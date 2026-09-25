@@ -25,3 +25,13 @@ def test_bundled_mcp_json_timeout_matches_default_mcp_tool_timeout_sec():
     assert data["mcpServers"]["autoskillit"]["timeout"] == int(
         RunSkillConfig().mcp_tool_timeout_sec * 1000
     )
+
+
+def test_bundled_autoskillit_server_is_a_per_client_stdio_child():
+    manifest_path = pkg_root() / ".mcp.json"
+    data = json.loads(manifest_path.read_text())
+    entry = data["mcpServers"]["autoskillit"]
+
+    assert entry["command"] == "autoskillit"
+    assert "url" not in entry
+    assert entry.get("type", "stdio") == "stdio"

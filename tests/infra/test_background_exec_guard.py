@@ -7,6 +7,7 @@ import json
 import os
 from contextlib import redirect_stdout
 from pathlib import Path
+from typing import NoReturn
 from unittest.mock import patch
 
 import pytest
@@ -89,6 +90,9 @@ def test_denies_schedule_wakeup_skill_session_with_managed_codex_route(
 ):
     import autoskillit.hooks.guards.background_exec_guard as guard
 
+    def _must_not_be_called(*_args: object, **_kwargs: object) -> NoReturn:
+        raise AssertionError("join applicability must not be consulted for this Codex route")
+
     monkeypatch.setattr(
         guard,
         "payload_managed_codex_route",
@@ -98,7 +102,7 @@ def test_denies_schedule_wakeup_skill_session_with_managed_codex_route(
             "digest",
         ),
     )
-    monkeypatch.setattr(guard, "session_join_required", lambda _cwd, _session_id: False)
+    monkeypatch.setattr(guard, "hook_join_applicability", _must_not_be_called)
 
     response = json.loads(
         _run_guard(
@@ -299,7 +303,11 @@ def _join_event(worktree: Path, tool_name: str, tool_input: dict) -> dict:
     }
 
 
-def _run_guard_join_bound(event: dict) -> dict:
+def _run_guard_join_bound(
+    event: dict,
+    *,
+    env_overrides: dict[str, str] | None = None,
+) -> dict:
     """Run the guard with binding authority derived only from the payload."""
     from autoskillit.hooks.guards.background_exec_guard import main
 
@@ -307,6 +315,8 @@ def _run_guard_join_bound(event: dict) -> dict:
         "AUTOSKILLIT_SESSION_TYPE": "skill",
         "AUTOSKILLIT_AGENT_BACKEND": "claude-code",
     }
+    if env_overrides is not None:
+        env_snapshot.update(env_overrides)
     with (
         patch.dict(os.environ, env_snapshot, clear=True),
         patch("sys.stdin", io.StringIO(json.dumps(event))),
@@ -390,6 +400,79 @@ def test_required_join_denies_schedule_wakeup(tmp_path):
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
     reason = response["hookSpecificOutput"]["permissionDecisionReason"]
     assert "ScheduleWakeup" in reason
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "tool_input"),
+    [
+        pytest.param("Agent", {"prompt": "reviewer", "name": "reviewer"}, id="agent-name"),
+        pytest.param("Agent", {"prompt": "reviewer", "team_name": "team-a"}, id="agent-team-name"),
+        pytest.param(
+            "Agent",
+            {"prompt": "reviewer", "run_in_background": True},
+            id="agent-background",
+        ),
+        pytest.param("ScheduleWakeup", {"delay": "5m"}, id="schedule-wakeup"),
+    ],
+)
+def test_authenticated_cook_join_session_lifts_join_bound_denials(
+    tmp_path: Path,
+    tool_name: str,
+    tool_input: dict,
+) -> None:
+    from autoskillit.core.runtime.session_registry import write_registry_entry
+
+    worktree = _write_session_binding(tmp_path, join_required=True)
+    write_registry_entry(
+        worktree,
+        "launch",
+        "cook",
+        None,
+        claude_session_id="bind",
+    )
+    log_dir = worktree / "logs"
+    response = _run_guard_join_bound(
+        _join_event(worktree, tool_name, tool_input),
+        env_overrides={
+            "AUTOSKILLIT_LAUNCH_ID": "launch",
+            "AUTOSKILLIT_LOG_DIR": str(log_dir),
+        },
+    )
+
+    assert response == {}
+    diagnostic_path = log_dir / "join_diagnostics.jsonl"
+    diagnostics = [
+        json.loads(line)
+        for line in diagnostic_path.read_text(encoding="utf-8").splitlines()
+        if line
+    ]
+    assert len(diagnostics) == 1
+    assert diagnostics[0]["gate"] == "background_exec_guard"
+    assert diagnostics[0]["status"] == "cook_bypass"
+
+
+def test_cook_join_session_bash_call_writes_no_join_diagnostic(tmp_path: Path) -> None:
+    from autoskillit.core.runtime.session_registry import write_registry_entry
+
+    worktree = _write_session_binding(tmp_path, join_required=True)
+    write_registry_entry(
+        worktree,
+        "launch",
+        "cook",
+        None,
+        claude_session_id="bind",
+    )
+    log_dir = worktree / "logs"
+    response = _run_guard_join_bound(
+        _join_event(worktree, "Bash", {"command": "echo test"}),
+        env_overrides={
+            "AUTOSKILLIT_LAUNCH_ID": "launch",
+            "AUTOSKILLIT_LOG_DIR": str(log_dir),
+        },
+    )
+
+    assert response == {}
+    assert not (log_dir / "join_diagnostics.jsonl").exists()
 
 
 def test_clean_session_allows_named_teammate_dispatch(tmp_path):

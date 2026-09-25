@@ -38,9 +38,8 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     resolve_state_root,
 )
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
-    record_cook_join_bypass,
+    hook_join_applicability,
     resolve_binding_session_id,
-    session_join_required,
     session_managed_codex_route,
     session_managed_scope,
     write_join_diagnostic,
@@ -79,9 +78,9 @@ def _resolve_required_join_session(data: dict[str, object]) -> tuple[str, str] |
     payload_cwd = normalize_payload_cwd(data.get("cwd"))
     if not session_id or not payload_cwd:
         return None
-    if record_cook_join_bypass(data, payload_cwd, session_id, gate="join_followup_guard"):
-        return None
-    if not session_join_required(payload_cwd, session_id):
+    if not hook_join_applicability(
+        data, payload_cwd, session_id, gate="join_followup_guard"
+    ).enforce:
         return None
     return session_id, payload_cwd
 

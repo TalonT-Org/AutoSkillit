@@ -23,7 +23,7 @@ import tempfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 if TYPE_CHECKING:
     from autoskillit.hooks._session_binding import JoinAdmission
@@ -619,20 +619,15 @@ def session_join_admission(payload_cwd: str, session_id: str) -> "JoinAdmission"
     )
 
 
-def is_authenticated_top_level_cook(
-    payload: dict[str, object],
-    payload_cwd: str,
-    binding_session_id: str,
-) -> bool:
-    """Apply canonical session shape before consulting durable cook identity."""
-    module_name = (
-        f"{__package__}._session_registry_bridge" if __package__ else "_session_registry_bridge"
-    )
+_REGISTRY_BRIDGE_MODULE = (
+    f"{__package__}._session_registry_bridge" if __package__ else "_session_registry_bridge"
+)
+
+
+def _cook_registry_predicate(name: str, *args: object) -> bool:
     return bool(
-        getattr(importlib.import_module(module_name), "is_authenticated_top_level_cook")(
-            payload,
-            payload_cwd,
-            binding_session_id,
+        getattr(importlib.import_module(_REGISTRY_BRIDGE_MODULE), name)(
+            *args,
             headless=hook_session_shape()[0],
             backend=os.environ.get(_AUTOSKILLIT_AGENT_BACKEND_ENV, "").strip(),
             launch_id=os.environ.get(_AUTOSKILLIT_LAUNCH_ID_ENV, ""),
@@ -641,30 +636,33 @@ def is_authenticated_top_level_cook(
     )
 
 
+def is_authenticated_top_level_cook(
+    payload: dict[str, object], payload_cwd: str, binding_session_id: str
+) -> bool:
+    """Apply payload identity to the authenticated cook session."""
+    return _cook_registry_predicate(
+        "is_authenticated_top_level_cook", payload, payload_cwd, binding_session_id
+    )
+
+
+def is_authenticated_top_level_cook_session(payload_cwd: str, binding_session_id: str) -> bool:
+    """Check cook identity from the current session's launch environment."""
+    return _cook_registry_predicate(
+        "is_authenticated_top_level_cook_session", payload_cwd, binding_session_id
+    )
+
+
 def bridge_session_registry(session_id: str, payload_cwd: str = "") -> None:
     """Bind the hook session through the canonical launch-id accessor."""
-    module_name = (
-        f"{__package__}._session_registry_bridge" if __package__ else "_session_registry_bridge"
-    )
-    getattr(importlib.import_module(module_name), "bridge_session_registry")(
+    getattr(importlib.import_module(_REGISTRY_BRIDGE_MODULE), "bridge_session_registry")(
         session_id,
         payload_cwd,
         launch_id=os.environ.get(_AUTOSKILLIT_LAUNCH_ID_ENV, ""),
     )
 
 
-def session_join_required(payload_cwd: str, session_id: str) -> bool:
-    """Return whether the payload-identified binding requires a fixed-set join."""
-    return session_join_admission(payload_cwd, session_id).enforce
-
-
 def session_managed_scope(payload_cwd: str, session_id: str) -> tuple[str, str] | None:
-    """Return the binding-authoritative parent/leaf scope for join guards.
-
-    A join-bearing binding without a valid scope is deliberately not repaired
-    from ambient values.  Callers that already established join applicability
-    must deny rather than substitute the former ``top_level`` literal.
-    """
+    """Return a valid binding-authoritative parent/leaf scope for join guards."""
     admission = session_join_admission(payload_cwd, session_id)
     binding = admission.binding_dict
     if binding is None or not admission.enforce or not binding.get("binding_valid"):
@@ -676,14 +674,8 @@ def session_managed_scope(payload_cwd: str, session_id: str) -> tuple[str, str] 
     return (parent, leaf)
 
 
-def record_cook_join_bypass(
-    payload: dict[str, object], payload_cwd: str, session_id: str, *, gate: str
-) -> bool:
-    """Record the shared join-guard bypass for an authenticated cook session."""
-    if not is_authenticated_top_level_cook(payload, payload_cwd, session_id):
-        return False
-    scope = session_managed_scope(payload_cwd, session_id)
-    managed_parent_id, managed_leaf_id = scope or ("", "")
+def _write_cook_bypass_diagnostic(payload_cwd: str, session_id: str, *, gate: str) -> None:
+    managed_parent_id, managed_leaf_id = session_managed_scope(payload_cwd, session_id) or ("", "")
     write_join_diagnostic(
         {
             "gate": gate,
@@ -694,7 +686,34 @@ def record_cook_join_bypass(
         },
         caller=gate,
     )
+
+
+def record_session_cook_join_bypass(payload_cwd: str, session_id: str, *, gate: str) -> bool:
+    """Record MCP cook bypass from the per-client stdio child's launch env.
+    Restricted child environments omit the launch ID and keep declaration enforced."""
+    if not is_authenticated_top_level_cook_session(payload_cwd, session_id):
+        return False
+    _write_cook_bypass_diagnostic(payload_cwd, session_id, gate=gate)
     return True
+
+
+class JoinApplicability(NamedTuple):
+    cook_bypass: bool
+    admission: "JoinAdmission | None"
+
+    @property
+    def enforce(self) -> bool:
+        return not self.cook_bypass and self.admission is not None and self.admission.enforce
+
+
+def hook_join_applicability(
+    payload: dict[str, object], payload_cwd: str, session_id: str, *, gate: str
+) -> JoinApplicability:
+    """Decide cook bypass before consulting the session's join admission."""
+    if is_authenticated_top_level_cook(payload, payload_cwd, session_id):
+        _write_cook_bypass_diagnostic(payload_cwd, session_id, gate=gate)
+        return JoinApplicability(True, None)
+    return JoinApplicability(False, session_join_admission(payload_cwd, session_id))
 
 
 def session_managed_codex_route(

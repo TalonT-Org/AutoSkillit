@@ -160,6 +160,10 @@ Agent calls. The `ScheduleWakeup` deferral hook is denied for the same
 reason: deferral cannot produce the declared-batch evidence the join
 contract requires.
 
+An authenticated top-level interactive cook is exempt: `declare_join_batch`
+returns `cook_bypass` without opening a wave, and join-bound selector denials
+do not apply.
+
 ### What's the difference between `join_required` and `team_name`?
 
 `join_required` is the semantic authority over the **parent's** dispatch

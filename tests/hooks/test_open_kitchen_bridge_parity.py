@@ -166,6 +166,109 @@ def test_authenticated_managed_codex_cook_requires_parent_binding(
     assert not is_authenticated_top_level_cook(payload, str(tmp_path), launch_id)
 
 
+def test_payload_cook_predicate_is_session_predicate_plus_payload_identity(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.hooks._runtime._session_registry_bridge import (
+        is_authenticated_top_level_cook,
+        is_authenticated_top_level_cook_session,
+    )
+    from autoskillit.hooks._session_binding import (
+        SessionBinding,
+        resolve_binding_path,
+        write_binding,
+    )
+
+    launch_id = "cook-launch"
+    session_id = "native-session"
+    claude_env = {
+        "headless": False,
+        "backend": "claude-code",
+        "launch_id": launch_id,
+        "managed_parent_id": "",
+    }
+    payload_shapes = (
+        ("top_level", {"session_id": session_id}),
+        ("descendant", {"session_id": session_id, "agent_id": "child-agent"}),
+        ("mismatched_session", {"session_id": "other-session"}),
+    )
+    session_states = (
+        ("bridged_cook", "cook", True),
+        ("order", "order", True),
+        ("unbridged", "cook", False),
+    )
+    for state_name, session_type, bridged in session_states:
+        project_dir = tmp_path / state_name
+        _write_registry(
+            project_dir,
+            {launch_id: {"session_type": session_type, "claude_session_id": None}},
+        )
+        if bridged:
+            _bridge(monkeypatch, project_dir, launch_id, session_id)
+        session_authenticated = is_authenticated_top_level_cook_session(
+            str(project_dir),
+            session_id,
+            **claude_env,
+        )
+        for payload_name, payload_identity in payload_shapes:
+            payload = {"cwd": str(project_dir), **payload_identity}
+            assert is_authenticated_top_level_cook(
+                payload,
+                str(project_dir),
+                session_id,
+                **claude_env,
+            ) == (
+                session_authenticated
+                and not payload.get("agent_id")
+                and payload.get("session_id") == session_id
+            ), (state_name, payload_name)
+
+    codex_project = tmp_path / "managed-codex"
+    _write_registry(
+        codex_project,
+        {launch_id: {"session_type": "cook", "claude_session_id": None}},
+    )
+    binding = SessionBinding(
+        schema_version=3,
+        session_id=launch_id,
+        join_required=True,
+        binding_valid=True,
+        artifact_digest="artifact",
+        loaded_skills=(),
+        managed_parent_id=launch_id,
+        managed_route="interactive-parent",
+        managed_guard_set=("join_followup_guard", "join_stop_guard"),
+        managed_config_digest="config",
+    )
+    write_binding(resolve_binding_path(str(codex_project), launch_id), binding)
+    codex_env = {
+        "headless": False,
+        "backend": "codex",
+        "launch_id": launch_id,
+        "managed_parent_id": launch_id,
+    }
+    payload = {"cwd": str(codex_project), "session_id": "payload-session-is-ignored"}
+    assert is_authenticated_top_level_cook_session(
+        str(codex_project),
+        launch_id,
+        **codex_env,
+    )
+    assert is_authenticated_top_level_cook(
+        payload,
+        str(codex_project),
+        launch_id,
+        **codex_env,
+    )
+    payload["agent_id"] = "child-agent"
+    assert not is_authenticated_top_level_cook(
+        payload,
+        str(codex_project),
+        launch_id,
+        **codex_env,
+    )
+
+
 @pytest.mark.parametrize(
     ("registry", "session_id", "expected_message"),
     [

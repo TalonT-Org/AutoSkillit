@@ -569,6 +569,7 @@ def test_claude_required_join_emits_keep_batch_first_directive() -> None:
     # The Claude join adaptation must require the declared-batch step
     # before spawning, and require unnamed foreground calls.
     assert "declare_join_batch" in text or "join_batch" in text
+    assert "cook_bypass" in text
     assert "normalized bare skill name" in text
     assert "exact session_id" in text
     assert "Skill PostToolUse additionalContext" in text

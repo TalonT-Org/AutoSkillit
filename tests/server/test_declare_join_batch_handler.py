@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from autoskillit.core import PluginLoadMode, SkillExecutionRole
+from autoskillit.core.runtime.session_registry import write_registry_entry
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.hooks._join_ledger import (
     JOIN_LEDGER_SCHEMA_VERSION,
@@ -20,7 +21,10 @@ from autoskillit.hooks._join_ledger import (
     ledger_paths,
     settle_assignment,
 )
-from autoskillit.hooks._runtime._hook_settings import DIAGNOSTIC_KEYS
+from autoskillit.hooks._runtime._hook_settings import (
+    DIAGNOSTIC_KEYS,
+    is_authenticated_top_level_cook_session,
+)
 from autoskillit.hooks._session_binding import (
     SESSION_BINDING_SCHEMA_VERSION,
     LoadedSkillEntry,
@@ -102,6 +106,25 @@ def _write_session_binding(
     path = resolve_binding_path(str(state_root), filename_session_id)
     write_binding(path, binding)
     return path
+
+
+def _write_cook_session(
+    state_root: Path,
+    launch_id: str,
+    session_id: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    write_registry_entry(
+        state_root,
+        launch_id,
+        "cook",
+        None,
+        claude_session_id=session_id,
+    )
+    monkeypatch.setenv("AUTOSKILLIT_STATE_ROOT", str(state_root))
+    monkeypatch.setenv("AUTOSKILLIT_LAUNCH_ID", launch_id)
+    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "claude-code")
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(state_root / "logs"))
 
 
 def _capable_backend() -> SimpleNamespace:
@@ -253,7 +276,53 @@ def test_end_to_end_real_projection_real_hook_real_handler(
 
     assert launch_binding.closed
     assert result["success"] is True
+    assert result["status"] == "declared"
     assert result["join_batch_id"]
+
+
+@pytest.mark.parametrize(
+    ("case", "expected_error"),
+    [
+        ("selected_not_join_bearing", "is not join-bearing"),
+        ("assignment_count", "declares count="),
+        ("foreign_session", "foreign-session"),
+    ],
+)
+def test_cook_bypass_preserves_admission_and_cardinality_refusals(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    case: str,
+    expected_error: str,
+) -> None:
+    state_root = tmp_path / "state-root"
+    state_root.mkdir()
+    launch_id = "cook-launch"
+    bridged_session_id = "bridged-session"
+    _write_cook_session(state_root, launch_id, bridged_session_id, monkeypatch)
+    monkeypatch.setattr(declare_module, "get_backend", lambda _name: _capable_backend())
+    diagnostics: list[dict[str, object]] = []
+    monkeypatch.setattr(declare_module, "_emit_join_diagnostic", diagnostics.append)
+
+    if case == "selected_not_join_bearing":
+        binding = _binding(
+            bridged_session_id,
+            entries=(_entry(join_required=False), _entry("other", join_required=True)),
+        )
+    elif case == "assignment_count":
+        binding = _binding(bridged_session_id, entries=(_entry(count=2),))
+    else:
+        binding = _binding(bridged_session_id)
+    _write_session_binding(state_root, bridged_session_id, binding)
+
+    assert is_authenticated_top_level_cook_session(str(state_root), bridged_session_id) is True
+    handler_session_id = "foreign-session" if case == "foreign_session" else bridged_session_id
+    result = declare_module._declare_join_batch_handler(
+        "rectify", ["assignment"], handler_session_id, state_root
+    )
+
+    assert result["success"] is False
+    assert expected_error in str(result["error"])
+    assert not any(record.get("status") == "cook_bypass" for record in diagnostics)
 
 
 @pytest.mark.parametrize(
@@ -681,6 +750,7 @@ def test_replacement_lifecycle_rejects_mismatches_and_retains_history(
         "autoskillit:rectify", ["replacement"], session_id, project_root
     )
     assert replacement["success"] is True
+    assert replacement["status"] == "replacement_batch"
     replacement_id = str(replacement["join_batch_id"])
     assert replacement_id != original_id
     replacement_diagnostic = diagnostics[-1]

@@ -170,8 +170,35 @@ def is_authenticated_top_level_cook(
     launch_id: str = "",
     managed_parent_id: str = "",
 ) -> bool:
-    """Return whether durable state proves this is the top-level interactive cook."""
-    if headless or payload.get("agent_id") or not payload_cwd or not binding_session_id:
+    """Apply payload identity before checking the authenticated cook session."""
+    if payload.get("agent_id"):
+        return False
+    if backend != "codex" and (
+        not isinstance(payload.get("session_id"), str)
+        or payload["session_id"] != binding_session_id
+    ):
+        return False
+    return is_authenticated_top_level_cook_session(
+        payload_cwd,
+        binding_session_id,
+        headless=headless,
+        backend=backend,
+        launch_id=launch_id,
+        managed_parent_id=managed_parent_id,
+    )
+
+
+def is_authenticated_top_level_cook_session(
+    payload_cwd: str,
+    binding_session_id: str,
+    *,
+    headless: bool,
+    backend: str,
+    launch_id: str,
+    managed_parent_id: str,
+) -> bool:
+    """Return whether durable state authenticates the top-level cook session."""
+    if headless or not payload_cwd or not binding_session_id:
         return False
 
     registry = _read_registry(payload_cwd)
@@ -196,12 +223,7 @@ def is_authenticated_top_level_cook(
             and binding.get("managed_leaf_id") == ""
         )
 
-    payload_session_id = payload.get("session_id")
-    if (
-        not launch_id
-        or not isinstance(payload_session_id, str)
-        or payload_session_id != binding_session_id
-    ):
+    if not launch_id:
         return False
     matches = [
         candidate_launch_id

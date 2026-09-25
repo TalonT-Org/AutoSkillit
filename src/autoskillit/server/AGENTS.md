@@ -69,7 +69,7 @@ Controls whether the tool succeeds when called (independent of visibility):
 | Standard kitchen | `kitchen` | Yes | Yes (`_require_enabled`) | `run_cmd`, `run_skill`, `report_bug` |
 | Fleet tool | `fleet`, `kitchen-core` | Yes (via `ALL_VISIBILITY_TAGS` loop) | Yes (`_require_fleet` or `_require_enabled`) | `dispatch_food_truck`, `record_gate_dispatch` |
 | Fleet-dispatch tool | `kitchen`, `fleet-dispatch` (± `kitchen-core`) | Yes (via `ALL_VISIBILITY_TAGS` loop) | Yes (`_require_enabled`) | `list_recipes`, `load_recipe` |
-| Headless-exempt | `headless` (usually `kitchen`) | Yes | No | `test_check`, `commit_files`, `fetch_github_issue`, `get_issue_title`, typed audit artifact producers |
+| Headless-exempt | `headless` (usually `kitchen` + `github`/`fleet-dispatch`) | Yes | No | `test_check`, `commit_files`, `fetch_github_issue`, `get_issue_title`, typed audit artifact producers |
 | Exploration broker | `exploration` | Yes (via `ALL_VISIBILITY_TAGS` loop) | Yes (`_require_enabled`) | `submit_exploration_query`, `get_exploration_page`, `resume_exploration_context` |
 | Free-range | _(none of the above)_ | No | No | `open_kitchen`, `close_kitchen` |
 

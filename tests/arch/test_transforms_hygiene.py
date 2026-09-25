@@ -524,6 +524,17 @@ def test_tool_decorators_enforce_tag_partition():
 def test_tag_partition_predicate_rules(
     tool_name: str, tags: set[str], has_violation: bool
 ) -> None:
+    # The 'fetch_github_issue' case relies on the tool being registered as INSPECTION.
+    # If a future registry change demotes that tool, this case flips silently; pin it.
+    if tool_name == "fetch_github_issue":
+        from autoskillit.core import ToolInitializationOperation, get_tool_def
+
+        definition = get_tool_def(tool_name)
+        assert definition is not None, f"{tool_name} must be registered for this case"
+        assert definition.initialization_operation is ToolInitializationOperation.INSPECTION, (
+            f"{tool_name} precondition changed: now "
+            f"{definition.initialization_operation.name}; update this parametrize case."
+        )
     assert (_tag_partition_violation(tool_name, tags) is not None) is has_violation
 
 

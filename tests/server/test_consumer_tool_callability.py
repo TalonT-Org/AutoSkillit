@@ -44,39 +44,61 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 ExemptionKey = tuple[str, str, CatalogContext]
 
 EXEMPTIONS: dict[ExemptionKey, str] = {
-    ("skill:audit-claims", "post_pr_review", CatalogContext.INTERACTIVE_SKILL): (
-        "#4448 (ba2ccd424): review publication is headless-only"
-    ),
-    ("skill:resolve-review", "post_pr_review", CatalogContext.INTERACTIVE_SKILL): (
-        "#4448 (ba2ccd424): review publication is headless-only"
-    ),
-    ("skill:review-pr", "post_pr_review", CatalogContext.INTERACTIVE_SKILL): (
-        "#4448 (ba2ccd424): review publication is headless-only"
-    ),
-    ("skill:review-research-pr", "post_pr_review", CatalogContext.INTERACTIVE_SKILL): (
-        "#4448 (ba2ccd424): review publication is headless-only"
-    ),
-    ("skill:review-pr", "run_python", CatalogContext.HEADLESS_SKILL): (
-        "review-pr/SKILL.md:284-296 exits before this call when AUTOSKILLIT_HEADLESS=1"
-    ),
-    ("skill:review-pr", "run_python", CatalogContext.HEADLESS_SKILL_AUTO_GATE): (
-        "review-pr/SKILL.md:284-296 exits before this call when AUTOSKILLIT_HEADLESS=1"
-    ),
-    ("skill:resolve-failures", "run_cmd", CatalogContext.HEADLESS_SKILL): (
-        "resolve-failures/SKILL.md:165 says not via Bash or run_cmd"
-    ),
-    ("skill:resolve-failures", "run_cmd", CatalogContext.HEADLESS_SKILL_AUTO_GATE): (
-        "resolve-failures/SKILL.md:165 says not via Bash or run_cmd"
-    ),
-    ("skill:audit-impl", "run_python", CatalogContext.HEADLESS_SKILL): (
-        "#5177: move the Step 3.4 probe to the parent-side floor check"
-    ),
-    ("skill:audit-impl", "run_python", CatalogContext.HEADLESS_SKILL_AUTO_GATE): (
-        "#5177: move the Step 3.4 probe to the parent-side floor check"
-    ),
-    ("skill:process-issues", "batch_cleanup_clones", CatalogContext.INTERACTIVE_ORCHESTRATOR): (
-        "#5179: fleet mutation tool is hidden from interactive orchestrators"
-    ),
+    (
+        "skill:audit-claims",
+        "post_pr_review",
+        CatalogContext.INTERACTIVE_SKILL,
+    ): "#4448 (ba2ccd424): review publication is headless-only",
+    (
+        "skill:resolve-review",
+        "post_pr_review",
+        CatalogContext.INTERACTIVE_SKILL,
+    ): "#4448 (ba2ccd424): review publication is headless-only",
+    (
+        "skill:review-pr",
+        "post_pr_review",
+        CatalogContext.INTERACTIVE_SKILL,
+    ): "#4448 (ba2ccd424): review publication is headless-only",
+    (
+        "skill:review-research-pr",
+        "post_pr_review",
+        CatalogContext.INTERACTIVE_SKILL,
+    ): "#4448 (ba2ccd424): review publication is headless-only",
+    (
+        "skill:review-pr",
+        "run_python",
+        CatalogContext.HEADLESS_SKILL,
+    ): "review-pr/SKILL.md:284-296 exits before this call when AUTOSKILLIT_HEADLESS=1",
+    (
+        "skill:review-pr",
+        "run_python",
+        CatalogContext.HEADLESS_SKILL_AUTO_GATE,
+    ): "review-pr/SKILL.md:284-296 exits before this call when AUTOSKILLIT_HEADLESS=1",
+    (
+        "skill:resolve-failures",
+        "run_cmd",
+        CatalogContext.HEADLESS_SKILL,
+    ): "resolve-failures/SKILL.md:165 says not via Bash or run_cmd",
+    (
+        "skill:resolve-failures",
+        "run_cmd",
+        CatalogContext.HEADLESS_SKILL_AUTO_GATE,
+    ): "resolve-failures/SKILL.md:165 says not via Bash or run_cmd",
+    (
+        "skill:audit-impl",
+        "run_python",
+        CatalogContext.HEADLESS_SKILL,
+    ): "#5177: move the Step 3.4 probe to the parent-side floor check",
+    (
+        "skill:audit-impl",
+        "run_python",
+        CatalogContext.HEADLESS_SKILL_AUTO_GATE,
+    ): "#5177: move the Step 3.4 probe to the parent-side floor check",
+    (
+        "skill:process-issues",
+        "batch_cleanup_clones",
+        CatalogContext.INTERACTIVE_ORCHESTRATOR,
+    ): "#5179: fleet mutation tool is hidden from interactive orchestrators",
     (
         "recipe:implement-findings:batch_cleanup",
         "batch_cleanup_clones",

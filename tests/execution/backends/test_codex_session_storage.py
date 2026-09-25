@@ -1544,7 +1544,10 @@ def test_record_teardown_unproven_rejects_mismatched_identity(tmp_path: Path) ->
 
     try:
         handle.record_spawn(child.pid, child.pid)
-        with pytest.raises(RuntimeError):
+        with pytest.raises(
+            RuntimeError,
+            match="Unproven teardown identity does not match the recorded spawn",
+        ):
             handle.record_teardown_unproven(child.pid + 1, child.pid)
         assert "teardown" not in lease.manifest
     finally:
@@ -1575,7 +1578,68 @@ def test_record_teardown_unproven_rejects_after_reap(tmp_path: Path) -> None:
         child.wait(timeout=2)
         handle.record_reaped(child.pid, child.pid)
 
-        with pytest.raises(RuntimeError):
+        with pytest.raises(
+            RuntimeError,
+            match="Cannot record unproven teardown after the child was reaped",
+        ):
+            handle.record_teardown_unproven(child.pid, child.pid)
+    finally:
+        with contextlib.suppress(Exception):
+            child.kill()
+            child.wait(timeout=2)
+        lease.__exit__(None, None, None)
+
+
+def test_record_teardown_unproven_rejects_outside_active_attempt(tmp_path: Path) -> None:
+    store = CodexSessionStore(log_dir=tmp_path / "log-root")
+    home, _ = _generated_home(tmp_path)
+    lease = _prepared_lease(store, home, tmp_path)
+    handle = lease.__enter__()
+    relative = Path("2026/07/rollout-teardown-outside.jsonl")
+    _rollout((home / "sessions").resolve() / relative, "thread-teardown-outside")
+    child = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        start_new_session=True,
+        env=production_interpreter_env(),
+    )
+
+    try:
+        handle.record_spawn(child.pid, child.pid)
+        handle.record_reaped(child.pid, child.pid)
+        lease.__exit__(None, None, None)
+
+        with pytest.raises(
+            RuntimeError,
+            match="Cannot record unproven teardown outside an active Codex attempt",
+        ):
+            handle.record_teardown_unproven(child.pid, child.pid)
+    finally:
+        with contextlib.suppress(Exception):
+            child.kill()
+            child.wait(timeout=2)
+
+
+def test_record_teardown_unproven_rejects_duplicate_recording(tmp_path: Path) -> None:
+    store = CodexSessionStore(log_dir=tmp_path / "log-root")
+    home, _ = _generated_home(tmp_path)
+    lease = _prepared_lease(store, home, tmp_path)
+    handle = lease.__enter__()
+    relative = Path("2026/07/rollout-teardown-duplicate.jsonl")
+    _rollout((home / "sessions").resolve() / relative, "thread-teardown-duplicate")
+    child = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        start_new_session=True,
+        env=production_interpreter_env(),
+    )
+
+    try:
+        handle.record_spawn(child.pid, child.pid)
+        handle.record_teardown_unproven(child.pid, child.pid)
+
+        with pytest.raises(
+            RuntimeError,
+            match="Codex attempt teardown outcome was already recorded",
+        ):
             handle.record_teardown_unproven(child.pid, child.pid)
     finally:
         with contextlib.suppress(Exception):

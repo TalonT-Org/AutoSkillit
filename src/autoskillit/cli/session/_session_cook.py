@@ -8,7 +8,7 @@ import sys
 import uuid
 from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, assert_never
 
 from autoskillit.cli.session._session_launch import (
     _exit_launch_preparation_error,
@@ -22,6 +22,7 @@ from autoskillit.core import (
     PluginLaunchBinding,
     PluginLoadMode,
     SkillContractError,
+    SourceCurrencyStatus,
     executable_binding_matches_current_file,
     is_feature_enabled,
     plugin_launch_binding_scope,
@@ -47,6 +48,7 @@ if TYPE_CHECKING:
         ResumeWithBriefing,
         SemanticAdaptationContext,
         SkillUnavailabilityPayload,
+        SourceCurrency,
     )
     from autoskillit.workspace import (
         EffectiveSkillCatalog,
@@ -66,19 +68,41 @@ _COOK_PRE_REVEALED_KITCHEN_PROMPT = (
 )
 
 
-def _print_source_currency_warning(status: str, behind_by: int | None, color: bool) -> None:
+def _source_currency_warning(
+    currency: SourceCurrency, *, checkout: Path, color: bool
+) -> str | None:
     yellow = "\x1b[33m" if color else ""
     reset = "\x1b[0m" if color else ""
-    if status == "stale":
-        print(
-            f"{yellow}WARNING: installed AutoSkillit generation is {behind_by} commits "
-            f"behind this checkout. Run `autoskillit install` to refresh it.{reset}"
-        )
-    elif status == "diverged":
-        print(
-            f"{yellow}WARNING: installed AutoSkillit generation diverges from this checkout. "
-            f"Run `autoskillit install` to refresh it.{reset}"
-        )
+    match currency.status:
+        case (
+            SourceCurrencyStatus.CURRENT
+            | SourceCurrencyStatus.NOT_SOURCE_CHECKOUT
+            | SourceCurrencyStatus.UNKNOWN
+        ):
+            return None
+        case SourceCurrencyStatus.DIVERGED:
+            return (
+                f"{yellow}WARNING: installed AutoSkillit generation diverges from this checkout. "
+                f"Run `autoskillit install` to refresh it.{reset}"
+            )
+        case SourceCurrencyStatus.STALE:
+            if currency.checkout_version is not None:
+                remedy = (
+                    f"`autoskillit update` (runs `uv tool install --force --reinstall {checkout}`)"
+                    if currency.install_type == "local-path"
+                    else "`task install-dev`"
+                )
+                return (
+                    f"{yellow}WARNING: installed AutoSkillit {currency.installed_version} "
+                    f"({currency.install_type}) is stale relative to working-tree "
+                    f"{currency.checkout_version}. Run {remedy}.{reset}"
+                )
+            return (
+                f"{yellow}WARNING: installed AutoSkillit generation is {currency.behind_by} "
+                f"commits behind this checkout. Run `autoskillit install` to refresh it.{reset}"
+            )
+        case unhandled:
+            assert_never(unhandled)
 
 
 def _validate_provider_profile(profile: str | None, config: AutomationConfig) -> None:
@@ -586,7 +610,9 @@ def cook(
         project_dir,
         generation_root=resolve_installed_generation_root(),
     )
-    _print_source_currency_warning(currency.status, currency.behind_by, color)
+    warning = _source_currency_warning(currency, checkout=project_dir, color=color)
+    if warning:
+        print(warning)
     _validate_provider_profile(profile, config)
     _render_cook_banner(config, color=color)
     print(permissions_warning())

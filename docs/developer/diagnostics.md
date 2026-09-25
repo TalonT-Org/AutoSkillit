@@ -141,8 +141,30 @@ Reasons](#child-terminal-reasons)); older rows are retained without that
 field, same as v9's `subagent_model_outcomes`.
 
 `source_currency()` compares the deployed generation's `direct_url.json` provenance
-with checkout `HEAD`. `kitchen_status` reports the result, and `cook` warns when the
-deployed generation is stale or diverged while continuing the interactive launch.
+with checkout `HEAD` for commit-bearing provenance (`git-vcs`), and with the checkout's
+`[project].version` for `local-path` and unknown provenance. `kitchen_status` reports
+the result, and `cook` warns when the deployed generation is stale or diverged while
+continuing the interactive launch.
+
+The version-based branch has a limitation the commit-based branch does not: it cannot
+see same-version changes. A checkout with uncommitted edits, or on a feature branch that
+has not bumped `[project].version`, compares equal to the installed version and reports
+CURRENT even though the two trees differ. On `develop`, every merge is followed by a
+version-bump commit, which keeps this gap narrow for that branch; it does not close the
+gap for a local checkout that never merges to `develop`.
+
+The two `local-path` signals answer different questions. The startup update prompt
+offers an update only when the recorded source's `[project].version` is PEP 440-greater
+than the installed version (`update_available`) — a checkout on an older version, or on
+a pre-release of the installed version, is not offered as an update. Cook's
+source-currency check reports *any* version mismatch, so it still warns in that case.
+
+The two surfaces also read a different "installed version". `source_currency()` reads
+the **deployed generation** (`distribution_version_at(generation_root)`), falling back
+to the running distribution only when no managed generation exists — the same fallback
+its commit-based branch already uses. The startup update prompt reads the **running
+process** (`normalized_package_version()`). Right after an update publishes a new
+generation and before the restart, the two can differ transiently, by design.
 
 | Field | Meaning | Source |
 | --- | --- | --- |

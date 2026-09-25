@@ -14,13 +14,13 @@ from autoskillit.cli.install._install_info import (
     _INSTALL_FROM_DEVELOP,
     InstallInfo,
     InstallType,
-    comparison_branch,
     detect_install,
     dismissal_window,
     installed_identity_at,
     release_identity,
     resolve_autoskillit_entrypoint,
     upgrade_command,
+    upgrade_unavailable_message,
 )
 from autoskillit.core import ReleaseChannel
 
@@ -215,66 +215,48 @@ def test_detect_install_unknown_incomplete_vcs_metadata(
     assert detect_install().install_type is InstallType.UNKNOWN
 
 
-# ---------------------------------------------------------------------------
-# comparison_branch — policy tests
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "requested_revision,expected",
-    [
-        ("stable", "releases/latest"),
-        ("main", "releases/latest"),
-        ("v0.7.75", "releases/latest"),
-        (None, "releases/latest"),  # UNKNOWN has no revision
-    ],
-)
-def test_comparison_branch_stable_variants(requested_revision: str | None, expected: str) -> None:
-    info = InstallInfo(
-        install_type=InstallType.GIT_VCS,
-        commit_id="abc123",
-        requested_revision=requested_revision,
-        url=None,
-        editable_source=None,
+def test_detect_install_local_path_records_local_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "autoskillit.cli.install._install_info.parse_direct_url",
+        lambda: {
+            "install_type": "local-path",
+            "requested_revision": None,
+            "commit_id": None,
+            "editable": False,
+            "url": "file:///work/My%20Repo",
+        },
     )
-    assert comparison_branch(info) == expected
-
-
-def test_comparison_branch_unknown_type() -> None:
-    info = InstallInfo(
-        install_type=InstallType.UNKNOWN,
-        commit_id=None,
-        requested_revision=None,
-        url=None,
-        editable_source=None,
+    monkeypatch.setattr(
+        "autoskillit.cli.install._install_info.resolve_autoskillit_entrypoint",
+        lambda *args, **kwargs: None,
     )
-    assert comparison_branch(info) == "releases/latest"
+
+    info = detect_install()
+
+    assert info.install_type is InstallType.LOCAL_PATH
+    assert info.local_source == Path("/work/My Repo")
 
 
-def test_comparison_branch_develop() -> None:
-    info = InstallInfo(
-        install_type=InstallType.GIT_VCS,
-        commit_id="abc123",
-        requested_revision="develop",
-        url=None,
-        editable_source=None,
+def test_detect_install_local_editable_unquotes_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "autoskillit.cli.install._install_info.parse_direct_url",
+        lambda: {
+            "install_type": "local-editable",
+            "requested_revision": None,
+            "commit_id": None,
+            "editable": True,
+            "url": "file:///work/My%20Repo",
+        },
     )
-    assert comparison_branch(info) == "develop"
-
-
-@pytest.mark.parametrize(
-    "install_type",
-    [InstallType.LOCAL_EDITABLE, InstallType.LOCAL_PATH],
-)
-def test_comparison_branch_local_types_returns_none(install_type: InstallType) -> None:
-    info = InstallInfo(
-        install_type=install_type,
-        commit_id=None,
-        requested_revision=None,
-        url=None,
-        editable_source=Path("/tmp/repo") if install_type == InstallType.LOCAL_EDITABLE else None,
+    monkeypatch.setattr(
+        "autoskillit.cli.install._install_info.resolve_autoskillit_entrypoint",
+        lambda *args, **kwargs: None,
     )
-    assert comparison_branch(info) is None
+
+    info = detect_install()
+
+    assert info.install_type is InstallType.LOCAL_EDITABLE
+    assert info.editable_source == Path("/work/My Repo")
 
 
 # ---------------------------------------------------------------------------
@@ -511,13 +493,8 @@ def test_installed_identity_at_returns_none_without_commit(tmp_path: Path) -> No
     assert installed_identity_at(tmp_path, channel=ReleaseChannel.BRANCH) is None
 
 
-@pytest.mark.parametrize(
-    "install_type",
-    [InstallType.UNKNOWN, InstallType.LOCAL_PATH],
-)
-def test_upgrade_command_unknown_and_local_path_returns_none(
-    install_type: InstallType,
-) -> None:
+@pytest.mark.parametrize("install_type", [InstallType.UNKNOWN])
+def test_upgrade_command_unknown_returns_none(install_type: InstallType) -> None:
     info = InstallInfo(
         install_type=install_type,
         commit_id=None,
@@ -526,6 +503,80 @@ def test_upgrade_command_unknown_and_local_path_returns_none(
         editable_source=None,
     )
     assert upgrade_command(info) is None
+
+
+def test_upgrade_command_local_path_forces_rebuild_into_staging(tmp_path: Path) -> None:
+    local_source = Path("/src/autoskillit")
+    info = InstallInfo(
+        install_type=InstallType.LOCAL_PATH,
+        commit_id=None,
+        requested_revision=None,
+        url=None,
+        editable_source=None,
+        local_source=local_source,
+    )
+    destination = tmp_path / "stage"
+
+    staged_result = upgrade_command(info, install_root_destination=destination)
+    shared_result = upgrade_command(info)
+
+    assert staged_result is not None
+    assert staged_result.argv == (
+        "uv",
+        "tool",
+        "install",
+        "--force",
+        "--reinstall",
+        str(local_source),
+        "--python",
+        _PYTHON_PIN,
+    )
+    assert staged_result.env["UV_TOOL_DIR"] == str(destination)
+    assert staged_result.env["UV_TOOL_BIN_DIR"] == str(
+        destination.parent / f".{destination.name}-bin"
+    )
+    assert staged_result.mutates_shared_root is False
+
+    assert shared_result is not None
+    assert shared_result.env == {}
+    assert shared_result.mutates_shared_root is True
+
+
+@pytest.mark.parametrize("install_type", list(InstallType))
+def test_upgrade_command_is_exhaustive_over_install_types(install_type: InstallType) -> None:
+    match install_type:
+        case InstallType.GIT_VCS:
+            stable = InstallInfo(InstallType.GIT_VCS, "a" * 40, "stable", None, None)
+            dev = InstallInfo(InstallType.GIT_VCS, "a" * 40, "develop", None, None)
+            assert upgrade_command(stable) is not None
+            assert upgrade_command(dev) is not None
+        case InstallType.LOCAL_EDITABLE:
+            present = InstallInfo(
+                InstallType.LOCAL_EDITABLE, None, None, None, Path("/src/autoskillit")
+            )
+            missing = InstallInfo(InstallType.LOCAL_EDITABLE, None, None, None, None)
+            assert upgrade_command(present) is not None
+            assert upgrade_command(missing) is None
+            assert missing.install_type.value in upgrade_unavailable_message(missing)
+        case InstallType.LOCAL_PATH:
+            present = InstallInfo(
+                InstallType.LOCAL_PATH,
+                None,
+                None,
+                None,
+                None,
+                local_source=Path("/src/autoskillit"),
+            )
+            missing = InstallInfo(InstallType.LOCAL_PATH, None, None, None, None)
+            assert upgrade_command(present) is not None
+            assert upgrade_command(missing) is None
+            assert missing.install_type.value in upgrade_unavailable_message(missing)
+        case InstallType.UNKNOWN:
+            info = InstallInfo(InstallType.UNKNOWN, None, None, None, None)
+            assert upgrade_command(info) is None
+            assert info.install_type.value in upgrade_unavailable_message(info)
+        case unhandled:
+            pytest.fail(f"no representative InstallInfo for {unhandled!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -611,20 +662,6 @@ def test_classify_track(
 # ---------------------------------------------------------------------------
 # Policy functions with arbitrary branch names (1d)
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "revision", ["integration", "feature-foo", "staging", "release-candidate", "my-branch"]
-)
-def test_comparison_branch_arbitrary_dev_revision(revision: str) -> None:
-    info = InstallInfo(
-        install_type=InstallType.GIT_VCS,
-        commit_id="abc123",
-        requested_revision=revision,
-        url=None,
-        editable_source=None,
-    )
-    assert comparison_branch(info) == "develop"
 
 
 @pytest.mark.parametrize(

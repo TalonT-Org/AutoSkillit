@@ -14,7 +14,12 @@ from autoskillit.cli.update._update_checks_fetch import (
     _fetch_with_cache,
     _read_fetch_cache,
 )
-from autoskillit.core import ReleaseChannel, ReleaseIdentity, get_logger
+from autoskillit.core import (
+    ReleaseChannel,
+    ReleaseIdentity,
+    autoskillit_source_version,
+    get_logger,
+)
 
 logger = get_logger(__name__)
 
@@ -44,23 +49,13 @@ def find_source_repo() -> Path | None:
                 env_val,
             )
 
-        import tomllib
-
         current = Path.cwd()
         while True:
-            pyproject = current / "pyproject.toml"
-            if pyproject.is_file():
-                try:
-                    with open(pyproject, "rb") as fh:
-                        data = tomllib.load(fh)
-                    project_name = data.get("project", {}).get("name")
-                    if (
-                        project_name == "autoskillit"
-                        and (current / "src" / "autoskillit").exists()
-                    ):
-                        return current
-                except Exception:
-                    logger.debug("drift check: could not parse %s", pyproject, exc_info=True)
+            if (
+                autoskillit_source_version(current) is not None
+                and (current / "src" / "autoskillit").exists()
+            ):
+                return current
 
             parent = current.parent
             if parent == current:  # Filesystem root
@@ -128,15 +123,22 @@ def resolve_target_identity(
 ) -> ReleaseIdentity | None:
     """Resolve the identity that ``upgrade_command(info)`` would install.
 
-    Returns ``None`` for working-tree installs and whenever the requested
+    For LOCAL_PATH, the recorded source directory's ``[project].version``;
+    ``None`` for other working-tree installs and whenever the requested
     revision's version or commit cannot be resolved.
     """
-    from autoskillit.cli.install._install_info import release_identity
+    from autoskillit.cli.install._install_info import InstallType, release_identity
 
     try:
         channel = release_identity(info, version="0").channel
         if channel is ReleaseChannel.WORKING_TREE:
-            return None
+            if info.install_type is not InstallType.LOCAL_PATH or info.local_source is None:
+                return None
+            source_version = autoskillit_source_version(info.local_source)
+            if source_version is None:
+                return None
+            Version(source_version)
+            return ReleaseIdentity(ReleaseChannel.WORKING_TREE, version=source_version)
 
         ref = info.requested_revision
         if ref is None:

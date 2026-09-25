@@ -1,8 +1,8 @@
 """Bundled consumers must be able to call tools in their actual session catalogs.
 
-When a violation is intentional, first fix an INSPECTION tool's tags or tier if
-the session is intended; otherwise exempt it only with a cited decision or
-guard. For a genuine remaining defect, file an issue and cite it here.
+Each exempted violation in EXEMPTIONS cites the decision or guard that makes
+the call safe; the assertion failure message explains the remedy order for
+adding a new exemption.
 """
 
 from __future__ import annotations

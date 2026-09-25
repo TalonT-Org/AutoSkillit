@@ -195,6 +195,7 @@ class TestModuleCascadeCore:
             "_type_constants_registries",
             "_type_exceptions",
             "_type_skill_contract",
+            "_type_session_invariant_admission",
             "_step_context",
             "_execution_marker",
             "git_refs",

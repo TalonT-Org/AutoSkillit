@@ -186,4 +186,12 @@ def test_validate_sanitized_plugin_artifact_reports_agent_namespace_errors(
         pkg_root(), public_root, manifest_path, source_infos
     )
 
-    assert any("session-log-reader.md" in error and _PLUGIN_NAMESPACE in error for error in errors)
+    assert any(
+        "session-log-reader.md" in error
+        and "does not carry the plugin namespace" in error
+        and _PLUGIN_NAMESPACE in error
+        for error in errors
+    ), (
+        f"Expected at least one error citing session-log-reader.md's missing plugin "
+        f"namespace {_PLUGIN_NAMESPACE!r}, got: {errors!r}"
+    )

@@ -22,10 +22,11 @@ block B bootstrap so hook scripts can keep importing via
   referenced by `_flags.py` and `_interpreters.py`. Lifted out so neither
   classification module owns the cross-import that would otherwise create a
   bidirectional `_flags` ↔ `_interpreters` coupling.
-- `_python_program_analysis.py` — Python interpreter invocation surface
-  (`_InterpreterCommandSpec`, `_python_program_command_specs`).
+- `_python_program_analysis.py` — Python interpreter and subprocess invocation
+  analysis (`_InterpreterCommandSpec`, `_python_c_program`,
+  `_python_program_command_specs`, `_python_program_evaluated_specs`).
 - `_substitution_scanning.py` — shell-substitution / process-substitution
-  scanning helpers.
+  scanning and the legacy shell-payload segment traversal.
 - `_github_mutation_cli_analysis.py` — `gh` / `curl` mutation grammar.
 - `_github_mutation_request_analysis.py` — request-body mutation vocabulary
   consumed by the cli analyzer.
@@ -34,9 +35,10 @@ block B bootstrap so hook scripts can keep importing via
   `_partition_output_redirects` / `_select_executable_argv_tokens` /
   `extract_redirect_targets_with_status` / `resolve_write_target` projections).
   Sole producer of these symbols; the facade re-exports them.
-
-`scan_write_targets` and `WriteTargetScan` live in
-`_runtime/_command_classification.py`.
+`scan_write_targets` and `WriteTargetScan` are defined in
+`_runtime/_write_target_scan.py` and re-exported by
+`_runtime/_command_classification.py`. The scanner tracks mutable cwd and scope
+state across evaluated commands.
 
 ## Bootstrap Conventions
 

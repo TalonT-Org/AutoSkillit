@@ -181,6 +181,45 @@ def test_unresolved_deny_message_names_literal_remediation() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "command_template",
+    [
+        'echo x > "$(echo {root})/probe.txt"',
+        "echo x > `echo {root}`/probe.txt",
+        'cp /tmp/s "$(echo {root})/probe.txt"',
+        'tee "$(echo {root})/probe.txt"',
+        "cp /tmp/s $(echo a {root})/probe.txt",
+        "cp /tmp/s `echo a {root}`/probe.txt",
+        "echo x > $[0]{root}/probe.txt",
+        'cd "$(echo {root})" && echo x > probe.txt',
+    ],
+    ids=[
+        "redirect-command-substitution",
+        "redirect-backticks",
+        "copy-command-substitution",
+        "tee-command-substitution",
+        "copy-unquoted-command-substitution",
+        "copy-unquoted-backticks",
+        "legacy-arithmetic",
+        "dynamic-cd",
+    ],
+)
+def test_blocks_substituted_install_tree_targets(tmp_path: Path, command_template: str) -> None:
+    root = tmp_path / "lib/python3.13/site-packages/autoskillit"
+    command = command_template.format(root=root)
+    event = _bash(command)
+    event["cwd"] = str(tmp_path)
+
+    code, stdout = _run(event)
+
+    assert code == 0
+    assert _decision(stdout) == "deny"
+    assert (
+        "code=unresolved-write-target"
+        in json.loads(stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+    )
+
+
 @pytest.mark.parametrize("tool_name", ["Write", "Edit"])
 def test_blocks_install_tree_direct_writes(tmp_path: Path, tool_name: str) -> None:
     target = tmp_path / "lib/python3.13/site-packages/autoskillit/__init__.py"
@@ -188,6 +227,50 @@ def test_blocks_install_tree_direct_writes(tmp_path: Path, tool_name: str) -> No
 
     assert code == 0
     assert _decision(stdout) == "deny"
+
+
+@pytest.mark.parametrize("tool_name", ["Write", "Edit"])
+@pytest.mark.parametrize(
+    "file_path", ["$(printf x)/notes.txt", "`printf x`/notes.txt", "~/notes.txt"]
+)
+def test_direct_write_paths_with_shell_syntax_are_literal(
+    tmp_path: Path, tool_name: str, file_path: str
+) -> None:
+    protected_home = tmp_path / "lib/python3.13/site-packages/autoskillit"
+    protected_home.mkdir(parents=True)
+    code, stdout = _run(
+        {"tool_name": tool_name, "cwd": str(tmp_path), "tool_input": {"file_path": file_path}},
+        env={"HOME": str(protected_home)},
+    )
+
+    assert code == 0
+    assert stdout == ""
+
+
+@pytest.mark.parametrize("path", ["$HOME/probe.txt", "~/probe.txt"])
+@pytest.mark.parametrize("tool_name", ["Bash", "Write", "Edit"])
+def test_blocks_literal_quoted_expansion_under_install_tree(
+    tmp_path: Path, tool_name: str, path: str
+) -> None:
+    root = tmp_path / "lib/python3.13/site-packages/autoskillit"
+    root.mkdir(parents=True)
+    home = tmp_path / "other-home"
+    home.mkdir()
+    event = (
+        _bash(f"echo x > '{path}'")
+        if tool_name == "Bash"
+        else {"tool_name": tool_name, "tool_input": {"file_path": path}}
+    )
+    event["cwd"] = str(root)
+
+    code, stdout = _run(event, env={"HOME": str(home)})
+
+    assert code == 0
+    assert _decision(stdout) == "deny"
+    assert (
+        "code=protected-installation-target"
+        in json.loads(stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+    )
 
 
 def test_blocks_install_tree_apply_patch(tmp_path: Path) -> None:
@@ -255,6 +338,76 @@ def test_blocks_relative_target_after_cd_into_install_tree(tmp_path: Path) -> No
     assert _decision(stdout) == "deny"
 
 
+@pytest.mark.parametrize(
+    "command_template",
+    [
+        "cd -P {package} && echo x > output.py",
+        "pushd {package} && echo x > output.py",
+        "(cd {package} && echo x > output.py)",
+        "{{ cd {package}; echo x > output.py; }}",
+    ],
+    ids=["cd-physical", "pushd", "subshell", "brace-group"],
+)
+def test_blocks_relative_write_after_cd_forms_into_install_tree(
+    tmp_path: Path, command_template: str
+) -> None:
+    package = tmp_path / "lib/python3.13/site-packages/autoskillit"
+    package.mkdir(parents=True)
+    event = _bash(command_template.format(package=package))
+    event["cwd"] = str(tmp_path)
+
+    code, stdout = _run(event)
+
+    assert code == 0
+    assert _decision(stdout) == "deny"
+    assert (
+        "code=protected-installation-target"
+        in json.loads(stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+    )
+
+
+def test_blocks_install_target_after_unresolved_cd(tmp_path: Path) -> None:
+    target = tmp_path / "lib/python3.13/site-packages/autoskillit/output.py"
+    event = _bash(f"cd - && echo x > {target}")
+    event["cwd"] = str(tmp_path)
+
+    code, stdout = _run(event)
+
+    assert code == 0
+    assert _decision(stdout) == "deny"
+    assert (
+        "code=protected-installation-target"
+        in json.loads(stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+    )
+
+
+def test_allows_absolute_write_after_unresolved_cd(tmp_path: Path) -> None:
+    root = tmp_path / "lib/python3.13/site-packages/autoskillit"
+    root.mkdir(parents=True)
+    outside = tmp_path / "outside.txt"
+    event = _bash(f'cd "$(git rev-parse --show-toplevel)" && echo x > {outside}')
+    event["cwd"] = str(root)
+
+    code, stdout = _run(event)
+
+    assert code == 0
+    assert stdout == ""
+
+
+def test_blocks_tilde_expansion_into_install_tree(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    target = "~/.local/share/uv/tools/autoskillit/lib/site-packages/autoskillit/output.py"
+
+    code, stdout = _run(_bash(f"echo x > {target}"), env={"HOME": str(home)})
+
+    assert code == 0
+    assert _decision(stdout) == "deny"
+    assert (
+        "code=protected-installation-target"
+        in json.loads(stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+    )
+
+
 def test_blocks_normalized_install_target(tmp_path: Path) -> None:
     target = tmp_path / "lib/python3.13/site-packages/../site-packages/autoskillit/__init__.py"
     code, stdout = _run(_bash(f"cat > {target} <<'EOF'\nEOF"))
@@ -272,6 +425,25 @@ def test_allows_non_install_writes_and_reads(tmp_path: Path) -> None:
     assert stdout == ""
 
     code, stdout = _run(_bash(f"cat {package_file}"))
+
+    assert code == 0
+    assert stdout == ""
+
+
+def test_allows_quoted_redirect_outside_install_tree(tmp_path: Path) -> None:
+    target = tmp_path / "project.txt"
+
+    code, stdout = _run(_bash(f'echo x > "{target}"'))
+
+    assert code == 0
+    assert stdout == ""
+
+
+def test_allows_quoted_redirect_glyph_in_argument(tmp_path: Path) -> None:
+    event = _bash(r"printf '> quoted\n' > .autoskillit/temp/x.md")
+    event["cwd"] = str(tmp_path)
+
+    code, stdout = _run(event)
 
     assert code == 0
     assert stdout == ""

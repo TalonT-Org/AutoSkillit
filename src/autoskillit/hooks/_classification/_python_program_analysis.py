@@ -11,6 +11,8 @@ dependency on the rest of `_classification/`.
 from __future__ import annotations
 
 import ast
+import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 _PYTHON_SUBPROCESS_FUNCS: frozenset[str] = frozenset(
@@ -95,6 +97,17 @@ class _InterpreterCommandSpec:
     invokes_shell: bool = False
 
 
+def _python_c_program(executable: str, args: Sequence[str]) -> str | None:
+    """Return the literal program passed to a normalized Python executable's -c."""
+    if re.fullmatch(r"python(?:3(?:\.\d+)?)?", executable) is None:
+        return None
+    try:
+        index = args.index("-c")
+    except ValueError:
+        return None
+    return args[index + 1] if index + 1 < len(args) else None
+
+
 def _python_program_command_specs(
     program: str,
 ) -> tuple[list[_InterpreterCommandSpec], bool]:
@@ -136,3 +149,14 @@ def _python_program_command_specs(
         else:
             specs.append(_InterpreterCommandSpec(payload, cwd, invokes_shell))
     return (specs, has_unresolved)
+
+
+def _python_program_evaluated_specs(program: str) -> list[_InterpreterCommandSpec]:
+    """Return specs that yield an executable argv or shell command."""
+    specs, _has_unresolved = _python_program_command_specs(program)
+    return [
+        spec
+        for spec in specs
+        if (isinstance(spec.payload, list) and bool(spec.payload))
+        or (isinstance(spec.payload, str) and spec.invokes_shell)
+    ]

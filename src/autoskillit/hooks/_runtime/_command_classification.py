@@ -179,36 +179,9 @@ _WRAPPER_VALUE_FLAGS_DETACHED: frozenset[str] = frozenset(
     }
 )
 
-WRITE_VERBS: frozenset[str] = frozenset(
-    {"sed", "tee", "mv", "cp", "patch", "install", "rm", "unlink"}
-)
-_PSEUDO_DEVICE_PATHS: frozenset[str] = frozenset(
-    {"/dev/null", "/dev/zero", "/dev/stdout", "/dev/stderr", "/dev/stdin"}
-)
-UNRESOLVED_WRITE_TARGET_REMEDIATION = (
-    "Write targets must be literal paths: substitute variable, command-substitution, "
-    "backtick and tilde values into the command text (e.g. run `date +%Y-%m-%d_%H%M%S` "
-    "once and paste the printed value) instead of writing through them."
-)
-
-
-@dataclass(frozen=True, slots=True)
-class WriteTargetScan:
-    targets: tuple[str, ...]
-    unresolved: bool
-    parseable: bool
-    has_write: bool
-
 
 class SearchPattern(Protocol):
     def search(self, string: str, /): ...
-
-
-def updated_execution_cwd(segment: list[str], cwd: str) -> str:
-    """Apply a literal shell cd segment to later relative target resolution."""
-    if command_verb(segment) != "cd" or len(segment) < 2:
-        return cwd
-    return resolve_write_target(segment[1], cwd) or ""
 
 
 def extract_patch_paths(command: str) -> list[str]:
@@ -222,27 +195,46 @@ def extract_patch_paths(command: str) -> list[str]:
     return paths
 
 
-def non_flag_operands(args: list[str]) -> list[str]:
-    operands: list[str] = []
-    skip_next = False
-    for token in args:
-        if skip_next:
-            skip_next = False
-            continue
-        if token.startswith("-") or token.startswith("&") or _FD_REDIRECT_RE.match(token):
-            continue
-        if _REDIRECT_OP_ONLY_RE.match(token):
-            skip_next = True
-            continue
-        if _REDIRECT_TOKEN_RE.match(token):
-            continue
-        operands.append(token)
-    return operands
+def _shell_source(argv_tokens: Sequence[ArgvToken] | None, index: int) -> str | None:
+    """Keep a shell token's raw spelling; Python argv has no shell expansion.
+
+    Returns ``None`` (the sentinel for "no source available") when *index* is
+    out of range. Callers must propagate ``None`` so ``resolve_write_target``
+    short-circuits the shell-expansion path; an empty string would silently
+    fail resolution inside ``_expand_shell_target``.
+    """
+    if argv_tokens is None or index >= len(argv_tokens):
+        return None
+    return argv_tokens[index].raw_span.strip()
 
 
-def _write_verb_operands(verb: str, segment: list[str], operands: list[str]) -> list[str]:
+def _non_option_indices(argv: list[str], argv_tokens: Sequence[ArgvToken] | None) -> list[int]:
+    separator = next(
+        (index for index, token in enumerate(argv[1:], start=1) if token == "--"),
+        len(argv),
+    )
+    input_redirects = {
+        index
+        for index in range(1, len(argv) - 1)
+        if argv_tokens is not None
+        and argv[index] == "<"
+        and argv_tokens[index].raw_span.strip() == "<"
+    }
+    return [
+        index
+        for index in range(1, len(argv))
+        if index not in input_redirects
+        and index - 1 not in input_redirects
+        and ((index < separator and not argv[index].startswith("-")) or index > separator)
+    ]
+
+
+def _write_verb_operand_indices(
+    verb: str, argv: list[str], argv_tokens: Sequence[ArgvToken] | None
+) -> list[int]:
+    operands = _non_option_indices(argv, argv_tokens)
     if verb == "sed":
-        has_inplace = any(token.startswith(("-i", "--in-place")) for token in segment[1:])
+        has_inplace = any(token.startswith(("-i", "--in-place")) for token in argv[1:])
         if not has_inplace:
             return []
         return operands[-1:]
@@ -251,7 +243,7 @@ def _write_verb_operands(verb: str, segment: list[str], operands: list[str]) -> 
     if verb == "install":
         # GNU install's -t/--target-directory form takes its destination
         # from a flag; otherwise the last operand is the destination.
-        if "-t" in segment[1:] or "--target-directory" in segment[1:]:
+        if "-t" in argv[1:] or "--target-directory" in argv[1:]:
             return operands[:1]
         if len(operands) < 2:
             return []
@@ -262,14 +254,20 @@ def _write_verb_operands(verb: str, segment: list[str], operands: list[str]) -> 
 
 
 def extract_write_verb_targets(
-    verb: str, segment: list[str], cwd: str = ""
+    verb: str,
+    argv: list[str],
+    cwd: str = "",
+    *,
+    argv_tokens: Sequence[ArgvToken] | None = None,
 ) -> tuple[list[str], bool]:
     """Return write-verb targets and whether a write target could not resolve."""
-    operands = _write_verb_operands(verb, segment, non_flag_operands(segment[1:]))
+    operands = _write_verb_operand_indices(verb, argv, argv_tokens)
     targets: list[str] = []
     unresolved_target = False
-    for operand in operands:
-        resolved = resolve_write_target(operand, cwd)
+    for index in operands:
+        resolved = resolve_write_target(
+            argv[index], cwd, shell_source=_shell_source(argv_tokens, index)
+        )
         if resolved is None:
             unresolved_target = True
         else:
@@ -327,21 +325,21 @@ def _consume_env(start: int, segment: list[str]) -> int:
     return i
 
 
-def _env_chdir_value(start: int, segment: list[str]) -> str | None:
-    """Return the last chdir option in one env prefix, if present."""
+def _env_chdir_value(start: int, segment: list[str]) -> tuple[str, int, int] | None:
+    """Return the last chdir value, token index, and attached-prefix length."""
     end = _consume_env(start, segment)
-    chdir: str | None = None
+    chdir: tuple[str, int, int] | None = None
     i = start
     while i < end:
         token = segment[i]
         if token in {"-C", "--chdir"} and i + 1 < end:
-            chdir = segment[i + 1]
+            chdir = (segment[i + 1], i + 1, 0)
             i += 2
         elif token.startswith("--chdir="):
-            chdir = token.partition("=")[2]
+            chdir = (token.partition("=")[2], i, len("--chdir="))
             i += 1
         elif token.startswith("-C") and token != "-C":
-            chdir = token[2:]
+            chdir = (token[2:], i, 2)
             i += 1
         elif token in _ENV_VALUE_FLAGS and i + 1 < end:
             i += 2
@@ -592,6 +590,7 @@ if TYPE_CHECKING:
         StdinConsumer,
         _extract_interpreter_segment_specs,
         _extract_process_substitution_occurrences,
+        _is_shell_interpreter,
         _normalize_executable,
         evaluated_payloads,
         extract_interpreter_command_payloads,
@@ -605,6 +604,9 @@ if TYPE_CHECKING:
         all_evaluated_segments as _all_evaluated_segments_impl,
     )
     from autoskillit.hooks._classification._interpreters import (
+        all_evaluated_segments_with_provenance as _all_evaluated_segments_with_provenance_impl,
+    )
+    from autoskillit.hooks._classification._interpreters import (
         interpreter_invokes as _interpreter_invokes_impl,
     )
     from autoskillit.hooks._classification._interpreters import (
@@ -612,10 +614,8 @@ if TYPE_CHECKING:
     )
     from autoskillit.hooks._classification._output_redirect import (  # noqa: F401
         _FD_DUPLICATION_RE,
-        _FD_REDIRECT_RE,
         _REDIRECT_OP_ONLY_RE,
         _REDIRECT_TOKEN_RE,
-        _SHELL_VAR_RE,
         OutputRedirectPartition,
         _partition_output_redirect_indices,
         _partition_output_redirects,
@@ -653,6 +653,7 @@ else:
     _extract_process_substitution_occurrences = (
         _interpreters._extract_process_substitution_occurrences
     )
+    _is_shell_interpreter = _interpreters._is_shell_interpreter
     _normalize_executable = _interpreters._normalize_executable
     EvaluatedPayload = _interpreters.EvaluatedPayload
     StdinConsumer = _interpreters.StdinConsumer
@@ -664,16 +665,17 @@ else:
     stdin_consumer = _interpreters.stdin_consumer
     tokenize_shell_payload_segments = _interpreters.tokenize_shell_payload_segments
     _all_evaluated_segments_impl = _interpreters.all_evaluated_segments
+    _all_evaluated_segments_with_provenance_impl = (
+        _interpreters.all_evaluated_segments_with_provenance
+    )
     _interpreter_invokes_impl = _interpreters.interpreter_invokes
     _live_command_text_impl = _interpreters.live_command_text
     _SHELL_INVOCATION_FLAG_SPEC = _interpreters._SHELL_INVOCATION_FLAG_SPEC
     _PYTHON_INVOCATION_FLAG_SPEC = _interpreters._PYTHON_INVOCATION_FLAG_SPEC
     OutputRedirectPartition = _output_redirect.OutputRedirectPartition
     _FD_DUPLICATION_RE = _output_redirect._FD_DUPLICATION_RE
-    _FD_REDIRECT_RE = _output_redirect._FD_REDIRECT_RE
     _REDIRECT_OP_ONLY_RE = _output_redirect._REDIRECT_OP_ONLY_RE
     _REDIRECT_TOKEN_RE = _output_redirect._REDIRECT_TOKEN_RE
-    _SHELL_VAR_RE = _output_redirect._SHELL_VAR_RE
     _partition_output_redirect_indices = _output_redirect._partition_output_redirect_indices
     _partition_output_redirects = _output_redirect._partition_output_redirects
     _select_executable_argv_tokens = _output_redirect._select_executable_argv_tokens
@@ -697,7 +699,33 @@ _GIT_FLAG_WITH_VALUE: frozenset[str] = frozenset(
 )
 
 
-def _git_subcommand_index(argv: list[str], cwd: str) -> tuple[int, str, bool]:
+def _git_global_value(
+    argv: list[str],
+    index: int,
+    flag: str,
+    argv_tokens: Sequence[ArgvToken] | None,
+) -> tuple[str | None, str | None, int] | None:
+    token = argv[index]
+    if flag not in _GIT_FLAG_WITH_VALUE:
+        return None, None, index + 1
+    if token == flag:
+        if index + 1 >= len(argv):
+            return None
+        return argv[index + 1], _shell_source(argv_tokens, index + 1), index + 2
+    value = token[len(flag) :]
+    source = _shell_source(argv_tokens, index)
+    if source is not None:
+        source = source[len(flag) :]
+    if token.startswith("--"):
+        value = value.removeprefix("=")
+        if source is not None:
+            source = source.removeprefix("=")
+    return value, source, index + 1
+
+
+def _git_subcommand_index(
+    argv: list[str], cwd: str, argv_tokens: Sequence[ArgvToken] | None = None
+) -> tuple[int, str, bool]:
     """Find git's subcommand, applying global cwd and repository-layout flags."""
     i = 1
     layout_unknown = False
@@ -706,42 +734,44 @@ def _git_subcommand_index(argv: list[str], cwd: str) -> tuple[int, str, bool]:
         flag = _spec_key_for_token(token, _GIT_GLOBAL_FLAG_SPEC)
         if flag not in _GIT_GLOBAL_FLAG_SPEC:
             return len(argv), cwd, layout_unknown
-        value: str | None = None
-        if flag in _GIT_FLAG_WITH_VALUE:
-            if token == flag:
-                if i + 1 >= len(argv):
-                    return len(argv), cwd, layout_unknown
-                value = argv[i + 1]
-                i += 2
-            else:
-                value = token[len(flag) :]
-                if token.startswith("--"):
-                    value = value.removeprefix("=")
-                i += 1
-        else:
-            i += 1
+        parsed = _git_global_value(argv, i, flag, argv_tokens)
+        if parsed is None:
+            return len(argv), cwd, layout_unknown
+        value, value_source, i = parsed
         if flag == "-C":
-            cwd = resolve_write_target(value or "", cwd) or ""
+            cwd = resolve_write_target(value or "", cwd, shell_source=value_source) or ""
         elif flag in {"--work-tree", "--git-dir"}:
             layout_unknown = True
     return i, cwd, layout_unknown
 
 
-def _wrapped_verb_cwd(segment: list[str], start: int, cwd: str) -> str:
+def _wrapped_verb_cwd(
+    segment: list[str],
+    start: int,
+    cwd: str,
+    argv_tokens: Sequence[ArgvToken] | None = None,
+) -> str:
     """Resolve env chdir options for the executable without moving shell redirects."""
     for index, token in enumerate(segment[:start]):
         if token == "env":
             chdir = _env_chdir_value(index + 1, segment)
             if chdir is not None:
-                cwd = resolve_write_target(chdir, cwd) or ""
+                value, value_index, prefix_length = chdir
+                source = _shell_source(argv_tokens, value_index)
+                if source is not None:
+                    source = source[prefix_length:]
+                cwd = resolve_write_target(value, cwd, shell_source=source) or ""
     return cwd
 
 
 def _git_write_targets(
-    argv: list[str], cwd: str, prefix: list[str]
+    argv: list[str],
+    cwd: str,
+    prefix: list[str],
+    argv_tokens: Sequence[ArgvToken] | None = None,
 ) -> tuple[list[str], bool, bool]:
     """Return git restoration targets, unresolved status, and write detection."""
-    subcommand_index, git_cwd, layout_unknown = _git_subcommand_index(argv, cwd)
+    subcommand_index, git_cwd, layout_unknown = _git_subcommand_index(argv, cwd, argv_tokens)
     if subcommand_index >= len(argv):
         return [], False, False
     subcommand = argv[subcommand_index]
@@ -757,62 +787,18 @@ def _git_write_targets(
     )
     targets: list[str] = []
     unresolved = False
-    for pathspec in options[options.index("--") + 1 :]:
-        target = resolve_write_target(pathspec, "" if layout_unknown else git_cwd)
+    pathspec_start = subcommand_index + 2 + options.index("--")
+    for index in range(pathspec_start, len(argv)):
+        target = resolve_write_target(
+            argv[index],
+            "" if layout_unknown else git_cwd,
+            shell_source=_shell_source(argv_tokens, index),
+        )
         if target is None:
             unresolved = True
         else:
             targets.append(target)
     return targets, unresolved, True
-
-
-def scan_write_targets(command: str, cwd: str) -> WriteTargetScan:
-    """Classify literal write targets and unresolved writes in evaluated shell commands."""
-    segments = all_evaluated_segments(command, include_process_substitutions=True)
-    if segments is None:
-        return WriteTargetScan((), False, False, False)
-
-    targets: list[str] = []
-    unresolved = False
-    has_write = False
-    shell_cwd = cwd
-    for segment in segments:
-        redirect_targets, redirect_unresolved = extract_redirect_targets_with_status(
-            segment, shell_cwd
-        )
-        unresolved |= redirect_unresolved
-        has_write |= bool(redirect_targets or redirect_unresolved)
-
-        start = _verb_start_index(segment)
-        if start is not None:
-            argv = segment[start:]
-            verb = argv[0]
-            if verb == "cd":
-                shell_cwd = updated_execution_cwd(argv, shell_cwd)
-            elif not is_gh_command(segment):
-                verb_cwd = _wrapped_verb_cwd(segment, start, shell_cwd)
-                if verb in WRITE_VERBS:
-                    verb_targets, verb_unresolved = extract_write_verb_targets(
-                        verb, argv, verb_cwd
-                    )
-                    targets.extend(verb_targets)
-                    unresolved |= verb_unresolved
-                    has_write = True
-                elif verb == "git" or verb.endswith("/git"):
-                    git_targets, git_unresolved, git_has_write = _git_write_targets(
-                        argv, verb_cwd, segment[:start]
-                    )
-                    targets.extend(git_targets)
-                    unresolved |= git_unresolved
-                    has_write |= git_has_write
-        targets.extend(redirect_targets)
-
-    return WriteTargetScan(
-        tuple(dict.fromkeys(path for path in targets if path not in _PSEUDO_DEVICE_PATHS)),
-        unresolved,
-        True,
-        has_write,
-    )
 
 
 def live_command_text(command: str) -> str:
@@ -823,3 +809,24 @@ def live_command_text(command: str) -> str:
 def interpreter_invokes(command: str, *, target: Sequence[str]) -> bool:
     """Return True when a PYTHON-consumer payload resolves to invoking *target*."""
     return _interpreter_invokes_impl(command, target=target)
+
+
+if TYPE_CHECKING:
+    from autoskillit.hooks._runtime import _write_target_scan
+    from autoskillit.hooks._runtime._write_target_scan import (
+        UNRESOLVED_WRITE_TARGET_REMEDIATION,
+        WriteTargetScan,
+    )
+else:
+    if __package__:
+        from . import _write_target_scan
+    else:
+        import _write_target_scan
+
+    UNRESOLVED_WRITE_TARGET_REMEDIATION = _write_target_scan.UNRESOLVED_WRITE_TARGET_REMEDIATION
+    WriteTargetScan = _write_target_scan.WriteTargetScan
+
+
+def scan_write_targets(command: str, cwd: str) -> WriteTargetScan:
+    """Classify write targets in evaluated shell and Python commands."""
+    return _write_target_scan.scan_write_targets(command, cwd)

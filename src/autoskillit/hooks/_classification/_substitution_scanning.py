@@ -2,11 +2,15 @@
 
 Split out of `_interpreters.py` (rectify #4941 Part A) to keep that module's
 stdin-consumer/evaluated-payload machinery under the REQ-CNST-010 line cap.
-Self-contained: these are pure character-by-character state machines over a
-command string, with no dependency on the rest of `_classification/`.
+The occurrence scanners are pure character-by-character state machines. The
+shell-payload walker receives payload extraction and tokenization callbacks
+from the interpreter, keeping this module independent of its callers.
 """
 
 from __future__ import annotations
+
+from collections import deque
+from collections.abc import Callable, Iterator
 
 
 def _quoted_span_end(command: str, start: int) -> int:
@@ -156,3 +160,65 @@ def _iter_substitution_occurrences(command: str) -> list[tuple[int, str]]:
             continue
         i += 1
     return occurrences
+
+
+def _queue_nested_shell_payloads(
+    payload: str,
+    queue: deque[tuple[str, bool, bool]],
+    *,
+    extract_shell_payloads: Callable[[str], list[str]],
+    preserve_occurrence: bool,
+    include_process_substitutions: bool,
+) -> bool:
+    queue.extend((nested, preserve_occurrence, True) for nested in extract_shell_payloads(payload))
+    if include_process_substitutions:
+        for _kind, _start, _end, body, balanced in _extract_process_substitution_occurrences(
+            payload
+        ):
+            if not balanced:
+                return False
+            queue.append((body, True, True))
+    return True
+
+
+def _iter_shell_payload_segment_groups(
+    command: str,
+    *,
+    extract_shell_payloads: Callable[[str], list[str]],
+    tokenize_segments: Callable[[str], list[list[str]] | None],
+    include_process_substitutions: bool = False,
+    include_outer: bool = True,
+) -> Iterator[list[list[str]] | None]:
+    """Walk shell payloads in BFS order, yielding tokenized segment groups.
+
+    Repeated synthesized payload text is visited once; occurrence-bearing
+    substitutions retain their identity. An unparseable command yields None.
+    """
+    seen: set[str] = set()
+    queue = deque([(command, False, False)])
+    while queue:
+        payload, preserve_occurrence, emit = queue.popleft()
+        is_outer = not emit
+        if emit and not preserve_occurrence and payload in seen:
+            continue
+        if emit and not preserve_occurrence:
+            seen.add(payload)
+        if not payload.strip():
+            if is_outer and include_outer:
+                yield []
+            continue
+        segments = tokenize_segments(payload)
+        if segments is None:
+            yield None
+            return
+        if include_outer or not is_outer:
+            yield segments
+        if not _queue_nested_shell_payloads(
+            payload,
+            queue,
+            extract_shell_payloads=extract_shell_payloads,
+            preserve_occurrence=preserve_occurrence,
+            include_process_substitutions=include_process_substitutions,
+        ):
+            yield None
+            return

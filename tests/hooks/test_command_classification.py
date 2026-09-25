@@ -1744,6 +1744,24 @@ class TestScanWriteTargets:
                 id="cdpath-inline-assignment",
             ),
             pytest.param(
+                "CDPATH=; cd sub; echo x > rel.txt",
+                ("{cwd}/sub/rel.txt",),
+                False,
+                id="cdpath-empty-assignment",
+            ),
+            pytest.param(
+                "unset CDPATH; cd sub; echo x > rel.txt",
+                ("{cwd}/sub/rel.txt",),
+                False,
+                id="cdpath-unset",
+            ),
+            pytest.param(
+                "CDPATH= cd sub && echo x > rel.txt",
+                ("{cwd}/sub/rel.txt",),
+                False,
+                id="cdpath-empty-inline-assignment",
+            ),
+            pytest.param(
                 "(cd /tmp/d; echo x > rel.txt)",
                 ("/tmp/d/rel.txt",),
                 False,
@@ -1845,6 +1863,16 @@ class TestScanWriteTargets:
         assert command_classification.scan_write_targets(
             "cd sub && echo x > rel.txt", str(tmp_path)
         ) == command_classification.WriteTargetScan((), True, True, True)
+
+    def test_unset_cdpath_restores_relative_cd_resolution(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("CDPATH", str(tmp_path / "other"))
+        assert command_classification.scan_write_targets(
+            "unset CDPATH; cd sub; echo x > rel.txt", str(tmp_path)
+        ) == command_classification.WriteTargetScan(
+            (str(tmp_path / "sub" / "rel.txt"),), False, True, True
+        )
 
     @pytest.mark.parametrize(
         ("command", "targets", "unresolved"),

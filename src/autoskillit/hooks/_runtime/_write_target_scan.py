@@ -68,7 +68,7 @@ def _shell_builtin_prefix(prefix: list[str]) -> bool:
     )
 
 
-def _cdpath_mutated(segment: list[str], start: int | None) -> bool:
+def _cdpath_setting(segment: list[str], start: int | None) -> tuple[bool, bool] | None:
     if __package__:
         from . import _command_classification as _classification
     else:
@@ -76,7 +76,7 @@ def _cdpath_mutated(segment: list[str], start: int | None) -> bool:
 
     prefix = segment if start is None else segment[:start]
     if not _shell_builtin_prefix(prefix):
-        return False
+        return None
     verb = segment[start] if start is not None else ""
     shell_builtin = verb in {
         "cd",
@@ -93,11 +93,13 @@ def _cdpath_mutated(segment: list[str], start: int | None) -> bool:
         "local",
         "read",
     }
-    if any(
-        _classification._is_posix_assignment(token) and token.partition("=")[0] == "CDPATH"
+    assignments = [
+        token.partition("=")[2]
         for token in prefix
-    ) and (start is None or shell_builtin):
-        return True
+        if _classification._is_posix_assignment(token) and token.partition("=")[0] == "CDPATH"
+    ]
+    if assignments and (start is None or shell_builtin):
+        return bool(assignments[-1]), verb in {"cd", "pushd", "popd"}
     if start is None or verb not in {
         "export",
         "unset",
@@ -107,8 +109,16 @@ def _cdpath_mutated(segment: list[str], start: int | None) -> bool:
         "local",
         "read",
     }:
-        return False
-    return any(token == "CDPATH" or token.startswith("CDPATH=") for token in segment[start + 1 :])
+        return None
+    for token in segment[start + 1 :]:
+        if token.startswith("CDPATH="):
+            return bool(token.partition("=")[2]), False
+        if token == "CDPATH":
+            if verb == "unset":
+                return False, False
+            if verb != "export":
+                return True, False
+    return None
 
 
 def _apply_directory_command(
@@ -281,9 +291,16 @@ def _scan_executable(
         import _command_classification as _classification  # type: ignore[no-redef]
 
     start = _classification._verb_start_index(executable)
-    if argv_tokens is not None and _cdpath_mutated(executable, start):
-        state.cdpath_unknown = True
-    if start is None or _apply_shell_builtin(executable, start, argv_tokens, state):
+    setting = _cdpath_setting(executable, start) if argv_tokens is not None else None
+    previous_cdpath = state.cdpath_unknown
+    if setting is not None:
+        state.cdpath_unknown = setting[0]
+    if start is None:
+        return [], False, False, None
+    handled = _apply_shell_builtin(executable, start, argv_tokens, state)
+    if setting is not None and setting[1]:
+        state.cdpath_unknown = previous_cdpath
+    if handled:
         return [], False, False, None
     if _classification.is_gh_command(executable):
         return [], False, False, None

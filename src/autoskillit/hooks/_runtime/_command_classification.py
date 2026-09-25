@@ -196,7 +196,13 @@ def extract_patch_paths(command: str) -> list[str]:
 
 
 def _shell_source(argv_tokens: Sequence[ArgvToken] | None, index: int) -> str | None:
-    """Keep a shell token's raw spelling; Python argv has no shell expansion."""
+    """Keep a shell token's raw spelling; Python argv has no shell expansion.
+
+    Returns ``None`` (the sentinel for "no source available") when *index* is
+    out of range. Callers must propagate ``None`` so ``resolve_write_target``
+    short-circuits the shell-expansion path; an empty string would silently
+    fail resolution inside ``_expand_shell_target``.
+    """
     if argv_tokens is None or index >= len(argv_tokens):
         return None
     return argv_tokens[index].raw_span.strip()

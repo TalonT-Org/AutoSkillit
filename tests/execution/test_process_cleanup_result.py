@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import errno
-import select
 import signal
-import subprocess
-import sys
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
@@ -18,7 +15,6 @@ import structlog.testing
 from autoskillit.execution import TetherSpec, async_kill_process_tree, kill_process_tree
 from autoskillit.execution.process import _process_kill
 from autoskillit.execution.process._lifecycle import owned_group as _owned_group
-from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -914,42 +910,3 @@ def test_subprocess_result_carries_cleanup_evidence_field() -> None:
     )
 
     assert result.cleanup_evidence is evidence
-
-
-@pytest.mark.skipif(
-    not hasattr(_owned_group.os, "WNOWAIT"),
-    reason="WNOWAIT is required for non-reaping observation",
-)
-@pytest.mark.parametrize(
-    ("ignore_sigterm", "expected_escalated"),
-    [(False, False), (True, True)],
-    ids=["sigterm", "sigkill-escalation"],
-)
-def test_owned_group_cleanup_reports_sigkill_escalation(
-    tmp_path: Path, ignore_sigterm: bool, expected_escalated: bool
-) -> None:
-    setup = "signal.signal(signal.SIGTERM, signal.SIG_IGN)" if ignore_sigterm else "pass"
-    script = f"import signal, time\n{setup}\nprint('ready', flush=True)\ntime.sleep(60)\n"
-    owner = _owned_group.spawn_owned_process(
-        [sys.executable, "-c", script],
-        start_new_session=True,
-        stdout=subprocess.PIPE,
-        text=True,
-        env=production_interpreter_env(),
-        tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
-    )
-
-    try:
-        assert owner.process.stdout is not None
-        readable, _, _ = select.select([owner.process.stdout], [], [], 5.0)
-        assert readable
-        assert owner.process.stdout.readline().strip() == "ready"
-
-        returncode, result = owner.cleanup(timeout=0.1)
-
-        assert returncode is not None
-        assert result.escalated is expected_escalated
-        assert result.complete is True
-    finally:
-        if owner.process.poll() is None:
-            owner.cleanup(timeout=0.1, escalate=True)

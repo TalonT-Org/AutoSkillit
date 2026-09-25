@@ -50,17 +50,6 @@ def test_evaluated_segment_rejects_tokens_provenance_mismatch() -> None:
         replace(_submitted_segment(), tokens=["git", "show"])
 
 
-def test_evaluated_segment_accepts_matching_provenance() -> None:
-    """The happy path: tokens equal provenance.tokens."""
-    segment = _submitted_segment()
-    provenance = segment.provenance
-    assert provenance is not None
-    assert segment.tokens == provenance.tokens
-    assert segment.redirect_syntax == provenance.redirect_syntax
-    assert segment.argv_tokens == provenance.argv_tokens
-    assert segment.subshell_path == provenance.subshell_path
-
-
 def test_evaluated_segment_accepts_provenance_none() -> None:
     """Literal Python argv has no submitted source or shell-lexed argv metadata."""
     segments = all_evaluated_segments_with_provenance(

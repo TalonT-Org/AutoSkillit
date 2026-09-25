@@ -134,7 +134,8 @@ def _violation(
     catalog: SessionCatalog,
 ) -> str:
     visible = tool in catalog.tools
-    admitted = TOOL_SESSION_SCOPES[tool].admits(catalog.shape)
+    scope = TOOL_SESSION_SCOPES.get(tool)
+    admitted = scope is not None and scope.admits(catalog.shape)
     gate = catalog.gate_open or tool not in GATED_TOOLS
     return (
         f"{consumer}:{line} {tool} {context.name} "

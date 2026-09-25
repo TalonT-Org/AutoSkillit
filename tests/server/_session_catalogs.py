@@ -53,7 +53,8 @@ class SessionCatalog:
         return frozenset(
             tool
             for tool in self.tools
-            if TOOL_SESSION_SCOPES[tool].admits(self.shape)
+            if (scope := TOOL_SESSION_SCOPES.get(tool)) is not None
+            and scope.admits(self.shape)
             and (self.gate_open or tool not in GATED_TOOLS)
         )
 
@@ -91,7 +92,7 @@ async def build_session_catalog(
     for tag in sorted(ALL_VISIBILITY_TAGS):
         mcp.disable(tags={tag})
 
-    session, headless, auto_gate, fleet_mode = {
+    session, headless_env, auto_gate, fleet_mode = {
         CatalogContext.INTERACTIVE_SKILL: (SESSION_TYPE_SKILL, None, None, None),
         CatalogContext.INTERACTIVE_ORCHESTRATOR: (SESSION_TYPE_ORCHESTRATOR, None, None, None),
         CatalogContext.FOOD_TRUCK: (SESSION_TYPE_ORCHESTRATOR, "1", None, None),
@@ -107,7 +108,7 @@ async def build_session_catalog(
 
     for key, value in (
         (SESSION_TYPE_ENV_VAR, session),
-        (HEADLESS_ENV_VAR, headless),
+        (HEADLESS_ENV_VAR, headless_env),
         (HEADLESS_AUTO_GATE_ENV_VAR, auto_gate),
         (FOOD_TRUCK_TOOL_TAGS_ENV_VAR, tool_tags),
         (FLEET_MODE_ENV_VAR, fleet_mode),

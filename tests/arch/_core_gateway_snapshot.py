@@ -973,7 +973,6 @@ CORE_GATEWAY_SYMBOLS: frozenset[str] = frozenset(
         "entrypoint_shim_path",
         "executable_binding_matches_current_file",
         "execution_marker",
-        "extract_bash_write_targets",
         "extract_path_arg",
         "extract_positional_args",
         "extract_skill_name",

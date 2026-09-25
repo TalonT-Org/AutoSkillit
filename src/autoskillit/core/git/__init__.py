@@ -1,4 +1,4 @@
-"""IL-0 git remote, GitHub URL parsing, bash write-target extraction, and branch-guard primitives.
+"""IL-0 git remote, GitHub URL parsing, test-gate detection, and branch-guard primitives.
 
 Exposes the canonical public surface of ``git_remote``, ``github_url``,
 ``bash_write_targets``, and ``branch_guard`` through the
@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from autoskillit.core.git.bash_write_targets import (
     contains_test_gate_command,
-    extract_bash_write_targets,
 )
 from autoskillit.core.git.branch_guard import (
     is_protected_branch,
@@ -46,7 +45,6 @@ __all__ = [
     "ResolvedRef",
     "_parse_issue_ref",
     "contains_test_gate_command",
-    "extract_bash_write_targets",
     "is_protected_branch",
     "local_branch_ref",
     "normalize_owner_repo",

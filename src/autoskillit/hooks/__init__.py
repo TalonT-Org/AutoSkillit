@@ -50,7 +50,10 @@ from autoskillit.hooks._runtime._command_classification import (
     _INTERPRETER_LINE_RE,
     _WRITE_APIS_RE,
     PROTECTED_SOURCE_PATH_PATTERNS,
+    UNRESOLVED_WRITE_TARGET_REMEDIATION,
+    WriteTargetScan,
     command_has_blocked_protected_path_read,
+    scan_write_targets,
 )
 from autoskillit.hooks._runtime._exploration_request_record import (
     consume_exploration_request_record,
@@ -111,6 +114,8 @@ __all__ = [
     "OUTCOME_SUCCESS",
     "OUTCOME_TIMEOUT",
     "PROTECTED_SOURCE_PATH_PATTERNS",
+    "UNRESOLVED_WRITE_TARGET_REMEDIATION",
+    "WriteTargetScan",
     "REVIEW_LOOP_DENY_TRIGGER",
     "RISKY_GH_SUBCOMMANDS",
     "RISKY_GIT_OPERATIONS",
@@ -139,6 +144,7 @@ __all__ = [
     "open_or_replay",
     "reconcile_batch",
     "reconcile_capture_store",
+    "scan_write_targets",
     "settle_assignment",
     "settle_unadmitted_assignment",
 ]

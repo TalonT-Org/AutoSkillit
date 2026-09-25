@@ -368,12 +368,12 @@ def test_no_resolved_target_is_purely_numeric() -> None:
     classifications = [measurer.classify_command(command) for command in commands]
     bounded_reads = [c for c in classifications if isinstance(c, measurer.BoundedRead)]
 
-    # Lock the type contract: classify_command must return BoundedRead for any
-    # classification outcome. getattr(..., "target", None) would silently coerce
-    # AttributeError to None if the field is ever renamed or removed, hiding a
-    # structural regression behind a vacuous truthy check.
-    assert all(isinstance(c, measurer.BoundedRead) for c in bounded_reads), (
-        f"non-BoundedRead classification outcome: {bounded_reads!r}"
+    # Lock classify_command's return contract: every outcome is BoundedRead or
+    # None. Iterating over the unfiltered list (not bounded_reads) makes the
+    # check non-vacuous — bounded_reads is already filtered by isinstance, so
+    # re-checking it here would silently always pass.
+    assert all(isinstance(c, (measurer.BoundedRead, type(None))) for c in classifications), (
+        f"unexpected classification outcome: {classifications!r}"
     )
     assert all(
         not target.isdigit() for target in (c.target for c in bounded_reads) if target is not None

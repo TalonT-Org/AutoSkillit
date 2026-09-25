@@ -157,6 +157,7 @@ class TestRenderAgentDefinitionsValidation:
             _render_agent_definitions,
         )
 
+        _write_plugin_manifests(tmp_path)
         agents_dir = tmp_path / "agents"
         agents_dir.mkdir()
         _write_agent_md(
@@ -375,9 +376,10 @@ class TestPerCorridorConsumptionChecks:
 
     @pytest.mark.parametrize("registered", [False, True])
     def test_production_projection_namespace_independent_of_host_registry(
-        self, tmp_path: Path, registered: bool
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: bool
     ) -> None:
-        registry = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        registry = tmp_path / ".claude" / "plugins" / "installed_plugins.json"
         if registered:
             registry.parent.mkdir(parents=True, exist_ok=True)
             registry.write_text(

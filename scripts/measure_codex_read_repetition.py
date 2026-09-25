@@ -96,6 +96,7 @@ class RolloutRecords(NamedTuple):
     policy_versions: frozenset[int]
     unclassified: int
     malformed_lines: int
+    malformed_function_call_args: int
 
 
 class BoundedRead(NamedTuple):
@@ -218,6 +219,7 @@ def read_rollout(path: Path) -> RolloutRecords:
     policy_versions: set[int] = set()
     unclassified = 0
     malformed_lines_cell: list[int] = [0]
+    malformed_function_call_args = 0
     with _logical_rollout_reader(path) as handle:
         for payload in _response_item_payloads(handle, malformed_lines_cell):
             payload_type = payload.get("type")
@@ -228,7 +230,7 @@ def read_rollout(path: Path) -> RolloutRecords:
                 if extracted.cmd:
                     commands.append(extracted.cmd)
                 elif extracted.malformed_args:
-                    unclassified += 1
+                    malformed_function_call_args += 1
                 else:
                     unclassified += 1
             elif payload_type == "custom_tool_call" and payload.get("name") == "exec":
@@ -244,6 +246,7 @@ def read_rollout(path: Path) -> RolloutRecords:
         frozenset(policy_versions),
         unclassified,
         malformed_lines_cell[0],
+        malformed_function_call_args,
     )
 
 
@@ -329,12 +332,14 @@ def _bounded_files(
         case "rg":
             if "-n" not in flags and "--line-number" not in flags:
                 return None
-            # Flags whose next token is a search pattern to be skipped from
-            # positionals (so it is not misidentified as the file target).
-            # Includes both --files and --files-with-matches: each makes rg
-            # print file names instead of pattern output, so any following
-            # positional is a path, not a pattern.
-            pattern_flags = ("-e", "-f", "--regexp", "--file", "--files", "--files-with-matches")
+            # Flags whose next token is a search pattern — value flags consume
+            # the pattern into their flag value, so positionals hold files only.
+            # --files is intentionally here: it lists files rg WOULD search
+            # without actually scanning, so no pattern is expected and the
+            # first positional is a path. -l / --files-with-matches expect a
+            # positional pattern and so are NOT in this set — leaving them
+            # out means positionals[1:] correctly skips that pattern.
+            pattern_flags = ("-e", "-f", "--regexp", "--file", "--files")
             return positionals if any(flag in flags for flag in pattern_flags) else positionals[1:]
         case _:
             return None
@@ -404,6 +409,8 @@ def measure_rollout(rollout_path: Path) -> dict[str, Any]:
         "repeat_reads": repeat_reads,
         "unresolved_targets": unresolved_targets,
         "unclassified": records.unclassified,
+        "malformed_lines": records.malformed_lines,
+        "malformed_function_call_args": records.malformed_function_call_args,
         "worst_paths": sorted(target_counts.items(), key=lambda item: -item[1])[:5],
     }
 
@@ -412,6 +419,8 @@ def aggregate_report(rollout_paths: list[Path]) -> dict[str, Any]:
     cohorts: dict[str, dict[str, Any]] = {}
     worst_overall: list[tuple[str, str, int]] = []
     total_unclassified = 0
+    total_malformed_lines = 0
+    total_malformed_function_call_args = 0
     unreadable_rollout_count = 0
     unreadable_errors: list[dict[str, str]] = []
     for path in rollout_paths:
@@ -440,6 +449,8 @@ def aggregate_report(rollout_paths: list[Path]) -> dict[str, Any]:
         agg["repeat_count"] += row["repeat_reads"]
         agg["unresolved_target_count"] += row["unresolved_targets"]
         total_unclassified += row["unclassified"]
+        total_malformed_lines += row["malformed_lines"]
+        total_malformed_function_call_args += row["malformed_function_call_args"]
         for path_name, count in row["worst_paths"]:
             if count > 1:
                 worst_overall.append((row["session"], path_name, count))
@@ -453,6 +464,8 @@ def aggregate_report(rollout_paths: list[Path]) -> dict[str, Any]:
         "cohorts": cohorts,
         "worst_offenders": worst_overall[:20],
         "unclassified_record_count": total_unclassified,
+        "malformed_lines_count": total_malformed_lines,
+        "malformed_function_call_args_count": total_malformed_function_call_args,
         "unreadable_rollout_count": unreadable_rollout_count,
         "unreadable_errors": unreadable_errors,
     }

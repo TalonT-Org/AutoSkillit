@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import shutil
 import sys
-import time
 import uuid
 from dataclasses import replace
 from pathlib import Path
@@ -428,7 +427,6 @@ def _execute_cook_attempt(
         launch_id=launch_id,
         attempt=attempt,
         current_resume_spec=current_resume_spec,
-        ceiling_seconds=config.process_tether.cook_ceiling_seconds,
     ) as attempt_handle:
         trace.record_attempt_anchor(attempt=attempt, view_id=attempt_handle.view_id)
         observer = _startup_observer(
@@ -458,10 +456,10 @@ def _execute_cook_attempt(
             pass_fds=pass_fds,
             on_spawn=_record_spawn,
             on_reaped=attempt_handle.record_reaped,
+            on_teardown_unproven=attempt_handle.record_teardown_unproven,
             trace=trace,
             observer=observer,
-            not_after=time.time() + config.process_tether.cook_ceiling_seconds,
-            systemd_scope_enabled=config.process_tether.systemd_scope_enabled,
+            lifetime=config.process_tether,
             pre_spawn_check=validation.pre_spawn_check,
         )
         reload_session_id = _session_reload.consume_reload_sentinel(project_dir)
@@ -487,7 +485,8 @@ def _run_managed_cook(
     showed_onboarding: bool,
 ) -> None:
     import autoskillit.core as core
-    from autoskillit.cli.session import _session_onboarding, _session_reload
+    from autoskillit.cli.session import _session_onboarding, _session_process, _session_reload
+    from autoskillit.core import TerminationReason
 
     if projection_binding is None:
         raise RuntimeError(
@@ -516,9 +515,15 @@ def _run_managed_cook(
                 trace_enabled=trace_enabled,
                 force_inactive_agent_teams=force_inactive_agent_teams,
             )
+            if result.termination in (
+                TerminationReason.IDLE_STALL,
+                TerminationReason.TIMED_OUT,
+            ):
+                raise SystemExit(_session_process.attempt_exit_status(result))
             if reload_session_id is None:
-                if result.returncode != 0:
-                    raise SystemExit(result.returncode)
+                status = _session_process.attempt_exit_status(result)
+                if status != 0:
+                    raise SystemExit(status)
                 if showed_onboarding:
                     _session_onboarding.mark_onboarded(project_dir)
                 trace.close(status="success")

@@ -26,16 +26,18 @@ even when it does:
   `execution/process/_process_tether.py`).
 - **`RuntimeMaxSec` is not reliably enforced** on scope units (Launchpad
   [#2015126](https://bugs.launchpad.net/ubuntu/+source/systemd/+bug/2015126)),
-  and monotonic-clock timers do not advance while the host is suspended. The
-  tether's `not_after` is wall-clock (`time.time()`) and does count
-  suspended time, so the two ceilings deliberately measure different clocks.
+  and its monotonic-clock timers do not advance while the host is suspended.
+  The live attempt owner and the orphan tether use wall-clock deadlines, which
+  continue to advance during suspension.
 
 ## Decision
 
-The tether sweep's wall-clock `not_after` stays the sole ceiling of record.
-`systemd_scope_enabled` only ever adds a best-effort, fail-open kernel
-backstop on top of it; it never substitutes for the sweep, and its absence
-(disabled, unsupported host, failed probe) must never be treated as a
+`InteractiveLifetime` in `autoskillit.cli.session._session_process` owns the
+live cook attempt's wall-clock hard cap. The tether sweep's `not_after` drives
+orphan cleanup when that owner is gone; it is not the live attempt's ceiling
+of record. `systemd_scope_enabled` adds a best-effort, fail-open kernel
+backstop, and never substitutes for the live owner or the tether sweep. Its
+absence (disabled, unsupported host, failed probe) must never be treated as a
 correctness regression — only as one fewer layer of defense-in-depth.
 
 ## Consequences
@@ -43,7 +45,7 @@ correctness regression — only as one fewer layer of defense-in-depth.
 - Code and docs referencing this field point here for the reliability
   caveats instead of repeating them inline (see
   `ProcessTetherConfig.systemd_scope_enabled` in
-  `config/_config_dataclasses.py` and `wrap_systemd_scope`'s docstring in
+  `config/_dataclasses_fleet.py` and `wrap_systemd_scope`'s docstring in
   `execution/process/_process_tether.py`).
 - A future change to WSL2/systemd-run detection, linger requirements, or the
   probe itself should update this ADR rather than re-deriving the rationale

@@ -2,12 +2,12 @@
 
 A tether is a small JSON record written as a mandatory side effect of every
 funnel spawn (see ``spawn_owned_process`` in ``_lifecycle/owned_group.py``). It carries
-the spawner's identity, the child's identity, and an absolute ``not_after``
-ceiling. ``sweep_orphaned_tethers`` is the single generic reaper wired into
-every boot/open chokepoint: a tether is only ever acted on when its child's
-(or PTY-wrapper workload's) identity is positively re-verified, so a mis-kill
-requires both a dead/expired guardian AND a forged identity — kills are never
-issued on ambiguous evidence.
+the spawner's identity, the child's identity, and a ``not_after`` lease.
+Supervising owners renew the lease; owners that do not supervise, such as
+headless children of long-lived servers, keep their spawn-time ceiling as an
+absolute bound. The sweep treats a lapsed lease as abandonment in either case.
+It acts only when the child's (or PTY-wrapper workload's) identity is positively
+re-verified, so kills are never issued on ambiguous evidence.
 
 Linux-only: identity primitives (`read_boot_id`/`read_starttime_ticks`) return
 ``None`` on every other platform, so writing and sweeping are no-ops there —
@@ -41,10 +41,10 @@ from autoskillit.core import (
 
 logger = get_logger(__name__)
 
-#: Headless children (run_managed/probe/evidence-reader/exploration) — 24h.
 DEFAULT_TETHER_CEILING_SECONDS: Final = 86400.0
-#: Interactive cook sessions may legitimately run overnight — 48h.
-INTERACTIVE_TETHER_CEILING_SECONDS: Final = 172800.0
+TETHER_SWEEP_INTERVAL_SECONDS: Final = 1800.0
+TETHER_LEASE_SECONDS: Final = 4 * TETHER_SWEEP_INTERVAL_SECONDS
+TETHER_LEASE_RENEW_SECONDS: Final = TETHER_LEASE_SECONDS / 4
 
 _TETHER_DIR_NAME: Final = "process-tethers"
 
@@ -225,6 +225,30 @@ def update_tether_workload(path: Path, workload_pid: int, workload_starttime_tic
         logger.warning("tether_workload_update_write_failed", path=str(path))
 
 
+def renew_tether(path: Path, not_after: float) -> bool:
+    """Best-effort lease renewal for a supervising tether owner."""
+    if sys.platform != "linux":
+        return True
+    if not math.isfinite(not_after):
+        logger.warning("tether_lease_renew_skipped_invalid_deadline", path=str(path))
+        return False
+    try:
+        data = read_versioned_json(path, 1)
+    except Exception:
+        logger.warning("tether_lease_renew_skipped_unreadable", path=str(path), exc_info=True)
+        return False
+    if not isinstance(data, dict):
+        logger.warning("tether_lease_renew_skipped_unreadable", path=str(path))
+        return False
+    data["not_after"] = not_after
+    try:
+        write_versioned_json(path, data, 1)
+    except Exception:
+        logger.warning("tether_lease_renew_write_failed", path=str(path), exc_info=True)
+        return False
+    return True
+
+
 def _identity_discriminator_mismatch(pid: int, expected_pidns_inode: int | None) -> bool:
     """True only when both sides carry a pidns_inode and they disagree."""
     if expected_pidns_inode is None:
@@ -347,6 +371,16 @@ def sweep_orphaned_tethers(
             continue
 
         reason = "reaped_orphan" if not spawner_alive else "reaped_ceiling"
+        logger.warning(
+            "tether_sweep_reap_decision",
+            reason=reason,
+            origin=record.origin,
+            child_pid=record.child_pid,
+            spawner_pid=record.spawner_pid,
+            spawner_alive=spawner_alive,
+            overdue_seconds=max(0.0, now - record.not_after),
+            path=str(path),
+        )
         all_confirmed_dead = True
         for name, pid, ticks in targets:
             if statuses[name] != "live":
@@ -363,6 +397,13 @@ def sweep_orphaned_tethers(
 
         if all_confirmed_dead:
             remove_tether(path)
+            logger.info(
+                "tether_sweep_reaped",
+                reason=reason,
+                origin=record.origin,
+                child_pid=record.child_pid,
+                path=str(path),
+            )
             outcomes.append(TetherSweepOutcome(str(path), record.child_pid, reason))
         else:
             logger.warning(

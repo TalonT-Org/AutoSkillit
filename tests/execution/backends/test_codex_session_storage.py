@@ -1441,9 +1441,7 @@ def test_record_spawn_captures_spawn_identity(tmp_path: Path) -> None:
         env=production_interpreter_env(),
     )
     try:
-        before = time.time()
         handle.record_spawn(child.pid, child.pid)
-        after = time.time()
 
         manifest = lease.manifest
         assert manifest["spawner_pid"] == os.getpid()
@@ -1452,11 +1450,7 @@ def test_record_spawn_captures_spawn_identity(tmp_path: Path) -> None:
         assert manifest["child_starttime_ticks"] == read_starttime_ticks(child.pid)
         assert manifest["child_starttime_ticks"] != manifest["spawner_starttime_ticks"]
         assert "pidns_inode" in manifest
-        assert (
-            before + lease.ceiling_seconds
-            <= manifest["not_after"]
-            <= after + lease.ceiling_seconds
-        )
+        assert "not_after" not in manifest
         assert manifest["schema_version"] == 1
 
         handle.record_reaped(child.pid, child.pid)
@@ -1465,6 +1459,193 @@ def test_record_spawn_captures_spawn_identity(tmp_path: Path) -> None:
         with contextlib.suppress(Exception):
             child.kill()
             child.wait(timeout=2)
+
+
+def test_exit_attempt_without_reap_proof_raises(tmp_path: Path) -> None:
+    store = CodexSessionStore(log_dir=tmp_path / "log-root")
+    home, _ = _generated_home(tmp_path)
+    lease = _prepared_lease(store, home, tmp_path)
+    handle = lease.__enter__()
+    relative = Path("2026/07/rollout-without-reap-proof.jsonl")
+    _rollout((home / "sessions").resolve() / relative, "thread-without-reap-proof")
+    child = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        start_new_session=True,
+        env=production_interpreter_env(),
+    )
+    try:
+        handle.record_spawn(child.pid, child.pid)
+
+        with pytest.raises(RuntimeError, match="lacks durable child-reaped proof"):
+            lease.__exit__(None, None, None)
+
+        assert lease.manifest["state"] == "failed"
+    finally:
+        with contextlib.suppress(Exception):
+            child.kill()
+            child.wait(timeout=2)
+        store.recover()
+
+
+def test_exit_attempt_with_unproven_teardown_retains_view_without_raising(
+    tmp_path: Path,
+) -> None:
+    store = CodexSessionStore(log_dir=tmp_path / "log-root")
+    home, _ = _generated_home(tmp_path)
+    lease = _prepared_lease(store, home, tmp_path)
+    handle = lease.__enter__()
+    relative = Path("2026/07/rollout-unproven-teardown.jsonl")
+    _rollout((home / "sessions").resolve() / relative, "thread-unproven-teardown")
+    child = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        start_new_session=True,
+        env=production_interpreter_env(),
+    )
+    exit_completed = False
+
+    try:
+        handle.record_spawn(child.pid, child.pid)
+        handle.record_teardown_unproven(child.pid, child.pid)
+
+        with structlog.testing.capture_logs() as logs:
+            lease.__exit__(None, None, None)
+        exit_completed = True
+
+        assert lease.manifest["state"] == "failed"
+        assert lease.manifest["teardown"] == "unproven_after_lifetime_termination"
+        assert any(entry.get("event") == "codex_attempt_teardown_unproven" for entry in logs)
+
+        child.kill()
+        child.wait(timeout=2)
+        _wait_for_death(child.pid)
+        store.recover()
+        assert not lease.view_path.exists()
+    finally:
+        with contextlib.suppress(Exception):
+            child.kill()
+            child.wait(timeout=2)
+        if not exit_completed:
+            with contextlib.suppress(Exception):
+                lease.__exit__(None, None, None)
+
+
+def test_record_teardown_unproven_rejects_mismatched_identity(tmp_path: Path) -> None:
+    store = CodexSessionStore(log_dir=tmp_path / "log-root")
+    home, _ = _generated_home(tmp_path)
+    lease = _prepared_lease(store, home, tmp_path)
+    handle = lease.__enter__()
+    relative = Path("2026/07/rollout-teardown-mismatch.jsonl")
+    _rollout((home / "sessions").resolve() / relative, "thread-teardown-mismatch")
+    child = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        start_new_session=True,
+        env=production_interpreter_env(),
+    )
+
+    try:
+        handle.record_spawn(child.pid, child.pid)
+        with pytest.raises(
+            RuntimeError,
+            match="Unproven teardown identity does not match the recorded spawn",
+        ):
+            handle.record_teardown_unproven(child.pid + 1, child.pid)
+        assert "teardown" not in lease.manifest
+    finally:
+        with contextlib.suppress(Exception):
+            child.kill()
+            child.wait(timeout=2)
+        if lease.manifest.get("reaped") is not True:
+            handle.record_reaped(child.pid, child.pid)
+        lease.__exit__(None, None, None)
+
+
+def test_record_teardown_unproven_rejects_after_reap(tmp_path: Path) -> None:
+    store = CodexSessionStore(log_dir=tmp_path / "log-root")
+    home, _ = _generated_home(tmp_path)
+    lease = _prepared_lease(store, home, tmp_path)
+    handle = lease.__enter__()
+    relative = Path("2026/07/rollout-teardown-after-reap.jsonl")
+    _rollout((home / "sessions").resolve() / relative, "thread-teardown-after-reap")
+    child = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        start_new_session=True,
+        env=production_interpreter_env(),
+    )
+
+    try:
+        handle.record_spawn(child.pid, child.pid)
+        child.kill()
+        child.wait(timeout=2)
+        handle.record_reaped(child.pid, child.pid)
+
+        with pytest.raises(
+            RuntimeError,
+            match="Cannot record unproven teardown after the child was reaped",
+        ):
+            handle.record_teardown_unproven(child.pid, child.pid)
+    finally:
+        with contextlib.suppress(Exception):
+            child.kill()
+            child.wait(timeout=2)
+        lease.__exit__(None, None, None)
+
+
+def test_record_teardown_unproven_rejects_outside_active_attempt(tmp_path: Path) -> None:
+    store = CodexSessionStore(log_dir=tmp_path / "log-root")
+    home, _ = _generated_home(tmp_path)
+    lease = _prepared_lease(store, home, tmp_path)
+    handle = lease.__enter__()
+    relative = Path("2026/07/rollout-teardown-outside.jsonl")
+    _rollout((home / "sessions").resolve() / relative, "thread-teardown-outside")
+    child = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        start_new_session=True,
+        env=production_interpreter_env(),
+    )
+
+    try:
+        handle.record_spawn(child.pid, child.pid)
+        handle.record_reaped(child.pid, child.pid)
+        lease.__exit__(None, None, None)
+
+        with pytest.raises(
+            RuntimeError,
+            match="Cannot record unproven teardown outside an active Codex attempt",
+        ):
+            handle.record_teardown_unproven(child.pid, child.pid)
+    finally:
+        with contextlib.suppress(Exception):
+            child.kill()
+            child.wait(timeout=2)
+
+
+def test_record_teardown_unproven_rejects_duplicate_recording(tmp_path: Path) -> None:
+    store = CodexSessionStore(log_dir=tmp_path / "log-root")
+    home, _ = _generated_home(tmp_path)
+    lease = _prepared_lease(store, home, tmp_path)
+    handle = lease.__enter__()
+    relative = Path("2026/07/rollout-teardown-duplicate.jsonl")
+    _rollout((home / "sessions").resolve() / relative, "thread-teardown-duplicate")
+    child = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        start_new_session=True,
+        env=production_interpreter_env(),
+    )
+
+    try:
+        handle.record_spawn(child.pid, child.pid)
+        handle.record_teardown_unproven(child.pid, child.pid)
+
+        with pytest.raises(
+            RuntimeError,
+            match="Codex attempt teardown outcome was already recorded",
+        ):
+            handle.record_teardown_unproven(child.pid, child.pid)
+    finally:
+        with contextlib.suppress(Exception):
+            child.kill()
+            child.wait(timeout=2)
+        lease.__exit__(None, None, None)
 
 
 def test_recover_kills_live_child_before_marking_reaped(tmp_path: Path) -> None:

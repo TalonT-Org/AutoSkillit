@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -21,6 +20,7 @@ import autoskillit.cli.prompts as _patch_cli_prompts
 import autoskillit.cli.session._session_launch as _patch_session__session_launch
 import autoskillit.cli.session._session_process as _patch_session__session_process
 from autoskillit.cli.session._session_launch import _launch_cook_session, _run_interactive_session
+from autoskillit.config import ProcessTetherConfig
 from autoskillit.core import (
     BackendCapabilities,
     BackendConventions,
@@ -32,6 +32,7 @@ from autoskillit.core import (
     SessionAttemptHandle,
     ValidatedAddDir,
 )
+from tests.cli._cook_launch_helpers import cook_attempt_result
 from tests.cli._interactive_process import interactive_launch_metadata
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
@@ -94,17 +95,15 @@ def _make_non_probe_backend() -> tuple[object, list[dict[str, object]]]:
             launch_id: str,
             attempt: int,
             current_resume_spec: object,
-            ceiling_seconds: float = 172800.0,
-            systemd_scope_enabled: bool = False,
         ):
-            del session_home, project_dir, current_resume_spec, ceiling_seconds
-            del systemd_scope_enabled
+            del session_home, project_dir, current_resume_spec
             return nullcontext(
                 SessionAttemptHandle(
                     view_id=f"{launch_id}-{attempt}",
                     pass_fds=(),
                     _record_spawn=lambda _pid, _pgid: None,
                     _record_reaped=lambda _pid, _pgid: None,
+                    _record_teardown_unproven=lambda _pid, _pgid: None,
                 )
             )
 
@@ -136,7 +135,7 @@ def test_non_probe_fork_threads_true_intent_into_both_build_calls(
     monkeypatch.setattr(
         _patch_session__session_process,
         "run_cook_attempt",
-        lambda *_a, **_kw: SimpleNamespace(returncode=0),
+        lambda *_a, **_kw: cook_attempt_result(),
     )
 
     result = _run_interactive_session(
@@ -145,6 +144,7 @@ def test_non_probe_fork_threads_true_intent_into_both_build_calls(
         project_dir=tmp_path,
         skill_compilation=launch_kwargs["skill_compilation"],
         managed_home=_managed_home(tmp_path),
+        process_tether=ProcessTetherConfig(),
         retained_projection_binding=MagicMock(inherited_fds=()),
         startup_trace=MagicMock(),
         attempt=1,
@@ -167,7 +167,7 @@ def test_non_probe_fork_defaults_to_false_across_both_build_calls(
     monkeypatch.setattr(
         _patch_session__session_process,
         "run_cook_attempt",
-        lambda *_a, **_kw: SimpleNamespace(returncode=0),
+        lambda *_a, **_kw: cook_attempt_result(),
     )
 
     result = _run_interactive_session(
@@ -176,6 +176,7 @@ def test_non_probe_fork_defaults_to_false_across_both_build_calls(
         project_dir=tmp_path,
         skill_compilation=launch_kwargs["skill_compilation"],
         managed_home=_managed_home(tmp_path),
+        process_tether=ProcessTetherConfig(),
         retained_projection_binding=MagicMock(inherited_fds=()),
         startup_trace=MagicMock(),
         attempt=1,

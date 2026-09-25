@@ -831,7 +831,9 @@ def test_no_direct_settle_call_outside_allowlist() -> None:
     # .settle_preserving() instead — a bare .settle() call is deliberately narrow.
     allowed_files = {
         PROCESS_OWNED_GROUP_PY,  # defines settle()
-        SRC_ROOT / "cli" / "session" / "_session_process.py",  # requires raising semantics
+        SRC_ROOT / "cli" / "session" / "_session_process.py",
+        # Raising settle() for ordinary exits; deliberate lifetime termination
+        # settles via settle_evidence().
         SRC_ROOT / "execution" / "evidence_reader.py",  # pre-existing catch-and-convert
         SRC_ROOT / "hooks" / "_capture_process.py",  # retained capture settlement
         SRC_ROOT / "hooks" / "_capture_spawn.py",  # spawn adoption cleanup

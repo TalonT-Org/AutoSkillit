@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -23,6 +22,7 @@ import autoskillit.cli.session._session_reload as _patch_session__session_reload
 import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
 from autoskillit.core import CmdSpec, FreshLaunch, ManagedSessionHome, ValidatedAddDir
 from autoskillit.execution.backends._backend_cmd_builder_base import SHARED_BASELINE_ENV
+from tests.cli._cook_launch_helpers import cook_attempt_result
 from tests.cli._interactive_process import InteractiveProcessStub
 
 pytestmark = [
@@ -171,7 +171,7 @@ def _capture_cook_spec(
 
     def fake_run(spec, **_kwargs):
         captured["spec"] = spec
-        return SimpleNamespace(pid=101, pgid=101, returncode=0)
+        return cook_attempt_result()
 
     monkeypatch.setattr("shutil.which", lambda _cmd: "/usr/bin/claude")
     monkeypatch.setattr(_patch_session__session_onboarding, "is_first_run", lambda _path: False)

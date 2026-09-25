@@ -9,6 +9,7 @@ method), and the hard ceiling constant ``_MAX_CONCURRENT_DISPATCHES`` that
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 _MAX_CONCURRENT_DISPATCHES = 8
@@ -74,17 +75,22 @@ class FleetConfig:
 
 @dataclass
 class ProcessTetherConfig:
-    """Absolute ceilings for the process-tether spawner-death sweep.
+    """Lifetime authority for interactive cooks and process-tethered children.
 
-    Literal defaults must equal ``execution.process._process_tether``'s
-    ``DEFAULT_TETHER_CEILING_SECONDS``/``INTERACTIVE_TETHER_CEILING_SECONDS``
-    module constants — config cannot import execution (IL-002), so a parity
-    test in ``tests/execution/test_process_tether.py`` ties the two literals
-    together instead of sharing them by import.
+    ``cook_ceiling_seconds`` is the soft interactive lifetime. After it, the
+    session may continue only while active, for at most
+    ``cook_max_extension_seconds`` more. This object is the single authority
+    consumed by ``run_cook_attempt``.
+
+    The orphan default mirrors ``execution.process._process_tether``'s
+    ``DEFAULT_TETHER_CEILING_SECONDS``. Config cannot import execution (IL-002),
+    so a parity test in ``tests/execution/test_process_tether.py`` ties the
+    literal to that constant.
     """
 
     orphan_ceiling_seconds: float = 86400.0
     cook_ceiling_seconds: float = 172800.0
+    cook_max_extension_seconds: float = 86400.0
     # Optional, default-off kernel-enforced ceiling via
     # `systemd-run --user --scope`; defense-in-depth only, never the ceiling
     # of record — see docs/decisions/0010-systemd-scope-defense-in-depth.md
@@ -93,11 +99,21 @@ class ProcessTetherConfig:
     systemd_scope_enabled: bool = False
 
     def validate(self) -> None:
-        if self.orphan_ceiling_seconds <= 0:
+        if not math.isfinite(self.orphan_ceiling_seconds) or self.orphan_ceiling_seconds <= 0:
             raise ValueError(
-                f"orphan_ceiling_seconds must be positive, got {self.orphan_ceiling_seconds}"
+                "orphan_ceiling_seconds must be a positive finite number, "
+                f"got {self.orphan_ceiling_seconds}"
             )
-        if self.cook_ceiling_seconds <= 0:
+        if not math.isfinite(self.cook_ceiling_seconds) or self.cook_ceiling_seconds <= 0:
             raise ValueError(
-                f"cook_ceiling_seconds must be positive, got {self.cook_ceiling_seconds}"
+                "cook_ceiling_seconds must be a positive finite number, "
+                f"got {self.cook_ceiling_seconds}"
+            )
+        if (
+            not math.isfinite(self.cook_max_extension_seconds)
+            or self.cook_max_extension_seconds < 0
+        ):
+            raise ValueError(
+                "cook_max_extension_seconds must be a non-negative finite number, "
+                f"got {self.cook_max_extension_seconds}"
             )

@@ -146,6 +146,7 @@ def test_codex_cook_resolves_and_runs_exact_binding_probe(
                 pass_fds=(),
                 _record_spawn=lambda _pid, _pgid: None,
                 _record_reaped=lambda _pid, _pgid: None,
+                _record_teardown_unproven=lambda _pid, _pgid: None,
             )
         ),
     )

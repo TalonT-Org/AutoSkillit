@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import select
 import signal
 import subprocess
 import sys
@@ -295,6 +296,41 @@ class TestKillProcessTreeUnit:
         assert result.root_pid == pid
         assert result.observation_complete is False
         assert result.complete is False
+
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX signals required")
+    @pytest.mark.parametrize(
+        ("ignore_sigterm", "expected_escalated"),
+        [(False, False), (True, True)],
+        ids=["sigterm", "sigkill-escalation"],
+    )
+    def test_kill_process_tree_reports_sigkill_escalation(
+        self, ignore_sigterm: bool, expected_escalated: bool
+    ) -> None:
+        setup = "signal.signal(signal.SIGTERM, signal.SIG_IGN)" if ignore_sigterm else "pass"
+        script = f"import signal, time\n{setup}\nprint('ready', flush=True)\ntime.sleep(60)\n"
+        proc = subprocess.Popen(
+            [sys.executable, "-c", script],
+            start_new_session=True,
+            env=production_interpreter_env(),
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            assert proc.stdout is not None
+            readable, _, _ = select.select([proc.stdout], [], [], 5.0)
+            assert readable
+            assert proc.stdout.readline().strip() == "ready"
+
+            result = kill_process_tree(proc.pid, timeout=0.1)
+
+            assert result.escalated is expected_escalated
+            assert result.complete is True
+            assert result.survivor_pids == ()
+            proc.wait(timeout=5)
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait(timeout=2)
 
     def test_exited_unowned_root_cannot_reconstruct_group_authority(self):
         proc = subprocess.Popen(

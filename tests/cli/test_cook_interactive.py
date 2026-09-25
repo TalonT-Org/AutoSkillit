@@ -44,6 +44,7 @@ from autoskillit.core import (
     atomic_write,
 )
 from tests._realistic_project import PINNED_CLAUDE_SHIM_VERSION_OUTPUT
+from tests.cli._cook_launch_helpers import cook_attempt_result
 from tests.cli._interactive_process import interactive_launch_metadata
 from tests.execution.backends._codex_fixtures import installed_catalog
 from tests.fakes import adapt_test_skill_semantics
@@ -176,6 +177,7 @@ class _Backend:
             pass_fds=(9,),
             _record_spawn=lambda _pid, _pgid: None,
             _record_reaped=lambda _pid, _pgid: None,
+            _record_teardown_unproven=lambda _pid, _pgid: None,
         )
 
 
@@ -250,7 +252,7 @@ def _install_harness(
         kwargs["on_reaped"](101, 101)  # type: ignore[operator]
         if callable(assertion):
             assertion()
-        return SimpleNamespace(pid=101, pgid=101, returncode=returncode)
+        return cook_attempt_result(returncode=returncode)
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: str(claude_shim))
@@ -452,6 +454,7 @@ def test_codex_cook_admits_compose_pr_roles_from_exact_bundled_catalog_probe(
             pass_fds=(),
             _record_spawn=lambda _pid, _pgid: None,
             _record_reaped=lambda _pid, _pgid: None,
+            _record_teardown_unproven=lambda _pid, _pgid: None,
         )
 
     def run_attempt(spec: CmdSpec, **kwargs: object) -> object:
@@ -463,7 +466,7 @@ def test_codex_cook_admits_compose_pr_roles_from_exact_bundled_catalog_probe(
         kwargs["on_spawn"](101, 101)  # type: ignore[operator]
         kwargs["trace"].record_spawn()  # type: ignore[union-attr]
         kwargs["on_reaped"](101, 101)  # type: ignore[operator]
-        return SimpleNamespace(pid=101, pgid=101, returncode=0)
+        return cook_attempt_result()
 
     bundled_catalog = tmp_path / "bundled-models.json"
     atomic_write(bundled_catalog, json.dumps(installed_catalog()))
@@ -1032,6 +1035,7 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
                 pass_fds=(),
                 _record_spawn=lambda _pid, _pgid: None,
                 _record_reaped=lambda _pid, _pgid: None,
+                _record_teardown_unproven=lambda _pid, _pgid: None,
             )
 
     def run_once(answer: str) -> None:
@@ -1050,9 +1054,7 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
         monkeypatch.setattr(
             _patch_session__session_process,
             "run_cook_attempt",
-            lambda *args, **kwargs: (
-                events.append(("run",)) or SimpleNamespace(pid=1, pgid=1, returncode=0)
-            ),
+            lambda *args, **kwargs: events.append(("run",)) or cook_attempt_result(),
         )
         monkeypatch.setattr(
             _patch_session__session_reload,

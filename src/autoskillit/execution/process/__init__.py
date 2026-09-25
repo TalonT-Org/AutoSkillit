@@ -74,6 +74,7 @@ from autoskillit.execution.process._process_kill import (
     kill_process_tree,
 )
 from autoskillit.execution.process._process_monitor import (
+    _active_liveness_signals,
     _has_active_api_connection,
     _has_active_child_processes,
     _has_active_execution_marker,
@@ -94,7 +95,9 @@ from autoskillit.execution.process._process_race import (
 )
 from autoskillit.execution.process._process_tether import (
     DEFAULT_TETHER_CEILING_SECONDS,
-    INTERACTIVE_TETHER_CEILING_SECONDS,
+    TETHER_LEASE_RENEW_SECONDS,
+    TETHER_LEASE_SECONDS,
+    TETHER_SWEEP_INTERVAL_SECONDS,
     OrphanedTetherRecord,
     TetherRecord,
     TetherSpec,
@@ -104,6 +107,7 @@ from autoskillit.execution.process._process_tether import (
     find_orphaned_tethers,
     format_orphaned_tether_fields,
     probe_systemd_scope_available,
+    renew_tether,
     sweep_orphaned_tethers,
     sweep_orphaned_tethers_async,
     update_tether_workload,
@@ -134,7 +138,9 @@ logger = get_logger(__name__)
 # internal sub-module paths.
 __all__ = [
     "DEFAULT_TETHER_CEILING_SECONDS",
-    "INTERACTIVE_TETHER_CEILING_SECONDS",
+    "TETHER_LEASE_RENEW_SECONDS",
+    "TETHER_LEASE_SECONDS",
+    "TETHER_SWEEP_INTERVAL_SECONDS",
     "CodexOrphanReapResult",
     "DaemonOrphanReapResult",
     "DefaultSubprocessRunner",
@@ -148,6 +154,7 @@ __all__ = [
     "TetherSweepReport",
     "_extract_stdout_session_id",
     "_resolve_session_id",
+    "_active_liveness_signals",
     "RaceAccumulator",
     "RaceSignals",
     "find_orphaned_codex_processes",
@@ -188,6 +195,7 @@ __all__ = [
     "summarize_capture",
     "sweep_orphaned_tethers",
     "sweep_orphaned_tethers_async",
+    "renew_tether",
     "update_tether_workload",
     "wrap_systemd_scope",
 ]

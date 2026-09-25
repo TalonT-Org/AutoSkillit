@@ -20,6 +20,7 @@ import autoskillit.cli._init_helpers as _patch_cli__init_helpers
 @pytest.fixture
 def launch_kwargs() -> dict[str, object]:
     """Return canonical launch inputs backed by the real session catalog."""
+    from autoskillit.config import ProcessTetherConfig
     from autoskillit.execution.backends.claude import ClaudeCodeBackend
     from autoskillit.workspace import (
         DefaultSkillResolver,
@@ -35,6 +36,7 @@ def launch_kwargs() -> dict[str, object]:
         "launch_id": "test-order",
         "default_base_branch": "main",
         "workspace_temp_dir": None,
+        "process_tether": ProcessTetherConfig(),
     }
 
 

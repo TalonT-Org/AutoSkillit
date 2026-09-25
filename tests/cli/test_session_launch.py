@@ -27,6 +27,7 @@ from autoskillit.cli.session._session_launch import (
     _launch_cook_session,
     _run_interactive_session,
 )
+from autoskillit.config import ProcessTetherConfig
 from autoskillit.core import (
     BackendConventions,
     ClaudeFlags,
@@ -47,7 +48,7 @@ from tests._realistic_project import (
     PINNED_CLAUDE_SHIM_VERSION,
     PINNED_CLAUDE_SHIM_VERSION_OUTPUT,
 )
-from tests.cli._cook_launch_helpers import RecordingLifecycle
+from tests.cli._cook_launch_helpers import RecordingLifecycle, cook_attempt_result
 from tests.cli._interactive_process import InteractiveProcessStub, interactive_launch_metadata
 from tests.fixtures.plugin_artifact_state import (
     PluginArtifactStateKind,
@@ -147,10 +148,8 @@ class _BackendLifecycleStub:
         launch_id: str,
         attempt: int,
         current_resume_spec,
-        ceiling_seconds: float = 172800.0,
-        systemd_scope_enabled: bool = False,
     ):
-        del project_dir, ceiling_seconds, systemd_scope_enabled
+        del project_dir
         from autoskillit.core import SessionAttemptHandle
 
         return nullcontext(
@@ -159,6 +158,7 @@ class _BackendLifecycleStub:
                 pass_fds=(),
                 _record_spawn=lambda _pid, _pgid: None,
                 _record_reaped=lambda _pid, _pgid: None,
+                _record_teardown_unproven=lambda _pid, _pgid: None,
             )
         )
 
@@ -1325,6 +1325,7 @@ def test_launch_cook_session_accepts_backend_param(
         launch=FreshLaunch(system_prompt="test"),
         backend=_CapturingBackend(),
         required_env=frozenset(),
+        process_tether=ProcessTetherConfig(),
         skill_compilation=compilation,
         launch_id=launch_kwargs["launch_id"],
         default_base_branch=launch_kwargs["default_base_branch"],
@@ -1693,7 +1694,7 @@ def test_managed_interactive_session_validates_before_shared_process_owner(
         events.append("spawned")
         assert kwargs["observer"] is None
         assert kwargs["pass_fds"] == (3, 7, 8)
-        return SimpleNamespace(returncode=0)
+        return cook_attempt_result()
 
     monkeypatch.setattr(
         _patch_session__session_process,
@@ -1719,6 +1720,7 @@ def test_managed_interactive_session_validates_before_shared_process_owner(
         project_dir=tmp_path,
         skill_compilation=launch_kwargs["skill_compilation"],
         managed_home=managed_home,
+        process_tether=ProcessTetherConfig(),
         retained_projection_binding=retained_binding,
         startup_trace=trace,
         attempt=1,
@@ -1773,6 +1775,7 @@ def test_managed_interactive_session_rejects_owner_binding_failure(
             project_dir=tmp_path,
             skill_compilation=launch_kwargs["skill_compilation"],
             managed_home=managed_home,
+            process_tether=ProcessTetherConfig(),
             retained_projection_binding=MagicMock(inherited_fds=()),
             startup_trace=MagicMock(),
             attempt=1,
@@ -1840,6 +1843,7 @@ def test_managed_launch_rejects_executable_drift_before_spawn(
             project_dir=tmp_path,
             skill_compilation=launch_kwargs["skill_compilation"],
             managed_home=managed_home,
+            process_tether=ProcessTetherConfig(),
             retained_projection_binding=MagicMock(inherited_fds=()),
             startup_trace=MagicMock(),
             attempt=1,
@@ -2190,7 +2194,7 @@ def _prepare_codex_order_composition(
         cast(list[tuple[object, dict[str, object]]], captured["process_calls"]).append(
             (spec, kwargs)
         )
-        return SimpleNamespace(pid=101, pgid=101, returncode=0)
+        return cook_attempt_result()
 
     monkeypatch.setattr(
         _patch_session__session_process,
@@ -2213,6 +2217,7 @@ def _prepare_codex_order_composition(
             launch=FreshLaunch(system_prompt="composition contract"),
             project_dir=project_dir,
             required_env=frozenset(),
+            process_tether=ProcessTetherConfig(),
             backend=backend,
             skill_compilation=compilation,
             launch_id="0123456789abcdef",
@@ -2557,6 +2562,7 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
         launch=FreshLaunch(system_prompt="lifecycle contract", initial_prompt="greeting"),
         project_dir=tmp_path,
         required_env=frozenset(),
+        process_tether=ProcessTetherConfig(),
         backend=backend,
         skill_compilation=compilation,
         launch_id=launch_id,

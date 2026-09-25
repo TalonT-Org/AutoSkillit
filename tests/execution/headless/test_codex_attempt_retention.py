@@ -338,11 +338,6 @@ async def test_generated_home_attempt_retains_rollout_before_nudge_and_named_res
         isinstance(call.kwargs["current_resume_spec"], NamedResume) for call in attempt_calls[1:]
     )
     assert [call.kwargs["project_dir"] for call in attempt_calls] == [cwd, cwd, cwd]
-    assert [call.kwargs["ceiling_seconds"] for call in attempt_calls] == [
-        _EXECUTION_CEILING_SECONDS,
-        _EXECUTION_CEILING_SECONDS,
-        _EXECUTION_CEILING_SECONDS,
-    ]
     assert all(re.fullmatch(r"[0-9a-f]{16}", call.kwargs["launch_id"]) for call in attempt_calls)
     assert attempt_calls[0].kwargs["launch_id"] == "a" * 16
     assert attempt_calls[2].kwargs["launch_id"] == "b" * 16

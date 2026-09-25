@@ -46,6 +46,7 @@ from autoskillit.workspace import (
     SkillUnavailableMetadata,
 )
 from autoskillit.workspace.skills import _skill_info_from_frontmatter
+from tests.cli._cook_launch_helpers import cook_attempt_result
 from tests.cli._interactive_process import interactive_launch_metadata
 from tests.fakes import adapt_test_skill_semantics
 
@@ -110,6 +111,7 @@ def _make_mock_backend_class(
                 pass_fds=(),
                 _record_spawn=lambda _pid, _pgid: None,
                 _record_reaped=lambda _pid, _pgid: None,
+                _record_teardown_unproven=lambda _pid, _pgid: None,
             )
 
     return _MockBackend, captured
@@ -167,7 +169,7 @@ def _run_cook(
         patch.object(
             _patch_session__session_process,
             "run_cook_attempt",
-            return_value=SimpleNamespace(pid=1, pgid=1, returncode=0),
+            return_value=cook_attempt_result(),
         ),
         patch.object(
             _patch_session__session_reload,
@@ -523,12 +525,14 @@ def _run_finalized_profile_cook(
                 pass_fds=(5,),
                 _record_spawn=lambda _pid, _pgid: None,
                 _record_reaped=lambda _pid, _pgid: None,
+                _record_teardown_unproven=lambda _pid, _pgid: None,
             )
 
     def run_attempt(spec: CmdSpec, **kwargs: object) -> object:
         captured["child"] = spec
         captured["pass_fds"] = kwargs["pass_fds"]
-        kwargs["on_spawn"](1, 1)  # type: ignore[operator]
+        result = cook_attempt_result()
+        kwargs["on_spawn"](result.pid, result.pgid)  # type: ignore[operator]
         trace = kwargs["trace"]
         trace.record_spawn()  # type: ignore[union-attr]
         trace.record_stage(  # type: ignore[union-attr]
@@ -536,8 +540,8 @@ def _run_finalized_profile_cook(
             attempt=1,
             view_id="view-1",
         )
-        kwargs["on_reaped"](1, 1)  # type: ignore[operator]
-        return SimpleNamespace(pid=1, pgid=1, returncode=0)
+        kwargs["on_reaped"](result.pid, result.pgid)  # type: ignore[operator]
+        return result
 
     cfg = MagicMock()
     cfg.experimental_enabled = True

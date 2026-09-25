@@ -1,12 +1,11 @@
 # Hooks
 
-AutoSkillit registers 58 Claude Code hook scripts: 39 PreToolUse, 11 PostToolUse,
-2 PostToolUseFailure, 2 SessionStart, 1 Stop, 1 SubagentStart, 1 SubagentStop, and
-1 SessionEnd. Every script is stdlib-only Python so it can run before the
-project virtualenv is on the path. Scripts live in `src/autoskillit/hooks/`
-and are bound to event types in `src/autoskillit/hook_registry/` via the
-`HOOK_REGISTRY` list of `HookDef` entries; `generate_hooks_json()` then
-materializes the canonical `hooks.json` that Claude Code reads.
+AutoSkillit registers Claude Code hooks for session, tool, and lifecycle events.
+Every script is stdlib-only Python so it can run before the project virtualenv
+is on the path. Scripts live in `src/autoskillit/hooks/` and are bound to event
+types in `src/autoskillit/hook_registry/` via the `HOOK_REGISTRY` list of
+`HookDef` entries; `generate_hooks_json()` then materializes the canonical
+`hooks.json` that Claude Code reads.
 
 ## Codex runtime-only hook
 
@@ -18,7 +17,7 @@ explains the terminal headless result and explicit TUI continuation. A `manual` 
 does not match, so users may compact manually. This hook is excluded from the Claude
 Code registry.
 
-## PreToolUse hooks (39)
+## PreToolUse hooks
 
 ### `branch_protection_guard.py`
 **Guarded tools:** `merge_worktree`, `push_to_remote`
@@ -523,7 +522,17 @@ denies. See `docs/developer/diagnostics.md` for the full taxonomy and
 `core/types/_type_execution_identity.py`'s `ChildOutcomeDict` for the
 persisted shape.
 
-## SessionStart hooks (2)
+### `session_lifetime_notice_hook.py`
+**Events:** interactive-only `PostToolUse` and `Stop` (Codex `PostToolUse` only)
+Delivers the current attempt's one-shot warning from the JSON path injected by
+`run_cook_attempt`. It emits the notice message as `systemMessage`; on
+`PostToolUse`, it also adds the same message through
+`hookSpecificOutput.additionalContext`. After delivery it unlinks the notice
+file, and errors fail open. Notices are advisory and event-driven: an idle
+session may reach its hard cap without a matching hook event to show a warning.
+The hard-cap decision does not depend on successful notice delivery.
+
+## SessionStart hooks
 
 ### `capture_lifecycle_hook.py`
 Runs one bounded, cleanup-only shell-capture lifecycle sweep using the absolute

@@ -119,6 +119,11 @@ _READ_SIDE_EXCEPTIONS: dict[str, str] = {
     "src/autoskillit/core/pipeline/_execution_marker.py": (
         "Progress signal — written and deleted, never read back"
     ),
+    "src/autoskillit/cli/session/_session_process.py": (
+        "The transient notice is consumed by the standalone "
+        "session_lifetime_notice_hook.py, which checks its event/message shape and deletes "
+        "the file; this process module does not read it back through read_versioned_json."
+    ),
     "src/autoskillit/execution/session_log/session_log.py": (
         "token_usage.json readers use dual-key fallback, not version-gated reading"
     ),

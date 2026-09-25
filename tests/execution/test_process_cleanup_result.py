@@ -596,6 +596,10 @@ def test_sigkill_escalation_uses_final_direct_reap_timeout(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     wait_timeouts: list[float | None] = []
+    member = (654, 1.0)
+    # Keep one group member alive through TERM so cleanup takes the SIGKILL branch.
+    group_waits = iter(((member,), ()))
+    group_signals: list[signal.Signals] = []
 
     class RecordingPopen(FakePopen):
         def wait(self, timeout: float | None = None) -> int:
@@ -615,13 +619,16 @@ def test_sigkill_escalation_uses_final_direct_reap_timeout(
         tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
     )
     monkeypatch.setattr(owner, "capture_snapshot", lambda: owner.snapshot)
+    owner.merge_snapshot(_owned_group.ProcessObservationSnapshot(process_identities=(member,)))
     monkeypatch.setattr(owner, "_scan_group", lambda: ())
-    monkeypatch.setattr(owner, "_signal_group", lambda _signum: None)
-    monkeypatch.setattr(owner, "_wait_group_members", lambda _timeout: ())
+    monkeypatch.setattr(owner, "_signal_group", group_signals.append)
+    monkeypatch.setattr(owner, "_wait_group_members", lambda _timeout: next(group_waits))
+    monkeypatch.setattr(owner, "_identity_is_alive", lambda _identity: False)
     monkeypatch.setattr(owner, "observe_exit", lambda **_kwargs: None)
 
     owner.cleanup(timeout=7.0)
 
+    assert group_signals == [signal.SIGTERM, signal.SIGKILL]
     assert wait_timeouts == [_owned_group._FINAL_WAIT_SECONDS]
 
 

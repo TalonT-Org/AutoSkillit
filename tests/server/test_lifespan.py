@@ -1,12 +1,14 @@
 """Tests that the FastMCP lifespan calls recorder.finalize() on server shutdown."""
 
 import asyncio
+import inspect
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 import structlog
 
+from autoskillit.execution import TETHER_SWEEP_INTERVAL_SECONDS
 from autoskillit.execution.recording.recording import RecordingSubprocessRunner
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -442,7 +444,16 @@ async def test_cleanup_stale_loop_calls_cleanup_periodically(monkeypatch):
     )
 
     with pytest.raises(asyncio.CancelledError):
-        await _lifespan._cleanup_stale_loop(interval=1800.0)
+        await _lifespan._cleanup_stale_loop(interval=TETHER_SWEEP_INTERVAL_SECONDS)
 
     assert len(calls) == 1
     assert calls[0]["max_age_seconds"] == 86400
+
+
+def test_cleanup_stale_loop_interval_is_tether_sweep_interval() -> None:
+    from autoskillit.server.lifecycle import _lifespan
+
+    assert (
+        inspect.signature(_lifespan._cleanup_stale_loop).parameters["interval"].default
+        is TETHER_SWEEP_INTERVAL_SECONDS
+    )

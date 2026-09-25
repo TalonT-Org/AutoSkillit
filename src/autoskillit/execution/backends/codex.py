@@ -105,7 +105,6 @@ from autoskillit.execution.backends._codex_session_storage import CodexSessionSt
 from autoskillit.execution.backends._explorer_dispatch import (
     CODEX_EXPLORATION_DISPATCH_RENDERER,
 )
-from autoskillit.execution.process import INTERACTIVE_TETHER_CEILING_SECONDS
 
 _CODEX_SQLITE_HOME_ENV_VAR = "CODEX_SQLITE_HOME"
 
@@ -625,14 +624,12 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
         launch_id: str,
         attempt: int,
         current_resume_spec: ResumeSpec,
-        ceiling_seconds: float = INTERACTIVE_TETHER_CEILING_SECONDS,
     ) -> AbstractContextManager[SessionAttemptHandle]:
         return CodexSessionStore(log_dir=default_log_dir()).prepare_attempt(
             session_home=session_home,
             project_dir=project_dir,
             launch_id=launch_id,
             attempt=attempt,
-            ceiling_seconds=ceiling_seconds,
             current_resume_spec=current_resume_spec,
         )
 

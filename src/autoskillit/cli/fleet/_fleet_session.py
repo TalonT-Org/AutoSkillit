@@ -31,6 +31,7 @@ from autoskillit.execution.backends import managed_codex_route_for_launch_contex
 logger = get_logger(__name__)
 
 if TYPE_CHECKING:
+    from autoskillit.config import ProcessTetherConfig
     from autoskillit.core import SemanticAdaptationContext
     from autoskillit.fleet import ResumeDecision
     from autoskillit.recipe.schema import Recipe
@@ -58,8 +59,7 @@ def _fleet_session_launcher(
     workspace_temp_dir: str | None,
     force_inactive_agent_teams: bool,
     mcp_tool_timeout_sec: float,
-    cook_ceiling_seconds: float,
-    systemd_scope_enabled: bool,
+    process_tether: ProcessTetherConfig,
     adaptation_context: SemanticAdaptationContext | None = None,
     managed_join_parent_id: str | None = None,
 ) -> Iterator[Callable[[InteractiveLaunch, dict[str, str]], Any]]:
@@ -84,8 +84,7 @@ def _fleet_session_launcher(
             skill_compilation=skill_compilation,
             force_inactive_agent_teams=force_inactive_agent_teams,
             mcp_tool_timeout_sec=mcp_tool_timeout_sec,
-            cook_ceiling_seconds=cook_ceiling_seconds,
-            systemd_scope_enabled=systemd_scope_enabled,
+            process_tether=process_tether,
         )
 
     if not backend.capabilities.session_dir_persistent:
@@ -189,8 +188,7 @@ def _fleet_session_launcher(
                     attempt=attempt,
                     force_inactive_agent_teams=force_inactive_agent_teams,
                     mcp_tool_timeout_sec=mcp_tool_timeout_sec,
-                    cook_ceiling_seconds=cook_ceiling_seconds,
-                    systemd_scope_enabled=systemd_scope_enabled,
+                    process_tether=process_tether,
                 )
 
             try:
@@ -479,8 +477,7 @@ def _launch_fleet_session(
         workspace_temp_dir=cfg.workspace.temp_dir,
         force_inactive_agent_teams=cfg.agent_backend.force_inactive_agent_teams,
         mcp_tool_timeout_sec=cfg.run_skill.mcp_tool_timeout_sec,
-        cook_ceiling_seconds=cfg.process_tether.cook_ceiling_seconds,
-        systemd_scope_enabled=cfg.process_tether.systemd_scope_enabled,
+        process_tether=cfg.process_tether,
         adaptation_context=managed_join_context,
         managed_join_parent_id=managed_join_parent_id,
     ) as launch_session:

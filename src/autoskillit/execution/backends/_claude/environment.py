@@ -20,7 +20,6 @@ from autoskillit.core import (
     atomic_write,
     build_agent_env,
 )
-from autoskillit.execution.process import INTERACTIVE_TETHER_CEILING_SECONDS
 
 CLAUDE_AGENT_TEAMS_ENV_VAR: str = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 _AGENT_TEAMS_SETTINGS_CANDIDATE_NAMES = (
@@ -46,15 +45,15 @@ class ClaudeCookSupportMixin:
         launch_id: str,
         attempt: int,
         current_resume_spec: ResumeSpec,
-        ceiling_seconds: float = INTERACTIVE_TETHER_CEILING_SECONDS,
     ) -> AbstractContextManager[SessionAttemptHandle]:
-        del session_home, project_dir, launch_id, attempt, current_resume_spec, ceiling_seconds
+        del session_home, project_dir, launch_id, attempt, current_resume_spec
         return nullcontext(
             SessionAttemptHandle(
                 view_id="",
                 pass_fds=(),
                 _record_spawn=_ignore_child_identity,
                 _record_reaped=_ignore_child_identity,
+                _record_teardown_unproven=_ignore_child_identity,
             )
         )
 

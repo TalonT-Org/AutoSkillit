@@ -23,7 +23,7 @@ import autoskillit.cli.session._session_reload as _patch_session__session_reload
 import autoskillit.cli.ui._terminal as _patch_ui__terminal
 import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
 from autoskillit.core import InteractiveInvocationValidation, PreLaunchReadiness
-from tests.cli._cook_launch_helpers import RecordingLifecycle
+from tests.cli._cook_launch_helpers import RecordingLifecycle, cook_attempt_result
 from tests.cli._interactive_process import InteractiveProcessStub, interactive_launch_metadata
 from tests.fakes import adapt_test_skill_semantics
 
@@ -390,6 +390,7 @@ def test_cook_rejects_repeated_and_excessive_reload_requests(
                 pass_fds=(),
                 _record_spawn=lambda _pid, _pgid: None,
                 _record_reaped=lambda _pid, _pgid: None,
+                _record_teardown_unproven=lambda _pid, _pgid: None,
             )
 
     sentinel_values = iter(reload_ids)
@@ -409,7 +410,7 @@ def test_cook_rejects_repeated_and_excessive_reload_requests(
     monkeypatch.setattr(
         _patch_session__session_process,
         "run_cook_attempt",
-        lambda *args, **kwargs: SimpleNamespace(pid=1, pgid=1, returncode=0),
+        lambda *args, **kwargs: cook_attempt_result(),
     )
     monkeypatch.setattr(
         _patch_session__session_reload,

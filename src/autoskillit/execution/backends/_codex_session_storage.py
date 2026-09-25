@@ -23,6 +23,7 @@ from autoskillit.core import (
     ResumeSpec,
     SessionSummary,
     default_log_dir,
+    get_logger,
     strict_walk,
 )
 from autoskillit.execution.backends._codex.session_attempt_lease import (
@@ -63,7 +64,8 @@ from autoskillit.execution.backends._codex_parse import (
     _thread_id,
 )
 from autoskillit.execution.backends._codex_session_lease import _FileLease
-from autoskillit.execution.process import INTERACTIVE_TETHER_CEILING_SECONDS
+
+logger = get_logger(__name__)
 
 
 def codex_session_index_path(log_dir: Path | None = None) -> Path:
@@ -92,33 +94,20 @@ class CodexSessionStore(_CodexSessionReconciliationMixin):
         )
 
     def _ensure_roots(self) -> None:
-        roots = (
+        storage_roots = (
             self.active_root,
             self.archive_root,
             self.views_root,
-            self.locks_root,
             self.reconciliations_root,
             self.reconciliation_tombstones_root,
         )
-        for root in roots:
+        for root in (*storage_roots, self.locks_root):
             root.mkdir(parents=True, exist_ok=True)
             _require_real_directory(root, label="Codex storage root")
-        devices = {
-            self.active_root.stat().st_dev,
-            self.archive_root.stat().st_dev,
-            self.views_root.stat().st_dev,
-            self.reconciliations_root.stat().st_dev,
-            self.reconciliation_tombstones_root.stat().st_dev,
-        }
+        devices = {root.stat().st_dev for root in storage_roots}
         if len(devices) != 1:
             raise RuntimeError("Codex rollout stores and views must share one filesystem")
-        filesystem_types = {
-            _filesystem_type(self.active_root),
-            _filesystem_type(self.archive_root),
-            _filesystem_type(self.views_root),
-            _filesystem_type(self.reconciliations_root),
-            _filesystem_type(self.reconciliation_tombstones_root),
-        }
+        filesystem_types = {_filesystem_type(root) for root in storage_roots}
         if len(filesystem_types) != 1 or not filesystem_types <= _SUPPORTED_LOCAL_FILESYSTEMS:
             raise RuntimeError(
                 "Codex durable views require one supported local filesystem; "
@@ -139,7 +128,6 @@ class CodexSessionStore(_CodexSessionReconciliationMixin):
         launch_id: str,
         attempt: int,
         current_resume_spec: ResumeSpec,
-        ceiling_seconds: float = INTERACTIVE_TETHER_CEILING_SECONDS,
     ) -> CodexSessionAttemptLease:
         self._ensure_roots()
         view_id = f"{launch_id}-{attempt}"
@@ -202,7 +190,6 @@ class CodexSessionStore(_CodexSessionReconciliationMixin):
                 view_lease=view_lease,
                 inert_targets=inert_targets,
                 thread_lease=thread_lease,
-                ceiling_seconds=ceiling_seconds,
             )
             self._write_manifest(lease)
             return lease
@@ -325,6 +312,9 @@ class CodexSessionStore(_CodexSessionReconciliationMixin):
         if lease.manifest.get("reaped") is not True:
             lease.manifest["state"] = "failed"
             self._write_manifest(lease)
+            if lease.manifest.get("teardown") == "unproven_after_lifetime_termination":
+                logger.warning("codex_attempt_teardown_unproven", view_id=lease.view_id)
+                return ()
             raise RuntimeError("Codex attempt lacks durable child-reaped proof")
         lifecycle = _FileLease.acquire(
             self.locks_root / "lifecycle.lock",

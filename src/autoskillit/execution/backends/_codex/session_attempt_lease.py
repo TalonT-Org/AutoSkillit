@@ -18,7 +18,6 @@ from autoskillit.core import (
     read_starttime_ticks,
 )
 from autoskillit.execution.backends._codex_session_lease import _FileLease
-from autoskillit.execution.process import INTERACTIVE_TETHER_CEILING_SECONDS
 
 if TYPE_CHECKING:
     from autoskillit.execution.backends._codex_session_storage import CodexSessionStore
@@ -41,7 +40,6 @@ class CodexSessionAttemptLease(AbstractContextManager[SessionAttemptHandle]):
     view_lease: _FileLease
     inert_targets: dict[str, Path]
     thread_lease: _FileLease | None = None
-    ceiling_seconds: float = INTERACTIVE_TETHER_CEILING_SECONDS
     _entered: bool = False
     _closed: bool = False
 
@@ -72,6 +70,7 @@ class CodexSessionAttemptLease(AbstractContextManager[SessionAttemptHandle]):
             pass_fds=tuple(fd for fd in pass_fds if fd >= 0),
             _record_spawn=self._record_spawn,
             _record_reaped=self._record_reaped,
+            _record_teardown_unproven=self._record_teardown_unproven,
         )
 
     def _record_spawn(self, pid: int, pgid: int) -> None:
@@ -96,7 +95,6 @@ class CodexSessionAttemptLease(AbstractContextManager[SessionAttemptHandle]):
             boot_id=read_boot_id(),
             child_starttime_ticks=read_starttime_ticks(pid),
             pidns_inode=read_pid_namespace_inode(pid),
-            not_after=time.time() + self.ceiling_seconds,
         )
         self.store._write_manifest(self)
 
@@ -109,6 +107,18 @@ class CodexSessionAttemptLease(AbstractContextManager[SessionAttemptHandle]):
             raise RuntimeError("Codex attempt reap was already recorded")
         self.manifest["reaped"] = True
         self.manifest["reaped_ns"] = time.time_ns()
+        self.store._write_manifest(self)
+
+    def _record_teardown_unproven(self, pid: int, pgid: int) -> None:
+        if not self._entered or self._closed:
+            raise RuntimeError("Cannot record unproven teardown outside an active Codex attempt")
+        if self.manifest.get("child_pid") != pid or self.manifest.get("child_pgid") != pgid:
+            raise RuntimeError("Unproven teardown identity does not match the recorded spawn")
+        if self.manifest.get("reaped") is True:
+            raise RuntimeError("Cannot record unproven teardown after the child was reaped")
+        if self.manifest.get("teardown") is not None:
+            raise RuntimeError("Codex attempt teardown outcome was already recorded")
+        self.manifest["teardown"] = "unproven_after_lifetime_termination"
         self.store._write_manifest(self)
 
     def _release_thread_lease(self, failures: list[BaseException]) -> bool:

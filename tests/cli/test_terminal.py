@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import termios
-import time
 from unittest.mock import Mock, patch
 
 import pytest
@@ -20,9 +20,45 @@ from autoskillit.cli.ui._terminal import _RESET_SPEC
 
 pytestmark = [
     pytest.mark.layer("cli"),
-    pytest.mark.small,
+    pytest.mark.medium,
     pytest.mark.usefixtures("_stub_interactive_prelaunch"),
 ]
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="PTY timestamp behavior is Linux-specific")
+def test_terminal_last_activity_uses_latest_tty_timestamp():
+    from autoskillit.cli.ui._terminal import terminal_last_activity
+
+    master_fd, slave_fd = os.openpty()
+    try:
+        access_time = 1_700_000_002
+        modified_time = 1_700_000_001
+        os.utime(os.ttyname(slave_fd), (access_time, modified_time))
+
+        assert terminal_last_activity(slave_fd) == max(access_time, modified_time)
+    finally:
+        os.close(master_fd)
+        os.close(slave_fd)
+
+
+def test_terminal_last_activity_returns_none_for_a_pipe():
+    from autoskillit.cli.ui._terminal import terminal_last_activity
+
+    read_fd, write_fd = os.pipe()
+    try:
+        assert terminal_last_activity(read_fd) is None
+    finally:
+        os.close(read_fd)
+        os.close(write_fd)
+
+
+def test_terminal_last_activity_returns_none_for_a_closed_fd():
+    from autoskillit.cli.ui._terminal import terminal_last_activity
+
+    fd = os.open(os.devnull, os.O_RDONLY)
+    os.close(fd)
+
+    assert terminal_last_activity(fd) is None
 
 
 class TestTerminalGuardTTYRestore:
@@ -429,6 +465,7 @@ class TestCookTerminalGuard:
     def test_cook_restores_terminal_on_keyboard_interrupt(self, monkeypatch, tmp_path):
         """The cook process owner restores terminal state when Popen is interrupted."""
         from autoskillit.cli.session._session_process import run_cook_attempt
+        from autoskillit.config import ProcessTetherConfig
         from autoskillit.core import CmdSpec
 
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
@@ -455,9 +492,10 @@ class TestCookTerminalGuard:
                 pass_fds=(),
                 on_spawn=lambda _pid, _pgid: None,
                 on_reaped=lambda _pid, _pgid: None,
+                on_teardown_unproven=lambda _pid, _pgid: None,
                 trace=Mock(),
                 observer=None,
-                not_after=time.time() + 60,
+                lifetime=ProcessTetherConfig(),
             )
 
         assert tcsetattr_calls, (

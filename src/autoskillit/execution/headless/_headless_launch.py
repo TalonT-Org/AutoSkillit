@@ -178,7 +178,6 @@ async def _run_headless_attempt(
             managed_attempt_id=managed_attempt_id,
             attempt=attempt,
             resume_session_id=backend_resume_session_id,
-            ceiling_seconds=ceiling_seconds,
         ) as handle:
             if handle is not None:
                 spec = dataclasses.replace(
@@ -422,7 +421,6 @@ async def _attempt_contract_nudge(
                 managed_attempt_id=managed_attempt_id,
                 attempt=attempt,
                 resume_session_id=skill_result.session_id,
-                ceiling_seconds=ceiling_seconds,
             ) as handle:
                 if handle is not None:
                     spec = dataclasses.replace(

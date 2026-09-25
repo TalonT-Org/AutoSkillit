@@ -195,11 +195,9 @@ def test_coding_agent_backend_new_lifecycle_signatures_are_exact():
         "launch_id",
         "attempt",
         "current_resume_spec",
-        "ceiling_seconds",
     )
     for name in tuple(context.parameters)[1:]:
         assert context.parameters[name].kind is inspect.Parameter.KEYWORD_ONLY
-    assert context.parameters["ceiling_seconds"].default == 172800.0
     hints = typing.get_type_hints(CodingAgentBackend.session_attempt_context)
     assert hints == {
         "session_home": Path,
@@ -207,7 +205,6 @@ def test_coding_agent_backend_new_lifecycle_signatures_are_exact():
         "launch_id": str,
         "attempt": int,
         "current_resume_spec": ResumeSpec,
-        "ceiling_seconds": float,
         "return": AbstractContextManager[SessionAttemptHandle],
     }
 
@@ -452,6 +449,7 @@ class _Backend:
                 pass_fds=(),
                 _record_spawn=lambda _pid, _pgid: None,
                 _record_reaped=lambda _pid, _pgid: None,
+                _record_teardown_unproven=lambda _pid, _pgid: None,
             )
         )
 

@@ -27,6 +27,7 @@ from autoskillit.core import (
     session_shape,
 )
 from autoskillit.execution import (
+    TETHER_SWEEP_INTERVAL_SECONDS,
     find_orphaned_autoskillit_daemons,
     find_orphaned_codex_processes,
     reap_orphaned_autoskillit_daemons,
@@ -77,7 +78,7 @@ def _reap_self_excluded_codex_and_daemon_orphans() -> None:
         reap_orphaned_autoskillit_daemons(daemon_orphans)
 
 
-async def _cleanup_stale_loop(interval: float = 1800.0) -> None:
+async def _cleanup_stale_loop(interval: float = TETHER_SWEEP_INTERVAL_SECONDS) -> None:
     """Periodically sweep stale session skill directories (defense-in-depth).
 
     Runs for the server lifetime. Sleep-first: deferred_initialize already

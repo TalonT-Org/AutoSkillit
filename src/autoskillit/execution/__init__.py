@@ -144,7 +144,9 @@ from autoskillit.execution.headless import (
 from autoskillit.execution.merge_queue import DefaultMergeQueueWatcher, fetch_repo_merge_state
 from autoskillit.execution.process import (
     DEFAULT_TETHER_CEILING_SECONDS,
-    INTERACTIVE_TETHER_CEILING_SECONDS,
+    TETHER_LEASE_RENEW_SECONDS,
+    TETHER_LEASE_SECONDS,
+    TETHER_SWEEP_INTERVAL_SECONDS,
     CaptureReadError,
     CaptureSetupError,
     CodexOrphanReapResult,
@@ -158,6 +160,7 @@ from autoskillit.execution.process import (
     TetherSpec,
     TetherSweepOutcome,
     TetherSweepReport,
+    _active_liveness_signals,  # noqa: F401 — shared liveness probe for cook lifetime decisions
     _has_active_execution_marker,  # noqa: F401 — re-exported for cli/app.py signal guard
     async_kill_process_tree,
     default_tether_dir,
@@ -169,6 +172,7 @@ from autoskillit.execution.process import (
     probe_systemd_scope_available,
     reap_orphaned_autoskillit_daemons,
     reap_orphaned_codex_processes,
+    renew_tether,
     run_managed_async,
     run_managed_sync,
     spawn_owned_process,
@@ -276,7 +280,9 @@ __all__ = [
     "ClaudeHeadlessCmd",
     # process
     "DEFAULT_TETHER_CEILING_SECONDS",
-    "INTERACTIVE_TETHER_CEILING_SECONDS",
+    "TETHER_LEASE_RENEW_SECONDS",
+    "TETHER_LEASE_SECONDS",
+    "TETHER_SWEEP_INTERVAL_SECONDS",
     "CaptureReadError",
     "CaptureSetupError",
     "CodexOrphanReapResult",
@@ -286,6 +292,7 @@ __all__ = [
     "OrphanedCodexProcess",
     "OrphanedTetherRecord",
     "OwnedProcessGroup",
+    "_active_liveness_signals",
     "TetherRecord",
     "TetherSpec",
     "TetherSweepOutcome",
@@ -304,6 +311,7 @@ __all__ = [
     "summarize_capture",
     "sweep_orphaned_tethers",
     "sweep_orphaned_tethers_async",
+    "renew_tether",
     "update_tether_workload",
     "wrap_systemd_scope",
     # recording

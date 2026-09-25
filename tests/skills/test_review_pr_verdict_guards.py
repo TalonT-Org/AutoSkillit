@@ -121,10 +121,25 @@ def test_experimental_degradation_blocks_approval() -> None:
 def test_initial_gate_degradation_is_not_classified_as_snapshot_movement() -> None:
     text = _skill_text()
     step2 = text[text.index("### Step 2.7") : text.index("### Step 2.5")]
-    assert "refresh_final_snapshot_state()" in step2
-    assert "FINAL_SNAPSHOT_STATE=authority_degraded" in step2
-    assert "Missing/malformed authority is degradation" in step2
-    assert "needs_human, never stale_snapshot" in step2
+    assert 'review_pr_gate.sh" snapshot' in step2
+    assert "non-zero" in step2
+    assert "needs_human" in step2
+    assert 'review_pr_gate.sh" revalidate' in step2
+    assert "FINAL_SNAPSHOT_STATE" in step2
+    assert "authority_degraded" in step2
+    assert "missing" in step2.lower() and "malformed" in step2.lower()
+
+
+def test_each_pre_effect_point_revalidates_retained_authority() -> None:
+    text = _skill_text()
+    sections = (
+        text[text.index("### Step 2.7") : text.index("### Step 2.5")],
+        text[text.index("### Step 4") : text.index("### Step 4.5")],
+        text[text.index("### Step 5") : text.index("### Step 6")],
+        text[text.index("### Step 6") : text.index("### Step 7")],
+        text[text.index("### Step 8") :],
+    )
+    assert all('review_pr_gate.sh" revalidate' in section for section in sections)
 
 
 def test_experimental_result_failures_are_distinct_from_empty_array() -> None:

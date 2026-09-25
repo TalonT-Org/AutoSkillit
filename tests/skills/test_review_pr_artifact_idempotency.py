@@ -49,20 +49,17 @@ def _all_surrounding_windows(text: str, target: str) -> list[str]:
 
 @pytest.mark.parametrize("filename_pattern", _VULNERABLE_FILES)
 def test_write_instruction_uses_dynamic_output_dir(filename_pattern: str) -> None:
-    """Write instructions for collision-risk files must use the dynamic output dir variable.
+    """Write instructions use the resolved output directory pasted as a literal path.
 
-    Write paths must reference ${REVIEW_OUTPUT_DIR} rather than hardcoded
-    {{AUTOSKILLIT_TEMP}}/review-pr/ so the write guard's allowed prefix is respected
-    when the recipe scopes output_dir to an iteration subdirectory.
+    The recipe may scope output_dir to an iteration subdirectory.
     """
     text = _SKILL_PATH.read_text()
     windows = _all_surrounding_windows(text, filename_pattern)
     assert windows, f"Pattern {filename_pattern!r} not found in review-pr/SKILL.md"
-    found = any("REVIEW_OUTPUT_DIR" in window for window in windows)
+    found = any("{review_output_dir}" in window for window in windows)
     assert found, (
-        f"No REVIEW_OUTPUT_DIR reference found near any occurrence of {filename_pattern!r} in "
-        f"review-pr/SKILL.md. Write paths must use ${{REVIEW_OUTPUT_DIR}} so they adapt to "
-        f"the recipe's output_dir at runtime. First window: {windows[0][:300]!r}"
+        f"No {{review_output_dir}} path found near {filename_pattern!r} in "
+        f"review-pr/SKILL.md. First window: {windows[0][:300]!r}"
     )
 
 
@@ -114,7 +111,7 @@ def test_runtime_threads_validation_aggregation_and_publication_results() -> Non
     assert "standard_findings=STANDARD_FINDINGS" in step4
     assert "anchor_authority=ANCHOR_AUTHORITY" in step4
     assert 'snapshot=GATE_AUTHORITY["snapshot"]' in step4
-    assert "review_root=REVIEW_CHECKOUT_ROOT" in step4
+    assert 'review_root="{checkout_root}"' in step4
     assert 'if GATE_STATE == "valid_true":' in step4
     assert 'elif GATE_STATE == "valid_false":' in step4
     assert '"state": "not_required"' in step4
@@ -133,11 +130,11 @@ def test_fixed_destinations_reject_direct_redirects() -> None:
     assert "jq -n ... > path" not in text
     assert "bash redirects (`> path`)" not in text
     for filename in (
-        "diff_context_${pr_number}.json",
-        "raw_findings_${pr_number}.json",
-        "local_findings_${pr_number}.json",
+        "diff_context_{pr_number}.json",
+        "raw_findings_{pr_number}.json",
+        "local_findings_{pr_number}.json",
     ):
-        assert f'> "${{REVIEW_OUTPUT_DIR}}{filename}"' not in text
+        assert f'> "{{review_output_dir}}{filename}"' not in text
 
 
 def test_post_pr_review_owns_the_idempotent_receipt_write() -> None:
@@ -153,7 +150,7 @@ def test_post_pr_review_owns_the_idempotent_receipt_write() -> None:
     assert _RECEIPT_PREFIX in section
     assert ".json" in section[section.find(_RECEIPT_PREFIX) :]
     assert "pr_number" in section.lower() or "PR_NUMBER" in section
-    assert "REVIEW_OUTPUT_DIR" in section or "AUTOSKILLIT_TEMP" in section
+    assert "{review_output_dir}" in section
     assert "receipt_path" in section
     assert "review_receipt_path" in text[call_idx:]
 

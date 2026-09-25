@@ -8,7 +8,7 @@ import pytest
 
 from autoskillit.core.io import load_yaml
 from autoskillit.recipe._skill_placeholder_parser import extract_blockquote_sections
-from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+from autoskillit.recipe.io import builtin_recipes_dir, builtin_scripts_dir, load_recipe
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
@@ -179,11 +179,11 @@ def test_annotate_pr_diff_callable_contract_has_valid_lines_path() -> None:
 
 
 def test_review_pr_skill_validates_sha_freshness() -> None:
-    """SKILL.md Step 2.7 must compare embedded SHA against live headRefOid."""
+    """Step 2.7 must use the bundled gate that validates live head authority."""
     skill_md = _SKILL_MD.read_text()
-    assert "headRefOid" in skill_md or "_head_sha" in skill_md, (
-        "Step 2.7 must validate SHA freshness, not just file existence"
-    )
+    script = (builtin_scripts_dir() / "review_pr_gate.sh").read_text()
+    assert 'review_pr_gate.sh" snapshot' in skill_md
+    assert "headRefOid" in script
 
 
 def test_annotate_pr_diff_callable_contract_has_head_sha() -> None:
@@ -307,18 +307,12 @@ def test_review_pr_gate_consumption_follows_manifest_and_marker_freshness() -> N
         "### Step 2.5: Deletion Context Pre-Computation",
     )
 
-    first_marker = step_2_7.index('cp -- "$diff_metrics_path" "$METRICS_MARKER_BEFORE"')
-    manifest_validation = step_2_7.index("artifact_digest_mismatch", first_marker)
-    second_marker = step_2_7.index('cp -- "$diff_metrics_path" "$METRICS_MARKER_AFTER"')
-    marker_comparison = step_2_7.index('cmp -s "$METRICS_MARKER_BEFORE" "$METRICS_MARKER_AFTER"')
-    gate_type_check = step_2_7.index('.run_overengineering_audits | type == "boolean"')
-
-    assert first_marker < manifest_validation < second_marker < marker_comparison < gate_type_check
-    assert 'cat "$HUNK_RANGES_SNAPSHOT_PATH"' in step_2_7
-    assert 'cat "$VALID_LINES_SNAPSHOT_PATH"' in step_2_7
-    assert "GATE_STATE=valid_true" in step_2_7
-    assert "GATE_STATE=valid_false" in step_2_7
-    assert "GATE_STATE=degraded" in step_2_7
+    assert 'review_pr_gate.sh" snapshot' in step_2_7
+    assert "GATE_AUTHORITY" in step_2_7
+    assert "metrics_marker_snapshot_path" in step_2_7
+    assert "annotated_diff_snapshot_path" in step_2_7
+    assert "hunk_ranges_snapshot_path" in step_2_7
+    assert "valid_lines_snapshot_path" in step_2_7
 
 
 def test_review_pr_experimental_dispatch_is_separate_and_exact() -> None:

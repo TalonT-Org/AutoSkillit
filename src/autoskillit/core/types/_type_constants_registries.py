@@ -603,7 +603,10 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
 EXPLORATION_TOOLS: frozenset[str] = frozenset(
     name for name, tags in TOOL_SUBSET_TAGS.items() if "exploration" in tags
 )
-# Kitchen-shared INSPECTION tools from FLEET_DISPATCH_TOOLS belong to the kitchen catalog.
+# Kitchen-gated tools visible to a kitchen session. Includes any FLEET_DISPATCH_TOOLS that
+# are also GATED and registered as INSPECTION — those are kitchen-shared readers that must
+# stay addressable from cook catalogs without requiring fleet mode. FLEET_DISPATCH mutation
+# tools are kept out because `assert_no_fleet_mutation_leak` enforces it at session time.
 KITCHEN_GATED_TOOLS: frozenset[str] = (
     GATED_TOOLS - FLEET_TOOLS - EXPLORATION_TOOLS - EVIDENCE_READER_TOOLS
 )

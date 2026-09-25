@@ -70,9 +70,13 @@ def _unwrapped_prefix(prefix: list[str]) -> bool:
 
 def _cdpath_setting(segment: list[str], start: int | None) -> tuple[bool, bool] | None:
     if __package__:
-        from . import _command_classification as _classification
+        from . import _command_classification as packaged_classification
+
+        _classification = packaged_classification
     else:
-        import _command_classification as _classification  # type: ignore[no-redef]
+        import _command_classification as standalone_classification
+
+        _classification = standalone_classification
 
     prefix = segment if start is None else segment[:start]
     if not _unwrapped_prefix(prefix):
@@ -128,9 +132,13 @@ def _apply_directory_command(
     state: _ShellDirectoryState,
 ) -> None:
     if __package__:
-        from . import _command_classification as _classification
+        from . import _command_classification as packaged_classification
+
+        _classification = packaged_classification
     else:
-        import _command_classification as _classification  # type: ignore[no-redef]
+        import _command_classification as standalone_classification
+
+        _classification = standalone_classification
 
     if verb == "popd":
         state.cwd = ""
@@ -205,9 +213,13 @@ def _record_state(
     ],
 ) -> _ShellDirectoryState:
     if __package__:
-        from . import _command_classification as _classification
+        from . import _command_classification as packaged_classification
+
+        _classification = packaged_classification
     else:
-        import _command_classification as _classification  # type: ignore[no-redef]
+        import _command_classification as standalone_classification
+
+        _classification = standalone_classification
 
     path = record.subshell_path
     _seed_child_scope(path, scopes, pending_children)
@@ -266,9 +278,13 @@ def _invoked_child_state(
     path: tuple[int, ...] | None,
 ) -> _ShellDirectoryState | None:
     if __package__:
-        from . import _command_classification as _classification
+        from . import _command_classification as packaged_classification
+
+        _classification = packaged_classification
     else:
-        import _command_classification as _classification  # type: ignore[no-redef]
+        import _command_classification as standalone_classification
+
+        _classification = standalone_classification
 
     if path is None or verb_cwd == state.cwd:
         return None
@@ -286,9 +302,13 @@ def _scan_executable(
     path: tuple[int, ...] | None,
 ) -> tuple[list[str], bool, bool, _ShellDirectoryState | None]:
     if __package__:
-        from . import _command_classification as _classification
+        from . import _command_classification as packaged_classification
+
+        _classification = packaged_classification
     else:
-        import _command_classification as _classification  # type: ignore[no-redef]
+        import _command_classification as standalone_classification
+
+        _classification = standalone_classification
 
     start = _classification._verb_start_index(executable)
     setting = _cdpath_setting(executable, start) if argv_tokens is not None else None
@@ -325,9 +345,13 @@ def _scan_executable(
 def scan_write_targets(command: str, cwd: str) -> WriteTargetScan:
     """Classify literal write targets and unresolved writes in evaluated shell commands."""
     if __package__:
-        from . import _command_classification as _classification
+        from . import _command_classification as packaged_classification
+
+        _classification = packaged_classification
     else:
-        import _command_classification as _classification  # type: ignore[no-redef]
+        import _command_classification as standalone_classification
+
+        _classification = standalone_classification
 
     records = _classification._all_evaluated_segments_with_provenance_impl(
         command, include_process_substitutions=True

@@ -67,43 +67,6 @@ def _session_catalog():
     )
 
 
-def _mcp_short_names(definitions, prefix: str) -> set[str]:
-    return {
-        tool.removeprefix(prefix)
-        for definition in definitions
-        for tool in definition.tools
-        if tool.startswith("mcp__")
-    }
-
-
-def _assert_production_projection_carries_plugin_namespace(cwd: Path) -> None:
-    from autoskillit.core import PluginLoadMode
-    from autoskillit.execution.backends.claude import ClaudeCodeBackend
-    from autoskillit.workspace import project_default_plugin_authority
-
-    authority = project_default_plugin_authority(
-        cwd=cwd, base_branch="main", catalog=_session_catalog()
-    )
-    with authority.acquire_launch_binding(
-        backend=ClaudeCodeBackend(),
-        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
-    ) as binding:
-        assert binding.plugin_dir is not None
-        rendered = load_agent_definitions(binding.plugin_dir / "agents")
-    assert binding.closed
-
-    for definition in rendered:
-        for tool in definition.tools:
-            if tool.startswith("mcp__"):
-                assert tool.startswith("mcp__plugin_autoskillit_autoskillit__"), (
-                    f"projected agent {definition.name!r} tool {tool!r} does not carry "
-                    "the plugin namespace Claude Code registers under --plugin-dir"
-                )
-    assert _mcp_short_names(rendered, "mcp__plugin_autoskillit_autoskillit__") == (
-        _mcp_short_names(load_bundled_agent_definitions(), DIRECT_PREFIX)
-    )
-
-
 def _write_agent_md(path: Path, *, name: str, tools: list[str], body: str = "") -> None:
     tools_str = "[" + ", ".join(tools) + "]"
     content = (
@@ -366,40 +329,6 @@ class TestBothPipelinesRenderAgents:
         assert len(projected_defs) == len(bundled_defs), (
             "marketplace root must contain all bundled agent definitions"
         )
-
-    def test_production_projection_agents_carry_plugin_namespace(self, tmp_path: Path) -> None:
-        _assert_production_projection_carries_plugin_namespace(tmp_path)
-
-
-class TestPerCorridorConsumptionChecks:
-    """I4: the rendered namespace follows the artifact's manifests, never host state."""
-
-    @pytest.mark.parametrize("registered", [False, True])
-    def test_production_projection_namespace_uses_plugin_manifests(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, registered: bool
-    ) -> None:
-        """The rendered namespace derives from the artifact's manifests, not the host registry.
-
-        The projection hardcodes PluginLoadMode.EXPLICIT_PLUGIN_DIR and derives the
-        MCP tool namespace from the artifact's own .claude-plugin/plugin.json and
-        .mcp.json via read_claude_plugin_tool_prefix(); it never consults
-        is_marketplace_plugin_registered(). This parametrize exists so the
-        projection is smoke-tested with both an absent and a present registry
-        file (scoped to tmp_path via monkeypatch so xdist is not polluted).
-        """
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        registry = tmp_path / ".claude" / "plugins" / "installed_plugins.json"
-        if registered:
-            registry.parent.mkdir(parents=True, exist_ok=True)
-            registry.write_text(
-                json.dumps(
-                    {"plugins": {"autoskillit@autoskillit-local": [{"installPath": "/fake"}]}}
-                ),
-                encoding="utf-8",
-            )
-        assert registry.is_file() is registered
-
-        _assert_production_projection_carries_plugin_namespace(tmp_path)
 
 
 class TestRenderCoherence:

@@ -1830,7 +1830,6 @@ class TestScanWriteTargets:
         cwd = str(tmp_path)
         home = str(tmp_path / "home")
         monkeypatch.setenv("HOME", home)
-        monkeypatch.delenv("CDPATH", raising=False)
         expected_targets = tuple(
             target.replace("{cwd}", cwd).replace("{home}", home) for target in targets
         )

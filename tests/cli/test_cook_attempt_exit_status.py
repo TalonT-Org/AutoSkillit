@@ -6,29 +6,22 @@ import io
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
 
 import autoskillit.cli.session._session_launch as _patch_session_launch
 import autoskillit.execution as _patch_execution
-from autoskillit.cli.session._session_process import CookAttemptResult
+from autoskillit.cli.session._session_process import (
+    LIFETIME_EXIT_STATUS,
+    attempt_exit_status,
+)
 from autoskillit.config import AutomationConfig, ProcessTetherConfig
 from autoskillit.core import FreshLaunch, PluginLoadMode
 from autoskillit.core.types import TerminationReason
+from tests.cli._cook_launch_helpers import cook_attempt_result
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
-
-
-def _attempt_result(
-    termination: TerminationReason,
-    returncode: int | None,
-) -> CookAttemptResult:
-    return cast(
-        CookAttemptResult,
-        SimpleNamespace(termination=termination, returncode=returncode),
-    )
 
 
 @pytest.mark.parametrize(
@@ -52,25 +45,21 @@ def test_lifetime_termination_uses_timeout_status_and_explains_resume(
     reason: TerminationReason,
     expected_fragments: tuple[str, ...],
 ) -> None:
-    from autoskillit.cli.session._session_process import attempt_exit_status
-
     stream = io.StringIO()
     status = attempt_exit_status(
-        _attempt_result(reason, -15),
+        cook_attempt_result(returncode=-15, termination=reason),
         stream=stream,
     )
 
-    assert status == 124
+    assert status == LIFETIME_EXIT_STATUS
     message = stream.getvalue().lower()
     assert all(fragment.lower() in message for fragment in expected_fragments)
 
 
 def test_external_sigkill_keeps_signal_status_and_explains_provenance() -> None:
-    from autoskillit.cli.session._session_process import attempt_exit_status
-
     stream = io.StringIO()
     status = attempt_exit_status(
-        _attempt_result(TerminationReason.NATURAL_EXIT, -9),
+        cook_attempt_result(returncode=-9, termination=TerminationReason.NATURAL_EXIT),
         stream=stream,
     )
 
@@ -81,11 +70,9 @@ def test_external_sigkill_keeps_signal_status_and_explains_provenance() -> None:
 
 @pytest.mark.parametrize("returncode", [0, 3])
 def test_natural_exit_status_is_returned_without_output(returncode: int) -> None:
-    from autoskillit.cli.session._session_process import attempt_exit_status
-
     stream = io.StringIO()
     status = attempt_exit_status(
-        _attempt_result(TerminationReason.NATURAL_EXIT, returncode),
+        cook_attempt_result(returncode=returncode),
         stream=stream,
     )
 
@@ -101,7 +88,7 @@ def test_run_managed_cook_exits_124_even_with_reload_sentinel(
     import autoskillit.cli.session._session_reload as session_reload
     from autoskillit.cli.session._session_cook import _run_managed_cook
 
-    result = _attempt_result(TerminationReason.TIMED_OUT, -15)
+    result = cook_attempt_result(returncode=-15, termination=TerminationReason.TIMED_OUT)
     monkeypatch.setattr(
         session_cook,
         "_execute_cook_attempt",
@@ -131,7 +118,7 @@ def test_run_managed_cook_exits_124_even_with_reload_sentinel(
             showed_onboarding=False,
         )
 
-    assert exc_info.value.code == 124
+    assert exc_info.value.code == LIFETIME_EXIT_STATUS
 
 
 def test_run_interactive_session_exits_124_before_infra_exit_classification(
@@ -142,7 +129,7 @@ def test_run_interactive_session_exits_124_before_infra_exit_classification(
     from autoskillit.cli.session._session_launch import _run_interactive_session
 
     policy = ProcessTetherConfig()
-    result = _attempt_result(TerminationReason.TIMED_OUT, -15)
+    result = cook_attempt_result(returncode=-15, termination=TerminationReason.TIMED_OUT)
     spec = SimpleNamespace(
         cmd=("claude",),
         env={},
@@ -204,4 +191,4 @@ def test_run_interactive_session_exits_124_before_infra_exit_classification(
             attempt=1,
         )
 
-    assert exc_info.value.code == 124
+    assert exc_info.value.code == LIFETIME_EXIT_STATUS

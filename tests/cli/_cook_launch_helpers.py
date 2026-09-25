@@ -52,6 +52,22 @@ def cook_attempt_result(
     )
 
 
+def lifetime_policy(
+    *,
+    cook_ceiling_seconds: float = 3.0,
+    cook_max_extension_seconds: float = 20.0,
+    systemd_scope_enabled: bool = False,
+):
+    """Build a ProcessTetherConfig with cook-lifetime defaults for tests."""
+    from autoskillit.config import ProcessTetherConfig
+
+    return ProcessTetherConfig(
+        cook_ceiling_seconds=cook_ceiling_seconds,
+        cook_max_extension_seconds=cook_max_extension_seconds,
+        systemd_scope_enabled=systemd_scope_enabled,
+    )
+
+
 class _RecordingProjectionBinding:
     def __init__(
         self,

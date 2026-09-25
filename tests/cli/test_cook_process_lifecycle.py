@@ -18,6 +18,7 @@ from autoskillit.cli.session._session_process import run_cook_attempt
 from autoskillit.cli.session.pty._observer import PtyObserver
 from autoskillit.config import ProcessTetherConfig
 from autoskillit.core import CmdSpec, TerminationReason, ValidatedAddDir
+from tests.cli._cook_launch_helpers import lifetime_policy
 from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
@@ -70,7 +71,7 @@ def _lifetime(
     *,
     extension_seconds: float = 0.0,
 ) -> ProcessTetherConfig:
-    return ProcessTetherConfig(
+    return lifetime_policy(
         cook_ceiling_seconds=ceiling_seconds,
         cook_max_extension_seconds=extension_seconds,
     )

@@ -15,6 +15,7 @@ import structlog
 from autoskillit.config import ProcessTetherConfig
 from autoskillit.core import TerminationReason
 from autoskillit.execution.process._process_tether import TetherRecord, write_tether
+from tests.cli._cook_launch_helpers import lifetime_policy
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -39,7 +40,7 @@ def _lifetime_module():
 def _policy(
     *, soft: float = 3.0, extension: float = 20.0, systemd_scope_enabled: bool = False
 ) -> ProcessTetherConfig:
-    return ProcessTetherConfig(
+    return lifetime_policy(
         cook_ceiling_seconds=soft,
         cook_max_extension_seconds=extension,
         systemd_scope_enabled=systemd_scope_enabled,

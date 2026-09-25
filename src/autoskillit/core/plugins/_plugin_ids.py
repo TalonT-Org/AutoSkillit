@@ -84,6 +84,8 @@ def read_claude_plugin_tool_prefix(plugin_root: Path) -> str:
     if not isinstance(servers, dict) or len(servers) != 1:
         raise ValueError(f"{mcp_json} must declare exactly one server under 'mcpServers'")
     (server_key,) = servers
+    if not isinstance(server_key, str) or not server_key:
+        raise ValueError(f"{mcp_json} 'mcpServers' key must be a non-empty string")
     return claude_plugin_tool_prefix(name, server_key)
 
 

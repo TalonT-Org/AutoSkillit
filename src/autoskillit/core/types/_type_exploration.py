@@ -63,7 +63,9 @@ PLUGINLESS_EXPLORER_ROLE: Final[str] = "pluginless-explorer"
 HARNESS_ZERO_TOOLS_REFUSAL_MARKER: Final[str] = "would be spawned with zero tools"
 #: A refusal is a deterministic packaging defect, never transient: retrying cannot
 #: help, and the pluginless fallback keeps the typed-evidence contract.
-EXPLORER_SPAWN_REFUSAL_RESPONSE: Final = ExplorationFailureResponse.FALLBACK
+EXPLORER_SPAWN_REFUSAL_RESPONSE: Final[ExplorationFailureResponse] = (
+    ExplorationFailureResponse.FALLBACK
+)
 
 EXPLORATION_FAILURE_CODE_RESPONSES: Mapping[ExplorationFailureCode, ExplorationFailureResponse] = {
     ExplorationFailureCode.SESSION_TYPE_INELIGIBLE: ExplorationFailureResponse.FALLBACK,

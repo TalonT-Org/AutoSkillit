@@ -490,6 +490,8 @@ class TestClaudePluginToolNamespace:
             ('{"name": "autoskillit"}', None),
             ('{"name": "autoskillit"}', '{"mcpServers": {}}'),
             ('{"name": "autoskillit"}', '{"mcpServers": {"a": {}, "b": {}}}'),
+            ('{"name": "autoskillit"}', '{"mcpServers": {7: {}}}'),
+            ('{"name": "autoskillit"}', '{"mcpServers": {"": {}}}'),
         ],
         ids=[
             "plugin-json-missing",
@@ -497,6 +499,8 @@ class TestClaudePluginToolNamespace:
             "mcp-json-missing",
             "zero-servers",
             "two-servers",
+            "server-key-not-string",
+            "server-key-empty-string",
         ],
     )
     def test_read_claude_plugin_tool_prefix_fails_closed(

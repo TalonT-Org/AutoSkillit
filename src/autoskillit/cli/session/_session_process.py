@@ -49,7 +49,10 @@ INTERACTIVE_TERMINATION_GRACE_SECONDS: Final = 10.0
 _LIVENESS_PROBE_INTERVAL_SECONDS: Final = 60.0
 _IDLE_WINDOW_SECONDS: Final = 1800.0
 _LEASE_RETRY_SECONDS: Final = 60.0
-_WARNING_LEADS_SECONDS: Final = (1800.0, 300.0)
+_WARNING_LEADS: Final[tuple[tuple[float, str], ...]] = (
+    (_IDLE_WINDOW_SECONDS, "30m"),
+    (300.0, "5m"),
+)
 
 
 def _default_activity(pid: int, fd: int | None) -> frozenset[str]:
@@ -177,7 +180,9 @@ class InteractiveLifetime:
         try:
             signals = frozenset(self._activity_probe(self._pid, self._terminal_fd))
         except Exception:
-            self._last_active_mono = now
+            # Probe failure is an unknown state, not evidence of activity.
+            # Leave _last_active_mono untouched so the IDLE_STALL backstop
+            # can still fire if probes keep failing.
             self._last_signals = frozenset()
             logger.warning(
                 "cook_lifetime_probe_failed",
@@ -215,7 +220,8 @@ class InteractiveLifetime:
         return None
 
     def _renew_lease(self, now: float, wall_now: float) -> None:
-        if self._lease_due_wall is None or wall_now < self._lease_due_wall:
+        assert self._lease_due_wall is not None
+        if wall_now < self._lease_due_wall:
             return
 
         if self._tether_path is None:
@@ -258,10 +264,9 @@ class InteractiveLifetime:
         if self._notice_path is None or self._hard_deadline is None or self._started_at is None:
             return
         remaining = self._hard_deadline - now
-        for lead in _WARNING_LEADS_SECONDS:
+        for lead, level in _WARNING_LEADS:
             if lead >= self._hard_cap_seconds or remaining <= 0 or remaining > lead:
                 continue
-            level = "30m" if lead == 1800.0 else "5m"
             if level in self._warning_levels_written:
                 continue
             self._warning_levels_written.add(level)
@@ -465,11 +470,17 @@ def _close_attempt_fds(
     observer: PtyObserver | None,
     failures: list[BaseException],
 ) -> int | None:
+    pid = owner.pid if owner is not None else None
     if slave_fd is not None:
         try:
             os.close(slave_fd)
         except BaseException as exc:
-            logger.error("cook_slave_fd_close_failed", error_type=type(exc).__name__)
+            logger.error(
+                "cook_slave_fd_close_failed",
+                error_type=type(exc).__name__,
+                pid=pid,
+                fd=slave_fd,
+            )
             failures.append(exc)
     if master_fd is None:
         return None
@@ -481,7 +492,12 @@ def _close_attempt_fds(
         else:
             observer.close_master(master_fd)
     except BaseException as exc:
-        logger.error("cook_master_fd_close_failed", error_type=type(exc).__name__)
+        logger.error(
+            "cook_master_fd_close_failed",
+            error_type=type(exc).__name__,
+            pid=pid,
+            fd=master_fd,
+        )
         failures.append(exc)
     return None
 
@@ -606,10 +622,11 @@ def _remove_lifetime_notice(notice_path: Path) -> None:
     try:
         notice_path.unlink(missing_ok=True)
     except OSError as exc:
-        logger.debug(
+        logger.warning(
             "cook_lifetime_notice_cleanup_failed",
             error_type=type(exc).__name__,
             path=str(notice_path),
+            exc_info=True,
         )
 
 
@@ -691,7 +708,7 @@ def _interactive_terminal_fd() -> int | None:
         terminal_fd = sys.stdin.fileno()
     except (OSError, TypeError, ValueError):
         return None
-    if terminal_fd is None or not os.isatty(terminal_fd):
+    if not os.isatty(terminal_fd):
         return None
     return terminal_fd
 

@@ -208,33 +208,33 @@ def _shell_source(argv_tokens: Sequence[ArgvToken] | None, index: int) -> str | 
     return argv_tokens[index].raw_span.strip()
 
 
-def _non_option_indices(segment: list[str], argv_tokens: Sequence[ArgvToken] | None) -> list[int]:
+def _non_option_indices(argv: list[str], argv_tokens: Sequence[ArgvToken] | None) -> list[int]:
     separator = next(
-        (index for index, token in enumerate(segment[1:], start=1) if token == "--"),
-        len(segment),
+        (index for index, token in enumerate(argv[1:], start=1) if token == "--"),
+        len(argv),
     )
     input_redirects = {
         index
-        for index in range(1, len(segment) - 1)
+        for index in range(1, len(argv) - 1)
         if argv_tokens is not None
-        and segment[index] == "<"
+        and argv[index] == "<"
         and argv_tokens[index].raw_span.strip() == "<"
     }
     return [
         index
-        for index in range(1, len(segment))
+        for index in range(1, len(argv))
         if index not in input_redirects
         and index - 1 not in input_redirects
-        and ((index < separator and not segment[index].startswith("-")) or index > separator)
+        and ((index < separator and not argv[index].startswith("-")) or index > separator)
     ]
 
 
 def _write_verb_operand_indices(
-    verb: str, segment: list[str], argv_tokens: Sequence[ArgvToken] | None
+    verb: str, argv: list[str], argv_tokens: Sequence[ArgvToken] | None
 ) -> list[int]:
-    operands = _non_option_indices(segment, argv_tokens)
+    operands = _non_option_indices(argv, argv_tokens)
     if verb == "sed":
-        has_inplace = any(token.startswith(("-i", "--in-place")) for token in segment[1:])
+        has_inplace = any(token.startswith(("-i", "--in-place")) for token in argv[1:])
         if not has_inplace:
             return []
         return operands[-1:]
@@ -243,7 +243,7 @@ def _write_verb_operand_indices(
     if verb == "install":
         # GNU install's -t/--target-directory form takes its destination
         # from a flag; otherwise the last operand is the destination.
-        if "-t" in segment[1:] or "--target-directory" in segment[1:]:
+        if "-t" in argv[1:] or "--target-directory" in argv[1:]:
             return operands[:1]
         if len(operands) < 2:
             return []
@@ -255,18 +255,18 @@ def _write_verb_operand_indices(
 
 def extract_write_verb_targets(
     verb: str,
-    segment: list[str],
+    argv: list[str],
     cwd: str = "",
     *,
     argv_tokens: Sequence[ArgvToken] | None = None,
 ) -> tuple[list[str], bool]:
     """Return write-verb targets and whether a write target could not resolve."""
-    operands = _write_verb_operand_indices(verb, segment, argv_tokens)
+    operands = _write_verb_operand_indices(verb, argv, argv_tokens)
     targets: list[str] = []
     unresolved_target = False
     for index in operands:
         resolved = resolve_write_target(
-            segment[index], cwd, shell_source=_shell_source(argv_tokens, index)
+            argv[index], cwd, shell_source=_shell_source(argv_tokens, index)
         )
         if resolved is None:
             unresolved_target = True

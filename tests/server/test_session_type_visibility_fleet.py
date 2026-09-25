@@ -194,74 +194,39 @@ async def test_fleet_tools_constant_matches_tagged_tools(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize(
+    ("session_type_value", "headless_value"),
+    [
+        ("orchestrator", "1"),
+        ("orchestrator", None),
+        ("skill", "1"),
+        ("skill", None),
+        (None, None),
+    ],
+    ids=[
+        "orchestrator_headless",
+        "orchestrator_interactive",
+        "skill_headless",
+        "skill_interactive",
+        "no_session_type",
+    ],
+)
 @pytest.mark.anyio
-async def test_orchestrator_headless_leaks_no_fleet_mutation_tools(monkeypatch):
-    """Orchestrator headless sessions expose no fleet mutation tools."""
+async def test_non_fleet_session_leaks_no_fleet_mutation_tools(
+    monkeypatch, session_type_value, headless_value
+):
+    """Non-fleet sessions (any shape) must not expose fleet mutation tools."""
     from autoskillit.core import FLEET_MODE_ENV_VAR
     from autoskillit.server import _apply_session_type_visibility, mcp
 
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
-    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    monkeypatch.delenv(FLEET_MODE_ENV_VAR, raising=False)
-    _apply_session_type_visibility()
-
-    visible = {t.name for t in await mcp.list_tools()}
-    assert_no_fleet_mutation_leak(visible)
-
-
-@pytest.mark.anyio
-async def test_orchestrator_interactive_leaks_no_fleet_mutation_tools(monkeypatch):
-    """Interactive orchestrator sessions expose no fleet mutation tools."""
-    from autoskillit.core import FLEET_MODE_ENV_VAR
-    from autoskillit.server import _apply_session_type_visibility, mcp
-
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
-    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
-    monkeypatch.delenv(FLEET_MODE_ENV_VAR, raising=False)
-    _apply_session_type_visibility()
-
-    visible = {t.name for t in await mcp.list_tools()}
-    assert_no_fleet_mutation_leak(visible)
-
-
-@pytest.mark.anyio
-async def test_skill_headless_leaks_no_fleet_mutation_tools(monkeypatch):
-    """Headless skill sessions expose no fleet mutation tools."""
-    from autoskillit.core import FLEET_MODE_ENV_VAR
-    from autoskillit.server import _apply_session_type_visibility, mcp
-
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
-    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    monkeypatch.delenv(FLEET_MODE_ENV_VAR, raising=False)
-    _apply_session_type_visibility()
-
-    visible = {t.name for t in await mcp.list_tools()}
-    assert_no_fleet_mutation_leak(visible)
-
-
-@pytest.mark.anyio
-async def test_skill_interactive_leaks_no_fleet_mutation_tools(monkeypatch):
-    """Interactive skill sessions expose no fleet mutation tools."""
-    from autoskillit.core import FLEET_MODE_ENV_VAR
-    from autoskillit.server import _apply_session_type_visibility, mcp
-
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
-    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
-    monkeypatch.delenv(FLEET_MODE_ENV_VAR, raising=False)
-    _apply_session_type_visibility()
-
-    visible = {t.name for t in await mcp.list_tools()}
-    assert_no_fleet_mutation_leak(visible)
-
-
-@pytest.mark.anyio
-async def test_no_session_type_leaks_no_fleet_mutation_tools(monkeypatch):
-    """No session type exposes no fleet mutation tools."""
-    from autoskillit.core import FLEET_MODE_ENV_VAR
-    from autoskillit.server import _apply_session_type_visibility, mcp
-
-    monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+    if session_type_value is not None:
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", session_type_value)
+    else:
+        monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
+    if headless_value is not None:
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", headless_value)
+    else:
+        monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
     monkeypatch.delenv(FLEET_MODE_ENV_VAR, raising=False)
     _apply_session_type_visibility()
 

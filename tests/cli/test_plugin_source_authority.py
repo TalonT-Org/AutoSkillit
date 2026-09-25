@@ -160,8 +160,11 @@ class TestDanglingInstallPathIsHarmless:
             registry.write_text(malformed)
             assert is_marketplace_plugin_registered() is False, malformed
 
-        gone = _seed_dangling_registry(tmp_path)
-        assert not gone.exists()
+        dangling_install_path = _seed_dangling_registry(tmp_path)
+        # `_seed_dangling_registry` returns the `installPath` it wrote into the
+        # registry — a directory that does NOT exist on disk. The registry
+        # records the plugin, but the directory it points at has been swept.
+        assert not dangling_install_path.exists()
         assert is_marketplace_plugin_registered() is True
         assert is_marketplace_plugin_registered(tmp_path) is True
 

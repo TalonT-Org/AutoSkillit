@@ -475,6 +475,46 @@ def test_cook_join_session_bash_call_writes_no_join_diagnostic(tmp_path: Path) -
     assert not (log_dir / "join_diagnostics.jsonl").exists()
 
 
+def test_cook_join_session_unnamed_agent_writes_single_cook_bypass_diagnostic(
+    tmp_path: Path,
+) -> None:
+    """Unnamed Agent in a cook session consults join applicability and records
+    the cook_bypass decision, matching the per-tool rhythm of the four sibling
+    join guards (claim/ settle/ followup/ stop). Regression guard for the
+    cohesion fix that moved the applicability check before the candidate
+    denial string.
+    """
+    from autoskillit.core.runtime.session_registry import write_registry_entry
+
+    worktree = _write_session_binding(tmp_path, join_required=True)
+    write_registry_entry(
+        worktree,
+        "launch",
+        "cook",
+        None,
+        claude_session_id="bind",
+    )
+    log_dir = worktree / "logs"
+    response = _run_guard_join_bound(
+        _join_event(worktree, "Agent", {"prompt": "reviewer"}),
+        env_overrides={
+            "AUTOSKILLIT_LAUNCH_ID": "launch",
+            "AUTOSKILLIT_LOG_DIR": str(log_dir),
+        },
+    )
+
+    assert response == {}
+    diagnostic_path = log_dir / "join_diagnostics.jsonl"
+    diagnostics = [
+        json.loads(line)
+        for line in diagnostic_path.read_text(encoding="utf-8").splitlines()
+        if line
+    ]
+    assert len(diagnostics) == 1
+    assert diagnostics[0]["gate"] == "background_exec_guard"
+    assert diagnostics[0]["status"] == "cook_bypass"
+
+
 def test_clean_session_allows_named_teammate_dispatch(tmp_path):
     """REQ-054: clean (join_required=false) session preserves legitimate team calls."""
     worktree = _write_session_binding(tmp_path, join_required=False)

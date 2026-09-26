@@ -1177,6 +1177,34 @@ def test_stop_guard_stays_blocked_after_terminal_failure(tmp_path: Path) -> None
     assert "settled non-success" in str(_stdout_json(completed)["reason"])
 
 
+def test_stop_guard_is_safe_under_python_optimization(tmp_path: Path) -> None:
+    """Regression guard: ``join_stop_guard`` must not use ``assert`` for
+    runtime type narrowing. ``python -O`` strips asserts, so a regression
+    to the assert pattern would let a None ``admission`` reach the
+    subsequent ``admission.binding_dict`` dereference.
+    """
+    session_id = "stop-O-flag"
+    worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
+    completed = subprocess.run(
+        [sys.executable, "-O", str(_GUARDS_DIR / "join_stop_guard.py")],
+        cwd=worktree,
+        env=_child_env(tmp_path),
+        input=json.dumps({"session_id": session_id, "cwd": str(worktree)}),
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=10,
+    )
+
+    # Either the guard exits 0 (no wave registered yet) or it raises a
+    # structured error — but it must NOT crash with an unhandled
+    # AttributeError from a stripped assert.
+    assert completed.returncode in (0, 2), (
+        f"unexpected return code {completed.returncode}: stderr={completed.stderr!r}"
+    )
+    assert "AttributeError" not in completed.stderr
+
+
 def test_followup_guard_prefers_the_managed_join_identity(tmp_path: Path) -> None:
     payload_session_id = "codex-thread-id"
     managed_join_id = "managed-join-id"

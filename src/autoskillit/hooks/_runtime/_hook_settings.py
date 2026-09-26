@@ -427,9 +427,10 @@ def resolve_quota_log_dir(*, caller: str = "") -> Path | None:
 # after the decomposition. The actual definitions live in
 # ``_hook_log_dispatch`` to keep this module under the REQ-CNST-010
 # 750 non-import line hard cap.
-from _hook_log_dispatch import (  # type: ignore[import-not-found]  # noqa: E402,PLC0415
+from _hook_log_dispatch import (  # type: ignore[import-not-found]  # noqa: E402,PLC0415,F401
     write_dispatch_diagnostic,
     write_join_diagnostic,
+    write_quota_log_event,
 )
 
 

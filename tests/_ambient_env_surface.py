@@ -1003,7 +1003,7 @@ FORWARDING_SITES: dict[str, str] = {
         "Unfiltered dict(os.environ) used only to probe an exact executable path before the real"
         "session env is sealed by build_agent_env elsewhere; not the launched child's env."
     ),
-    "cli/update/_transaction.py:432": (
+    "cli/update/_transaction.py:440": (
         "Unfiltered dict(os.environ if base_env is None else base_env) snapshot captured for"
         "update-transaction diagnostics/rollback comparison, not for a spawned child process."
     ),

@@ -106,7 +106,7 @@ def _guard_denials(event: dict, monkeypatch: pytest.MonkeyPatch) -> list[str]:
             try:
                 guard.main()
             except SystemExit as exc:
-                assert exc.code in (None, 0, 2), exc.code
+                assert exc.code in (None, 0), exc.code
         if output.getvalue():
             decision = json.loads(output.getvalue())["hookSpecificOutput"]
             if decision["permissionDecision"] == "deny":
@@ -193,6 +193,12 @@ def test_unresolved_write_negative_controls(
 ):
     event = make_hook_event(tool="Bash", command=command, payload_cwd=str(checkout))
     assert len(_guard_denials(event, monkeypatch)) == 2
+
+
+def test_guard_error_exit_is_not_allowed(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(installation_integrity_guard, "main", lambda: sys.exit(2))
+    with pytest.raises(AssertionError, match="2"):
+        _guard_denials({}, monkeypatch)
 
 
 @pytest.mark.parametrize("label", ["sh", "shell", "zsh", "console", "shell-session", ""])

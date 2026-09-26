@@ -305,22 +305,29 @@ def upgrade_unavailable_message(info: InstallInfo) -> str:
     """Name the install type and its remedy when ``upgrade_command`` returns ``None``."""
     install_type = info.install_type
     match install_type:
-        case InstallType.UNKNOWN | InstallType.GIT_VCS:
+        case InstallType.UNKNOWN:
             return (
                 f"Install type '{install_type.value}' has no upgrade command. Reinstall via "
                 "install.sh (stable) or 'task install-dev' (develop)."
             )
         case InstallType.LOCAL_PATH:
             return (
-                f"Install type '{install_type.value}' did not record a source directory. "
+                f"Install type '{install_type.value}' has no recorded source directory. "
                 "Reinstall with 'uv tool install --force --reinstall <autoskillit checkout>' "
                 "or 'task install-dev' (develop)."
             )
         case InstallType.LOCAL_EDITABLE:
             return (
-                f"Install type '{install_type.value}' did not record a source directory. "
+                f"Install type '{install_type.value}' has no recorded source directory. "
                 "Reinstall with 'uv pip install -e <autoskillit checkout>' "
                 "or 'task install-dev' (develop)."
+            )
+        case InstallType.GIT_VCS:
+            # Unreachable: ``upgrade_command`` for GIT_VCS always returns a non-None
+            # command (stable upgrade or dev install), so this function is only
+            # invoked for install types where ``upgrade_command`` returned ``None``.
+            raise AssertionError(
+                f"GIT_VCS upgrade_command always returns a command; got info={info!r}"
             )
         case unhandled:
             assert_never(unhandled)

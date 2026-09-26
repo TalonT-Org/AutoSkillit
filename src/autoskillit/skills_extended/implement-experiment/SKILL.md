@@ -61,6 +61,7 @@ tokens after the skill name for the first path-like token (starts with `/`,
 `./`, or `.autoskillit/`).
 
 Derived values: `{worktree_path}` is the literal worktree root printed in Step 1;
+`{branch_name}` is the branch name printed in Step 1;
 `{research_dir}` is the absolute experiment directory defined in Step 1 (cont.), with a trailing `/`.
 
 ## Critical Constraints
@@ -150,6 +151,7 @@ Read the Bash tool output to capture WORKTREE_PATH — it is an absolute path to
 ### Step 1 (cont.) — Emit Structured Tokens Early
 
 Define `{worktree_path}` as the literal WORKTREE_PATH printed in Step 1.
+Define `{branch_name}` as the literal BRANCH_NAME printed in Step 1.
 Define `{research_dir}` as that path plus `/` and the experiment directory name
 extracted in Step 0 (`research/YYYY-MM-DD-{slug}/`), including its trailing `/`.
 Paste these literal values into every later path.
@@ -165,7 +167,7 @@ execution layer can capture them even if context is exhausted later:
 
 ```
 worktree_path = {worktree_path}
-branch_name = ${BRANCH_NAME}
+branch_name = {branch_name}
 ```
 
 ### Step 2 — Deep Context Understanding (Subagents) (SINGLE MESSAGE)
@@ -351,7 +353,7 @@ fi
 
 Output to terminal:
 - **Worktree path:** `{worktree_path}`
-- **Branch name:** `${WORKTREE_NAME}`
+- **Branch name:** `{branch_name}`
 - **Base branch:** the branch the worktree was created from
 - **Research folder:** the `research/` subfolder created inside the worktree
 - **Summary:** list of implemented phases and artifacts created
@@ -368,7 +370,7 @@ Then emit these structured output tokens:
 
 ```
 worktree_path = {worktree_path}
-branch_name = ${BRANCH_NAME}
+branch_name = {branch_name}
 ```
 
 ## Error Handling

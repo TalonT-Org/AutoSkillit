@@ -64,7 +64,7 @@ Grouping analysis is performed as in-context LLM reasoning. No parallel sessions
 - Use angle-bracket placeholder syntax (`<...>`) in the combined issue body — always paste actual retrieved content from fetch_github_issue
 - Use the body field from `gh issue list` for body assembly — only fetched_content[N] from per-issue fetch is authoritative
 - Use `--body` inline for `gh issue create` when the body contains verbatim multi-issue content —
-  always write to `{{AUTOSKILLIT_TEMP}}/collapse-issues/combined_body_{timestamp}.md` and use
+  always write to `{{AUTOSKILLIT_TEMP}}/collapse-issues/combined_body_{run_id}.md` and use
   `--body-file` (the combined body can exceed shell arg limits and the inline form contradicts
   the SWITCH TO COPY MODE verbatim guarantee)
 
@@ -202,14 +202,22 @@ Format: `"Combined: <descriptive scope phrase>"`
 
 **7b. Build combined issue body:**
 
-Initialize the temp file:
+Run this read-only command once and substitute its printed value for every `{run_id}` below:
+
 ```bash
-ts=$(date +%Y-%m-%d_%H%M%S)
-COMBINED_BODY="{{AUTOSKILLIT_TEMP}}/collapse-issues/combined_body_${ts}.md"
+python -c 'from datetime import datetime; from uuid import uuid4; print(datetime.now().strftime("%Y-%m-%d_%H%M%S") + "_" + uuid4().hex)'
+```
+
+Write targets must be literal paths: never write through a shell variable, `$(...)`,
+backticks, or `~`. Bash variables do not persist across tool calls; repeat the
+model-substituted literal path in every later command.
+
+Initialize the temp directory:
+```bash
 mkdir -p "{{AUTOSKILLIT_TEMP}}/collapse-issues"
 ```
 
-Write the verbatim combined body to `${COMBINED_BODY}` using the Write tool (one section at a
+Write the verbatim combined body to `{{AUTOSKILLIT_TEMP}}/collapse-issues/combined_body_{run_id}.md` using the Write tool (one section at a
 time via `>>` append). Write exactly this structure:
 
 ```
@@ -277,7 +285,7 @@ Repeat for each unique label in the collected set (e.g., `recipe:remediation`, `
 ```bash
 gh issue create \
   --title "Combined: <synthesized title>" \
-  --body-file "${COMBINED_BODY}" \
+  --body-file "{{AUTOSKILLIT_TEMP}}/collapse-issues/combined_body_{run_id}.md" \
   --label "recipe:implementation" \
   --label "enhancement" \
   [--repo {repo}]
@@ -292,12 +300,11 @@ For each original issue that was collapsed (one by one, in order):
 **8a. Append ## Superseded section and update body:**
 
 ```bash
-COLLAPSE_BODY_FILE="{{AUTOSKILLIT_TEMP}}/collapse-issues/supersede_{orig_number}_{ts}.md"
-mkdir -p "$(dirname "$COLLAPSE_BODY_FILE")"
-gh issue view {orig_number} --json body --jq '.body' [--repo {repo}] > "$COLLAPSE_BODY_FILE"
+mkdir -p "{{AUTOSKILLIT_TEMP}}/collapse-issues"
+gh issue view {orig_number} --json body --jq '.body' [--repo {repo}] > "{{AUTOSKILLIT_TEMP}}/collapse-issues/supersede_{orig_number}_{run_id}.md"
 printf '\n\n---\n\n## Superseded\n\nCollapsed into #%s: %s' \
-  "{combined_number}" "{combined_url}" >> "$COLLAPSE_BODY_FILE"
-gh issue edit {orig_number} --body-file "$COLLAPSE_BODY_FILE" [--repo {repo}]
+  "{combined_number}" "{combined_url}" >> "{{AUTOSKILLIT_TEMP}}/collapse-issues/supersede_{orig_number}_{run_id}.md"
+gh issue edit {orig_number} --body-file "{{AUTOSKILLIT_TEMP}}/collapse-issues/supersede_{orig_number}_{run_id}.md" [--repo {repo}]
 sleep 1  # Rate-limit discipline: 1s between mutating calls
 ```
 

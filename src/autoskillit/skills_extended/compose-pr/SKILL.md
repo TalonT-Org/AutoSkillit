@@ -109,12 +109,20 @@ FEATURE_BRANCH=$(git -C "$WORK_DIR" rev-parse --abbrev-ref HEAD)
 BASE_BRANCH=$4
 ```
 
+Run this read-only command once and substitute its printed value for every `{run_id}` below:
+
+```bash
+python -c 'from datetime import datetime; from uuid import uuid4; print(datetime.now().strftime("%Y-%m-%d_%H%M%S") + "_" + uuid4().hex)'
+```
+
+Write targets must be literal paths: never write through a shell variable, `$(...)`,
+backticks, or `~`. Bash variables do not persist across tool calls; repeat the
+model-substituted literal path in every later command.
+
 Create temp dir (relative to the current working directory):
 ```bash
 mkdir -p {{AUTOSKILLIT_TEMP}}/compose-pr/
-ts=$(date +%Y-%m-%d_%H%M%S)
 ```
-Timestamp `ts` is assigned in the bash block above.
 
 ### Step 1: Read PR Prep File
 
@@ -155,7 +163,7 @@ If `all_diagram_paths` is empty or all diagrams fail → `validated_diagrams = [
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Write PR body to `{{AUTOSKILLIT_TEMP}}/compose-pr/pr_body_$ts.md` (using the `ts` variable from Step 0).
+Write PR body to `{{AUTOSKILLIT_TEMP}}/compose-pr/pr_body_{run_id}.md`.
 
 #### Single plan format:
 
@@ -252,7 +260,7 @@ Plan files:
 
 After writing the body, compute SHA-256 over its exact raw bytes and write the
 exclusive version-1 sibling metadata file
-`{{AUTOSKILLIT_TEMP}}/compose-pr/pr_body_$ts.metadata.json`:
+`{{AUTOSKILLIT_TEMP}}/compose-pr/pr_body_{run_id}.metadata.json`:
 
 ```json
 {
@@ -292,8 +300,7 @@ matching issue number plus exact canonical URL in the body. Any mismatch is term
 must stop before `gh pr create` executes.
 
 ```bash
-PR_CREATE_BODY={{AUTOSKILLIT_TEMP}}/compose-pr/pr_body_$ts.md
-PR_CREATE_LOG_DIR={{AUTOSKILLIT_TEMP}}/compose-pr
+PR_CREATE_BODY={{AUTOSKILLIT_TEMP}}/compose-pr/pr_body_{run_id}.md
 PR_CREATE_ATTEMPT=1
 PR_CREATE_MAX=3
 PR_CREATE_STATUS=0
@@ -309,17 +316,17 @@ while [ "$PR_CREATE_ATTEMPT" -le "$PR_CREATE_MAX" ]; do
        --head "$FEATURE_BRANCH" \
        --title "$TASK_TITLE" \
        --body-file "$PR_CREATE_BODY" \
-       > "$PR_CREATE_LOG_DIR/pr_stdout_$ts.$PR_CREATE_ATTEMPT.txt" \
-       2> "$PR_CREATE_LOG_DIR/pr_stderr_$ts.$PR_CREATE_ATTEMPT.txt"
+       > "{{AUTOSKILLIT_TEMP}}/compose-pr/pr_stdout_{run_id}.txt" \
+       2> "{{AUTOSKILLIT_TEMP}}/compose-pr/pr_stderr_{run_id}.txt"
   PR_CREATE_STATUS=$?
   PR_CREATE_LAST_ATTEMPT=$PR_CREATE_ATTEMPT
   if [ "$PR_CREATE_STATUS" -eq 0 ]; then
-    PR_URL=$(grep -E '^https://github\.com/' "$PR_CREATE_LOG_DIR/pr_stdout_$ts.$PR_CREATE_ATTEMPT.txt" | head -1)
+    PR_URL=$(grep -E '^https://github\.com/' "{{AUTOSKILLIT_TEMP}}/compose-pr/pr_stdout_{run_id}.txt" | head -1)
     if [ -n "$PR_URL" ]; then
       break
     fi
   fi
-  PR_CREATE_ERR=$(cat "$PR_CREATE_LOG_DIR/pr_stderr_$ts.$PR_CREATE_ATTEMPT.txt")
+  PR_CREATE_ERR=$(cat "{{AUTOSKILLIT_TEMP}}/compose-pr/pr_stderr_{run_id}.txt")
   case "$PR_CREATE_ERR" in
     # Retryable — HTTP 5xx, HTTP 429, secondary rate limit, rate limit, timeout, connection reset/refused.
     # Classified before broad HTTP 4xx terminal handling so retryable rate limits are not shadowed.
@@ -350,7 +357,7 @@ if [ "$PR_CREATE_STATUS" -eq 0 ]; then
   PR_CREATE_STATUS=1
 fi
 echo "gh pr create failed after ${PR_CREATE_LAST_ATTEMPT} attempt(s):" >&2
-LAST_STDERR="$PR_CREATE_LOG_DIR/pr_stderr_$ts.$PR_CREATE_LAST_ATTEMPT.txt"
+LAST_STDERR="{{AUTOSKILLIT_TEMP}}/compose-pr/pr_stderr_{run_id}.txt"
 if [ -s "$LAST_STDERR" ]; then
   cat "$LAST_STDERR" >&2
 else
@@ -379,8 +386,9 @@ a URL, treat the create as recovered and emit that URL. The recovery path runs o
 transient/ambiguous failures — never for terminal validation failures.
 
 Last-attempt tracking: `PR_CREATE_LAST_ATTEMPT` is set to `$PR_CREATE_ATTEMPT` immediately
-after each `gh pr create` execution. Final failure reporting reads the stderr file for
-`PR_CREATE_LAST_ATTEMPT`, not the post-increment loop counter.
+after each `gh pr create` execution for the attempt-count diagnostic. The fixed
+`{{AUTOSKILLIT_TEMP}}/compose-pr/pr_stderr_{run_id}.txt` path is overwritten each
+attempt, so final failure reporting reads the last attempt’s stderr after the loop.
 
 Final status propagation: if the loop exits without a captured or recovered PR URL, the exit
 status is forced nonzero even if the last raw `gh pr create` exit code was 0 (zero-exit/no-URL

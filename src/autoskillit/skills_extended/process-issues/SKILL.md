@@ -162,6 +162,19 @@ Total: N issues, M batches. No sessions launched.
 
 Then emit the `---process-issues-result---` block with `"dry_run": true` and exit.
 
+Run this read-only command once and substitute its printed value for every `{run_id}` below:
+
+```bash
+python -c 'from datetime import datetime; from uuid import uuid4; print(datetime.now().strftime("%Y-%m-%d_%H%M%S") + "_" + uuid4().hex)'
+```
+
+Write targets must be literal paths: never write through a shell variable, `$(...)`,
+backticks, or `~`. Bash variables do not persist across tool calls; repeat the
+model-substituted literal path in every later command.
+
+Generate this token even when status updates are disabled or there are no issues;
+Step 4 uses it for the summary report.
+
 ### Step 2a: Batch Scope Confirmation
 
 Before executing any batch, display the full processing plan and confirm scope with the user:
@@ -242,12 +255,11 @@ Processing X issues:
 
 4. **Optionally append pickup status to issue body** (if `--status-updates` is active):
    ```bash
-   PROCESS_BODY_FILE="{{AUTOSKILLIT_TEMP}}/process-issues/status_{number}_$(date +%s).md"
-   mkdir -p "$(dirname "$PROCESS_BODY_FILE")"
-   gh issue view {number} --json body --jq '.body' > "$PROCESS_BODY_FILE"
+   mkdir -p "{{AUTOSKILLIT_TEMP}}/process-issues"
+   gh issue view {number} --json body --jq '.body' > "{{AUTOSKILLIT_TEMP}}/process-issues/status_{number}_{run_id}.md"
    printf '\n\n---\n\n## In Progress\n\nProcessing in batch %s — recipe: `%s`\n' \
-     "{N}" "{recipe}" >> "$PROCESS_BODY_FILE"
-   gh issue edit {number} --body-file "$PROCESS_BODY_FILE"
+     "{N}" "{recipe}" >> "{{AUTOSKILLIT_TEMP}}/process-issues/status_{number}_{run_id}.md"
+   gh issue edit {number} --body-file "{{AUTOSKILLIT_TEMP}}/process-issues/status_{number}_{run_id}.md"
    sleep 1
    ```
 
@@ -312,13 +324,12 @@ Processing X issues:
 
 9. **Optionally append completion status to issue body** (if `--status-updates` is active):
    ```bash
-   PROCESS_BODY_FILE="{{AUTOSKILLIT_TEMP}}/process-issues/status_{number}_$(date +%s).md"
-   mkdir -p "$(dirname "$PROCESS_BODY_FILE")"
-   gh issue view {number} --json body --jq '.body' > "$PROCESS_BODY_FILE"
+   mkdir -p "{{AUTOSKILLIT_TEMP}}/process-issues"
+   gh issue view {number} --json body --jq '.body' > "{{AUTOSKILLIT_TEMP}}/process-issues/status_{number}_{run_id}.md"
    printf '\n\n---\n\n## Status\n\n%s\n' \
      "{✅ Processing complete — PR: $pr_url | ❌ Processing failed — manual intervention required}" \
-     >> "$PROCESS_BODY_FILE"
-   gh issue edit {number} --body-file "$PROCESS_BODY_FILE"
+     >> "{{AUTOSKILLIT_TEMP}}/process-issues/status_{number}_{run_id}.md"
+   gh issue edit {number} --body-file "{{AUTOSKILLIT_TEMP}}/process-issues/status_{number}_{run_id}.md"
    sleep 1
    ```
 
@@ -379,13 +390,13 @@ path — it is intended for manual recovery of stale registry files only.
 
 ### Step 4: Write Summary Report
 
-Compute timestamp: `YYYY-MM-DD_HHMMSS`.
+Reuse the `{run_id}` obtained after the dry-run exit.
 Create `{{AUTOSKILLIT_TEMP}}/process-issues/` if it does not exist.
 
-Write `{{AUTOSKILLIT_TEMP}}/process-issues/process_report_{ts}.md`:
+Write `{{AUTOSKILLIT_TEMP}}/process-issues/process_report_{run_id}.md`:
 
 ```markdown
-# Process Issues Report — {ts}
+# Process Issues Report — {run_id}
 
 ## Summary
 
@@ -421,7 +432,7 @@ Print the structured result for pipeline capture:
 ```
 ---process-issues-result---
 {
-    "report_path": "{{AUTOSKILLIT_TEMP}}/process-issues/process_report_{ts}.md",
+    "report_path": "{{AUTOSKILLIT_TEMP}}/process-issues/process_report_{run_id}.md",
     "total_issues": N,
     "successes": X,
     "failures": Y,
@@ -438,14 +449,14 @@ Print the structured result for pipeline capture:
 Also emit the report path as a standalone structured token for recipe capture:
 
 ```
-dispatch_results = {{AUTOSKILLIT_TEMP}}/process-issues/process_report_{ts}.md
+dispatch_results = {{AUTOSKILLIT_TEMP}}/process-issues/process_report_{run_id}.md
 ```
 
 ## Output Location
 
 ```
 {{AUTOSKILLIT_TEMP}}/process-issues/
-  process_report_{ts}.md   # Human-readable summary (created per run)
+  process_report_{run_id}.md   # Human-readable summary (created per run)
 ```
 
 ## Related Skills

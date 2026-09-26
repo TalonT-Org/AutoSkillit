@@ -242,13 +242,13 @@ When the task involves resolving conflicts to apply changes from one branch onto
 fail with `WORKTREE_INTACT_MERGE_COMMITS_DETECTED`.
 
 **NEVER prescribe in conflict-resolution plans:**
-```
+```bash
 git merge --no-ff origin/{branch}            # creates merge commit — rebase fails
 git merge --no-commit --no-ff origin/{branch}  # same problem
 ```
 
 **ALWAYS use linear approaches instead:**
-```
+```bash
 # Option A: Per-file checkout (copies contents without merge relationship)
 git checkout origin/{branch} -- path/to/file.py
 

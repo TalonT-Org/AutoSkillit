@@ -355,12 +355,11 @@ def test_compose_pr_step5_preserves_pr_arguments():
     assert "--head" in bash, "Step 5 must include --head argument"
     assert "--title" in bash, "Step 5 must include --title argument"
     assert "--body-file" in bash, "Step 5 must include --body-file argument"
-    # Literal body-file path with the canonical {{AUTOSKILLIT_TEMP}} prefix
-    # and the $ts.md suffix.
-    assert "{{AUTOSKILLIT_TEMP}}/compose-pr/pr_body_$ts.md" in bash, (
+    assert "PR_CREATE_BODY={{AUTOSKILLIT_TEMP}}/compose-pr/pr_body_{run_id}.md" in bash, (
         "Step 5 must use the literal --body-file path "
-        "{{AUTOSKILLIT_TEMP}}/compose-pr/pr_body_$ts.md"
+        "{{AUTOSKILLIT_TEMP}}/compose-pr/pr_body_{run_id}.md"
     )
+    assert "$ts" not in COMPOSE_PR.read_text()
 
 
 def test_compose_pr_step4_auth_preflight_unchanged():
@@ -458,7 +457,7 @@ def test_compose_pr_step5_body_file_uses_variable_form():
     """Step 5 must use --body-file \"$PR_CREATE_BODY\" (guard-resolvable variable form)."""
     bash = _compose_pr_step5_bash()
 
-    # The guard resolves $PR_CREATE_BODY from the preamble assignment.
+    # compose_pr_body_guard resolves read arguments only from literal assignments.
     assert '--body-file "$PR_CREATE_BODY"' in bash, (
         'Step 5 must pass --body-file "$PR_CREATE_BODY" so the guard can resolve '
         "the variable from the preamble assignment"
@@ -467,3 +466,5 @@ def test_compose_pr_step5_body_file_uses_variable_form():
         "Step 5 must declare PR_CREATE_BODY= assignment before the loop "
         "so the guard can resolve it"
     )
+    assignment = next(line for line in bash.splitlines() if line.startswith("PR_CREATE_BODY="))
+    assert "$" not in assignment.split("=", 1)[1]

@@ -146,6 +146,11 @@ Read the Bash tool output to capture WORKTREE_PATH — it is an absolute path to
 
 ### Step 1 (cont.) — Emit Structured Tokens Early
 
+Define `{worktree_path}` as the literal WORKTREE_PATH printed in Step 1.
+Define `{research_dir}` as that path plus `/` and the experiment directory name
+extracted in Step 0 (`research/YYYY-MM-DD-{slug}/`), including its trailing `/`.
+Paste these literal values into every later path.
+
 Immediately after the worktree is created, output these tokens so the
 execution layer can capture them even if context is exhausted later:
 
@@ -156,7 +161,7 @@ execution layer can capture them even if context is exhausted later:
 > code fences cause match failure.
 
 ```
-worktree_path = ${WORKTREE_PATH}
+worktree_path = {worktree_path}
 branch_name = ${BRANCH_NAME}
 ```
 
@@ -204,7 +209,7 @@ reproducibility artifacts — it does NOT build or install anything.
 Locate the `environment.yml` in the planned research directory. The YAML's
 `name:` field is the `MAMBA_ENV` slug (e.g., `2026-04-13-my-experiment`).
 
-Write `${RESEARCH_DIR}/Dockerfile` based on the canonical template at
+Write `{research_dir}Dockerfile` based on the canonical template at
 `src/autoskillit/assets/research/Dockerfile.template` in the project root,
 substituting `${MAMBA_ENV}` with the actual environment name from `environment.yml`:
 
@@ -233,7 +238,7 @@ RUN micromamba create -f /opt/research/env/{slug}.yaml && micromamba clean -afy
 RUN echo "micromamba activate {slug}" >> /etc/container.bashrc
 ```
 
-**3b — Write `${RESEARCH_DIR}/Taskfile.yml`:**
+**3b — Write `{research_dir}Taskfile.yml`:**
 
 ```yaml
 version: '3'
@@ -262,7 +267,7 @@ Adjust the `run-experiment` command to match the actual entry-point script from 
 **3c — Write `environment.yml` and note `env_mode`:**
 
 If the experiment plan specifies an `environment.yml`, write it to
-`${RESEARCH_DIR}/environment.yml`. This file is committed to the worktree
+`{research_dir}environment.yml`. This file is committed to the worktree
 as a reproducibility artifact — reviewers can inspect exact dependency
 versions.
 
@@ -274,7 +279,7 @@ Note the `env_mode` from context (set by `setup-environment`):
 
 Do NOT invoke any container or environment construction commands. The environment is already ready.
 
-**All commands from this point must run from `${WORKTREE_PATH}`.** Use absolute
+**All commands from this point must run from `{worktree_path}`.** Use absolute
 paths to avoid CWD drift across Bash tool calls.
 
 ### Step 4 — Implement Phase by Phase
@@ -304,12 +309,12 @@ For each phase, begin implementation immediately (no announcement):
 When implementing experiment scripts in Phases 2 and 3, also create a corresponding
 `tests/test_{script_name}.py` for each script:
 
-1. Create `{WORKTREE_PATH}/research/{slug}/tests/` and `conftest.py` if not yet present
+1. Create `{worktree_path}/research/{slug}/tests/` and `conftest.py` if not yet present
 2. For each script (e.g., `analysis.py`), create `tests/test_analysis.py` covering:
    - Data loads without error and has the expected shape/type
    - Key output values fall in expected ranges (sanity checks, not exact match)
    - At least one test per public function or entry point
-3. Run `pytest --collect-only {WORKTREE_PATH}/research/{slug}/tests/` to confirm
+3. Run `pytest --collect-only {worktree_path}/research/{slug}/tests/` to confirm
    pytest can discover all test files. Fix any import errors before committing.
 
 The plan is the authority on what phases exist and what each phase creates.
@@ -320,9 +325,8 @@ Follow it.
 Copy the experiment plan into the research folder for reference:
 
 ```bash
-RESEARCH_DIR=$(ls -d "${WORKTREE_PATH}"/research/*/ 2>/dev/null | head -1)
-cp "${PLAN_PATH}" "${RESEARCH_DIR}experiment-plan.md"
-git -C "${WORKTREE_PATH}" add research/ && git -C "${WORKTREE_PATH}" commit -m "Add experiment plan to research folder"
+cp "{plan_path}" "{research_dir}experiment-plan.md"
+git -C "{worktree_path}" add research/ && git -C "{worktree_path}" commit -m "Add experiment plan to research folder"
 ```
 
 ### Step 6 — Pre-commit Checks (Conditional)
@@ -331,8 +335,8 @@ Pre-commit is only relevant when the worktree has a `.pre-commit-config.yaml`.
 Research worktrees do not — skip pre-commit for them.
 
 ```bash
-if [ -f "${WORKTREE_PATH}/.pre-commit-config.yaml" ]; then
-    cd "${WORKTREE_PATH}" && pre-commit run --all-files
+if [ -f "{worktree_path}/.pre-commit-config.yaml" ]; then
+    cd "{worktree_path}" && pre-commit run --all-files
     # Fix any formatting or linting issues, re-stage, and create a new commit (NEVER --amend):
     # git add -u && git commit -m 'style: apply pre-commit auto-fixes'
 else
@@ -343,7 +347,7 @@ fi
 ### Step 7 — Handoff Report
 
 Output to terminal:
-- **Worktree path:** `${WORKTREE_PATH}`
+- **Worktree path:** `{worktree_path}`
 - **Branch name:** `${WORKTREE_NAME}`
 - **Base branch:** the branch the worktree was created from
 - **Research folder:** the `research/` subfolder created inside the worktree
@@ -360,7 +364,7 @@ Then emit these structured output tokens:
 > code fences cause match failure.
 
 ```
-worktree_path = ${WORKTREE_PATH}
+worktree_path = {worktree_path}
 branch_name = ${BRANCH_NAME}
 ```
 

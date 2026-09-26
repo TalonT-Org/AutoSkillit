@@ -57,3 +57,27 @@ Files with no registration support their folder; one immediate-child
 subdirectory per skill. The authoritative enumeration is the directory
 listing itself (catalog pointer in the intro above). For the canonical
 visibility matrix see `docs/skills/visibility.md`.
+
+## Literal write targets
+
+Every write target in a `bash` fence, prose-prescribed shell, or Write-tool
+instruction must be a literal path. Obtain dynamic values once with a read-only
+command and paste the printed values through `{placeholder}`s. For files in
+shared temp storage, generate an invocation token with a timestamp and UUID:
+
+```bash
+python -c 'from datetime import datetime; from uuid import uuid4; print(datetime.now().strftime("%Y-%m-%d_%H%M%S") + "_" + uuid4().hex)'
+```
+
+Substitute that value for `{run_id}` in every later path. Never write through
+shell variables, command substitutions, backticks, or `~`. Read arguments may
+use variables assigned literal paths within the same Bash call; variables do
+not persist across tool calls. Redirect, `tee`, `cp`, `mv`, `rm`, `sed -i`, and
+`install` targets must repeat the literal path.
+
+`{name}` is the only placeholder syntax; `<name>` parses as a redirect. Label
+shell command fences `bash` so they are included in the guard corpus.
+`tests/contracts/test_skill_write_target_conformance.py` checks Bash fences and
+bundled recipe `run_cmd` commands against the installed write-target guards.
+A later prose conformance part extends enforcement to prose-prescribed shell.
+Keep this guidance here; do not add code comments that merely restate it.

@@ -90,6 +90,16 @@ Confirm access:
 gh repo view --json owner,name
 ```
 
+Run this read-only command once and substitute its printed value for every `{run_id}` below:
+
+```bash
+python -c 'from datetime import datetime; from uuid import uuid4; print(datetime.now().strftime("%Y-%m-%d_%H%M%S") + "_" + uuid4().hex)'
+```
+
+Write targets must be literal paths: never write through a shell variable, `$(...)`,
+backticks, or `~`. Bash variables do not persist across tool calls; repeat the
+model-substituted literal path in every later command.
+
 ### Step 4: Dedup Check (skip if `--issue N` provided)
 
 Extract multiple keyword sets from the description — individual key terms and 2–3 phrase
@@ -153,12 +163,10 @@ option entirely — only `C` appears.
 
 1. Fetch current body and append new context using a temp file to avoid shell injection:
    ```bash
-   ts=$(date +%Y-%m-%d_%H%M%S)
-   EDIT_BODY_FILE="{{AUTOSKILLIT_TEMP}}/prepare-issue/edit_body_${ts}.md"
    mkdir -p "{{AUTOSKILLIT_TEMP}}/prepare-issue"
-   gh issue view {selected_number} --json body -q .body > "${EDIT_BODY_FILE}"
-   printf '\n## Additional Context\n\n%s' "{description}" >> "${EDIT_BODY_FILE}"
-   gh issue edit {selected_number} --body-file "${EDIT_BODY_FILE}"
+   gh issue view {selected_number} --json body -q .body > "{{AUTOSKILLIT_TEMP}}/prepare-issue/edit_body_{run_id}.md"
+   printf '\n## Additional Context\n\n%s' "{description}" >> "{{AUTOSKILLIT_TEMP}}/prepare-issue/edit_body_{run_id}.md"
+   gh issue edit {selected_number} --body-file "{{AUTOSKILLIT_TEMP}}/prepare-issue/edit_body_{run_id}.md"
    ```
 2. Set `issue_number = selected_number` (no new issue will be created).
 3. Fetch the updated issue for triage:
@@ -204,8 +212,6 @@ provided (adopting an existing issue) or when `--dry-run` is active.
 2. Apply all strip transforms in a single deterministic shell pipeline:
 
    ```bash
-   ts=$(date +%Y-%m-%d_%H%M%S)
-   ISSUE_BODY_FILE="{{AUTOSKILLIT_TEMP}}/prepare-issue/issue_body_${ts}.md"
    mkdir -p "{{AUTOSKILLIT_TEMP}}/prepare-issue"
 
    grep -v 'validated: true' "$report_path" \
@@ -215,12 +221,12 @@ provided (adopting an existing issue) or when `--dry-run` is active.
      | grep -v '| VALID BUT EXCEPTION WARRANTED |' \
      | sed 's/ | \*\*Contested:\*\* [0-9][0-9]*//' \
      | sed 's/ | \*\*Exception warranted:\*\* [0-9][0-9]*//' \
-   > "${ISSUE_BODY_FILE}" || { echo 'ERROR: failed to process report_path'; exit 1; }
+   > "{{AUTOSKILLIT_TEMP}}/prepare-issue/issue_body_{run_id}.md" || { echo 'ERROR: failed to process report_path'; exit 1; }
 
    # Strip the ## Findings with Exceptions section entirely:
    awk '/^## Findings with Exceptions/{skip=1} skip && /^---/{skip=0; next} !skip' \
-     "${ISSUE_BODY_FILE}" > "${ISSUE_BODY_FILE}.tmp" \
-     && mv "${ISSUE_BODY_FILE}.tmp" "${ISSUE_BODY_FILE}"
+     "{{AUTOSKILLIT_TEMP}}/prepare-issue/issue_body_{run_id}.md" > "{{AUTOSKILLIT_TEMP}}/prepare-issue/issue_body_{run_id}.md.tmp" \
+     && mv "{{AUTOSKILLIT_TEMP}}/prepare-issue/issue_body_{run_id}.md.tmp" "{{AUTOSKILLIT_TEMP}}/prepare-issue/issue_body_{run_id}.md"
 
    # Defensive strip: remove any finding detail section that contains an exception note
    # (guards against exception-warranted findings leaking inline into ## Validated Findings)
@@ -230,8 +236,8 @@ provided (adopting an existing issue) or when `--dry-run` is active.
      in_exception && /^## / { in_exception=0 }
      !in_exception
      END { in_exception=0 }
-   ' "${ISSUE_BODY_FILE}" > "${ISSUE_BODY_FILE}.tmp" \
-     && mv "${ISSUE_BODY_FILE}.tmp" "${ISSUE_BODY_FILE}"
+   ' "{{AUTOSKILLIT_TEMP}}/prepare-issue/issue_body_{run_id}.md" > "{{AUTOSKILLIT_TEMP}}/prepare-issue/issue_body_{run_id}.md.tmp" \
+     && mv "{{AUTOSKILLIT_TEMP}}/prepare-issue/issue_body_{run_id}.md.tmp" "{{AUTOSKILLIT_TEMP}}/prepare-issue/issue_body_{run_id}.md"
    ```
 
    **What each transform removes:**
@@ -250,7 +256,7 @@ provided (adopting an existing issue) or when `--dry-run` is active.
    ```bash
    gh issue create \
      --title "{title}" \
-     --body-file "${ISSUE_BODY_FILE}"
+     --body-file "{{AUTOSKILLIT_TEMP}}/prepare-issue/issue_body_{run_id}.md"
    ```
 
    Capture the returned issue URL and extract the issue number from it.
@@ -292,23 +298,21 @@ After creating or adopting the issue, detect whether the description originates 
 When detected:
 1. Fetch the current issue body:
    ```bash
-   ts=$(date +%Y-%m-%d_%H%M%S)
-   EDIT_BODY_FILE="{{AUTOSKILLIT_TEMP}}/prepare-issue/edit_body_${ts}.md"
    mkdir -p "{{AUTOSKILLIT_TEMP}}/prepare-issue"
-   gh issue view {issue_number} --json body -q .body > "${EDIT_BODY_FILE}"
+   gh issue view {issue_number} --json body -q .body > "{{AUTOSKILLIT_TEMP}}/prepare-issue/edit_body_{run_id}.md"
    ```
 2. Append an `## Investigation` section containing the marker and the investigation context:
    ```bash
-   printf '\n\n## Investigation\n\n<!-- investigation_complete: true -->\n' >> "${EDIT_BODY_FILE}"
-   printf '> Prior investigation completed interactively. See below for root cause analysis.\n\n' >> "${EDIT_BODY_FILE}"
+   printf '\n\n## Investigation\n\n<!-- investigation_complete: true -->\n' >> "{{AUTOSKILLIT_TEMP}}/prepare-issue/edit_body_{run_id}.md"
+   printf '> Prior investigation completed interactively. See below for root cause analysis.\n\n' >> "{{AUTOSKILLIT_TEMP}}/prepare-issue/edit_body_{run_id}.md"
    ```
 3. If the description is a file path, append the file contents (the investigation report):
    ```bash
-   cat "${description}" >> "${EDIT_BODY_FILE}"
+   cat "${description}" >> "{{AUTOSKILLIT_TEMP}}/prepare-issue/edit_body_{run_id}.md"
    ```
 4. Update the issue body:
    ```bash
-   gh issue edit {issue_number} --body-file "${EDIT_BODY_FILE}"
+   gh issue edit {issue_number} --body-file "{{AUTOSKILLIT_TEMP}}/prepare-issue/edit_body_{run_id}.md"
    sleep 1  # Rate-limit discipline
    ```
 
@@ -377,19 +381,21 @@ If one or more requirements pass, write each as one plain sentence (at most thre
 3. Otherwise append, then set `requirements_generated: true`,
    `requirements_appended: true`:
    ```bash
-   ts=$(date +%Y-%m-%d_%H%M%S)
-   EDIT_BODY_FILE="{{AUTOSKILLIT_TEMP}}/prepare-issue/edit_body_${ts}.md"
-   REQUIREMENTS_FILE="{{AUTOSKILLIT_TEMP}}/prepare-issue/requirements_${ts}.md"
    mkdir -p "{{AUTOSKILLIT_TEMP}}/prepare-issue"
 
    # Fetch current issue body to temp file (avoids shell interpolation):
-   gh issue view {N} --json body -q .body > "${EDIT_BODY_FILE}"
+   gh issue view {N} --json body -q .body > "{{AUTOSKILLIT_TEMP}}/prepare-issue/edit_body_{run_id}.md"
 
-   # Populate ${REQUIREMENTS_FILE} with the requirement sentences, then:
-   printf '\n\n## Requirements\n\n' >> "${EDIT_BODY_FILE}"
-   cat "${REQUIREMENTS_FILE}" >> "${EDIT_BODY_FILE}"
+   ```
 
-   gh issue edit {N} --body-file "${EDIT_BODY_FILE}"
+   Use the Write tool to populate `{{AUTOSKILLIT_TEMP}}/prepare-issue/requirements_{run_id}.md`
+   with the requirement sentences, then append them:
+
+   ```bash
+   printf '\n\n## Requirements\n\n' >> "{{AUTOSKILLIT_TEMP}}/prepare-issue/edit_body_{run_id}.md"
+   cat "{{AUTOSKILLIT_TEMP}}/prepare-issue/requirements_{run_id}.md" >> "{{AUTOSKILLIT_TEMP}}/prepare-issue/edit_body_{run_id}.md"
+
+   gh issue edit {N} --body-file "{{AUTOSKILLIT_TEMP}}/prepare-issue/edit_body_{run_id}.md"
    ```
 
 ### Step 8: Mixed-Concern Detection
@@ -459,14 +465,15 @@ gh issue edit {issue_number} \
 - Create a GitHub issue without displaying the draft and receiving explicit Y confirmation
   (unless `--issue N` or `--dry-run` is active)
 - Use `--body` inline for the validated-report `gh issue create` — always write the
-  stripped body to `{{AUTOSKILLIT_TEMP}}/prepare-issue/issue_body_{timestamp}.md` and
+  stripped body to `{{AUTOSKILLIT_TEMP}}/prepare-issue/issue_body_{run_id}.md` and
   pass `--body-file` (prevents LLM paraphrase, shell truncation, and special-character injection)
 - Use `--body` shell substitution (`--body "$(...)`) for `gh issue edit` — always write to
-  `{{AUTOSKILLIT_TEMP}}/prepare-issue/edit_body_{timestamp}.md` and use `--body-file`
+  `{{AUTOSKILLIT_TEMP}}/prepare-issue/edit_body_{run_id}.md` and use `--body-file`
 - Emit `REQ-` identifiers, requirement groups, or more than three requirement sentences in
   the `## Requirements` section
 
 **ALWAYS:**
+- Every write target is a literal path
 - Confirm repo access with `gh repo view` before any issue operations
 - Create only definitions proven missing by the complete label inventory
 - Emit the result block (`---prepare-issue-result---`) even on dry-run

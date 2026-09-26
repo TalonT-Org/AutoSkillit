@@ -85,7 +85,7 @@ path below. Substitute that directory before making any tool call.
 - Log `WARNING` to stdout for any L0 response that fails validation (skip that assignment)
 - Log `CRITICAL` to stdout for any L0 subagent that fails entirely (proceed with N-1, partial result)
 - When two assignments propose WPs covering the same files, assign ownership to the numerically earlier assignment_id using natural sort on numeric suffixes (e.g. `P1-A1` beats `P1-A2`; `P1-A2` beats `P1-A10`); log each resolution
-- Emit: `phase_refined_path = {output_dir}/refine_contexts/{phase_id}_result.json`
+- Emit the absolute saved path: `phase_refined_path = {output_dir}/refine_contexts/{phase_id}_result.json`
 - Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow

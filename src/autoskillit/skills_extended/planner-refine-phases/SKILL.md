@@ -72,7 +72,7 @@ conflicts, applies field-level edits to the plan, and writes `refined_plan.json`
 - Log a `WARNING` to stdout for any L0 response that fails validation (skip that phase)
 - Log `CRITICAL` to stdout for any L0 subagent that fails entirely (proceed with N-1)
 - Log each conflict resolution to stdout before applying it
-- Emit: `refined_plan_path = {output_dir}/refined_plan.json`
+- Emit the absolute saved path: `refined_plan_path = {output_dir}/refined_plan.json`
 - Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow

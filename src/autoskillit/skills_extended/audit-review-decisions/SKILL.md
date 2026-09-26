@@ -56,10 +56,13 @@ implemented. Identify review debt before it compounds.
   corresponding raw-data filename. It is not a positional input.
 - `{run_id}` — locally captured timestamp-and-UUID value from the read-only command
   below; use it in the default path. It is not a positional input.
-- `{output_path}` — locally resolved literal path: `$2` when supplied, otherwise the
+- `{output_path}` — locally resolved literal absolute path: `$2` when supplied, otherwise the
   default above. It is not a positional input.
 - `{output_dir}` — locally captured literal parent directory printed from
   `{output_path}` in Step 4; use it for the later `mkdir`. It is not a positional input.
+
+Resolve any relative caller-supplied path from the current working directory before
+binding it as `{output_path}`.
 
 Generate `{run_id}` once with this read-only command. Use its printed value in the
 default output path when `$2` is omitted:

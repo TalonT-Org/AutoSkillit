@@ -79,7 +79,7 @@ path below. Substitute that directory before making any tool call.
 - Log `WARNING` to stdout for any L0 response that fails validation (skip that phase)
 - Log `CRITICAL` to stdout for any L0 subagent that fails entirely (proceed with N-1 suggestions)
 - When two WPs claim the same deliverable file, assign ownership to the WP with the numerically earlier ID using natural sort (e.g., `P1-A1-WP1` beats `P2-A1-WP1`)
-- Emit: `phase_wp_refined_path = {output_dir}/wp_refine_contexts/{phase_id}_result.json`
+- Emit the absolute saved path: `phase_wp_refined_path = {output_dir}/wp_refine_contexts/{phase_id}_result.json`
 - Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
@@ -219,7 +219,7 @@ Collect all `subsumption_pairs` from validated L0 responses. For each pair:
 2. Append the subsumed WP's unique acceptance criteria to the consumer WP
 3. Remove the subsumed WP from the output WP list
 4. Update all `depends_on` references: any WP that depended on the subsumed WP should instead depend on the consumer WP
-5. Write voided_wps entry to `$4/work_packages/lifecycle_registry.json`:
+5. Write voided_wps entry to `{output_dir}/work_packages/lifecycle_registry.json`:
    Read existing registry (or create with defaults `{"voided_phases": [], "voided_assignments": [], "absorbed": {}, "voided_wps": {}, "archived_stubs": {}}`).
    Add to `voided_wps`: `{subsumed_id: {"merged_into": consumer_id, "reason": reason}}`.
    Write back with `schema_version: 1`.

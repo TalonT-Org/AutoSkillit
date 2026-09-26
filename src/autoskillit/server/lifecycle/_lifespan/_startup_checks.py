@@ -9,6 +9,7 @@ diagnostics find problems.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import assert_never
 
 import autoskillit.core.paths as _core_paths
 from autoskillit.core import (
@@ -85,29 +86,33 @@ def _activate_recipe_kitchen(kitchen_id: str) -> None:
 
 def _log_hook_repair_outcome(outcome: PluginHookRepairOutcome, artifact_scope: str) -> None:
     """Record one cache or projection hook repair result."""
-    if outcome.status is PluginHookRepairStatus.REPAIRED:
-        logger.info(
-            f"{artifact_scope}_hooks_repaired_at_startup",
-            incarnation=str(outcome.incarnation_dir),
-        )
-    elif outcome.status is PluginHookRepairStatus.CONTENDED:
-        logger.warning(
-            f"{artifact_scope}_hooks_repair_contended_at_startup",
-            incarnation=str(outcome.incarnation_dir),
-            reason=outcome.detail,
-        )
-    elif outcome.status is PluginHookRepairStatus.QUARANTINED:
-        logger.warning(
-            f"{artifact_scope}_hooks_quarantined_at_startup",
-            incarnation=str(outcome.incarnation_dir),
-            reason=outcome.detail,
-        )
-    else:
-        logger.error(
-            f"{artifact_scope}_hooks_repair_failed_at_startup",
-            incarnation=str(outcome.incarnation_dir),
-            reason=outcome.detail,
-        )
+    match outcome.status:
+        case PluginHookRepairStatus.REPAIRED:
+            logger.info(
+                f"{artifact_scope}_hooks_repaired_at_startup",
+                incarnation=str(outcome.incarnation_dir),
+            )
+        case PluginHookRepairStatus.CONTENDED:
+            # Skipping a leased incarnation is the documented contract; the next startup retries.
+            logger.debug(
+                f"{artifact_scope}_hooks_repair_contended_at_startup",
+                incarnation=str(outcome.incarnation_dir),
+                reason=outcome.detail,
+            )
+        case PluginHookRepairStatus.QUARANTINED:
+            logger.warning(
+                f"{artifact_scope}_hooks_quarantined_at_startup",
+                incarnation=str(outcome.incarnation_dir),
+                reason=outcome.detail,
+            )
+        case PluginHookRepairStatus.FAILED:
+            logger.error(
+                f"{artifact_scope}_hooks_repair_failed_at_startup",
+                incarnation=str(outcome.incarnation_dir),
+                reason=outcome.detail,
+            )
+        case _ as unreachable:
+            assert_never(unreachable)
 
 
 def run_startup_hook_health_check() -> list[str]:

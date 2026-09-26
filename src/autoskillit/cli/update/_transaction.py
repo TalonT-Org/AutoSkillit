@@ -132,8 +132,16 @@ def _pre_mutation_refusal(
     if info.install_type is InstallType.LOCAL_PATH:
         local_source = info.local_source
         # Caller established ``upgrade_command(info)`` returned non-None, which
-        # for LOCAL_PATH forces ``info.local_source`` to be set.
-        assert local_source is not None
+        # for LOCAL_PATH forces ``info.local_source`` to be set. Surface a typed
+        # failure (mirroring the ``is_dir()`` branch below) if the invariant
+        # ever drifts, instead of an ``AssertionError`` crash.
+        if local_source is None:
+            return _upgrade_failure(
+                progress,
+                "Install type 'local-path' has no recorded source directory. "
+                "Reinstall with 'uv tool install --force --reinstall "
+                "<autoskillit checkout>' or 'task install-dev' (develop).",
+            )
         if not local_source.is_dir():
             return _upgrade_failure(
                 progress,

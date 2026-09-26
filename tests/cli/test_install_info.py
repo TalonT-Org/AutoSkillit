@@ -552,6 +552,8 @@ def test_upgrade_command_is_exhaustive_over_install_types(install_type: InstallT
             dev_cmd = upgrade_command(dev)
             assert stable_cmd is not None
             assert stable_cmd.argv[0] == "uv"
+            assert stable_cmd.mutates_shared_root is True
+            assert stable_cmd.env == {}
             assert dev_cmd is not None
             assert dev_cmd.argv[0] == "uv"
         case InstallType.LOCAL_EDITABLE:

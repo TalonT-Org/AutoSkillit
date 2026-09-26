@@ -359,7 +359,7 @@ def test_compose_pr_step5_preserves_pr_arguments():
         "Step 5 must use the literal --body-file path "
         "{{AUTOSKILLIT_TEMP}}/compose-pr/pr_body_{run_id}.md"
     )
-    assert "$ts" not in COMPOSE_PR.read_text()
+    assert "$ts" not in bash
 
 
 def test_compose_pr_step4_auth_preflight_unchanged():

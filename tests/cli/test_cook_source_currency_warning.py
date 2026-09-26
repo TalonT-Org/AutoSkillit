@@ -100,3 +100,14 @@ def test_stale_commit_based_text_is_unchanged(tmp_path: Path) -> None:
 
     assert warning is not None
     assert "4 commits behind" in warning
+
+
+def test_stale_commit_based_text_handles_missing_behind_by(tmp_path: Path) -> None:
+    """When ``behind_by`` is None, the warning renders an unknown-commits phrase."""
+    currency = _currency(SourceCurrencyStatus.STALE, behind_by=None)
+
+    warning = _source_currency_warning(currency, checkout=tmp_path, color=False)
+
+    assert warning is not None
+    assert "None" not in warning
+    assert "unknown" in warning.lower()

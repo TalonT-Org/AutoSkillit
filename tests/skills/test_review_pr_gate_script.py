@@ -204,8 +204,9 @@ def test_malformed_authority_fails_without_claiming_a_state(tmp_path: Path, dama
         authority_path.write_text(json.dumps(authority))
     before = _directory_state(authority_path.parent)
     result = revalidate(case, authority_path)
-    assert result.returncode != 0
-    assert result.stdout.strip() not in {"fresh", "stale", "authority_degraded"}
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert result.stderr == "invalid gate authority\n"
     assert _directory_state(authority_path.parent) == before
 
 

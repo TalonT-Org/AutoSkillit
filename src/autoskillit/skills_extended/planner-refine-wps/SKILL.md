@@ -50,14 +50,17 @@ directory.
 
 - **$1** — Absolute path to per-phase context file (`wp_refine_contexts/context_{phase_id}.json`)
 - **$2** — Absolute path to `refined_plan.json` (PlanDocument with phases as PhaseElaborated)
-- **$3** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`). Output is written to `$3/wp_refine_contexts/{phase_id}_result.json`.
+- **$3** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`). Output is written to `{output_dir}/wp_refine_contexts/{phase_id}_result.json`.
+
+Use the literal absolute directory supplied as `$3` as `{output_dir}` in every
+path below. Substitute that directory before making any tool call.
 
 ## Critical Constraints
 
 **NEVER:**
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
-- Write any file outside `$3/`
+- Write any file outside `{output_dir}/`
 - Directly modify the context file ($1) — always write a new `{phase_id}_result.json`
 - Allow an L0 subagent to write files directly (L0s return structured text only)
 - Emit `phase_wp_refined_path` before writing `{phase_id}_result.json`
@@ -76,7 +79,7 @@ directory.
 - Log `WARNING` to stdout for any L0 response that fails validation (skip that phase)
 - Log `CRITICAL` to stdout for any L0 subagent that fails entirely (proceed with N-1 suggestions)
 - When two WPs claim the same deliverable file, assign ownership to the WP with the numerically earlier ID using natural sort (e.g., `P1-A1-WP1` beats `P2-A1-WP1`)
-- Emit: `phase_wp_refined_path = <absolute path to $3/wp_refine_contexts/{phase_id}_result.json>`
+- Emit: `phase_wp_refined_path = {output_dir}/wp_refine_contexts/{phase_id}_result.json`
 - Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
@@ -99,7 +102,7 @@ FATAL: failed to parse {path}: {error_detail}
 ```
 
 Read `$2` (refined_plan.json). Build a map `phase_id → PhaseElaborated` for phase context.
-The `$3` argument is the planner output directory; output is written to `$3/wp_refine_contexts/{phase_id}_result.json`.
+The `$3` argument is the planner output directory; output is written to `{output_dir}/wp_refine_contexts/{phase_id}_result.json`.
 
 Input schema (per-phase context file):
 ```json
@@ -263,7 +266,7 @@ Valid WPElaborated fields for changes: `goal`, `summary`, `technical_steps`,
 
 ### Step 7: Write output
 
-Write the updated work packages for this phase to `$3/wp_refine_contexts/{phase_id}_result.json`.
+Write the updated work packages for this phase to `{output_dir}/wp_refine_contexts/{phase_id}_result.json`.
 The output schema:
 ```json
 {
@@ -275,7 +278,7 @@ The output schema:
 ### Step 8: Emit output token
 
 ```
-phase_wp_refined_path = <absolute path to $3/wp_refine_contexts/{phase_id}_result.json>
+phase_wp_refined_path = {output_dir}/wp_refine_contexts/{phase_id}_result.json
 ```
 
 ## Context Limit Behavior

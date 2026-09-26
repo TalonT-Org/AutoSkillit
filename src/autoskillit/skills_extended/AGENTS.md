@@ -79,5 +79,9 @@ not persist across tool calls. Redirect, `tee`, `cp`, `mv`, `rm`, `sed -i`, and
 shell command fences `bash` so they are included in the guard corpus.
 `tests/contracts/test_skill_write_target_conformance.py` checks Bash fences and
 bundled recipe `run_cmd` commands against the installed write-target guards.
-A later prose conformance part extends enforcement to prose-prescribed shell.
+`tests/contracts/test_skill_prose_write_targets.py` checks prose Write-tool
+instructions for unresolved shell expansions, including targets on continuation
+lines and in nested lists. Write/Edit `file_path` values are literal strings;
+they do not evaluate shell variables or command substitutions. Finish the
+read-only resolution call before using its output in a later write call.
 Keep this guidance here; do not add code comments that merely restate it.

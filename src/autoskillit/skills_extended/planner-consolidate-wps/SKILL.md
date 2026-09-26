@@ -53,6 +53,9 @@ merging).
 - **$1** — Absolute path to `refined_wps.json` (PlanDocument with `work_packages: list[WPElaborated]`)
 - **$2** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`)
 
+Use the literal absolute directory supplied as `$2` as `{planner_dir}` in every
+path below. Substitute that directory before making any tool call.
+
 ## Critical Constraints
 
 **NEVER:**
@@ -62,7 +65,7 @@ merging).
 - Create a merged group that would clearly exceed a medium-complexity PR (use judgment — no hard threshold)
 - Skip a WP from a manifest — every WP must appear in exactly one group (singleton = no-op)
 - Use a `merged_id` that is not one of the `source_wp_ids`
-- Allow an L0 to write files outside `$2/work_packages/consolidation/`
+- Allow an L0 to write files outside `{planner_dir}/work_packages/consolidation/`
 - Detach child delegations instead of joining them (joining every child is required)
 - Spawn more than 6 L0s in a single parallel batch
 - Start independent child delegations sequentially
@@ -70,7 +73,7 @@ merging).
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
 **ALWAYS:**
-- Create `$2/work_packages/consolidation/` before dispatching L0s
+- Create `{planner_dir}/work_packages/consolidation/` before dispatching L0s
 - Validate each L0 response before writing its manifest
 - Write a manifest for every phase, even if it contains only singleton groups
 - Emit: `consolidation_manifest_dir = {planner_dir}/work_packages/consolidation`
@@ -95,7 +98,7 @@ Build a map `phase_id → [WPElaborated, ...]`.
 ### Step 2: Create output directory
 
 ```bash
-mkdir -p "$2/work_packages/consolidation"
+mkdir -p "{planner_dir}/work_packages/consolidation"
 ```
 
 ### Step 3: Build L0 context packets
@@ -190,7 +193,7 @@ CRITICAL: L0 for {phase_id} failed — no manifest written for this phase
 
 For each validated L0 response, write the manifest file:
 ```
-$2/work_packages/consolidation/{phase_id}_consolidation.json
+{planner_dir}/work_packages/consolidation/{phase_id}_consolidation.json
 ```
 
 Manifest format:
@@ -212,7 +215,7 @@ Manifest format:
 ### Step 7: Emit output token
 
 ```
-consolidation_manifest_dir = $2/work_packages/consolidation
+consolidation_manifest_dir = {planner_dir}/work_packages/consolidation
 ```
 
 ## Context Limit Behavior

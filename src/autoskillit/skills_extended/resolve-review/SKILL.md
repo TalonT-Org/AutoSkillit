@@ -59,6 +59,10 @@ for actionable findings, commit each fix, and verify tests still pass.
   - `mode=local`: read `local_findings_{pr_number}.json`; skip publication and all GitHub
     API fetching; accumulate DISCUSS/REJECT to persistent local files; skip thread resolution
     and all review-comment publication; still run the `test_check` MCP gate.
+- `{pr_number}` — Locally captured literal from the Step 1 PR lookup; use it in file paths.
+  It is not a positional input.
+- `{run_id}` — Locally captured timestamp-and-UUID value from the read-only command below;
+  use it in timestamped output paths. It is not a positional input.
 
 The `cwd` is provided by the recipe step's `cwd:` field — the clone with the feature
 branch already checked out.
@@ -141,6 +145,13 @@ done
 
 If `mode` is absent or unrecognized, default to `"github"`.
 
+For the timestamped reject-pattern file, generate `{run_id}` once with this read-only
+command before writing:
+
+```bash
+python -c 'from datetime import datetime; from uuid import uuid4; print(datetime.now().strftime("%Y-%m-%d_%H%M%S") + "_" + uuid4().hex)'
+```
+
 ### Step 1: Find the Open PR
 
 ```bash
@@ -149,6 +160,8 @@ PR_LIST_OUTPUT=$(gh pr list --head "$feature_branch" --base "$base_branch" \
 PR_NUMBER=$(echo "$PR_LIST_OUTPUT" | awk '{print $1}')
 PR_URL=$(echo "$PR_LIST_OUTPUT" | awk '{print $2}')
 ```
+
+Capture the number from the command output as `{pr_number}` for all file paths below.
 
 Get owner/repo:
 ```bash
@@ -170,7 +183,7 @@ Before fetching current findings, check for `deferred_observations` accumulated 
 local rounds:
 
 ```bash
-DEFERRED_FILE="{{AUTOSKILLIT_TEMP}}/resolve-review/deferred_observations_${PR_NUMBER}.json"
+DEFERRED_FILE="{{AUTOSKILLIT_TEMP}}/resolve-review/deferred_observations_{pr_number}.json"
 ```
 
 If the file exists and contains entries:
@@ -187,8 +200,8 @@ If the file exists and contains entries:
    positive caller-supplied `pr_number`, and validate the caller-supplied `pr_head_sha` against
    `^[0-9a-f]{40}$`.
 5. Require caller-supplied `logical_iteration` beginning with `resolve-review:` and a
-   caller-supplied `receipt_path` under `${AUTOSKILLIT_TEMP}` with the exact
-   `batch_review_response_${pr_number}.json` basename, then call the structured
+   caller-supplied `receipt_path` under `{{AUTOSKILLIT_TEMP}}` with the exact
+   `batch_review_response_{pr_number}.json` basename, then call the structured
    publication tool once:
 
 ```text
@@ -211,7 +224,7 @@ Capture `review_operation_key`, `review_head_sha`, `review_post_state`, and
 `review_receipt_path`. Continue only for a confirmed or reconciled final-success state.
 Stop on ambiguous, throttled, terminal, prepared, posting, or verification-pending results.
 Only after final success rename the source to
-`deferred_observations_${PR_NUMBER}_posted.json`. These discussion threads remain unresolved.
+`deferred_observations_{pr_number}_posted.json`. These discussion threads remain unresolved.
 
 If the file does not exist or is empty, skip this step and proceed to Step 2.
 
@@ -333,7 +346,7 @@ REVIEW_PR_DIR="${AUTOSKILLIT_TEMP}/review-pr"
 # If iter_N directory exists under review-pr/, use the latest iteration
 REVIEW_PR_ITER_DIR=$(ls -d "${REVIEW_PR_DIR}"/iter_* 2>/dev/null | sort -V | tail -1)
 REVIEW_PR_OUTPUT="${REVIEW_PR_ITER_DIR:-${REVIEW_PR_DIR}}"
-DIFF_CONTEXT_PATH="${REVIEW_PR_OUTPUT}/diff_context_${PR_NUMBER}.json"
+DIFF_CONTEXT_PATH="${REVIEW_PR_OUTPUT}/diff_context_{pr_number}.json"
 ```
 
 If the file exists:
@@ -536,7 +549,7 @@ Each entry must also carry two additional fields populated at merge time (not de
 
 For INFO-verdict findings (classified in Step 3, not validated by sub-agents): add them to `classification_map` with `verdict="INFO"`, `severity="info"`, and `dimension=diff_context_map.get((path, line), {}).get("dimension", "unknown")`.
 
-**Write analysis report** to `{{AUTOSKILLIT_TEMP}}/resolve-review/analysis_{pr_number}_{ts}.md` before
+**Write analysis report** to `{{AUTOSKILLIT_TEMP}}/resolve-review/analysis_{pr_number}_{run_id}.md` before
 any code changes are made. The report must include a summary banner:
 ```
 Analysis complete (BEFORE any code changes)
@@ -561,7 +574,7 @@ to get the round number. If that file is absent, use `iteration = 0`.
 
 This file accumulates across review loop iterations. Before writing, read the existing file (if it exists), merge new entries with existing ones, then write the combined result using `jq -n` or the Write tool.
 
-Read `{{AUTOSKILLIT_TEMP}}/resolve-review/deferred_observations_${PR_NUMBER}.json` if it
+Read `{{AUTOSKILLIT_TEMP}}/resolve-review/deferred_observations_{pr_number}.json` if it
 exists. If absent, start with an empty array.
 
 **CRITICAL:** Do NOT output any prose status text between iterations. Collect all entries,
@@ -587,7 +600,7 @@ build an entry object:
 Deduplicate: skip any entry where `(path, line, body)` already exists in the loaded array.
 
 Append new entries to the loaded array and use the **Write tool** to save the result to
-`{{AUTOSKILLIT_TEMP}}/resolve-review/deferred_observations_${PR_NUMBER}.json` as
+`{{AUTOSKILLIT_TEMP}}/resolve-review/deferred_observations_{pr_number}.json` as
 pretty-printed JSON (indent 2).
 
 Log: `"Accumulated N new DISCUSS findings (M total)"`.
@@ -771,7 +784,7 @@ After Step 6.5, save all REJECT-classified comments to a **stable, accumulating*
 
 This file accumulates across review loop iterations. Before writing, read the existing file (if it exists), merge new entries with existing ones, then write the combined result using `jq -n` or the Write tool.
 
-Read `{{AUTOSKILLIT_TEMP}}/resolve-review/reject_patterns_${PR_NUMBER}.json` if it exists.
+Read `{{AUTOSKILLIT_TEMP}}/resolve-review/reject_patterns_{pr_number}.json` if it exists.
 If absent, start with an empty array.
 
 **CRITICAL:** Do NOT output any prose status text between iterations. Collect all entries,
@@ -797,7 +810,7 @@ synthetic identifier:
 Deduplicate: skip any entry where `(path, line, body)` already exists in the loaded array.
 
 Append new entries to the loaded array and use the **Write tool** to save the result to
-`{{AUTOSKILLIT_TEMP}}/resolve-review/reject_patterns_${PR_NUMBER}.json` as pretty-printed
+`{{AUTOSKILLIT_TEMP}}/resolve-review/reject_patterns_{pr_number}.json` as pretty-printed
 JSON (indent 2).
 
 Log: `"Accumulated N new REJECT patterns (M total)"`.
@@ -828,9 +841,8 @@ For each entry in `classification_map` with `verdict == "REJECT"`, build an entr
 ```
 
 Use the **Write tool** to save the array to
-`{{AUTOSKILLIT_TEMP}}/resolve-review/reject_patterns_${PR_NUMBER}_${YYYYMMDD-HHMMSS}.json`
-as pretty-printed JSON (indent 2). Generate the timestamp suffix using
-`date +%Y%m%d-%H%M%S` in a Bash call before writing.
+`{{AUTOSKILLIT_TEMP}}/resolve-review/reject_patterns_{pr_number}_{run_id}.json`
+as pretty-printed JSON (indent 2), using the `{run_id}` generated above.
 
 Log: `"Saved N reject patterns"`.
 
@@ -861,8 +873,8 @@ Status: {PASS|FAIL}
 ```
 
 Save full report to:
-- Analysis report: `{{AUTOSKILLIT_TEMP}}/resolve-review/analysis_{pr_number}_{ts}.md` (written before code changes)
-- Final report: `{{AUTOSKILLIT_TEMP}}/resolve-review/report_{pr_number}_{ts}.md`
+- Analysis report: `{{AUTOSKILLIT_TEMP}}/resolve-review/analysis_{pr_number}_{run_id}.md` (written before code changes)
+- Final report: `{{AUTOSKILLIT_TEMP}}/resolve-review/report_{pr_number}_{run_id}.md`
 
 <!-- gated-field-semantics:begin -->
 ### Finding disposition and qualifier semantics
@@ -936,5 +948,5 @@ When `mode=local`, also emit `deferred_observations_path` and `reject_patterns_p
 their documented local artifacts. When `mode=github`, omit those path tokens after prior
 local observations are posted. For no PR, emit only `review_status = no_pr`.
 
-Summary written to: `{{AUTOSKILLIT_TEMP}}/resolve-review/report_{pr_number}_{ts}.md` (relative to the current working directory)
+Summary written to: `{{AUTOSKILLIT_TEMP}}/resolve-review/report_{pr_number}_{run_id}.md` (relative to the current working directory)
 <!-- gated-field-semantics:end -->

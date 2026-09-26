@@ -46,14 +46,16 @@ conflicts, applies field-level edits to the plan, and writes `refined_plan.json`
 ## Arguments
 
 - **$1** — Absolute path to `combined_plan.json` (PlanDocument, every phase as PhaseElaborated)
-- **$2** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`). Output is written to `$2/refined_plan.json`.
+- **$2** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`).
+- **{output_dir}** — Locally bound literal run-scoped planner directory supplied as
+  `$2`; not an additional positional argument.
 
 ## Critical Constraints
 
 **NEVER:**
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
-- Write any file outside `$2/`
+- Write any file outside `{output_dir}/`
 - Directly modify the combined_plan.json ($1) — always write a new refined_plan.json
 - Allow an L0 subagent to write files directly (L0s return structured text only)
 - Emit `refined_plan_path` before writing `refined_plan.json`
@@ -70,7 +72,7 @@ conflicts, applies field-level edits to the plan, and writes `refined_plan.json`
 - Log a `WARNING` to stdout for any L0 response that fails validation (skip that phase)
 - Log `CRITICAL` to stdout for any L0 subagent that fails entirely (proceed with N-1)
 - Log each conflict resolution to stdout before applying it
-- Emit: `refined_plan_path = <absolute path to refined_plan.json>`
+- Emit: `refined_plan_path = {output_dir}/refined_plan.json`
 - Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
@@ -178,14 +180,14 @@ WARNING: Unrecognized field '{field}' in changes for {phase_id} — skipping
 
 ### Step 6: Write output
 
-Write the updated plan document to `$2/refined_plan.json`. The output schema is
+Write the updated plan document to `{output_dir}/refined_plan.json`. The output schema is
 identical to the input `combined_plan.json` (a `PlanDocument` with
 `phases: list[PhaseElaborated]`).
 
 ### Step 7: Emit output token
 
 ```
-refined_plan_path = <absolute path to $2/refined_plan.json>
+refined_plan_path = {output_dir}/refined_plan.json
 ```
 
 ## Context Limit Behavior

@@ -30,6 +30,9 @@ Called by the `research` recipe on `implement_phase` failure before routing to
 - `{worktree_path}` — absolute path to the worktree where execution failed
 - `{step_name}` — name of the failed pipeline step (e.g. `implement_phase`)
 
+Workflow value `{output_dir}` is the literal directory printed in Step 5 and pasted
+into the later `mkdir` call; it is not a positional argument.
+
 ## Critical Constraints
 
 **NEVER:**
@@ -97,13 +100,25 @@ When `failure_type=transient_api`, the output MUST include `retry_delay = 120`. 
 ### Step 5: Write Diagnosis Report
 
 ```bash
-TROUBLESHOOT_OUTPUT_DIR="${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment}"
-mkdir -p "${TROUBLESHOOT_OUTPUT_DIR}"
+printf '%s\n' "${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment}"
+```
+
+Paste the printed path as `{output_dir}` in every write below. Generate one
+`{run_id}` with the timestamp-and-UUID read-only command below and use it for the diagnosis filename.
+
+```bash
+python -c 'from datetime import datetime; from uuid import uuid4; print(datetime.now().strftime("%Y-%m-%d_%H%M%S") + "_" + uuid4().hex)'
+```
+
+In a separate tool call after capturing the literal path:
+
+```bash
+mkdir -p "{output_dir}"
 ```
 
 Write the diagnosis file to:
 
-`${TROUBLESHOOT_OUTPUT_DIR}/diagnosis_{YYYY-MM-DD_HHMMSS}.md`
+`{output_dir}/diagnosis_{run_id}.md`
 
 ```markdown
 # Experiment Failure Diagnosis
@@ -152,7 +167,7 @@ with no markdown formatting on the token names. The adjudicator performs a regex
 on the exact token name — decorators cause match failure.
 
 ```
-diagnosis_path = {absolute_path_to_report}
+diagnosis_path = {output_dir}/diagnosis_{run_id}.md
 failure_type = {stale_timeout|context_exhaustion|build_failure|data_missing|transient_api|environment_error|unknown}
 is_fixable = {true|false}
 retry_delay = {seconds}  ← ONLY emitted when failure_type = transient_api

@@ -50,6 +50,12 @@ context" in pipeline context. The pipeline fails with a `review_approach require
 plan file path argument` error if only an issue URL is provided; treat that as a hard
 failure, not something to work around.
 
+## Arguments
+
+The first argument is the plan file path described in the Input Contract.
+Workflow value `{output_dir}` is the literal directory printed in Step 4 and pasted
+into the later `mkdir` call; it is not a positional argument.
+
 ## Critical Constraints
 
 **NEVER:**
@@ -72,10 +78,9 @@ failure, not something to work around.
 - Tie research back to the specific problem context
 - Include source URLs for all referenced material
 - After writing the review file, emit the **absolute path** as a structured output
-  token as your final output. Resolve the relative `temp/review-approach/...`
-  save path to absolute by prepending the full CWD:
+  token as your final output. Use the exact saved path under `{output_dir}`:
   ```
-  review_path = /absolute/cwd/temp/review-approach/{filename}.md
+  review_path = {output_dir}/review_approach_{topic}_{run_id}.md
   ```
   This token is MANDATORY — the pipeline cannot proceed without it.
 - Start all independent child delegations before awaiting any result to maximize concurrency
@@ -128,14 +133,26 @@ Every completion branch, including retryable failure, writes the review report a
 
 ### Step 4: Write Review
 
-Set the recipe-scoped output directory:
+Resolve the recipe-scoped output directory:
 
 ```bash
-REVIEW_OUTPUT_DIR="${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/review-approach}"
-mkdir -p "${REVIEW_OUTPUT_DIR}"
+printf '%s\n' "${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/review-approach}"
 ```
 
-Save to: `${REVIEW_OUTPUT_DIR}/review_approach_{topic}_{YYYY-MM-DD_HHMMSS}.md`.
+Paste the printed path as `{output_dir}` in every write below. Generate one
+`{run_id}` with the timestamp-and-UUID read-only command below and use it for the review filename.
+
+```bash
+python -c 'from datetime import datetime; from uuid import uuid4; print(datetime.now().strftime("%Y-%m-%d_%H%M%S") + "_" + uuid4().hex)'
+```
+
+In a separate tool call after capturing the literal path:
+
+```bash
+mkdir -p "{output_dir}"
+```
+
+Save to: `{output_dir}/review_approach_{topic}_{run_id}.md`.
 
 ```markdown
 # Approach Review: {Topic}
@@ -174,5 +191,5 @@ of your text output:
 > code fences cause match failure.
 
 ```
-review_path = {absolute_path_to_review_file}
+review_path = {output_dir}/review_approach_{topic}_{run_id}.md
 ```

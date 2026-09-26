@@ -28,6 +28,8 @@ a fully-done `phase_manifest.json` in one shot.
 ## Arguments
 
 - **$1** — Absolute path to `analysis.json` produced by `planner-analyze`
+- **{input_dir}** — Locally bound literal directory containing the input file passed as
+  `$1`; not an additional positional argument.
 - **$2** — (optional) Absolute path to `domain_knowledge.md` produced by `planner-extract-domain`
 - **$3** — Absolute path to a file containing the task description
 
@@ -36,18 +38,18 @@ a fully-done `phase_manifest.json` in one shot.
 **NEVER:**
 - Invent phases that do not serve the task description — every phase must map to work requested by the user
 - Anchor phase count to a predetermined number — derive it from the task's natural verification boundaries
-- Write output outside `$(dirname $1)/phases/`
+- Write output outside `{input_dir}/phases/`
 - Use freeform text instead of the required JSON schema
-- Read files outside `$(dirname $1)` or the project's git-tracked source tree
-- Explore parent directories of `$(dirname $1)` (e.g., `ls $(dirname $1)/..`)
+- Read files outside `{input_dir}` or the project's git-tracked source tree
+- Explore parent directories of `{input_dir}`
 - Read `{{AUTOSKILLIT_TEMP}}` artifacts from other planner runs or pipeline steps
 - If `$3` is empty or the file does not exist, STOP immediately and report failure. Do not attempt to infer the task from the codebase, GitHub issues, or any other source.
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
 **ALWAYS:**
-- Write `$(dirname $1)/phases/{phase_id}_result.json` for every phase
-- Write `$(dirname $1)/phases/phase_manifest.json` with every item status=`done`
+- Write `{input_dir}/phases/{phase_id}_result.json` for every phase
+- Write `{input_dir}/phases/phase_manifest.json` with every item status=`done`
 - Use sequential `ordering` values starting at 1
 - Emit: `phase_manifest_path = <absolute path to phase_manifest.json>`; also emit `phase_count` and `phase_ids`
 
@@ -100,7 +102,7 @@ For each phase, generate:
 
 ### Step 3: Write phase results
 
-For each phase, write to `$(dirname $1)/phases/{phase_id}_result.json`:
+For each phase, write to `{input_dir}/phases/{phase_id}_result.json`:
 
 ```json
 {
@@ -126,7 +128,7 @@ The backend derives two additional fields at load time — do not write them:
 
 ### Step 4: Write phase manifest
 
-Write `$(dirname $1)/phases/phase_manifest.json`. Set every item's status to
+Write `{input_dir}/phases/phase_manifest.json`. Set every item's status to
 `done` (Pass 1 is coarse-grained enough to resolve in one shot; the elaborate loop exists
 only as a fallback). Set `result_path` to the absolute path of the corresponding result file.
 

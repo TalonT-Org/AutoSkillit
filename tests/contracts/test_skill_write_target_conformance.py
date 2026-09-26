@@ -69,11 +69,9 @@ _SKILLS = _rendered_skills()
 _BASH_CASES = []
 for _name, _content in _SKILLS:
     _spans = list(_BASH_FENCE.finditer(_content))
-    _blocks = extract_bash_blocks(_content)
-    assert [span.group(1) for span in _spans] == _blocks
-    for _span, _block in zip(_spans, _blocks, strict=True):
+    for _span in _spans:
         _line = _content.count("\n", 0, _span.start()) + 1
-        _BASH_CASES.append(pytest.param(_block, id=f"{_name}:{_line}"))
+        _BASH_CASES.append(pytest.param(_span.group(1), id=f"{_name}:{_line}"))
 
 _RECIPES = [
     load_recipe(path)
@@ -153,6 +151,13 @@ def _bad_fence_labels(content: str) -> list[tuple[int, str]]:
 def test_corpora_are_nonempty():
     assert _SKILLS and _BASH_CASES
     assert _RECIPES and _RECIPE_CASES
+
+
+@pytest.mark.parametrize("name,content", _SKILLS, ids=[name for name, _ in _SKILLS])
+def test_skill_bash_parser_matches_case_extraction(name: str, content: str):
+    assert [span.group(1) for span in _BASH_FENCE.finditer(content)] == extract_bash_blocks(
+        content
+    ), name
 
 
 @pytest.mark.parametrize("name,content", _SKILLS, ids=[name for name, _ in _SKILLS])

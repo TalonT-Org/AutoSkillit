@@ -441,7 +441,9 @@ def test_authenticated_top_level_cook_full_join_sequence_never_opens_a_wave(
     assert declared["status"] == "cook_bypass"
     assert declared["join_batch_id"] is None
     assert declared["wave"] is None
-    assert "cook" in str(declared["message"])
+    # Assert the documented bypass phrase from _COOK_BYPASS_MESSAGE rather than
+    # the loose "cook" substring (which would match many unrelated messages).
+    assert "no join wave was opened" in str(declared["message"])
 
     guard_events = (
         (

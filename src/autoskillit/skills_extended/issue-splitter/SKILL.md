@@ -39,6 +39,8 @@ This skill is intentionally lightweight: concern analysis is performed as in-con
 - `--dry-run` — analyze and show what would be split, but skip GitHub mutations
 - `--max-sub-issues N` — maximum sub-issues to create (default: 4)
 
+Derived value: `{run_id}` is the timestamp-plus-UUID token generated once at first staging.
+
 ## Critical Constraints
 
 **NEVER:**
@@ -173,6 +175,16 @@ Capture the new issue URL and number from stdout.
 
 ### Step 8 — Label Parent and Add Tracking Comment
 
+Run this read-only command once and substitute its printed value for every `{run_id}` below:
+
+```bash
+python -c 'from datetime import datetime; from uuid import uuid4; print(datetime.now().strftime("%Y-%m-%d_%H%M%S") + "_" + uuid4().hex)'
+```
+
+Write targets must be literal paths: never write through a shell variable, `$(...)`,
+backticks, or `~`. Bash variables do not persist across tool calls; repeat the
+model-substituted literal path in every later command.
+
 ```bash
 # Ensure the split label exists (idempotent)
 gh label create "split" --force \
@@ -183,16 +195,15 @@ gh label create "split" --force \
 gh issue edit {N} --add-label "split" [--repo {repo}]
 
 # Append ## Decomposed section to parent body
-SPLIT_BODY_FILE="{{AUTOSKILLIT_TEMP}}/issue-splitter/decomposed_{N}_$(date +%s).md"
-mkdir -p "$(dirname "$SPLIT_BODY_FILE")"
-gh issue view {N} --json body --jq '.body' [--repo {repo}] > "$SPLIT_BODY_FILE"
+mkdir -p "{{AUTOSKILLIT_TEMP}}/issue-splitter"
+gh issue view {N} --json body --jq '.body' [--repo {repo}] > "{{AUTOSKILLIT_TEMP}}/issue-splitter/decomposed_{N}_{run_id}.md"
 printf '\n\n---\n\n## Decomposed\n\nThis issue covers multiple concerns and has been decomposed into focused sub-issues:\n\n' \
-  >> "$SPLIT_BODY_FILE"
+  >> "{{AUTOSKILLIT_TEMP}}/issue-splitter/decomposed_{N}_{run_id}.md"
 for sub in $sub_issue_links; do
-  printf '- %s\n' "$sub" >> "$SPLIT_BODY_FILE"
+  printf '- %s\n' "$sub" >> "{{AUTOSKILLIT_TEMP}}/issue-splitter/decomposed_{N}_{run_id}.md"
 done
-printf '\nThis issue remains open as a tracking issue.\n' >> "$SPLIT_BODY_FILE"
-gh issue edit {N} --body-file "$SPLIT_BODY_FILE" [--repo {repo}]
+printf '\nThis issue remains open as a tracking issue.\n' >> "{{AUTOSKILLIT_TEMP}}/issue-splitter/decomposed_{N}_{run_id}.md"
+gh issue edit {N} --body-file "{{AUTOSKILLIT_TEMP}}/issue-splitter/decomposed_{N}_{run_id}.md" [--repo {repo}]
 sleep 1
 ```
 

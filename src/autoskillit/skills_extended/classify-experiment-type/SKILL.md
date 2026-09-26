@@ -77,7 +77,7 @@ and before `apply-review-dimensions`. NOT invoked standalone — the recipe step
 
 (a) Locate bundled types directory:
 
-```
+```bash
 python -c "from autoskillit.core import pkg_root; print(pkg_root() / 'recipes' / 'experiment-types')"
 ```
 

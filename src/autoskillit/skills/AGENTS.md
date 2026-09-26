@@ -10,6 +10,8 @@ lives in `skills_extended/`. Authoritative accounting lives in
 so it is not assigned to any import-linter IL layer); `skills_extended/`
 shares the same shape.
 
+For shell commands and Write-tool paths, follow `skills_extended/AGENTS.md` § Literal write targets.
+
 ## Architecture Notes
 
 These skills are tightly coupled by the **open-kitchen → sous-chef

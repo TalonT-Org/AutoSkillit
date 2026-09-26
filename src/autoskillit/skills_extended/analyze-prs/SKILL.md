@@ -75,6 +75,8 @@ complexity, and produce machine-readable output for the `merge-prs` recipe.
 - `base_branch` — the base branch to list PRs against (e.g., `main`)
 - `merge_queue_data_path` (optional) — absolute path to a JSON file containing pre-fetched merge queue data (produced by `fetch_merge_queue_data` run_python step). When provided and present, read from file instead of calling GitHub GraphQL API inline.
 
+In per-PR commands, `{number}` is a PR number selected from the listing or merge queue.
+
 ## Workflow
 
 ### Step 0: Authenticate and List PRs
@@ -160,7 +162,7 @@ Do not output any prose between subagent dispatches. Immediately proceed to the 
 
 - **If `QUEUE_MODE = true`**: for each PR number in `QUEUE_ENTRIES`, fetch only the
   metadata needed for the manifest (no diffs, no body extraction):
-  ```
+  ```bash
   gh pr view {number} --json headRefName,files,additions,deletions,changedFiles
   ```
   Extract file paths from the `files` array: `gh pr view {number} --json files -q '[.files[].path]'`.

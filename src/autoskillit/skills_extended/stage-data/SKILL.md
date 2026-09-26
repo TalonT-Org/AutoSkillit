@@ -60,6 +60,10 @@ compute on doomed downloads.
 - `experiment_plan_path` — Absolute path to the experiment plan (positional).
   Default: `$AUTOSKILLIT_TEMP/experiment-plan.md` in the current working directory.
 
+Derived values: `{worktree_cwd}` is the absolute worktree root from the invocation context;
+`{location}` is each non-null resource location parsed from the plan; `{run_id}` is
+the timestamp-plus-UUID token generated before writing the report.
+
 ## Critical Constraints
 
 **NEVER:**
@@ -163,7 +167,7 @@ produces FAIL.
 For every entry whose `location` field is non-null, run:
 
 ```bash
-mkdir -p <worktree_cwd>/<location>
+mkdir -p "{worktree_cwd}/{location}"
 ```
 
 This creates the data dir hierarchy required by the experiment implementation.
@@ -175,12 +179,22 @@ Aggregate results across all entries:
 - **WARN** if any entry produced a WARN result and none produced FAIL
 - **PASS** if all entries produced PASS
 
+Run this read-only command once and substitute its printed value for every `{run_id}` below:
+
+```bash
+python -c 'from datetime import datetime; from uuid import uuid4; print(datetime.now().strftime("%Y-%m-%d_%H%M%S") + "_" + uuid4().hex)'
+```
+
+Write targets must be literal paths: never write through a shell variable, `$(...)`,
+backticks, or `~`. Bash variables do not persist across tool calls; repeat the
+model-substituted literal path in every later command.
+
 ### Step 6 — Write Resource Feasibility Report
 
 Write the resource feasibility report to:
 
 ```
-{{AUTOSKILLIT_TEMP}}/stage-data/resource_feasibility_{YYYY-MM-DD_HHMMSS}.md
+{{AUTOSKILLIT_TEMP}}/stage-data/resource_feasibility_{run_id}.md
 ```
 
 Report structure:
@@ -217,7 +231,7 @@ on the exact token name — decorators cause match failure.
 
 ```
 verdict = PASS
-resource_report = /absolute/path/to/resource_feasibility_{YYYY-MM-DD_HHMMSS}.md
+resource_report = {{AUTOSKILLIT_TEMP}}/stage-data/resource_feasibility_{run_id}.md
 ```
 
 ## Output
@@ -230,6 +244,6 @@ resource_report = /absolute/path/to/resource_feasibility_{YYYY-MM-DD_HHMMSS}.md
 
 ```
 verdict = PASS|WARN|FAIL
-resource_report = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/stage-data/resource_feasibility_{YYYY-MM-DD_HHMMSS}.md
+resource_report = {{AUTOSKILLIT_TEMP}}/stage-data/resource_feasibility_{run_id}.md
 %%ORDER_UP::<hex>%%
 ```

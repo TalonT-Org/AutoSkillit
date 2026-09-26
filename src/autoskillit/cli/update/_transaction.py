@@ -129,17 +129,18 @@ def _pre_mutation_refusal(
                 "safely replaced from inside CLAUDECODE.",
             ),
         )
-    if (
-        info.install_type is InstallType.LOCAL_PATH
-        and info.local_source is not None
-        and not info.local_source.is_dir()
-    ):
-        return _upgrade_failure(
-            progress,
-            f"Install type 'local-path' source directory {info.local_source} no longer exists. "
-            "Reinstall with 'uv tool install --force --reinstall <autoskillit checkout>' or "
-            "'task install-dev' (develop).",
-        )
+    if info.install_type is InstallType.LOCAL_PATH:
+        local_source = info.local_source
+        # Caller established ``upgrade_command(info)`` returned non-None, which
+        # for LOCAL_PATH forces ``info.local_source`` to be set.
+        assert local_source is not None
+        if not local_source.is_dir():
+            return _upgrade_failure(
+                progress,
+                f"Install type 'local-path' source directory {local_source} no longer exists. "
+                "Reinstall with 'uv tool install --force --reinstall <autoskillit checkout>' or "
+                "'task install-dev' (develop).",
+            )
     return None
 
 

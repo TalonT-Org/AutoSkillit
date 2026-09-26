@@ -13,6 +13,7 @@ from autoskillit.hooks._runtime._github_mutation_analysis import (
     GitHubMutationStatus,
     analyze_github_mutations,
 )
+from autoskillit.recipe._skill_placeholder_parser import extract_step_sections
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
@@ -397,8 +398,6 @@ def test_prepare_issue_strips_exception_warranted_table_rows():
 def test_prepare_issue_validated_report_uses_body_file():
     """prepare-issue must use --body-file (not inline --body) for validated report creation."""
     text = SKILL_MD.read_text()
-    from autoskillit.recipe._skill_placeholder_parser import extract_step_sections
-
     body_section = extract_step_sections(text)["Step 5"]
     body_path = "{{AUTOSKILLIT_TEMP}}/prepare-issue/issue_body_{run_id}.md"
     assert f'--body-file "{body_path}"' in body_section, (

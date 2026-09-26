@@ -88,7 +88,7 @@ by the recipe pipeline after `open_pr_step` opens the PR.
   registered calls are the exact reachability and abstraction-surface calls in Step 3.
 - Give standard or deletion agents repository-read access. Only the two registered
   proof-only auditors may use `Read`, `Grep`, and `Glob`, and only under
-  `{checkout_root}`.
+  `REVIEW_CHECKOUT_ROOT`.
 - Embed diff content inline in standard or deletion subagent prompts; those ephemeral
   agents continue to consume the annotated artifact path.
 - Pass an experimental auditor only artifact paths or a narrative. Both registered calls
@@ -107,37 +107,21 @@ by the recipe pipeline after `open_pr_step` opens the PR.
   verdict, artifact handoff, or GitHub mutation
 - Deduplicate findings by (file, line) pairs before posting
 - Start all independent child delegations before awaiting any result to maximize concurrency
-- For each manual fixed-name publication, print a fresh timestamp plus UUID as
-  `publish_id`, paste it into the literal same-directory path
-  `{review_output_dir}{artifact_name}.tmp-{publish_id}`, write there, then
-  run `mv -- "{review_output_dir}{artifact_name}.tmp-{publish_id}" "{review_output_dir}{artifact_name}"`.
-  Never redirect directly to the fixed destination. Never `open(path, 'w')`
-  or `.write_text()` inside a `python3` heredoc or `python3 -c`
-  invocation; keep artifact writes within the declared review output directory.
+- Publish every fixed-name file through a same-directory `mktemp` path and atomic
+  `mv`; a redirect may target only that temporary path, never the fixed destination.
+  Never `open(path, 'w')` or `.write_text()` inside a `python3` heredoc or
+  `python3 -c` invocation; keep artifact writes within the declared review output directory.
 
 ## Workflow
 
 ### Step 0: Validate Arguments
 
-Print the allowed output directory without writing to it:
-
+Resolve the output directory from the environment:
 ```bash
-printf '%s\n' "${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/review-pr/}"
+REVIEW_OUTPUT_DIR="${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/review-pr/}"
 ```
 
-Paste the printed value as a literal path in the next commands. Create it,
-then resolve its canonical absolute path:
-
-```bash
-mkdir -p "{printed_output_dir}"
-cd "{printed_output_dir}" && pwd -P
-```
-
-Use the printed canonical path with a trailing `/` as `{review_output_dir}`
-everywhere below. Paste the actual path, not the brace notation, into every
-shell write target. Run `git rev-parse --show-toplevel` in the review checkout
-and paste its printed absolute path as `{checkout_root}` wherever this skill
-reads the review checkout.
+All file writes in this skill MUST target `${REVIEW_OUTPUT_DIR}`.
 
 Parse two positional arguments: `feature_branch` and `base_branch`.
 
@@ -264,21 +248,13 @@ else:
 [{"file": "src/bar.py", "line": 17, "body": "[warning] tests: ..."}]
 ```
 
-Save to: `{review_output_dir}prior_threads_{pr_number}.json`
+Save to: `${REVIEW_OUTPUT_DIR}prior_threads_{pr_number}.json`
 
-Print a fresh `publish_id` for this publication:
-
-```bash
-printf '%s-%s\n' "$(date -u +%Y%m%dT%H%M%S%N)" "$(python3 -c 'import uuid; print(uuid.uuid4())')"
-```
-
-Paste the printed value into both literal paths. Render with `jq -n` into
-`{review_output_dir}prior_threads_{pr_number}.json.tmp-{publish_id}`, then
-atomically `mv` that path to
-`{review_output_dir}prior_threads_{pr_number}.json`. If using the Write tool,
-write the same literal temporary path first and rename it. Never redirect
-directly to the fixed destination. Do not use inline Python one-liners or
-heredoc scripts with `open()` — these are blocked by the sandbox.
+Render with `jq -n` into a same-directory `mktemp` path, then atomically `mv` that
+temporary over the fixed destination. If using the Write tool, write the temporary
+path first and rename it. Never redirect directly to the fixed destination. Do not
+use inline Python one-liners or heredoc scripts with `open()` — these are blocked by
+the sandbox.
 
 If the GraphQL call fails (token scope, network): set both lists to `[]` and log a warning.
 Prior-thread context is best-effort — failure must not abort the review.
@@ -293,7 +269,7 @@ gh pr diff {pr_number}
 gh repo view --json nameWithOwner -q .nameWithOwner
 ```
 
-Save the diff to `{review_output_dir}diff_{pr_number}.txt`. (relative to the current working directory)
+Save the diff to `${REVIEW_OUTPUT_DIR}diff_{pr_number}.txt`. (relative to the current working directory)
 
 ### Step 2.7: Deterministic Diff Annotation
 
@@ -302,94 +278,391 @@ generation. The gate has three states: `valid_true`, `valid_false`, or `degraded
 Freshness and the complete artifact manifest MUST validate before consuming the
 gate boolean. The review LLM never counts lines or infers eligibility.
 
-Recipe-provided artifact paths bypass preparation. For a standalone local review,
-if any of the metrics, annotated-diff, hunk-range or valid-lines paths is missing,
-stop with `verdict=needs_human`, print `%%REVIEW_GATE::CLEAR%%`, and exit
-in a headless session. In an interactive session, run this complete command:
+```text
+REVIEW_CHECKOUT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 
-```bash
-mktemp -d "{review_output_dir}annotation.XXXXXX"
+# Standalone interactive local reviews use the same preparation authority as recipes.
+# Recipe-provided artifacts bypass this block. A headless L1 session cannot call
+# run_python, so missing local artifacts there stop with needs_human and clear.
+if [ "$MODE" = local ] && {
+   [ -z "${annotated_diff_path:-}" ] || [ ! -f "$annotated_diff_path" ] ||
+   [ -z "${hunk_ranges_path:-}" ] || [ ! -f "$hunk_ranges_path" ] ||
+   [ -z "${valid_lines_path:-}" ] || [ ! -f "$valid_lines_path" ] ||
+   [ -z "${diff_metrics_path:-}" ] || [ ! -f "$diff_metrics_path" ];
+}; then
+    if [ "${AUTOSKILLIT_HEADLESS:-}" = 1 ]; then
+        echo "verdict=needs_human"
+        echo "%%REVIEW_GATE::CLEAR%%"
+        exit 0
+    fi
+    ANNOTATION_OUTPUT_DIR="$(mktemp -d "${REVIEW_OUTPUT_DIR%/}/annotation.XXXXXX")" || {
+        echo "verdict=needs_human"
+        echo "%%REVIEW_GATE::CLEAR%%"
+        exit 0
+    }
 ```
 
-Paste its printed absolute path as `{annotation_output_dir}`. Invoke the MCP
-helper exactly once:
+Invoke the MCP helper exactly once:
 
 ```text
 annotation_result = run_python(
     callable="autoskillit.smoke_utils.annotate_pr_diff",
     args={
         "pr_number": pr_number,
-        "cwd": "{checkout_root}",
-        "output_dir": "{annotation_output_dir}",
+        "cwd": REVIEW_CHECKOUT_ROOT,
+        "output_dir": ANNOTATION_OUTPUT_DIR,
         "base_branch": base_branch,
         "mode": "local",
     },
     timeout=120,
-    work_dir="{checkout_root}",
+    work_dir=REVIEW_CHECKOUT_ROOT,
 )
 ```
 
 Require `annotation_result.success=true` and a mapping-valued
-`annotation_result.result`. On failure, emit `verdict=needs_human`, print
-`%%REVIEW_GATE::CLEAR%%`, and stop. On success, paste its returned
-`diff_metrics_path`, `annotated_diff_path`, `hunk_ranges_path`,
-`valid_lines_path`, and `anchor_authority_path` as literal paths for the
-remaining steps. Keep `anchor_authority_path` for its later consumer.
-Use the recipe-provided literal paths directly when they already exist.
+`annotation_result.result`. On failure, output `verdict=needs_human`, output
+`%%REVIEW_GATE::CLEAR%%`, and stop. On success, bind the helper result before the gate:
 
-Run the gate with the actual values pasted into every argument:
-
-```bash
-bash "{{AUTOSKILLIT_SCRIPTS}}/review_pr_gate.sh" snapshot "{review_output_dir}" "{checkout_root}" "{mode}" "{pr_number}" "{diff_metrics_path}" "{annotated_diff_path}" "{hunk_ranges_path}" "{valid_lines_path}"
+```text
+    annotated_diff_path="$(printf '%s' "$annotation_result" | jq -r '.result.annotated_diff_path')"
+    hunk_ranges_path="$(printf '%s' "$annotation_result" | jq -r '.result.hunk_ranges_path')"
+    anchor_authority_path="$(printf '%s' "$annotation_result" | jq -r '.result.anchor_authority_path')"
+    valid_lines_path="$(printf '%s' "$annotation_result" | jq -r '.result.valid_lines_path')"
+    diff_metrics_path="$(printf '%s' "$annotation_result" | jq -r '.result.diff_metrics_path')"
+fi
 ```
 
-If `snapshot` exits non-zero, stop before evidence reads, verdict computation
-or any GitHub mutation; emit `verdict=needs_human` and
-`%%REVIEW_GATE::CLEAR%%`. Do not use partial stdout as authority.
-
-On success, parse the one printed JSON object as `GATE_AUTHORITY`. Retain its
-`authority_path` as a literal path for every later revalidation call. Bind
-`GATE_STATE`, `GATE_REASON_CODE`, and `EXPERIMENTAL_AUDIT_STATE` from it;
-bind `METRICS_HEAD_SHA`, `METRICS_BASE_SHA`,
-`METRICS_MERGE_BASE_SHA`, `DIFF_SHA256`, and
-`ANNOTATION_GENERATION_ID` from its `snapshot` and generation fields.
-Take `metrics_marker_snapshot_path`, `annotated_diff_snapshot_path`,
-`hunk_ranges_snapshot_path`, and `valid_lines_snapshot_path` from the
-same mapping. Paste those paths literally in later shell calls; do not rely
-on shell state from the snapshot call.
-
-For a valid gate, read evidence only from the retained paths:
-
 ```bash
-tail -n +2 "{annotated_diff_snapshot_path}"
-cat "{hunk_ranges_snapshot_path}"
-cat "{valid_lines_snapshot_path}"
+REVIEW_CHECKOUT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+METRICS_HEAD_SHA=""
+METRICS_BASE_SHA=""
+METRICS_MERGE_BASE_SHA=""
+METRICS_BASE_REPO_FULL_NAME=""
+CHECKOUT_HEAD_SHA=""
+CHECKOUT_BASE_SHA=""
+CHECKOUT_MERGE_BASE_SHA=""
+LIVE_REFS=""
+LIVE_HEAD_SHA=""
+LIVE_BASE_SHA=""
+LIVE_BASE_REPO_FULL_NAME=""
+LIVE_MERGE_BASE_SHA=""
+DIFF_SHA256=""
+PROFILE_ID=""
+ANNOTATION_GENERATION_ID=""
+METRICS_MARKER_BEFORE=""
+METRICS_MARKER_AFTER=""
+ARTIFACT_SNAPSHOT_DIR=""
+ANNOTATED_DIFF_SNAPSHOT_PATH=""
+HUNK_RANGES_SNAPSHOT_PATH=""
+VALID_LINES_SNAPSHOT_PATH=""
+ANNOTATED_DIFF=""
+VALID_LINE_RANGES="{}"
+VALID_DIFF_LINES=""
+GATE_STATE=degraded
+GATE_REASON_CODE=metrics_missing
+GATE_FAILED=false
+GATE_AUTHORITY='{"state":"degraded","reason_code":"metrics_missing","snapshot":{},"annotation_generation_id":""}'
+STANDARD_RAW_FINDINGS='[]'
+STANDARD_AUDITOR_RAW_FINDINGS='[]'
+EXPERIMENTAL_CANDIDATES='[]'
+EXPERIMENTAL_AUDIT_STATE=not_eligible
+AUDITOR_STATUS_BY_NAME='{"pr-review-auditor-reachability":{"status":"not_started","reason_code":"not_eligible"},"pr-review-auditor-abstraction-surface":{"status":"not_started","reason_code":"not_eligible"}}'
+FINAL_SNAPSHOT_STATE=authority_degraded
+COMMIT_ID=""
+HTTP_STATUS=""
+BATCH_RESPONSE_TMP=""
+POSTED_REVIEW_ID=""
+RECEIPT_DOCUMENT=""
+STALE_REVIEW_COMPENSATION_FAILED=false
+
+# Closed degraded reason codes:
+# metrics_missing, metrics_invalid_json, manifest_missing, manifest_invalid,
+# profile_invalid, ref_missing, snapshot_mismatch, artifact_missing,
+# artifact_name_mismatch, artifact_length_mismatch, artifact_digest_mismatch,
+# marker_changed, gate_missing, gate_not_boolean.
+degrade_gate() {
+    if [ "$GATE_FAILED" = false ]; then
+        GATE_STATE=degraded
+        GATE_REASON_CODE="$1"
+        GATE_FAILED=true
+    fi
+    ANNOTATED_DIFF=""
+    VALID_LINE_RANGES="{}"
+    VALID_DIFF_LINES=""
+}
+
+if [ -z "$REVIEW_CHECKOUT_ROOT" ] || [ ! -d "$REVIEW_CHECKOUT_ROOT" ]; then
+    degrade_gate ref_missing
+elif [ -z "${diff_metrics_path:-}" ] || [ ! -f "$diff_metrics_path" ]; then
+    degrade_gate metrics_missing
+else
+    # Retain one candidate generation in invocation-scoped files. Each cp reads
+    # through one open descriptor, so atomic publisher replacement can select an
+    # old or new complete file but cannot create mixed bytes within a retained file.
+    ARTIFACT_SNAPSHOT_DIR="$(mktemp -d "${REVIEW_OUTPUT_DIR%/}/gate_snapshot.XXXXXX")" ||
+        degrade_gate artifact_missing
+    METRICS_MARKER_BEFORE="${ARTIFACT_SNAPSHOT_DIR}/metrics.before"
+    METRICS_MARKER_AFTER="${ARTIFACT_SNAPSHOT_DIR}/metrics.after"
+    if [ "$GATE_FAILED" = false ] &&
+       ! cp -- "$diff_metrics_path" "$METRICS_MARKER_BEFORE"; then
+        degrade_gate metrics_missing
+    fi
+
+    if [ "$GATE_FAILED" = false ] &&
+       ! jq -e 'type == "object"' < "$METRICS_MARKER_BEFORE" >/dev/null; then
+        degrade_gate metrics_invalid_json
+    elif [ "$GATE_FAILED" = false ] &&
+         ! jq -e '
+        has("_head_sha") and
+        has("_base_sha") and
+        has("_base_repo_full_name") and
+        has("generation_id") and
+        has("diff_sha256") and
+        has("diff_byte_length") and
+        has("diff_source") and
+        has("artifacts") and
+        (.artifacts | has("annotated_diff") and has("hunk_ranges") and has("valid_lines"))
+    ' < "$METRICS_MARKER_BEFORE" >/dev/null; then
+        degrade_gate manifest_missing
+    elif [ "$GATE_FAILED" = false ] &&
+         ! jq -e '
+        (._head_sha | type == "string" and length > 0) and
+        (._base_sha | type == "string" and length > 0) and
+        (._base_repo_full_name | type == "string") and
+        (.generation_id | type == "string" and length > 0) and
+        (.diff_sha256 | type == "string" and length == 64) and
+        (.diff_byte_length | type == "number" and . >= 0 and floor == .) and
+        (.diff_source | type == "object") and
+        (.artifacts | type == "object") and
+        (.artifacts.annotated_diff | type == "object") and
+        (.artifacts.hunk_ranges | type == "object") and
+        (.artifacts.valid_lines | type == "object")
+    ' < "$METRICS_MARKER_BEFORE" >/dev/null; then
+        degrade_gate manifest_invalid
+    fi
+
+    if [ "$GATE_FAILED" = false ]; then
+        METRICS_HEAD_SHA="$(jq -r '._head_sha' < "$METRICS_MARKER_BEFORE")"
+        METRICS_BASE_SHA="$(jq -r '._base_sha' < "$METRICS_MARKER_BEFORE")"
+        METRICS_MERGE_BASE_SHA="$(jq -r '._merge_base_sha // ""' < "$METRICS_MARKER_BEFORE")"
+        METRICS_BASE_REPO_FULL_NAME="$(jq -r '._base_repo_full_name // ""' < "$METRICS_MARKER_BEFORE")"
+        ANNOTATION_GENERATION_ID="$(jq -r '.generation_id' < "$METRICS_MARKER_BEFORE")"
+        DIFF_SHA256="$(jq -r '.diff_sha256' < "$METRICS_MARKER_BEFORE")"
+        PROFILE_ID="$(jq -r '.diff_source.profile_id // ""' < "$METRICS_MARKER_BEFORE")"
+
+        # Validate the closed source/profile object before any gate read.
+        if [ "$MODE" = "local" ]; then
+            jq -e '
+              .review_mode == "local" and .diff_source == {
+                "comparison":"merge_base_to_head","context_lines":3,
+                "external_diff":false,"kind":"local_git",
+                "profile_id":"local_git_pinned_v1","rename_detection":"50%",
+                "text_conversion":false
+              }' < "$METRICS_MARKER_BEFORE" >/dev/null || degrade_gate profile_invalid
+        else
+            jq -e '
+              .review_mode == "github" and .diff_source == {
+                "comparison":"pull_request","context_lines":3,
+                "external_diff":false,"kind":"github_pr",
+                "profile_id":"github_pr_diff_v1","rename_detection":"provider_default",
+                "text_conversion":false
+              }' < "$METRICS_MARKER_BEFORE" >/dev/null || degrade_gate profile_invalid
+        fi
+
+        CHECKOUT_HEAD_SHA="$(git -C "$REVIEW_CHECKOUT_ROOT" rev-parse HEAD 2>/dev/null || true)"
+        if [ -z "$CHECKOUT_HEAD_SHA" ] || [ "$CHECKOUT_HEAD_SHA" != "$METRICS_HEAD_SHA" ]; then
+            degrade_gate snapshot_mismatch
+        elif [ "$MODE" = "local" ]; then
+            LIVE_REFS="$(
+              gh api "repos/{owner}/{repo}/pulls/${pr_number}" \
+                --jq '{headRefOid:.head.sha,baseRefOid:.base.sha,baseRepoFullName:.base.repo.full_name}' 2>/dev/null || true
+            )"
+            LIVE_HEAD_SHA="$(printf '%s' "$LIVE_REFS" | jq -r '.headRefOid // ""' 2>/dev/null)"
+            LIVE_BASE_SHA="$(printf '%s' "$LIVE_REFS" | jq -r '.baseRefOid // ""' 2>/dev/null)"
+            LIVE_BASE_REPO_FULL_NAME="$(printf '%s' "$LIVE_REFS" | jq -r '.baseRepoFullName // ""' 2>/dev/null)"
+            LIVE_MERGE_BASE_SHA="$(gh api \
+              "repos/${LIVE_BASE_REPO_FULL_NAME}/compare/${LIVE_BASE_SHA}...${LIVE_HEAD_SHA}" \
+              --jq '.merge_base_commit.sha' 2>/dev/null || true)"
+            CHECKOUT_MERGE_BASE_SHA="$(git -C "$REVIEW_CHECKOUT_ROOT" merge-base "$METRICS_BASE_SHA" "$CHECKOUT_HEAD_SHA" 2>/dev/null || true)"
+            if [ -z "$LIVE_HEAD_SHA" ] || [ -z "$LIVE_BASE_SHA" ] ||
+               [ -z "$LIVE_BASE_REPO_FULL_NAME" ] || [ -z "$LIVE_MERGE_BASE_SHA" ] ||
+               [ -z "$CHECKOUT_MERGE_BASE_SHA" ]; then
+                degrade_gate ref_missing
+            elif [ "$LIVE_HEAD_SHA" != "$METRICS_HEAD_SHA" ] ||
+                 [ "$LIVE_BASE_SHA" != "$METRICS_BASE_SHA" ] ||
+                 [ "$LIVE_BASE_REPO_FULL_NAME" != "$METRICS_BASE_REPO_FULL_NAME" ] ||
+                 [ "$LIVE_MERGE_BASE_SHA" != "$METRICS_MERGE_BASE_SHA" ] ||
+                 [ "$CHECKOUT_MERGE_BASE_SHA" != "$METRICS_MERGE_BASE_SHA" ]; then
+                degrade_gate snapshot_mismatch
+            fi
+        else
+            LIVE_REFS="$(
+              gh api "repos/{owner}/{repo}/pulls/${pr_number}" \
+                --jq '{headRefOid:.head.sha,baseRefOid:.base.sha}' 2>/dev/null || true
+            )"
+            LIVE_HEAD_SHA="$(printf '%s' "$LIVE_REFS" | jq -r '.headRefOid // ""' 2>/dev/null)"
+            LIVE_BASE_SHA="$(printf '%s' "$LIVE_REFS" | jq -r '.baseRefOid // ""' 2>/dev/null)"
+            if [ -z "$LIVE_HEAD_SHA" ] || [ -z "$LIVE_BASE_SHA" ]; then
+                degrade_gate ref_missing
+            elif [ "$LIVE_HEAD_SHA" != "$METRICS_HEAD_SHA" ] ||
+                 [ "$LIVE_BASE_SHA" != "$METRICS_BASE_SHA" ]; then
+                degrade_gate snapshot_mismatch
+            fi
+        fi
+
+        # Verify fixed path names, byte lengths, and SHA-256 digests.
+        for artifact_key in annotated_diff hunk_ranges valid_lines; do
+            case "$artifact_key" in
+              annotated_diff)
+                artifact_path="${annotated_diff_path:-}"
+                retained_path="${ARTIFACT_SNAPSHOT_DIR}/annotated_diff"
+                ANNOTATED_DIFF_SNAPSHOT_PATH="$retained_path"
+                ;;
+              hunk_ranges)
+                artifact_path="${hunk_ranges_path:-}"
+                retained_path="${ARTIFACT_SNAPSHOT_DIR}/hunk_ranges"
+                HUNK_RANGES_SNAPSHOT_PATH="$retained_path"
+                ;;
+              valid_lines)
+                artifact_path="${valid_lines_path:-}"
+                retained_path="${ARTIFACT_SNAPSHOT_DIR}/valid_lines"
+                VALID_LINES_SNAPSHOT_PATH="$retained_path"
+                ;;
+            esac
+            expected_name="$(jq -r ".artifacts.${artifact_key}.basename // \"\"" < "$METRICS_MARKER_BEFORE")"
+            expected_length="$(jq -r ".artifacts.${artifact_key}.byte_length // \"\"" < "$METRICS_MARKER_BEFORE")"
+            expected_digest="$(jq -r ".artifacts.${artifact_key}.sha256 // \"\"" < "$METRICS_MARKER_BEFORE")"
+            if [ -z "$artifact_path" ] || [ ! -f "$artifact_path" ]; then
+                degrade_gate artifact_missing
+            elif [ "$(basename "$artifact_path")" != "$expected_name" ]; then
+                degrade_gate artifact_name_mismatch
+            elif ! cp -- "$artifact_path" "$retained_path"; then
+                degrade_gate artifact_missing
+            elif [ "$(wc -c < "$retained_path" | tr -d ' ')" != "$expected_length" ]; then
+                degrade_gate artifact_length_mismatch
+            elif [ "$(sha256sum "$retained_path" | cut -d' ' -f1)" != "$expected_digest" ]; then
+                degrade_gate artifact_digest_mismatch
+            fi
+        done
+
+        if ! cp -- "$diff_metrics_path" "$METRICS_MARKER_AFTER" ||
+           ! cmp -s "$METRICS_MARKER_BEFORE" "$METRICS_MARKER_AFTER"; then
+            degrade_gate marker_changed
+        elif ! jq -e 'has("run_overengineering_audits")' < "$METRICS_MARKER_BEFORE" >/dev/null; then
+            degrade_gate gate_missing
+        elif ! jq -e '.run_overengineering_audits | type == "boolean"' < "$METRICS_MARKER_BEFORE" >/dev/null; then
+            degrade_gate gate_not_boolean
+        elif [ "$GATE_FAILED" = true ]; then
+            : # Retain the first deterministic validation failure.
+        elif [ "$(jq -r '.run_overengineering_audits' < "$METRICS_MARKER_BEFORE")" = true ]; then
+            GATE_STATE=valid_true
+            GATE_REASON_CODE=none
+            EXPERIMENTAL_AUDIT_STATE=pending
+        else
+            GATE_STATE=valid_false
+            GATE_REASON_CODE=none
+            EXPERIMENTAL_AUDIT_STATE=not_required
+        fi
+
+        if [ "$GATE_STATE" = valid_true ] || [ "$GATE_STATE" = valid_false ]; then
+            # Consume only the retained, digest-validated sidecars. Keep these files
+            # for final pre-effect revalidation; never reread the publisher paths.
+            ANNOTATED_DIFF="$(tail -n +2 "$ANNOTATED_DIFF_SNAPSHOT_PATH")"
+            VALID_LINE_RANGES="$(cat "$HUNK_RANGES_SNAPSHOT_PATH")"
+            VALID_DIFF_LINES="$(cat "$VALID_LINES_SNAPSHOT_PATH")"
+        fi
+    fi
+fi
+
+GATE_AUTHORITY="$(jq -cn \
+  --arg state "$GATE_STATE" \
+  --arg reason_code "$GATE_REASON_CODE" \
+  --arg head_sha "$METRICS_HEAD_SHA" \
+  --arg base_sha "$METRICS_BASE_SHA" \
+  --arg merge_base_sha "$METRICS_MERGE_BASE_SHA" \
+  --arg base_repo_full_name "$METRICS_BASE_REPO_FULL_NAME" \
+  --arg diff_sha256 "${DIFF_SHA256:-}" \
+  --arg profile_id "${PROFILE_ID:-}" \
+  --arg annotation_generation_id "${ANNOTATION_GENERATION_ID:-}" \
+  '{state:$state,reason_code:$reason_code,snapshot:{
+    head_sha:$head_sha,base_sha:$base_sha,merge_base_sha:$merge_base_sha,
+    base_repo_full_name:$base_repo_full_name,
+    diff_sha256:$diff_sha256,profile_id:$profile_id
+  },annotation_generation_id:$annotation_generation_id}')"
+
+revalidate_retained_snapshot() {
+    local current_marker="" current_head="" current_merge_base=""
+    local current_live_refs="" current_live_head="" current_live_base=""
+    local current_live_repo="" current_live_merge_base=""
+    [ "$GATE_STATE" = valid_true ] || [ "$GATE_STATE" = valid_false ] || return 1
+    current_marker="$(mktemp "${REVIEW_OUTPUT_DIR%/}/metrics_recheck.XXXXXX")" || return 1
+    if ! cp -- "$diff_metrics_path" "$current_marker" ||
+       ! cmp -s "$METRICS_MARKER_BEFORE" "$current_marker" ||
+       ! cmp -s "$annotated_diff_path" "$ANNOTATED_DIFF_SNAPSHOT_PATH" ||
+       ! cmp -s "$hunk_ranges_path" "$HUNK_RANGES_SNAPSHOT_PATH" ||
+       ! cmp -s "$valid_lines_path" "$VALID_LINES_SNAPSHOT_PATH"; then
+        rm -f -- "$current_marker"
+        return 1
+    fi
+    rm -f -- "$current_marker"
+
+    current_head="$(git -C "$REVIEW_CHECKOUT_ROOT" rev-parse HEAD 2>/dev/null || true)"
+    [ "$current_head" = "$METRICS_HEAD_SHA" ] || return 1
+    if [ "$MODE" = "local" ]; then
+        current_live_refs="$(
+          gh api "repos/{owner}/{repo}/pulls/${pr_number}" \
+            --jq '{headRefOid:.head.sha,baseRefOid:.base.sha,baseRepoFullName:.base.repo.full_name}' 2>/dev/null || true
+        )"
+        current_live_head="$(printf '%s' "$current_live_refs" | jq -r '.headRefOid // ""' 2>/dev/null)"
+        current_live_base="$(printf '%s' "$current_live_refs" | jq -r '.baseRefOid // ""' 2>/dev/null)"
+        current_live_repo="$(printf '%s' "$current_live_refs" | jq -r '.baseRepoFullName // ""' 2>/dev/null)"
+        current_live_merge_base="$(gh api \
+          "repos/${current_live_repo}/compare/${current_live_base}...${current_live_head}" \
+          --jq '.merge_base_commit.sha' 2>/dev/null || true)"
+        current_merge_base="$(git -C "$REVIEW_CHECKOUT_ROOT" merge-base "$METRICS_BASE_SHA" "$current_head" 2>/dev/null || true)"
+        [ "$current_live_head" = "$METRICS_HEAD_SHA" ] &&
+            [ "$current_live_base" = "$METRICS_BASE_SHA" ] &&
+            [ "$current_live_repo" = "$METRICS_BASE_REPO_FULL_NAME" ] &&
+            [ "$current_live_merge_base" = "$METRICS_MERGE_BASE_SHA" ] &&
+            [ "$current_merge_base" = "$METRICS_MERGE_BASE_SHA" ]
+    else
+        current_live_refs="$(
+          gh api "repos/{owner}/{repo}/pulls/${pr_number}" \
+            --jq '{headRefOid:.head.sha,baseRefOid:.base.sha}' 2>/dev/null || true
+        )"
+        current_live_head="$(printf '%s' "$current_live_refs" | jq -r '.headRefOid // ""' 2>/dev/null)"
+        current_live_base="$(printf '%s' "$current_live_refs" | jq -r '.baseRefOid // ""' 2>/dev/null)"
+        [ "$current_live_head" = "$METRICS_HEAD_SHA" ] &&
+            [ "$current_live_base" = "$METRICS_BASE_SHA" ]
+    fi
+}
+
+refresh_final_snapshot_state() {
+    if [ "$GATE_STATE" = valid_true ] || [ "$GATE_STATE" = valid_false ]; then
+        if revalidate_retained_snapshot; then
+            FINAL_SNAPSHOT_STATE=fresh
+        else
+            FINAL_SNAPSHOT_STATE=stale
+        fi
+    else
+        # Missing/malformed authority is degradation, not movement of a retained
+        # valid snapshot. It must resolve to needs_human, never stale_snapshot.
+        FINAL_SNAPSHOT_STATE=authority_degraded
+    fi
+}
 ```
 
-Bind these outputs in order as `ANNOTATED_DIFF`, `VALID_LINE_RANGES`,
-and `VALID_DIFF_LINES`. Strip trailing LF bytes from the annotated-diff
-output as the former command substitution did. For a degraded gate, use an
-empty annotated diff, `{}` hunk ranges and empty valid lines.
-
-`VALID_DIFF_LINES` is right-side annotation evidence. All findings use the
-explicit anchor authority for inline admission; no finding may fall back to
-hunk ranges. Every Git command, agent working directory, containment check,
-and parent evidence read uses `{checkout_root}`.
-
-Immediately before evidence reads, verdict computation, every GitHub mutation,
-and the single handoff publication, run:
-
-```bash
-bash "{{AUTOSKILLIT_SCRIPTS}}/review_pr_gate.sh" revalidate "{authority_path}"
-```
-
-Set `FINAL_SNAPSHOT_STATE` to the single printed word only if the command
-exits zero and prints exactly `fresh`, `stale`, or
-`authority_degraded`. Otherwise set it to `authority_degraded` and route
-to `needs_human`. A missing or malformed authority file takes this fallback;
-it never becomes a stale snapshot. Only a previously valid retained authority that later
-fails byte/ref revalidation becomes `stale`. Never reread publisher sidecars
-or adopt a newer generation.
+`VALID_DIFF_LINES` is right-side annotation evidence. All findings use the explicit
+anchor authority for inline admission; no finding may fall back to hunk ranges.
+Every Git command, agent
+working directory, containment check, and parent evidence read uses
+`REVIEW_CHECKOUT_ROOT`.
+Call `refresh_final_snapshot_state` immediately before evidence reads, verdict
+computation, every GitHub mutation, and the single handoff publication. Only a
+previously valid retained authority that later fails byte/ref revalidation sets
+`FINAL_SNAPSHOT_STATE=stale`. Missing or malformed initial gate authority remains
+`authority_degraded` and resolves to `needs_human`; it is not a stale snapshot.
+Neither branch triggers a fresh sidecar read or adopts a newer generation.
 
 ### Step 2.5: Deletion Context Pre-Computation
 
@@ -460,18 +733,16 @@ DELETION_DISPATCH_REQUIRED = deletion_regression_is_eligible(deletion_context)
 
 Keep standard adaptive selection, experimental eligibility, and deletion
 eligibility as separate authorities:
-Paste `GATE_AUTHORITY["metrics_marker_snapshot_path"]` as the literal
-`{metrics_marker_snapshot_path}` in this call.
 
 ```bash
 STANDARD_AGENT_ALLOWLIST="arch,tests,defense,bugs,cohesion,slop"
 STANDARD_DISPATCH_AGENTS=""
 
-if [ -f "{metrics_marker_snapshot_path}" ]; then
+if [ -n "$METRICS_MARKER_BEFORE" ]; then
     STANDARD_DISPATCH_AGENTS="$(
       jq -r 'if (.dispatch_agents | type) == "array"
              then .dispatch_agents | join(",") else "" end' \
-        < "{metrics_marker_snapshot_path}" 2>/dev/null || true
+        < "$METRICS_MARKER_BEFORE" 2>/dev/null || true
     )"
 fi
 
@@ -529,7 +800,7 @@ Do not output any prose between subagent dispatches. Immediately proceed to the 
 
 Standard and deletion subagents use ephemeral `child delegation under the declared `sonnet` model-class policy` calls and receive
 only PR diff content. The two experimental agents use the exact registered calls below
-and run with cwd `{checkout_root}`.
+and run with cwd `REVIEW_CHECKOUT_ROOT`.
 
 ```json
 [
@@ -584,7 +855,7 @@ as the standard and deletion calls:
 - `a child assigned logical role `pr-review-auditor-abstraction-surface` under its declared model policy`
 
 For both registered calls, inline the actual `ANNOTATED_DIFF` string, the exact
-`VALID_DIFF_LINES` JSON authority, `{checkout_root}`, `METRICS_HEAD_SHA`,
+`VALID_DIFF_LINES` JSON authority, `REVIEW_CHECKOUT_ROOT`, `METRICS_HEAD_SHA`,
 `METRICS_BASE_SHA`, `METRICS_MERGE_BASE_SHA`, `DIFF_SHA256`, and
 `ANNOTATION_GENERATION_ID` in the prompt. A path, placeholder, or description is
 insufficient. Reads are restricted to the current checkout root; modifications and
@@ -724,7 +995,7 @@ candidate key set is `file`, `line`, `dimension`, `severity`, `message`,
   status `checked_absent`, `checked_no_reachable_path`, or `not_applicable`;
   every boundary `claim` is a non-empty string after trimming;
 - paths are relative, contain no `..`, and canonically remain under
-  `{checkout_root}`;
+  `REVIEW_CHECKOUT_ROOT`;
 - `type(confidence)` is exactly integer or float, never boolean, is finite, and
   lies in `[0,1]`;
 - `simpler_behavior` is non-empty and covers return values, exceptions, ordering,
@@ -739,7 +1010,7 @@ every sibling from entering normal aggregation.
 Before repository evidence reads, revalidate checkout head/base/merge-base, the
 mode-appropriate live refs, the byte-identical metrics marker, diff identity/profile,
 and all artifact digests. Quote and read each cited location under
-`{checkout_root}`. Write a separate immutable disposition record with a
+`REVIEW_CHECKOUT_ROOT`. Write a separate immutable disposition record with a
 parent-generated `disposition_id` referencing `candidate_id`. Confidence never
 implies acceptance. The parent must verify every role-labelled evidence claim,
 every one of the seven boundary claims, every hop in the complete ordered trace
@@ -815,7 +1086,7 @@ if GATE_STATE == "valid_true":
         outputs=EXPERIMENTAL_OUTCOMES_BY_NAME,
         anchor_authority=ANCHOR_AUTHORITY,
         snapshot=GATE_AUTHORITY["snapshot"],
-        review_root="{checkout_root}",
+        review_root=REVIEW_CHECKOUT_ROOT,
     )
 elif GATE_STATE == "valid_false":
     VALIDATION_RESULT = {
@@ -854,7 +1125,7 @@ else:
         standard_findings=STANDARD_FINDINGS,
         anchor_authority=ANCHOR_AUTHORITY,
         snapshot=GATE_AUTHORITY["snapshot"],
-        review_root="{checkout_root}",
+        review_root=REVIEW_CHECKOUT_ROOT,
     )
 if AGGREGATION_RESULT["state"] == "degraded":
     EXPERIMENTAL_AUDIT_STATE = "degraded"
@@ -917,17 +1188,10 @@ disposition, aggregation, verdict use, and publication as separate immutable lin
 records.
 
 Immediately before verdict computation and again before any artifact handoff or GitHub
-effect, run the gate with the literal authority path:
-
-```bash
-bash "{{AUTOSKILLIT_SCRIPTS}}/review_pr_gate.sh" revalidate "{authority_path}"
-```
-
-Bind `FINAL_SNAPSHOT_STATE` from the one printed word using Step 2.7's failure rule.
-If an initially valid retained snapshot
+effect, call `refresh_final_snapshot_state`. If an initially valid retained snapshot
 is now unavailable or differs, discard survivor sets from effect-producing consumers,
 permit only diagnostic raw/summary envelopes with empty survivors, and emit
-`stale_snapshot`. In that movement branch the revalidation result sets
+`stale_snapshot`. In that movement branch the refresh helper sets
 `FINAL_SNAPSHOT_STATE=stale` before any consumer is selected. Initial gate
 degradation remains `authority_degraded` and emits
 `needs_human`. Do not publish diff context, local findings, receipts, comments,
@@ -958,17 +1222,10 @@ No degraded gate, eligible audit, or stale snapshot may emit `approved`,
 `approved_with_comments`, or a GitHub approval event.
 
 **Verdict logic:**
-Immediately before this computation, run:
-
-```bash
-bash "{{AUTOSKILLIT_SCRIPTS}}/review_pr_gate.sh" revalidate "{authority_path}"
-```
-
-Bind `FINAL_SNAPSHOT_STATE` from the result using Step 2.7's failure rule.
-
 ```python
 from autoskillit.smoke_utils import determine_experimental_review_verdict
 
+refresh_final_snapshot_state()
 RETAINED_SNAPSHOT_WAS_VALID = GATE_STATE in {"valid_true", "valid_false"}
 SNAPSHOT_IS_FRESH = FINAL_SNAPSHOT_STATE == "fresh"
 verdict = determine_experimental_review_verdict(
@@ -1011,14 +1268,7 @@ else:
 
 **MODE BRANCHING:**
 
-Run the final freshness guard before entering this step and before every GitHub
-mutation in it:
-
-```bash
-bash "{{AUTOSKILLIT_SCRIPTS}}/review_pr_gate.sh" revalidate "{authority_path}"
-```
-
-Bind `FINAL_SNAPSHOT_STATE` using Step 2.7's failure rule. If it yields
+Run the final freshness guard before entering this step. If it yields
 `stale_snapshot`, skip Steps 6-7 completely. Every GitHub mutation below uses the
 authoritative `COMMIT_ID="$METRICS_HEAD_SHA"` and the same checkout/annotation
 generation. Never replace it with a later HEAD query.
@@ -1026,7 +1276,7 @@ generation. Never replace it with a later HEAD query.
 **When `mode=local`:**
 - Skip ALL GitHub API calls for posting comments and reviews.
 - Build the local findings payload in memory; Step 8 atomically publishes
-  `{review_output_dir}local_findings_{pr_number}.json` last
+  `${REVIEW_OUTPUT_DIR}local_findings_{pr_number}.json` last
 
 **Iteration tracking:** Before writing, check if `local_findings_{pr_number}.json` already exists. If so, read its `iteration` field and set the new value to `iteration + 1`. If the file does not exist, set `iteration` to `0`.
 
@@ -1071,9 +1321,9 @@ would have been posted to GitHub). Copy the complete finding dictionary, normali
 discarding opaque evidence or provenance fields.
 
 **Still write mode-independent files:**
-- `{review_output_dir}diff_context_{pr_number}.json` (Step 8)
-- `{review_output_dir}raw_findings_{pr_number}.json` (Step 8)
-- `{review_output_dir}summary_{pr_number}_{timestamp}.md` (Step 8)
+- `${REVIEW_OUTPUT_DIR}diff_context_{pr_number}.json` (Step 8)
+- `${REVIEW_OUTPUT_DIR}raw_findings_{pr_number}.json` (Step 8)
+- `${REVIEW_OUTPUT_DIR}summary_{pr_number}_{timestamp}.md` (Step 8)
 
 Then skip directly to Step 8 (verdict emission).
 
@@ -1086,7 +1336,7 @@ require it to match `owner/repo`. Require a positive caller-supplied `pr_number`
 the caller-supplied `pr_head_sha` against `^[0-9a-f]{40}$` before publication. Require the
 caller-supplied `logical_iteration` to be namespaced and require `receipt_path` to be the
 contained `batch_review_response_${pr_number}.json` destination under
-`{review_output_dir}` for this invocation. Reject a logical iteration that does not start
+`${REVIEW_OUTPUT_DIR}` for this invocation. Reject a logical iteration that does not start
 with `review-pr:`.
 
 Prepare one complete `comments` array from `INLINE_FINDINGS`, filtering at the publication
@@ -1185,18 +1435,13 @@ winner ID, and rationale. Include `GATE_AUTHORITY`, the fixed-order
 generations, accepted/rejected counts, and bounded
 malformed envelopes.
 
-Save findings summary to `{review_output_dir}summary_{pr_number}_{timestamp}.md`. (relative to the current working directory)
+Save findings summary to `${REVIEW_OUTPUT_DIR}summary_{pr_number}_{timestamp}.md`. (relative to the current working directory)
 
 Prepare and publish the structured artifacts with the installed executable
 helpers. The final freshness check selects a complete or diagnostic-only
 publication; the publisher stages every document before renaming and rolls back
-any completed rename if a later boundary fails. Immediately before this block, run:
-
-```bash
-bash "{{AUTOSKILLIT_SCRIPTS}}/review_pr_gate.sh" revalidate "{authority_path}"
-```
-
-Bind `FINAL_SNAPSHOT_STATE` using Step 2.7's failure rule, then assign
+any completed rename if a later boundary fails. Execute
+`refresh_final_snapshot_state` immediately before this block and assign
 `FINAL_SNAPSHOT_STATE == "fresh"` to the Python boolean `SNAPSHOT_IS_FRESH`.
 Parse `RECEIPT_DOCUMENT` only when it is non-empty:
 
@@ -1251,7 +1496,7 @@ else:
             raise RuntimeError("publication generation changed after external effects")
     PUBLICATION_RESULT = publish_experimental_review_artifacts(
         publication=PUBLICATION,
-        output_dir="{review_output_dir}",
+        output_dir=REVIEW_OUTPUT_DIR,
         pr_number=str(pr_number),
     )
 ```
@@ -1268,7 +1513,7 @@ opaque fields, and carries both `file` and the normalized `path` alias plus
 As the first publication, build the complete raw ledger in memory using the schema
 specified below. The sole publisher renders it into a same-directory temporary path
 and atomically renames it to
-`{review_output_dir}raw_findings_{pr_number}.json`. Do not begin diff-context,
+`${REVIEW_OUTPUT_DIR}raw_findings_{pr_number}.json`. Do not begin diff-context,
 receipt, or local-findings publication until this rename succeeds. On
 `stale_snapshot`, the raw ledger is a bounded diagnostic envelope with empty
 survivor and publication sets.
@@ -1294,7 +1539,7 @@ Do not output prose between iterations. For each non-review-level finding in
   raw annotated-diff lines as-is. If ANNOTATED_DIFF is empty or the file section is
   not found, set `code_region` to `""`.
 
-Write to `{review_output_dir}diff_context_{pr_number}.json`. If it already exists,
+Write to `${REVIEW_OUTPUT_DIR}diff_context_{pr_number}.json`. If it already exists,
 replace it through the Step 8 same-directory temporary file and atomic rename:
 
 ```json
@@ -1349,7 +1594,7 @@ The raw findings source ledger preserves
 standard findings, experimental candidates, validation, disposition, aggregation,
 verdict-use, publication, rejected-candidate, and malformed-envelope records.
 
-Write to `{review_output_dir}raw_findings_{pr_number}.json`:
+Write to `${REVIEW_OUTPUT_DIR}raw_findings_{pr_number}.json`:
 
 ```json
 {
@@ -1448,13 +1693,13 @@ The `needs_human` verdict is in `_SAFE_DEGRADATION_VERDICTS`, so the
 - `verdict=stale_snapshot` — no gate tag or effect-bearing artifact; recipe refreshes
   annotation within its existing bounded recovery path
 
-Summary written to: `{review_output_dir}summary_{pr_number}_{timestamp}.md`
+Summary written to: `${REVIEW_OUTPUT_DIR}summary_{pr_number}_{timestamp}.md`
 
 **Mode-conditional path output:**
 
 When `mode=local`, the following token is emitted:
 ```
-local_findings_path = {review_output_dir}local_findings_{pr_number}.json
+local_findings_path = ${REVIEW_OUTPUT_DIR}local_findings_{pr_number}.json
 ```
 
 When `mode=github`, no local_findings_path token is emitted (findings are posted directly to GitHub).

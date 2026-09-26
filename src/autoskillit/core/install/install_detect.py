@@ -124,10 +124,10 @@ def _version_currency(
     def result(status: SourceCurrencyStatus) -> SourceCurrency:
         return SourceCurrency(
             status,
-            None,
-            None,
-            None,
-            generation_root,
+            installed_commit=None,
+            checkout_head=None,
+            behind_by=None,
+            generation_root=generation_root,
             installed_version=installed,
             checkout_version=checkout_version,
             install_type=install_type,

@@ -624,9 +624,15 @@ _REGISTRY_BRIDGE_MODULE = (
 )
 
 
+def _registry_bridge_call(name: str, *args: object, **kwargs: object) -> object:
+    """Dispatch ``name`` on the registry-bridge module (centralized importlib dance)."""
+    return getattr(importlib.import_module(_REGISTRY_BRIDGE_MODULE), name)(*args, **kwargs)
+
+
 def _cook_registry_predicate(name: str, *args: object) -> bool:
     return bool(
-        getattr(importlib.import_module(_REGISTRY_BRIDGE_MODULE), name)(
+        _registry_bridge_call(
+            name,
             *args,
             headless=hook_session_shape()[0],
             backend=os.environ.get(_AUTOSKILLIT_AGENT_BACKEND_ENV, "").strip(),
@@ -654,7 +660,8 @@ def is_authenticated_top_level_cook_session(payload_cwd: str, binding_session_id
 
 def bridge_session_registry(session_id: str, payload_cwd: str = "") -> None:
     """Bind the hook session through the canonical launch-id accessor."""
-    getattr(importlib.import_module(_REGISTRY_BRIDGE_MODULE), "bridge_session_registry")(
+    _registry_bridge_call(
+        "bridge_session_registry",
         session_id,
         payload_cwd,
         launch_id=os.environ.get(_AUTOSKILLIT_LAUNCH_ID_ENV, ""),
@@ -662,7 +669,13 @@ def bridge_session_registry(session_id: str, payload_cwd: str = "") -> None:
 
 
 def session_managed_scope(payload_cwd: str, session_id: str) -> tuple[str, str] | None:
-    """Return a valid binding-authoritative parent/leaf scope for join guards."""
+    """Return a valid binding-authoritative parent/leaf scope for join guards.
+
+    Deliberately not repaired from ambient values: callers that already
+    established join applicability must deny rather than substitute the
+    former top_level literal — returning ``None`` forces a deterministic
+    denial reason instead of silently widening enforcement.
+    """
     admission = session_join_admission(payload_cwd, session_id)
     binding = admission.binding_dict
     if binding is None or not admission.enforce or not binding.get("binding_valid"):

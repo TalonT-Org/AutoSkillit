@@ -732,11 +732,8 @@ def test_compliance_sweep_roots_cover_bundled_and_every_project_local_root() -> 
     assert {".claude/skills", ".autoskillit/skills"} <= set(ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS)
     assert tracked_project_local_skill_paths(_REPO_ROOT) == _TRACKED_LOCAL_SKILLS
     for path in _TRACKED_LOCAL_SKILLS:
-        assert path.parent.parent.relative_to(_REPO_ROOT).as_posix() in (
-            ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
-        )
         # Each tracked skill's parent dir is a single-level subdir under a search dir,
         # so SKILL.md sits exactly two levels below one of the search roots.
         search_dir = path.parent.parent.relative_to(_REPO_ROOT).as_posix()
-        assert path.parent.name
         assert search_dir in ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
+        assert path.parent.name

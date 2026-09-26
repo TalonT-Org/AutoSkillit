@@ -93,7 +93,6 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
                 "printed_output_dir",
                 "review_output_dir",
                 "checkout_root",
-                "metrics_path",
                 "annotated_diff_path",
                 "hunk_ranges_path",
                 "valid_lines_path",

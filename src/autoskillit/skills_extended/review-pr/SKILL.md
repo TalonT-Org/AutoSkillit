@@ -340,7 +340,7 @@ Use the recipe-provided literal paths directly when they already exist.
 Run the gate with the actual values pasted into every argument:
 
 ```bash
-bash "{{AUTOSKILLIT_SCRIPTS}}/review_pr_gate.sh" snapshot "{review_output_dir}" "{checkout_root}" "{mode}" "{pr_number}" "{metrics_path}" "{annotated_diff_path}" "{hunk_ranges_path}" "{valid_lines_path}"
+bash "{{AUTOSKILLIT_SCRIPTS}}/review_pr_gate.sh" snapshot "{review_output_dir}" "{checkout_root}" "{mode}" "{pr_number}" "{diff_metrics_path}" "{annotated_diff_path}" "{hunk_ranges_path}" "{valid_lines_path}"
 ```
 
 If `snapshot` exits non-zero, stop before evidence reads, verdict computation

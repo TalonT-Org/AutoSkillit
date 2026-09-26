@@ -1318,22 +1318,22 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "A newly created exact retirement record completes this generation's current disposition."
     ),
     # -- workspace._installed._state::_enqueue_legacy_installed_plugin_candidate --
-    f"{_IL}::L458": _self_limiting(
+    f"{_IL}::L401": _self_limiting(
         "The running legacy version without a selected generation remains outside retirement."
     ),
-    f"{_IL}::L461": _self_limiting(
+    f"{_IL}::L404": _self_limiting(
         "A durable rejected-legacy marker already records this invalid candidate's terminal "
         "disposition."
     ),
-    f"{_IL}::L485": _self_limiting(
+    f"{_IL}::L428": _self_limiting(
         "Another reconciler created the same durable rejection marker, completing this "
         "candidate's disposition."
     ),
-    f"{_IL}::L491": _self_limiting(
+    f"{_IL}::L434": _self_limiting(
         "Writing the rejected-legacy marker durably records this invalid candidate for quiet "
         "later passes."
     ),
-    f"{_IL}::L493": _resolves_with_contention(
+    f"{_IL}::L436": _resolves_with_contention(
         "A shared lease is currently contended, so the legacy candidate waits for its holder."
     ),
     # -- workspace._projected_artifact._hook_repair::repair_broken_plugin_cache_hooks --

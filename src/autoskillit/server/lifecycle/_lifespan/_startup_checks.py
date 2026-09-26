@@ -13,6 +13,7 @@ from typing import assert_never
 
 import autoskillit.core.paths as _core_paths
 from autoskillit.core import (
+    Severity,
     atomic_write,
     get_logger,
     installed_plugin_cache_dir,
@@ -187,23 +188,36 @@ def run_startup_hook_health_check() -> list[str]:
 
 
 def run_startup_install_state_check() -> list[str]:
-    """Report install-state inconsistencies on MCP startup.
+    """Report install-state findings on MCP startup.
 
-    The third consumer of ``verify_install_state()`` (alongside ``doctor`` and
-    post-install verification), so the authority cannot decay into a function
-    nobody calls. Diagnostic only: startup never fails on a finding, because
-    the projection no longer depends on any of the artifacts being checked.
-    Any failure is logged and swallowed.
+    One of the two consumers of ``verify_install_state()``: ``doctor`` shows every
+    finding, and startup logs them so the authority cannot decay into a function
+    nobody calls. Diagnostic only: startup never fails on a finding, because the
+    projection no longer depends on any of the artifacts being checked. WARNING is
+    reserved for actionable (``ERROR``) findings; diagnostic evidence logs at INFO
+    and stays visible in ``doctor``. Each finding's message carries its own
+    remediation. Any failure is logged and swallowed.
     """
     try:
         findings = verify_install_state()
         for finding in findings:
-            logger.warning(
-                "install_state_inconsistent",
-                check=finding.check,
-                message=finding.message,
-                remediation="Run `autoskillit install` from an external terminal",
-            )
+            match finding.severity:
+                case Severity.ERROR:
+                    logger.warning(
+                        "install_state_inconsistent",
+                        check=finding.check,
+                        severity=finding.severity,
+                        message=finding.message,
+                    )
+                case Severity.WARNING | Severity.INFO | Severity.OK:
+                    logger.info(
+                        "install_state_diagnostic",
+                        check=finding.check,
+                        severity=finding.severity,
+                        message=finding.message,
+                    )
+                case _ as unreachable:
+                    assert_never(unreachable)
         return [f.check for f in findings]
     except Exception:
         logger.exception("startup_install_state_check_failed")

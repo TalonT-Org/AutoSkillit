@@ -318,9 +318,7 @@ def _check_plugin_cache_integrity(cache_dir: Path | None = None) -> DoctorResult
 def _check_install_state_consistency() -> list[DoctorResult]:
     """Report every install-state invariant via the single consistency authority.
 
-    One finding per violated invariant, and one finding per *derived version
-    file* that disagrees with the running package — so a three-way drift names
-    all three files rather than collapsing into one ambiguous message.
+    One finding per violated invariant.
     """
     findings = verify_install_state()
     if not findings:

@@ -22,7 +22,7 @@ _SYNTHETIC_MODEL_ID = "gpt-synthetic"
 def test_exploration_vector_contract_versions_invalidate_stale_artifacts() -> None:
     from autoskillit.core import SKILL_SESSION_CONTRACT_SCHEMA_VERSION
 
-    assert SKILL_PROJECTION_VERSION == 9
+    assert SKILL_PROJECTION_VERSION == 10
     assert SKILL_SESSION_CONTRACT_SCHEMA_VERSION == 5
 
 

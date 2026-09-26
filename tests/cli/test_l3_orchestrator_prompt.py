@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.core import DIRECT_PREFIX, MARKETPLACE_PREFIX
+from autoskillit.core import DIRECT_PREFIX, PLUGIN_PREFIX
 from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small, pytest.mark.feature("fleet")]
@@ -353,7 +353,7 @@ class TestProgressMarkers:
 
 
 class TestToolSurface:
-    @pytest.mark.parametrize("prefix", [DIRECT_PREFIX, MARKETPLACE_PREFIX])
+    @pytest.mark.parametrize("prefix", [DIRECT_PREFIX, PLUGIN_PREFIX])
     def test_seven_fleet_tools_listed(self, prefix: str) -> None:
         prompt = _build(mcp_prefix=prefix)
         for tool in (
@@ -413,7 +413,7 @@ class TestL3NoBootstrapSequence:
         prompt = _build()
         assert f"{DIRECT_PREFIX}open_kitchen()" not in prompt
 
-    @pytest.mark.parametrize("prefix", [DIRECT_PREFIX, MARKETPLACE_PREFIX])
+    @pytest.mark.parametrize("prefix", [DIRECT_PREFIX, PLUGIN_PREFIX])
     def test_open_kitchen_not_callable_for_any_prefix(self, prefix: str) -> None:
         prompt = _build(mcp_prefix=prefix)
         assert f"{prefix}open_kitchen()" not in prompt

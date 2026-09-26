@@ -108,3 +108,16 @@ def test_analyze_pipeline_health_has_output_dir_resolution():
     assert "Step 0" in content, (
         "analyze-pipeline-health/SKILL.md must have a Step 0 for output-dir resolution"
     )
+
+
+def test_analyze_pipeline_health_defines_refused_reader_response():
+    """A refused session-log-reader spawn is a verbatim-quoted blocked gap, not improvised."""
+    from autoskillit.core import pkg_root
+
+    skill_path = pkg_root() / "skills_extended" / "analyze-pipeline-health" / "SKILL.md"
+    content = skill_path.read_text()
+    step4 = content.split("### Step 4", 1)[1].split("### Step 5", 1)[0]
+    assert "would be spawned with zero tools" in step4
+    assert "`blocked`" in step4
+    assert "quoted verbatim" in step4
+    assert "do not" in step4 and "inspect session logs yourself" in step4

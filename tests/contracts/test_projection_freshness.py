@@ -26,7 +26,7 @@ from pathlib import Path
 import pytest
 
 import autoskillit
-from autoskillit.core import pkg_root
+from autoskillit.core import DIRECT_PREFIX, PLUGIN_PREFIX, pkg_root
 from autoskillit.workspace import (
     iter_public_plugin_asset_files,
     public_plugin_asset_digest,
@@ -41,12 +41,22 @@ def _digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _rendered_agent_text(source_file: Path) -> str:
+    """Source agent text with its ``tools:`` line in the plugin namespace."""
+    return "".join(
+        line.replace(DIRECT_PREFIX, PLUGIN_PREFIX) if line.lstrip().startswith("tools:") else line
+        for line in source_file.read_text(encoding="utf-8").splitlines(keepends=True)
+    )
+
+
 def _assert_projection_is_live(root: Path) -> None:
     """Every projected asset must byte-match the running package.
 
     ``hooks/hooks.json`` is special: it is *rendered* at staging time (not
     copied from the source tree), so its projected bytes must match the
     current ``render_hooks_json_text()`` output rather than the source file.
+    Agent definitions are rendered too: only their ``tools:`` line may differ,
+    and only by carrying the plugin namespace.
     """
     from autoskillit.hook_registry import render_hooks_json_text
 
@@ -72,6 +82,9 @@ def _assert_projection_is_live(root: Path) -> None:
             expected = render_hooks_json_text()
             if projected_file.read_text(encoding="utf-8") != expected:
                 mismatched.append(f"{rel} (rendered, not source-copied)")
+        elif rel.parts[0] == "agents" and rel.suffix == ".md":
+            if projected_file.read_text(encoding="utf-8") != _rendered_agent_text(source_file):
+                mismatched.append(f"{rel} (rendered tools: line)")
         elif _digest(projected_file) != _digest(source_file):
             mismatched.append(str(rel))
     assert not missing, f"projection is missing live package assets: {missing[:10]}"
@@ -323,6 +336,60 @@ class TestProjectionFreshness:
             assert result.returncode == 0, result.stderr
             assert json.loads(result.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
         assert binding.closed
+
+    def test_stale_agent_namespace_projection_is_republished(self, isolated_home: Path) -> None:
+        """A self-consistent artifact from an older renderer fails validation on reuse."""
+        from autoskillit.core import PluginLoadMode, load_agent_definitions
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
+        from autoskillit.workspace import project_default_plugin_authority
+        from autoskillit.workspace._installed._projection_cache import (
+            projected_artifact_manifest_path,
+            projected_plugin_artifact_digest,
+        )
+
+        def acquire():
+            return project_default_plugin_authority(
+                cwd=isolated_home,
+                base_branch="main",
+                catalog=session_catalog(),
+            ).acquire_launch_binding(
+                backend=ClaudeCodeBackend(),
+                load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+            )
+
+        with acquire() as binding:
+            assert binding.plugin_dir is not None
+            destination = binding.plugin_dir
+        assert binding.closed
+
+        # Rendered agent files are written with atomic_write, never shared-store
+        # hardlinks, so rewriting them cannot disturb other projections.
+        rewritten = 0
+        for agent_md in sorted((destination / "agents").glob("*.md")):
+            text = agent_md.read_text(encoding="utf-8")
+            if PLUGIN_PREFIX not in text:
+                continue
+            agent_md.write_text(
+                text.replace(PLUGIN_PREFIX, DIRECT_PREFIX),
+                encoding="utf-8",
+            )
+            rewritten += 1
+        assert rewritten
+        manifest_path = projected_artifact_manifest_path(destination)
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["artifact_digest"] = projected_plugin_artifact_digest(destination)
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        with acquire() as binding:
+            assert binding.plugin_dir is not None
+            served = load_agent_definitions(binding.plugin_dir / "agents")
+        assert binding.closed
+
+        served_mcp_tools = [
+            tool for definition in served for tool in definition.tools if tool.startswith("mcp__")
+        ]
+        assert served_mcp_tools
+        assert all(tool.startswith(PLUGIN_PREFIX) for tool in served_mcp_tools), served_mcp_tools
 
 
 class TestAssetDigestMirrorsTheCopier:

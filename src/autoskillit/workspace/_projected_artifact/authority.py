@@ -15,7 +15,6 @@ from typing import assert_never, cast
 
 from autoskillit.core import (
     ARTIFACT_LEASE_TIMEOUT_SECONDS,
-    DIRECT_PREFIX,
     SKILL_PROJECTION_VERSION,
     ArtifactLease,
     ArtifactLeaseContention,
@@ -150,10 +149,7 @@ def _stage_projected_plugin_artifact(
         # handlers); only the rendered manifest is replaced.
         write_generated_hooks_json(staging_root)
         validate_staged_plugin_hooks(staging_root)
-        # Projected artifact — consumed exclusively via --plugin-dir, which
-        # registers the plugin verbatim; never detect_autoskillit_mcp_prefix(),
-        # which answers a different question (host-level registry presence).
-        _render_agent_definitions(staging_root / "agents", DIRECT_PREFIX)
+        _render_agent_definitions(staging_root)
         skill_infos = _skill_sequence(plan.catalog)
         documents = materialize_agent_skill_tree(
             staging_root / "skills",

@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import DIRECT_PREFIX, MARKETPLACE_PREFIX, STEP_SKIP_SEMANTICS_CLAUSE
+from autoskillit.core import DIRECT_PREFIX, PLUGIN_PREFIX, STEP_SKIP_SEMANTICS_CLAUSE
 from autoskillit.core.types import PIPELINE_FORBIDDEN_TOOLS
 from tests.contracts._anti_fab_helpers import FABRICATION_GUARD_RE
 
@@ -880,7 +880,7 @@ class TestContextLimitBehaviorContract:
         )
 
 
-@pytest.mark.parametrize("mcp_prefix", [DIRECT_PREFIX, MARKETPLACE_PREFIX])
+@pytest.mark.parametrize("mcp_prefix", [DIRECT_PREFIX, PLUGIN_PREFIX])
 def test_orchestrator_tool_name_matches_open_kitchen_hook_matcher(mcp_prefix: str) -> None:
     """The fully-qualified tool name in the prompt must satisfy the hook registry matcher."""
     from autoskillit.hook_registry import HOOK_REGISTRY

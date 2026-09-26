@@ -18,7 +18,6 @@ from autoskillit.core import (
     FinalizedRecipeProjection,
     ProcessStaleError,
     RecipeDeliveryRequest,
-    detect_autoskillit_mcp_prefix,
     get_logger,
 )
 from autoskillit.pipeline import KITCHEN_EFFECT_RECIPE_SERVING, ToolContext, transition_abort
@@ -374,7 +373,9 @@ async def _serve_named_recipe(
     try:
         warning = (
             _tk_pkg._build_hook_diagnostic_warning(
-                detect_autoskillit_mcp_prefix(tool_ctx.backend.capabilities)
+                claude_plugin_tool_namespace=(
+                    tool_ctx.backend.capabilities.claude_plugin_tool_namespace
+                )
             )
             if tool_ctx.backend is not None
             else None

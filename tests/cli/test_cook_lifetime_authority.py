@@ -231,6 +231,7 @@ def test_launch_fleet_session_forwards_config_process_tether(
         capabilities=SimpleNamespace(
             managed_fixed_batch_route_capable=False,
             has_unguarded_filesystem_access=False,
+            claude_plugin_tool_namespace=True,
         ),
     )
     captured: dict[str, object] = {}
@@ -246,10 +247,6 @@ def test_launch_fleet_session_forwards_config_process_tether(
         _patch_session_backend,
         "resolve_global_backend",
         lambda *_args, **_kwargs: backend,
-    )
-    monkeypatch.setattr(
-        "autoskillit.cli.detect_autoskillit_mcp_prefix",
-        lambda _capabilities: "mcp__autoskillit",
     )
     monkeypatch.setattr(
         _patch_workspace,

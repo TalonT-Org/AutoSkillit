@@ -301,15 +301,15 @@ def test_build_fleet_dispatch_prompt_no_campaign_manifest() -> None:
     assert "CAMPAIGN DISCIPLINE" not in prompt
 
 
-def test_build_fleet_dispatch_prompt_accepts_marketplace_prefix() -> None:
-    from autoskillit.core import MARKETPLACE_PREFIX
+def test_build_fleet_dispatch_prompt_accepts_plugin_prefix() -> None:
+    from autoskillit.core import PLUGIN_PREFIX
     from tests.cli._orchestrator_prompt_helpers import (
         build_fleet_dispatch_prompt as _build_fleet_dispatch_prompt,
     )
 
-    prompt = _build_fleet_dispatch_prompt(MARKETPLACE_PREFIX)
-    assert MARKETPLACE_PREFIX + "open_kitchen" not in prompt
-    assert MARKETPLACE_PREFIX + "dispatch_food_truck" in prompt
+    prompt = _build_fleet_dispatch_prompt(PLUGIN_PREFIX)
+    assert PLUGIN_PREFIX + "open_kitchen" not in prompt
+    assert PLUGIN_PREFIX + "dispatch_food_truck" in prompt
 
 
 def test_build_fleet_dispatch_prompt_lists_all_11_tools() -> None:

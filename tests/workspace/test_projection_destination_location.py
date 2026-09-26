@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import DIRECT_PREFIX, SkillContractError, destination_location
+from autoskillit.core import SkillContractError, destination_location
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
@@ -86,7 +86,6 @@ class TestMaterializeSanitizedPluginRoot:
             destination,
             catalog,
             _context(catalog, tmp_path),
-            mcp_tool_prefix=DIRECT_PREFIX,
         )
 
         assert destination.is_dir()
@@ -116,7 +115,6 @@ class TestMaterializeSanitizedPluginRoot:
                 destination,
                 catalog,
                 _context(catalog, tmp_path),
-                mcp_tool_prefix=DIRECT_PREFIX,
             )
 
 

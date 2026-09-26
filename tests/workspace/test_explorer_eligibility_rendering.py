@@ -93,6 +93,7 @@ def test_ineligible_context_renders_unavailable_text(tmp_path: Path) -> None:
         assert "local checkout" in content
         assert "remote or public copy" in content
         assert "local access" in content
+        assert "would be spawned with zero tools" in content
 
 
 def test_ineligible_context_projects_pluginless_explorer_dispatch(tmp_path: Path) -> None:

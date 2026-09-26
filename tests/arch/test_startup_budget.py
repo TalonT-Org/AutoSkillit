@@ -231,7 +231,8 @@ def test_no_subprocess_in_serve() -> None:
         "serve() transitively uses subprocess on the MCP transport critical path "
         "(REQ-STARTUP-001):\n"
         + "\n".join(f"  {v}" for v in violations)
-        + "\nReplace with backend-aware detect_autoskillit_mcp_prefix(capabilities)."
+        + "\nReplace with launched_session_mcp_prefix(capabilities) for tool names, or "
+        "is_marketplace_plugin_registered() for registry presence."
     )
 
 
@@ -270,7 +271,8 @@ def test_serve_pre_anyio_no_denylist_calls() -> None:
         "serve() calls denylist function(s) before anyio.run() — violates REQ-STARTUP-001.\n"
         "These block the MCP transport critical path:\n"
         + "\n".join(f"  {v}" for v in violations)
-        + "\nReplace with backend-aware detect_autoskillit_mcp_prefix(capabilities)."
+        + "\nReplace with launched_session_mcp_prefix(capabilities) for tool names, or "
+        "is_marketplace_plugin_registered() for registry presence."
     )
 
 

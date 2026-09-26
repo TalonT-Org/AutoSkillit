@@ -233,94 +233,62 @@ class TestCLIOrderCommand:
         assert "capture_output" not in kwargs
         assert "stdin" not in kwargs
 
+    @pytest.mark.parametrize(
+        "registered", [True, False], ids=["registry-present", "registry-absent"]
+    )
     @patch("autoskillit.cli.subprocess.Popen")
-    def test_order_includes_plugin_dir_when_plugin_installed(
+    def test_order_prompt_uses_plugin_prefix_regardless_of_registry(
         self,
         mock_run: MagicMock,
+        registered: bool,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """order still passes --plugin-dir when a marketplace plugin is installed —
-        EXPLICIT_PLUGIN_DIR generation-store binding is unconditional for a
-        plugin-install-capable backend (IMPLICIT_INSTALLED was retired in #4480)."""
+        """order always launches Claude with --plugin-dir (EXPLICIT_PLUGIN_DIR is
+        unconditional for a plugin-install-capable backend, #4480), so the prompt names
+        the plugin-namespaced tools whether or not a marketplace registration exists."""
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        from autoskillit.core._plugin_ids import MARKETPLACE_PREFIX
+        if registered:
+            from autoskillit import __version__
+            from autoskillit.cli.install._plugin_artifact import (
+                current_installed_plugin_root,
+                installed_plugin_semantic_key,
+                publish_installed_plugin_artifact,
+            )
+            from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY
 
-        monkeypatch.setattr(
-            "autoskillit.core.detect_autoskillit_mcp_prefix",
-            lambda _capabilities: MARKETPLACE_PREFIX,
-        )
-        from autoskillit import __version__
-        from autoskillit.cli.install._plugin_artifact import (
-            current_installed_plugin_root,
-            installed_plugin_semantic_key,
-            publish_installed_plugin_artifact,
-        )
-        from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY
-
-        installed_root = current_installed_plugin_root()
-        installed_root.mkdir(parents=True)
-        (installed_root / "plugin.json").write_text("{}\n", encoding="utf-8")
-        metadata = installed_root / ".claude-plugin" / "plugin.json"
-        metadata.parent.mkdir(parents=True)
-        metadata.write_text(
-            json.dumps({"name": "autoskillit", "version": __version__}),
-            encoding="utf-8",
-        )
-        publish_installed_plugin_artifact(
-            installed_root,
-            semantic_key=installed_plugin_semantic_key(
-                _AUTOSKILLIT_PLUGIN_KEY,
-                __version__,
-            ),
-        )
-        registry = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
-        registry.parent.mkdir(parents=True, exist_ok=True)
-        registry.write_text(
-            json.dumps(
-                {
-                    "version": 2,
-                    "plugins": {_AUTOSKILLIT_PLUGIN_KEY: {"installPath": str(installed_root)}},
-                }
-            ),
-            encoding="utf-8",
-        )
-        configure_popen(mock_run, returncode=0)
-
-        cli.order("test-script")
-
-        mock_run.assert_called_once()
-        cmd = mock_run.call_args[0][0]
-        # After the generation-keyed publication migration (#4480), all
-        # bindings carry a concrete plugin_dir, so --plugin-dir is always
-        # passed — even when the marketplace registry has an entry.
-        assert ClaudeFlags.PLUGIN_DIR in cmd
-
-    @patch("autoskillit.cli.subprocess.Popen")
-    def test_order_includes_plugin_dir_when_no_plugin_installed(
-        self,
-        mock_run: MagicMock,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """order includes --plugin-dir when marketplace plugin is not installed."""
-        monkeypatch.chdir(tmp_path)
-        scripts_dir = tmp_path / ".autoskillit" / "recipes"
-        scripts_dir.mkdir(parents=True)
-        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
-        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
-        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-        from autoskillit.core._plugin_ids import DIRECT_PREFIX
-
-        monkeypatch.setattr(
-            "autoskillit.core.detect_autoskillit_mcp_prefix",
-            lambda _capabilities: DIRECT_PREFIX,
-        )
+            installed_root = current_installed_plugin_root()
+            installed_root.mkdir(parents=True)
+            (installed_root / "plugin.json").write_text("{}\n", encoding="utf-8")
+            metadata = installed_root / ".claude-plugin" / "plugin.json"
+            metadata.parent.mkdir(parents=True)
+            metadata.write_text(
+                json.dumps({"name": "autoskillit", "version": __version__}),
+                encoding="utf-8",
+            )
+            publish_installed_plugin_artifact(
+                installed_root,
+                semantic_key=installed_plugin_semantic_key(
+                    _AUTOSKILLIT_PLUGIN_KEY,
+                    __version__,
+                ),
+            )
+            registry = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
+            registry.parent.mkdir(parents=True, exist_ok=True)
+            registry.write_text(
+                json.dumps(
+                    {
+                        "version": 2,
+                        "plugins": {_AUTOSKILLIT_PLUGIN_KEY: {"installPath": str(installed_root)}},
+                    }
+                ),
+                encoding="utf-8",
+            )
         configure_popen(mock_run, returncode=0)
 
         cli.order("test-script")
@@ -328,6 +296,9 @@ class TestCLIOrderCommand:
         mock_run.assert_called_once()
         cmd = mock_run.call_args[0][0]
         assert ClaudeFlags.PLUGIN_DIR in cmd
+        system_prompt = cmd[cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT) + 1]
+        assert "mcp__plugin_autoskillit_autoskillit__open_kitchen" in system_prompt
+        assert "mcp__autoskillit__open_kitchen" not in system_prompt
 
     @patch("autoskillit.cli.subprocess.Popen")
     def test_order_propagates_exit_code(

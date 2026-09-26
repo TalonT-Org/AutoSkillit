@@ -248,7 +248,7 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
             record_capable=False,
             anthropic_provider_capable=False,
             plugin_install_capable=False,
-            claude_marketplace_tool_prefix_capable=False,
+            claude_plugin_tool_namespace=False,
             inspector_capable=False,
             supports_context_window_suffix=False,
             has_unguarded_filesystem_access=True,

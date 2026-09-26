@@ -293,14 +293,6 @@ class TestOrderMcpPrefixSelection:
     """order() must embed the resolved MCP prefix in the system prompt."""
 
     @pytest.fixture(autouse=True)
-    def _clear_prefix_cache(self):  # noqa: ANN204
-        from autoskillit.core._plugin_ids import detect_autoskillit_mcp_prefix as _fn
-
-        _fn.cache_clear()
-        yield
-        _fn.cache_clear()
-
-    @pytest.fixture(autouse=True)
     def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(_patch_cli__preview, "show_cook_preview", lambda *a, **kw: None)
 
@@ -320,11 +312,11 @@ class TestOrderMcpPrefixSelection:
         monkeypatch.setattr(_app_mod, "_get_ingredients_table", lambda *a, **kw: "| col | val |")
 
     @patch("autoskillit.cli.subprocess.Popen")
-    def test_order_prompt_uses_direct_prefix_when_no_marketplace_install(
+    def test_order_prompt_uses_plugin_prefix_without_marketplace_registration(
         self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """order() builds a prompt with the direct prefix when installed_plugins.json lacks key."""
-        from autoskillit.core import DIRECT_PREFIX
+        """order() names plugin-namespaced tools even when installed_plugins.json lacks key."""
+        from autoskillit.core import PLUGIN_PREFIX
 
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -347,14 +339,14 @@ class TestOrderMcpPrefixSelection:
         cmd = mock_run.call_args[0][0]
         prompt_idx = cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
         captured_prompt = cmd[prompt_idx + 1]
-        assert f"{DIRECT_PREFIX}open_kitchen" in captured_prompt
+        assert f"{PLUGIN_PREFIX}open_kitchen" in captured_prompt
 
     @patch("autoskillit.cli.subprocess.Popen")
-    def test_order_prompt_uses_marketplace_prefix_when_plugin_installed(
+    def test_order_prompt_uses_plugin_prefix_with_marketplace_registration(
         self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """order() uses marketplace prefix when autoskillit is plugin-installed."""
-        from autoskillit.core import MARKETPLACE_PREFIX
+        """order() names plugin-namespaced tools when autoskillit is also plugin-installed."""
+        from autoskillit.core import PLUGIN_PREFIX
 
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -377,7 +369,7 @@ class TestOrderMcpPrefixSelection:
         cmd = mock_run.call_args[0][0]
         prompt_idx = cmd.index(ClaudeFlags.APPEND_SYSTEM_PROMPT)
         captured_prompt = cmd[prompt_idx + 1]
-        assert f"{MARKETPLACE_PREFIX}open_kitchen" in captured_prompt
+        assert f"{PLUGIN_PREFIX}open_kitchen" in captured_prompt
 
     @patch("autoskillit.cli.subprocess.Popen")
     def test_cook_passes_ingredients_table_to_orchestrator_prompt(

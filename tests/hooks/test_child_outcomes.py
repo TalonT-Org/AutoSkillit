@@ -61,6 +61,13 @@ def test_context_exhausted_value_matches_infra_exit_category_enum() -> None:
     assert snap._INFRA_EXIT_CONTEXT_EXHAUSTED == InfraExitCategory.CONTEXT_EXHAUSTED.value
 
 
+def test_spawn_refusal_literal_matches_core_marker() -> None:
+    from autoskillit.core import HARNESS_ZERO_TOOLS_REFUSAL_MARKER
+
+    assert snapshot_impl.HARNESS_SPAWN_REFUSAL_LITERAL == HARNESS_ZERO_TOOLS_REFUSAL_MARKER
+    assert snap.HARNESS_SPAWN_REFUSAL_LITERAL == HARNESS_ZERO_TOOLS_REFUSAL_MARKER
+
+
 def test_turn_limit_input_value_matches_cli_subtype_enum() -> None:
     assert snap._CLI_SUBTYPE_ERROR_MAX_TURNS == CliSubtype.ERROR_MAX_TURNS.value
 
@@ -863,3 +870,50 @@ def test_an_interacted_follow_up_style_event_adds_no_row(tmp_path) -> None:
         tmp_path, backend="claude_code", parent_session_id="parent-1"
     )
     assert snap.read_snapshot(snapshot_path) == {}
+
+
+_SPAWN_REFUSAL = (
+    "Agent 'autoskillit:semantic-code-navigator' would be spawned with zero tools — refusing."
+    " Its tools list resolved to nothing: unrecognized"
+    " [mcp__autoskillit__submit_exploration_query]."
+)
+
+
+def test_spawn_refusal_harness_literal_classifies_error() -> None:
+    assert snap.classify_evidence({"harness_literal": _SPAWN_REFUSAL}) == snap.REASON_ERROR
+
+
+def test_replayed_agent_spawn_refusal_failure_records_the_harness_literal(tmp_path) -> None:
+    """A refused spawn is a documented Agent tool error (PostToolUseFailure ``error``)."""
+    payload = {
+        "hook_event_name": "PostToolUseFailure",
+        "session_id": "parent-1",
+        "tool_name": "Agent",
+        "tool_use_id": "tool-refused",
+        "error": _SPAWN_REFUSAL,
+    }
+    assert _run_hook(payload, log_dir=tmp_path) == 0
+    outcome = _outcome(
+        tmp_path, backend="claude_code", parent_session_id="parent-1", child_id="tool-refused"
+    )
+    assert outcome["terminal_reason"] == snap.REASON_ERROR
+    assert snap.HARNESS_SPAWN_REFUSAL_LITERAL in outcome["raw_reason"]
+
+
+def test_successful_agent_report_quoting_the_refusal_marker_is_not_a_refusal(tmp_path) -> None:
+    payload = {
+        "hook_event_name": "PostToolUse",
+        "session_id": "parent-1",
+        "tool_name": "Agent",
+        "tool_use_id": "tool-quote",
+        "tool_response": {
+            "result": "Findings: AGENTS.md routes a result containing "
+            "'would be spawned with zero tools' to pluginless-explorer."
+        },
+    }
+    assert _run_hook(payload, log_dir=tmp_path) == 0
+    outcome = _outcome(
+        tmp_path, backend="claude_code", parent_session_id="parent-1", child_id="tool-quote"
+    )
+    assert outcome["terminal_reason"] == snap.REASON_UNKNOWN
+    assert snap.HARNESS_SPAWN_REFUSAL_LITERAL not in (outcome.get("raw_reason") or "")

@@ -30,7 +30,6 @@ def tracked_project_local_skill_paths(repo_root: Path) -> tuple[Path, ...]:
             repo_root / rel
             for rel in git_ls_files(repo_root, *ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS)
             if PurePosixPath(rel).name == "SKILL.md"
-            and PurePosixPath(rel).parent.parent.as_posix() in ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
         )
     )
 

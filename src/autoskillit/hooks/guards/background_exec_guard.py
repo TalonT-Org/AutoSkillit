@@ -17,6 +17,8 @@ The guard derives session identity from the hook payload; a binding with
 or malformed binding defaults to non-join semantics because a transient
 file-system error during hook invocation must not lock the agent out of
 legitimate work.
+An authenticated top-level interactive cook session is outside join enforcement
+(hook_join_applicability) and receives no join-bound denials.
 """
 
 from __future__ import annotations
@@ -36,10 +38,10 @@ if _RUNTIME_DIR not in sys.path:
 
 from _hook_payload import normalize_payload_cwd  # noqa: E402
 from _hook_settings import (  # noqa: E402
+    hook_join_applicability,
     hook_session_shape,
     payload_managed_codex_route,
     resolve_binding_session_id,
-    session_join_required,
 )
 
 BACKGROUND_EXEC_DENY_TRIGGER: str = "run_in_background=true is prohibited in skill sessions"
@@ -57,9 +59,9 @@ def _governed_skill_session(session_type: str) -> bool:
     """Whether this hook is acting in a governed Claude skill session tier.
 
     Active for Claude-code sessions on the skill tier, so orchestrator, fleet,
-    and Codex sessions are excluded from governance. The headless axis is not
-    consulted here — the caller in main() short-circuits interactive sessions
-    via `if not headless: sys.exit(0)` before this helper runs.
+    and Codex sessions are excluded from governance. This helper runs before
+    the interactive exit; join-bound denials apply there only when
+    hook_join_applicability enforces. Authenticated interactive cook is exempt.
     """
     backend = os.environ.get("AUTOSKILLIT_AGENT_BACKEND", "").strip()
     if backend == "codex":
@@ -105,20 +107,34 @@ def _managed_route_denial(
 def _join_bound_denial(
     is_governed: bool,
     in_subagent_context: bool,
+    payload: dict[str, object],
     payload_cwd: str | None,
     session_id: object,
     tool_name: object,
     tool_input: dict[str, object],
 ) -> str | None:
-    join_required = (
+    # Only Agent and ScheduleWakeup can trigger a join-bound denial. Filter
+    # first so we avoid calling ``hook_join_applicability`` for tools that
+    # would never be denied — that helper writes a ``cook_bypass`` diagnostic
+    # unconditionally for authenticated cook sessions, so calling it for
+    # arbitrary tools would emit spurious join_diagnostics records.
+    if tool_name not in ("Agent", "ScheduleWakeup"):
+        return None
+    if not (
         is_governed
         and not in_subagent_context
         and isinstance(session_id, str)
         and bool(session_id)
         and bool(payload_cwd)
-        and session_join_required(payload_cwd, session_id)
-    )
-    if not join_required:
+    ):
+        return None
+    # Check join applicability before building the tool-specific denial
+    # string, mirroring the rhythm of the other join guards (claim/settle/
+    # followup/stop). Only the applicability decision itself can record a
+    # diagnostic; we have already ensured the tool could plausibly deny.
+    if not hook_join_applicability(
+        payload, payload_cwd, session_id, gate="background_exec_guard"
+    ).enforce:
         return None
     if tool_name == "Agent":
         selector = [
@@ -131,13 +147,12 @@ def _join_bound_denial(
                 "join-bound session — declare a wave via declare_join_batch and "
                 "issue every member as one ordinary unnamed foreground Agent call)."
             )
-    if tool_name == "ScheduleWakeup":
-        return (
-            f"{SCHEDULE_WAKEUP_DENY_TRIGGER} (ADR-0001) — ScheduleWakeup is "
-            "prohibited in a join-bound session because deferral cannot "
-            "produce the declared-batch evidence the join contract requires."
-        )
-    return None
+        return None
+    return (
+        f"{SCHEDULE_WAKEUP_DENY_TRIGGER} (ADR-0001) — ScheduleWakeup is "
+        "prohibited in a join-bound session because deferral cannot "
+        "produce the declared-batch evidence the join contract requires."
+    )
 
 
 def _headless_background_denial(
@@ -200,6 +215,7 @@ def main() -> None:
     denial_reason = _join_bound_denial(
         is_governed,
         in_subagent_context,
+        data,
         payload_cwd,
         session_id,
         tool_name,

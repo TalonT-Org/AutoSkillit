@@ -40,9 +40,8 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     resolve_state_root,
 )
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
-    record_cook_join_bypass,
+    hook_join_applicability,
     resolve_binding_session_id,
-    session_join_admission,
     session_managed_codex_route,
     session_managed_scope,
     write_join_diagnostic,
@@ -95,12 +94,17 @@ def main() -> None:
     data, sid = _read_stop_payload()
 
     payload_cwd = normalize_payload_cwd(data.get("cwd"))
-    if record_cook_join_bypass(data, payload_cwd, sid, gate="join_stop_guard"):
+    applicability = hook_join_applicability(data, payload_cwd, sid, gate="join_stop_guard")
+    if not applicability.enforce:
         sys.exit(0)
-    admission = session_join_admission(payload_cwd, sid)
-    if not admission.enforce or admission.binding_dict is None:
+    if applicability.admission is None:
+        # ``enforce`` is True only when admission is non-None; guard explicitly
+        # so the narrowing holds even when Python is invoked with ``-O``
+        # (which strips ``assert`` statements).
         sys.exit(0)
-    binding = admission.binding_dict
+    binding = applicability.admission.binding_dict
+    if binding is None:
+        sys.exit(0)
 
     managed_route = session_managed_codex_route(payload_cwd, sid)
     if managed_route is not None:

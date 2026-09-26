@@ -466,5 +466,8 @@ def test_compose_pr_step5_body_file_uses_variable_form():
         "Step 5 must declare PR_CREATE_BODY= assignment before the loop "
         "so the guard can resolve it"
     )
-    assignment = next(line for line in bash.splitlines() if line.startswith("PR_CREATE_BODY="))
+    assignment = next(
+        (line for line in bash.splitlines() if line.startswith("PR_CREATE_BODY=")), None
+    )
+    assert assignment, "Step 5 must declare a literal PR_CREATE_BODY assignment"
     assert "$" not in assignment.split("=", 1)[1]

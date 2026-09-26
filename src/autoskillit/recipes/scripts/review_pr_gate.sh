@@ -17,6 +17,10 @@ snapshot() {
         printf 'snapshot mode must be local or github\n' >&2
         return 2
     fi
+    if [[ ! "$pr_number" =~ ^[1-9][0-9]*$ ]]; then
+        printf 'snapshot PR number must be a positive integer\n' >&2
+        return 2
+    fi
     output_dir="$(cd "$output_dir" && pwd -P)" || return 2
     snapshot_dir="$(mktemp -d "$output_dir/gate_snapshot.XXXXXX")" || return 2
     authority_path="$snapshot_dir/gate_authority.json"
@@ -358,7 +362,8 @@ revalidate() {
     merge_base_sha="$(jq -r '.snapshot.merge_base_sha' <<< "$authority")"
     base_repo_full_name="$(jq -r '.snapshot.base_repo_full_name' <<< "$authority")"
     if [[ "$mode" != local && "$mode" != github ]] ||
-       [[ -z "$checkout_root" || -z "$pr_number" || -z "$head_sha" || -z "$base_sha" ]] ||
+       [[ ! "$pr_number" =~ ^[1-9][0-9]*$ ]] ||
+       [[ -z "$checkout_root" || -z "$head_sha" || -z "$base_sha" ]] ||
        [[ -z "$metrics_marker_snapshot_path" || -z "$annotated_diff_snapshot_path" ]] ||
        [[ -z "$hunk_ranges_snapshot_path" || -z "$valid_lines_snapshot_path" ]]; then
         printf 'invalid gate authority\n' >&2

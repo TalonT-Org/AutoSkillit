@@ -354,3 +354,38 @@ def test_snapshot_rejects_invalid_arguments_before_github_call(
     assert result.returncode != 0
     assert sorted(case["output_dir"].iterdir()) == before
     assert not case["gh_call_log"].exists()
+
+
+@pytest.mark.parametrize("pr_number", ["7/extra", "0"])
+def test_invalid_pr_number_is_rejected_at_both_boundaries(tmp_path: Path, pr_number: str) -> None:
+    case = make_gate_case(tmp_path)
+    result = subprocess.run(
+        [
+            "bash",
+            str(GATE_SCRIPT),
+            "snapshot",
+            str(case["output_dir"]),
+            str(case["repo"]),
+            case["mode"],
+            pr_number,
+            str(case["metrics_path"]),
+            str(case["annotated"]),
+            str(case["ranges"]),
+            str(case["valid_lines"]),
+        ],
+        cwd=case["repo"],
+        env=case["env"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert result.stderr == "snapshot PR number must be a positive integer\n"
+    authority = _authority(case)
+    authority["pr_number"] = pr_number
+    authority_path = Path(authority["authority_path"])
+    authority_path.write_text(json.dumps(authority))
+    result = revalidate(case, authority_path)
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert result.stderr == "invalid gate authority\n"

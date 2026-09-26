@@ -87,17 +87,28 @@ def _source_currency_warning(
             )
         case SourceCurrencyStatus.STALE:
             if currency.checkout_version is not None:
-                # Lazy runtime import (NOT TYPE_CHECKING): InstallType.LOCAL_PATH is used
-                # as a runtime value here, not merely as a type annotation, so the
-                # TYPE_CHECKING re-export in the module-level block can't substitute.
-                # Deferred to function body to avoid pulling ``cli.install._install_info``
-                # into the parent module's import chain at cook-load time.
+                # Lazy runtime import (NOT TYPE_CHECKING): InstallType.LOCAL_PATH and
+                # LOCAL_EDITABLE are used as runtime values here, not merely as type
+                # annotations, so the TYPE_CHECKING re-export in the module-level block
+                # can't substitute. Deferred to function body to avoid pulling
+                # ``cli.install._install_info`` into the parent module's import chain at
+                # cook-load time.
                 from autoskillit.cli.install._install_info import InstallType
 
-                remedy = (
-                    f"`autoskillit update` (runs `uv tool install --force --reinstall {checkout}`)"
-                    if currency.install_type == InstallType.LOCAL_PATH
-                    else "`task install-dev`"
+                if currency.install_type == InstallType.LOCAL_PATH:
+                    remedy = (
+                        f"`autoskillit update` (runs `uv tool install "
+                        f"--force --reinstall {checkout}`)"
+                    )
+                elif currency.install_type == InstallType.LOCAL_EDITABLE:
+                    editable_source = "<autoskillit checkout>"
+                    remedy = f"`uv pip install -e {editable_source}`"
+                else:
+                    remedy = "`task install-dev`"
+                return (
+                    f"{yellow}WARNING: installed AutoSkillit {currency.installed_version} "
+                    f"({currency.install_type}) is stale relative to working-tree "
+                    f"{currency.checkout_version}. Run {remedy}.{reset}"
                 )
                 return (
                     f"{yellow}WARNING: installed AutoSkillit {currency.installed_version} "

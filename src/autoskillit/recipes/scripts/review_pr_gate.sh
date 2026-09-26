@@ -3,6 +3,7 @@
 #       revalidate AUTHORITY_PATH
 set -uo pipefail
 
+# Local mode disables publication; both modes validate refs through read-only GitHub API calls.
 snapshot() {
     local output_dir="$1" checkout_root="$2" mode="$3" pr_number="$4"
     local diff_metrics_path="$5" annotated_diff_path="$6"

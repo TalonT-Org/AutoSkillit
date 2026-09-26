@@ -273,7 +273,7 @@ def test_every_gate_degradation_reason_is_preserved(tmp_path: Path, reason: str)
 
     authority = _authority(case)
     assert (authority["state"], authority["reason_code"]) == ("degraded", reason)
-    assert authority["experimental_audit_state"] != "pending"
+    assert authority["experimental_audit_state"] == "not_eligible"
 
 
 def test_closed_reason_set_matches_script() -> None:

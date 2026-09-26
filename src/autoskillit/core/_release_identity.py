@@ -90,11 +90,12 @@ def update_available(installed: ReleaseIdentity, target: ReleaseIdentity) -> boo
             return target.commit != installed.commit
         case ReleaseChannel.WORKING_TREE:
             try:
-                return _parse_channel_version(target.version, channel) > _parse_channel_version(
-                    installed.version, channel
-                )
-            except ValueError:
-                raise
+                return Version(target.version) > Version(installed.version)
+            except InvalidVersion as err:
+                raise ValueError(
+                    f"unparseable working-tree version: "
+                    f"installed={installed.version!r}, target={target.version!r}"
+                ) from err
         case unhandled:
             assert_never(unhandled)
 
@@ -127,11 +128,16 @@ def advance_verdict(
             if target is None:
                 return AdvanceVerdict.NOT_APPLICABLE
             try:
-                observed_key = _parse_channel_version(observed.version, channel)
-                previous_key = _parse_channel_version(previous.version, channel)
-                target_key = _parse_channel_version(target.version, channel)
-            except ValueError:
-                raise
+                observed_key = Version(observed.version)
+                previous_key = Version(previous.version)
+                target_key = Version(target.version)
+            except InvalidVersion as err:
+                raise ValueError(
+                    f"unparseable working-tree version: "
+                    f"observed={observed.version!r}, "
+                    f"previous={previous.version!r}, "
+                    f"target={target.version!r}"
+                ) from err
         case unhandled:
             assert_never(unhandled)
     if observed_key == previous_key:

@@ -13,6 +13,7 @@ import pytest
 import autoskillit.cli.install._install_info as _patch_install__install_info
 import autoskillit.cli.update._transaction as _patch_update__transaction
 import autoskillit.server.lifecycle._lifespan as _patch_lifecycle__lifespan
+from autoskillit.core import managed_home_for
 from tests._retention_surface import (
     RECLAIMER_CONVERGENCE_CASES,
     assert_second_pass_is_quiet,
@@ -463,7 +464,7 @@ def test_repair_preserves_version_owned_logical_hooks(tmp_path: Path) -> None:
         logical_name="legacy/version_specific",
     )
 
-    outcomes = repair_broken_plugin_cache_hooks(cache_dir)
+    outcomes = repair_broken_plugin_cache_hooks(cache_dir, home=managed_home_for(tmp_path))
 
     payload = json.loads((version_dir / "hooks/hooks.json").read_text())
     command = payload["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
@@ -490,7 +491,9 @@ def test_manifest_failure_rolls_back_hooks_and_manifest(
         MagicMock(side_effect=RuntimeError("manifest write failed")),
     )
 
-    outcomes = repair_module.repair_broken_plugin_cache_hooks(cache_dir)
+    outcomes = repair_module.repair_broken_plugin_cache_hooks(
+        cache_dir, home=managed_home_for(tmp_path)
+    )
 
     assert outcomes[0].status.value == "failed"
     assert "manifest write failed" in (outcomes[0].detail or "")
@@ -510,7 +513,7 @@ def test_repair_refuses_to_bless_unrelated_tampering(tmp_path: Path) -> None:
     (version_dir / "skills" / "tampered").mkdir(parents=True)
     (version_dir / "skills" / "tampered" / "SKILL.md").write_text("modified")
 
-    outcomes = repair_broken_plugin_cache_hooks(cache_dir)
+    outcomes = repair_broken_plugin_cache_hooks(cache_dir, home=managed_home_for(tmp_path))
 
     assert outcomes[0].status.value == "quarantined"
     assert "content digest mismatch" in (outcomes[0].detail or "")
@@ -532,7 +535,7 @@ def test_repair_rejects_unsafe_logical_hook_names(tmp_path: Path) -> None:
     hooks_path = version_dir / "hooks/hooks.json"
     original_hooks = hooks_path.read_text()
 
-    outcomes = repair_broken_plugin_cache_hooks(cache_dir)
+    outcomes = repair_broken_plugin_cache_hooks(cache_dir, home=managed_home_for(tmp_path))
 
     assert outcomes[0].status.value == "quarantined"
     assert "invalid logical hook name" in (outcomes[0].detail or "")
@@ -563,7 +566,7 @@ def test_malformed_cache_hooks_are_quarantined_by_exact_bytes(tmp_path: Path) ->
     run_adapter, observe_adapter = RECLAIMER_CONVERGENCE_CASES[target]
 
     def run() -> object:
-        return repair_broken_plugin_cache_hooks(cache_dir)
+        return repair_broken_plugin_cache_hooks(cache_dir, home=managed_home_for(tmp_path))
 
     def observe() -> object:
         marker = hook_quarantine_marker_path(manifest_path, malformed)
@@ -582,7 +585,7 @@ def test_malformed_cache_hooks_are_quarantined_by_exact_bytes(tmp_path: Path) ->
 
     changed_malformed = b"[not-json"
     hooks_path.write_bytes(changed_malformed)
-    retry = repair_broken_plugin_cache_hooks(cache_dir)
+    retry = repair_broken_plugin_cache_hooks(cache_dir, home=managed_home_for(tmp_path))
 
     assert retry[0].status is PluginHookRepairStatus.QUARANTINED
     assert hook_quarantine_marker_path(manifest_path, changed_malformed).is_file()
@@ -623,7 +626,7 @@ def test_missing_dispatcher_rolls_back_failed_repair(tmp_path: Path) -> None:
     original_hooks = hooks_path.read_text()
     original_manifest = manifest_path.read_text()
 
-    outcomes = repair_broken_plugin_cache_hooks(cache_dir)
+    outcomes = repair_broken_plugin_cache_hooks(cache_dir, home=managed_home_for(tmp_path))
 
     assert outcomes[0].status.value == "failed"
     assert "remain after repair" in (outcomes[0].detail or "")
@@ -648,7 +651,7 @@ def test_repair_skips_a_contended_lease(monkeypatch: pytest.MonkeyPatch, tmp_pat
     lease_path = installed_plugin_artifact_lease_path(version_dir)
     held_lease = ArtifactLease.acquire_exclusive(lease_path, timeout=2.0)
     try:
-        outcomes = repair_broken_plugin_cache_hooks(cache_dir)
+        outcomes = repair_broken_plugin_cache_hooks(cache_dir, home=managed_home_for(tmp_path))
     finally:
         held_lease.close()
 
@@ -667,8 +670,34 @@ def test_hook_repair_does_not_follow_incarnation_symlinks(tmp_path: Path) -> Non
 
     from autoskillit.workspace import repair_broken_plugin_cache_hooks
 
-    assert repair_broken_plugin_cache_hooks(cache_dir) == ()
+    assert repair_broken_plugin_cache_hooks(cache_dir, home=managed_home_for(tmp_path)) == ()
     assert (version_dir / "hooks" / "hooks.json").read_text() == original
+
+
+def test_plugin_cache_repair_skips_queued_version(tmp_path: Path) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from autoskillit.cli.install._plugin_artifact import InstalledPluginArtifactRetirementOwner
+    from autoskillit.workspace._projected_artifact._hook_repair import (
+        repair_broken_plugin_cache_hooks,
+    )
+
+    home = managed_home_for(tmp_path)
+    cache_dir = tmp_path / ".claude/plugins/cache/autoskillit-local/autoskillit"
+    version_dir = _publish_cache_incarnation(cache_dir, "1.0.0", broken=True)
+    hooks_path = version_dir / "hooks" / "hooks.json"
+    owner = InstalledPluginArtifactRetirementOwner(cache_dir, home=home)
+    identity = owner.identity_for_path(version_dir)
+    owner.enqueue_retirement(identity, datetime.now(UTC) + timedelta(hours=6))
+    original_hooks = hooks_path.read_bytes()
+
+    assert repair_broken_plugin_cache_hooks(cache_dir, home=home) == ()
+    assert hooks_path.read_bytes() == original_hooks
+    current = owner.identity_for_path(version_dir)
+    assert (current.incarnation_id, current.artifact_digest) == (
+        identity.incarnation_id,
+        identity.artifact_digest,
+    )
 
 
 # ---------------------------------------------------------------------------

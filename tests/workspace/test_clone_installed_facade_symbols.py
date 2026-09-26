@@ -57,7 +57,6 @@ _EXPECTED_INSTALLED_SYMBOLS: frozenset[str] = frozenset(
         "InstalledArtifactVerification",
         "PublicationObligation",
         "clear_obligation",
-        "marketplace_plugin_root",
         "read_obligation",
         "reconcile_install_artifacts",
         "update_obligation_expected_version",
@@ -234,15 +233,13 @@ def test_installed_artifact_exports():
 
 
 def test_installed_state_exports():
-    """marketplace_plugin_root, reconcile_install_artifacts, verify_install_state live in
-    _state."""
+    """reconcile_install_artifacts and verify_install_state live in _state."""
     from autoskillit.workspace._installed._state import (
-        marketplace_plugin_root,
         reconcile_install_artifacts,
         verify_install_state,
     )
 
-    for fn in (marketplace_plugin_root, reconcile_install_artifacts, verify_install_state):
+    for fn in (reconcile_install_artifacts, verify_install_state):
         assert callable(fn)
         assert fn.__module__ == "autoskillit.workspace._installed._state"
 

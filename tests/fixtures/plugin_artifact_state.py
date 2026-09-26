@@ -180,9 +180,15 @@ def _write_registry(spec: InstallStateSpec, install_path: Path) -> Path:
     return registry
 
 
-def _write_marketplace_surfaces(spec: InstallStateSpec) -> tuple[Path, Path]:
+def write_marketplace_surfaces(
+    home: Path,
+    version: str,
+    *,
+    plugin_name: str = "autoskillit",
+) -> tuple[Path, Path]:
+    """Write the install-time marketplace manifest and plugin metadata at ``version``."""
     marketplace_manifest = (
-        spec.home / ".autoskillit" / "marketplace" / ".claude-plugin" / "marketplace.json"
+        home / ".autoskillit" / "marketplace" / ".claude-plugin" / "marketplace.json"
     )
     marketplace_manifest.parent.mkdir(parents=True, exist_ok=True)
     marketplace_manifest.write_text(
@@ -191,24 +197,22 @@ def _write_marketplace_surfaces(spec: InstallStateSpec) -> tuple[Path, Path]:
                 "name": "autoskillit-local",
                 "plugins": [
                     {
-                        "name": spec.plugin_ref.partition("@")[0],
-                        "version": spec.expected_version,
+                        "name": plugin_name,
+                        "version": version,
                     }
                 ],
             }
         ),
         encoding="utf-8",
     )
-    marketplace_plugin_root = (
-        spec.home / ".autoskillit" / "marketplace" / "plugins" / "autoskillit"
-    )
+    marketplace_plugin_root = home / ".autoskillit" / "marketplace" / "plugins" / "autoskillit"
     plugin_json = marketplace_plugin_root / ".claude-plugin" / "plugin.json"
     plugin_json.parent.mkdir(parents=True, exist_ok=True)
     plugin_json.write_text(
         json.dumps(
             {
-                "name": spec.plugin_ref.partition("@")[0],
-                "version": spec.expected_version,
+                "name": plugin_name,
+                "version": version,
             }
         ),
         encoding="utf-8",
@@ -290,7 +294,11 @@ def build_plugin_artifact_state(
     older_root: Path | None = None
 
     if selected is not PluginArtifactStateKind.NO_INSTALLATION:
-        marketplace_manifest, marketplace_plugin_root = _write_marketplace_surfaces(spec)
+        marketplace_manifest, marketplace_plugin_root = write_marketplace_surfaces(
+            spec.home,
+            spec.expected_version,
+            plugin_name=spec.plugin_ref.partition("@")[0],
+        )
 
     if selected is PluginArtifactStateKind.OLDER_ONLY:
         older_version = f"{version}-older"

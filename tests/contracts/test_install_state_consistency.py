@@ -2,13 +2,14 @@
 
 The old doctor registry check and cache-integrity check could each report `OK`
 for a machine that could not start. ``verify_install_state()`` now owns the
-registry obligation and exact current-artifact decision, wired into doctor,
-MCP server startup, and post-install verification so it cannot rot.
+registry obligation and exact current-artifact decision, wired into doctor
+and MCP server startup so it cannot rot.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import replace
 from pathlib import Path
 
@@ -21,30 +22,20 @@ from autoskillit.core import (
     Severity,
     managed_home_for,
 )
+from tests._helpers import _flush_structlog_proxy_caches
 from tests._retention_surface import (
     RECLAIMER_CONVERGENCE_CASES,
     assert_second_pass_is_quiet,
+)
+from tests.fixtures.plugin_artifact_state import write_marketplace_surfaces
+from tests.fixtures.startup_steady_state import (
+    write_migrated_legacy_evidence,
+    write_registry,
 )
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 _PLUGIN_KEY = "autoskillit@autoskillit-local"
-
-
-def _write_registry(home: Path, install_path: Path) -> None:
-    registry = home / ".claude" / "plugins" / "installed_plugins.json"
-    registry.parent.mkdir(parents=True, exist_ok=True)
-    registry.write_text(
-        json.dumps({"version": 2, "plugins": {_PLUGIN_KEY: {"installPath": str(install_path)}}})
-    )
-
-
-def _write_marketplace_manifest(home: Path, version: str) -> None:
-    manifest = home / ".autoskillit" / "marketplace" / ".claude-plugin" / "marketplace.json"
-    manifest.parent.mkdir(parents=True, exist_ok=True)
-    manifest.write_text(
-        json.dumps({"name": "autoskillit-local", "plugins": [{"version": version}]})
-    )
 
 
 def _publish_generation(
@@ -151,7 +142,7 @@ def _queue_registered_retirement(home: Path) -> PluginArtifactIdentity:
     metadata = live / ".claude-plugin" / "plugin.json"
     metadata.parent.mkdir(parents=True)
     metadata.write_text(json.dumps({"name": "autoskillit", "version": __version__}))
-    _write_registry(home, live)
+    write_registry(home, live)
     identity = publish_installed_plugin_artifact(
         live,
         semantic_key=f"autoskillit@autoskillit-local:{__version__}",
@@ -260,7 +251,7 @@ class TestVerifyInstallState:
         obligation with nothing published is exactly the "cannot start" case
         this module exists to catch.
         """
-        _write_registry(home, home / "cache" / "wherever")
+        write_registry(home, home / "cache" / "wherever")
         assert "generation_store_missing" in _checks(home)
 
     def test_valid_current_generation_reports_nothing(self, home: Path) -> None:
@@ -358,7 +349,7 @@ class TestVerifyInstallState:
         assert "generation_artifact_invalid" in _checks(home)
 
     def test_dangling_install_path(self, home: Path) -> None:
-        _write_registry(home, home / "does" / "not" / "exist")
+        write_registry(home, home / "does" / "not" / "exist")
         assert "generation_store_missing" in _checks(home)
 
     def test_resolvable_stale_install_path_is_not_path_authority(self, home: Path) -> None:
@@ -371,7 +362,7 @@ class TestVerifyInstallState:
         """
         real = home / "cache" / "1.0.0"
         real.mkdir(parents=True)
-        _write_registry(home, real)
+        write_registry(home, real)
         assert "generation_store_missing" in _checks(home)
 
     def test_current_spec_uses_fresh_metadata_and_live_obligation(
@@ -399,7 +390,7 @@ class TestVerifyInstallState:
         assert clean_spec.expected_version == fresh_version
         assert clean_spec.require_registered_plugin is False
 
-        _write_registry(home, home / "cache" / "older")
+        write_registry(home, home / "cache" / "older")
         obligated_spec = install_state._current_install_state_spec()
         assert obligated_spec.expected_version == fresh_version
         assert obligated_spec.require_registered_plugin is True
@@ -455,29 +446,9 @@ class TestVerifyInstallState:
         self,
         home: Path,
     ) -> None:
-        from autoskillit.core import (
-            PluginArtifactKind,
-            Severity,
-            migrate_retiring_cache_v1,
-            write_versioned_json,
-        )
         from autoskillit.workspace import verify_install_state
 
-        legacy_path = home / "cache" / "legacy"
-        write_versioned_json(
-            home / ".autoskillit" / "retiring_cache.json",
-            {
-                "retiring": [
-                    {
-                        "version": "legacy",
-                        "path": str(legacy_path),
-                        "retired_at": "2025-01-01T00:00:00+00:00",
-                    }
-                ]
-            },
-            schema_version=1,
-        )
-        migrate_retiring_cache_v1({PluginArtifactKind.INSTALLED_PLUGIN: home / "cache"})
+        write_migrated_legacy_evidence(home, home / "cache" / "legacy")
 
         finding = next(
             item
@@ -519,44 +490,56 @@ class TestVerifyInstallState:
         assert "autoskillit doctor --repair" not in finding.message
         assert "Upgrade AutoSkillit" in finding.message
 
-    def test_version_drift_names_each_derived_file(self, home: Path) -> None:
-        """Three files carry a version and all three are derived.
-
-        The observed machine had package 0.10.894, marketplace.json 0.10.884, and
-        the registry pointing at 0.10.883 — and the only version check compared
-        the package to the *cached snapshot*, never to the manifest. A single
-        ambiguous "version mismatch" is not actionable; each file is named.
-        """
-        from autoskillit import __version__
-
-        _write_marketplace_manifest(home, "0.0.1-stale")
-        plugin_root = home / ".autoskillit" / "marketplace" / "plugins" / "autoskillit"
-        (plugin_root / ".claude-plugin").mkdir(parents=True)
-        (plugin_root / ".claude-plugin" / "plugin.json").write_text(
-            json.dumps({"name": "autoskillit", "version": "0.0.2-stale"})
-        )
-
-        checks = _checks(home)
-        assert "marketplace_manifest_version" in checks
-        assert "marketplace_plugin_version" in checks
-
-        _write_marketplace_manifest(home, __version__)
-        (plugin_root / ".claude-plugin" / "plugin.json").write_text(
-            json.dumps({"name": "autoskillit", "version": __version__})
-        )
-        assert not (_checks(home) & {"marketplace_manifest_version", "marketplace_plugin_version"})
-
-    def test_all_findings_are_actionable_errors(self, home: Path) -> None:
+    def test_marketplace_version_drift_is_not_an_install_state_finding(
+        self,
+        home: Path,
+    ) -> None:
+        """Version-only marketplace drift is reconciled by install, its only consumer."""
         from autoskillit.workspace import verify_install_state
 
-        _write_registry(home, home / "gone")
+        write_marketplace_surfaces(home, "0.0.1-stale")
+
         findings = verify_install_state()
-        assert findings
+
+        assert findings == ()
+        assert not [f.check for f in findings if f.check.startswith("marketplace_")]
+
+    def test_findings_are_actionable_errors_or_startup_quiet_diagnostics(
+        self,
+        home: Path,
+    ) -> None:
+        from autoskillit.server.lifecycle._lifespan import run_startup_install_state_check
+        from autoskillit.workspace import verify_install_state
+
+        write_registry(home, home / "gone")
+        write_migrated_legacy_evidence(home, home / "cache" / "legacy")
+
+        findings = verify_install_state()
+
+        assert {f.check for f in findings} == {
+            "generation_store_missing",
+            "retiring_cache_legacy_evidence",
+        }
         for finding in findings:
-            assert finding.severity is Severity.ERROR
-            assert "autoskillit install" in finding.message, (
-                f"{finding.check} does not tell the operator what to do"
-            )
+            if finding.severity is Severity.ERROR:
+                assert re.search(r"`autoskillit [^`]+`", finding.message), (
+                    f"{finding.check} does not tell the operator what to do"
+                )
+            else:
+                assert finding.check == "retiring_cache_legacy_evidence"
+
+        _flush_structlog_proxy_caches()
+        try:
+            with structlog.testing.capture_logs() as logs:
+                run_startup_install_state_check()
+        finally:
+            _flush_structlog_proxy_caches()
+
+        levels = {entry["check"]: entry["log_level"] for entry in logs if "check" in entry}
+        assert levels == {
+            finding.check: "warning" if finding.severity is Severity.ERROR else "info"
+            for finding in findings
+        }
 
 
 class TestDoctorReportsTheBrokenState:
@@ -578,7 +561,7 @@ class TestDoctorReportsTheBrokenState:
         """
         from autoskillit.cli.doctor._doctor_mcp import _check_install_state_consistency
 
-        _write_registry(home, home / "gone")
+        write_registry(home, home / "gone")
         legacy_cache = home / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
         legacy_cache.mkdir(parents=True)
         (legacy_cache / "marker.txt").write_text("leftover", encoding="utf-8")
@@ -611,7 +594,7 @@ class TestDoctorReportsTheBrokenState:
             "version",
             lambda package: fresh_version if package == "autoskillit" else "",
         )
-        _write_registry(home, home / "cache" / "older")
+        write_registry(home, home / "cache" / "older")
 
         results = _check_install_state_consistency()
         assert any(fresh_version in result.message for result in results)

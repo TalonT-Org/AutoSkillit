@@ -31,7 +31,7 @@ files, emit `issue_urls = ` and `issue_count = 0` and exit with success (exit co
 ## Step 3 — Dedup Against Existing Issues
 
 For each ticket body file, extract 2–3 key terms from the title. Run:
-```
+```bash
 gh issue list --search "{key terms}" --json number,title,state --limit 5 --state open
 ```
 in the workspace. If any existing open issue title has high similarity, mark that ticket body

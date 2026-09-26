@@ -71,6 +71,9 @@ Create focused, actionable implementation plans that recommend the technically b
   plan set; do not absorb the gaps into Part A by default. In grouped planning, the
   dedicated gap-replan route adds a group to the still-open set.
 
+In conflict-resolution examples, `{branch}` is the source PR branch and
+`{commit-hash}` is an individual source commit selected from that branch.
+
 ## Core Values - CRITICAL
 
 The ONLY criterion for choosing an approach is **technical quality and correctness of design**. A well-designed system is the goal. Nothing else matters.
@@ -242,13 +245,13 @@ When the task involves resolving conflicts to apply changes from one branch onto
 fail with `WORKTREE_INTACT_MERGE_COMMITS_DETECTED`.
 
 **NEVER prescribe in conflict-resolution plans:**
-```
+```bash
 git merge --no-ff origin/{branch}            # creates merge commit — rebase fails
 git merge --no-commit --no-ff origin/{branch}  # same problem
 ```
 
 **ALWAYS use linear approaches instead:**
-```
+```bash
 # Option A: Per-file checkout (copies contents without merge relationship)
 git checkout origin/{branch} -- path/to/file.py
 

@@ -397,19 +397,17 @@ def test_prepare_issue_strips_exception_warranted_table_rows():
 def test_prepare_issue_validated_report_uses_body_file():
     """prepare-issue must use --body-file (not inline --body) for validated report creation."""
     text = SKILL_MD.read_text()
-    validated_pos = text.find("is_validated_report")
-    assert validated_pos != -1, "Sanity: 'is_validated_report' not found"
-    body_section = text[validated_pos:]
-    # --body-file must appear in the validated-report section
-    assert "--body-file" in body_section, (
+    from autoskillit.recipe._skill_placeholder_parser import extract_step_sections
+
+    body_section = extract_step_sections(text)["Step 5"]
+    body_path = "{{AUTOSKILLIT_TEMP}}/prepare-issue/issue_body_{run_id}.md"
+    assert f'--body-file "{body_path}"' in body_section, (
         "prepare-issue must use 'gh issue create --body-file' for validated-report input, "
         "not inline '--body'"
     )
-    # The temp file must live under AUTOSKILLIT_TEMP
-    assert "AUTOSKILLIT_TEMP" in body_section and "issue_body_" in body_section, (
-        "prepare-issue must write the issue body to "
-        "{{AUTOSKILLIT_TEMP}}/prepare-issue/issue_body_*.md before calling gh issue create"
-    )
+    assert f'> "{body_path}"' in body_section
+    assert "ts=$(date" not in text
+    assert "ISSUE_BODY_FILE" not in text and "EDIT_BODY_FILE" not in text
 
 
 def test_prepare_issue_never_constraint_prohibits_inline_body():

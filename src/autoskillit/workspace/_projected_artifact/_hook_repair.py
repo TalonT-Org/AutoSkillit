@@ -14,12 +14,17 @@ from autoskillit.core import (
     _AUTOSKILLIT_PLUGIN_KEY,
     ArtifactLease,
     ArtifactLeaseContention,
+    ManagedHome,
+    PluginArtifactKind,
     PluginArtifactValidationError,
     atomic_write,
+    destination_location,
     installed_plugin_artifact_lease_path,
     installed_plugin_artifact_manifest_path,
     installed_plugin_semantic_key,
+    managed_home,
     read_installed_plugin_artifact_identity,
+    read_retiring_cache,
     read_versioned_json,
     write_versioned_json,
 )
@@ -261,6 +266,36 @@ def _safe_incarnations(root: Path) -> Iterable[Path]:
     )
 
 
+def _retiring_incarnation_locations(
+    root: Path, artifact_kind: PluginArtifactKind, *, home: ManagedHome
+) -> frozenset[Path]:
+    """Return the locations under ``root`` that ``home``'s retirement queue names.
+
+    The queue is the lifecycle authority: a queued incarnation is reclaimed under the same
+    exclusive lease repair takes, and repairing it rewrites the identity its record pins,
+    so reclaim rejects the record and leaves the directory behind. Callers read this
+    snapshot before listing; an incarnation reclaimed concurrently is excluded, already
+    gone, or still under reclaim's exclusive lease (repair then reports CONTENDED). A queued
+    incarnation that is re-activated is revalidated and republished at launch.
+    """
+    if not home.contains(root):
+        raise ValueError(f"hook repair root {root} is outside managed home {home.root}")
+    queue = read_retiring_cache(home=home)
+    locations = {
+        destination_location(record.managed_path)
+        for record in queue.records
+        if record.artifact_kind is artifact_kind
+    }
+    for evidence in queue.legacy_evidence:
+        if evidence.recognized_kind is not artifact_kind:
+            continue
+        try:
+            locations.add(destination_location(Path(evidence.path)))
+        except (OSError, TypeError, ValueError):
+            continue
+    return frozenset(locations)
+
+
 def _hook_repair_needed(
     hooks_json_path: Path,
     *,
@@ -423,6 +458,8 @@ def _repair_hook_incarnations(
 
 def repair_broken_plugin_cache_hooks(
     cache_dir: Path,
+    *,
+    home: ManagedHome | None = None,
 ) -> tuple[PluginHookRepairOutcome, ...]:
     """Regenerate broken hooks.json for every incarnation under ``cache_dir``.
 
@@ -432,11 +469,20 @@ def repair_broken_plugin_cache_hooks(
     Hooks and manifest are updated as one rollback-protected operation and
     the repaired artifact is revalidated before success is reported.
 
-    Per-incarnation errors are returned as closed outcomes. This primitive
-    repairs hook artifacts only and never clears publication obligations.
+    Incarnations queued for retirement in ``home`` (default: the process's
+    managed home, which must contain ``cache_dir``) are skipped, as are
+    incarnations whose lease is contended. An unreadable retirement queue raises
+    before any mutation. Per-incarnation errors are returned as closed outcomes.
+    This primitive repairs hook artifacts only and never clears publication
+    obligations.
     """
     if not cache_dir.is_dir():
         return ()
+    retiring = _retiring_incarnation_locations(
+        cache_dir,
+        PluginArtifactKind.INSTALLED_PLUGIN,
+        home=managed_home() if home is None else home,
+    )
 
     def validate_identity(version_dir: Path) -> Callable[[], None]:
         semantic_key = installed_plugin_semantic_key(_AUTOSKILLIT_PLUGIN_KEY, version_dir.name)
@@ -470,7 +516,11 @@ def repair_broken_plugin_cache_hooks(
         return write
 
     return _repair_hook_incarnations(
-        _safe_incarnations(cache_dir),
+        (
+            path
+            for path in _safe_incarnations(cache_dir)
+            if destination_location(path) not in retiring
+        ),
         manifest_path_for=installed_plugin_artifact_manifest_path,
         lease_path_for=installed_plugin_artifact_lease_path,
         validate_identity_for=validate_identity,
@@ -482,16 +532,27 @@ def repair_broken_plugin_cache_hooks(
 
 def repair_broken_projection_hooks(
     projections_root: Path | None = None,
+    *,
+    home: ManagedHome | None = None,
 ) -> tuple[PluginHookRepairOutcome, ...]:
-    """Repair broken hooks in ``~/.autoskillit/plugin-projections/*``.
+    """Repair broken hooks in ``<home>/.autoskillit/plugin-projections/*``.
 
-    Contended projections are skipped. Hooks and the sidecar digest are updated
-    as one rollback-protected transaction and revalidated before success.
+    ``home`` defaults to the process's managed home and must contain
+    ``projections_root``. Projections queued for retirement in ``home`` are
+    skipped, as are contended projections. An unreadable retirement queue raises
+    before any mutation. Hooks and the sidecar digest are updated as one
+    rollback-protected transaction and revalidated before success.
     """
+    resolved_home = managed_home() if home is None else home
     if projections_root is None:
-        projections_root = Path.home() / ".autoskillit" / "plugin-projections"
+        projections_root = resolved_home.autoskillit_dir / "plugin-projections"
     if not projections_root.is_dir():
         return ()
+    retiring = _retiring_incarnation_locations(
+        projections_root,
+        PluginArtifactKind.PROJECTION,
+        home=resolved_home,
+    )
 
     def load_manifest_refresh(
         projection_dir: Path,
@@ -514,7 +575,11 @@ def repair_broken_projection_hooks(
         return write
 
     return _repair_hook_incarnations(
-        _safe_incarnations(projections_root),
+        (
+            path
+            for path in _safe_incarnations(projections_root)
+            if destination_location(path) not in retiring
+        ),
         manifest_path_for=projected_artifact_manifest_path,
         lease_path_for=projected_artifact_lease_path,
         validate_identity_for=lambda _projection_dir: None,

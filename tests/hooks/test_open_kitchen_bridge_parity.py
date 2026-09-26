@@ -20,6 +20,15 @@ from autoskillit.core.runtime.session_registry import (
     read_registry,
     registry_path,
 )
+from autoskillit.hooks._runtime._session_registry_bridge import (
+    is_authenticated_top_level_cook,
+    is_authenticated_top_level_cook_session,
+)
+from autoskillit.hooks._session_binding import (
+    SessionBinding,
+    resolve_binding_path,
+    write_binding,
+)
 from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.medium]
@@ -130,11 +139,6 @@ def test_authenticated_managed_codex_cook_requires_parent_binding(
     from autoskillit.hooks._runtime._hook_settings import (
         is_authenticated_top_level_cook,
     )
-    from autoskillit.hooks._session_binding import (
-        SessionBinding,
-        resolve_binding_path,
-        write_binding,
-    )
 
     launch_id = "managed-cook"
     _write_registry(
@@ -170,16 +174,6 @@ def test_payload_cook_predicate_is_session_predicate_plus_payload_identity(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    from autoskillit.hooks._runtime._session_registry_bridge import (
-        is_authenticated_top_level_cook,
-        is_authenticated_top_level_cook_session,
-    )
-    from autoskillit.hooks._session_binding import (
-        SessionBinding,
-        resolve_binding_path,
-        write_binding,
-    )
-
     launch_id = "cook-launch"
     session_id = "native-session"
     claude_env = {

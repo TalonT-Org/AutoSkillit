@@ -25,6 +25,7 @@ from autoskillit.core import (
     ReleaseIdentity,
     _is_stable_track,
     distribution_version_at,
+    file_url_path,
     get_logger,
     parse_direct_url,
 )
@@ -59,6 +60,8 @@ class InstallInfo:
     editable_source: Path | None
     entrypoint: Path | None = None
     """The executable running this CLI, resolved before an update pivot."""
+    local_source: Path | None = None
+    """The source directory a LOCAL_PATH install was built from."""
 
 
 def resolve_autoskillit_entrypoint(
@@ -106,14 +109,14 @@ def detect_install() -> InstallInfo:
                 entrypoint=entrypoint,
             )
         if info["install_type"] == "local-editable":
-            if isinstance(url, str) and url.startswith("file://"):
-                src_path = url[len("file://") :]
+            editable_source = file_url_path(url)
+            if editable_source is not None:
                 return InstallInfo(
                     install_type=InstallType.LOCAL_EDITABLE,
                     commit_id=None,
                     requested_revision=None,
                     url=url,
-                    editable_source=Path(src_path),
+                    editable_source=editable_source,
                     entrypoint=entrypoint,
                 )
         if info["install_type"] == "local-path":
@@ -124,6 +127,7 @@ def detect_install() -> InstallInfo:
                 url=url or None,
                 editable_source=None,
                 entrypoint=entrypoint,
+                local_source=file_url_path(url),
             )
         return _unknown
     except Exception:
@@ -184,21 +188,6 @@ def installed_identity_at(
             assert_never(unhandled)
 
 
-def comparison_branch(info: InstallInfo) -> str | None:
-    """Return the GitHub branch/tag to compare for update availability.
-
-    - stable / main / release-tag / UNKNOWN → ``"releases/latest"``
-    - any other GIT_VCS revision (dev-track) → ``"develop"``
-    - ``LOCAL_EDITABLE`` / ``LOCAL_PATH`` → ``None`` (not applicable)
-    """
-    track = classify_track(info)
-    if track == InstallTrack.LOCAL:
-        return None
-    if track == InstallTrack.DEV:
-        return "develop"
-    return "releases/latest"
-
-
 def dismissal_window(info: InstallInfo) -> timedelta:
     """Return the dismissal cooldown for this install type.
 
@@ -218,12 +207,12 @@ def dismissal_window(info: InstallInfo) -> timedelta:
 class UpgradeCommand:
     """Track-aware upgrade argv, plus any environment overrides it requires.
 
-    Environment overrides are non-empty only for the GIT_VCS dev track: it
-    installs into a caller-chosen destination via ``UV_TOOL_DIR`` rather than
-    force-replacing the single shared uv tool root. ``uv tool install`` (uv
-    0.9.21) has no ``--target``/per-install destination flag — ``UV_TOOL_DIR``
-    is the sole supported redirection mechanism, confirmed by spike against a
-    real git-sourced install.
+    Environment overrides are non-empty only for the GIT_VCS dev track and
+    LOCAL_PATH: they install into a caller-chosen destination via
+    ``UV_TOOL_DIR`` rather than force-replacing the single shared uv tool root.
+    ``uv tool install`` (uv 0.9.21) has no ``--target``/per-install destination
+    flag — ``UV_TOOL_DIR`` is the sole supported redirection mechanism,
+    confirmed by spike against a real git-sourced install.
     """
 
     argv: Sequence[str]
@@ -239,6 +228,17 @@ def _install_from_commit(commit: str) -> str:
     return f"{_INSTALL_REPOSITORY}@{commit}"
 
 
+def _staged_tool_env(install_root_destination: Path | None) -> tuple[dict[str, str], bool]:
+    """Return the ``UV_TOOL_DIR`` staging env and whether the shared root is mutated."""
+    if install_root_destination is None:
+        return {}, True
+    bin_dir = install_root_destination.parent / f".{install_root_destination.name}-bin"
+    return {
+        "UV_TOOL_DIR": str(install_root_destination),
+        "UV_TOOL_BIN_DIR": str(bin_dir),
+    }, False
+
+
 def upgrade_command(
     info: InstallInfo,
     *,
@@ -248,42 +248,86 @@ def upgrade_command(
     """Build the track-aware upgrade command, pinned to this Python minor.
 
     ``install_root_destination``, when given, redirects the GIT_VCS dev-track
-    install into that directory via ``UV_TOOL_DIR`` instead of force-replacing
-    the shared uv-managed tool root. ``UV_TOOL_BIN_DIR`` is redirected
-    alongside it into a sibling throwaway directory so uv's own generated
-    console-script symlink never lands at ``~/.local/bin/autoskillit`` and
-    clobbers the AutoSkillit-owned entrypoint shim published there. Ignored by
-    every other branch — the STABLE and LOCAL_EDITABLE tracks are unchanged.
+    and LOCAL_PATH installs into that directory via ``UV_TOOL_DIR`` instead of
+    force-replacing the shared uv-managed tool root. ``UV_TOOL_BIN_DIR`` is
+    redirected alongside it into a sibling throwaway directory so uv's own
+    generated console-script symlink never lands at ``~/.local/bin/autoskillit``
+    and clobbers the AutoSkillit-owned entrypoint shim published there. Ignored
+    by the STABLE and LOCAL_EDITABLE tracks, which upgrade in place.
     """
-    if info.install_type == InstallType.LOCAL_EDITABLE and info.editable_source is not None:
-        return UpgradeCommand(
-            argv=["uv", "pip", "install", "-e", str(info.editable_source)],
-            mutates_shared_root=True,
-        )
-    if info.install_type != InstallType.GIT_VCS:
-        return None
     python_pin = f"{sys.version_info.major}.{sys.version_info.minor}"
-    track = classify_track(info)
-    if track != InstallTrack.DEV:
-        return UpgradeCommand(
-            argv=["uv", "tool", "upgrade", "autoskillit", "--python", python_pin],
-            mutates_shared_root=True,
-        )
-    requirement = _install_from_commit(pin_commit) if pin_commit else _INSTALL_FROM_DEVELOP
-    argv = ["uv", "tool", "install", "--force", requirement, "--python", python_pin]
-    if install_root_destination is None:
-        return UpgradeCommand(argv=argv, mutates_shared_root=True)
-    bin_dir = install_root_destination.parent / f".{install_root_destination.name}-bin"
-    return UpgradeCommand(
-        argv=argv,
-        mutates_shared_root=False,
-        env=MappingProxyType(
-            {
-                "UV_TOOL_DIR": str(install_root_destination),
-                "UV_TOOL_BIN_DIR": str(bin_dir),
-            }
-        ),
-    )
+    match info.install_type:
+        case InstallType.LOCAL_EDITABLE:
+            if info.editable_source is None:
+                return None
+            return UpgradeCommand(
+                argv=["uv", "pip", "install", "-e", str(info.editable_source)],
+                mutates_shared_root=True,
+            )
+        case InstallType.LOCAL_PATH:
+            if info.local_source is None:
+                return None
+            env, mutates_shared_root = _staged_tool_env(install_root_destination)
+            return UpgradeCommand(
+                argv=[
+                    "uv",
+                    "tool",
+                    "install",
+                    "--force",
+                    "--reinstall",
+                    str(info.local_source),
+                    "--python",
+                    python_pin,
+                ],
+                mutates_shared_root=mutates_shared_root,
+                env=env,
+            )
+        case InstallType.GIT_VCS:
+            if classify_track(info) != InstallTrack.DEV:
+                return UpgradeCommand(
+                    argv=["uv", "tool", "upgrade", "autoskillit", "--python", python_pin],
+                    mutates_shared_root=True,
+                )
+            requirement = _install_from_commit(pin_commit) if pin_commit else _INSTALL_FROM_DEVELOP
+            env, mutates_shared_root = _staged_tool_env(install_root_destination)
+            return UpgradeCommand(
+                argv=["uv", "tool", "install", "--force", requirement, "--python", python_pin],
+                mutates_shared_root=mutates_shared_root,
+                env=env,
+            )
+        case InstallType.UNKNOWN:
+            return None
+        case unhandled:
+            assert_never(unhandled)
+
+
+def upgrade_unavailable_message(info: InstallInfo) -> str:
+    """Name the install type and its remedy when ``upgrade_command`` returns ``None``."""
+    install_type = info.install_type
+    match install_type:
+        case InstallType.UNKNOWN | InstallType.GIT_VCS:
+            # GIT_VCS is unreachable under production: ``upgrade_command`` for
+            # GIT_VCS always returns a non-None command. It is grouped with
+            # UNKNOWN so that tests which monkeypatch ``upgrade_command`` to
+            # return ``None`` still get a graceful message instead of a crash.
+            return (
+                f"Install type '{install_type.value}' has no upgrade command. Reinstall via "
+                "install.sh (stable) or 'task install-dev' (develop)."
+            )
+        case InstallType.LOCAL_PATH:
+            return (
+                f"Install type '{install_type.value}' has no recorded source directory. "
+                "Reinstall with 'uv tool install --force --reinstall <autoskillit checkout>' "
+                "or 'task install-dev' (develop)."
+            )
+        case InstallType.LOCAL_EDITABLE:
+            return (
+                f"Install type '{install_type.value}' has no recorded source directory. "
+                "Reinstall with 'uv pip install -e <autoskillit checkout>' "
+                "or 'task install-dev' (develop)."
+            )
+        case unhandled:
+            assert_never(unhandled)
 
 
 def normalized_package_version() -> str | None:

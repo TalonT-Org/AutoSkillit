@@ -23,7 +23,7 @@ from autoskillit.cli.update._transaction import (
 )
 from autoskillit.cli.update._update_checks import _binary_signal, _source_drift_signal
 from autoskillit.cli.update._update_checks_source import resolve_target_identity
-from autoskillit.core import ReleaseIdentity, update_available
+from autoskillit.core import ReleaseChannel, ReleaseIdentity, update_available
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -238,3 +238,74 @@ def test_main_tracking_install_does_not_prompt_without_a_release(
         target=signal.target,
     )
     assert result.outcome is UpdateTransactionOutcome.COMPLETED, result.findings
+
+
+def _local_path_info(local_source: Path | None) -> InstallInfo:
+    return InstallInfo(
+        install_type=InstallType.LOCAL_PATH,
+        commit_id=None,
+        requested_revision=None,
+        url=local_source.as_uri() if local_source is not None else None,
+        editable_source=None,
+        local_source=local_source,
+    )
+
+
+def test_resolve_target_identity_local_path_reads_source_version(tmp_path: Path) -> None:
+    local_source = tmp_path / "checkout"
+    local_source.mkdir()
+    (local_source / "pyproject.toml").write_text(
+        '[project]\nname = "autoskillit"\nversion = "0.9.1"\n', encoding="utf-8"
+    )
+
+    target = resolve_target_identity(_local_path_info(local_source), tmp_path)
+
+    assert target == ReleaseIdentity(ReleaseChannel.WORKING_TREE, version="0.9.1")
+
+
+def _checkout_without_pyproject(tmp_path: Path) -> Path:
+    checkout = tmp_path / "checkout-no-pyproject"
+    checkout.mkdir(exist_ok=True)
+    return checkout
+
+
+def _non_autoskillit_checkout(tmp_path: Path) -> Path:
+    checkout = tmp_path / "checkout-foreign"
+    checkout.mkdir(exist_ok=True)
+    (checkout / "pyproject.toml").write_text(
+        '[project]\nname = "other-project"\nversion = "0.9.1"\n', encoding="utf-8"
+    )
+    return checkout
+
+
+def _local_editable_info(tmp_path: Path) -> InstallInfo:
+    checkout = tmp_path / "checkout"
+    checkout.mkdir(exist_ok=True)
+    return InstallInfo(
+        install_type=InstallType.LOCAL_EDITABLE,
+        commit_id=None,
+        requested_revision=None,
+        url=checkout.as_uri(),
+        editable_source=checkout,
+    )
+
+
+@pytest.mark.parametrize(
+    "build_info",
+    [
+        lambda _: _local_path_info(None),
+        lambda tmp_path: _local_path_info(_checkout_without_pyproject(tmp_path)),
+        lambda tmp_path: _local_path_info(_non_autoskillit_checkout(tmp_path)),
+        _local_editable_info,
+    ],
+    ids=[
+        "missing-local-source",
+        "no-pyproject",
+        "non-autoskillit-project",
+        "local-editable",
+    ],
+)
+def test_resolve_target_identity_local_path_none_cases(
+    tmp_path: Path, build_info: Callable[[Path], InstallInfo]
+) -> None:
+    assert resolve_target_identity(build_info(tmp_path), tmp_path) is None

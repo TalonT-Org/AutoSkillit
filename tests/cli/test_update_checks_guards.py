@@ -99,7 +99,7 @@ def test_run_update_checks_skips_non_tty_stdout(
 
 @pytest.mark.parametrize(
     "install_type",
-    [InstallType.LOCAL_EDITABLE, InstallType.LOCAL_PATH, InstallType.UNKNOWN],
+    [InstallType.LOCAL_EDITABLE, InstallType.UNKNOWN],
 )
 def test_run_update_checks_skips_local_and_unknown_install_types(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, install_type: InstallType
@@ -132,6 +132,112 @@ def test_run_update_checks_skips_local_and_unknown_install_types(
     run_update_checks(home=tmp_path)
     assert not fetched
     assert not prompted
+
+
+def _local_path_source_info(local_source: Path) -> InstallInfo:
+    return InstallInfo(
+        install_type=InstallType.LOCAL_PATH,
+        commit_id=None,
+        requested_revision=None,
+        url=local_source.as_uri(),
+        editable_source=None,
+        local_source=local_source,
+    )
+
+
+def test_run_update_checks_prompts_for_local_path_with_newer_source(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("CI", raising=False)
+
+    fake_stdin = MagicMock()
+    fake_stdin.isatty.return_value = True
+    fake_stdout = MagicMock()
+    fake_stdout.isatty.return_value = True
+    monkeypatch.setattr(sys, "stdin", fake_stdin)
+    monkeypatch.setattr(sys, "stdout", fake_stdout)
+
+    local_source = tmp_path / "source"
+    local_source.mkdir()
+    (local_source / "pyproject.toml").write_text(
+        '[project]\nname = "autoskillit"\nversion = "0.9.1"\n', encoding="utf-8"
+    )
+    monkeypatch.setattr(
+        _patch_update__update_checks,
+        "detect_install",
+        lambda: _local_path_source_info(local_source),
+    )
+
+    import autoskillit as _pkg
+
+    monkeypatch.setattr(_pkg, "__version__", "0.9.0")
+
+    monkeypatch.setattr(_patch_update__update_checks, "_hooks_signal", lambda *_a, **_kw: None)
+    monkeypatch.setattr(_patch_update__update_checks, "_dual_mcp_signal", lambda *_a, **_kw: None)
+
+    fetched: list[str] = []
+    monkeypatch.setattr(
+        _patch_update__update_checks_fetch,
+        "_fetch_with_cache",
+        lambda url, **kw: fetched.append(url) or None,
+    )
+
+    prompt_calls: list[str] = []
+
+    def fake_prompt(prompt_text: str, **_kwargs: object) -> str:
+        prompt_calls.append(prompt_text)
+        return "n"
+
+    monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", fake_prompt)
+    monkeypatch.setattr("autoskillit.cli.ui._timed_input.status_line", lambda *_a, **_kw: None)
+
+    run_update_checks(home=tmp_path)
+
+    assert len(prompt_calls) == 1
+    assert "0.9.1" in prompt_calls[0]
+    assert "0.9.0" in prompt_calls[0]
+    assert not fetched
+
+
+def test_run_update_checks_silent_for_local_path_at_source_version(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("CI", raising=False)
+
+    fake_stdin = MagicMock()
+    fake_stdin.isatty.return_value = True
+    fake_stdout = MagicMock()
+    fake_stdout.isatty.return_value = True
+    monkeypatch.setattr(sys, "stdin", fake_stdin)
+    monkeypatch.setattr(sys, "stdout", fake_stdout)
+
+    local_source = tmp_path / "source"
+    local_source.mkdir()
+    (local_source / "pyproject.toml").write_text(
+        '[project]\nname = "autoskillit"\nversion = "0.9.0"\n', encoding="utf-8"
+    )
+    monkeypatch.setattr(
+        _patch_update__update_checks,
+        "detect_install",
+        lambda: _local_path_source_info(local_source),
+    )
+
+    import autoskillit as _pkg
+
+    monkeypatch.setattr(_pkg, "__version__", "0.9.0")
+
+    monkeypatch.setattr(_patch_update__update_checks, "_hooks_signal", lambda *_a, **_kw: None)
+    monkeypatch.setattr(_patch_update__update_checks, "_dual_mcp_signal", lambda *_a, **_kw: None)
+
+    prompt_calls: list[str] = []
+    monkeypatch.setattr(
+        "autoskillit.cli.ui._timed_input.timed_prompt",
+        lambda prompt_text, **_kw: prompt_calls.append(prompt_text) or "n",
+    )
+
+    run_update_checks(home=tmp_path)
+
+    assert not prompt_calls
 
 
 # ---------------------------------------------------------------------------
@@ -421,7 +527,7 @@ def test_find_source_repo_cwd_walk_finds_pyproject(
     src_dir = project_root / "src" / "autoskillit"
     src_dir.mkdir(parents=True)
     pyproject = project_root / "pyproject.toml"
-    pyproject.write_text('[project]\nname = "autoskillit"\n', encoding="utf-8")
+    pyproject.write_text('[project]\nname = "autoskillit"\nversion = "0.1.0"\n', encoding="utf-8")
 
     nested_cwd = project_root / "src" / "autoskillit" / "cli"
     nested_cwd.mkdir(parents=True)

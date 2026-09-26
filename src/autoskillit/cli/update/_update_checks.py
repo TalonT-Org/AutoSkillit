@@ -5,7 +5,7 @@ single dismissable prompt per CLI invocation.
 
 Branch-aware dismissal windows:
 - stable/main/release-tag/UNKNOWN: timedelta(days=7)
-- develop/LOCAL_EDITABLE: timedelta(hours=12)
+- develop/LOCAL_EDITABLE/LOCAL_PATH: timedelta(hours=12)
 
 Dismissal expires on two axes: time window elapsed, or the installed release
 identity changing from the identity recorded at dismiss time.
@@ -52,6 +52,7 @@ from autoskillit.cli.update._update_checks_source import (
     resolve_target_identity,
 )
 from autoskillit.core import (
+    ReleaseChannel,
     ReleaseIdentity,
     atomic_write,
     get_logger,
@@ -102,11 +103,11 @@ def _binary_signal(
 ) -> Signal | None:
     """Return a Signal if a newer binary release is available, else None."""
     if available and target is not None and version_advanced(installed, target):
-        return Signal(
-            "binary",
-            f"New release: {target.version} (you have {installed.version})",
-            target,
-        )
+        if target.channel is ReleaseChannel.WORKING_TREE:
+            message = f"Local source is at {target.version} (you have {installed.version})"
+        else:
+            message = f"New release: {target.version} (you have {installed.version})"
+        return Signal("binary", message, target)
     return None
 
 
@@ -191,7 +192,7 @@ def _is_dismissed(
     1. ``dismissed_at`` is within the branch-aware ``window`` (time-based,
        never SHA-keyed — a new upstream commit does NOT break the window).
        Window values: 7 days for stable/main/release-tag/UNKNOWN installs;
-       12 hours for develop/LOCAL_EDITABLE installs.
+       12 hours for develop/LOCAL_EDITABLE/LOCAL_PATH installs.
     2. The stored identity key is absent (legacy state) or still matches the
        running install. A changed release identity expires the dismissal.
     3. ``condition in entry["conditions"]`` — a user who dismissed only
@@ -296,8 +297,8 @@ def run_update_checks(home: Path | None = None) -> None:
     - ``AUTOSKILLIT_SKIP_UPDATE_CHECK=1`` — explicit bypass (preferred name)
     - Non-TTY stdin or stdout
 
-    Install types ``LOCAL_EDITABLE``, ``LOCAL_PATH``, and ``UNKNOWN`` are
-    silently skipped after classification.
+    Install types ``LOCAL_EDITABLE`` and ``UNKNOWN`` are silently skipped
+    after classification.
     """
     if (
         os.environ.get("CLAUDECODE")
@@ -312,7 +313,6 @@ def run_update_checks(home: Path | None = None) -> None:
     info = detect_install()
     if info.install_type in (
         InstallType.UNKNOWN,
-        InstallType.LOCAL_PATH,
         InstallType.LOCAL_EDITABLE,
     ) and not os.environ.get("AUTOSKILLIT_FORCE_UPDATE_CHECK"):
         return

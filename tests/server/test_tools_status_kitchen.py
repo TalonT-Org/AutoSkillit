@@ -11,11 +11,13 @@ import anyio
 import pytest
 
 from autoskillit.config import AutomationConfig, TokenUsageConfig
+from autoskillit.core import SourceCurrency, SourceCurrencyStatus
 from autoskillit.core.types import ChannelConfirmation
 from autoskillit.execution.github_ops.github import DefaultGitHubFetcher
 from autoskillit.pipeline.audit import FailureRecord
 from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.recipe.schema import RecipeStep
+from autoskillit.server.tools import tools_status
 from autoskillit.server.tools.tools_execution import run_skill
 from autoskillit.server.tools.tools_status import (
     get_pipeline_report,
@@ -245,6 +247,28 @@ class TestKitchenStatus:
         assert status["tracker_authority"]["available"] is True
         assert "error" not in status
         assert tool_ctx_kitchen_open.tracker_leases == {}
+
+    @pytest.mark.anyio
+    async def test_kitchen_status_source_currency_includes_version_fields(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ):
+        currency = SourceCurrency(
+            SourceCurrencyStatus.STALE,
+            None,
+            None,
+            None,
+            None,
+            installed_version="1.2.3",
+            checkout_version="1.3.0",
+            install_type="local-path",
+        )
+        monkeypatch.setattr(tools_status, "source_currency", lambda *_a, **_k: currency)
+
+        status = json.loads(await kitchen_status())
+
+        assert status["source_currency"]["installed_version"] == "1.2.3"
+        assert status["source_currency"]["checkout_version"] == "1.3.0"
+        assert status["source_currency"]["install_type"] == "local-path"
 
 
 class TestGetPipelineReport:

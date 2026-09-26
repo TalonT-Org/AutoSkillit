@@ -84,9 +84,11 @@ incorporate the issue content as additional strategic context.
 - Generate the compass document without user review and approval
 - Write the final compass to disk until the user confirms (plan-apply pattern)
 - Proceed past a checkpoint without user response
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Initialize code-index via `set_project_path` before exploration (Phase 1)
 - Ask the user before moving to the next phase
 - Generate at least one diagram per direction explored

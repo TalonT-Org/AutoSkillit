@@ -68,6 +68,7 @@ signal downstream processing.
 **ALWAYS:**
 - Spawn all subagents via child delegation under the declared `sonnet` model-class policy
 - Launch all independent child delegations concurrently
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Write `validated: true` as the **first line** of the validated report file
 - Respect interactive vs headless mode for the approval step (Step 6)
 
@@ -150,10 +151,9 @@ by the top-level package touched (e.g., `pipeline/`, `execution/`, `server/`, `c
 - More than 9 distinct areas: merge smallest clusters until ≤ 9 groups remain.
 - The 10th slot is reserved for the history research agent (runs against ALL findings).
 
-### Step 3 — Launch Parallel Child Delegations
+### Step 3 — Launch Parallel Child Delegations (SINGLE MESSAGE)
 
-**Start ALL independent child delegations concurrently.** Join every delegation before
-synthesizing their evidence.
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Start the following delegated workers concurrently under the declared `delegated-worker`
 role and `sonnet` model-class policy:

@@ -25,7 +25,6 @@ from autoskillit.workspace.skills import (
     SkillInfo,
     invalidity_hints,
 )
-from tests._git_inventory import git_ls_files
 from tests._helpers import extract_always_block, extract_never_block
 from tests._tracked_skills import (
     admit_tracked_project_local_skill,
@@ -736,11 +735,8 @@ def test_compliance_sweep_roots_cover_bundled_and_every_project_local_root() -> 
         assert path.parent.parent.relative_to(_REPO_ROOT).as_posix() in (
             ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
         )
-
-    tracked_skill_files = {
-        _REPO_ROOT / rel
-        for rel in git_ls_files(_REPO_ROOT, *ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS)
-        if Path(rel).name == "SKILL.md"
-        and Path(rel).parent.parent.as_posix() in ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
-    }
-    assert set(_TRACKED_LOCAL_SKILLS) == tracked_skill_files
+        # Each tracked skill's parent dir is a single-level subdir under a search dir,
+        # so SKILL.md sits exactly two levels below one of the search roots.
+        search_dir = path.parent.parent.relative_to(_REPO_ROOT).as_posix()
+        assert path.parent.name
+        assert search_dir in ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS

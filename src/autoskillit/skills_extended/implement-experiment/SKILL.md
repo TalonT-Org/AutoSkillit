@@ -60,6 +60,9 @@ generate, and what environment to set up. This skill builds all of it.
 tokens after the skill name for the first path-like token (starts with `/`,
 `./`, or `.autoskillit/`).
 
+Derived values: `{worktree_path}` is the literal worktree root printed in Step 1;
+`{research_dir}` is the absolute experiment directory defined in Step 1 (cont.), with a trailing `/`.
+
 ## Critical Constraints
 
 **NEVER:**

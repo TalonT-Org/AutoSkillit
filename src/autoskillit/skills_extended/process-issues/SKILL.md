@@ -102,6 +102,8 @@ issues upfront, load recipe, execute session, collect result, report.
 - `--merge-batch` — after each batch completes, run `analyze-prs` + `merge-pr` to merge
   the batch PRs into the integration branch before starting the next batch
 
+Derived value: `{run_id}` is the timestamp-plus-UUID token generated after the dry-run exit.
+
 ## Workflow
 
 ### Step 0: Parse Arguments

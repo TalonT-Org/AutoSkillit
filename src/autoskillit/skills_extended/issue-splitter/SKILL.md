@@ -39,6 +39,8 @@ This skill is intentionally lightweight: concern analysis is performed as in-con
 - `--dry-run` — analyze and show what would be split, but skip GitHub mutations
 - `--max-sub-issues N` — maximum sub-issues to create (default: 4)
 
+Derived value: `{run_id}` is the timestamp-plus-UUID token generated once at first staging.
+
 ## Critical Constraints
 
 **NEVER:**

@@ -71,6 +71,9 @@ Create focused, actionable implementation plans that recommend the technically b
   plan set; do not absorb the gaps into Part A by default. In grouped planning, the
   dedicated gap-replan route adds a group to the still-open set.
 
+In conflict-resolution examples, `{branch}` is the source PR branch and
+`{commit-hash}` is an individual source commit selected from that branch.
+
 ## Core Values - CRITICAL
 
 The ONLY criterion for choosing an approach is **technical quality and correctness of design**. A well-designed system is the goal. Nothing else matters.

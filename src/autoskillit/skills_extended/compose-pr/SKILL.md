@@ -58,6 +58,8 @@ decomposed PR flow (prepare → run_arch_lenses → compose).
 - **base_branch** — PR target branch
 - **closing_issue** (optional) — GitHub issue number for `Closes #N`
 
+Derived value: `{run_id}` is the timestamp-plus-UUID token generated once in Step 0.
+
 ## Critical Constraints
 
 **NEVER:**

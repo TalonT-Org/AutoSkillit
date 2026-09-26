@@ -47,6 +47,8 @@ Grouping analysis is performed as in-context LLM reasoning. No parallel sessions
 - `--repo owner/repo` — explicit repo; if absent, resolve via `gh repo view`
 - `--no-label` — skip all label creation and `--label` calls
 
+Derived value: `{run_id}` is the timestamp-plus-UUID token generated once at first staging.
+
 ## Critical Constraints
 
 **NEVER:**

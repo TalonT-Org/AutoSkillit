@@ -60,6 +60,10 @@ compute on doomed downloads.
 - `experiment_plan_path` — Absolute path to the experiment plan (positional).
   Default: `$AUTOSKILLIT_TEMP/experiment-plan.md` in the current working directory.
 
+Derived values: `{worktree_cwd}` is the absolute worktree root from the invocation context;
+`{location}` is each non-null resource location parsed from the plan; `{run_id}` is
+the timestamp-plus-UUID token generated before writing the report.
+
 ## Critical Constraints
 
 **NEVER:**

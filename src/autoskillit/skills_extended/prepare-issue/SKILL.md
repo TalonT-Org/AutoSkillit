@@ -41,6 +41,10 @@ Create a GitHub issue and immediately triage it with LLM classification.
 - `--dry-run` — show classification and labels without creating or editing anything
 - `--repo owner/repo` — target repository (falls back to gh default repo context)
 
+## Invocation values
+
+`{run_id}` — Timestamp-plus-UUID token generated once before the first staging step.
+
 ## Workflow
 
 ### Step 1: Parse Arguments

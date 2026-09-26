@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import assert_never
 
-from packaging.version import Version
+from packaging.version import InvalidVersion, Version
 
 
 class ReleaseChannel(StrEnum):
@@ -66,16 +66,29 @@ def _require_same_channel(
     return next(iter(channels))
 
 
+def _parse_version(raw: str, channel: ReleaseChannel) -> Version:
+    """Parse a release-identity version string with channel-aware error context."""
+    try:
+        return Version(raw)
+    except InvalidVersion as err:
+        raise ValueError(f"unparseable {channel.value} version: {raw!r}") from err
+
+
+def _compare_versions(installed_raw: str, target_raw: str, channel: ReleaseChannel) -> bool:
+    """Return ``Version(target) > Version(installed)`` under *channel*."""
+    return _parse_version(target_raw, channel) > _parse_version(installed_raw, channel)
+
+
 def update_available(installed: ReleaseIdentity, target: ReleaseIdentity) -> bool:
     """Return whether *target* is newer under the identities' shared channel."""
     channel = _require_same_channel(installed, target)
     match channel:
         case ReleaseChannel.RELEASED:
-            return Version(target.version) > Version(installed.version)
+            return _compare_versions(installed.version, target.version, channel)
         case ReleaseChannel.BRANCH:
             return target.commit != installed.commit
         case ReleaseChannel.WORKING_TREE:
-            return Version(target.version) > Version(installed.version)
+            return _compare_versions(installed.version, target.version, channel)
         case unhandled:
             assert_never(unhandled)
 
@@ -93,8 +106,8 @@ def advance_verdict(
     target_key: object | None
     match channel:
         case ReleaseChannel.RELEASED:
-            previous_version = Version(previous.version)
-            observed_version = Version(observed.version)
+            previous_version = _parse_version(previous.version, channel)
+            observed_version = _parse_version(observed.version, channel)
             if observed_version > previous_version:
                 return AdvanceVerdict.ADVANCED
             if observed_version == previous_version:
@@ -107,9 +120,9 @@ def advance_verdict(
         case ReleaseChannel.WORKING_TREE:
             if target is None:
                 return AdvanceVerdict.NOT_APPLICABLE
-            observed_key = Version(observed.version)
-            previous_key = Version(previous.version)
-            target_key = Version(target.version)
+            observed_key = _parse_version(observed.version, channel)
+            previous_key = _parse_version(previous.version, channel)
+            target_key = _parse_version(target.version, channel)
         case unhandled:
             assert_never(unhandled)
     if observed_key == previous_key:

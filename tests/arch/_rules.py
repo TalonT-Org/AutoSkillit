@@ -85,6 +85,7 @@ _PRINT_EXEMPT = frozenset(
         "branch_protection_guard.py",
         "exploration_request_identity_guard.py",
         "_hook_settings.py",
+        "_hook_log_dispatch.py",
         "_session_scope_authority.py",
         "_guard_decision_diagnostics.py",
         "lint_after_edit_hook.py",
@@ -113,6 +114,7 @@ _PRINT_EXEMPT = frozenset(
 _BROAD_EXCEPT_EXEMPT = frozenset(
     {
         "_hook_settings.py",
+        "_hook_log_dispatch.py",
         "open_kitchen_guard.py",
         "pretty_output_hook.py",
         "quota_guard.py",

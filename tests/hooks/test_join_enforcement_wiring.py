@@ -23,6 +23,7 @@ from autoskillit.hooks._join_ledger import (
 from autoskillit.hooks._runtime._hook_constants import MANAGED_JOIN_PARENT_ID_ENV_VAR
 from autoskillit.hooks._runtime._hook_settings import is_authenticated_top_level_cook
 from autoskillit.hooks._session_binding import read_binding, resolve_binding_path, write_binding
+from autoskillit.server.tools.tools_kitchen import _declare_join_batch as declare_module
 from tests._helpers import _EnvVarReadCollector
 from tests.conftest import production_interpreter_env
 from tests.hooks._session_binding_helpers import copy_projected_hook, write_projection_manifest
@@ -146,6 +147,24 @@ def _load_join_bearing_skill(
     cook_launch_id: str = "",
     resumed: bool = False,
 ) -> Path:
+    worktree, _ = _load_join_bearing_skill_with_context(
+        tmp_path,
+        session_id=session_id,
+        activation_source=activation_source,
+        cook_launch_id=cook_launch_id,
+        resumed=resumed,
+    )
+    return worktree
+
+
+def _load_join_bearing_skill_with_context(
+    tmp_path: Path,
+    *,
+    session_id: str = "session-1",
+    activation_source: str = "PostToolUse",
+    cook_launch_id: str = "",
+    resumed: bool = False,
+) -> tuple[Path, str]:
     """Drive the projected skill-load hook so the binding is production-shaped."""
     worktree = tmp_path / "worktree"
     (worktree / ".autoskillit").mkdir(parents=True)
@@ -175,13 +194,20 @@ def _load_join_bearing_skill(
         env_overrides=({"AUTOSKILLIT_LAUNCH_ID": cook_launch_id} if cook_launch_id else None),
     )
     assert completed.returncode == 0, completed.stderr
+    output = _stdout_json(completed)
+    if activation_source == "PostToolUse":
+        context = output.get("additionalContext", "")
+    else:
+        hook_output = output.get("hookSpecificOutput")
+        context = hook_output.get("additionalContext", "") if isinstance(hook_output, dict) else ""
+    assert isinstance(context, str)
     binding = read_binding(resolve_binding_path(str(worktree), session_id))
     assert binding is not None and binding.join_required
     if registry_before is not None:
         assert (
             worktree / ".autoskillit" / "temp" / "session_registry.json"
         ).read_bytes() == registry_before
-    return worktree
+    return worktree, context
 
 
 def _declare_one_assignment(worktree: Path, *, session_id: str) -> Path:
@@ -382,24 +408,44 @@ def test_settle_guard_maps_every_registered_event_type(
     (("slash", False), ("PostToolUse", True)),
     ids=("fresh-slash", "resumed-post-tool-use"),
 )
-def test_authenticated_top_level_cook_bypasses_all_join_guards_without_mutation(
+def test_authenticated_top_level_cook_full_join_sequence_never_opens_a_wave(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     activation_source: str,
     resumed: bool,
 ) -> None:
     session_id = "interactive-cook"
     launch_id = "cook-launch"
-    worktree = _load_join_bearing_skill(
+    monkeypatch.setenv("AUTOSKILLIT_LAUNCH_ID", launch_id)
+    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "claude-code")
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(tmp_path / "logs"))
+    worktree, context = _load_join_bearing_skill_with_context(
         tmp_path,
         session_id=session_id,
         activation_source=activation_source,
         cook_launch_id=launch_id,
         resumed=resumed,
     )
-    flag_dir = _declare_one_assignment(worktree, session_id=session_id)
-    env = {"AUTOSKILLIT_LAUNCH_ID": launch_id}
+    assert "JOIN DECLARATION AUTHORITY" in context
+    assert "cook_bypass" in context
 
-    events = (
+    env = {"AUTOSKILLIT_LAUNCH_ID": launch_id}
+    declared = declare_module._declare_join_batch_handler(
+        skill_name="join-bearing",
+        assignments=["a", "b", "c", "d"],
+        session_id=session_id,
+        project_root=worktree,
+    )
+    assert declared["success"] is True
+    assert declared["status"] == "cook_bypass"
+    assert declared["join_batch_id"] is None
+    assert declared["wave"] is None
+    # Assert the documented bypass phrase from _COOK_BYPASS_MESSAGE rather than
+    # the loose "cook" substring (which would match many unrelated messages).
+    assert "no join wave was opened" in str(declared["message"])
+
+    guard_events = (
         (
             "join_claim_guard.py",
             _agent_payload(worktree, session_id=session_id, tool_use_id="agent-1"),
@@ -426,6 +472,119 @@ def test_authenticated_top_level_cook_bypasses_all_join_guards_without_mutation(
             {"session_id": session_id, "cwd": str(worktree)},
         ),
     )
+    for script_name, payload in guard_events[:2]:
+        completed = _run_hook(
+            tmp_path,
+            _GUARDS_DIR / script_name,
+            payload,
+            cwd=worktree,
+            env_overrides=env,
+        )
+        assert completed.returncode == 0, (script_name, completed.stderr)
+        assert not completed.stdout, script_name
+
+    redeclared = declare_module._declare_join_batch_handler(
+        skill_name="join-bearing",
+        assignments=["a", "b", "c", "d"],
+        session_id=session_id,
+        project_root=worktree,
+    )
+    assert redeclared["success"] is True
+    assert redeclared["status"] == "cook_bypass"
+    assert redeclared["join_batch_id"] is None
+    assert redeclared["wave"] is None
+
+    for script_name, payload in guard_events[2:]:
+        completed = _run_hook(
+            tmp_path,
+            _GUARDS_DIR / script_name,
+            payload,
+            cwd=worktree,
+            env_overrides=env,
+        )
+        assert completed.returncode == 0, (script_name, completed.stderr)
+        assert not completed.stdout, script_name
+
+    assert (
+        active_batch(
+            resolve_flag_dir(worktree),
+            session_id=session_id,
+            top_level_parent="top_level",
+        )
+        is None
+    )
+    diagnostics_path = tmp_path / "logs" / "join_diagnostics.jsonl"
+    diagnostics = [json.loads(line) for line in diagnostics_path.read_text().splitlines()]
+    assert all(record["status"] == "cook_bypass" for record in diagnostics)
+    assert {record["gate"] for record in diagnostics} == {
+        "skill_load_post_hook",
+        "declare_join_batch",
+        "join_claim_guard",
+        "join_settle_guard",
+        "join_followup_guard",
+        "join_stop_guard",
+    }
+    assert sum(record["gate"] == "declare_join_batch" for record in diagnostics) == 2
+    assert all(record["managed_parent_id"] == "top_level" for record in diagnostics)
+
+
+def test_cook_redeclaration_is_not_refused_by_a_pre_fix_stranded_wave(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_id = "stranded-cook"
+    launch_id = "cook-launch"
+    monkeypatch.setenv("AUTOSKILLIT_LAUNCH_ID", launch_id)
+    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "claude-code")
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(tmp_path / "logs"))
+    worktree = _load_join_bearing_skill(
+        tmp_path,
+        session_id=session_id,
+        cook_launch_id=launch_id,
+    )
+    flag_dir = _declare_one_assignment(worktree, session_id=session_id)
+    legacy_batch = active_batch(
+        flag_dir,
+        session_id=session_id,
+        top_level_parent="top_level",
+    )
+    assert legacy_batch is not None
+
+    result = declare_module._declare_join_batch_handler(
+        skill_name="join-bearing",
+        assignments=["a", "b", "c", "d"],
+        session_id=session_id,
+        project_root=worktree,
+    )
+    assert result["success"] is True
+    assert result["status"] == "cook_bypass"
+
+    env = {"AUTOSKILLIT_LAUNCH_ID": launch_id}
+    events = (
+        (
+            "join_claim_guard.py",
+            _agent_payload(worktree, session_id=session_id, tool_use_id="agent-1"),
+        ),
+        (
+            "join_settle_guard.py",
+            {
+                **_agent_payload(worktree, session_id=session_id, tool_use_id="agent-1"),
+                "hook_event_name": "PostToolUse",
+                "tool_response": "complete",
+            },
+        ),
+        (
+            "join_followup_guard.py",
+            {
+                "tool_name": "Bash",
+                "tool_input": {"command": "true"},
+                "session_id": session_id,
+                "cwd": str(worktree),
+            },
+        ),
+        ("join_stop_guard.py", {"session_id": session_id, "cwd": str(worktree)}),
+    )
     for script_name, payload in events:
         completed = _run_hook(
             tmp_path,
@@ -437,22 +596,15 @@ def test_authenticated_top_level_cook_bypasses_all_join_guards_without_mutation(
         assert completed.returncode == 0, (script_name, completed.stderr)
         assert not completed.stdout, script_name
 
-    batch = active_batch(flag_dir, session_id=session_id, top_level_parent="top_level")
-    assert batch is not None
-    assert batch["wave_outcome"] == "pending"
-    assert batch["assignments"][0]["tool_use_id"] is None
-    diagnostics_path = tmp_path / "logs" / "join_diagnostics.jsonl"
-    diagnostics = [json.loads(line) for line in diagnostics_path.read_text().splitlines()]
-    bypasses = [record for record in diagnostics if record.get("status") == "cook_bypass"]
-    assert {record["gate"] for record in bypasses} == {
-        "join_claim_guard",
-        "join_settle_guard",
-        "join_followup_guard",
-        "join_stop_guard",
-    }
-    assert all(record["session_id"] == session_id for record in bypasses)
-    assert all(record["managed_parent_id"] == "top_level" for record in bypasses)
-    assert all(record["managed_leaf_id"] == "" for record in bypasses)
+    unchanged = active_batch(
+        flag_dir,
+        session_id=session_id,
+        top_level_parent="top_level",
+    )
+    assert unchanged is not None
+    assert unchanged == legacy_batch
+    assert unchanged["wave_outcome"] == "pending"
+    assert unchanged["assignments"][0]["tool_use_id"] is None
 
 
 def test_authenticated_cook_bypass_survives_an_absent_managed_scope(tmp_path: Path) -> None:
@@ -525,6 +677,10 @@ def test_cook_authentication_rejects_non_top_level_shapes(
     monkeypatch: pytest.MonkeyPatch,
     case: str,
 ) -> None:
+    from autoskillit.hooks._runtime._hook_settings import (
+        is_authenticated_top_level_cook_session,
+    )
+
     session_id = f"non-cook-{case}"
     worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
     payload, binding_session_id, env = _configure_non_cook_shape(
@@ -532,12 +688,6 @@ def test_cook_authentication_rejects_non_top_level_shapes(
         session_id=session_id,
         case=case,
     )
-    for name in (
-        "AUTOSKILLIT_HEADLESS",
-        "AUTOSKILLIT_LAUNCH_ID",
-        MANAGED_JOIN_PARENT_ID_ENV_VAR,
-    ):
-        monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "claude-code")
     monkeypatch.setenv("AUTOSKILLIT_STATE_ROOT", str(worktree))
     for name, value in env.items():
@@ -548,6 +698,10 @@ def test_cook_authentication_rejects_non_top_level_shapes(
         str(worktree),
         binding_session_id,
     )
+    assert is_authenticated_top_level_cook_session(
+        str(worktree),
+        binding_session_id,
+    ) is (case == "descendant")
     if case == "descendant":
         return
 
@@ -581,6 +735,28 @@ def test_cook_authentication_rejects_non_top_level_shapes(
     else:
         assert stop.returncode == 2
         assert _stdout_json(stop)["decision"] == "block"
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(tmp_path / "logs"))
+    result = declare_module._declare_join_batch_handler(
+        skill_name="join-bearing",
+        assignments=["a", "b", "c", "d"],
+        session_id=binding_session_id,
+        project_root=worktree,
+    )
+    if case == "managed_leaf":
+        assert result["success"] is False
+        assert "does not attest fixed_set_join_capable" in str(result["error"])
+    else:
+        assert result["success"] is True
+        assert result["status"] == "declared"
+        assert (
+            active_batch(
+                resolve_flag_dir(worktree),
+                session_id=binding_session_id,
+                top_level_parent="top_level",
+            )
+            is not None
+        )
+
     diagnostics_path = tmp_path / "logs" / "join_diagnostics.jsonl"
     if diagnostics_path.exists():
         diagnostics = [json.loads(line) for line in diagnostics_path.read_text().splitlines()]
@@ -999,6 +1175,34 @@ def test_stop_guard_stays_blocked_after_terminal_failure(tmp_path: Path) -> None
 
     assert completed.returncode == 2
     assert "settled non-success" in str(_stdout_json(completed)["reason"])
+
+
+def test_stop_guard_is_safe_under_python_optimization(tmp_path: Path) -> None:
+    """Regression guard: ``join_stop_guard`` must not use ``assert`` for
+    runtime type narrowing. ``python -O`` strips asserts, so a regression
+    to the assert pattern would let a None ``admission`` reach the
+    subsequent ``admission.binding_dict`` dereference.
+    """
+    session_id = "stop-O-flag"
+    worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
+    completed = subprocess.run(
+        [sys.executable, "-O", str(_GUARDS_DIR / "join_stop_guard.py")],
+        cwd=worktree,
+        env=_child_env(tmp_path),
+        input=json.dumps({"session_id": session_id, "cwd": str(worktree)}),
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=10,
+    )
+
+    # Either the guard exits 0 (no wave registered yet) or it raises a
+    # structured error — but it must NOT crash with an unhandled
+    # AttributeError from a stripped assert.
+    assert completed.returncode in (0, 2), (
+        f"unexpected return code {completed.returncode}: stderr={completed.stderr!r}"
+    )
+    assert "AttributeError" not in completed.stderr
 
 
 def test_followup_guard_prefers_the_managed_join_identity(tmp_path: Path) -> None:

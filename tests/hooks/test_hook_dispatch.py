@@ -20,19 +20,23 @@ pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 DISPATCH_SCRIPT = HOOKS_DIR / "_dispatch.py"
 HOOK_SETTINGS_SCRIPT = HOOKS_DIR / "_runtime" / "_hook_settings.py"
+HOOK_LOG_DISPATCH_SCRIPT = HOOKS_DIR / "_runtime" / "_hook_log_dispatch.py"
 
 
 def _copy_dispatcher(hooks_dir: Path) -> None:
-    """Install the dispatcher with its stdlib-only settings sibling.
+    """Install the dispatcher with its stdlib-only settings siblings.
 
     After #4672's decomposition, _hook_settings.py lives at hooks/_runtime/.
-    The dispatcher bootstrap adds both hooks/ and hooks/_runtime/ to sys.path,
+    The 5190 follow-up decomposition moved the JSONL sinks into
+    _hook_log_dispatch.py, which _hook_settings.py re-exports. The
+    dispatcher bootstrap adds both hooks/ and hooks/_runtime/ to sys.path,
     so the test fixture mirrors that layout.
     """
     (hooks_dir / "_dispatch.py").write_text(DISPATCH_SCRIPT.read_text())
     runtime_dir = hooks_dir / "_runtime"
     runtime_dir.mkdir(exist_ok=True)
     (runtime_dir / "_hook_settings.py").write_text(HOOK_SETTINGS_SCRIPT.read_text())
+    (runtime_dir / "_hook_log_dispatch.py").write_text(HOOK_LOG_DISPATCH_SCRIPT.read_text())
 
 
 @pytest.fixture()

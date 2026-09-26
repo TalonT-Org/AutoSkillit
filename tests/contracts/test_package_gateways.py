@@ -493,6 +493,7 @@ DECOMPOSITION_MOVE_SETS: dict[str, frozenset[str]] = {
             "_hook_constants",
             "_hook_payload",
             "_hook_settings",
+            "_hook_log_dispatch",
             "_hook_utils",
             "_policy_event",
             "_command_classification",

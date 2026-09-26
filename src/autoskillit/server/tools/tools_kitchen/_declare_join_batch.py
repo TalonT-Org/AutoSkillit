@@ -17,7 +17,11 @@ from autoskillit.hooks._join_ledger import (
     declare_batch,
     is_terminal_non_success_batch,
 )
-from autoskillit.hooks._runtime._hook_settings import validate_session_id, write_join_diagnostic
+from autoskillit.hooks._runtime._hook_settings import (
+    record_session_cook_join_bypass,
+    validate_session_id,
+    write_join_diagnostic,
+)
 from autoskillit.hooks._session_binding import (
     JoinAdmissionOutcome,
     LoadedSkillEntry,
@@ -35,6 +39,12 @@ from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scope
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
+
+_COOK_BYPASS_MESSAGE = (
+    "declare_join_batch: this authenticated interactive cook session is outside fixed-set "
+    "join enforcement, so no join wave was opened. Issue the children as ordinary Agent "
+    "calls, retain every direct result, and synthesize after all of them return."
+)
 
 
 def _admit_join_binding(
@@ -253,6 +263,17 @@ def _declare_join_batch_handler(
             ),
         }
 
+    # The per-client stdio server inherits the cook launch environment. Opening a
+    # wave here would strand it because the join guards bypass authenticated cook.
+    if record_session_cook_join_bypass(str(project_root), session_id, gate="declare_join_batch"):
+        return {
+            "success": True,
+            "status": "cook_bypass",
+            "join_batch_id": None,
+            "wave": None,
+            "message": _COOK_BYPASS_MESSAGE,
+        }
+
     recovery = _binding_authoritative_recovery(
         channel_dir,
         binding,
@@ -284,16 +305,20 @@ def _declare_join_batch_handler(
             }
         )
         return {"success": False, "error": str(exc)}
-    _emit_join_diagnostic(
-        _declared_join_diagnostic(
-            session_id=session_id,
-            parent=parent,
-            normalized_skill_name=normalized_skill_name,
-            batch=batch,
-            expected_predecessor_id=expected_predecessor_id,
-        )
+    diagnostic = _declared_join_diagnostic(
+        session_id=session_id,
+        parent=parent,
+        normalized_skill_name=normalized_skill_name,
+        batch=batch,
+        expected_predecessor_id=expected_predecessor_id,
     )
-    return {"success": True, "join_batch_id": batch.get("join_batch_id"), "wave": batch}
+    _emit_join_diagnostic(diagnostic)
+    return {
+        "success": True,
+        "status": diagnostic["status"],
+        "join_batch_id": batch.get("join_batch_id"),
+        "wave": batch,
+    }
 
 
 def _session_mismatch_error(requested_session_id: str, recorded_session_id: str) -> str:
@@ -378,8 +403,9 @@ async def declare_join_batch(
     """Open one declared batch ledger for the next wave of direct children.
 
     Validates that the loaded skill, the session flag binding, and the
-    artifact identity are all consistent. Returns the new ``join_batch_id``
-    on success; a structured refusal on conflict.
+    artifact identity are all consistent. Success status is ``declared``,
+    ``replacement_batch``, or ``cook_bypass``; cook bypass opens no wave.
+    Returns a structured refusal on conflict.
 
     Never raises.
     """

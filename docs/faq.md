@@ -67,7 +67,7 @@ tree. See [safety/workspace.md](safety/workspace.md).
 
 Set `quota_guard.short_window_threshold` (default 85.0) for short windows
 (e.g. `five_hour`), `quota_guard.long_window_threshold` (default 95.0) for
-long windows (weekly, sonnet, opus), and `quota_guard.buffer_seconds`
+long windows (seven_day, sonnet, opus), and `quota_guard.buffer_seconds`
 (default 60) in `.autoskillit/config.yaml`.
 
 ### Where do session diagnostics go?

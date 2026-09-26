@@ -226,7 +226,7 @@ class TestRenderAgentDefinitionsByteIdentity:
             for definition in load_agent_definitions(agents_dir)
             if definition.name == "session-log-reader"
         )
-        assert reader.tools == ("mcp__plugin_autoskillit_autoskillit__inspect_session_logs",)
+        assert reader.tools == (f"{PLUGIN_PREFIX}inspect_session_logs",)
 
         pr_source_reader = next(
             definition

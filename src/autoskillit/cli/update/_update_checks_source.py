@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from packaging.version import Version
+from packaging.version import InvalidVersion, Version
 
 from autoskillit.cli.update._update_checks_fetch import (
     _fetch_latest_version,
@@ -137,7 +137,16 @@ def resolve_target_identity(
             source_version = autoskillit_source_version(info.local_source)
             if source_version is None:
                 return None
-            Version(source_version)
+            try:
+                Version(source_version)
+            except InvalidVersion as err:
+                logger.debug(
+                    "update check skipped: unparseable LOCAL_PATH source version at %s: %r (%s)",
+                    info.local_source,
+                    source_version,
+                    err,
+                )
+                return None
             return ReleaseIdentity(ReleaseChannel.WORKING_TREE, version=source_version)
 
         ref = info.requested_revision

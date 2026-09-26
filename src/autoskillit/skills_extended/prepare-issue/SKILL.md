@@ -477,7 +477,6 @@ gh issue edit {issue_number} \
   the `## Requirements` section
 
 **ALWAYS:**
-- Every write target is a literal path
 - Confirm repo access with `gh repo view` before any issue operations
 - Create only definitions proven missing by the complete label inventory
 - Emit the result block (`---prepare-issue-result---`) even on dry-run

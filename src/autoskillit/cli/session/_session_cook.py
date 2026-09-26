@@ -99,9 +99,13 @@ def _source_currency_warning(
                     f"({currency.install_type}) is stale relative to working-tree "
                     f"{currency.checkout_version}. Run {remedy}.{reset}"
                 )
+            behind_by = currency.behind_by
+            behind_text = (
+                f"{behind_by} commits" if behind_by is not None else "an unknown number of commits"
+            )
             return (
-                f"{yellow}WARNING: installed AutoSkillit generation is {currency.behind_by} "
-                f"commits behind this checkout. Run `autoskillit install` to refresh it.{reset}"
+                f"{yellow}WARNING: installed AutoSkillit generation is {behind_text} "
+                f"behind this checkout. Run `autoskillit install` to refresh it.{reset}"
             )
         case unhandled:
             assert_never(unhandled)

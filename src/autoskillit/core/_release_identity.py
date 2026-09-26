@@ -66,17 +66,16 @@ def _require_same_channel(
     return next(iter(channels))
 
 
-def _parse_version(raw: str, channel: ReleaseChannel) -> Version:
-    """Parse a release-identity version string with channel-aware error context."""
+def _parse_channel_version(raw: str, channel: ReleaseChannel) -> Version:
+    """Parse a release-identity version string with channel-aware error context.
+
+    Centralizes the InvalidVersion wrap so callers raise a ValueError naming
+    the channel and raw version that failed to parse.
+    """
     try:
         return Version(raw)
     except InvalidVersion as err:
         raise ValueError(f"unparseable {channel.value} version: {raw!r}") from err
-
-
-def _compare_versions(installed_raw: str, target_raw: str, channel: ReleaseChannel) -> bool:
-    """Return ``Version(target) > Version(installed)`` under *channel*."""
-    return _parse_version(target_raw, channel) > _parse_version(installed_raw, channel)
 
 
 def update_available(installed: ReleaseIdentity, target: ReleaseIdentity) -> bool:
@@ -84,11 +83,19 @@ def update_available(installed: ReleaseIdentity, target: ReleaseIdentity) -> boo
     channel = _require_same_channel(installed, target)
     match channel:
         case ReleaseChannel.RELEASED:
-            return _compare_versions(installed.version, target.version, channel)
+            return _parse_channel_version(target.version, channel) > _parse_channel_version(
+                installed.version, channel
+            )
         case ReleaseChannel.BRANCH:
             return target.commit != installed.commit
         case ReleaseChannel.WORKING_TREE:
-            return _compare_versions(installed.version, target.version, channel)
+            try:
+                return Version(target.version) > Version(installed.version)
+            except InvalidVersion as err:
+                raise ValueError(
+                    f"unparseable {channel.value} working-tree version: "
+                    f"installed={installed.version!r}, target={target.version!r}"
+                ) from err
         case unhandled:
             assert_never(unhandled)
 
@@ -106,8 +113,8 @@ def advance_verdict(
     target_key: object | None
     match channel:
         case ReleaseChannel.RELEASED:
-            previous_version = _parse_version(previous.version, channel)
-            observed_version = _parse_version(observed.version, channel)
+            previous_version = Version(previous.version)
+            observed_version = Version(observed.version)
             if observed_version > previous_version:
                 return AdvanceVerdict.ADVANCED
             if observed_version == previous_version:
@@ -120,9 +127,17 @@ def advance_verdict(
         case ReleaseChannel.WORKING_TREE:
             if target is None:
                 return AdvanceVerdict.NOT_APPLICABLE
-            observed_key = _parse_version(observed.version, channel)
-            previous_key = _parse_version(previous.version, channel)
-            target_key = _parse_version(target.version, channel)
+            try:
+                observed_key = Version(observed.version)
+                previous_key = Version(previous.version)
+                target_key = Version(target.version)
+            except InvalidVersion as err:
+                raise ValueError(
+                    f"unparseable {channel.value} working-tree version: "
+                    f"observed={observed.version!r}, "
+                    f"previous={previous.version!r}, "
+                    f"target={target.version!r}"
+                ) from err
         case unhandled:
             assert_never(unhandled)
     if observed_key == previous_key:

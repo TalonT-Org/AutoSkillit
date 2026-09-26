@@ -113,37 +113,46 @@ def _join_bound_denial(
     tool_name: object,
     tool_input: dict[str, object],
 ) -> str | None:
-    candidate: str | None = None
-    if tool_name == "Agent":
-        selector = [
-            name for name in ("name", "team_name", "run_in_background") if tool_input.get(name)
-        ]
-        if selector:
-            candidate = (
-                f"{JOIN_DENY_TRIGGER} (selectors rejected: {', '.join(selector)}; "
-                "background execution and teammate routing are prohibited in a "
-                "join-bound session — declare a wave via declare_join_batch and "
-                "issue every member as one ordinary unnamed foreground Agent call)."
-            )
-    elif tool_name == "ScheduleWakeup":
-        candidate = (
-            f"{SCHEDULE_WAKEUP_DENY_TRIGGER} (ADR-0001) — ScheduleWakeup is "
-            "prohibited in a join-bound session because deferral cannot "
-            "produce the declared-batch evidence the join contract requires."
-        )
-    if candidate is None:
+    # Only Agent and ScheduleWakeup can trigger a join-bound denial. Filter
+    # first so we avoid calling ``hook_join_applicability`` for tools that
+    # would never be denied — that helper writes a ``cook_bypass`` diagnostic
+    # unconditionally for authenticated cook sessions, so calling it for
+    # arbitrary tools would emit spurious join_diagnostics records.
+    if tool_name not in ("Agent", "ScheduleWakeup"):
         return None
-    join_required = (
+    if not (
         is_governed
         and not in_subagent_context
         and isinstance(session_id, str)
         and bool(session_id)
         and bool(payload_cwd)
-        and hook_join_applicability(
-            payload, payload_cwd, session_id, gate="background_exec_guard"
-        ).enforce
+    ):
+        return None
+    # Check join applicability before building the tool-specific denial
+    # string, mirroring the rhythm of the other join guards (claim/settle/
+    # followup/stop). Only the applicability decision itself can record a
+    # diagnostic; we have already ensured the tool could plausibly deny.
+    if not hook_join_applicability(
+        payload, payload_cwd, session_id, gate="background_exec_guard"
+    ).enforce:
+        return None
+    if tool_name == "Agent":
+        selector = [
+            name for name in ("name", "team_name", "run_in_background") if tool_input.get(name)
+        ]
+        if selector:
+            return (
+                f"{JOIN_DENY_TRIGGER} (selectors rejected: {', '.join(selector)}; "
+                "background execution and teammate routing are prohibited in a "
+                "join-bound session — declare a wave via declare_join_batch and "
+                "issue every member as one ordinary unnamed foreground Agent call)."
+            )
+        return None
+    return (
+        f"{SCHEDULE_WAKEUP_DENY_TRIGGER} (ADR-0001) — ScheduleWakeup is "
+        "prohibited in a join-bound session because deferral cannot "
+        "produce the declared-batch evidence the join contract requires."
     )
-    return candidate if join_required else None
 
 
 def _headless_background_denial(

@@ -27,6 +27,10 @@ def test_update_available_false_for_older_source_version() -> None:
     assert update_available(_wt("1.1.0"), _wt("1.0.0")) is False
 
 
+def test_update_available_false_for_equal_source_version() -> None:
+    assert update_available(_wt("1.0.0"), _wt("1.0.0")) is False
+
+
 def test_advance_verdict_not_applicable_without_target() -> None:
     verdict = advance_verdict(previous=_wt("1.0.0"), observed=_wt("1.1.0"), target=None)
     assert verdict is AdvanceVerdict.NOT_APPLICABLE

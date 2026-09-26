@@ -548,8 +548,12 @@ def test_upgrade_command_is_exhaustive_over_install_types(install_type: InstallT
         case InstallType.GIT_VCS:
             stable = InstallInfo(InstallType.GIT_VCS, "a" * 40, "stable", None, None)
             dev = InstallInfo(InstallType.GIT_VCS, "a" * 40, "develop", None, None)
-            assert upgrade_command(stable) is not None
-            assert upgrade_command(dev) is not None
+            stable_cmd = upgrade_command(stable)
+            dev_cmd = upgrade_command(dev)
+            assert stable_cmd is not None
+            assert stable_cmd.argv[0] == "uv"
+            assert dev_cmd is not None
+            assert dev_cmd.argv[0] == "uv"
         case InstallType.LOCAL_EDITABLE:
             present = InstallInfo(
                 InstallType.LOCAL_EDITABLE, None, None, None, Path("/src/autoskillit")

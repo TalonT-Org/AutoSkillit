@@ -293,7 +293,7 @@ def _local_editable_info(tmp_path: Path) -> InstallInfo:
 @pytest.mark.parametrize(
     "build_info",
     [
-        lambda tmp_path: _local_path_info(None),
+        lambda _: _local_path_info(None),
         lambda tmp_path: _local_path_info(_checkout_without_pyproject(tmp_path)),
         lambda tmp_path: _local_path_info(_non_autoskillit_checkout(tmp_path)),
         _local_editable_info,

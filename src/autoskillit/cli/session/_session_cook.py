@@ -87,6 +87,11 @@ def _source_currency_warning(
             )
         case SourceCurrencyStatus.STALE:
             if currency.checkout_version is not None:
+                # Lazy runtime import (NOT TYPE_CHECKING): InstallType.LOCAL_PATH is used
+                # as a runtime value here, not merely as a type annotation, so the
+                # TYPE_CHECKING re-export in the module-level block can't substitute.
+                # Deferred to function body to avoid pulling ``cli.install._install_info``
+                # into the parent module's import chain at cook-load time.
                 from autoskillit.cli.install._install_info import InstallType
 
                 remedy = (

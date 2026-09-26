@@ -133,7 +133,7 @@ def advance_verdict(
                 target_key = Version(target.version)
             except InvalidVersion as err:
                 raise ValueError(
-                    f"unparseable {channel.value} working-tree version: "
+                    f"unparseable working-tree version: "
                     f"observed={observed.version!r}, "
                     f"previous={previous.version!r}, "
                     f"target={target.version!r}"

@@ -389,3 +389,12 @@ def test_invalid_pr_number_is_rejected_at_both_boundaries(tmp_path: Path, pr_num
     assert result.returncode == 2
     assert result.stdout == ""
     assert result.stderr == "invalid gate authority\n"
+
+
+@pytest.mark.parametrize("field", ["basename", "byte_length", "sha256"])
+def test_incomplete_artifact_manifest_is_invalid(tmp_path: Path, field: str) -> None:
+    case = make_gate_case(tmp_path)
+    case["metrics"]["artifacts"]["annotated_diff"].pop(field)
+    write_metrics(case)
+    authority = _authority(case)
+    assert (authority["state"], authority["reason_code"]) == ("degraded", "manifest_invalid")

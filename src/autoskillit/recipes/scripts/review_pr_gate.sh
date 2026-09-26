@@ -117,9 +117,11 @@ else
         (.diff_byte_length | type == "number" and . >= 0 and floor == .) and
         (.diff_source | type == "object") and
         (.artifacts | type == "object") and
-        (.artifacts.annotated_diff | type == "object") and
-        (.artifacts.hunk_ranges | type == "object") and
-        (.artifacts.valid_lines | type == "object")
+        ([.artifacts.annotated_diff, .artifacts.hunk_ranges, .artifacts.valid_lines] |
+          all(.[]; type == "object" and
+            (.basename | type == "string" and length > 0) and
+            (.byte_length | type == "number" and . >= 0 and floor == .) and
+            (.sha256 | type == "string" and test("^[0-9a-f]{64}$"))))
     ' < "$METRICS_MARKER_BEFORE" >/dev/null; then
         degrade_gate manifest_invalid
     fi

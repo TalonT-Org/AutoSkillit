@@ -426,13 +426,21 @@ def resolve_quota_log_dir(*, caller: str = "") -> Path | None:
 # ``_hook_settings.write_join_diagnostic`` (and friends) continue to work
 # after the decomposition. The actual definitions live in
 # ``_hook_log_dispatch`` to keep this module under the REQ-CNST-010
-# 750 non-import line hard cap.
-from _hook_log_dispatch import (  # type: ignore[import-not-found]  # noqa: E402,PLC0415,F401
-    DIAGNOSTIC_KEYS,
-    write_dispatch_diagnostic,
-    write_join_diagnostic,
-    write_quota_log_event,
-)
+# 750 non-import line hard cap. The package-relative form runs when this
+# module is loaded as ``autoskillit.hooks._runtime._hook_settings`` (test
+# mode); the bare-name form runs when ``_dispatch.py`` loads it directly
+# via ``from _hook_settings import …`` (no parent package set).
+if __package__:  # noqa: E402
+    from . import _hook_log_dispatch  # noqa: PLC0415
+else:  # noqa: E402
+    import _hook_log_dispatch  # type: ignore[import-not-found,no-redef]  # noqa: PLC0415
+
+DIAGNOSTIC_KEYS = _hook_log_dispatch.DIAGNOSTIC_KEYS
+_MAX_HOOK_LOG_LINES = _hook_log_dispatch._MAX_HOOK_LOG_LINES
+_append_and_trim_jsonl_line = _hook_log_dispatch._append_and_trim_jsonl_line
+write_dispatch_diagnostic = _hook_log_dispatch.write_dispatch_diagnostic
+write_join_diagnostic = _hook_log_dispatch.write_join_diagnostic
+write_quota_log_event = _hook_log_dispatch.write_quota_log_event
 
 
 def hook_session_shape() -> tuple[bool, str]:

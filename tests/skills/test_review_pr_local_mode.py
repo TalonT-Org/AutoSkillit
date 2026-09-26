@@ -232,15 +232,22 @@ def test_standalone_preparation_binds_exact_returned_artifact_paths_before_gate(
     gate_start = step_2_7.index('review_pr_gate.sh" snapshot')
 
     preparation = step_2_7[:gate_start]
+    binding_start = preparation.index("On success, paste its returned")
+    binding_end = preparation.index("as literal paths", binding_start)
+    binding = preparation[binding_start:binding_end]
     for field in (
+        "diff_metrics_path",
         "annotated_diff_path",
         "hunk_ranges_path",
         "valid_lines_path",
-        "diff_metrics_path",
         "anchor_authority_path",
     ):
-        assert field in preparation
-    assert "paste" in preparation.lower()
+        assert f"`{field}`" in binding
+    assert "Keep `anchor_authority_path` for its later consumer." in preparation
+    gate_command = step_2_7[gate_start:].splitlines()[0]
+    assert gate_command.endswith(
+        '"{diff_metrics_path}" "{annotated_diff_path}" "{hunk_ranges_path}" "{valid_lines_path}"'
+    )
 
 
 def test_standalone_preparation_failure_stops_without_git_repair() -> None:

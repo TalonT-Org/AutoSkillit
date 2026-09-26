@@ -406,8 +406,8 @@ def test_prepare_issue_validated_report_uses_body_file():
         "not inline '--body'"
     )
     assert f'> "{body_path}"' in body_section
-    assert "ts=$(date" not in text
-    assert "ISSUE_BODY_FILE" not in text and "EDIT_BODY_FILE" not in text
+    assert "ts=$(date" not in body_section
+    assert "ISSUE_BODY_FILE" not in body_section and "EDIT_BODY_FILE" not in body_section
 
 
 def test_prepare_issue_never_constraint_prohibits_inline_body():

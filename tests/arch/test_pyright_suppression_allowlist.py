@@ -65,7 +65,13 @@ TEST_ALLOWLIST: dict[tuple[str, int], str] = {
 # command_verb_and_args)  # type: ignore[import-not-found]` suppression,
 # following the same stdlib-only standalone-import pattern already used by
 # every other guard in this package.
-TYPE_IGNORE_BUDGET = 160
+TYPE_IGNORE_BUDGET = 164
+
+# Note: the test budget accounts for the 2ce06a8be decomposition of JSONL
+# sinks into _hook_log_dispatch.py, which adds 4 site-bounded
+# `# type: ignore[import-not-found]` suppressions following the existing
+# stdlib-only bare-name sibling-import pattern used by every other module
+# in hooks/_runtime/.
 
 
 def _scan_pyright_ignores(root: Path) -> set[tuple[str, int]]:

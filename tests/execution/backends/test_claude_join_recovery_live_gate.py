@@ -13,7 +13,6 @@ from uuid import uuid4
 import pytest
 
 from autoskillit.core import (
-    MARKETPLACE_PREFIX,
     SkillExecutionRole,
     pkg_root,
     write_versioned_json,
@@ -134,7 +133,6 @@ def _build_projected_plugin(plugin: Path, project: Path) -> Path:
         plugin,
         catalog,
         SkillProjectionContext(cwd=project, catalog=catalog),
-        mcp_tool_prefix=MARKETPLACE_PREFIX,
     )
     assert manifest_path.is_file()
     write_generated_hooks_json(plugin)

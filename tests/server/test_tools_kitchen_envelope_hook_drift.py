@@ -187,13 +187,23 @@ async def test_open_kitchen_warns_on_missing_hook_scripts(tmp_path, monkeypatch)
     )
 
 
-# T-KITCHEN-3: Site 2 — _build_hook_diagnostic_warning skips missing when plugin marketplace-active
+# T-KITCHEN-3: Site 2 — missing hooks are expected only when marketplace hooks are active
 @pytest.mark.anyio
-async def test_build_hook_diagnostic_warning_skips_missing_when_plugin_active(
-    tmp_path, monkeypatch
+@pytest.mark.parametrize(
+    ("backend_name", "registered", "missing_reported"),
+    [
+        ("claude-code", True, False),
+        ("claude-code", False, True),
+        ("codex", True, True),
+        ("codex", False, True),
+    ],
+)
+async def test_build_hook_diagnostic_warning_skips_missing_only_when_marketplace_hooks_active(
+    tmp_path, monkeypatch, backend_name, registered, missing_reported
 ):
-    """Site 2: _build_hook_diagnostic_warning returns None when plugin is marketplace-installed."""
-    from autoskillit.core._plugin_ids import MARKETPLACE_PREFIX
+    """Site 2: a registered marketplace plugin ships its own hooks, but only a Claude
+    plugin-loaded session runs them; every other combination reports missing hooks."""
+    from autoskillit.execution.backends import get_backend
 
     settings_dir = tmp_path / ".claude"
     settings_dir.mkdir()
@@ -206,10 +216,18 @@ async def test_build_hook_diagnostic_warning_skips_missing_when_plugin_active(
         lambda scope, **_kwargs: settings_dir / "settings.json",
     )
     monkeypatch.setattr(_misc, "validate_plugin_cache_hooks", lambda **_: [])
+    monkeypatch.setattr(_misc, "is_marketplace_plugin_registered", lambda: registered)
     from autoskillit.server._misc import _build_hook_diagnostic_warning
 
-    result = _build_hook_diagnostic_warning(MARKETPLACE_PREFIX)
-    assert result is None
+    capabilities = get_backend(backend_name).capabilities
+    result = _build_hook_diagnostic_warning(
+        claude_plugin_tool_namespace=capabilities.claude_plugin_tool_namespace
+    )
+    if missing_reported:
+        assert result is not None
+        assert "not deployed in settings.json" in result
+    else:
+        assert result is None
 
 
 # T-KITCHEN-4: Site 2 — orphaned hook detection remains unconditional in MCP path
@@ -218,7 +236,7 @@ async def test_build_hook_diagnostic_warning_orphaned_still_fires_when_plugin_ac
     tmp_path, monkeypatch
 ):
     """Site 2: orphaned detection remains unconditional even when plugin is marketplace-active."""
-    from autoskillit.core._plugin_ids import MARKETPLACE_PREFIX
+    from autoskillit.core import CLAUDE_CODE_CAPABILITIES
     from autoskillit.hook_registry import HookDriftResult
 
     settings_dir = tmp_path / ".claude"
@@ -238,9 +256,12 @@ async def test_build_hook_diagnostic_warning_orphaned_still_fires_when_plugin_ac
     )
     monkeypatch.setattr(_misc, "find_broken_hook_scripts", lambda _: [])
     monkeypatch.setattr(_misc, "validate_plugin_cache_hooks", lambda **_: [])
+    monkeypatch.setattr(_misc, "is_marketplace_plugin_registered", lambda: True)
     from autoskillit.server._misc import _build_hook_diagnostic_warning
 
-    result = _build_hook_diagnostic_warning(MARKETPLACE_PREFIX)
+    result = _build_hook_diagnostic_warning(
+        claude_plugin_tool_namespace=CLAUDE_CODE_CAPABILITIES.claude_plugin_tool_namespace
+    )
     assert result is not None
     assert "orphan" in result.lower()
     assert "1" in result

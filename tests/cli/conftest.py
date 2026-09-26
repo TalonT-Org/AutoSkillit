@@ -53,17 +53,6 @@ def _patch_worktree_guard_for_hooks(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_patch_cli__init_helpers, "_is_plugin_installed", lambda **kwargs: False)
 
 
-@pytest.fixture(autouse=True)
-def _stub_detect_mcp_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Stub detect_autoskillit_mcp_prefix for deterministic PLUGIN_DIR behavior."""
-    from autoskillit.core._plugin_ids import DIRECT_PREFIX
-
-    monkeypatch.setattr(
-        "autoskillit.core.detect_autoskillit_mcp_prefix",
-        lambda _capabilities: DIRECT_PREFIX,
-    )
-
-
 @pytest.fixture
 def _stub_owner_binding(
     monkeypatch: pytest.MonkeyPatch,

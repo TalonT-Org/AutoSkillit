@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core._plugin_ids import DIRECT_PREFIX, MARKETPLACE_PREFIX
+from autoskillit.core._plugin_ids import DIRECT_PREFIX, PLUGIN_PREFIX
 from autoskillit.hooks._runtime import _hook_constants
 from autoskillit.hooks._runtime._hook_constants import (
     _RECOVERY_DECLARE_TOOL_PARTS,
@@ -63,7 +63,7 @@ def test_managed_join_parent_id_env_var_matches_literal() -> None:
 def test_recovery_declaration_parts_match_canonical_mcp_prefixes() -> None:
     expected = frozenset(
         tuple(f"{prefix}declare_join_batch".split("__"))
-        for prefix in (DIRECT_PREFIX, MARKETPLACE_PREFIX)
+        for prefix in (DIRECT_PREFIX, PLUGIN_PREFIX)
     )
 
     assert _RECOVERY_DECLARE_TOOL_PARTS == expected

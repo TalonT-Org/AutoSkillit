@@ -42,9 +42,6 @@ from autoskillit.core import (
     ValidatedAddDir,
     plugin_launch_binding_scope,
 )
-from autoskillit.core._plugin_ids import (
-    detect_autoskillit_mcp_prefix as _production_mcp_prefix,
-)
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 from autoskillit.workspace import DefaultSkillResolver, compile_session_skill_catalog
 from autoskillit.workspace._installed._projection_cache import projected_plugin_artifact_digest
@@ -275,12 +272,7 @@ def _activate_production_selector(
     monkeypatch: pytest.MonkeyPatch,
     state: PluginArtifactState,
 ) -> None:
-    """Undo the CLI test directory's direct-prefix stub for this integration."""
-    _production_mcp_prefix.cache_clear()
-    monkeypatch.setattr(
-        "autoskillit.core.detect_autoskillit_mcp_prefix",
-        _production_mcp_prefix,
-    )
+    """Point home resolution at the seeded plugin-artifact state for this integration."""
     monkeypatch.setattr(Path, "home", lambda: state.home)
     monkeypatch.setenv("HOME", str(state.home))
 

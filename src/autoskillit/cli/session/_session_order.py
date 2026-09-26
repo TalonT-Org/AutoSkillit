@@ -33,8 +33,8 @@ from autoskillit.core import (
     SkillExecutionRole,
     atomic_write,
     claim_launch_for_session,
-    detect_autoskillit_mcp_prefix,
     get_logger,
+    launched_session_mcp_prefix,
     pkg_root,
     release_session_claim,
     resume_spec_from_cli,
@@ -422,7 +422,7 @@ def order(
         codex_runtime_spec=config.codex_runtime.resolve(),
     )
     backend_caps = backend.capabilities
-    mcp_prefix = detect_autoskillit_mcp_prefix(backend_caps)
+    mcp_prefix = launched_session_mcp_prefix(backend_caps)
     skill_resolver = DefaultSkillResolver()
     skill_visibility = config.skill_visibility_spec()
     try:

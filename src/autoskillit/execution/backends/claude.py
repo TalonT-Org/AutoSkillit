@@ -641,7 +641,9 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
                 "an ID or scan binding files. Then issue every member as one ordinary unnamed "
                 "foreground Agent(subagent_type=...) call in a single message. Retain every "
                 "direct result. Only after the ledger reports complete do you synthesize or "
-                "allow Stop."
+                "allow Stop. If declare_join_batch instead answers status cook_bypass, no "
+                "ledger wave exists for this session: synthesize once every direct result "
+                "has returned."
             )
         if plan.evidence is not None and plan.evidence.required:
             boundary = "independent " if plan.evidence.independent else ""

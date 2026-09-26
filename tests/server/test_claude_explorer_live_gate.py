@@ -13,16 +13,18 @@ import pytest
 from autoskillit.core import (
     BUNDLED_EXPLORER_ROLES,
     EXPLORATION_TOOLS,
+    PluginLoadMode,
+    load_agent_definition,
+    load_agent_definitions,
     load_bundled_agent_definitions,
 )
-from autoskillit.hook_registry import generate_hooks_json
 from tests.conftest import production_interpreter_env
+from tests.contracts._projection_helpers import session_catalog
 from tests.execution._process_group_helpers import _cleanup_owned_process_group
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.large, pytest.mark.smoke]
 
 _ROOT = Path(__file__).resolve().parents[2]
-_PACKAGE_ROOT = _ROOT / "src" / "autoskillit"
 _LIVE_ENV = "AUTOSKILLIT_CLAUDE_EXPLORER_LIVE_GATE"
 _SOURCE_CREDENTIALS = Path.home() / ".claude" / ".credentials.json"
 _has_authentication = bool(
@@ -52,48 +54,51 @@ def _initialize_repository(project: Path) -> None:
 
 
 def _build_plugin(plugin: Path) -> None:
-    (plugin / ".claude-plugin").mkdir(parents=True)
-    shutil.copy2(
-        _PACKAGE_ROOT / ".claude-plugin" / "plugin.json",
-        plugin / ".claude-plugin" / "plugin.json",
+    """Copy the production ``--plugin-dir`` projection into *plugin*, byte for byte."""
+    from autoskillit.execution.backends.claude import ClaudeCodeBackend
+    from autoskillit.workspace import project_default_plugin_authority
+
+    authority = project_default_plugin_authority(
+        cwd=plugin.parent, base_branch="main", catalog=session_catalog()
     )
-    shutil.copytree(_PACKAGE_ROOT / "hooks", plugin / "hooks")
-    shutil.copytree(_PACKAGE_ROOT / "agents", plugin / "agents")
-    for agent_path in (plugin / "agents").glob("*.md"):
-        agent_path.write_text(
-            agent_path.read_text().replace(
-                "mcp__autoskillit__", "mcp__plugin_autoskillit_autoskillit__"
-            )
+    with authority.acquire_launch_binding(
+        backend=ClaudeCodeBackend(),
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+    ) as binding:
+        assert binding.plugin_dir is not None
+        shutil.copytree(binding.plugin_dir, plugin)
+        projected_agents = binding.plugin_dir / "agents"
+        projected_tools = [
+            tool
+            for definition in load_agent_definitions(projected_agents)
+            for tool in definition.tools
+            if tool.startswith("mcp__")
+        ]
+        assert projected_tools
+        assert all(
+            tool.startswith("mcp__plugin_autoskillit_autoskillit__") for tool in projected_tools
         )
-    (plugin / "hooks" / "hooks.json").write_text(
-        json.dumps(generate_hooks_json(), indent=2) + "\n"
-    )
+    assert binding.closed
 
 
 def _configure_plugin_mcp(
     plugin: Path, project: Path, evidence: Path, instrumentation: Path
 ) -> None:
-    (plugin / ".mcp.json").write_text(
-        json.dumps(
-            {
-                "mcpServers": {
-                    "autoskillit": {
-                        "command": str(_ROOT / ".venv" / "bin" / "autoskillit"),
-                        "env": {
-                            "AUTOSKILLIT_STATE_ROOT": str(project),
-                            "AUTOSKILLIT_SESSION_TYPE": "skill",
-                            "AUTOSKILLIT_AGENT_BACKEND": "claude-code",
-                            "AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED": "true",
-                            "AUTOSKILLIT_CLAUDE_EXPLORER_EVIDENCE": str(evidence),
-                            "PYTHONPATH": str(instrumentation),
-                        },
-                    }
-                }
-            },
-            indent=2,
-        )
-        + "\n"
-    )
+    """Point the projection's MCP server at the dev venv; its key is part of the namespace."""
+    mcp_json = plugin / ".mcp.json"
+    config = json.loads(mcp_json.read_text(encoding="utf-8"))
+    assert list(config["mcpServers"]) == ["autoskillit"]
+    server = config["mcpServers"]["autoskillit"]
+    server["command"] = str(_ROOT / ".venv" / "bin" / "autoskillit")
+    server["env"] = {
+        "AUTOSKILLIT_STATE_ROOT": str(project),
+        "AUTOSKILLIT_SESSION_TYPE": "skill",
+        "AUTOSKILLIT_AGENT_BACKEND": "claude-code",
+        "AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED": "true",
+        "AUTOSKILLIT_CLAUDE_EXPLORER_EVIDENCE": str(evidence),
+        "PYTHONPATH": str(instrumentation),
+    }
+    mcp_json.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
 
 def _write_consumer_instrumentation(directory: Path) -> None:
@@ -141,7 +146,7 @@ OwnerBoundExplorationContextStore.submit_for_capability = _recording_submit
     )
 
 
-def _run_claude(project: Path, plugin: Path, home: Path) -> str:
+def _run_claude(project: Path, plugin: Path, home: Path) -> tuple[str, list[dict]]:
     prompt = (
         "Call enable_exploration first. Then dispatch the registered "
         "semantic-code-navigator agent and require that child to call "
@@ -164,7 +169,8 @@ def _run_claude(project: Path, plugin: Path, home: Path) -> str:
                 "--plugin-dir",
                 str(plugin),
                 "--output-format",
-                "json",
+                "stream-json",
+                "--verbose",
                 prompt,
             ],
             cwd=project,
@@ -180,9 +186,20 @@ def _run_claude(project: Path, plugin: Path, home: Path) -> str:
             _cleanup_owned_process_group(process, timeout=10)
             pytest.fail(f"Claude explorer live gate timed out: {output_path.read_text()[-4000:]}")
     output = output_path.read_text()
-    assert len(output.encode()) <= 256_000, "Claude live output exceeded its evidence bound"
+    # stream-json --verbose emits per-event NDJSON envelopes (system / user / assistant
+    # tool_use / tool_result), which is intrinsically much larger than the previous
+    # single-result `json` payload. The 2 MB bound still bounds the evidence file size
+    # for human review; the meaningful content boundary is the prompt + LIVE_OK line.
+    assert len(output.encode()) <= 2_000_000, "Claude live output exceeded its evidence bound"
     assert process.returncode == 0, output[-4000:]
-    return output
+    events = [json.loads(line) for line in output.splitlines() if line.strip()]
+    # Secondary bound on event count so a regression that produces a flood of small
+    # envelopes cannot balloon the evidence file while staying under the byte bound.
+    assert len(events) <= 500, (
+        f"Claude live output emitted {len(events)} NDJSON events; expected a handful, "
+        "got a flood — investigate before raising either bound"
+    )
+    return output, events
 
 
 @_skip_unless_live_gate
@@ -211,12 +228,25 @@ def test_real_parent_and_registered_child_share_native_session_authority(
     _write_consumer_instrumentation(instrumentation)
     _build_plugin(plugin)
     _configure_plugin_mcp(plugin, project, evidence, instrumentation)
+    navigator_tools = load_agent_definition(plugin / "agents" / "semantic-code-navigator.md").tools
 
-    output = _run_claude(project, plugin, home)
+    output, events = _run_claude(project, plugin, home)
     rows = [json.loads(line) for line in evidence.read_text().splitlines() if line.strip()]
     by_tool = {row["tool"]: row["session_id"] for row in rows if isinstance(row.get("tool"), str)}
+    init_events = [
+        event
+        for event in events
+        if event.get("type") == "system" and event.get("subtype") == "init"
+    ]
 
     assert "LIVE_OK" in output
     assert by_tool["enable_exploration"]
     assert by_tool["submit_exploration_query"] == by_tool["enable_exploration"]
     assert any(row.get("event") == "submit_ok" for row in rows)
+    assert init_events
+    for event in init_events:
+        server_names = {server.get("name") for server in event.get("mcp_servers", [])}
+        assert "plugin:autoskillit:autoskillit" in server_names, server_names
+    observed_tools = {tool for event in init_events for tool in event.get("tools", [])}
+    assert set(navigator_tools) <= observed_tools, sorted(set(navigator_tools) - observed_tools)
+    assert "would be spawned with zero tools" not in output

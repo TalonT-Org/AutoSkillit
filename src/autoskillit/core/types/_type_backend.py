@@ -256,9 +256,9 @@ class BackendCapabilities:
     anthropic_provider_capable: bool = field(default=False)
     # True when backend supports Claude plugin install/list CLI
     plugin_install_capable: bool = field(default=False)
-    # True when MCP tool names may use Claude marketplace registration state.
-    # Backends without this capability always use the direct/runtime prefix.
-    claude_marketplace_tool_prefix_capable: bool = field(default=False)
+    # True when AutoSkillit launches this backend with AutoSkillit loaded as a
+    # Claude plugin, so its MCP tools carry PLUGIN_PREFIX.
+    claude_plugin_tool_namespace: bool = field(default=False)
     # True when backend supports Health Inspector LLM-callback idle detection
     inspector_capable: bool = field(default=False)
     # True when backend CLI natively understands context-window suffixes like [1m]
@@ -481,7 +481,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     record_capable=True,
     anthropic_provider_capable=True,
     plugin_install_capable=True,
-    claude_marketplace_tool_prefix_capable=True,
+    claude_plugin_tool_namespace=True,
     inspector_capable=False,
     supports_context_window_suffix=True,
     has_unguarded_filesystem_access=False,

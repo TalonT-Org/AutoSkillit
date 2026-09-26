@@ -39,6 +39,7 @@ pytestmark = [pytest.mark.integration, pytest.mark.medium]
 
 _DISPATCH_SCRIPT = HOOKS_DIR / "_dispatch.py"
 _HOOK_SETTINGS_SCRIPT = HOOKS_DIR / "_runtime" / "_hook_settings.py"
+_HOOK_LOG_DISPATCH_SCRIPT = HOOKS_DIR / "_runtime" / "_hook_log_dispatch.py"
 _QUOTA_GUARD_SCRIPT = HOOKS_DIR / "guards" / "quota_guard.py"
 _QUOTA_CONSTRAINTS_SCRIPT = HOOKS_DIR.parent / "quota_constraints.py"
 
@@ -47,17 +48,21 @@ def _build_hooks_tree(dest_root: Path) -> Path:
     """Build a production-shaped ``hooks/`` tree under ``dest_root``.
 
     Copies the real ``_dispatch.py``, a real registered guard script
-    (``quota_guard.py``), and the stdlib-only sibling module it imports
-    (``_hook_settings.py``) — the same shape the installed plugin artifact
-    ships. A synthetic stub hook wouldn't exercise the sibling-import path,
-    which is exactly where a second, easy-to-miss bytecode write happens.
+    (``quota_guard.py``), and the stdlib-only sibling modules it imports
+    (``_hook_settings.py`` and its ``_hook_log_dispatch`` re-export target)
+    — the same shape the installed plugin artifact ships. A synthetic stub
+    hook wouldn't exercise the sibling-import path, which is exactly where
+    a second, easy-to-miss bytecode write happens.
     """
     hooks_dir = dest_root / "hooks"
+    runtime_dir = hooks_dir / "_runtime"
     guards_dir = hooks_dir / "guards"
+    runtime_dir.mkdir(parents=True)
     guards_dir.mkdir(parents=True)
 
     (hooks_dir / "_dispatch.py").write_text(_DISPATCH_SCRIPT.read_text())
-    (hooks_dir / "_hook_settings.py").write_text(_HOOK_SETTINGS_SCRIPT.read_text())
+    (runtime_dir / "_hook_settings.py").write_text(_HOOK_SETTINGS_SCRIPT.read_text())
+    (runtime_dir / "_hook_log_dispatch.py").write_text(_HOOK_LOG_DISPATCH_SCRIPT.read_text())
     (guards_dir / "quota_guard.py").write_text(_QUOTA_GUARD_SCRIPT.read_text())
     (dest_root / "quota_constraints.py").write_text(_QUOTA_CONSTRAINTS_SCRIPT.read_text())
 

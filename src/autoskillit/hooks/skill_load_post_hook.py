@@ -30,6 +30,7 @@ from _guard_decision_diagnostics import (  # noqa: E402
 from _hook_payload import normalize_payload_cwd  # type: ignore[import-not-found]  # noqa: E402
 from _hook_settings import (  # noqa: E402
     bridge_session_registry,
+    hook_join_applicability,
     resolve_quota_log_dir,
     write_quota_log_event,
 )
@@ -114,6 +115,29 @@ def _invocation_skill(data: dict[str, object]) -> tuple[str, object] | None:
     return None
 
 
+def _join_context_parts(
+    data: dict[str, object], payload_cwd: str, session_id: str, entry: LoadedSkillEntry
+) -> list[str]:
+    if not entry.join_required:
+        return []
+    parts = [
+        "JOIN DECLARATION AUTHORITY: Call declare_join_batch with the normalized bare "
+        f"skill_name={json.dumps(entry.skill_name)} and exact "
+        f"session_id={json.dumps(session_id)} delivered "
+        "by this Skill PostToolUse hook."
+    ]
+    if hook_join_applicability(
+        data, payload_cwd, session_id, gate="skill_load_post_hook"
+    ).cook_bypass:
+        parts.append(
+            "JOIN APPLICABILITY: this authenticated interactive cook session is outside "
+            'fixed-set join enforcement. declare_join_batch will answer status "cook_bypass" '
+            "without opening a wave; issue the children as ordinary Agent calls, retain "
+            "every direct result, and synthesize after all of them return."
+        )
+    return parts
+
+
 def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
@@ -181,12 +205,7 @@ def main() -> None:
 
     context_parts: list[str] = []
     if binding_written and new_entry.binding_valid and new_entry.join_required:
-        context_parts.append(
-            "JOIN DECLARATION AUTHORITY: Call declare_join_batch with the normalized bare "
-            f"skill_name={json.dumps(new_entry.skill_name)} and exact "
-            f"session_id={json.dumps(session_id)} delivered "
-            "by this Skill PostToolUse hook."
-        )
+        context_parts.extend(_join_context_parts(data, payload_cwd, session_id, new_entry))
 
     marker = os.environ.get("AUTOSKILLIT_COMPLETION_MARKER", "").strip()
     if marker:

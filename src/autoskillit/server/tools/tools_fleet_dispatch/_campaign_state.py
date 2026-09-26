@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING, Any
 from autoskillit.core import (
     CodingAgentBackend,
     SemanticAdaptationContext,
-    detect_autoskillit_mcp_prefix,
     get_logger,
+    launched_session_mcp_prefix,
 )
 from autoskillit.fleet import (
     CampaignStateMutator,
@@ -157,7 +157,7 @@ def _get_food_truck_prompt_builder(
 ) -> Callable[..., str]:
     """Return the food truck prompt builder with mcp_prefix pre-bound."""
 
-    mcp_prefix = detect_autoskillit_mcp_prefix(backend.capabilities)
+    mcp_prefix = launched_session_mcp_prefix(backend.capabilities)
     return functools.partial(
         _build_food_truck_prompt,
         mcp_prefix=mcp_prefix,

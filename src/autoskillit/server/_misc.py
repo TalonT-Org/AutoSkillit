@@ -15,11 +15,11 @@ from autoskillit._llm_triage import triage_staleness
 from autoskillit.core import (
     ARTIFACT_LEASE_TIMEOUT_SECONDS,
     DIRECT_INSTALL_CACHE_SUBDIR,
-    MARKETPLACE_PREFIX,
     ArtifactLease,
     ArtifactLeaseContention,
     ensure_project_temp,
     get_logger,
+    is_marketplace_plugin_registered,
     pipeline_tracker_directory,
 )
 from autoskillit.execution import (
@@ -173,11 +173,18 @@ def _extract_block(text: str, start_delim: str, end_delim: str) -> list[str]:
 
 
 def _build_hook_diagnostic_warning(
-    mcp_prefix: str,
+    *,
+    claude_plugin_tool_namespace: bool,
 ) -> str | None:
-    """Run hook health and drift checks. Return a warning string if issues are found."""
+    """Run hook health and drift checks. Return a warning string if issues are found.
+
+    *claude_plugin_tool_namespace* is the running backend's capability of the same
+    name: only a Claude plugin-loaded session runs a registered marketplace plugin's
+    own hooks, which makes hooks missing from settings.json expected.
+    """
 
     issues: list[str] = []
+    marketplace_hooks_active = claude_plugin_tool_namespace and is_marketplace_plugin_registered()
 
     settings_path = _claude_settings_path("user", cwd=Path.cwd())
     if settings_path.exists():
@@ -190,7 +197,7 @@ def _build_hook_diagnostic_warning(
                 f"{drift.orphaned} orphaned hook entry(ies) in settings.json are not in "
                 f"HOOK_REGISTRY — every matching tool call will be denied with ENOENT."
             )
-        if drift.missing > 0 and mcp_prefix != MARKETPLACE_PREFIX:
+        if drift.missing > 0 and not marketplace_hooks_active:
             issues.append(
                 f"{drift.missing} hook(s) from HOOK_REGISTRY are not deployed in settings.json."
             )

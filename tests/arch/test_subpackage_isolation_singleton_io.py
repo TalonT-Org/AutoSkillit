@@ -122,6 +122,9 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         # hooks/lifecycle/child_outcome_hook.py: same importlib/getattr resolution pattern
         # for its own sibling snapshot module (issue #4623).
         "child_outcome_hook",
+        # hooks/guards/join_settle_guard.py: same importlib/getattr resolution pattern
+        # for the snapshot module's harness spawn-refusal literal.
+        "join_settle_guard",
     }
 )
 

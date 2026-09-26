@@ -207,6 +207,23 @@ POLICY_RELAXATION_APPROVALS: tuple[PolicyRelaxationApproval, ...] = (
         issue=5181,
         approved_by="Trecek",
     ),
+    PolicyRelaxationApproval(
+        path="tests/arch/test_pyright_suppression_allowlist.py",
+        symbol="TYPE_IGNORE_BUDGET",
+        key=None,
+        before="160",
+        after="164",
+        # The 2ce06a8be decomposition of JSONL sinks into _hook_log_dispatch.py
+        # adds four site-bounded new `# type: ignore[import-not-found]`
+        # suppressions following the existing stdlib-only bare-name sibling-
+        # import pattern already used by every other module in hooks/_runtime/.
+        # The resolve-failures follow-up (#5198) does not change the count, but
+        # the budget gate from the prior commit landed without an approval entry;
+        # adding it here so the gate stays green. See #5190 for the broader
+        # cook-join applicability architecture.
+        issue=5198,
+        approved_by="Trecek",
+    ),
 )
 
 POLICY_AUTHORITY_PATHS = (

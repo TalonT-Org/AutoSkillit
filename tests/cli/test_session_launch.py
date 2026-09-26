@@ -37,9 +37,6 @@ from autoskillit.core import (
     PluginLoadMode,
     PreLaunchReadiness,
 )
-from autoskillit.core._plugin_ids import (
-    detect_autoskillit_mcp_prefix as _production_mcp_prefix,
-)
 from autoskillit.execution.backends.codex import CodexFlags
 from autoskillit.workspace import (
     project_default_plugin_authority as _production_project_default_plugin_authority,
@@ -201,17 +198,6 @@ def _capture_subprocess(monkeypatch: pytest.MonkeyPatch) -> dict:
     return captured
 
 
-def _stub_plugin_installed(monkeypatch: pytest.MonkeyPatch, *, installed: bool = True) -> None:
-    """Stub detect_autoskillit_mcp_prefix to simulate marketplace/direct install."""
-    from autoskillit.core._plugin_ids import DIRECT_PREFIX, MARKETPLACE_PREFIX
-
-    prefix = MARKETPLACE_PREFIX if installed else DIRECT_PREFIX
-    monkeypatch.setattr(
-        "autoskillit.core.detect_autoskillit_mcp_prefix",
-        lambda _capabilities: prefix,
-    )
-
-
 def _stub_codex_pre_launch(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep command-assembly tests independent of an installed Codex binary."""
     from autoskillit.execution.backends.codex import CodexBackend
@@ -271,7 +257,6 @@ def _make_capturing_backend() -> tuple[object, list[dict]]:
 
 def test_run_interactive_session_passes_plugin_flags(monkeypatch: pytest.MonkeyPatch) -> None:
     """_run_interactive_session adds --plugin-dir when plugin not installed."""
-    _stub_plugin_installed(monkeypatch, installed=False)
     captured = _capture_subprocess(monkeypatch)
     _run_interactive_session(launch=FreshLaunch(system_prompt="test"))
     assert ClaudeFlags.PLUGIN_DIR in captured["cmd"]
@@ -284,7 +269,6 @@ def test_run_interactive_session_passes_plugin_flags(monkeypatch: pytest.MonkeyP
 
 def test_run_interactive_session_restricts_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     """_run_interactive_session passes --tools AskUserQuestion."""
-    _stub_plugin_installed(monkeypatch, installed=True)
     captured = _capture_subprocess(monkeypatch)
     _run_interactive_session(launch=FreshLaunch(system_prompt="test"))
     idx = captured["cmd"].index(ClaudeFlags.TOOLS)
@@ -423,7 +407,6 @@ def test_run_interactive_session_preserves_failure_when_binding_close_fails(
 
 def test_run_interactive_session_extra_env_merged(monkeypatch: pytest.MonkeyPatch) -> None:
     """extra_env values appear in the subprocess env."""
-    _stub_plugin_installed(monkeypatch)
     captured = _capture_subprocess(monkeypatch)
     _run_interactive_session(
         launch=FreshLaunch(system_prompt="test"), extra_env={"MY_UNIQUE_KEY": "MY_VAL"}
@@ -440,7 +423,6 @@ def test_run_interactive_session_injects_state_root_from_project_dir(
     _assemble_shared_env_extras (that helper is skill/food-truck only)."""
     from autoskillit.core import AUTOSKILLIT_STATE_ROOT_ENV_VAR
 
-    _stub_plugin_installed(monkeypatch)
     captured = _capture_subprocess(monkeypatch)
     _run_interactive_session(launch=FreshLaunch(system_prompt="test"), project_dir=tmp_path)
     assert captured["env"].get(AUTOSKILLIT_STATE_ROOT_ENV_VAR) == str(tmp_path)
@@ -452,7 +434,6 @@ def test_run_interactive_session_state_root_survives_alongside_extra_env(
     """Injecting AUTOSKILLIT_STATE_ROOT must not drop caller-supplied extra_env keys."""
     from autoskillit.core import AUTOSKILLIT_STATE_ROOT_ENV_VAR
 
-    _stub_plugin_installed(monkeypatch)
     captured = _capture_subprocess(monkeypatch)
     _run_interactive_session(
         launch=FreshLaunch(system_prompt="test"),
@@ -583,7 +564,6 @@ def test_run_interactive_session_includes_plugin_dir_when_installed(
     """_run_interactive_session always passes --plugin-dir for a plugin-install-capable
     backend — EXPLICIT_PLUGIN_DIR generation-store binding, not marketplace-install
     detection, governs the flag (IMPLICIT_INSTALLED was retired in #4480)."""
-    _stub_plugin_installed(monkeypatch, installed=True)
     captured = _capture_subprocess(monkeypatch)
     _run_interactive_session(launch=FreshLaunch(system_prompt="test"))
     assert ClaudeFlags.PLUGIN_DIR in captured["cmd"]
@@ -813,7 +793,6 @@ def test_run_interactive_session_uses_injected_backend(monkeypatch: pytest.Monke
                 **interactive_launch_metadata(binary="claude", launch=kwargs["launch"]),
             )
 
-    _stub_plugin_installed(monkeypatch, installed=True)
     _capture_subprocess(monkeypatch)
     _run_interactive_session(launch=FreshLaunch(system_prompt="test"), backend=_InjectedBackend())
     assert build_called, "Injected backend must be used"
@@ -855,7 +834,6 @@ def test_run_interactive_session_default_backend_uses_typed_resolver(
         get_backend_called.append(name)
         return _FakeBackend()
 
-    _stub_plugin_installed(monkeypatch, installed=True)
     _capture_subprocess(monkeypatch)
     monkeypatch.setattr(
         _patch_session__session_backend,
@@ -915,7 +893,6 @@ def test_typed_resolver_di_used_in_session_launch(monkeypatch: pytest.MonkeyPatc
         "resolve_global_backend",
         lambda name, **_kwargs: _DIBackend(),
     )
-    _stub_plugin_installed(monkeypatch)
     _capture_subprocess(monkeypatch)
     _run_interactive_session(launch=FreshLaunch(system_prompt="test"))
     assert build_calls, "Stub backend's build_interactive_cmd must be invoked via resolver DI"
@@ -972,7 +949,6 @@ def test_run_interactive_session_default_backend_threads_mcp_tool_timeout_sec(
         "resolve_global_backend",
         lambda name, **_kwargs: _DIBackend(),
     )
-    _stub_plugin_installed(monkeypatch)
     _capture_subprocess(monkeypatch)
     _run_interactive_session(launch=FreshLaunch(system_prompt="test"))
     assert build_calls
@@ -1305,7 +1281,6 @@ def test_launch_cook_session_accepts_backend_param(
         "render_skill_unavailability",
         rendered_payloads.append,
     )
-    _stub_plugin_installed(monkeypatch, installed=True)
     compilation = CompiledSessionSkillCatalog(
         backend="claude-code",
         catalog=EffectiveSkillCatalog(
@@ -1399,7 +1374,6 @@ def test_multi_backend_no_cross_flag_contamination(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(subprocess, "run", mock_run)
     monkeypatch.setattr(subprocess, "Popen", _popen_from_run(mock_run))
-    _stub_plugin_installed(monkeypatch, installed=False)
     _stub_codex_pre_launch(monkeypatch)
 
     from tests.execution.backends._generated_home_backend import GeneratedHomeCodexBackend
@@ -1447,7 +1421,6 @@ def test_real_backend_no_foreign_flags(monkeypatch: pytest.MonkeyPatch, backend_
 
     monkeypatch.setattr(subprocess, "run", mock_run)
     monkeypatch.setattr(subprocess, "Popen", _popen_from_run(mock_run))
-    _stub_plugin_installed(monkeypatch, installed=False)
     _stub_codex_pre_launch(monkeypatch)
 
     from tests.execution.backends._generated_home_backend import GeneratedHomeCodexBackend
@@ -1500,7 +1473,6 @@ def test_cross_validation_contract_all_flags_known(
 
     monkeypatch.setattr(subprocess, "run", mock_run)
     monkeypatch.setattr(subprocess, "Popen", _popen_from_run(mock_run))
-    _stub_plugin_installed(monkeypatch, installed=False)
     _stub_codex_pre_launch(monkeypatch)
 
     from tests.execution.backends._generated_home_backend import GeneratedHomeCodexBackend
@@ -2082,11 +2054,6 @@ def _prepare_codex_order_composition(
     state = build_plugin_artifact_state(
         tmp_path / "home",
         PluginArtifactStateKind.VALID_CURRENT,
-    )
-    _production_mcp_prefix.cache_clear()
-    monkeypatch.setattr(
-        "autoskillit.core.detect_autoskillit_mcp_prefix",
-        _production_mcp_prefix,
     )
     monkeypatch.setattr(
         "autoskillit.workspace.project_default_plugin_authority",

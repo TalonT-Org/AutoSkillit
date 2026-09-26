@@ -27,11 +27,13 @@ from autoskillit.cli.install._install_contract import (
 )
 from autoskillit.cli.install._install_info import (
     InstallInfo,
+    InstallType,
     UpgradeCommand,
     detect_install,
     release_identity,
     resolve_autoskillit_entrypoint,
     upgrade_command,
+    upgrade_unavailable_message,
 )
 from autoskillit.cli.install._installed_plugins import InstalledPluginsFile
 from autoskillit.cli.update._transaction_result import (
@@ -109,6 +111,45 @@ def _upgrade_failure(
         UpdateTransactionOutcome.FAILED_UPGRADE,
         findings=(message,),
     )
+
+
+def _pre_mutation_refusal(
+    progress: _TransactionProgress,
+    info: InstallInfo,
+    *,
+    defer_inside_claudecode: bool,
+) -> UpdateTransactionResult | None:
+    """Refuse before mutating anything: the CLAUDECODE deferral always wins."""
+    if defer_inside_claudecode:
+        return progress.finish(
+            UpdateTransactionOutcome.DEFERRED,
+            install_result=InstallResult(outcome=InstallOutcome.DEFERRED),
+            findings=(
+                "Update deferred because a registered Claude plugin cannot be "
+                "safely replaced from inside CLAUDECODE.",
+            ),
+        )
+    if info.install_type is InstallType.LOCAL_PATH:
+        local_source = info.local_source
+        # Caller established ``upgrade_command(info)`` returned non-None, which
+        # for LOCAL_PATH forces ``info.local_source`` to be set. Surface a typed
+        # failure (mirroring the ``is_dir()`` branch below) if the invariant
+        # ever drifts, instead of an ``AssertionError`` crash.
+        if local_source is None:
+            return _upgrade_failure(
+                progress,
+                "Install type 'local-path' has no recorded source directory. "
+                "Reinstall with 'uv tool install --force --reinstall "
+                "<autoskillit checkout>' or 'task install-dev' (develop).",
+            )
+        if not local_source.is_dir():
+            return _upgrade_failure(
+                progress,
+                f"Install type 'local-path' source directory {local_source} no longer exists. "
+                "Reinstall with 'uv tool install --force --reinstall <autoskillit checkout>' or "
+                "'task install-dev' (develop).",
+            )
+    return None
 
 
 def _advance_failure_message(
@@ -430,21 +471,14 @@ def run_update_transaction(
     install_root_probe_bin = install_root_staging.parent / f".{install_root_staging.name}-bin"
     command = upgrade_command(info, install_root_destination=install_root_staging)
     if command is None:
-        return _upgrade_failure(
-            progress,
-            "Unknown install type. Reinstall via install.sh (stable) or "
-            "'task install-dev' (develop).",
-        )
-    if environment.get("CLAUDECODE") and require_registered_plugin:
-        install_result = InstallResult(outcome=InstallOutcome.DEFERRED)
-        return progress.finish(
-            UpdateTransactionOutcome.DEFERRED,
-            install_result=install_result,
-            findings=(
-                "Update deferred because a registered Claude plugin cannot be "
-                "safely replaced from inside CLAUDECODE.",
-            ),
-        )
+        return _upgrade_failure(progress, upgrade_unavailable_message(info))
+    refusal = _pre_mutation_refusal(
+        progress,
+        info,
+        defer_inside_claudecode=bool(environment.get("CLAUDECODE")) and require_registered_plugin,
+    )
+    if refusal is not None:
+        return refusal
 
     previous = release_identity(info, version=current_version)
     target = target_identity
@@ -559,18 +593,20 @@ def run_update_transaction(
 
         progress.enter(UpdateTransactionPhase.INSTALL_ROOT_GENERATION_PUBLICATION)
         if command.env:
-            # Only the retargeted GIT_VCS dev track staged content via
-            # UV_TOOL_DIR — the STABLE/LOCAL_EDITABLE branches upgraded the
-            # shared uv-managed root in place and have nothing to finalize.
+            # The retargeted GIT_VCS dev track and LOCAL_PATH stage content
+            # via UV_TOOL_DIR — the STABLE/LOCAL_EDITABLE branches upgraded
+            # the shared uv-managed root in place and have nothing to finalize.
             #
             # install_root_staging is a disposable probe copy, not the
             # published artifact: uv/venv console scripts bake an absolute
             # shebang path at creation time, so a tree once written cannot be
             # relocated afterward. The install above ran only to learn
-            # expected_version. A second, near-free install (uv's local
-            # cache makes a repeat install of the same resolved commit a
-            # cache hit — verified by spike) writes the real, permanent copy
-            # directly at its final version+incarnation-keyed path.
+            # expected_version. A second install of the same argv writes the
+            # real, permanent copy directly at its final
+            # version+incarnation-keyed path. For GIT_VCS it is near-free
+            # (uv's local cache makes a repeat install of the same resolved
+            # commit a cache hit — verified by spike); LOCAL_PATH's
+            # --reinstall rebuilds the source again.
             generation_root = generation_artifact_root(
                 resolved_home,
                 _AUTOSKILLIT_INSTALL_ROOT_KEY,

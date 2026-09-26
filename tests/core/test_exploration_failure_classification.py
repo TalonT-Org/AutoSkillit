@@ -83,9 +83,42 @@ def test_agents_md_and_agent_definition_name_exactly_the_fallback_set() -> None:
             f"pluginless-explorer.md missing fallback code {code.value!r}"
         )
 
+    from autoskillit.core import HARNESS_ZERO_TOOLS_REFUSAL_MARKER, load_agent_definition
+
+    assert HARNESS_ZERO_TOOLS_REFUSAL_MARKER in agents_md, (
+        "AGENTS.md must authorize the pluginless fallback for a harness spawn refusal"
+    )
+    description = load_agent_definition(
+        pkg_root() / "agents" / "pluginless-explorer.md"
+    ).description
+    assert HARNESS_ZERO_TOOLS_REFUSAL_MARKER in description, (
+        "pluginless-explorer's description must authorize dispatch on a harness spawn refusal"
+    )
+
 
 def test_pluginless_explorer_role_name_is_registered() -> None:
     from autoskillit.core import pkg_root
 
     agent_path = pkg_root() / "agents" / f"{PLUGINLESS_EXPLORER_ROLE}.md"
     assert agent_path.exists()
+
+
+def test_client_spawn_refusal_is_a_typed_fallback_condition() -> None:
+    from autoskillit.core import (
+        EXPLORER_SPAWN_REFUSAL_RESPONSE,
+        HARNESS_ZERO_TOOLS_REFUSAL_MARKER,
+    )
+
+    assert HARNESS_ZERO_TOOLS_REFUSAL_MARKER == "would be spawned with zero tools"
+    assert EXPLORER_SPAWN_REFUSAL_RESPONSE is ExplorationFailureResponse.FALLBACK
+
+
+def test_guidance_defines_client_spawn_refusal_response() -> None:
+    from autoskillit.core import HARNESS_ZERO_TOOLS_REFUSAL_MARKER
+
+    guidance = render_exploration_failure_guidance(fallback_dispatch="DISPATCH_X")
+
+    assert HARNESS_ZERO_TOOLS_REFUSAL_MARKER in guidance
+    refusal_sentence = guidance[guidance.index(HARNESS_ZERO_TOOLS_REFUSAL_MARKER) :]
+    assert "DISPATCH_X" in refusal_sentence
+    assert "verbatim" in refusal_sentence

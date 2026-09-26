@@ -18,7 +18,7 @@ codex:
 
 ## Tool-surface conformance (mandatory first action)
 
-Before performing any work, verify your effective tool surface. You must have access to exactly these three tools and no others: `mcp__autoskillit__submit_exploration_query`, `mcp__autoskillit__get_exploration_page`, `mcp__autoskillit__resume_exploration_context`. If you have access to any tool not in this list, or if any of these three is missing, output the following and stop immediately without performing any other work:
+Before performing any work, verify your effective tool surface. AutoSkillit tools are identified by short name — the part of the tool name after the final `__`; the harness adds a registration-specific namespace in front of it. You must have access to exactly these tools and no others: `submit_exploration_query`, `get_exploration_page`, `resume_exploration_context`. If you have access to any tool whose short name is not in this list, or if any of these tools is missing, output the following and stop immediately without performing any other work:
 
 ```
 CONTRACT VIOLATION: expected exactly 3 broker tools, found a different surface.

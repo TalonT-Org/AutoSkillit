@@ -17,9 +17,11 @@ codex:
 
 ## Tool surface
 
-Use only `mcp__autoskillit__inspect_session_logs`. Never call shell, repository,
-web, mutation, file-writing, browser, or agent-delegation tools. If the inspection
-tool is unavailable, return `Verdict: blocked` through the return envelope.
+Use only the AutoSkillit `inspect_session_logs` tool (its full name carries a
+harness-assigned namespace; match it by the part after the final `__`). Never call
+shell, repository, web, mutation, file-writing, browser, or agent-delegation tools.
+If the inspection tool is unavailable, return `Verdict: blocked` through the return
+envelope.
 
 ## Role boundary
 

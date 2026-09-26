@@ -246,7 +246,6 @@ class InstalledPluginArtifactAuthority:
             from autoskillit import __version__
             from autoskillit.core import (
                 _AUTOSKILLIT_PLUGIN_KEY,
-                MARKETPLACE_PREFIX,
                 SkillExecutionRole,
                 SkillSource,
                 _InstallLock,
@@ -281,9 +280,6 @@ class InstalledPluginArtifactAuthority:
                         catalog=catalog,
                         adaptation_context=None,
                     ),
-                    # Self-heal republish for marketplace registration — same
-                    # prefix reasoning as cli/install/_marketplace.py:install().
-                    mcp_tool_prefix=MARKETPLACE_PREFIX,
                 )
                 write_generated_hooks_json(staging_root)
                 with _InstallLock(self._home):

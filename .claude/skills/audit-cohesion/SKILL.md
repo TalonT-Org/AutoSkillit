@@ -1,18 +1,35 @@
 ---
 name: audit-cohesion
-categories: [audit]
-description: Audit codebase for internal cohesion - how well components fit together and maintain consistent patterns. Distinct from audit-arch (which checks rule violations); this checks integration fitness and convergence. Use when user says "audit cohesion", "check cohesion", "cohesion audit", or "alignment check".
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/audit-cohesion/'
+categories:
+- audit
+uses_capabilities: []
+description: Audit codebase for internal cohesion - how well components fit together and maintain consistent patterns. Distinct
+  from audit-arch (which checks rule violations); this checks integration fitness and convergence. Use when user says "audit
+  cohesion", "check cohesion", "cohesion audit", or "alignment check".
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: audit-cohesion] Auditing codebase cohesion and integration fitness...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: audit-cohesion] Auditing codebase cohesion and integration fitness...'''
+      once: true
 semantic_version: 1
 semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+    count: 5
+  concurrency:
+    required: true
   join:
     required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # Cohesion Audit Skill
@@ -30,14 +47,19 @@ Audit the codebase for internal cohesion: how well components integrate and main
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any source code files
 - Update an existing report — always generate new
 - Duplicate findings that belong in audit-arch (rule violations)
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Use subagents for parallel exploration (one per cohesion dimension)
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - All output goes under `{{AUTOSKILLIT_TEMP}}/audit-cohesion/` (create if needed)
-- Final report: `{{AUTOSKILLIT_TEMP}}/audit-cohesion/cohesion_audit_{YYYY-MM-DD_HHMMSS}.md` — always one file, never split
+- Final report: `{{AUTOSKILLIT_TEMP}}/audit-cohesion/cohesion_audit_{YYYY-MM-DD_HHMMSS}.md`
 - Subagents must NOT create their own files — they return findings in their response text only
 - Score each dimension (STRONG, ADEQUATE, WEAK, FRACTURED)
 
@@ -45,7 +67,7 @@ Audit the codebase for internal cohesion: how well components integrate and main
 
 ## Output Quality Standard
 
-**The report must be plan-ready.** Every finding must contain enough detail that a `/make-plan` invocation can act on it without re-investigating the codebase.
+**The report must be plan-ready.** Every finding must contain enough detail that a `/autoskillit:make-plan` invocation can act on it without re-investigating the codebase.
 
 **ENUMERATE, do not summarize.** The following are NOT acceptable findings:
 
@@ -102,10 +124,10 @@ Each subagent MUST structure its response as:
 
 1. **Directory-level comparison** — produce a side-by-side table:
 
-| Directory/File | Module A Has? | Module B Has? | Symmetric? | Notes |
+| Directory/File | Planner Has? | Executor Has? | Symmetric? | Notes |
 |---------------|-------------|--------------|------------|-------|
-| `handlers/` | Yes | Yes | Yes | — |
-| `config.py` | Yes (single file) | Yes (directory/) | NO | Naming: BaseConfig vs ConfigManager |
+| `nodes/` | Yes | Yes | Yes | — |
+| `checkpointer.py` | Yes (single file) | Yes (directory/) | NO | Naming: PlannerCheckpointer vs HybridCheckpointer |
 
 List ALL directories and key files, not just divergent ones.
 
@@ -116,49 +138,43 @@ List ALL directories and key files, not just divergent ones.
 
 3. **Node implementation comparison** — for each node pattern:
 
-| Pattern | Module A Implementation | Module B Implementation | Consistent? |
+| Pattern | Planner Implementation | Executor Implementation | Consistent? |
 |---------|----------------------|------------------------|-------------|
-| Request dispatch | Send via handler chain | Send via handler chain | Yes |
-| State wrapper | StateManager | ... | ... |
+| Worker dispatch | Send API via prep node | Send API via prep node | Yes |
+| State wrapper | StatePropagatingWrapper | ... | ... |
 
 4. **Prompt template comparison:**
 
-| Template Type | Module A Path | Module B Path | Shared Partials | Divergence |
+| Template Type | Planner Path | Executor Path | Shared Partials | Divergence |
 |--------------|-------------|--------------|----------------|-----------|
 
 ---
 
 ### C2: Interface Completeness
 
-**Question:** Are Protocol/ABC contracts complete — every interface fully implemented, every DI slot wired?
+**Question:** Are adapter, factory, and contract chains complete with no missing links?
 
 **Audit Strategy:**
 
-1. **Protocol → concrete implementation mapping** — find every `Protocol` and `ABC` class, then find its concrete implementation(s):
+1. **Adapter field coverage** — for each graph state field, verify adapter mapping:
 
-| Protocol/ABC | File:Line | Methods Defined | Concrete Implementation | Impl File:Line | All Methods Implemented? |
-|---|---|---|---|---|---|
+| State Field | In PersistenceAdapter? | Database Column | Bidirectional? |
+|------------|----------------------|----------------|---------------|
 
-Flag any protocol with zero implementations, or any concrete class missing an abstract method.
+2. **Factory method coverage** — for each table model, verify factory access:
 
-2. **DI container field population** — for the main dependency injection container(s), compare declared fields vs factory wiring:
+| Table Model | Has Repository? | Has Factory Method? | Factory Method Name |
+|------------|----------------|--------------------|--------------------|
 
-| Field | Type | Optional? | Wired in Factory? | Factory Value | Notes |
-|---|---|---|---|---|---|
+3. **Contract test inventory** — for each interface, verify contract exists:
 
-Flag any field that is declared but not populated in the composition root factory.
+| Interface | Contract Test File | Tests Count | Full Surface Covered? |
+|-----------|-------------------|-------------|---------------------|
 
-3. **Abstract method coverage** — for ABC hierarchies with multiple levels (base → sub-ABC → concrete), verify each concrete class implements all inherited abstract methods:
+4. **Type boundary audit** — find every place SQLModel instances cross boundaries:
 
-| Concrete Class | Inherits From | Abstract Methods Required | Methods Implemented | Complete? |
-|---|---|---|---|---|
-
-4. **Factory function completeness** — for each factory/builder pattern:
-
-| Factory Function | File:Line | Returns | All Fields Populated? | Stale Comments? |
-|---|---|---|---|---|
-
-Flag any factory whose docstring or inline comments claim a different field count than the actual implementation.
+| Location (file:line) | SQLModel Type | Destination | Violation? |
+|---------------------|--------------|------------|-----------|
 
 ---
 
@@ -172,17 +188,17 @@ Flag any factory whose docstring or inline comments claim a different field coun
 
 | Feature | File Path | Role in Feature | Package |
 |---------|----------|----------------|---------|
-| Caching | `src/module_a/cache.py` | Module A caching | core |
-| Caching | `src/module_b/cache/manager.py` | Module B caching | core |
-| Caching | `lib/shared/cache_base.py` | Base abstraction | shared |
+| Checkpointing | `agents/graph/planner/checkpointer.py` | Planner checkpointing | agents |
+| Checkpointing | `agents/graph/executor/checkpointer/checkpointer.py` | Executor checkpointing | agents |
+| Checkpointing | `packages/sdk/graph/checkpointer.py` | Base abstraction | sdk |
 
-Audit the major cross-cutting features in the project.
+Audit at minimum: checkpointing, work package execution, plan compilation, canvas sync, test framework detection.
 
 2. **SDK utility audit** — for each SDK module, count its importers by package:
 
-| Shared Module | Total Importers | Module A Only | Module B Only | Shared | Verdict |
+| SDK Module | Total Importers | Planner-Only | Executor-Only | Shared | Verdict |
 |-----------|----------------|-------------|--------------|--------|---------|
-| `lib/shared/scope.py` | 8 | 0 | 8 | 0 | Misplaced — module B only |
+| `sdk/execution/executor_scope.py` | 8 | 0 | 8 | 0 | Misplaced — executor-only |
 
 3. **Import fan-in** — list every module with 10+ importers:
 
@@ -202,7 +218,7 @@ Audit the major cross-cutting features in the project.
 | Suffix | Count | Examples | Exceptions |
 |--------|-------|---------|-----------|
 | `*Repository` | 27 | PlanRepository, PhaseRepository | — |
-| `*Manager` | 2 | CacheManager, StateManager | Mixed naming strategy |
+| `*Checkpointer` | 2 | PlannerCheckpointer, HybridCheckpointer | Mixed naming strategy |
 
 2. **Method verb audit** — for each verb used in repository/node methods:
 
@@ -233,8 +249,8 @@ Audit the major cross-cutting features in the project.
 
 | Source Module | Test File | Exists? | Test Count |
 |--------------|-----------|---------|-----------|
-| `src/module_a/handler.py` | `tests/module_a/test_handler.py` | Yes | 12 |
-| `lib/shared/utils.py` | — | NO | 0 |
+| `agents/graph/executor/nodes/execute/worker.py` | `tests/agents/graph/executor/nodes/test_worker.py` | Yes | 12 |
+| `packages/sdk/code_intelligence/lens.py` | — | NO | 0 |
 
 List ALL gaps — every source file without a corresponding test file.
 
@@ -257,35 +273,33 @@ List ALL gaps — every source file without a corresponding test file.
 
 ### C6: Registration Completeness
 
-**Question:** Are all registries internally consistent and complete — every registered entry has an implementation, every implementation is registered?
+**Question:** Are all registries internally consistent and complete?
 
 **Audit Strategy:**
 
-1. **MCP tool registry completeness** — find the gate frozensets (`GATED_TOOLS`, `UNGATED_TOOLS`) and cross-reference every tool name against handler functions and documentation:
+1. **Field registry gap analysis** — compare state schema fields vs registry:
 
-| Tool Name | In Gate Frozenset (which) | Handler Function | Handler File:Line | @app.tool() registered? | In AGENTS.md? | Notes |
-|---|---|---|---|---|---|---|
+| Field Name | In State Schema? | In Field Registry? | Lifecycle Category | Source File:Line |
+|-----------|-----------------|-------------------|-------------------|-----------------|
+| `session_started_at` | Yes (`unified_state.py:42`) | NO | — | Missing |
 
-Flag any tool in the frozenset without a handler, any handler not in the frozenset, and any documentation attribution to the wrong file (shared tools belong in AGENTS.md; Claude-only overlay tools belong in physical CLAUDE.md).
+List EVERY missing field.
 
-2. **Decorator-based rule registry** — for `@semantic_rule` (or equivalent auto-registration decorator) find all decorated functions vs all emitted finding IDs:
+2. **Phase registry audit:**
 
-| Decorator `name=` | Registered Under | Emitted Finding IDs | Mismatch? |
-|---|---|---|---|
+| Phase | In Registry? | Hardcoded Elsewhere? | Location of Hardcode |
+|-------|-------------|---------------------|---------------------|
 
-Flag cases where one decorated function emits findings under different IDs than the one it is registered under.
+3. **Role registry vs prompt template audit:**
 
-3. **CLI command registration** — enumerate all `@app.command()` (or equivalent) decorators and cross-reference against documentation:
+| Role | In Registry? | Has Prompt Template? | Template Path | Gap |
+|------|-------------|---------------------|--------------|-----|
+| Provider | Yes | NO | — | Missing `provider_guidance.j2` |
 
-| Command | Registered at File:Line | Documented? | Notes |
-|---|---|---|---|
+4. **DevToolRegistry audit:**
 
-Flag commands registered in code but absent from AGENTS.md (shared commands) or physical/effective CLAUDE.md (Claude-only overlay).
-
-4. **Skill/plugin registry completeness** — count skill directories (those with `SKILL.md`) and verify count matches documented claim:
-
-| Skill Directory | Has SKILL.md? | Listed in AGENTS.md? | Name Match? |
-|---|---|---|---|
+| Tool | In Registry? | In pyproject.toml? | In pre-commit? | Gap |
+|------|-------------|-------------------|---------------|-----|
 
 ---
 
@@ -329,10 +343,10 @@ Flag forward references (using a key before the step that defines it) and phanto
 
 1. **Symbol accessibility audit** — for key public symbols, check import depth:
 
-| Symbol | Shallow Import (`from lib.X import Y`) | Deep Import Required? | Consumer Count |
+| Symbol | Shallow Import (`from packages.X import Y`) | Deep Import Required? | Consumer Count |
 |--------|---------------------------------------------|---------------------|---------------|
-| `Config` | Yes | No | 45 |
-| `AppState` | No | `from lib.schema.state.app_state import ...` | 23 |
+| `Plan` | Yes | No | 45 |
+| `ExecutorGraphState` | No | `from packages.schema.state.executor_state import ...` | 23 |
 
 List EVERY symbol that requires deep imports but has 5+ consumers.
 
@@ -368,7 +382,7 @@ Flag duplicates (same name in different agents).
 
 2. **Error state field comparison:**
 
-| Error Field | In Module A State? | In Module B State? | Same Semantics? |
+| Error Field | In Planner State? | In Executor State? | Same Semantics? |
 |------------|-------------------|-------------------|----------------|
 
 3. **Broad exception handler census** — list EVERY `except Exception` or `except BaseException`:
@@ -420,24 +434,22 @@ Flag files listed in `AGENTS.md` that do not exist, and files on disk not listed
 
 ## Audit Workflow
 
-### Step 0: Initialize Code Index
+### Step 1: Launch Parallel Subagents (SINGLE MESSAGE)
 
-```
-mcp__code-index__set_project_path(path="{PROJECT_ROOT}")
-```
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
-### Step 1: Launch Parallel Subagents
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Spawn subagents for each cohesion dimension. Each subagent MUST be instructed:
 
 > "You are conducting a thorough cohesion audit. Your output must be EXHAUSTIVE — enumerate every item, do not summarize. Return structured tables, not prose. Every finding needs a file:line reference. If you find 16 missing fields, list all 16 with their source locations. If you find 48 files with broad exception handlers, list all 48. Completeness is more important than brevity. This is a research task — DO NOT modify any code."
 
-**Grouping** (spawn 6 subagents, one dimension each or grouped by relatedness):
+**Grouping** (spawn 5 subagents, one dimension each or grouped by relatedness):
 
 | Subagent | Dimensions | Focus |
 |----------|-----------|-------|
 | 1 | C1, C4 | Structural symmetry + naming consistency (side-by-side comparison tables) |
-| 2 | C2, C8 | Interface completeness + export surface (Protocol/DI audit + __init__ gaps) |
+| 2 | C2, C8 | Interface completeness + export surface (adapter/factory chain verification) |
 | 3 | C3, C9 | Feature locality + error handling (file mapping + exception census) |
 | 4 | C5, C10 | Test-source alignment + documentation-code alignment (enumerate EVERY source module, cross-reference AGENTS.md; consult physical CLAUDE.md only for Claude-only overlay) |
 | 5 | C6, C7 | Registration completeness + recipe-to-skill coherence (registry gap tables + YAML reference resolution) |
@@ -458,9 +470,16 @@ After all subagents return:
 
 Ensure `{{AUTOSKILLIT_TEMP}}/audit-cohesion/` exists (`mkdir -p`).
 
-Write to `{{AUTOSKILLIT_TEMP}}/audit-cohesion/cohesion_audit_{YYYY-MM-DD_HHMMSS}.md` — **always one file, never split**.
+Write to `{{AUTOSKILLIT_TEMP}}/audit-cohesion/cohesion_audit_{YYYY-MM-DD_HHMMSS}.md`. (relative to the current working directory)
 
-The report WILL be long. This is expected and correct — thoroughness over brevity. Do not reduce content to stay under any line count.
+The report WILL be long. This is expected and correct — thoroughness over brevity.
+
+If report exceeds 500 lines, split into parts at natural dimension boundaries:
+- `_scorecard.md` — scorecard, cross-dimension patterns, recommended focus areas
+- `_c1_c4.md` — dimensions C1 through C4 with full tables
+- `_c5_c9.md` — dimensions C5 through C9 with full tables
+
+Each part must reference the other parts by filename.
 
 ### Step 4: Output Summary to Terminal
 
@@ -510,10 +529,10 @@ Each dimension section in the report MUST follow this structure:
 ## Exclusions
 
 Do NOT flag:
-- Generated files (migrations, schema DDL)
+- Generated files (Alembic migrations, PowerSync DDL)
 - Third-party vendored code
 - Test fixtures and cached LLM responses
-- Temporary/debug files in `temp/`
+- Temporary/debug files in `{{AUTOSKILLIT_TEMP}}/`
 - Configuration template files in `config/`
 
 ---

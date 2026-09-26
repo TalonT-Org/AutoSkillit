@@ -110,6 +110,9 @@ _API_TERMINAL_REASON_ERROR = "api_error"
 #: (v2.1.199+) and pinned in Step 1 investigation notes. Matched by exact
 #: substring equality only — never by loose keyword search.
 HARNESS_API_ERROR_LITERAL = "Agent terminated early due to an API error"
+#: Duplicated from ``core.types._type_exploration.HARNESS_ZERO_TOOLS_REFUSAL_MARKER``;
+#: this module cannot import ``core``; a contract test pins equality.
+HARNESS_SPAWN_REFUSAL_LITERAL = "would be spawned with zero tools"
 #: Structured context-window terminal evidence code (distinct from the
 #: normalized ``InfraExitCategory`` value above).
 _CONTEXT_TERMINAL_CODE = "prompt_too_long"
@@ -279,7 +282,10 @@ def classify_evidence(evidence: Mapping[str, Any]) -> str:
     if evidence.get("api_terminal_reason") == _API_TERMINAL_REASON_ERROR:
         return REASON_ERROR
     harness_literal = evidence.get("harness_literal")
-    if isinstance(harness_literal, str) and HARNESS_API_ERROR_LITERAL in harness_literal:
+    if isinstance(harness_literal, str) and any(
+        literal in harness_literal
+        for literal in (HARNESS_API_ERROR_LITERAL, HARNESS_SPAWN_REFUSAL_LITERAL)
+    ):
         return REASON_ERROR
     if evidence.get("confirmed_interrupted"):
         return REASON_INTERRUPTED

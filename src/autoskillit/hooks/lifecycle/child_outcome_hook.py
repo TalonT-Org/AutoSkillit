@@ -54,6 +54,7 @@ if _RUNTIME_DIR not in sys.path:
 # which static analysis cannot resolve ahead of the sys.path bootstrap above.
 _snapshot_module = importlib.import_module("_child_outcome_snapshot")
 HARNESS_API_ERROR_LITERAL = getattr(_snapshot_module, "HARNESS_API_ERROR_LITERAL")
+HARNESS_SPAWN_REFUSAL_LITERAL = getattr(_snapshot_module, "HARNESS_SPAWN_REFUSAL_LITERAL")
 finalize_snapshot_at_session_end = getattr(_snapshot_module, "finalize_snapshot_at_session_end")
 observe_child = getattr(_snapshot_module, "observe_child")
 record_terminal_evidence = getattr(_snapshot_module, "record_terminal_evidence")
@@ -190,6 +191,9 @@ def _handle_agent_task_result(data: dict, *, event_type: str) -> None:
     result_text = _extract_result_text(data)
     evidence: dict[str, object] = {"evidence_source": event_type.lower()}
     if HARNESS_API_ERROR_LITERAL in result_text:
+        evidence["harness_literal"] = result_text[:_RESULT_TEXT_EVIDENCE_CAP]
+    # A refusal is a documented Agent tool error; a successful report may quote it.
+    if event_type == "PostToolUseFailure" and HARNESS_SPAWN_REFUSAL_LITERAL in result_text:
         evidence["harness_literal"] = result_text[:_RESULT_TEXT_EVIDENCE_CAP]
 
     record_terminal_evidence(

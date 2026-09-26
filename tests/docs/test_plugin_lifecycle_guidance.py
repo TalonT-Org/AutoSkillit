@@ -69,3 +69,16 @@ def test_interactive_codex_discovery_contract_is_documented() -> None:
         "`<generated_home>/skills`",
     ):
         assert phrase in contract
+
+
+def test_overrides_doc_names_the_post_upgrade_check_path() -> None:
+    overrides = (DOCS_ROOT / "skills" / "overrides.md").read_text(encoding="utf-8")
+
+    for phrase in (
+        "autoskillit doctor",
+        "project_local_skill_contracts",
+        "autoskillit migrate",
+        "ADVISORY",
+        "CONTRACT_FLOOR_WEAKENED",
+    ):
+        assert phrase in overrides

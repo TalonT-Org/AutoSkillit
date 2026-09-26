@@ -34,6 +34,7 @@ def _run_hook(
     state_root: Path | None = None,
     hook_path: Path | None = None,
     launch_id: str | None = None,
+    extra_env: dict[str, str] | None = None,
 ) -> tuple[str, int]:
     """Run skill_load_post_hook.main(), return (stdout, exit_code)."""
     root = state_root if state_root is not None else tmp_dir
@@ -53,6 +54,8 @@ def _run_hook(
         "AUTOSKILLIT_AGENT_BACKEND",
         "AUTOSKILLIT_LAUNCH_ID",
         "AUTOSKILLIT_STATE_ROOT",
+        "AUTOSKILLIT_LOG_DIR",
+        "AUTOSKILLIT_COMPLETION_MARKER",
     ):
         env_base.pop(key, None)
     if provider_profile is not None:
@@ -62,6 +65,8 @@ def _run_hook(
     if launch_id is not None:
         env_base["AUTOSKILLIT_LAUNCH_ID"] = launch_id
     env_base["AUTOSKILLIT_STATE_ROOT"] = str(root.resolve())
+    if extra_env:
+        env_base.update(extra_env)
 
     if hook_path is not None:
         completed = subprocess.run(
@@ -584,6 +589,72 @@ def test_join_authority_renders_exact_values_as_json_strings(tmp_path: Path) -> 
     additional_context = json.loads(stdout)["additionalContext"]
     assert f"skill_name={json.dumps(skill_name)}" in additional_context
     assert f"session_id={json.dumps(session_id)}" in additional_context
+    assert "cook_bypass" not in additional_context
+
+
+def test_cook_join_authority_context_announces_the_bypass(tmp_path: Path) -> None:
+    from autoskillit.core.runtime.session_registry import write_registry_entry
+
+    skill_name = "join-bearing"
+    session_id = "cook-session"
+    write_registry_entry(tmp_path, "cook-launch", "cook", None)
+    projection_root, hook_path = copy_projected_hook(tmp_path)
+    write_projection_manifest(
+        projection_root,
+        skill_name=skill_name,
+        join_required=True,
+    )
+
+    stdout, exit_code = _run_hook(
+        stdin_data=_make_skill_event(session_id=session_id, skill=skill_name),
+        tmp_dir=tmp_path,
+        hook_path=hook_path,
+        launch_id="cook-launch",
+        extra_env={"AUTOSKILLIT_LOG_DIR": str(tmp_path / "logs")},
+    )
+
+    assert exit_code == 0
+    additional_context = json.loads(stdout)["additionalContext"]
+    assert "JOIN DECLARATION AUTHORITY" in additional_context
+    assert f"session_id={json.dumps(session_id)}" in additional_context
+    assert "cook_bypass" in additional_context
+
+    # Symmetric to the companion negative test: verify the cook_bypass
+    # diagnostic was emitted to join_diagnostics.jsonl, not just rendered
+    # into the additionalContext payload.
+    diagnostic_path = tmp_path / "logs" / "join_diagnostics.jsonl"
+    diagnostics = [json.loads(line) for line in diagnostic_path.read_text().splitlines() if line]
+    assert diagnostics, "expected at least one join_diagnostic record"
+    assert diagnostics[0]["status"] == "cook_bypass"
+
+
+def test_cook_non_join_skill_load_consults_no_join_authority(tmp_path: Path) -> None:
+    from autoskillit.core.runtime.session_registry import write_registry_entry
+
+    skill_name = "non-join-skill"
+    session_id = "cook-session"
+    write_registry_entry(tmp_path, "cook-launch", "cook", None)
+    projection_root, hook_path = copy_projected_hook(tmp_path)
+    write_projection_manifest(
+        projection_root,
+        skill_name=skill_name,
+        join_required=False,
+    )
+
+    stdout, exit_code = _run_hook(
+        stdin_data=_make_skill_event(session_id=session_id, skill=skill_name),
+        tmp_dir=tmp_path,
+        hook_path=hook_path,
+        launch_id="cook-launch",
+        extra_env={"AUTOSKILLIT_LOG_DIR": str(tmp_path / "logs")},
+    )
+
+    assert exit_code == 0
+    # The test's intent is that no cook join-authority context is rendered.
+    # Asserting the absence of the specific marker (rather than stdout == "")
+    # is robust against unrelated stdout emissions (logging, future fields).
+    assert "JOIN DECLARATION AUTHORITY" not in stdout
+    assert not (tmp_path / "logs" / "join_diagnostics.jsonl").exists()
 
 
 def test_join_false_skill_load_keeps_join_required_false(tmp_path: Path) -> None:

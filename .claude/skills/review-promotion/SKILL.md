@@ -61,10 +61,13 @@ only the currently independent frontier and join every launched responsibility.
 - Modify any source code — this skill is read-only analysis
 - Use `gh pr comment --body` inline — always use `--body-file`
 - Fail silently if `gh` is unavailable when `--post-to-pr` — output `verdict = review_ready` and exit 0
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Output `report_path = <absolute path>` as a structured token (absolute path, prepend CWD)
 - Output `verdict = <value>` as a structured token
+- Start all independent child delegations before awaiting any result to maximize concurrency
+
 ## Workflow
 
 ### Phase 0: Setup
@@ -205,6 +208,8 @@ Return JSON:
 ```
 
 ### Phase 2: Quality Assessment (parallel subagents)
+
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Spawn three parallel subagents via `child delegation under the declared `sonnet` model-class policy`.
 

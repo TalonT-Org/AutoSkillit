@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import DIRECT_PREFIX, MARKETPLACE_PREFIX
+from autoskillit.core import DIRECT_PREFIX, PLUGIN_PREFIX
 from tests.cli._orchestrator_prompt_helpers import (
     build_fleet_dispatch_prompt as _build_fleet_dispatch_prompt,
 )
@@ -418,14 +418,14 @@ def test_orchestrator_prompt_context_exhaustion_still_routes_to_context_limit():
 
 
 # MCP prefix parametrisation tests
-@pytest.mark.parametrize("mcp_prefix", [DIRECT_PREFIX, MARKETPLACE_PREFIX])
+@pytest.mark.parametrize("mcp_prefix", [DIRECT_PREFIX, PLUGIN_PREFIX])
 def test_orchestrator_prompt_uses_fully_qualified_tool_name(mcp_prefix: str) -> None:
 
     prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=mcp_prefix)
     assert f"{mcp_prefix}open_kitchen" in prompt
 
 
-@pytest.mark.parametrize("mcp_prefix", [DIRECT_PREFIX, MARKETPLACE_PREFIX])
+@pytest.mark.parametrize("mcp_prefix", [DIRECT_PREFIX, PLUGIN_PREFIX])
 def test_open_kitchen_prompt_uses_fully_qualified_tool_name(mcp_prefix: str) -> None:
 
     prompt = _build_open_kitchen_prompt(mcp_prefix=mcp_prefix)

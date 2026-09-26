@@ -403,6 +403,18 @@ def test_claude_provisioning_preamble_names_pluginless_explorer_and_authorized_c
     assert "dispatch" in preamble
 
 
+def test_claude_provisioning_preamble_defines_spawn_refusal_response() -> None:
+    """A harness spawn refusal has a defined response in the parent's preamble."""
+    from autoskillit.core import HARNESS_ZERO_TOOLS_REFUSAL_MARKER, PLUGINLESS_EXPLORER_ROLE
+
+    preamble = ClaudeCodeBackend().exploration_dispatch_renderer.conventions.provisioning_preamble
+    assert preamble is not None
+    assert HARNESS_ZERO_TOOLS_REFUSAL_MARKER in preamble
+    assert (
+        PLUGINLESS_EXPLORER_ROLE in preamble[preamble.index(HARNESS_ZERO_TOOLS_REFUSAL_MARKER) :]
+    )
+
+
 def test_codex_provisioning_preamble_is_absent() -> None:
     """Codex never calls enable_exploration, so it carries no provisioning preamble at all."""
     conventions = CodexBackend().exploration_dispatch_renderer.conventions

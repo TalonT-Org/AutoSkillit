@@ -1157,6 +1157,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_orchestrator_guidance_admission.py",
             "server/test_server_init_gate.py",
             "server/test_consumer_tool_callability.py",
+            # live gate copies the production --plugin-dir projection
+            "server/test_claude_explorer_live_gate.py",
             "smoke_utils",
             # recipe direct-import entries (import autoskillit.workspace at AST level):
             "recipe/test_contracts.py",
@@ -1449,7 +1451,6 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_lifespan.py",
             # file-level: live output-budget E2E imports the hook registry directly
             "server/test_output_budget_e2e.py",
-            "server/test_claude_explorer_live_gate.py",
             "execution/backends/test_claude_join_recovery_live_gate.py",
             # infra/ narrowed to 7 files
             "infra/test_adr_runtime_guard_coverage.py",

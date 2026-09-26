@@ -53,7 +53,7 @@ from autoskillit.cli.prompts import (
     _build_orchestrator_prompt,
 )
 from autoskillit.cli.session import cook
-from autoskillit.core import detect_autoskillit_mcp_prefix
+from autoskillit.core import launched_session_mcp_prefix
 from autoskillit.hook_registry import HookDriftResult
 
 doctor_cmd = _doctor_cmd
@@ -75,7 +75,6 @@ __all__ = [
     "config_show",
     "cook",
     "daemon_orphans",
-    "detect_autoskillit_mcp_prefix",
     "doctor_cmd",
     "fleet_app",
     "fleet_campaign",
@@ -84,6 +83,7 @@ __all__ = [
     "fleet_status",
     "init",
     "install",
+    "launched_session_mcp_prefix",
     "main",
     "migrate",
     "order",

@@ -61,7 +61,7 @@ async def _execute_fleet_run(
     from autoskillit.cli.install._plugin_artifact import default_plugin_retirement_coordinator
     from autoskillit.core import (
         SkillExecutionRole,
-        detect_autoskillit_mcp_prefix,
+        launched_session_mcp_prefix,
         new_managed_launch_id,
     )
     from autoskillit.fleet import _build_food_truck_prompt, execute_dispatch
@@ -174,7 +174,7 @@ async def _execute_fleet_run(
     )
     prompt_builder = functools.partial(
         _build_food_truck_prompt,
-        mcp_prefix=detect_autoskillit_mcp_prefix(effective_backend.capabilities),
+        mcp_prefix=launched_session_mcp_prefix(effective_backend.capabilities),
         has_unguarded_filesystem_access=has_ufa,
         projected_sous_chef=projected_sous_chef,
     )

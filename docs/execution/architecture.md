@@ -142,6 +142,10 @@ A skill that declares `semantic_requirements.join.required: true` enters a join-
 
 The session flag carries join policy; the manifest carries projection identity; the ledger carries wave state. Each is read by the matching hook family. None of them is a duplicate authority — they are three projections of one decision.
 
+### Interactive cook join applicability
+
+The shared cook predicate, `is_authenticated_top_level_cook_session`, feeds `hook_join_applicability` in hooks and `record_session_cook_join_bypass` in the declaration tool. In an authenticated top-level interactive cook, `declare_join_batch` returns successful status `cook_bypass` without opening a wave; the hook guards and join-bound background restrictions also bypass. Backend capability admission runs first, so native Codex still refuses declaration. This assumes the MCP server is a per-client stdio child that receives the cook launch environment, as pinned by the bundled MCP manifest test. The join-applicability architecture test inventories hook surfaces and native wave openers so new call sites must route through this authority.
+
 ### Attested managed Codex route
 
 Managed Codex is a server-owned route; it does not change the native capability.

@@ -1,15 +1,16 @@
-"""MCP tool name prefix detection — pure stdlib, importable from any layer.
+"""AutoSkillit plugin identifiers and MCP tool-name authorities — pure stdlib.
 
-Detects whether autoskillit is marketplace-installed or running under
-direct --plugin-dir only, and derives the correct fully-qualified MCP
-tool name prefix. Detection is pure Python I/O — no LLM, no subprocess,
-no network calls.
+Holds the plugin registry keys, the Claude Code plugin tool-naming rule, and
+the prefix AutoSkillit's MCP tools carry inside a session it launches. That
+prefix follows the launch corridor (how the backend loads AutoSkillit), never
+host registry state. Importable from any layer; no LLM, subprocess, or
+network calls.
 """
 
 from __future__ import annotations
 
-import functools
 import json
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -28,7 +29,69 @@ DIRECT_INSTALL_CACHE_SUBDIR = "autoskillit-local"
 
 # Single source of truth for both known prefix forms
 DIRECT_PREFIX = "mcp__autoskillit__"
-MARKETPLACE_PREFIX = "mcp__plugin_autoskillit_autoskillit__"
+# Prefix Claude Code assigns to AutoSkillit's MCP tools in every plugin-loaded
+# session (--plugin-dir and marketplace alike):
+# mcp__plugin_<plugin.json name>_<.mcp.json server key>__
+PLUGIN_PREFIX = "mcp__plugin_autoskillit_autoskillit__"
+
+_CLAUDE_TOOL_SEGMENT_INVALID_CHARS = re.compile(r"[^A-Za-z0-9_-]")
+_QUALIFIED_AUTOSKILLIT_TOOL_RE = re.compile(
+    r"mcp__[A-Za-z0-9_-]*autoskillit[A-Za-z0-9_-]*__[A-Za-z0-9_]+"
+)
+
+
+def _claude_tool_segment(value: str) -> str:
+    if not value:
+        raise ValueError("Claude plugin tool-name segment must not be empty")
+    return _CLAUDE_TOOL_SEGMENT_INVALID_CHARS.sub("_", value)
+
+
+def claude_plugin_tool_prefix(plugin_name: str, server_key: str) -> str:
+    """Return the prefix Claude Code assigns to a plugin-provided MCP server's tools.
+
+    Claude Code MCP docs (https://code.claude.com/docs/en/mcp, plugin-provided
+    servers): tools are named ``mcp__plugin_<plugin-name>_<server-name>__<tool-name>``,
+    where any character outside ``A-Z``, ``a-z``, ``0-9``, ``_``, and ``-`` is
+    replaced with ``_``. The rule does not vary by load mode: ``--plugin-dir`` and
+    marketplace loading produce the same names.
+    """
+    return f"mcp__plugin_{_claude_tool_segment(plugin_name)}_{_claude_tool_segment(server_key)}__"
+
+
+def _read_plugin_json_object(path: Path) -> dict[str, object]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ValueError(f"cannot read {path}: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} must contain a JSON object")
+    return data
+
+
+def read_claude_plugin_tool_prefix(plugin_root: Path) -> str:
+    """Derive the MCP tool prefix Claude Code registers for the plugin at *plugin_root*.
+
+    Reads the plugin name from ``.claude-plugin/plugin.json`` and the single
+    server key from ``.mcp.json``. Raises ``ValueError`` naming the offending
+    file when either is missing, unreadable, or malformed.
+    """
+    plugin_json = plugin_root / ".claude-plugin" / "plugin.json"
+    name = _read_plugin_json_object(plugin_json).get("name")
+    if not isinstance(name, str) or not name:
+        raise ValueError(f"{plugin_json} must declare a non-empty string 'name'")
+    mcp_json = plugin_root / ".mcp.json"
+    servers = _read_plugin_json_object(mcp_json).get("mcpServers")
+    if not isinstance(servers, dict) or len(servers) != 1:
+        raise ValueError(f"{mcp_json} must declare exactly one server under 'mcpServers'")
+    (server_key,) = servers
+    if not isinstance(server_key, str) or not server_key:
+        raise ValueError(f"{mcp_json} 'mcpServers' key must be a non-empty string")
+    return claude_plugin_tool_prefix(name, server_key)
+
+
+def find_qualified_autoskillit_tool_names(text: str) -> tuple[str, ...]:
+    """Return every namespace-qualified AutoSkillit MCP tool name in *text*."""
+    return tuple(_QUALIFIED_AUTOSKILLIT_TOOL_RE.findall(text))
 
 
 def _installed_plugins_path(home: Path | None = None) -> Path:
@@ -89,23 +152,31 @@ def registered_install_paths(home: Path | None = None) -> tuple[Path, ...]:
     return tuple(paths)
 
 
-@functools.lru_cache(maxsize=2)
-def detect_autoskillit_mcp_prefix(capabilities: BackendCapabilities) -> str:
-    """Return the MCP prefix that autoskillit tools will use in a spawned session.
+def launched_session_mcp_prefix(capabilities: BackendCapabilities) -> str:
+    """Prefix of AutoSkillit's MCP tools inside a session AutoSkillit launches with this backend.
 
-    Backends without marketplace-prefix support always use the direct prefix.
-    Marketplace-capable backends use the marketplace prefix only while an
-    ``installed_plugins.json`` registration is present.
+    Claude children always load AutoSkillit as a plugin (``--plugin-dir``);
+    Codex children register ``[mcp_servers.autoskillit]``. Pure: never reads
+    host state.
     """
-    if not capabilities.claude_marketplace_tool_prefix_capable:
-        return DIRECT_PREFIX
+    return PLUGIN_PREFIX if capabilities.claude_plugin_tool_namespace else DIRECT_PREFIX
+
+
+def is_marketplace_plugin_registered(home: Path | None = None) -> bool:
+    """Host-level registry presence, for diagnostics about the *running* session's hook
+    source only; never a tool-name authority.
+
+    Checks key presence only and never dereferences ``installPath``. Never
+    raises: an absent, unreadable, or malformed registry reads as unregistered.
+    """
     try:
-        data = json.loads(_installed_plugins_path().read_text())
-        if _AUTOSKILLIT_PLUGIN_KEY in data.get("plugins", {}):
-            return MARKETPLACE_PREFIX
-    except (OSError, json.JSONDecodeError, AttributeError, TypeError):
-        pass
-    return DIRECT_PREFIX
+        data = json.loads(_installed_plugins_path(home).read_text())
+    except (OSError, ValueError):
+        return False
+    if not isinstance(data, dict):
+        return False
+    plugins = data.get("plugins")
+    return isinstance(plugins, dict) and _AUTOSKILLIT_PLUGIN_KEY in plugins
 
 
 def validate_agent_tool_canonical(tool: str) -> str:
@@ -114,14 +185,22 @@ def validate_agent_tool_canonical(tool: str) -> str:
     Raises ValueError if the tool does not start with DIRECT_PREFIX or its short
     name is neither a canonical exploration tool nor a registered inspection tool.
     """
-    from ..tool_registry import get_tool_def
-    from ..types import EXPLORATION_TOOLS, ToolInitializationOperation
-
     if not tool.startswith(DIRECT_PREFIX):
         raise ValueError(
             f"agent tool {tool!r} must use the direct-install canonical prefix {DIRECT_PREFIX!r}"
         )
-    short = tool[len(DIRECT_PREFIX) :]
+    return validate_agent_tool_short_name(tool[len(DIRECT_PREFIX) :])
+
+
+def validate_agent_tool_short_name(short: str) -> str:
+    """Assert *short* names an agent-admissible AutoSkillit tool and return it.
+
+    Raises ValueError unless *short* is a canonical exploration tool or a
+    registered inspection tool.
+    """
+    from ..tool_registry import get_tool_def
+    from ..types import EXPLORATION_TOOLS, ToolInitializationOperation
+
     if short not in EXPLORATION_TOOLS:
         try:
             tool_def = get_tool_def(short)

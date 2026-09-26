@@ -121,30 +121,52 @@ class TestDanglingInstallPathIsHarmless:
             assert binding.plugin_dir.is_dir()
         assert binding.closed
 
-    def test_mcp_prefix_detection_still_reads_key_presence(
-        self, tmp_path: Path, monkeypatch
+    @pytest.mark.parametrize("registry_state", ["absent", "dangling", "present"])
+    def test_launched_session_prefix_ignores_host_registry(
+        self, tmp_path: Path, monkeypatch, registry_state: str
     ) -> None:
-        """Key presence remains a legitimate dependency; only the *path* read is gone.
-
-        `installed_plugins.json` is authoritative for exactly one thing: which MCP
-        tool-name prefix a spawned session will use. That answer comes from key
-        presence and never dereferences installPath, so it survives a dangling
-        entry unchanged.
-        """
-        from autoskillit.core import _plugin_ids
+        """The child-session prefix follows the launch corridor, never host registry state."""
+        from autoskillit.core import CLAUDE_CODE_CAPABILITIES, launched_session_mcp_prefix
+        from autoskillit.execution.backends import get_backend
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        _seed_dangling_registry(tmp_path)
-        _plugin_ids.detect_autoskillit_mcp_prefix.cache_clear()
-        try:
-            from autoskillit.core import CLAUDE_CODE_CAPABILITIES
+        if registry_state == "dangling":
+            _seed_dangling_registry(tmp_path)
+        elif registry_state == "present":
+            root = _installed_root(tmp_path)
+            root.mkdir(parents=True)
+            _write_installed_registry(tmp_path, root)
 
-            assert (
-                _plugin_ids.detect_autoskillit_mcp_prefix(CLAUDE_CODE_CAPABILITIES)
-                == _plugin_ids.MARKETPLACE_PREFIX
-            )
-        finally:
-            _plugin_ids.detect_autoskillit_mcp_prefix.cache_clear()
+        assert (
+            launched_session_mcp_prefix(CLAUDE_CODE_CAPABILITIES)
+            == "mcp__plugin_autoskillit_autoskillit__"
+        )
+        assert launched_session_mcp_prefix(get_backend("codex").capabilities) == (
+            "mcp__autoskillit__"
+        )
+
+    def test_marketplace_registration_probe_reads_key_presence(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """Registry presence is a key-presence probe that never dereferences installPath."""
+        from autoskillit.core import is_marketplace_plugin_registered
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        assert is_marketplace_plugin_registered() is False
+
+        registry = tmp_path / ".claude" / "plugins" / "installed_plugins.json"
+        registry.parent.mkdir(parents=True)
+        for malformed in ("{not json", "[]", '{"plugins": []}', '{"plugins": {}}'):
+            registry.write_text(malformed)
+            assert is_marketplace_plugin_registered() is False, malformed
+
+        dangling_install_path = _seed_dangling_registry(tmp_path)
+        # `_seed_dangling_registry` returns the `installPath` it wrote into the
+        # registry — a directory that does NOT exist on disk. The registry
+        # records the plugin, but the directory it points at has been swept.
+        assert not dangling_install_path.exists()
+        assert is_marketplace_plugin_registered() is True
+        assert is_marketplace_plugin_registered(tmp_path) is True
 
 
 class TestPluginArtifactAuthoritySurface:

@@ -444,6 +444,106 @@ class TestPluginJsonContract:
 
 
 # ---------------------------------------------------------------------------
+# CC-PLUGIN-TOOL-NAME: plugin-provided MCP tool naming rule
+# https://code.claude.com/docs/en/mcp (plugin-provided servers):
+#   mcp__plugin_<plugin-name>_<server-name>__<tool-name>, with every character
+#   outside A-Z, a-z, 0-9, _ and - replaced by _.
+# Expected prefixes are HARDCODED STRING LITERALS.
+# ---------------------------------------------------------------------------
+
+
+class TestClaudePluginToolNamespace:
+    def test_claude_plugin_tool_prefix_rule(self) -> None:
+        from autoskillit.core import claude_plugin_tool_prefix
+
+        assert (
+            claude_plugin_tool_prefix("autoskillit", "autoskillit")
+            == "mcp__plugin_autoskillit_autoskillit__"
+        )
+        assert (
+            claude_plugin_tool_prefix("my.plugin", "db-tools")
+            == "mcp__plugin_my_plugin_db-tools__"
+        )
+        with pytest.raises(ValueError):
+            claude_plugin_tool_prefix("", "autoskillit")
+        with pytest.raises(ValueError):
+            claude_plugin_tool_prefix("autoskillit", "")
+
+    def test_packaged_plugin_manifests_yield_plugin_tool_prefix(self) -> None:
+        from autoskillit.core import pkg_root, read_claude_plugin_tool_prefix
+
+        assert (
+            read_claude_plugin_tool_prefix(pkg_root()) == "mcp__plugin_autoskillit_autoskillit__"
+        )
+
+    def test_plugin_prefix_constant_matches_packaged_manifests(self) -> None:
+        """Prompt builders' PLUGIN_PREFIX and the namespace rendered into agents agree."""
+        from autoskillit.core import PLUGIN_PREFIX, pkg_root, read_claude_plugin_tool_prefix
+
+        assert read_claude_plugin_tool_prefix(pkg_root()) == PLUGIN_PREFIX
+
+    @pytest.mark.parametrize(
+        ("plugin_json", "mcp_json"),
+        [
+            (None, '{"mcpServers": {"autoskillit": {}}}'),
+            ('{"name": 7}', '{"mcpServers": {"autoskillit": {}}}'),
+            ('{"name": "autoskillit"}', None),
+            ('{"name": "autoskillit"}', '{"mcpServers": {}}'),
+            ('{"name": "autoskillit"}', '{"mcpServers": {"a": {}, "b": {}}}'),
+            ('{"name": "autoskillit"}', '{"mcpServers": {"": {}}}'),
+        ],
+        ids=[
+            "plugin-json-missing",
+            "name-not-string",
+            "mcp-json-missing",
+            "zero-servers",
+            "two-servers",
+            "server-key-empty-string",
+        ],
+    )
+    def test_read_claude_plugin_tool_prefix_fails_closed(
+        self, tmp_path: Path, plugin_json: str | None, mcp_json: str | None
+    ) -> None:
+        from autoskillit.core import read_claude_plugin_tool_prefix
+
+        if plugin_json is not None:
+            (tmp_path / ".claude-plugin").mkdir()
+            (tmp_path / ".claude-plugin" / "plugin.json").write_text(plugin_json)
+        if mcp_json is not None:
+            (tmp_path / ".mcp.json").write_text(mcp_json)
+        with pytest.raises(ValueError):
+            read_claude_plugin_tool_prefix(tmp_path)
+
+    def test_read_claude_plugin_tool_prefix_rejects_non_string_server_key(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A non-string mcpServers key is rejected even if JSON parsing is bypassed.
+
+        json.loads strictly rejects non-string object keys, so the production
+        guard is unreachable through the normal read path; this test bypasses
+        the JSON layer to verify the runtime isinstance(server_key, str)
+        check still rejects the malformed dict shape.
+        """
+        from autoskillit.core import read_claude_plugin_tool_prefix
+        from autoskillit.core.plugins import _plugin_ids
+
+        original_reader = _plugin_ids._read_plugin_json_object
+
+        (tmp_path / ".claude-plugin").mkdir()
+        (tmp_path / ".claude-plugin" / "plugin.json").write_text('{"name": "autoskillit"}')
+        (tmp_path / ".mcp.json").write_text('{"mcpServers": {"autoskillit": {}}}')
+
+        def _selective_bypass(path: Path) -> dict[str, object]:
+            if path.name == ".mcp.json":
+                return {"mcpServers": {7: {}}}
+            return original_reader(path)
+
+        monkeypatch.setattr(_plugin_ids, "_read_plugin_json_object", _selective_bypass)
+        with pytest.raises(ValueError, match="must be a non-empty string"):
+            read_claude_plugin_tool_prefix(tmp_path)
+
+
+# ---------------------------------------------------------------------------
 # CC-HEADLESS-001: run_skill headless path --add-dir layout guard
 # Path components are HARDCODED STRING LITERALS — do NOT replace with constants.
 # Replaces CC-SKILLS-EXT (xfail removed): run_skill now routes through

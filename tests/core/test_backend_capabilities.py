@@ -112,7 +112,7 @@ def test_backend_capabilities_field_count():
         "supports_model_invocation_gating",
         "github_api_callable",
         "protected_recipe_delivery_capable",
-        "claude_marketplace_tool_prefix_capable",
+        "claude_plugin_tool_namespace",
         "cook_exact_binding_probe_required",
     }
     assert frozenset_fields == {
@@ -194,7 +194,7 @@ def test_backend_capabilities_field_names_locked():
         "github_api_callable",
         "unnegotiated_tool_result_token_limit",
         "protected_recipe_delivery_capable",
-        "claude_marketplace_tool_prefix_capable",
+        "claude_plugin_tool_namespace",
         "cook_exact_binding_probe_required",
         "explicit_path_env_var",
         "recipe_delivery_budget",
@@ -221,7 +221,7 @@ def test_claude_code_capabilities_field_values():
     assert CLAUDE_CODE_CAPABILITIES.exit_code_is_terminal is False
     assert CLAUDE_CODE_CAPABILITIES.mcp_config_capable is False
     assert CLAUDE_CODE_CAPABILITIES.managed_fixed_batch_route_capable is False
-    assert CLAUDE_CODE_CAPABILITIES.claude_marketplace_tool_prefix_capable is True
+    assert CLAUDE_CODE_CAPABILITIES.claude_plugin_tool_namespace is True
     assert CLAUDE_CODE_CAPABILITIES.explicit_path_env_var == "CLAUDE_CODE_EXECPATH"
     assert CLAUDE_CODE_CAPABILITIES.cook_exact_binding_probe_required is True
     assert CLAUDE_CODE_CAPABILITIES.food_truck_capable is True

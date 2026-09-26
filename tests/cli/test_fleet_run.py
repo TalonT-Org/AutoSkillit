@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import autoskillit.cli.fleet._fleet_run as _patch_fleet__fleet_run
-from autoskillit.core import FleetErrorCode
+from autoskillit.core import DIRECT_PREFIX, PLUGIN_PREFIX, FleetErrorCode
 from autoskillit.fleet import (
     DispatchCompleted,
     DispatchEffectProvenance,
@@ -85,7 +85,7 @@ def _mock_backend() -> MagicMock:
     backend = MagicMock()
     backend.name = "codex"
     backend.conventions = None
-    backend.capabilities.claude_marketplace_tool_prefix_capable = False
+    backend.capabilities.claude_plugin_tool_namespace = False
     backend.capabilities.has_unguarded_filesystem_access = False
     backend.capabilities.anthropic_provider_capable = False
     backend.capabilities.managed_fixed_batch_route_capable = False
@@ -555,6 +555,39 @@ class TestFleetRunDispatch:
         assert len(make_context_calls) == 1
         assert len(dispatch_ctx) == 1
         assert dispatch_ctx[0] is fake_ctx
+
+    @pytest.mark.parametrize(
+        ("plugin_namespace", "expected_prefix"),
+        [(True, PLUGIN_PREFIX), (False, DIRECT_PREFIX)],
+    )
+    def test_fleet_run_prompt_builder_binds_launch_corridor_prefix(
+        self, monkeypatch: pytest.MonkeyPatch, plugin_namespace: bool, expected_prefix: str
+    ) -> None:
+        """The food-truck prompt prefix follows the backend's claude_plugin_tool_namespace."""
+        monkeypatch.setattr(
+            "autoskillit.config.load_config",
+            lambda path=None: _make_test_config(fleet=True, fleet_headless_run=True),
+        )
+        fake_ctx = MagicMock()
+        fake_ctx.backend = _mock_backend()
+        fake_ctx.backend.capabilities.claude_plugin_tool_namespace = plugin_namespace
+        fake_ctx.config = MagicMock()
+        monkeypatch.setattr("autoskillit.server.make_context", lambda cfg, **kwargs: fake_ctx)
+        builders: list[object] = []
+
+        async def fake_execute_dispatch(**kwargs: object) -> DispatchResult:
+            builders.append(kwargs["prompt_builder"])
+            return _mock_success_result()
+
+        monkeypatch.setattr("autoskillit.fleet.execute_dispatch", fake_execute_dispatch)
+
+        from autoskillit.cli.fleet import fleet_run
+
+        with pytest.raises(SystemExit):
+            fleet_run("test-recipe", task="test")
+
+        (builder,) = builders
+        assert builder.keywords["mcp_prefix"] == expected_prefix  # type: ignore[attr-defined]
 
 
 class TestHeadlessCLIPriorFailure:

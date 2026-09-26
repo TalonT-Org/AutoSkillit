@@ -46,6 +46,7 @@ class _RoutingBackend:
         self.capabilities = SimpleNamespace(
             has_unguarded_filesystem_access=True,
             managed_fixed_batch_route_capable=False,
+            claude_plugin_tool_namespace=name == "claude-code",
         )
         self._events = events
 
@@ -99,7 +100,6 @@ def _install_order_harness(
     monkeypatch.setattr("sys.stdin.isatty", lambda: is_tty)
     monkeypatch.setattr(_session_backend, "resolve_global_backend", lambda *a, **kw: backend)
     monkeypatch.setattr(_config, "load_config", lambda *a, **kw: config)
-    monkeypatch.setattr(_order, "detect_autoskillit_mcp_prefix", lambda _caps: "autoskillit")
     monkeypatch.setattr(_order, "validate_skill_tier_roles", lambda *a, **kw: None)
     monkeypatch.setattr(
         _order,

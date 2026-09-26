@@ -62,9 +62,11 @@ and creates a comprehensive promotion PR.
 - Skip pre-flight checks — a failing pre-flight must block PR creation
 - Use the Bash tool for file reads — use Read, Grep, Glob for all codebase inspection
 - Use `gh pr create --body` inline — always use `--body-file`
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Run ALL pre-flight checks before any analysis work
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Check `gh auth status` before any GitHub operations
 - Output `pr_url = <url>` as a structured token (empty string when GitHub unavailable or dry-run)
 - Output `verdict = <value>` as a structured token
@@ -175,6 +177,8 @@ Set `selected_promotion_responsibilities` to the dependency-ready pre-flight, in
 domain, and synthesis responsibilities selected across the phases below. Dispatch only
 the current independent frontier and join it before dependent work.
 
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
+
 Spawn three parallel subagents via child delegation under the declared `sonnet` model-class
 policy to validate promotion readiness.
 All three must pass before analysis proceeds. If any fails, report the failure clearly
@@ -240,6 +244,8 @@ clear summary table and exit 1 without proceeding to analysis. If `ci_status` is
 treat as a warning (non-blocking) and note it in the report.
 
 ### Phase 2: Change Inventory (parallel subagents)
+
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Spawn four parallel subagents via child delegation under the declared `sonnet` model-class policy.
 

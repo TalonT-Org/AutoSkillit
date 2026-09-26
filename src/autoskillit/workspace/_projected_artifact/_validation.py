@@ -16,10 +16,17 @@ from pathlib import Path
 
 from autoskillit.core import (
     MACHINE_ONLY_SKILL_FRONTMATTER_KEYS,
+    VANISHED_ERRORS,
+    AgentDefinitionError,
     EffectiveSkillCatalogAuthority,
     TreeVanishedError,
+    YAMLError,
+    load_agent_definition,
+    read_claude_plugin_tool_prefix,
     read_versioned_json,
+    scan_observed,
     strict_walk,
+    validate_agent_tool_short_name,
 )
 from autoskillit.workspace._projected_artifact._documents import SkillContractRecord
 from autoskillit.workspace._projected_artifact._publication import (
@@ -248,6 +255,69 @@ def _validate_manifest_entry(
             )
 
 
+def _rendered_agent_mcp_tools(agents_dir: Path, errors: list[str]) -> list[tuple[str, str]]:
+    """Return ``(file name, tool)`` for every MCP tool the rendered agents declare.
+
+    A vanished ``agents/`` directory declares nothing; every unreadable or
+    invalid definition is recorded in *errors*.
+    """
+    if not agents_dir.is_dir():
+        return []
+    try:
+        entries = sorted(scan_observed(agents_dir), key=lambda entry: entry.name)
+    except VANISHED_ERRORS:
+        return []
+    except OSError as exc:
+        errors.append(f"rendered agents cannot be listed during validation: {exc}")
+        return []
+    mcp_tools: list[tuple[str, str]] = []
+    for entry in entries:
+        if entry.is_dir or entry.path.suffix != ".md" or entry.name in {"AGENTS.md", "CLAUDE.md"}:
+            continue
+        try:
+            definition = load_agent_definition(entry.path)
+        except (AgentDefinitionError, OSError, UnicodeDecodeError, YAMLError) as exc:
+            errors.append(f"rendered agent {entry.name} cannot be loaded: {exc}")
+            continue
+        mcp_tools.extend(
+            (entry.name, tool) for tool in definition.tools if tool.startswith("mcp__")
+        )
+    return mcp_tools
+
+
+def validate_rendered_agent_tool_namespace(public_root: Path) -> tuple[str, ...]:
+    """Return errors for rendered agent MCP tools that lack the plugin's own namespace.
+
+    The expected namespace is re-derived from the artifact's own
+    ``.claude-plugin/plugin.json`` and ``.mcp.json``. Only ``tools`` is checked:
+    ``reader_tools`` is the Codex-only allowlist and stays DIRECT-canonical.
+    Never raises; every failure becomes an error string.
+    """
+    errors: list[str] = []
+    mcp_tools = _rendered_agent_mcp_tools(Path(public_root) / "agents", errors)
+    if not mcp_tools:
+        return tuple(errors)
+    try:
+        expected = read_claude_plugin_tool_prefix(Path(public_root))
+    except ValueError as exc:
+        errors.append(
+            f"rendered agents declare MCP tools but the plugin namespace is underivable: {exc}"
+        )
+        return tuple(errors)
+    for agent_name, tool in mcp_tools:
+        if not tool.startswith(expected):
+            errors.append(
+                f"rendered agent {agent_name} tool {tool!r} does not carry the plugin "
+                f"namespace {expected!r}"
+            )
+            continue
+        try:
+            validate_agent_tool_short_name(tool[len(expected) :])
+        except ValueError as exc:
+            errors.append(f"rendered agent {agent_name} tool {tool!r} is not admissible: {exc}")
+    return tuple(errors)
+
+
 def validate_sanitized_plugin_artifact(
     source_root: Path,
     public_root: Path,
@@ -268,6 +338,7 @@ def validate_sanitized_plugin_artifact(
         pass
     else:
         errors.append("projection manifest must be outside the public plugin root")
+    errors.extend(validate_rendered_agent_tool_namespace(public_root))
     infos = _skill_sequence(skills_or_catalog)
     expected = _collect_expected_contracts(
         source_root,

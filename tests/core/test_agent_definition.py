@@ -230,6 +230,40 @@ def test_invalid_agent_provisioning_fails_closed_through_direct_construction() -
         )
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        "Use only `mcp__autoskillit__inspect_session_logs`.",
+        "Call `mcp__plugin_autoskillit_autoskillit__submit_exploration_query` first.",
+        "Page with `mcp__dev_autoskillit_v2__get_exploration_page`.",
+    ],
+)
+def test_body_with_qualified_autoskillit_tool_name_is_rejected(body: str) -> None:
+    with pytest.raises(AgentDefinitionError, match="short name"):
+        AgentDef(
+            name="qualified-body",
+            description="Bounded agent",
+            tools=("Read",),
+            model=None,
+            max_turns=1,
+            body=body,
+            codex=CodexAgentProjectionDef(None, None, "read-only"),
+        )
+
+
+def test_body_with_short_tool_names_is_accepted() -> None:
+    definition = AgentDef(
+        name="short-body",
+        description="Bounded agent",
+        tools=("Read",),
+        model=None,
+        max_turns=1,
+        body="Call `submit_exploration_query` first.",
+        codex=CodexAgentProjectionDef(None, None, "read-only"),
+    )
+    assert "`submit_exploration_query`" in definition.body
+
+
 def test_skill_child_roles_have_bounded_tools_and_usage_descriptions() -> None:
     definitions = {definition.name: definition for definition in load_bundled_agent_definitions()}
 

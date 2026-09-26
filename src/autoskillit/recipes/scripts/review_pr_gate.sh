@@ -24,9 +24,6 @@ snapshot() {
     output_dir="$(cd "$output_dir" && pwd -P)" || return 2
     snapshot_dir="$(mktemp -d "$output_dir/gate_snapshot.XXXXXX")" || return 2
     authority_path="$snapshot_dir/gate_authority.json"
-    REVIEW_CHECKOUT_ROOT="$checkout_root"
-    REVIEW_OUTPUT_DIR="$output_dir"
-    MODE="$mode"
     if [[ -d "$checkout_root" ]]; then
         cd "$checkout_root" || return 2
     fi
@@ -35,7 +32,6 @@ METRICS_BASE_SHA=""
 METRICS_MERGE_BASE_SHA=""
 METRICS_BASE_REPO_FULL_NAME=""
 CHECKOUT_HEAD_SHA=""
-CHECKOUT_BASE_SHA=""
 CHECKOUT_MERGE_BASE_SHA=""
 LIVE_REFS=""
 LIVE_HEAD_SHA=""
@@ -75,7 +71,7 @@ degrade_gate() {
     VALID_DIFF_LINES=""
 }
 
-if [ -z "$REVIEW_CHECKOUT_ROOT" ] || [ ! -d "$REVIEW_CHECKOUT_ROOT" ]; then
+if [ -z "$checkout_root" ] || [ ! -d "$checkout_root" ]; then
     degrade_gate ref_missing
 elif [ -z "${diff_metrics_path:-}" ] || [ ! -f "$diff_metrics_path" ]; then
     degrade_gate metrics_missing
@@ -136,7 +132,7 @@ else
         PROFILE_ID="$(jq -r '.diff_source.profile_id // ""' < "$METRICS_MARKER_BEFORE")"
 
         # Validate the closed source/profile object before any gate read.
-        if [ "$MODE" = "local" ]; then
+        if [ "$mode" = "local" ]; then
             jq -e '
               .review_mode == "local" and .diff_source == {
                 "comparison":"merge_base_to_head","context_lines":3,
@@ -154,10 +150,10 @@ else
               }' < "$METRICS_MARKER_BEFORE" >/dev/null || degrade_gate profile_invalid
         fi
 
-        CHECKOUT_HEAD_SHA="$(git -C "$REVIEW_CHECKOUT_ROOT" rev-parse HEAD 2>/dev/null || true)"
+        CHECKOUT_HEAD_SHA="$(git -C "$checkout_root" rev-parse HEAD 2>/dev/null || true)"
         if [ -z "$CHECKOUT_HEAD_SHA" ] || [ "$CHECKOUT_HEAD_SHA" != "$METRICS_HEAD_SHA" ]; then
             degrade_gate snapshot_mismatch
-        elif [ "$MODE" = "local" ]; then
+        elif [ "$mode" = "local" ]; then
             LIVE_REFS="$(
               gh api "repos/{owner}/{repo}/pulls/${pr_number}" \
                 --jq '{headRefOid:.head.sha,baseRefOid:.base.sha,baseRepoFullName:.base.repo.full_name}' 2>/dev/null || true
@@ -168,7 +164,7 @@ else
             LIVE_MERGE_BASE_SHA="$(gh api \
               "repos/${LIVE_BASE_REPO_FULL_NAME}/compare/${LIVE_BASE_SHA}...${LIVE_HEAD_SHA}" \
               --jq '.merge_base_commit.sha' 2>/dev/null || true)"
-            CHECKOUT_MERGE_BASE_SHA="$(git -C "$REVIEW_CHECKOUT_ROOT" merge-base "$METRICS_BASE_SHA" "$CHECKOUT_HEAD_SHA" 2>/dev/null || true)"
+            CHECKOUT_MERGE_BASE_SHA="$(git -C "$checkout_root" merge-base "$METRICS_BASE_SHA" "$CHECKOUT_HEAD_SHA" 2>/dev/null || true)"
             if [ -z "$LIVE_HEAD_SHA" ] || [ -z "$LIVE_BASE_SHA" ] ||
                [ -z "$LIVE_BASE_REPO_FULL_NAME" ] || [ -z "$LIVE_MERGE_BASE_SHA" ] ||
                [ -z "$CHECKOUT_MERGE_BASE_SHA" ]; then

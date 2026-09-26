@@ -1003,11 +1003,11 @@ FORWARDING_SITES: dict[str, str] = {
         "Unfiltered dict(os.environ) used only to probe an exact executable path before the real"
         "session env is sealed by build_agent_env elsewhere; not the launched child's env."
     ),
-    "cli/update/_transaction.py:431": (
+    "cli/update/_transaction.py:432": (
         "Unfiltered dict(os.environ if base_env is None else base_env) snapshot captured for"
         "update-transaction diagnostics/rollback comparison, not for a spawned child process."
     ),
-    "cli/update/_update_checks_source.py:181": (
+    "cli/update/_update_checks_source.py:190": (
         "Bare os.environ passed as `env=` to a read-only `git ls-remote` probe subprocess;"
         "unfiltered wholesale forward for a local diagnostic command."
     ),

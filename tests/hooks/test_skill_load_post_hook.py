@@ -619,6 +619,14 @@ def test_cook_join_authority_context_announces_the_bypass(tmp_path: Path) -> Non
     assert f"session_id={json.dumps(session_id)}" in additional_context
     assert "cook_bypass" in additional_context
 
+    # Symmetric to the companion negative test: verify the cook_bypass
+    # diagnostic was emitted to join_diagnostics.jsonl, not just rendered
+    # into the additionalContext payload.
+    diagnostic_path = tmp_path / "logs" / "join_diagnostics.jsonl"
+    diagnostics = [json.loads(line) for line in diagnostic_path.read_text().splitlines() if line]
+    assert diagnostics, "expected at least one join_diagnostic record"
+    assert diagnostics[0]["status"] == "cook_bypass"
+
 
 def test_cook_non_join_skill_load_consults_no_join_authority(tmp_path: Path) -> None:
     from autoskillit.core.runtime.session_registry import write_registry_entry
@@ -642,7 +650,10 @@ def test_cook_non_join_skill_load_consults_no_join_authority(tmp_path: Path) -> 
     )
 
     assert exit_code == 0
-    assert stdout == ""
+    # The test's intent is that no cook join-authority context is rendered.
+    # Asserting the absence of the specific marker (rather than stdout == "")
+    # is robust against unrelated stdout emissions (logging, future fields).
+    assert "JOIN DECLARATION AUTHORITY" not in stdout
     assert not (tmp_path / "logs" / "join_diagnostics.jsonl").exists()
 
 

@@ -97,7 +97,11 @@ def main() -> None:
     applicability = hook_join_applicability(data, payload_cwd, sid, gate="join_stop_guard")
     if not applicability.enforce:
         sys.exit(0)
-    assert applicability.admission is not None
+    if applicability.admission is None:
+        # ``enforce`` is True only when admission is non-None; guard explicitly
+        # so the narrowing holds even when Python is invoked with ``-O``
+        # (which strips ``assert`` statements).
+        sys.exit(0)
     binding = applicability.admission.binding_dict
     if binding is None:
         sys.exit(0)

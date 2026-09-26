@@ -188,7 +188,7 @@ def test_review_pr_step6_mode_branching_header():
     assert step6_section.count("post_pr_review") == 1
 
 
-def test_local_gate_validates_provider_tuple_and_checkout_head_authority() -> None:
+def test_local_gate_passes_mode_and_checkout_root_to_executable() -> None:
     text = _skill_text()
     step_2_7 = text[
         text.index("### Step 2.7: Deterministic Diff Annotation") : text.index(
@@ -196,14 +196,11 @@ def test_local_gate_validates_provider_tuple_and_checkout_head_authority() -> No
         )
     ]
 
-    assert 'git -C "$REVIEW_CHECKOUT_ROOT" rev-parse HEAD' in step_2_7
-    assert "_base_repo_full_name" in step_2_7
-    assert "merge_base_commit" in step_2_7
-    assert ".base.repo.full_name" in step_2_7
-    assert "METRICS_BASE_REPO_FULL_NAME" in step_2_7
-    assert "LIVE_BASE_REPO_FULL_NAME" in step_2_7
-    assert 'rev-parse "${base_branch}"' not in step_2_7
-    assert 'rev-parse "$base_branch"' not in step_2_7
+    assert (
+        'review_pr_gate.sh" snapshot "{review_output_dir}" "{checkout_root}" "{mode}"' in step_2_7
+    )
+    assert "GATE_AUTHORITY" in step_2_7
+    assert "authority_path" in step_2_7
 
 
 def test_standalone_local_mode_prepares_missing_artifacts_once() -> None:
@@ -214,15 +211,15 @@ def test_standalone_local_mode_prepares_missing_artifacts_once() -> None:
         )
     ]
 
-    assert 'mktemp -d "${REVIEW_OUTPUT_DIR%/}/annotation.XXXXXX"' in step_2_7
+    assert 'mktemp -d "{review_output_dir}annotation.XXXXXX"' in step_2_7
     assert step_2_7.count('callable="autoskillit.smoke_utils.annotate_pr_diff"') == 1
     assert '"pr_number": pr_number' in step_2_7
-    assert '"cwd": REVIEW_CHECKOUT_ROOT' in step_2_7
-    assert '"output_dir": ANNOTATION_OUTPUT_DIR' in step_2_7
+    assert '"cwd": "{checkout_root}"' in step_2_7
+    assert '"output_dir": "{annotation_output_dir}"' in step_2_7
     assert '"base_branch": base_branch' in step_2_7
     assert '"mode": "local"' in step_2_7
     assert "timeout=120" in step_2_7
-    assert "work_dir=REVIEW_CHECKOUT_ROOT" in step_2_7
+    assert 'work_dir="{checkout_root}"' in step_2_7
 
 
 def test_standalone_preparation_binds_exact_returned_artifact_paths_before_gate() -> None:
@@ -232,20 +229,25 @@ def test_standalone_preparation_binds_exact_returned_artifact_paths_before_gate(
             "### Step 2.5: Deletion Context Pre-Computation"
         )
     ]
-    gate_start = step_2_7.index("GATE_STATE=degraded")
+    gate_start = step_2_7.index('review_pr_gate.sh" snapshot')
 
-    for variable, field in (
-        ("annotated_diff_path", "annotated_diff_path"),
-        ("hunk_ranges_path", "hunk_ranges_path"),
-        ("valid_lines_path", "valid_lines_path"),
-        ("diff_metrics_path", "diff_metrics_path"),
+    preparation = step_2_7[:gate_start]
+    binding_start = preparation.index("On success, paste its returned")
+    binding_end = preparation.index("as literal paths", binding_start)
+    binding = preparation[binding_start:binding_end]
+    for field in (
+        "diff_metrics_path",
+        "annotated_diff_path",
+        "hunk_ranges_path",
+        "valid_lines_path",
+        "anchor_authority_path",
     ):
-        preparation = step_2_7[:gate_start]
-        assignment = preparation.find(f"{variable}=")
-        result_read = preparation.find(f".result.{field}")
-        assert assignment >= 0
-        assert result_read >= 0
-        assert result_read <= assignment or result_read - assignment < 500
+        assert f"`{field}`" in binding
+    assert "Keep `anchor_authority_path` for its later consumer." in preparation
+    gate_command = step_2_7[gate_start:].splitlines()[0]
+    assert gate_command.endswith(
+        '"{diff_metrics_path}" "{annotated_diff_path}" "{hunk_ranges_path}" "{valid_lines_path}"'
+    )
 
 
 def test_standalone_preparation_failure_stops_without_git_repair() -> None:
@@ -255,7 +257,7 @@ def test_standalone_preparation_failure_stops_without_git_repair() -> None:
             "### Step 2.5: Deletion Context Pre-Computation"
         )
     ]
-    preparation = step_2_7[: step_2_7.index("GATE_STATE=degraded")]
+    preparation = step_2_7[: step_2_7.index('review_pr_gate.sh" snapshot')]
 
     assert "needs_human" in preparation
     assert "%%REVIEW_GATE::CLEAR%%" in preparation
@@ -274,26 +276,17 @@ def test_review_pr_declares_observational_only_git_state_prohibition() -> None:
     assert "worktree" in text
 
 
-def test_initial_and_retained_gates_revalidate_complete_provider_authority() -> None:
+def test_snapshot_authority_is_reused_for_revalidation() -> None:
     text = _skill_text()
     step_2_7 = text[
         text.index("### Step 2.7: Deterministic Diff Annotation") : text.index(
             "### Step 2.5: Deletion Context Pre-Computation"
         )
     ]
-    retained = step_2_7[step_2_7.index("revalidate_retained_snapshot") :]
-
-    for token in (
-        "METRICS_HEAD_SHA",
-        "METRICS_BASE_SHA",
-        "METRICS_MERGE_BASE_SHA",
-        "METRICS_BASE_REPO_FULL_NAME",
-        "merge_base_commit",
-        ".base.repo.full_name",
-    ):
-        assert token in step_2_7
-        assert token in retained
-    assert 'rev-parse "$base_branch"' not in retained
+    assert "GATE_AUTHORITY" in step_2_7
+    assert "authority_path" in step_2_7
+    assert 'review_pr_gate.sh" revalidate' in step_2_7
+    assert "revalidate_retained_snapshot" not in step_2_7
 
 
 def test_local_handoff_is_generation_bound_and_published_last() -> None:

@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
-import os
-import shutil
+import re
 import subprocess
 from pathlib import Path
-from typing import Any
 
 import pytest
 
 from autoskillit.workspace.skills._format import read_skill_frontmatter
+from tests.skills._review_pr_gate_helpers import (
+    GATE_SCRIPT,
+    make_gate_case,
+    snapshot,
+    write_metrics,
+)
 
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
@@ -44,166 +47,22 @@ def _bash_block(start_heading: str, end_heading: str) -> str:
     return section[start:end]
 
 
-def _gate_script() -> str:
+def _gate_bash_block() -> str:
+    section = _section("### Step 2.7", "### Step 2.5")
+    return next(
+        body
+        for body in re.findall(r"```bash\n(.*?)```", section, re.DOTALL)
+        if 'review_pr_gate.sh" snapshot' in body
+    )
+
+
+def _adaptive_dispatch_script(metrics_marker: Path) -> str:
+    script = _bash_block("### Step 2.9", "### Step 3")
+    assert "{metrics_marker_snapshot_path}" in script
     return (
-        _bash_block("### Step 2.7", "### Step 2.5")
-        + """
-if revalidate_retained_snapshot; then
-    REVALIDATE_STATUS=0
-else
-    REVALIDATE_STATUS=$?
-fi
-printf '\\nGATE_RESULT=%s|%s|%s|%s\\n' \
-    "$GATE_STATE" "$GATE_REASON_CODE" "$EXPERIMENTAL_AUDIT_STATE" "$REVALIDATE_STATUS"
-printf '%s' "$ANNOTATED_DIFF" | sha256sum | cut -d' ' -f1 | sed 's/^/ANNOTATED_SHA=/'
-"""
+        script.replace("{metrics_marker_snapshot_path}", str(metrics_marker))
+        + "\nprintf 'STANDARD_RESULT=%s\\n' \"$STANDARD_DISPATCH_AGENTS\"\n"
     )
-
-
-def _adaptive_dispatch_script() -> str:
-    return (
-        _bash_block("### Step 2.7", "### Step 2.5")
-        + _bash_block("### Step 2.9", "### Step 3")
-        + """
-printf 'STANDARD_RESULT=%s\n' "$STANDARD_DISPATCH_AGENTS"
-"""
-    )
-
-
-def _git(repo: Path, *args: str) -> str:
-    result = subprocess.run(
-        ["git", *args],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout.strip()
-
-
-def _artifact_record(path: Path) -> dict[str, str | int]:
-    data = path.read_bytes()
-    return {
-        "basename": path.name,
-        "byte_length": len(data),
-        "sha256": hashlib.sha256(data).hexdigest(),
-    }
-
-
-def _make_gate_case(tmp_path: Path, *, gate: bool = True) -> dict[str, Any]:
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    _git(repo, "init", "-q")
-    _git(repo, "config", "user.name", "Test")
-    _git(repo, "config", "user.email", "test@example.com")
-    (repo / "tracked.txt").write_text("base\n")
-    _git(repo, "add", "tracked.txt")
-    _git(repo, "commit", "-qm", "base")
-    _git(repo, "branch", "base")
-    (repo / "tracked.txt").write_text("head\n")
-    _git(repo, "commit", "-qam", "head")
-
-    output_dir = tmp_path / "review-output"
-    output_dir.mkdir()
-    annotated = output_dir / "annotated_diff_7.txt"
-    ranges = output_dir / "hunk_ranges_7.json"
-    valid_lines = output_dir / "valid_lines_7.json"
-    metrics_path = output_dir / "metrics_7.json"
-    annotated.write_text("metadata\n[L1]+old-generation\n")
-    ranges.write_text('{"tracked.txt":[[1,1]]}\n')
-    valid_lines.write_text('{"tracked.txt":[1]}\n')
-
-    head_sha = _git(repo, "rev-parse", "HEAD")
-    base_sha = _git(repo, "rev-parse", "base")
-    merge_base_sha = _git(repo, "merge-base", base_sha, head_sha)
-    metrics: dict[str, Any] = {
-        "_head_sha": head_sha,
-        "_base_sha": base_sha,
-        "_merge_base_sha": merge_base_sha,
-        "_base_repo_full_name": "Acme/Base",
-        "generation_id": "generation-1",
-        "diff_sha256": "a" * 64,
-        "diff_byte_length": 17,
-        "review_mode": "local",
-        "diff_source": {
-            "comparison": "merge_base_to_head",
-            "context_lines": 3,
-            "external_diff": False,
-            "kind": "local_git",
-            "profile_id": "local_git_pinned_v1",
-            "rename_detection": "50%",
-            "text_conversion": False,
-        },
-        "artifacts": {
-            "annotated_diff": _artifact_record(annotated),
-            "hunk_ranges": _artifact_record(ranges),
-            "valid_lines": _artifact_record(valid_lines),
-        },
-        "dispatch_agents": ["tests", "cohesion"],
-        "run_overengineering_audits": gate,
-    }
-    metrics_path.write_text(json.dumps(metrics, sort_keys=True) + "\n")
-
-    fake_bin = tmp_path / "bin"
-    fake_bin.mkdir()
-    fake_gh = fake_bin / "gh"
-    fake_gh.write_text(
-        "#!/bin/sh\n"
-        "if [ \"${FAKE_GH_MISSING_AUTHORITY:-}\" = 1 ]; then printf '{}\\n'; exit 0; fi\n"
-        'case "$*" in\n'
-        f"  *\"/compare/\"*) printf '%s\\n' '{merge_base_sha}' ;;\n"
-        "  *) printf '%s\\n' "
-        f'\'{{"headRefOid":"{head_sha}","baseRefOid":"{base_sha}",'
-        '"baseRepoFullName":"Acme/Base"}\' ;;\n'
-        "esac\n",
-        encoding="utf-8",
-    )
-    fake_gh.chmod(0o755)
-
-    env = {
-        **os.environ,
-        "PATH": f"{fake_bin}:{os.environ['PATH']}",
-        "REVIEW_OUTPUT_DIR": f"{output_dir}/",
-        "MODE": "local",
-        "base_branch": "base",
-        "pr_number": "7",
-        "diff_metrics_path": str(metrics_path),
-        "annotated_diff_path": str(annotated),
-        "hunk_ranges_path": str(ranges),
-        "valid_lines_path": str(valid_lines),
-    }
-    return {
-        "repo": repo,
-        "env": env,
-        "metrics": metrics,
-        "metrics_path": metrics_path,
-        "annotated": annotated,
-        "ranges": ranges,
-        "valid_lines": valid_lines,
-        "output_dir": output_dir,
-    }
-
-
-def _write_metrics(case: dict[str, Any]) -> None:
-    case["metrics_path"].write_text(json.dumps(case["metrics"], sort_keys=True) + "\n")
-
-
-def _run_gate(case: dict[str, Any]) -> tuple[str, str]:
-    result = subprocess.run(
-        ["bash", "-c", _gate_script()],
-        cwd=case["repo"],
-        env=case["env"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    gate_line = next(
-        line for line in result.stdout.splitlines() if line.startswith("GATE_RESULT=")
-    )
-    annotated_sha = next(
-        line for line in result.stdout.splitlines() if line.startswith("ANNOTATED_SHA=")
-    )
-    return gate_line.removeprefix("GATE_RESULT="), annotated_sha.removeprefix("ANNOTATED_SHA=")
 
 
 def test_skill_accepts_diff_metrics_path_argument():
@@ -251,194 +110,73 @@ def test_step3_requires_single_message_dispatch():
     )
 
 
-def test_gate_validation_precedes_boolean_consumption() -> None:
+def test_skill_invokes_bundled_gate_without_inline_writes() -> None:
     section = _section("### Step 2.7", "### Step 2.5")
-    assert section.index("METRICS_MARKER_BEFORE") < section.index("run_overengineering_audits")
-    assert section.index("artifact_digest_mismatch") < section.index("GATE_STATE=valid_true")
-    assert 'type == "boolean"' in section
-    assert "${mode}" not in section
-    assert '[ "$MODE" = "local" ]' in section
-    for initialized in (
-        'CHECKOUT_MERGE_BASE_SHA=""',
-        'LIVE_REFS=""',
-        'DIFF_SHA256=""',
-        'PROFILE_ID=""',
-        'ANNOTATION_GENERATION_ID=""',
-        'HTTP_STATUS=""',
-    ):
-        assert initialized in section
+    gate_fence = _gate_bash_block()
+    assert 'bash "{{AUTOSKILLIT_SCRIPTS}}/review_pr_gate.sh" snapshot' in section
+    for old_shell_operation in ('cp -- "$', 'rm -f -- "$', "mktemp", "degrade_gate"):
+        assert old_shell_operation not in gate_fence
+
+
+def test_snapshot_failure_stops_before_evidence_verdict_and_github() -> None:
+    section = _section("### Step 2.7", "### Step 2.5")
+    after_call = section[section.index('review_pr_gate.sh" snapshot') :].lower()
+    assert "non-zero" in after_call
+    assert "needs_human" in after_call
+    assert "stop" in after_call
+    assert "evidence" in after_call
+    assert "verdict" in after_call
+    assert "github" in after_call
+
+
+def test_review_pr_uses_literal_output_paths_and_executable_shell_fences() -> None:
+    text = _skill_text()
+    assert "${REVIEW_OUTPUT_DIR}" not in text
+    assert "REVIEW_OUTPUT_DIR=" not in text
+    step_0 = _section("### Step 0", "### Step 1")
+    assert "AUTOSKILLIT_ALLOWED_WRITE_PREFIX" in step_0
+    assert "printf" in step_0
+    assert "mkdir -p" in step_0
+    assert "pwd -P" in step_0
+    assert "{review_output_dir}" in text
+    assert ".tmp-{publish_id}" in text
+    assert "mv" in text
+
+    step_2_7 = _section("### Step 2.7", "### Step 2.5")
+    for language, body in re.findall(r"```(\w+)\n(.*?)```", step_2_7, re.DOTALL):
+        if re.search(r"^\s*[A-Za-z_][A-Za-z0-9_]*=\"?\$\(", body, re.MULTILINE):
+            assert language == "bash"
+    for body in re.findall(r"```text\n(.*?)```", text, re.DOTALL):
+        assert not re.search(r"^\s*[A-Za-z_][A-Za-z0-9_]*=\"?\$\(", body, re.MULTILINE)
 
 
 def test_live_pr_refs_use_supported_pull_request_api_fields() -> None:
     section = _section("### Step 2.7", "### Step 2.5")
-    assert section.count('gh api "repos/{owner}/{repo}/pulls/${pr_number}"') == 4
-    assert "gh pr view" not in section
-    assert "--json headRefOid,baseRefOid" not in section
-
-
-@pytest.mark.parametrize(
-    ("gate", "expected_state", "expected_audit_state"),
-    [
-        (True, "valid_true", "pending"),
-        (False, "valid_false", "not_required"),
-    ],
-)
-def test_local_gate_block_executes_mode_authority(
-    tmp_path: Path,
-    gate: bool,
-    expected_state: str,
-    expected_audit_state: str,
-) -> None:
-    case = _make_gate_case(tmp_path, gate=gate)
-    result, _ = _run_gate(case)
-    assert result == f"{expected_state}|none|{expected_audit_state}|0"
+    script = GATE_SCRIPT.read_text()
+    assert script.count('gh api "repos/{owner}/{repo}/pulls/${pr_number}"') == 4
+    assert "gh pr view" not in script
+    assert 'gh api "repos/{owner}/{repo}/pulls/${pr_number}"' not in section
 
 
 @pytest.mark.parametrize("gate", [True, False])
 def test_standard_dispatch_reads_retained_marker_and_preserves_adaptive_selection(
-    tmp_path: Path,
-    gate: bool,
+    tmp_path: Path, gate: bool
 ) -> None:
-    case = _make_gate_case(tmp_path, gate=gate)
+    case = make_gate_case(tmp_path, gate=gate)
+    result = snapshot(case)
+    assert result.returncode == 0, result.stderr
+    authority = json.loads(result.stdout)
+    case["metrics"]["dispatch_agents"] = ["arch"]
+    write_metrics(case)
     result = subprocess.run(
-        ["bash", "-c", _adaptive_dispatch_script()],
+        ["bash", "-c", _adaptive_dispatch_script(Path(authority["metrics_marker_snapshot_path"]))],
         cwd=case["repo"],
         env=case["env"],
         check=True,
         capture_output=True,
         text=True,
     )
-
-    dispatch_line = next(
-        line for line in result.stdout.splitlines() if line.startswith("STANDARD_RESULT=")
-    )
-    assert dispatch_line == "STANDARD_RESULT=tests,cohesion"
-
-
-@pytest.mark.parametrize(
-    "reason",
-    [
-        "metrics_missing",
-        "metrics_invalid_json",
-        "manifest_missing",
-        "manifest_invalid",
-        "profile_invalid",
-        "ref_missing",
-        "snapshot_mismatch",
-        "artifact_missing",
-        "artifact_name_mismatch",
-        "artifact_length_mismatch",
-        "artifact_digest_mismatch",
-        "marker_changed",
-        "gate_missing",
-        "gate_not_boolean",
-    ],
-)
-def test_closed_gate_degradation_reasons_execute(tmp_path: Path, reason: str) -> None:
-    case = _make_gate_case(tmp_path)
-    metrics = case["metrics"]
-    env_updates = {
-        "metrics_missing": (
-            "diff_metrics_path",
-            str(case["output_dir"] / "missing.json"),
-        ),
-        "ref_missing": ("FAKE_GH_MISSING_AUTHORITY", "1"),
-    }
-    metric_key_deletions = {
-        "manifest_missing": "artifacts",
-        "gate_missing": "run_overengineering_audits",
-    }
-    scalar_metric_updates = {
-        "manifest_invalid": (metrics, "diff_byte_length", "17"),
-        "profile_invalid": (metrics["diff_source"], "profile_id", "wrong"),
-        "snapshot_mismatch": (metrics, "_head_sha", "b" * 40),
-        "gate_not_boolean": (metrics, "run_overengineering_audits", "true"),
-    }
-
-    if env_update := env_updates.get(reason):
-        key, value = env_update
-        case["env"][key] = value
-    elif reason == "metrics_invalid_json":
-        case["metrics_path"].write_text("{")
-    elif metric_key := metric_key_deletions.get(reason):
-        metrics.pop(metric_key)
-        _write_metrics(case)
-    elif scalar_metric_update := scalar_metric_updates.get(reason):
-        target, key, value = scalar_metric_update
-        target[key] = value
-        _write_metrics(case)
-    elif reason == "artifact_missing":
-        case["annotated"].unlink()
-    elif reason == "artifact_name_mismatch":
-        replacement = case["output_dir"] / "wrong-name.txt"
-        replacement.write_bytes(case["annotated"].read_bytes())
-        case["env"]["annotated_diff_path"] = str(replacement)
-    elif reason == "artifact_length_mismatch":
-        metrics["artifacts"]["annotated_diff"]["byte_length"] += 1
-        _write_metrics(case)
-    elif reason == "artifact_digest_mismatch":
-        metrics["artifacts"]["annotated_diff"]["sha256"] = "0" * 64
-        _write_metrics(case)
-    elif reason == "marker_changed":
-        real_sha256sum = shutil.which("sha256sum")
-        if real_sha256sum is None:
-            pytest.skip("sha256sum is required by the extracted review-pr gate")
-        fake_bin = case["output_dir"] / "bin"
-        fake_bin.mkdir()
-        wrapper = fake_bin / "sha256sum"
-        wrapper.write_text(
-            "#!/bin/sh\n"
-            'if [ ! -e "$MUTATION_SENTINEL" ]; then\n'
-            '  : > "$MUTATION_SENTINEL"\n'
-            '  printf "\\n" >> "$MUTATE_MARKER_PATH"\n'
-            "fi\n"
-            'exec "$REAL_SHA256SUM" "$@"\n'
-        )
-        wrapper.chmod(0o755)
-        case["env"]["PATH"] = f"{fake_bin}:{case['env']['PATH']}"
-        case["env"]["MUTATION_SENTINEL"] = str(case["output_dir"] / "mutated")
-        case["env"]["MUTATE_MARKER_PATH"] = str(case["metrics_path"])
-        case["env"]["REAL_SHA256SUM"] = real_sha256sum
-
-    result, _ = _run_gate(case)
-    state, actual_reason, audit_state, revalidate_status = result.split("|")
-    assert (state, actual_reason) == ("degraded", reason)
-    assert audit_state != "pending"
-    assert revalidate_status == "1"
-
-
-def test_overlapping_sidecar_replacement_never_reaches_effect_revalidation(tmp_path: Path) -> None:
-    case = _make_gate_case(tmp_path)
-    real_sha256sum = shutil.which("sha256sum")
-    if real_sha256sum is None:
-        pytest.skip("sha256sum is required by the extracted review-pr gate")
-    old_body = "[L1]+old-generation"
-    expected_sha = hashlib.sha256(old_body.encode()).hexdigest()
-    fake_bin = case["output_dir"] / "bin"
-    fake_bin.mkdir()
-    wrapper = fake_bin / "sha256sum"
-    wrapper.write_text(
-        "#!/bin/sh\n"
-        'if [ ! -e "$MUTATION_SENTINEL" ]; then\n'
-        '  : > "$MUTATION_SENTINEL"\n'
-        '  printf "metadata\\n[L1]+new-generation\\n" > "$MUTATE_SIDECAR_PATH"\n'
-        "fi\n"
-        'exec "$REAL_SHA256SUM" "$@"\n'
-    )
-    wrapper.chmod(0o755)
-    case["env"]["PATH"] = f"{fake_bin}:{case['env']['PATH']}"
-    mutation_sentinel = case["output_dir"] / "mutated"
-    case["env"]["MUTATION_SENTINEL"] = str(mutation_sentinel)
-    case["env"]["MUTATE_SIDECAR_PATH"] = str(case["annotated"])
-    case["env"]["REAL_SHA256SUM"] = real_sha256sum
-
-    result, annotated_sha = _run_gate(case)
-    assert result == "valid_true|none|pending|1"
-    assert annotated_sha == expected_sha
-    assert mutation_sentinel.exists()
-    replaced_body = case["annotated"].read_text()
-    assert "[L1]+new-generation" in replaced_body
-    assert hashlib.sha256(replaced_body.encode()).hexdigest() != annotated_sha
+    assert "STANDARD_RESULT=tests,cohesion" in result.stdout.splitlines()
 
 
 def test_standard_and_experimental_dispatch_are_separate() -> None:

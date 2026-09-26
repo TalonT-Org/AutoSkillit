@@ -167,7 +167,9 @@ def test_post_pr_review_receives_complete_review_and_contained_receipt(
     assert re.search(r"batch_review_response_[^\s`\"']*pr[^\s`\"']*\.json", section, re.I), (
         f"{skill_name}/SKILL.md receipt_path must use batch_review_response_<pr>.json"
     )
-    assert "AUTOSKILLIT_TEMP" in section or "OUTPUT_DIR" in section, (
+    assert any(
+        token in section for token in ("AUTOSKILLIT_TEMP", "OUTPUT_DIR", "{review_output_dir}")
+    ), (
         f"{skill_name}/SKILL.md receipt_path must be contained by its declared "
         "AutoSkillit output directory"
     )

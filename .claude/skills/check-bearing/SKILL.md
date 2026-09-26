@@ -92,9 +92,11 @@ semantic_requirements:
   regardless of priority
 - Conflate "this change doesn't advance direction X" with "this change harms
   direction X" — most changes are genuinely NEUTRAL to most directions
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Initialize code-index via `set_project_path` before exploration (Step 0.5)
 - Parse the `---compass-data---` block before launching any analysis subagents
 - Provide specific file-level evidence for every non-NEUTRAL assessment
@@ -194,7 +196,9 @@ Classify each direction:
 - **SIGNAL_HIT** — at least one signal matched. Requires full subagent analysis.
 - **NO_SIGNAL** — zero signals matched. Gets lightweight bulk assessment only.
 
-### Step 4: Launch Parallel Direction Assessment Subagents
+### Step 4: Launch Parallel Direction Assessment Subagents (SINGLE MESSAGE)
+
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Set `selected_bearing_assessments` to the SIGNAL_HIT direction tasks, NO_SIGNAL batch
 tasks, and any dependency-ready holistic review task selected by the workflow below.

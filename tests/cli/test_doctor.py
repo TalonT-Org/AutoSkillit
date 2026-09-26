@@ -1775,6 +1775,95 @@ def test_check_source_version_drift_warning_on_drift(
     assert ref_sha[:8] in result.message
 
 
+def test_check_source_version_drift_warns_for_local_path_behind_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A LOCAL_PATH install behind its recorded source directory warns with both versions."""
+    import autoskillit as _pkg
+    from autoskillit.cli.doctor import _check_source_version_drift
+    from autoskillit.cli.install._install_info import InstallInfo, InstallType
+    from autoskillit.core import Severity
+
+    local_source = tmp_path / "checkout"
+    local_source.mkdir()
+    (local_source / "pyproject.toml").write_text(
+        '[project]\nname = "autoskillit"\nversion = "0.9.1"\n', encoding="utf-8"
+    )
+    info = InstallInfo(
+        install_type=InstallType.LOCAL_PATH,
+        commit_id=None,
+        requested_revision=None,
+        url=local_source.as_uri(),
+        editable_source=None,
+        local_source=local_source,
+    )
+    monkeypatch.setattr(_patch_install__install_info, "detect_install", lambda: info)
+    monkeypatch.setattr(_pkg, "__version__", "0.9.0")
+
+    result = _check_source_version_drift(home=tmp_path)
+
+    assert result.severity == Severity.WARNING
+    assert "0.9.0" in result.message
+    assert "0.9.1" in result.message
+    assert "uv tool install --force --reinstall" in result.message
+
+
+def test_check_source_version_drift_ok_for_local_path_at_source_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A LOCAL_PATH install already at its recorded source version reports no drift."""
+    import autoskillit as _pkg
+    from autoskillit.cli.doctor import _check_source_version_drift
+    from autoskillit.cli.install._install_info import InstallInfo, InstallType
+    from autoskillit.core import Severity
+
+    local_source = tmp_path / "checkout"
+    local_source.mkdir()
+    (local_source / "pyproject.toml").write_text(
+        '[project]\nname = "autoskillit"\nversion = "0.9.0"\n', encoding="utf-8"
+    )
+    info = InstallInfo(
+        install_type=InstallType.LOCAL_PATH,
+        commit_id=None,
+        requested_revision=None,
+        url=local_source.as_uri(),
+        editable_source=None,
+        local_source=local_source,
+    )
+    monkeypatch.setattr(_patch_install__install_info, "detect_install", lambda: info)
+    monkeypatch.setattr(_pkg, "__version__", "0.9.0")
+
+    result = _check_source_version_drift(home=tmp_path)
+
+    assert result.severity == Severity.OK
+
+
+def test_check_source_version_drift_local_path_without_source_version_is_not_network(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A LOCAL_PATH install whose source lacks a pyproject.toml is OK, with no network wording."""
+    from autoskillit.cli.doctor import _check_source_version_drift
+    from autoskillit.cli.install._install_info import InstallInfo, InstallType
+    from autoskillit.core import Severity
+
+    local_source = tmp_path / "checkout-no-pyproject"
+    local_source.mkdir()
+    info = InstallInfo(
+        install_type=InstallType.LOCAL_PATH,
+        commit_id=None,
+        requested_revision=None,
+        url=local_source.as_uri(),
+        editable_source=None,
+        local_source=local_source,
+    )
+    monkeypatch.setattr(_patch_install__install_info, "detect_install", lambda: info)
+
+    result = _check_source_version_drift(home=tmp_path)
+
+    assert result.severity == Severity.OK
+    assert "network" not in result.message.lower()
+
+
 @pytest.mark.parametrize(
     ("installed_sha", "target_sha"),
     [("samecommit", "samecommit"), ("oldcommit", "newcommit")],

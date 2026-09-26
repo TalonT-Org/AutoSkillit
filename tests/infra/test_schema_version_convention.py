@@ -134,7 +134,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/core/pipeline/pipeline_tracker.py", 352),
     ("src/autoskillit/core/pipeline/pipeline_tracker.py", 370),
     # tools_status.py — mcp_data dict
-    ("src/autoskillit/server/tools/tools_status.py", 584),
+    ("src/autoskillit/server/tools/tools_status.py", 587),
     # tools_github.py — bug report dict (non-blocking report-bug status file)
     ("src/autoskillit/server/tools/tools_github.py", 343),
     # _hooks.py — settings.json dict (co-owned with Claude CLI)
@@ -142,7 +142,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _installed_plugins.py — installed_plugins.json (co-owned with Claude plugin system)
     ("src/autoskillit/cli/install/_installed_plugins.py", 81),
     # _update_checks.py — dismissal state file
-    ("src/autoskillit/cli/update/_update_checks.py", 95),
+    ("src/autoskillit/cli/update/_update_checks.py", 96),
     # _update_checks_fetch.py — fetch cache (extracted from _update_checks.py)
     ("src/autoskillit/cli/update/_update_checks_fetch.py", 67),
     # smoke_utils/_review_design.py — atomic v1→v2 handoff enrichment and manifest

@@ -38,7 +38,10 @@ def _representative_pairs(
             )
         case ReleaseChannel.WORKING_TREE:
             installed = ReleaseIdentity(channel, version="1.0.0")
-            return ((installed, ReleaseIdentity(channel, version="1.1.0")),)
+            return (
+                (installed, ReleaseIdentity(channel, version="1.1.0")),
+                (installed, installed),
+            )
         case unhandled:
             assert_never(unhandled)
 

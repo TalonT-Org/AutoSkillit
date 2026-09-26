@@ -18,7 +18,7 @@ import site
 import subprocess
 from pathlib import Path
 
-from autoskillit.core import get_logger
+from autoskillit.core import file_url_path, get_logger
 
 logger = get_logger(__name__)
 
@@ -154,9 +154,8 @@ def _is_editable_in_worktree(direct_url: dict, worktree_path: Path) -> bool:
     if not editable:
         return False
 
-    # Strip file:// prefix and check if the path is inside the worktree
-    source_path = url[len("file://") :]
-    return Path(source_path).is_relative_to(worktree_path)
+    source_path = file_url_path(url)
+    return source_path is not None and source_path.is_relative_to(worktree_path)
 
 
 def _scan_direct_url_metadata(direct_url_file: Path, worktree_path: Path) -> EditableScanResult:

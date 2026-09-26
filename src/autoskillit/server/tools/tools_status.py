@@ -123,6 +123,9 @@ async def kitchen_status() -> str:
                 "generation_root": (
                     str(currency.generation_root) if currency.generation_root else None
                 ),
+                "installed_version": currency.installed_version,
+                "checkout_version": currency.checkout_version,
+                "install_type": currency.install_type,
             }
             if not EXPLORER_SESSION_SCOPE.admits(session_shape()):
                 status["broker_authority"] = BrokerAuthorityStatus.SESSION_TYPE_INELIGIBLE.value

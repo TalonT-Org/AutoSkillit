@@ -28,19 +28,54 @@ to add your team's review guidelines.
 Resolution applies a contract floor when a project-local skill shadows a bundled one.
 The local skill may add semantic requirements, but cannot remove the bundled semantic
 plan or lower `join.required`, `concurrency.required`, `evidence.required`, or
-`evidence.independent`. For example, a local copy of a fixed-set skill must retain:
+`evidence.independent`. An override must carry at least every floor field its bundled
+twin sets to `true`. For example, a local copy of a skill whose bundled twin declares
+all three floor fields must retain:
 
 ```yaml
 semantic_version: 1
 semantic_requirements:
   join:
     required: true
+  concurrency:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ```
 
 If the local copy weakens that floor, it receives a `CONTRACT_FLOOR_WEAKENED` exclusion
 and the bundled skill becomes effective. The exclusion details any dropped
 `requires_resources` or `git_metadata_writes`; those fields by themselves do not reject
 an override.
+
+## Checking overrides after an upgrade
+
+`autoskillit doctor` is the check for override health. Its `project_local_skill_contracts`
+result lists each rejected override, naming its invalidity kinds and hints. Run it after
+every AutoSkillit upgrade: a new release can add requirements to a bundled twin, so an
+override admitted before the upgrade can fail the floor afterward.
+
+`autoskillit migrate` only repairs DETERMINISTIC invalidity kinds. It never acts on
+ADVISORY kinds such as `CONTRACT_FLOOR_WEAKENED` — a rejected override carrying that kind
+must be fixed by hand or deleted.
+
+## Native discovery of a rejected override
+
+When an override is rejected, every AutoSkillit-mediated surface — `run_skill`, recipes,
+`/autoskillit:<name>`, and the session add-dir — falls back to serving the bundled twin.
+Claude Code, however, still discovers the project's `.claude/skills/<name>` directory
+natively as `/<name>`, independent of AutoSkillit's own admission decision. Claude Code
+2.1.280 was observed to prefer that native copy over a same-named add-dir copy. This is
+observed behavior, not a documented contract, and it was verified for Claude Code only.
+
+An admitted override is also published into the add-dir, so both the native
+`.claude/skills/<name>` copy and the add-dir copy run the override body. Only the add-dir
+copy carries the appended "Backend-adapted semantic execution contract" section.
+
+A rejected override therefore keeps answering `/<name>` in Claude Code natively, even
+though every AutoSkillit-mediated surface has already fallen back to the bundled skill.
+Fix or delete a rejected override; do not rely on the fallback to keep it out of use.
 
 Project-local skills are discovered from all four supported roots, in precedence order:
 
@@ -54,8 +89,11 @@ An interactive Codex Cook generated home has one managed catalog at
 same catalog, so it does not create a second copy or another precedence tier.
 
 Git tracking does not affect this check: every on-disk override root participates in
-resolution. `tests/arch/test_skill_override_contract_guard.py` checks on-disk shadow pairs
-and verifies that local and bundled definitions have the same backend admission result.
+resolution, filesystem-wide, whether or not the override is tracked by git.
+`tests/arch/test_skill_override_contract_guard.py` checks on-disk shadow pairs and
+verifies that local and bundled definitions have the same backend admission result.
+In addition, `tests/skills/test_skill_compliance.py` admits every **tracked** override
+per path, and the guard asserts zero tracked floor exclusions.
 
 ## Name-Matching Behavior
 

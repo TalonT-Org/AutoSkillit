@@ -375,3 +375,13 @@ class TestScanEditableInstalls:
 
         assert result.findings == ()
         assert any(str(executable) in reason for reason in result.unverified)
+
+    def test_percent_encoded_worktree_path_is_recognized_as_inside(self, tmp_path: Path) -> None:
+        worktree = tmp_path / "wt with space"
+        encoded = str(worktree).replace(" ", "%20")
+        direct_url = {
+            "url": f"file://{encoded}/src",
+            "dir_info": {"editable": True},
+        }
+
+        assert _editable_guard._is_editable_in_worktree(direct_url, worktree) is True

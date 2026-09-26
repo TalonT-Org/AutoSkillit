@@ -10,13 +10,12 @@ import json
 import shutil
 import stat
 import subprocess
-import urllib.parse
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import Severity, get_logger, is_python_bytecode_path
+from autoskillit.core import Severity, file_url_path, get_logger, is_python_bytecode_path
 
 from ._doctor_types import DoctorResult
 
@@ -70,17 +69,8 @@ def _check_editable_install_source_exists() -> DoctorResult:
     if not is_editable:
         return DoctorResult(Severity.OK, check_name, "Not an editable install")
 
-    url = direct_url.get("url", "")
-    src_path = urllib.parse.urlparse(url).path if url.startswith("file://") else ""
-    if src_path:
-        # pip records the editable-install source URL with percent-encoded
-        # special characters (e.g. literal " becomes %22). urllib's
-        # parsed .path leaves the encoding intact, so unquote before the
-        # filesystem existence check — otherwise a worktree whose directory
-        # name contains shell-special characters is misclassified as
-        # "deleted from a different path".
-        src_path = urllib.parse.unquote(src_path)
-    if not src_path or Path(src_path).exists():
+    src_path = file_url_path(direct_url.get("url", ""))
+    if src_path is None or src_path.exists():
         return DoctorResult(Severity.OK, check_name, "Editable install source directory exists")
 
     return DoctorResult(
@@ -144,7 +134,7 @@ def _check_source_version_drift(home: Path | None = None) -> DoctorResult:
             release_identity,
         )
         from autoskillit.cli.update._update_checks_source import resolve_target_identity
-        from autoskillit.core import update_available
+        from autoskillit.core import ReleaseChannel, update_available
 
         info = detect_install()
 
@@ -153,7 +143,7 @@ def _check_source_version_drift(home: Path | None = None) -> DoctorResult:
                 Severity.OK, check_name, "Local editable install — drift check not applicable"
             )
 
-        if info.install_type in (InstallType.UNKNOWN, InstallType.LOCAL_PATH):
+        if info.install_type == InstallType.UNKNOWN:
             return DoctorResult(
                 Severity.OK,
                 check_name,
@@ -174,6 +164,13 @@ def _check_source_version_drift(home: Path | None = None) -> DoctorResult:
         target = resolve_target_identity(info, _home, network=True)
 
         if target is None:
+            if info.install_type == InstallType.LOCAL_PATH:
+                return DoctorResult(
+                    Severity.OK,
+                    check_name,
+                    "Local source version unavailable — the recorded source directory is "
+                    "missing or is not an autoskillit checkout",
+                )
             return DoctorResult(
                 Severity.OK,
                 check_name,
@@ -184,6 +181,13 @@ def _check_source_version_drift(home: Path | None = None) -> DoctorResult:
         if not update_available(installed, target):
             return DoctorResult(Severity.OK, check_name, "No source drift detected")
 
+        if target.channel is ReleaseChannel.WORKING_TREE:
+            return DoctorResult(
+                Severity.WARNING,
+                check_name,
+                f"Source drift: installed={current}, local source={target.version}. "
+                f"Run: {_format_upgrade_cmd(info)} && autoskillit install",
+            )
         installed_short = (info.commit_id or "unknown")[:8]
         ref_short = (target.commit or target.version)[:8]
         _cmd_str = _format_upgrade_cmd(info)

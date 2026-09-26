@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import subprocess
+import tomllib
 from dataclasses import dataclass
 from enum import StrEnum, unique
 from pathlib import Path
@@ -16,7 +17,9 @@ __all__ = [
     "DirectUrlInfo",
     "SourceCurrency",
     "SourceCurrencyStatus",
+    "autoskillit_source_version",
     "distribution_version_at",
+    "file_url_path",
     "is_dev_install",
     "parse_direct_url",
     "source_currency",
@@ -42,6 +45,9 @@ class SourceCurrency:
     checkout_head: str | None
     behind_by: int | None
     generation_root: Path | None
+    installed_version: str | None = None
+    checkout_version: str | None = None
+    install_type: str | None = None
 
 
 @unique
@@ -67,11 +73,96 @@ def _git(checkout: Path, *args: str) -> str | None:
     return result.stdout.strip() if result.returncode == 0 else None
 
 
+def file_url_path(url: str) -> Path | None:
+    """Return the local absolute path named by a ``file://`` URL, else ``None``.
+
+    pip percent-encodes special characters in ``direct_url.json`` URLs, so the
+    path component is unquoted rather than sliced off the prefix.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme != "file" or parsed.netloc not in ("", "localhost"):
+        return None
+    if not parsed.path.startswith("/"):
+        return None
+    return Path(unquote(parsed.path))
+
+
+def autoskillit_source_version(root: Path) -> str | None:
+    """Return ``[project].version`` when ``root`` is an autoskillit source tree."""
+    try:
+        with (root / "pyproject.toml").open("rb") as handle:
+            data = tomllib.load(handle)
+    except (OSError, ValueError):
+        return None
+    project = data.get("project")
+    if not isinstance(project, dict) or project.get("name") != "autoskillit":
+        return None
+    version = project.get("version")
+    return version if isinstance(version, str) and version else None
+
+
+def _running_distribution_version() -> str | None:
+    import importlib.metadata
+
+    try:
+        return importlib.metadata.version("autoskillit")
+    except importlib.metadata.PackageNotFoundError:
+        return None
+
+
+def _version_currency(
+    checkout: Path, info: DirectUrlInfo, generation_root: Path | None
+) -> SourceCurrency:
+    install_type = info["install_type"]
+    installed = (
+        distribution_version_at(generation_root)
+        if generation_root is not None
+        else _running_distribution_version()
+    )
+    checkout_version = autoskillit_source_version(checkout)
+
+    def result(status: SourceCurrencyStatus) -> SourceCurrency:
+        return SourceCurrency(
+            status,
+            installed_commit=None,
+            checkout_head=None,
+            behind_by=None,
+            generation_root=generation_root,
+            installed_version=installed,
+            checkout_version=checkout_version,
+            install_type=install_type,
+        )
+
+    if checkout_version is None:
+        return result(SourceCurrencyStatus.NOT_SOURCE_CHECKOUT)
+    if install_type == "local-path":
+        recorded = file_url_path(info["url"])
+        if recorded is None or recorded.resolve() != checkout.resolve():
+            return result(SourceCurrencyStatus.NOT_SOURCE_CHECKOUT)
+    if installed is None:
+        return result(SourceCurrencyStatus.UNKNOWN)
+    return result(
+        SourceCurrencyStatus.CURRENT
+        if installed == checkout_version
+        else SourceCurrencyStatus.STALE
+    )
+
+
 def source_currency(checkout: Path, *, generation_root: Path | None) -> SourceCurrency:
-    """Compare the deployed generation provenance with a checkout's current HEAD."""
+    """Compare the deployed generation provenance with a checkout.
+
+    Commit-bearing provenance compares against the checkout's ``HEAD``;
+    ``local-path`` and unknown provenance compare the installed version
+    against the checkout's ``[project].version``.
+    """
+    info = parse_direct_url(generation_root) if generation_root is not None else parse_direct_url()
+    install_type = info["install_type"]
+    if install_type in ("local-path", "unknown"):
+        return _version_currency(checkout, info, generation_root)
     if generation_root is None:
-        return SourceCurrency(SourceCurrencyStatus.UNKNOWN, None, None, None, None)
-    info = parse_direct_url(generation_root)
+        return SourceCurrency(
+            SourceCurrencyStatus.UNKNOWN, None, None, None, None, install_type=install_type
+        )
     head = _git(checkout, "rev-parse", "HEAD")
     if head is None:
         return SourceCurrency(
@@ -80,24 +171,39 @@ def source_currency(checkout: Path, *, generation_root: Path | None) -> SourceCu
             None,
             None,
             generation_root,
+            install_type=install_type,
         )
-    if info["install_type"] == "local-editable":
-        parsed = urlparse(info["url"])
-        installed_path = Path(unquote(parsed.path)).resolve()
+    if install_type == "local-editable":
+        installed_path = file_url_path(info["url"])
         return SourceCurrency(
             SourceCurrencyStatus.CURRENT
-            if installed_path == checkout.resolve()
+            if installed_path is not None and installed_path.resolve() == checkout.resolve()
             else SourceCurrencyStatus.NOT_SOURCE_CHECKOUT,
             None,
             head,
             None,
             generation_root,
+            install_type=install_type,
         )
     commit = info["commit_id"]
-    if info["install_type"] != "git-vcs" or not commit:
-        return SourceCurrency(SourceCurrencyStatus.UNKNOWN, commit, head, None, generation_root)
+    if install_type != "git-vcs" or not commit:
+        return SourceCurrency(
+            SourceCurrencyStatus.UNKNOWN,
+            commit,
+            head,
+            None,
+            generation_root,
+            install_type=install_type,
+        )
     if commit == head:
-        return SourceCurrency(SourceCurrencyStatus.CURRENT, commit, head, 0, generation_root)
+        return SourceCurrency(
+            SourceCurrencyStatus.CURRENT,
+            commit,
+            head,
+            0,
+            generation_root,
+            install_type=install_type,
+        )
     if _git(checkout, "cat-file", "-e", f"{commit}^{{commit}}") is None:
         return SourceCurrency(
             SourceCurrencyStatus.NOT_SOURCE_CHECKOUT,
@@ -105,9 +211,17 @@ def source_currency(checkout: Path, *, generation_root: Path | None) -> SourceCu
             head,
             None,
             generation_root,
+            install_type=install_type,
         )
     if _git(checkout, "merge-base", "--is-ancestor", commit, "HEAD") is None:
-        return SourceCurrency(SourceCurrencyStatus.DIVERGED, commit, head, None, generation_root)
+        return SourceCurrency(
+            SourceCurrencyStatus.DIVERGED,
+            commit,
+            head,
+            None,
+            generation_root,
+            install_type=install_type,
+        )
     behind = _git(checkout, "rev-list", "--count", f"{commit}..HEAD")
     return SourceCurrency(
         SourceCurrencyStatus.STALE,
@@ -115,6 +229,7 @@ def source_currency(checkout: Path, *, generation_root: Path | None) -> SourceCu
         head,
         int(behind) if behind is not None else None,
         generation_root,
+        install_type=install_type,
     )
 
 

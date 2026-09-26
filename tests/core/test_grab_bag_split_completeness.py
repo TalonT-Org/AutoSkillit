@@ -534,6 +534,7 @@ def test_no_unintended_new_test_files_under_tests_core() -> None:
             "test_recipe_delivery_contract.py",
             "test_recipe_execution_credential.py",
             "test_recipe_section_bound_resolver.py",
+            "test_release_identity_working_tree.py",
             "test_resolve_main_worktree.py",
             "test_resolve_temp_dir.py",
             "test_session_checkpoint.py",

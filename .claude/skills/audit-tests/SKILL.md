@@ -1,18 +1,35 @@
 ---
 name: audit-tests
-categories: [audit]
-description: Audit the test suite for useless tests, consolidation opportunities, over-mocking, weak assertions, placement/organization issues, xdist safety violations, test path filter integrity, and other test quality issues. Use when user says "audit tests", "audit test suite", "review tests", or "test quality check". Generates an improvement plan in temp/ with explanations for each proposed change.
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/audit-tests/'
+categories:
+- audit
+description: Audit the test suite for useless tests, consolidation opportunities, over-mocking, weak assertions, placement/organization
+  issues, xdist safety violations, test path filter integrity, and other test quality issues. Use when user says "audit tests",
+  "audit test suite", "review tests", or "test quality check". Generates an improvement plan in {{AUTOSKILLIT_TEMP}}/ with
+  explanations for each proposed change.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: audit-tests] Auditing test suite...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: audit-tests] Auditing test suite...'''
+      once: true
 semantic_version: 1
 semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+    count: 6
+  concurrency:
+    required: true
   join:
     required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # Test Suite Audit Skill
@@ -60,16 +77,22 @@ Tests that span two modules should be placed in the directory of their primary c
 ## Critical Constraints
 
 **NEVER:**
+- Fabricate, invent, or embellish information not supported by the available evidence or code.
+
 - Modify any source or test code files
 - Flag tests as useless without reading and understanding them
 - Recommend removing tests that guard against real regressions
 - Recommend changes that would reduce meaningful coverage
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Use subagents for parallel exploration
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Read both the test AND the code it tests before judging
 - Provide file paths, line numbers, and an explanation for each finding
-- Write the improvement plan to `{{AUTOSKILLIT_TEMP}}/audit-tests/test_audit_{YYYY-MM-DD_HHMMSS}.md`
+- Write the improvement plan to `{{AUTOSKILLIT_TEMP}}/audit-tests/test_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
+- Emit: `audit_report_path = <absolute path to test_audit_{YYYY-MM-DD_HHMMSS}.md>`
 - Categorize findings by issue type and severity
 
 ---
@@ -142,7 +165,7 @@ Tests that no longer align with the current codebase.
 - Fixtures marked as deprecated that are still defined
 - Tests that are always skipped or conditionally disabled
 - Tests whose setup creates state the production code no longer uses
-- `CLAUDE.md` test file list that diverges from the actual files on disk — flag if the documented inventory is incomplete or contains stale entries
+- `AGENTS.md` test file list that diverges from the actual files on disk — flag if the documented inventory is incomplete or contains stale entries
 - `LAYER_CASCADE_CONSERVATIVE` or `LAYER_CASCADE_AGGRESSIVE` keys in `tests/_test_filter.py` that don't match the current set of subpackages under `src/autoskillit/`
 - `.autoskillit/test-filter-manifest.yaml` patterns that match zero tracked files (orphaned entries)
 - `.autoskillit/test-source-map.json` not regenerated within the quarterly schedule
@@ -215,6 +238,7 @@ Tests and configuration that maintain the path-based test filter's correctness. 
 - `small`-marked tests that spawn subprocesses or perform real filesystem I/O (should be `medium`)
 - `medium`-marked tests that access the network (should be `large`)
 - `_SIZE_DIRS` in `conftest.py` diverging from `SIZE_DIRECTORIES` in `tests/arch/test_size_markers.py`
+- Root-level `test_*.py` files missing size markers (covered by `test_root_test_files_have_size_marker`)
 
 **Bucket A discipline:**
 - Files in `BUCKET_A_PATTERNS` that could be narrowed to specific test directories via the manifest instead of triggering a full run
@@ -234,7 +258,11 @@ Tests and configuration that maintain the path-based test filter's correctness. 
 
 ## Audit Workflow
 
-### Step 1: Launch Parallel Subagents
+### Step 1: Launch Parallel Subagents (SINGLE MESSAGE)
+
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Spawn 6 domain-based subagents. Each covers all issue categories (C1–C11) within its area. Group by source domain, not by issue category. Each subagent must read both test files AND the corresponding production code before making judgements.
 
@@ -243,7 +271,7 @@ Spawn 6 domain-based subagents. Each covers all issue categories (C1–C11) with
 - **Group 3 — Execution (IL-1):** Tests for `execution/` sub-package.
 - **Group 4 — Recipe + Migration (IL-2):** Tests for `recipe/` and `migration/` sub-packages.
 - **Group 5 — Server + CLI (IL-3):** Tests for `server/` and `cli/` sub-packages.
-- **Group 6 — Cross-cutting:** Architecture enforcement tests, instruction surface/contract tests, CI/dev infrastructure tests. Also audit `tests/CLAUDE.md` for accuracy against the actual test files on disk. Additionally, perform filter integrity checks: verify filter cascade maps (`LAYER_CASCADE_CONSERVATIVE`, `LAYER_CASCADE_AGGRESSIVE`) against actual source subpackages under `src/autoskillit/`; check manifest completeness against `git ls-files`; verify size marker rollup coverage against `_SIZE_DIRS` in `conftest.py`; check Bucket A minimality (files that could use manifest instead); verify always-run directories (`ALWAYS_RUN_CONSERVATIVE`, `ALWAYS_RUN_AGGRESSIVE`) have appropriate size markers or are exempted from size filtering.
+- **Group 6 — Cross-cutting:** Architecture enforcement tests, instruction surface/contract tests, CI/dev infrastructure tests. Also audit `tests/AGENTS.md` for accuracy against the actual test files on disk. Additionally, perform filter integrity checks: verify filter cascade maps (`LAYER_CASCADE_CONSERVATIVE`, `LAYER_CASCADE_AGGRESSIVE`) against actual source subpackages under `src/autoskillit/`; check manifest completeness against `git ls-files`; verify size marker rollup coverage against `_SIZE_DIRS` in `conftest.py`; check Bucket A minimality (files that could use manifest instead); verify always-run directories (`ALWAYS_RUN_CONSERVATIVE`, `ALWAYS_RUN_AGGRESSIVE`) have appropriate size markers or are exempted from size filtering.
 
 For each finding, note the file, line range, issue category, and a brief explanation of why it's a problem and what should change.
 
@@ -258,7 +286,7 @@ After subagents complete:
 
 ### Step 3: Generate Improvement Plan
 
-Write a structured plan to: `{{AUTOSKILLIT_TEMP}}/audit-tests/test_audit_{YYYY-MM-DD_HHMMSS}.md`
+Write a structured plan to: `{{AUTOSKILLIT_TEMP}}/audit-tests/test_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 
 Organize the plan into phases grouped by issue type. Each finding must include:
 - **File path and line range**
@@ -280,6 +308,12 @@ Output a summary including:
 - Placement map summary: N files to relocate, N files to rename, target directory breakdown
 - Next steps
 
+Emit the structured output token so the recipe can capture the path:
+
+```
+audit_report_path = {{AUTOSKILLIT_TEMP}}/audit-tests/test_audit_{YYYY-MM-DD_HHMMSS}.md
+```
+
 ---
 
 ## Exclusions
@@ -291,6 +325,5 @@ Do NOT flag:
 - Test infrastructure and safety mechanisms
 - Tests that are intentionally minimal as smoke tests
 - Shared fixtures in centralized test configuration
-- Architecture enforcement tests (`test_architecture.py`, `test_import_paths.py`) for having "weak assertions" or "no meaningful coverage" — AST rule enforcement tests validate source code structure, not runtime behavior, and are correctly evaluated against whether the structural rule they enforce is correct and complete, not by normal assertion-strength standards
 - Test files at the `tests/` root that are part of the filter infrastructure (`test_test_filter.py`, `test_test_filter_plugin.py`, `test_test_filter_step7.py`, `_test_filter.py`) — these test root-level infrastructure and are correctly placed at the root
 - Hardcoded count assertions in filter/manifest tests (e.g., `>= 22 patterns`) — these are intentional drift detectors, not weak assertions

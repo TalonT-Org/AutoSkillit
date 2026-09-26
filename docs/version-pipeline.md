@@ -8,10 +8,11 @@ That PEP 440 version is the ordering authority only for the **released** channel
 (stable, main, and release tags). A branch-tracking install such as `develop`
 uses the resolved commit SHA as its release identity: availability means the
 tracked ref points at a different commit, and a successful update converges to
-the exact resolved SHA even when `pyproject.toml` is unchanged. Local working-tree
-installs have no monotonic release criterion. The shared policy lives in
-`core/_release_identity.py`; update checks, transaction verification, and doctor
-diagnostics consume it rather than re-deriving version or commit comparisons.
+the exact resolved SHA even when `pyproject.toml` is unchanged. Local-path installs
+compare the recorded source's `[project].version`; local-editable installs have no
+automatic release criterion. The shared policy lives in `core/_release_identity.py`;
+update checks, transaction verification, and doctor diagnostics consume it rather
+than re-deriving version or commit comparisons.
 
 ## Version Propagation
 

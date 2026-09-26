@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import assert_never
 
-from packaging.version import Version
+from packaging.version import InvalidVersion, Version
 
 
 class ReleaseChannel(StrEnum):
@@ -66,16 +66,36 @@ def _require_same_channel(
     return next(iter(channels))
 
 
+def _parse_channel_version(raw: str, channel: ReleaseChannel) -> Version:
+    """Parse a release-identity version string with channel-aware error context.
+
+    Centralizes the InvalidVersion wrap so callers raise a ValueError naming
+    the channel and raw version that failed to parse.
+    """
+    try:
+        return Version(raw)
+    except InvalidVersion as err:
+        raise ValueError(f"unparseable {channel.value} version: {raw!r}") from err
+
+
 def update_available(installed: ReleaseIdentity, target: ReleaseIdentity) -> bool:
     """Return whether *target* is newer under the identities' shared channel."""
     channel = _require_same_channel(installed, target)
     match channel:
         case ReleaseChannel.RELEASED:
-            return Version(target.version) > Version(installed.version)
+            return _parse_channel_version(target.version, channel) > _parse_channel_version(
+                installed.version, channel
+            )
         case ReleaseChannel.BRANCH:
             return target.commit != installed.commit
         case ReleaseChannel.WORKING_TREE:
-            return False
+            try:
+                return Version(target.version) > Version(installed.version)
+            except InvalidVersion as err:
+                raise ValueError(
+                    f"unparseable working-tree version: "
+                    f"installed={installed.version!r}, target={target.version!r}"
+                ) from err
         case unhandled:
             assert_never(unhandled)
 
@@ -88,6 +108,9 @@ def advance_verdict(
 ) -> AdvanceVerdict:
     """Judge whether an upgrade advanced according to its release channel."""
     channel = _require_same_channel(previous, observed, target)
+    observed_key: object
+    previous_key: object
+    target_key: object | None
     match channel:
         case ReleaseChannel.RELEASED:
             previous_version = Version(previous.version)
@@ -98,15 +121,30 @@ def advance_verdict(
                 return AdvanceVerdict.UNCHANGED
             return AdvanceVerdict.REGRESSED
         case ReleaseChannel.BRANCH:
-            if observed.commit == previous.commit:
-                return AdvanceVerdict.UNCHANGED
-            if target is None or observed.commit == target.commit:
-                return AdvanceVerdict.ADVANCED
-            return AdvanceVerdict.DIVERGED_FROM_TARGET
+            observed_key = observed.commit
+            previous_key = previous.commit
+            target_key = target.commit if target is not None else None
         case ReleaseChannel.WORKING_TREE:
-            return AdvanceVerdict.NOT_APPLICABLE
+            if target is None:
+                return AdvanceVerdict.NOT_APPLICABLE
+            try:
+                observed_key = Version(observed.version)
+                previous_key = Version(previous.version)
+                target_key = Version(target.version)
+            except InvalidVersion as err:
+                raise ValueError(
+                    f"unparseable working-tree version: "
+                    f"observed={observed.version!r}, "
+                    f"previous={previous.version!r}, "
+                    f"target={target.version!r}"
+                ) from err
         case unhandled:
             assert_never(unhandled)
+    if observed_key == previous_key:
+        return AdvanceVerdict.UNCHANGED
+    if target_key is None or observed_key == target_key:
+        return AdvanceVerdict.ADVANCED
+    return AdvanceVerdict.DIVERGED_FROM_TARGET
 
 
 def version_advanced(installed: ReleaseIdentity, target: ReleaseIdentity) -> bool:

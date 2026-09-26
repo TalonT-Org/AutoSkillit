@@ -23,15 +23,17 @@ answer; they are not independent freshness checks.
 |---------|----------|------------------|--------------------|
 | released | stable, main, and release tags | target PEP 440 version is greater | observed version is greater |
 | branch | develop and other non-stable VCS refs | resolved target commit differs | observed commit equals the resolved target commit |
-| working tree | local editable/path installs | never automatic | monotonic advance is not applicable |
+| working tree | local editable/path installs | local-path: the recorded source's `[project].version` is greater; local-editable: never | local-path with an announced target: observed version equals the target; otherwise not applicable |
 
 For a branch channel, the tracked ref is the authority. The update pins the SHA
 resolved during the check, and success means convergence to that exact commit even
 when the package version is unchanged. A ref rewind is therefore not treated as a
 version downgrade: if the branch now points at an older commit, converging to that
-commit is the requested branch-tracking behavior. Working-tree installs have no
-meaningful monotonic identity; their update still has to complete its subprocess,
-install, and artifact-verification checks, but no invented ordering is imposed.
+commit is the requested branch-tracking behavior. Local-editable installs still have
+no meaningful monotonic identity; their update still has to complete its subprocess,
+install, and artifact-verification checks, but no invented ordering is imposed. A
+local-path install is ordered by its recorded source directory's `[project].version`;
+that version is the one criterion for both availability and advance.
 
 For the `develop`-tracking (dev) branch, the upgrade command no longer force-replaces
 the shared `uv`-managed tool root in place. It installs into a fresh, version-addressed
@@ -50,7 +52,7 @@ Dismissal windows vary by install type to balance convenience and safety:
 | Install | Window |
 |---------|--------|
 | stable / main / release-tag | 7 days |
-| develop / local-editable | 12 hours |
+| develop / local-editable / local-path | 12 hours |
 
 The window is determined at check time from the current `direct_url.json` —
 not from what was stored when you dismissed.
@@ -84,8 +86,17 @@ then verifies that the release identity advanced under the channel contract abov
 On success it clears any active
 dismissal state so the next check starts fresh.
 
-For unknown install types (e.g. installed from PyPI without a VCS reference),
-`autoskillit update` exits with code 2 and prints a reinstallation hint.
+For installs without an upgrade command — unknown provenance, or a `local-path` install
+whose recorded source directory is gone — `autoskillit update` names the install type
+and remedy, and exits with code 20.
+
+For a `local-path` install, the upgrade command is
+`uv tool install --force --reinstall <source> --python <pin>`, staged via `UV_TOOL_DIR`
+the same way the `develop` track stages above, rather than force-replacing the shared
+uv-managed tool root in place. `--reinstall` is required because `uv` otherwise reuses
+a cached build of an unchanged-version local source — without it, a rebuilt or edited
+checkout at the same `[project].version` would appear to install successfully while
+leaving the stale build in place.
 
 ## Escape hatches
 

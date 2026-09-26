@@ -72,7 +72,7 @@ Create focused, actionable implementation plans that recommend the technically b
   dedicated gap-replan route adds a group to the still-open set.
 
 In conflict-resolution examples, `{branch}` is the source PR branch and
-`{commit-hash}` is an individual source commit selected from that branch.
+`{commit_hash}` is an individual source commit selected from that branch.
 
 ## Core Values - CRITICAL
 
@@ -256,7 +256,7 @@ git merge --no-commit --no-ff origin/{branch}  # same problem
 git checkout origin/{branch} -- path/to/file.py
 
 # Option B: Cherry-pick (replays individual commits as regular commits)
-git cherry-pick {commit-hash}
+git cherry-pick {commit_hash}
 
 # Option C: Squash merge (single linear commit from all changes)
 git merge --squash origin/{branch}

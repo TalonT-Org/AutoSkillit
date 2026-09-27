@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import autoskillit.cli.fleet._fleet_run as _patch_fleet__fleet_run
+from autoskillit.config import LoggingConfig
 from autoskillit.core import DIRECT_PREFIX, PLUGIN_PREFIX, FleetErrorCode
 from autoskillit.fleet import (
     DispatchCompleted,
@@ -22,6 +23,7 @@ pytestmark = [
     pytest.mark.layer("cli"),
     pytest.mark.medium,
     pytest.mark.feature("fleet"),
+    pytest.mark.usefixtures("_stub_configure_logging"),
 ]
 
 _TEST_PROVENANCE = DispatchEffectProvenance(operation_id="fleet-run-test")
@@ -41,6 +43,7 @@ def _make_test_config(
                 model_override=None,
                 default_model="fixture-default-model",
             ),
+            "logging": LoggingConfig(),
         },
     )()
 

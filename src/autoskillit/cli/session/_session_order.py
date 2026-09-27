@@ -410,10 +410,12 @@ def order(
         print("ERROR: 'order' cannot run inside a Claude Code session.")
         print("Run this command in a regular terminal.")
         sys.exit(1)
+    from autoskillit.cli.ui._terminal_logging import TerminalLogPolicy, apply_terminal_logging
     from autoskillit.config import load_config
 
     project_dir = Path.cwd()
     config = load_config(project_dir)
+    apply_terminal_logging(config.logging, TerminalLogPolicy.INTERACTIVE)
     is_tty = sys.stdin.isatty()
     from autoskillit.cli.session._session_backend import resolve_global_backend
 

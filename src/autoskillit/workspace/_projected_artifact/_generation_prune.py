@@ -331,7 +331,6 @@ def _log_generation_prune_reconcile(
     """Emit the sole lifecycle event for one generation-prune attempt."""
     fields = {"path": str(candidate), "disposition": disposition.value}
     if disposition in {
-        _GenerationPruneDisposition.RECONCILED,
         _GenerationPruneDisposition.DEFERRED_IO_ERROR,
         _GenerationPruneDisposition.DEFERRED_UNAVAILABLE,
         _GenerationPruneDisposition.DEFERRED_QUEUE_UNREADABLE,

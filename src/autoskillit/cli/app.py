@@ -86,37 +86,33 @@ class CliError(Exception):
 @app.default
 def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = False):
     """Start the MCP server (default command)."""
-    import logging as _stdlib_logging
-
-    from autoskillit.config import load_config
+    from autoskillit.cli.ui._terminal_logging import TerminalLogPolicy, resolve_terminal_logging
+    from autoskillit.config import LoggingConfig, load_config
     from autoskillit.core import configure_logging, get_logger
 
     # Phase 1: Early init at INFO (or DEBUG if --verbose) — ensures logging
     # works for config load errors.  MUST run before importing
     # autoskillit.server so that module-level loggers resolve to stderr.
-    cli_level = _stdlib_logging.DEBUG if verbose else _stdlib_logging.INFO
-    configure_logging(
-        level=cli_level,
-        json_output=not sys.stderr.isatty(),
-        stream=sys.stderr,
+    early = resolve_terminal_logging(
+        LoggingConfig(),
+        TerminalLogPolicy.SERVICE,
+        stderr_is_tty=sys.stderr.isatty(),
+        verbose=verbose,
     )
+    configure_logging(level=early.level, json_output=early.json_output, stream=sys.stderr)
 
     project_dir = Path.cwd()
     cfg = load_config(project_dir)
 
-    # Phase 2: Reconfigure if config specifies a different level.
-    # min() ensures --verbose OR config DEBUG both enable debug — most verbose wins.
-    config_level = getattr(_stdlib_logging, cfg.logging.level.upper(), _stdlib_logging.INFO)
-    effective_level = min(config_level, cli_level)
-    json_output = (
-        cfg.logging.json_output if cfg.logging.json_output is not None else not sys.stderr.isatty()
+    # Phase 2: Reconfigure if config specifies a different level or renderer.
+    final = resolve_terminal_logging(
+        cfg.logging,
+        TerminalLogPolicy.SERVICE,
+        stderr_is_tty=sys.stderr.isatty(),
+        verbose=verbose,
     )
-    if effective_level != cli_level or cfg.logging.json_output is not None:
-        configure_logging(
-            level=effective_level,
-            json_output=json_output,
-            stream=sys.stderr,
-        )
+    if final.level != early.level or cfg.logging.json_output is not None:
+        configure_logging(level=final.level, json_output=final.json_output, stream=sys.stderr)
 
     # Import server AFTER logging is configured so module-level loggers
     # resolve to stderr+JSON, not stdout+ConsoleRenderer (structlog default).

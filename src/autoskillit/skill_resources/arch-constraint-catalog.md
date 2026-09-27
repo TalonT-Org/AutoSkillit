@@ -43,6 +43,7 @@ classified `REJECT` with `category: "arch_violation"`.
 | No requestId dedup in flush | `test_flush_no_rid_guard.py` | Inline `seen_request_ids` dedup outside `_parent_assistant_turns.py` — transcript dedup belongs to its canonical iterator |
 | GFM table rendering | `test_gfm_rendering_guard.py` | GFM table rendering bypassing `_render_gfm_table()` — all table output must route through it |
 | CLI prompts via timed_prompt | `test_input_tty_contracts.py` | `input()` calls in `src/autoskillit/cli/` not routed through `timed_prompt()` |
+| Launch terminal logging policy | `test_launch_terminal_logging.py` | `configure_logging()` calls outside `cli/ui/_terminal_logging.py`'s `apply_terminal_logging()` and `serve`; reading `.logging.level` in `cli/` outside that policy module; a launch entry that does not apply its `TerminalLogPolicy` as an unconditional top-level statement before its first prompt or launch sink; a new `cli/` function that reaches a launch sink without being classified as a launch entry or intermediate |
 | Interactive ordering gate | `test_interactive_ordering_gate.py` | Interactive launch sites that skip `assert_interactive_ordering()` before `_session_launch` |
 | Kitchen guard scoping | `test_kitchen_guard_scoping.py` | `any_kitchen_open()` call sites not passing `project_path` — must use scoped check |
 | Ambient home boundary | `test_ambient_home_boundary.py` | Raw `Path.home()` reads in registered managed-home modules outside their single approved resolution entry point |

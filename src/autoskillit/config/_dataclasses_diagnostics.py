@@ -13,12 +13,15 @@ import inspect
 import os
 from dataclasses import dataclass
 
+from autoskillit.config._dataclasses_errors import ConfigSchemaError
 from autoskillit.core import (
     RECIPE_RESPONSE_DEFAULT_BYTES,
     RECIPE_RESPONSE_MAX_UTF8_BYTES,
     RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
     Utf8ByteLimit,
 )
+
+_LOG_LEVEL_NAMES: tuple[str, ...] = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
 
 @dataclass
@@ -28,8 +31,14 @@ class TokenUsageConfig:
 
 @dataclass
 class LoggingConfig:
-    level: str = "INFO"
+    level: str | None = None  # None = per-command baseline (see cli/ui/_terminal_logging.py)
     json_output: bool | None = None  # None = auto-detect from stderr.isatty()
+
+    def __post_init__(self) -> None:
+        if self.level is not None and self.level not in _LOG_LEVEL_NAMES:
+            raise ConfigSchemaError(
+                f"logging.level must be one of {_LOG_LEVEL_NAMES} or null, got {self.level!r}"
+            )
 
 
 @dataclass

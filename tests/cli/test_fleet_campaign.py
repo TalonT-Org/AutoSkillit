@@ -15,6 +15,7 @@ import autoskillit.cli.prompts as _patch_cli_prompts
 import autoskillit.cli.session._session_launch as _patch_session__session_launch
 import autoskillit.cli.ui._menu as _patch_ui__menu
 from autoskillit.cli.fleet import fleet_campaign as _fleet_campaign
+from autoskillit.config import LoggingConfig
 from tests.cli._fleet_helpers import (
     _capture_subprocess,
     _setup_campaign_with_status,
@@ -119,7 +120,11 @@ def test_fleet_campaign_exits_when_disabled(
     )
     monkeypatch.setattr(
         "autoskillit.config.load_config",
-        lambda path: type("C", (), {"features": {}, "experimental_enabled": False})(),
+        lambda path: type(
+            "C",
+            (),
+            {"features": {}, "experimental_enabled": False, "logging": LoggingConfig()},
+        )(),
     )
     with pytest.raises(SystemExit) as exc_info:
         _fleet_campaign("any-campaign")

@@ -55,6 +55,8 @@ tasks:
         fi
 
         set +e
+        task lint
+        LINT_EXIT=$?
         task typecheck
         TYPECHECK_EXIT=$?
         set -e
@@ -68,8 +70,16 @@ tasks:
 
         echo ""
         echo "Test output saved to: $TEST_OUTPUT"
+        GATE_EXIT=0
+        if [ "$LINT_EXIT" -ne 0 ]; then
+          echo "LINT_EXIT_CODE=$LINT_EXIT"
+          GATE_EXIT=1
+        fi
         if [ "$TYPECHECK_EXIT" -ne 0 ]; then
           echo "TYPECHECK_EXIT_CODE=$TYPECHECK_EXIT"
+          GATE_EXIT=1
+        fi
+        if [ "$GATE_EXIT" -ne 0 ]; then
           exit 1
         fi
         exit $PYTEST_EXIT
@@ -79,6 +89,28 @@ tasks:
     cmds:
       - .venv/bin/mypy --platform linux
       - .venv/bin/mypy --platform darwin --cache-dir .mypy_cache/darwin
+
+  lint:
+    desc: Run the pinned ruff gate (lint + format) over ruff's own file population
+    cmds:
+      - |
+        set +e
+        # The fix preview's --diff exits 1 whenever a fix exists, so errexit stays off
+        # until the remediation line prints; the explicit gate below decides the verdict.
+        .venv/bin/ruff check --output-format=concise
+        CHECK_EXIT=$?
+        .venv/bin/ruff format --check
+        FORMAT_EXIT=$?
+        if [ "$CHECK_EXIT" -ne 0 ] || [ "$FORMAT_EXIT" -ne 0 ]; then
+          echo ""
+          echo "Fix preview (first 200 lines):"
+          { .venv/bin/ruff check --diff; .venv/bin/ruff format --diff; } 2>&1 | head -n 200
+          echo "Apply fixes with: .venv/bin/ruff check --fix && .venv/bin/ruff format"
+        fi
+        set -e
+        if [ "$CHECK_EXIT" -ne 0 ] || [ "$FORMAT_EXIT" -ne 0 ]; then
+          exit 1
+        fi
 
   test-check:
     desc: Run all tests and return unambiguous PASS/FAIL (for automation)

@@ -132,7 +132,10 @@ class TokenMeasure:
     def measure_from_raw(cls, raw: object, *, legacy: bool = False) -> TokenMeasure:
         """Canonical decoder: dict/int/None → TokenMeasure with legacy-zero overload.
 
-        Downgrades to unknown on malformed input while logging the offending shape.
+        Logs the offending shape when a dict decode fails. The legacy-zero overload
+        and the unrecognized-type fallback both return unknown without logging —
+        legacy zero is a documented encoding quirk, and the fallback covers inputs
+        (None, str, list, ...) that are expected to be missing rather than malformed.
         """
         if isinstance(raw, dict):
             try:
@@ -245,7 +248,7 @@ class SourcePair:
 @dataclass(frozen=True, slots=True)
 class MeasureRecord:
     pair: SourcePair
-    measures: Mapping[str, TokenMeasure]
+    measures: dict[str, TokenMeasure]
 
     def __post_init__(self) -> None:
         if not isinstance(self.pair, SourcePair):
@@ -263,8 +266,12 @@ class MeasureScope:
     normalization: str | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.pairs, frozenset):
+            raise TypeError("pairs must be a frozenset[SourcePair]")
         if not self.pairs:
             raise ValueError("scope pairs must not be empty")
+        if any(not isinstance(pair, SourcePair) for pair in self.pairs):
+            raise TypeError("pairs must contain only SourcePair instances")
 
 
 @dataclass(frozen=True, slots=True)
@@ -301,12 +308,33 @@ class FieldAggregate:
     value: TokenMeasure
     state_counts: Mapping[TokenMeasureState, int]
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.field, str) or not self.field:
+            raise ValueError("field must be a non-empty str")
+        if not isinstance(self.value, TokenMeasure):
+            raise TypeError("value must be a TokenMeasure")
+        expected = set(TokenMeasureState)
+        if set(self.state_counts) != expected:
+            missing = expected - set(self.state_counts)
+            extra = set(self.state_counts) - expected
+            problems: list[str] = []
+            if missing:
+                problems.append(f"missing {sorted(missing, key=str)}")
+            if extra:
+                problems.append(f"unexpected {sorted(extra, key=str)}")
+            raise ValueError(
+                "state_counts must contain exactly one entry per TokenMeasureState: "
+                + ", ".join(problems)
+            )
+        if any(
+            isinstance(count, bool) or not isinstance(count, int) or count < 0
+            for count in self.state_counts.values()
+        ):
+            raise ValueError("state_counts values must be non-negative ints")
+
     @property
     def reporting_runs(self) -> int:
-        return (
-            self.state_counts[TokenMeasureState.MEASURED]
-            + self.state_counts[TokenMeasureState.MEASURED_ZERO]
-        )
+        return sum(self.state_counts[s] for s in _OBSERVED_STATES)
 
 
 @dataclass(frozen=True, slots=True)
@@ -314,6 +342,16 @@ class MeasureAggregate:
     scope: MeasureScope
     runs: int
     fields: Mapping[str, FieldAggregate]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.scope, MeasureScope):
+            raise TypeError("scope must be a MeasureScope")
+        if isinstance(self.runs, bool) or not isinstance(self.runs, int) or self.runs < 0:
+            raise ValueError("runs must be a non-negative int")
+        if any(not isinstance(name, str) or not name for name in self.fields):
+            raise ValueError("field names must be non-empty strs")
+        if any(not isinstance(aggregate, FieldAggregate) for aggregate in self.fields.values()):
+            raise TypeError("field values must be FieldAggregate instances")
 
 
 @dataclass(frozen=True, slots=True)
@@ -466,7 +504,8 @@ def aggregate_measures(
                 if running.state is TokenMeasureState.UNKNOWN
                 else reducer(running, measure)
             )
-        assert running is not None
+        if running is None:
+            raise RuntimeError("aggregate_measures received an empty record set")
         aggregates[field] = FieldAggregate(field, running, counts)
     return MeasureAggregate(scope, len(record_list), aggregates)
 

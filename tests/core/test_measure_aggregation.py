@@ -604,3 +604,76 @@ class TestAggregateInputContract:
     def test_scope_rejects_empty_pairs(self) -> None:
         with pytest.raises(ValueError, match="scope pairs must not be empty"):
             aggregation.MeasureScope(frozenset())
+
+
+class TestAggregateInvariants:
+    def _baseline_measure_aggregate(self) -> aggregation.MeasureAggregate:
+        record = _rec("claude-code", "anthropic", input_tokens=_obs(4))
+        return aggregation.aggregate_measures([record], ["input_tokens"])
+
+    def test_field_aggregate_rejects_missing_state_counts(self) -> None:
+        baseline = aggregation.aggregate_measures(
+            [_rec("claude-code", "anthropic", input_tokens=_obs(4))], ["input_tokens"]
+        ).fields["input_tokens"]
+        incomplete = {
+            state: baseline.state_counts[state] for state in _State if state is not _State.UNKNOWN
+        }
+        with pytest.raises(ValueError, match="state_counts must contain exactly one entry"):
+            dataclasses.replace(baseline, state_counts=incomplete)
+
+    def test_field_aggregate_rejects_extra_state_counts(self) -> None:
+        baseline = aggregation.aggregate_measures(
+            [_rec("claude-code", "anthropic", input_tokens=_obs(4))], ["input_tokens"]
+        ).fields["input_tokens"]
+        extra = {**baseline.state_counts, _State.UNKNOWN + "_bogus": 0}  # type: ignore[operator]
+        with pytest.raises(ValueError, match="state_counts must contain exactly one entry"):
+            dataclasses.replace(baseline, state_counts=extra)  # type: ignore[arg-type]
+
+    def test_field_aggregate_rejects_negative_state_counts(self) -> None:
+        baseline = aggregation.aggregate_measures(
+            [_rec("claude-code", "anthropic", input_tokens=_obs(4))], ["input_tokens"]
+        ).fields["input_tokens"]
+        negative = {**baseline.state_counts, _State.MEASURED: -1}
+        with pytest.raises(ValueError, match="non-negative ints"):
+            dataclasses.replace(baseline, state_counts=negative)
+
+    def test_field_aggregate_rejects_non_measure_value(self) -> None:
+        baseline = aggregation.aggregate_measures(
+            [_rec("claude-code", "anthropic", input_tokens=_obs(4))], ["input_tokens"]
+        ).fields["input_tokens"]
+        with pytest.raises(TypeError, match="value must be a TokenMeasure"):
+            dataclasses.replace(baseline, value=cast(aggregation.TokenMeasure, "not-a-measure"))
+
+    def test_field_aggregate_rejects_empty_field_name(self) -> None:
+        baseline = aggregation.aggregate_measures(
+            [_rec("claude-code", "anthropic", input_tokens=_obs(4))], ["input_tokens"]
+        ).fields["input_tokens"]
+        with pytest.raises(ValueError, match="field must be a non-empty str"):
+            dataclasses.replace(baseline, field="")
+
+    def test_measure_aggregate_rejects_negative_runs(self) -> None:
+        baseline = self._baseline_measure_aggregate()
+        with pytest.raises(ValueError, match="runs must be a non-negative int"):
+            dataclasses.replace(baseline, runs=-1)
+
+    def test_measure_aggregate_rejects_non_int_runs(self) -> None:
+        baseline = self._baseline_measure_aggregate()
+        with pytest.raises(ValueError, match="runs must be a non-negative int"):
+            dataclasses.replace(baseline, runs=True)  # type: ignore[arg-type]
+
+    def test_measure_aggregate_rejects_non_scope(self) -> None:
+        baseline = self._baseline_measure_aggregate()
+        with pytest.raises(TypeError, match="scope must be a MeasureScope"):
+            dataclasses.replace(baseline, scope=cast(aggregation.MeasureScope, object()))
+
+    def test_measure_aggregate_rejects_non_field_aggregate_value(self) -> None:
+        baseline = self._baseline_measure_aggregate()
+        bogus_fields = {"input_tokens": cast(aggregation.FieldAggregate, {"value": "bad"})}
+        with pytest.raises(TypeError, match="field values must be FieldAggregate instances"):
+            dataclasses.replace(baseline, fields=bogus_fields)
+
+    def test_measure_aggregate_rejects_empty_field_name(self) -> None:
+        baseline = self._baseline_measure_aggregate()
+        renamed_fields = {"": baseline.fields["input_tokens"]}
+        with pytest.raises(ValueError, match="field names must be non-empty strs"):
+            dataclasses.replace(baseline, fields=renamed_fields)

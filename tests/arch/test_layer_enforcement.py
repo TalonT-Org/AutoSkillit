@@ -2036,6 +2036,10 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/fleet/test_fleet_e2e_codex_dispatch_identity.py": frozenset(
         {"autoskillit.execution", "autoskillit.server"}
     ),
+    # exercises the real Codex NDJSON parse path end-to-end (CodexBackend,
+    # DefaultHeadlessExecutor) so the classified SkillResult is genuine, not
+    # injected
+    "tests/fleet/test_dispatch_outcome_codex_backend.py": frozenset({"autoskillit.execution"}),
     # reaper owner-scope settlement is proven on real funnel-spawned, scope-registered
     # processes, which only the execution spawn funnel and tether registry can create
     "tests/fleet/test_dispatch_reaper_process.py": frozenset({"autoskillit.execution"}),

@@ -771,7 +771,7 @@ def test_lifeline_release_is_the_group_kill(tmp_path: Path) -> None:
 
         assert owner.anchor.returncode is not None
         assert capture_process._process_group_has_live_members(owner.pgid) is False
-        assert owner._runner_signals == []
+        assert owner.runner_signalled is False
         assert owner.wait() == -signal.SIGKILL
     finally:
         if owner.returncode is None:

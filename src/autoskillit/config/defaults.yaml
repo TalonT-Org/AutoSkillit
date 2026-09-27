@@ -121,7 +121,7 @@ report_bug:
     - "bug"
 
 logging:
-  level: "INFO"
+  level: null
   json_output: null
 
 diagnostics:

@@ -9,7 +9,8 @@ Owns:
   - ``_YAML_KEY_ALIASES`` (static YAML-key vs Python-field-name mismatch table).
   - ``_FIELD_OVERRIDES`` (per-(section, field) custom builders — notably the
     ``_COMMAND_UNSET`` sentinel fallback for ``test_check.command`` and the
-    ``logging.level`` uppercase transform).
+    ``logging.level`` uppercase transform, which passes null or empty through
+    as the unset sentinel).
   - ``_SECTION_PREPROCESSORS`` and ``_SECTION_BUILDERS`` (mapping section name
     to its pre-coercion normalizer or fully-custom builder).
 """
@@ -30,6 +31,12 @@ from autoskillit.config._dataclasses_errors import ConfigSchemaError
 from autoskillit.config._dataclasses_test_gating import _COMMAND_UNSET
 
 _T = TypeVar("_T")
+
+
+def _upper_or_none(value: Any) -> str | None:
+    if value is None or value == "":
+        return None
+    return str(value).upper()
 
 
 def _field_defaults(cls: type) -> dict[str, Any]:
@@ -201,8 +208,8 @@ _FIELD_OVERRIDES: dict[tuple[str, str], Callable[[dict[str, Any], dict[str, Any]
     ("test_check", "commands"): lambda sec, defs: _to_optional_commands(
         sec.get("commands", defs.get("commands"))
     ),
-    # Uppercase transform
-    ("logging", "level"): lambda sec, defs: str(sec.get("level", defs["level"])).upper(),
+    # Uppercase transform; null or empty passes through as the unset sentinel
+    ("logging", "level"): lambda sec, defs: _upper_or_none(sec.get("level", defs["level"])),
 }
 
 

@@ -99,3 +99,22 @@ class TestServeLoggingPhases:
         assert mock_configure.call_count >= 2
         second_call = mock_configure.call_args_list[1]
         assert second_call.kwargs.get("json_output") is True
+
+    def test_serve_explicit_warning_does_not_reconfigure(self, tmp_path, monkeypatch):
+        """An explicit level quieter than serve's INFO baseline cannot lower it."""
+        import autoskillit.cli as cli_mod
+
+        monkeypatch.chdir(tmp_path)
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text("logging:\n  level: WARNING\n")
+
+        with (
+            patch("anyio.run"),  # prevent actual event loop; serve() routes through anyio.run
+            patch("autoskillit.core.configure_logging") as mock_configure,
+            structlog.testing.capture_logs(),
+        ):
+            cli_mod.serve()
+
+        assert mock_configure.call_count == 1
+        assert mock_configure.call_args_list[0].kwargs["level"] == _stdlib_logging.INFO

@@ -80,6 +80,24 @@ def test_run_doctor_json_reports_config_loadable_error(
     assert matches[0]["severity"] == "error"
 
 
+def test_run_doctor_reports_invalid_logging_level(
+    tmp_home: Path,
+    project_dir: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A mistyped logging.level is reported as a config_loadable error, not a crash."""
+    from autoskillit.cli.doctor import run_doctor
+
+    _write_project_config(project_dir, "logging:\n  level: verbose\n")
+
+    run_doctor(output_json=True)
+
+    payload = json.loads(capsys.readouterr().out)
+    matches = [r for r in payload["results"] if r["check"] == "config_loadable"]
+    assert len(matches) == 1
+    assert matches[0]["severity"] == "error"
+
+
 def test_run_doctor_heals_retired_only_key_no_config_loadable(
     tmp_home: Path,
     project_dir: Path,

@@ -451,6 +451,20 @@ def test_arch007_channel_confirmation_dispatch_uses_match_case() -> None:
     )
 
 
+def test_arch007_plugin_hook_repair_status_dispatch_uses_match_case() -> None:
+    """
+    ARCH-007 extension: Any function that dispatches on >=2 distinct
+    PluginHookRepairStatus values via if/elif must use match/case with
+    assert_never, so a new repair outcome cannot silently inherit a log level.
+    """
+    violations = _check_enum_dispatch_exhaustive(
+        SRC_ROOT, "PluginHookRepairStatus", (ast.FunctionDef, ast.AsyncFunctionDef), set()
+    )
+    assert violations == [], (
+        "Non-exhaustive PluginHookRepairStatus dispatch tables found:\n" + "\n".join(violations)
+    )
+
+
 def test_no_raw_claude_list_construction() -> None:
     """No list literal starting with 'claude' may be constructed outside the ALLOWED set.
 

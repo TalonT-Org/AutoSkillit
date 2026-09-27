@@ -47,9 +47,7 @@ def test_every_registered_module_exists() -> None:
         "workspace/_projected_artifact/authority.py": frozenset(),
         "workspace/_projected_artifact/_generation_publication.py": frozenset(),
         "workspace/_projected_artifact/_generation_prune.py": frozenset(),
-        "workspace/_projected_artifact/_hook_repair.py": frozenset(
-            {"repair_broken_projection_hooks"}
-        ),
+        "workspace/_projected_artifact/_hook_repair.py": frozenset(),
     }
 
 

@@ -83,8 +83,11 @@ def test_structured_output_tokens_present():
 
 
 def test_temp_directory_is_resolve_design_review():
-    """SKILL.md must use ``{{AUTOSKILLIT_TEMP}}/resolve-design-review/`` for output."""
-    assert "{{AUTOSKILLIT_TEMP}}/resolve-design-review/" in SKILL_TEXT
+    """SKILL.md must print the expected default output directory."""
+    expected_fallback = (
+        "${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/resolve-design-review}"
+    )
+    assert expected_fallback in SKILL_TEXT
 
 
 # ── Diminishing-return detection ──────────────────────────────────────────────

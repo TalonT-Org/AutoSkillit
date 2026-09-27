@@ -19,6 +19,7 @@ from tests.cli._upgrade_fixtures import (
     LEGACY_HOME_STATES,
     seed_legacy_home,
 )
+from tests.fixtures.plugin_artifact_state import write_marketplace_surfaces
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
@@ -98,6 +99,21 @@ class TestVersionConsistency:
         plugins = data.get("plugins", [])
         assert len(plugins) == 1
         assert plugins[0]["version"] == autoskillit.__version__
+
+    def test_marketplace_drift_is_reconciled_at_its_consumer(self, tmp_path, monkeypatch):
+        """Install rebuilds a version-drifted marketplace tree before publishing from it."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        manifest, plugin_root = write_marketplace_surfaces(tmp_path, "0.0.1-stale")
+        from autoskillit.cli.install._marketplace import _ensure_marketplace
+
+        _ensure_marketplace()
+
+        manifest_data = json.loads(manifest.read_text())
+        plugin_data = json.loads((plugin_root / ".claude-plugin" / "plugin.json").read_text())
+        assert [plugin["version"] for plugin in manifest_data["plugins"]] == [
+            autoskillit.__version__
+        ]
+        assert plugin_data["version"] == autoskillit.__version__
 
     @pytest.mark.parametrize("legacy_state", sorted(LEGACY_HOME_STATES - CONTAINED_STATES))
     def test_marketplace_public_projection_matches_private_contract(

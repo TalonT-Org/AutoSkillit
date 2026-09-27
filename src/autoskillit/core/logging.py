@@ -30,8 +30,10 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from collections.abc import Mapping
 from datetime import datetime
-from typing import Any, Protocol
+from types import MappingProxyType
+from typing import Any, Literal, Protocol
 
 import structlog
 
@@ -50,15 +52,19 @@ _PLUGIN_ARTIFACT_ACTIONS = frozenset(
         "reclaim",
     }
 )
-_PLUGIN_ARTIFACT_OUTCOMES = frozenset(
-    {
-        "succeeded",
-        "deferred_contended",
-        "deferred_io_error",
-        "deferred_unreadable_queue",
-        "rejected_identity",
-        "failed_validation",
-    }
+# already_queued and deferred_contended are expected outcomes that retry on their own.
+_PLUGIN_ARTIFACT_OUTCOME_LEVELS: Mapping[str, Literal["debug", "info", "warning"]] = (
+    MappingProxyType(
+        {
+            "succeeded": "info",
+            "already_queued": "debug",
+            "deferred_contended": "debug",
+            "deferred_io_error": "warning",
+            "deferred_unreadable_queue": "warning",
+            "rejected_identity": "warning",
+            "failed_validation": "warning",
+        }
+    )
 )
 
 # Shared by every console processor chain.
@@ -128,10 +134,10 @@ def log_plugin_artifact_lifecycle(
     """Emit the single schema used for plugin artifact lifecycle events."""
     if action not in _PLUGIN_ARTIFACT_ACTIONS:
         raise ValueError(f"unsupported plugin artifact lifecycle action: {action}")
-    if outcome not in _PLUGIN_ARTIFACT_OUTCOMES:
+    level = _PLUGIN_ARTIFACT_OUTCOME_LEVELS.get(outcome)
+    if level is None:
         raise ValueError(f"unsupported plugin artifact lifecycle outcome: {outcome}")
-    emit = logger.info if outcome == "succeeded" else logger.warning
-    emit(
+    getattr(logger, level)(
         "plugin_artifact_lifecycle",
         action=action,
         outcome=outcome,

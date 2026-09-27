@@ -124,8 +124,8 @@ def test_anti_fabrication_never_rule() -> None:
     ), "NEVER block must prohibit fabricated explanations for absent data"
 
 
-def test_generate_report_group_manifest_input() -> None:
-    """generate-report contract must declare group_manifest as an optional input."""
+def test_generate_report_generated_contract_inputs() -> None:
+    """Generated contract declares group_manifest and a required research directory."""
     from autoskillit.core.io import load_yaml
 
     contract_path = (
@@ -147,6 +147,13 @@ def test_generate_report_group_manifest_input() -> None:
     assert "group_manifest" in input_names, (
         "generate-report contract must declare group_manifest as an input"
     )
+    research_dir = next(
+        (inp for inp in gen_report.get("inputs", []) if inp.get("name") == "research_dir"),
+        None,
+    )
+    assert research_dir is not None, "generate-report contract must declare research_dir"
+    assert research_dir.get("type") == "directory_path"
+    assert research_dir.get("required") is True
 
 
 def test_generate_report_step25_uses_docker_run() -> None:

@@ -50,6 +50,8 @@ conflicts from earlier merges in the queue.
 
 - `pr_number` — GitHub PR number (integer)
 - `complexity` — `simple` or `needs_check` (from `analyze-prs` pr_order JSON)
+- Workflow value `{output_dir}` — the literal directory printed in the conflict-plan
+  workflow and pasted into its later `mkdir` call; it is not a positional argument.
 
 ## Critical Constraints
 
@@ -314,16 +316,27 @@ gh pr view {pr_number} --json body -q .body
 ```
 Extract the `## Requirements` section if present — set `requirements_section = ""` if not found. Gracefully skip if `gh` is unavailable.
 
-Compute timestamp: `YYYY-MM-DD_HHMMSS`.
-
-Set the recipe-scoped output directory:
+Generate one `{run_id}` with the timestamp-and-UUID read-only command below and reuse it for the conflict-plan filename.
 
 ```bash
-MERGE_PR_OUTPUT_DIR="${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/merge-prs}"
-mkdir -p "${MERGE_PR_OUTPUT_DIR}"
+python -c 'from datetime import datetime; from uuid import uuid4; print(datetime.now().strftime("%Y-%m-%d_%H%M%S") + "_" + uuid4().hex)'
 ```
 
-Write `${MERGE_PR_OUTPUT_DIR}/conflict_pr{pr_number}_plan_{ts}.md`:
+Resolve the recipe-scoped output directory:
+
+```bash
+printf '%s\n' "${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/merge-prs}"
+```
+
+Paste the printed path as `{output_dir}` in every write below.
+
+In a separate tool call after capturing the literal path:
+
+```bash
+mkdir -p "{output_dir}"
+```
+
+Write `{output_dir}/conflict_pr{pr_number}_plan_{run_id}.md`:
 
 ```markdown
 # Conflict Resolution Plan: PR #{pr_number} — "{pr_title}"
@@ -445,7 +458,7 @@ Print a JSON result block to stdout for recipe capture:
     "pr_number": 47,
     "pr_branch": "feature/db-refactor",
     "pr_title": "Refactor database layer",
-    "conflict_report_path": "${MERGE_PR_OUTPUT_DIR}/conflict_pr47_plan_YYYY-MM-DD_HHMMSS.md"
+    "conflict_report_path": "{output_dir}/conflict_pr47_plan_{run_id}.md"
 }
 ```
 
@@ -464,7 +477,7 @@ with `conflict_report_path` set. The pipeline then routes to make-plan → imple
     "pr_number": 47,
     "pr_branch": "feature/stale-branch",
     "pr_title": "Feature from stale branch",
-    "conflict_report_path": "${MERGE_PR_OUTPUT_DIR}/conflict_pr47_plan_YYYY-MM-DD_HHMMSS.md"
+    "conflict_report_path": "{output_dir}/conflict_pr47_plan_{run_id}.md"
 }
 ```
 
@@ -535,7 +548,7 @@ escalation_required = false
 pr_number = {pr_number}
 pr_branch = {pr_branch_name}
 pr_title = {pr_title}
-conflict_report_path = {absolute_path_to_conflict_plan_file}
+conflict_report_path = {output_dir}/conflict_pr{pr_number}_plan_{run_id}.md
 ```
 
 **On deletion regression detected:**
@@ -554,7 +567,7 @@ escalation_required = false
 pr_number = {pr_number}
 pr_branch = {pr_branch_name}
 pr_title = {pr_title}
-conflict_report_path = {absolute_path_to_conflict_plan_file}
+conflict_report_path = {output_dir}/conflict_pr{pr_number}_plan_{run_id}.md
 ```
 
 **On escalation required:**
@@ -594,8 +607,8 @@ written. Omit the line entirely on a successful direct merge or when `escalation
 ## Output Location
 
 ```
-${MERGE_PR_OUTPUT_DIR}/
-└── conflict_pr{N}_plan_{ts}.md    (written only when needs_plan=true)
+{output_dir}/
+└── conflict_pr{pr_number}_plan_{run_id}.md    (written only when needs_plan=true)
 ```
 
 ## Related Skills

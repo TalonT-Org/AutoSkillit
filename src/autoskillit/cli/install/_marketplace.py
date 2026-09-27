@@ -166,10 +166,6 @@ def _ensure_workspace_ready(*, cwd: Path | None = None) -> None:
             print(f"Warning: migration upgrade() failed (non-fatal): {exc}")
 
 
-def _marketplace_manifest_path() -> Path:
-    return Path.home() / ".autoskillit" / "marketplace" / ".claude-plugin" / "marketplace.json"
-
-
 def _typed_result(
     outcome: InstallOutcome,
     *,

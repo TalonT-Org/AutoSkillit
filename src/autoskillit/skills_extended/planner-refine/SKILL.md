@@ -51,6 +51,9 @@ retries) before escalation.
 - **$1** — Absolute path to `validation.json`
 - **$2** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`)
 
+Use the literal absolute directory supplied as `$2` as `{output_dir}` in every
+path below. Substitute that directory before making any tool call.
+
 ## Critical Constraints
 
 **NEVER:**
@@ -90,18 +93,18 @@ dicts). Extract the `message` field from each finding for classification. Group 
 
 ### Step 2: Load required artifacts
 
-- Always load: `{$2}/work_packages/wp_manifest.json`, `{$2}/work_packages/wp_index.json`
+- Always load: `{output_dir}/work_packages/wp_manifest.json`, `{output_dir}/work_packages/wp_index.json`
 - Load only the `{id}_result.json` files for WPs mentioned in the findings
 
 ### Step 3: Fix each finding type
 
 **Failed WPs** (including `elaboration_failed` and `stub_consistency` findings) — re-elaborate:
 - Start all independent child delegations before awaiting any result.
-- For each failed WP ID, read its `{id}_result.json` from `{$2}/work_packages/` (provides
+- For each failed WP ID, read its `{id}_result.json` from `{output_dir}/work_packages/` (provides
   `name`, `scope`, `estimated_files`) and its entry from `wp_manifest.json` for status context
 - Spawn a sub-agent under the declared `sonnet` model-class policy per failed WP. Provide: WP name, scope,
   estimated_files, and the relevant portion of `wp_index.json` for context
-- Sub-agent writes a corrected `{$2}/work_packages/{id}_result.json`
+- Sub-agent writes a corrected `{output_dir}/work_packages/{id}_result.json`
 - Sub-agent appends corrected compact entry to `wp_index.json`
 - Update the WP status in `wp_manifest.json` from `failed` to `done`
 
@@ -138,7 +141,7 @@ Write this to stdout. Do NOT attempt WP splitting or merging.
 - For each `WP X depends on unknown WP Y` finding:
   - Search `wp_index.json` for a WP with a similar name or scope to the missing `Y`
     (it may have been renamed or split)
-  - If a valid replacement is found, update `depends_on` in `{$2}/work_packages/{X}_result.json`
+  - If a valid replacement is found, update `depends_on` in `{output_dir}/work_packages/{X}_result.json`
   - If no valid replacement exists, remove the broken reference from `depends_on`
 - If `dep_graph.json` exists, update it to reflect corrected dependency IDs
 

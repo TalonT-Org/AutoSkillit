@@ -1015,6 +1015,7 @@ steps:
       skill_inputs:
         worktree_path: ${{ context.worktree_path }}
         results_path: ${{ context.experiment_results }}
+        research_dir: ${{ context.research_dir }}
         output_mode: ${{ inputs.output_mode }}
         issue_url: ${{ inputs.issue_url }}
         experiment_type: ${{ context.experiment_type }}
@@ -1048,6 +1049,7 @@ steps:
       skill_inputs:
         worktree_path: ${{ context.worktree_path }}
         results_path: ${{ context.experiment_results }}
+        research_dir: ${{ context.research_dir }}
         inconclusive: true
         output_mode: ${{ inputs.output_mode }}
         issue_url: ${{ inputs.issue_url }}
@@ -1515,6 +1517,7 @@ steps:
       skill_inputs:
         worktree_path: ${{ context.worktree_path }}
         results_path: ${{ context.experiment_results }}
+        research_dir: ${{ context.research_dir }}
         output_mode: ${{ inputs.output_mode }}
         issue_url: ${{ inputs.issue_url }}
         experiment_type: ${{ context.experiment_type }}

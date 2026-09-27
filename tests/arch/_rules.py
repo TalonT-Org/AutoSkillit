@@ -317,8 +317,8 @@ RULES: tuple[RuleDescriptor, ...] = (
         name="termination-dispatch-exhaustive",
         lens="process-flow",
         description=(
-            "TerminationReason and ChannelConfirmation enum dispatch must use "
-            "match/case + assert_never, not if/elif chains"
+            "TerminationReason, ChannelConfirmation and PluginHookRepairStatus enum dispatch "
+            "must use match/case + assert_never, not if/elif chains"
         ),
         rationale=(
             "Exhaustive dispatch via assert_never guarantees that adding a new enum variant "

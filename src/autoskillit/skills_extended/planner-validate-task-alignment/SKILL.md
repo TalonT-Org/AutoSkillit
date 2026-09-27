@@ -46,13 +46,16 @@ zero findings.
 - **$2** — Absolute path to `refined_plan.json` (PlanDocument with `task`, `phases[]`)
 - **$3** — Absolute path to output directory for findings
 
+Use the literal absolute directory supplied as `$3` as `{output_dir}` in every
+path below. Substitute that directory before making any tool call.
+
 ## Critical Constraints
 
 **NEVER:**
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
 - Block the pipeline — all findings are `warning` severity
-- Write output outside `$3/`
+- Write output outside `{output_dir}/`
 - Read files not passed as arguments
 - Modify input files
 - Detach child delegations instead of joining them (joining every child is required)
@@ -63,7 +66,7 @@ zero findings.
 **ALWAYS:**
 - Read the `task` field from $1 or $2
 - Compare every phase goal and every WP description against the task
-- Write `$3/task_alignment.json` with findings array
+- Write `{output_dir}/task_alignment.json` with findings array
 - Emit: `alignment_findings_path = <absolute path to task_alignment.json>`; also emit `alignment_finding_count`
 - Start all independent child delegations before awaiting any result to maximize concurrency
 
@@ -114,7 +117,7 @@ a finding:
 }
 ```
 
-Write all findings to `$3/task_alignment.json`:
+Write all findings to `{output_dir}/task_alignment.json`:
 ```json
 {
   "schema_version": 1,
@@ -131,7 +134,7 @@ Write all findings to `$3/task_alignment.json`:
 ### Step 4: Emit output tokens
 
 ```
-alignment_findings_path = <absolute path to $3/task_alignment.json>
+alignment_findings_path = {output_dir}/task_alignment.json
 alignment_finding_count = <N>
 ```
 

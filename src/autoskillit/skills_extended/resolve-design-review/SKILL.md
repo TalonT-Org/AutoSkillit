@@ -54,6 +54,9 @@ parse those files as immutable inputs. `revision_guidance`, supplied positionall
 `prior_revision_guidance_path` when present, likewise identifies one Markdown file;
 read the file as an immutable input.
 
+Workflow value `{output_dir}` is the literal directory printed in Step 0 and pasted
+into the later `mkdir` call; it is not a positional argument.
+
 ## When to Use
 
 Called by the research recipe via run_skill when review_design emits verdict=STOP.
@@ -92,14 +95,32 @@ abandoning the partial triage.
 
 Resolve relative output paths from the current working directory before writing.
 
-1. Set `RESOLVE_DESIGN_REVIEW_OUTPUT_DIR="${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/resolve-design-review}"` and create it if absent
-2. Parse two positional path arguments: `evaluation_dashboard_path`, `experiment_plan_path`
+Resolve the output directory:
+
+```bash
+printf '%s\n' "${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/resolve-design-review}"
+```
+
+Paste the printed path as `{output_dir}` in every write below. Generate one
+`{run_id}` with the timestamp-and-UUID read-only command below and reuse it for both report filenames.
+
+```bash
+python -c 'from datetime import datetime; from uuid import uuid4; print(datetime.now().strftime("%Y-%m-%d_%H%M%S") + "_" + uuid4().hex)'
+```
+
+In a separate tool call after capturing the literal path:
+
+```bash
+mkdir -p "{output_dir}"
+```
+
+1. Parse two positional path arguments: `evaluation_dashboard_path`, `experiment_plan_path`
    - If missing: print `"Error: missing required argument(s) — expected <evaluation_dashboard_path> <experiment_plan_path>"`, then emit `resolution=failed`, and return
    - If file not found: print `"Error: file not found — {missing_path}"`, then emit `resolution=failed`, and return
-3. Parse optional third argument: `prior_revision_guidance_path`
+2. Parse optional third argument: `prior_revision_guidance_path`
    - If present and file exists: read prior revision guidance for theme comparison
    - If absent or file not found: skip diminishing-return detection (first-round behavior)
-4. Parse stop-trigger findings from the evaluation dashboard:
+3. Parse stop-trigger findings from the evaluation dashboard:
    - Locate machine-readable YAML block (`# --- review-design machine summary ---`)
    - Extract critical findings from L1 dimensions (estimand_clarity, hypothesis_falsifiability)
    - Extract red_team critical findings
@@ -134,7 +155,7 @@ Each subagent returns:
 
 Fallback: failed/timed-out subagent → classify finding as DISCUSS (safe, routes to revision).
 
-Write analysis report to `${RESOLVE_DESIGN_REVIEW_OUTPUT_DIR}/analysis_{slug}_{ts}.md`
+Write the analysis report to `{output_dir}/analysis_{slug}_{run_id}.md`
 BEFORE any guidance is generated. Report must include summary banner:
 ```
 Triage complete (BEFORE any guidance written)
@@ -179,7 +200,7 @@ resolution = "failed"  only when ALL findings are STRUCTURAL
 
 ### Step 3: Write Revision Guidance (only when resolution = revised)
 
-Write `revision_guidance_{slug}_{ts}.md` to `${RESOLVE_DESIGN_REVIEW_OUTPUT_DIR}/`
+Write `{output_dir}/revision_guidance_{slug}_{run_id}.md`
 
 Sections:
 1. **Required Fixes** — ADDRESSABLE findings with fix_sketch from subagent
@@ -208,7 +229,7 @@ When resolution = revised, emit as your final output:
 
 ```
 resolution = revised
-revision_guidance = /absolute/path/${RESOLVE_DESIGN_REVIEW_OUTPUT_DIR}/revision_guidance_{slug}_{ts}.md
+revision_guidance = {output_dir}/revision_guidance_{slug}_{run_id}.md
 ```
 
 When resolution = failed, emit as your final output:
@@ -221,11 +242,10 @@ The revision-guidance path is ONLY emitted when resolution = revised.
 
 ## Output
 
-All output files are written to `${RESOLVE_DESIGN_REVIEW_OUTPUT_DIR}/`, which defaults to
-`{{AUTOSKILLIT_TEMP}}/resolve-design-review/` relative to the current working path.
+All output files are written under the captured absolute path in `{output_dir}`.
 
 ```
-${RESOLVE_DESIGN_REVIEW_OUTPUT_DIR}/
-├── analysis_{slug}_{ts}.md          (always written — before any guidance)
-└── revision_guidance_{slug}_{ts}.md  (revised path only)
+{output_dir}/
+├── analysis_{slug}_{run_id}.md          (always written — before any guidance)
+└── revision_guidance_{slug}_{run_id}.md  (revised path only)
 ```

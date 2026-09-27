@@ -32,7 +32,7 @@ Blocks launching new headless sessions when the cached binding window marks
 is set, and no per-session disable marker exists. The threshold is per-window:
 short windows (e.g. `five_hour`) use `quota_guard.short_window_threshold`
 (default 85.0%); long windows matched by `quota_guard.long_window_patterns`
-(default `weekly`, `sonnet`, `opus`) use `quota_guard.long_window_threshold`
+(default `seven_day`, `sonnet`, `opus`) use `quota_guard.long_window_threshold`
 (default 95.0%). Reports the exact sleep duration the orchestrator must wait.
 
 ### `skill_command_guard.py`
@@ -661,7 +661,7 @@ quota_guard:
   enabled: true
   short_window_threshold: 85.0
   long_window_threshold: 95.0
-  long_window_patterns: ["weekly", "sonnet", "opus"]
+  long_window_patterns: ["seven_day", "sonnet", "opus"]
   buffer_seconds: 60
 ```
 

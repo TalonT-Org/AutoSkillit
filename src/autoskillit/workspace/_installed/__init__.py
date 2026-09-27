@@ -18,7 +18,6 @@ from ._artifact import (
     write_installed_plugin_artifact_manifest_locked,
 )
 from ._state import (
-    marketplace_plugin_root,
     reconcile_install_artifacts,
     verify_install_state,
 )
@@ -37,7 +36,6 @@ __all__ = [
     "InstalledArtifactVerification",
     "PublicationObligation",
     "clear_obligation",
-    "marketplace_plugin_root",
     "read_obligation",
     "reconcile_install_artifacts",
     "update_obligation_expected_version",

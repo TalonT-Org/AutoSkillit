@@ -49,12 +49,15 @@ independently and writes a single elaborated phase result. No dependency on
 - **$2** — Phase ID to elaborate (e.g., `"P3"`)
 - **$3** — Absolute path to output directory (result written here)
 
+Use the literal absolute directory supplied as `$3` as `{output_dir}` in every
+path below. Substitute that directory before making any tool call.
+
 ## Critical Constraints
 
 **NEVER:**
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
-- Write output outside `$3/`
+- Write output outside `{output_dir}/`
 - Read any `*_result.json` file from other phases (you have only the snapshot)
 - Require or read a context file from `check_remaining`
 - Communicate with other parallel worker instances
@@ -68,7 +71,7 @@ independently and writes a single elaborated phase result. No dependency on
 
 **ALWAYS:**
 - Derive `relationship_notes` from snapshot context + codebase analysis, NOT from prior result files
-- Write result to `$3/{phase_id}_result.json` (keep `_result.json` suffix — downstream consumers glob `*_result.json`)
+- Write result to `{output_dir}/{phase_id}_result.json` (keep `_result.json` suffix — downstream consumers glob `*_result.json`)
 - Emit: `elab_result_path = <absolute path to {phase_id}_result.json>`
 - Include all `PhaseElaborated` fields in the result
 - Dispatch all ready, scope-disjoint vectors through the deterministic router before awaiting any result, then join every result
@@ -129,7 +132,7 @@ Dispatch the 6 exploration vectors through the deterministic router against the 
 
 ### Step 3: Write phase result
 
-Write to `$3/{target_phase_id}_result.json` matching `PhaseElaborated`:
+Write to `{output_dir}/{target_phase_id}_result.json` matching `PhaseElaborated`:
 ```json
 {
   "id": "P3",
@@ -152,7 +155,7 @@ Do NOT write `phase_number` or `name_slug` — the backend derives these at load
 ### Step 4: Emit output token
 
 ```
-elab_result_path = <absolute path to $3/{id}_result.json>
+elab_result_path = {output_dir}/{id}_result.json
 ```
 
 ## Context Limit Behavior

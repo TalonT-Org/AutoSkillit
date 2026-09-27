@@ -54,6 +54,8 @@ and before `apply-review-dimensions`. NOT invoked standalone — the recipe step
   skill name for the first path-like token (starts with `/`, `./`, or `.autoskillit/`).
 - **scope_report_path** (optional) — Absolute path to the scope report. Second path-like
   token if present. Forwarded downstream to apply-review-dimensions via recipe context.
+- Workflow value `{output_dir}` — the literal directory printed in Step 0 and pasted
+  into the later `mkdir` call; it is not a positional argument.
 
 ## Critical Constraints
 
@@ -68,12 +70,31 @@ and before `apply-review-dimensions`. NOT invoked standalone — the recipe step
 - Use `child delegation under the declared `sonnet` model-class policy` for the triage subagent
 - Emit `is_silent_type=true|false`
 - Emit `dimensions_manifest_path` as an absolute path
-- Write output to `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/classify-experiment-type}`
+- Write output to `{output_dir}`
 - Issue all subagent calls in a single message to maximize parallel execution
 
 ## Workflow
 
 ### Step 0: Registry Loading
+
+Resolve the output directory before loading the registry:
+
+```bash
+printf '%s\n' "${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/classify-experiment-type}"
+```
+
+Paste the printed path as `{output_dir}` in every write below. Generate one
+`{run_id}` with the timestamp-and-UUID read-only command below and reuse it in every output filename.
+
+```bash
+python -c 'from datetime import datetime; from uuid import uuid4; print(datetime.now().strftime("%Y-%m-%d_%H%M%S") + "_" + uuid4().hex)'
+```
+
+In a separate tool call after capturing the literal path:
+
+```bash
+mkdir -p "{output_dir}"
+```
 
 (a) Locate bundled types directory:
 
@@ -155,7 +176,7 @@ Reference: `docs/research/silent-type-convention.md`.
 **When `is_silent_type=true`:**
 
 1. Write `dimensions_manifest` JSON to
-   `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/classify-experiment-type}/dimensions_manifest_{slug}_{YYYY-MM-DD_HHMMSS}.json`
+   `{output_dir}/dimensions_manifest_{slug}_{run_id}.json`
    with all-S weights from the base spec plus `secondary_modifiers: []`. This file MUST
    exist at a valid path — `dimensions_manifest_path` always points to a real file, even
    on the silent path.
@@ -172,7 +193,7 @@ Reference: `docs/research/silent-type-convention.md`.
 1. Build `{dimension: weight}` dict from the dimension_weights matrix (applying
    secondary modifier adjustments).
 2. Write JSON to
-   `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/classify-experiment-type}/dimensions_manifest_{slug}_{YYYY-MM-DD_HHMMSS}.json`
+   `{output_dir}/dimensions_manifest_{slug}_{run_id}.json`
    with schema:
 
    ```json
@@ -183,7 +204,7 @@ Reference: `docs/research/silent-type-convention.md`.
    ```
 
 3. For each non-SILENT dimension (weight != S), write a lens context file at
-   `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/classify-experiment-type}/lens_ctx_{dimension}_{slug}_{YYYY-MM-DD_HHMMSS}.md`
+   `{output_dir}/lens_ctx_{dimension}_{slug}_{run_id}.md`
    containing: experiment_type, weight, and relevant plan excerpts for that dimension.
 4. `selected_lenses` = comma-separated non-SILENT dimension names.
 5. `lens_context_paths` = comma-separated absolute paths to per-dimension context files.
@@ -195,9 +216,9 @@ experiment_type = {experiment_type}
 dimension_weights = {inline summary, e.g., causal_structure:H,variance_protocol:M,...}
 is_silent_type = true|false
 classification_timestamp = {ISO 8601 UTC}
-dimensions_manifest_path = /absolute/path/to/dimensions_manifest_{slug}_{timestamp}.json
+dimensions_manifest_path = {output_dir}/dimensions_manifest_{slug}_{run_id}.json
 selected_lenses = {comma-separated non-SILENT dimension names}
-lens_context_paths = {comma-separated absolute paths}
+lens_context_paths = {comma-separated absolute paths under output_dir}
 ```
 
 Do NOT emit `verdict`. When `is_silent_type=true`, prepend advisory:
@@ -212,10 +233,10 @@ Do NOT emit `verdict`. When `is_silent_type=true`, prepend advisory:
 ## Output
 
 ```
-${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/classify-experiment-type}/
-├── dimensions_manifest_{slug}_{YYYY-MM-DD_HHMMSS}.json
-├── lens_ctx_{dimension1}_{slug}_{YYYY-MM-DD_HHMMSS}.md
-├── lens_ctx_{dimension2}_{slug}_{YYYY-MM-DD_HHMMSS}.md
+{output_dir}/
+├── dimensions_manifest_{slug}_{run_id}.json
+├── lens_ctx_{dimension1}_{slug}_{run_id}.md
+├── lens_ctx_{dimension2}_{slug}_{run_id}.md
 └── ...
 ```
 
@@ -229,7 +250,7 @@ ${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/classify-experiment-typ
 ## Context Limit Behavior
 
 When context is exhausted mid-execution, the `dimensions_manifest_path` and
-lens context files in `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/classify-experiment-type}` may
+lens context files under `{output_dir}` may
 be partially written but the experiment_type classification may be incomplete.
 The recipe's `on_context_limit` route triggers `create_worktree`, preserving
 whatever was written so the next pipeline stage can attempt recovery or

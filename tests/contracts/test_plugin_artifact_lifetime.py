@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import inspect
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -32,6 +32,7 @@ from autoskillit.workspace import (
 )
 from tests._helpers import _flush_structlog_proxy_caches
 from tests.contracts._projection_helpers import session_catalog
+from tests.fixtures.startup_steady_state import plant_stale_projection
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
@@ -590,6 +591,39 @@ def test_projection_reclaim_io_failure_stays_queued_for_retry(
     assert append_result.record_id not in {
         queued.record_id for queued in read_retiring_cache().records
     }
+
+
+def test_reenqueue_of_queued_identity_logs_already_queued(tmp_path: Path) -> None:
+    from autoskillit.workspace import ProjectedPluginRetirementOwner
+
+    home = managed_home_for(tmp_path)
+    _, projection, _, _, _ = plant_stale_projection(tmp_path, "requeue-key")
+    owner = ProjectedPluginRetirementOwner(projection.parent, home=home)
+    identity = owner.identity_for_path(projection)
+    first_deadline = datetime.now(UTC) + timedelta(hours=1)
+    second_deadline = first_deadline + timedelta(hours=6)
+
+    _flush_structlog_proxy_caches()
+    try:
+        with structlog.testing.capture_logs() as logs:
+            first = owner.enqueue_retirement(identity, first_deadline)
+            second = owner.enqueue_retirement(identity, second_deadline)
+    finally:
+        _flush_structlog_proxy_caches()
+
+    assert first is not None and first.created
+    assert second is not None and not second.created
+    assert second.record_id == first.record_id
+    assert [
+        (entry["outcome"], entry["log_level"], entry["not_before"])
+        for entry in logs
+        if entry.get("event") == "plugin_artifact_lifecycle" and entry["action"] == "retire"
+    ] == [
+        ("succeeded", "info", first_deadline.isoformat()),
+        ("already_queued", "debug", None),
+    ]
+    (record,) = read_retiring_cache(home=home).records
+    assert record.not_before == first_deadline
 
 
 def test_projection_reclaim_preserves_outcome_when_writer_close_fails(

@@ -10,75 +10,25 @@ T-B5: CLAUDECODE does not disable in-process repair.
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+import structlog
 
+from autoskillit.core import RetirementOutcome, managed_home_for
 from autoskillit.hook_registry import PLUGIN_ROOT_TOKEN
+from tests._helpers import _flush_structlog_proxy_caches
 from tests._retention_surface import (
     RECLAIMER_CONVERGENCE_CASES,
     assert_second_pass_is_quiet,
 )
+from tests.fixtures.startup_steady_state import (
+    enqueue_projection_retirement,
+    plant_stale_projection,
+)
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
-
-
-def _plant_stale_projection(
-    home: Path,
-    semantic_key: str,
-) -> tuple[Path, Path, Path, Path, Path]:
-    from autoskillit.workspace._installed._projection_cache import (
-        projected_artifact_lease_path,
-        projected_artifact_manifest_path,
-        projected_plugin_artifact_digest,
-    )
-
-    projections_root = home / ".autoskillit" / "plugin-projections"
-    projection = projections_root / semantic_key
-    hooks_dir = projection / "hooks"
-    hooks_dir.mkdir(parents=True)
-    (hooks_dir / "_dispatch.py").write_text("# dispatcher\n")
-    hooks_path = hooks_dir / "hooks.json"
-    hooks_path.write_text(
-        json.dumps(
-            {
-                "hooks": {
-                    "PreToolUse": [
-                        {
-                            "matcher": "Read",
-                            "hooks": [
-                                {
-                                    "type": "command",
-                                    "command": "python3 /deleted/hooks/_dispatch.py foo",
-                                }
-                            ],
-                        }
-                    ]
-                }
-            },
-            indent=2,
-        )
-        + "\n"
-    )
-    manifest_path = projected_artifact_manifest_path(projection)
-    manifest_path.write_text(
-        json.dumps(
-            {
-                "schema_version": 2,
-                "artifact_kind": "projection",
-                "projection_version": 2,
-                "semantic_key": semantic_key,
-                "incarnation_id": "test-incarnation",
-                "artifact_digest": projected_plugin_artifact_digest(projection),
-                "skills": {},
-            },
-            indent=2,
-        )
-        + "\n"
-    )
-    lease_path = projected_artifact_lease_path(projection)
-    lease_path.parent.mkdir(parents=True, exist_ok=True)
-    return projections_root, projection, hooks_path, manifest_path, lease_path
 
 
 class TestValidateStagedPluginHooks:
@@ -397,7 +347,7 @@ class TestProjectionRepair:
             repair_broken_projection_hooks,
         )
 
-        projections_root, projection, hooks_path, manifest_path, _ = _plant_stale_projection(
+        projections_root, projection, hooks_path, manifest_path, _ = plant_stale_projection(
             tmp_path, "deadbeefcafe0123"
         )
         malformed = b"{not-json"
@@ -410,7 +360,9 @@ class TestProjectionRepair:
         run_adapter, observe_adapter = RECLAIMER_CONVERGENCE_CASES[target]
 
         def run() -> object:
-            return repair_broken_projection_hooks(projections_root)
+            return repair_broken_projection_hooks(
+                projections_root, home=managed_home_for(tmp_path)
+            )
 
         def observe() -> object:
             marker = hook_quarantine_marker_path(manifest_path, malformed)
@@ -428,7 +380,7 @@ class TestProjectionRepair:
 
         changed_malformed = b"[not-json"
         hooks_path.write_bytes(changed_malformed)
-        retry = repair_broken_projection_hooks(projections_root)
+        retry = repair_broken_projection_hooks(projections_root, home=managed_home_for(tmp_path))
 
         assert retry[0].status is PluginHookRepairStatus.QUARANTINED
         assert hook_quarantine_marker_path(manifest_path, changed_malformed).is_file()
@@ -446,7 +398,7 @@ class TestProjectionRepair:
         )
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        projections_root, projection, hooks_path, manifest_path, _ = _plant_stale_projection(
+        projections_root, projection, hooks_path, manifest_path, _ = plant_stale_projection(
             tmp_path, "deadbeefcafe0123"
         )
 
@@ -541,7 +493,7 @@ class TestProjectionRepair:
         )
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        projections_root, _, hooks_path, _, lease_path = _plant_stale_projection(
+        projections_root, _, hooks_path, _, lease_path = plant_stale_projection(
             tmp_path, "contended-key"
         )
         original_text = hooks_path.read_text()
@@ -567,7 +519,7 @@ class TestProjectionRepair:
         )
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        projections_root, _, hooks_path, _, lease_path = _plant_stale_projection(
+        projections_root, _, hooks_path, _, lease_path = plant_stale_projection(
             tmp_path, "post-contention"
         )
 
@@ -585,6 +537,126 @@ class TestProjectionRepair:
             for entry in entries:
                 for hook in entry.get("hooks", []):
                     assert PLUGIN_ROOT_TOKEN in hook["command"]
+
+    def test_repair_skips_incarnation_queued_for_retirement(self, tmp_path: Path) -> None:
+        from autoskillit.workspace._projected_artifact._hook_repair import (
+            repair_broken_projection_hooks,
+        )
+
+        projections_root, projection, hooks_path, manifest_path, _ = plant_stale_projection(
+            tmp_path, "queued-key"
+        )
+        enqueue_projection_retirement(
+            tmp_path, projection, not_before=datetime.now(UTC) + timedelta(hours=6)
+        )
+        original = (hooks_path.read_bytes(), manifest_path.read_bytes())
+
+        outcomes = repair_broken_projection_hooks(
+            projections_root, home=managed_home_for(tmp_path)
+        )
+
+        assert outcomes == ()
+        assert (hooks_path.read_bytes(), manifest_path.read_bytes()) == original
+
+    def test_repair_repairs_unqueued_sibling_of_queued_incarnation(self, tmp_path: Path) -> None:
+        from autoskillit.workspace._projected_artifact._hook_repair import (
+            PluginHookRepairStatus,
+            repair_broken_projection_hooks,
+        )
+
+        projections_root, queued, hooks_path, manifest_path, _ = plant_stale_projection(
+            tmp_path, "queued-key"
+        )
+        _, sibling, _, _, _ = plant_stale_projection(tmp_path, "sibling-key")
+        enqueue_projection_retirement(
+            tmp_path, queued, not_before=datetime.now(UTC) + timedelta(hours=6)
+        )
+        original = (hooks_path.read_bytes(), manifest_path.read_bytes())
+
+        outcomes = repair_broken_projection_hooks(
+            projections_root, home=managed_home_for(tmp_path)
+        )
+
+        assert [(o.incarnation_dir, o.status) for o in outcomes] == [
+            (sibling, PluginHookRepairStatus.REPAIRED)
+        ]
+        assert (hooks_path.read_bytes(), manifest_path.read_bytes()) == original
+
+    def test_repair_then_sweep_reclaims_queued_incarnation(self, tmp_path: Path) -> None:
+        from autoskillit.cli.install._plugin_artifact import (
+            default_plugin_retirement_coordinator,
+        )
+        from autoskillit.workspace._projected_artifact._hook_repair import (
+            repair_broken_projection_hooks,
+        )
+
+        home = managed_home_for(tmp_path)
+        projections_root, projection, _, _, _ = plant_stale_projection(tmp_path, "due-key")
+        now = datetime.now(UTC)
+        enqueue_projection_retirement(tmp_path, projection, not_before=now - timedelta(hours=1))
+
+        _flush_structlog_proxy_caches()
+        try:
+            with structlog.testing.capture_logs() as logs:
+                repair_broken_projection_hooks(projections_root, home=home)
+                outcomes = default_plugin_retirement_coordinator(home=home).sweep_due(now)
+        finally:
+            _flush_structlog_proxy_caches()
+
+        assert RetirementOutcome.RECLAIMED in outcomes
+        assert not projection.exists()
+        assert not [entry for entry in logs if entry.get("outcome") == "rejected_identity"]
+        assert not [
+            entry for entry in logs if entry.get("log_level") in {"warning", "error", "critical"}
+        ]
+
+    def test_repair_proceeds_when_retirement_queue_is_corrupt(self, tmp_path: Path) -> None:
+        from autoskillit.workspace._projected_artifact._hook_repair import (
+            PluginHookRepairStatus,
+            repair_broken_projection_hooks,
+        )
+
+        projections_root, _, _, _, _ = plant_stale_projection(tmp_path, "corrupt-queue-key")
+        (tmp_path / ".autoskillit" / "retiring_cache.json").write_text("{not-json")
+
+        outcomes = repair_broken_projection_hooks(
+            projections_root, home=managed_home_for(tmp_path)
+        )
+
+        assert [o.status for o in outcomes] == [PluginHookRepairStatus.REPAIRED]
+
+    def test_repair_fails_closed_when_retirement_queue_read_raises(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.workspace._projected_artifact import _hook_repair
+
+        projections_root, _, hooks_path, manifest_path, _ = plant_stale_projection(
+            tmp_path, "unreadable-queue-key"
+        )
+        original = (hooks_path.read_bytes(), manifest_path.read_bytes())
+
+        def unreadable_queue(**_kwargs: object) -> None:
+            raise TimeoutError("retiring cache lock timed out")
+
+        monkeypatch.setattr(_hook_repair, "read_retiring_cache", unreadable_queue)
+
+        with pytest.raises(TimeoutError):
+            _hook_repair.repair_broken_projection_hooks(
+                projections_root, home=managed_home_for(tmp_path)
+            )
+        assert (hooks_path.read_bytes(), manifest_path.read_bytes()) == original
+
+    @pytest.mark.parametrize(
+        "walker", ["repair_broken_plugin_cache_hooks", "repair_broken_projection_hooks"]
+    )
+    def test_repair_rejects_root_outside_managed_home(self, tmp_path: Path, walker: str) -> None:
+        from autoskillit.workspace._projected_artifact import _hook_repair
+
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+
+        with pytest.raises(ValueError, match="outside managed home"):
+            getattr(_hook_repair, walker)(elsewhere, home=managed_home_for(tmp_path / "home"))
 
 
 class TestStaleGeneratorRefusal:
@@ -742,7 +814,7 @@ class TestClaudeCodeDoesNotDisableRepair:
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setenv("CLAUDECODE", "1")
-        projections_root, _, _, _, _ = _plant_stale_projection(tmp_path, "claudecode-test")
+        projections_root, _, _, _, _ = plant_stale_projection(tmp_path, "claudecode-test")
 
         outcomes = repair_broken_projection_hooks(projections_root)
         assert len(outcomes) == 1

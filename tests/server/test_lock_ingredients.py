@@ -106,6 +106,31 @@ class TestLockIngredientsBasic:
         data = json.loads(overlay.read_text())
         assert data["locked_steps"]["a"]["investigate"] is True
 
+    @pytest.mark.anyio
+    async def test_lock_ingredients_empty_pipeline_id_scopes_to_dispatch_env(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("AUTOSKILLIT_DISPATCH_ID", "dispatch-active")
+        temp_dir = tmp_path / ".autoskillit" / "temp"
+        temp_dir.mkdir(parents=True)
+        (temp_dir / ".hook_config.json").write_text("{}")
+
+        ctx = _make_mock_ctx()
+        ctx.project_dir = tmp_path
+        _set_active_recipe_steps(ctx, {"investigate": _make_step_mock("inputs.investigate")})
+
+        with patch.object(server, "_get_ctx", return_value=ctx):
+            from autoskillit.server.tools.tools_kitchen import lock_ingredients
+
+            result = json.loads(await lock_ingredients(locked={"investigate": "false"}))
+
+        assert result["success"] is True
+        overlay = temp_dir / ".hook_config_overlay.json"
+        data = json.loads(overlay.read_text())
+        assert data["locked_steps"]["dispatch-active"]["investigate"] is False
+        assert "" not in data["locked_steps"]
+        assert data["locked_ingredients"]["dispatch-active"] == {"investigate": "false"}
+
 
 class TestLockIngredientsRejectsServerAuthoritative:
     """Test 2: lock_ingredients rejects server-authoritative ingredients."""

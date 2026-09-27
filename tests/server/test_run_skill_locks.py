@@ -629,14 +629,16 @@ class TestDispatchScopedLockIsolation:
         )
         tool_ctx_kitchen_open.project_dir = tmp_path
 
-        result = json.loads(_check_ingredient_locks("investigate", "") or "{}")
+        result_str = _check_ingredient_locks("investigate", "")
+        assert result_str is not None
+        result = json.loads(result_str)
 
         assert result["success"] is False
         assert result["stage"] == "preflight:ingredient_locks"
-        assert f"pipeline '{_ACTIVE_DISPATCH}'" in result["error"]
-        assert "'4171'" not in result["error"]
+        assert _ACTIVE_DISPATCH in result["error"]
+        assert "4171" not in result["error"]
 
-    def test_has_active_locks_dispatch_env_ignores_stale_scopes(
+    def test_has_active_locks_dispatch_env_stale_scopes_do_not_block(
         self, tool_ctx_kitchen_open, tmp_path, monkeypatch
     ) -> None:
         from autoskillit.server.tools.tools_execution import _has_active_locks
@@ -647,7 +649,14 @@ class TestDispatchScopedLockIsolation:
 
         assert _has_active_locks("") is False
 
+    def test_has_active_locks_dispatch_env_own_scope_blocks(
+        self, tool_ctx_kitchen_open, tmp_path, monkeypatch
+    ) -> None:
+        from autoskillit.server.tools.tools_execution import _has_active_locks
+
+        monkeypatch.setenv("AUTOSKILLIT_DISPATCH_ID", _ACTIVE_DISPATCH)
         _write_overlay(tmp_path, {**_STALE_LOCKED_STEPS, _ACTIVE_DISPATCH: {"investigate": False}})
+        tool_ctx_kitchen_open.project_dir = tmp_path
 
         assert _has_active_locks("") is True
 

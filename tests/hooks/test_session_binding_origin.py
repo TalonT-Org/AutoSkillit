@@ -12,6 +12,7 @@ from autoskillit.hooks._runtime._session_registry_bridge import (
     is_authenticated_top_level_cook_session,
 )
 from autoskillit.hooks._session_binding import (
+    PROJECTION_MANIFEST_SCHEMA_VERSION,
     SESSION_BINDING_SCHEMA_VERSION,
     BindingReadOutcome,
     JoinAdmissionOutcome,
@@ -31,7 +32,7 @@ pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
 _TS = "2026-09-26T00:00:00+00:00"
 _MANIFEST: dict[str, object] = {
-    "schema_version": 3,
+    "schema_version": PROJECTION_MANIFEST_SCHEMA_VERSION,
     "artifact_digest": "artifact",
     "incarnation_id": "incarnation",
     "skills": {

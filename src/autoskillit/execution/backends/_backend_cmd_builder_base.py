@@ -35,6 +35,8 @@ from autoskillit.core import (
     MANAGED_LINEAGE_DIGEST_ENV_VAR,
     MANAGED_LINEAGE_REF_ENV_VAR,
     NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
+    OWNER_SCOPE_DIR_ENV_VAR,
+    OWNER_SCOPE_ENV_VAR,
     ExecutionIdentity,
     ManagedHeadlessSessionLineageRef,
     NativeShellCaptureDecision,
@@ -144,6 +146,10 @@ def _add_workflow_context_env(extras: dict[str, str], scenario_step_name: str) -
     kitchen_session_id = os.environ.get(KITCHEN_SESSION_ID_ENV_VAR)
     if kitchen_session_id:
         extras[KITCHEN_SESSION_ID_ENV_VAR] = kitchen_session_id
+    owner_scope = os.environ.get(OWNER_SCOPE_ENV_VAR)
+    if owner_scope:
+        extras[OWNER_SCOPE_ENV_VAR] = owner_scope
+        extras[OWNER_SCOPE_DIR_ENV_VAR] = os.environ.get(OWNER_SCOPE_DIR_ENV_VAR, "")
 
 
 class FlagVocabulary(NamedTuple):
@@ -206,24 +212,26 @@ class BackendCmdBuilderBase(ABC):
     ) -> dict[str, str]:
         """Assemble the shared env keys consumed by both backends.
 
-        Always-on keys (three): ``MAX_MCP_OUTPUT_TOKENS``, ``MCP_CONNECTION_NONBLOCKING``,
+        Always-on keys: ``MAX_MCP_OUTPUT_TOKENS``, ``MCP_CONNECTION_NONBLOCKING``,
         ``AUTOSKILLIT_HEADLESS``. Backend-specific keys (e.g. Claude's host client
         attestation pair) are layered on by each concrete backend's own builders,
         not by this shared assembly — see ``claude.py``'s ``_claude_host_attestation_env()``.
 
-        Conditional keys (eleven): ``AUTOSKILLIT_SESSION_TYPE``,
+        Conditional keys: ``AUTOSKILLIT_SESSION_TYPE``,
         ``AUTOSKILLIT_APPLICABLE_GUARDS``, ``AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES``,
         ``SCENARIO_STEP_NAME``, ``CAMPAIGN_ID_ENV_VAR``, ``KITCHEN_SESSION_ID_ENV_VAR``,
+        ``OWNER_SCOPE_ENV_VAR``, ``OWNER_SCOPE_DIR_ENV_VAR``,
         ``AUTOSKILLIT_ALLOWED_WRITE_PREFIX``, ``AUTOSKILLIT_ALLOWED_WRITE_PREFIXES``,
         ``AUTOSKILLIT_CWD``, ``AUTOSKILLIT_STATE_ROOT_ENV_VAR``,
         ``CHILD_OUTCOME_LOG_DIR_ENV_VAR``. Each is included only when its input is
-        non-empty (campaign/kitchen IDs are also read from the ambient
-        ``os.environ``). A non-empty ``cwd`` supplies both the command's project
-        context and the ``AUTOSKILLIT_STATE_ROOT`` signal guards use to locate
-        ``.autoskillit/`` state in worktree topologies. A non-empty
-        ``child_outcome_log_dir`` binds the launched child's own child-terminal-
-        reason snapshot hooks (issue #4623) to the same resolved diagnostic root
-        the launching parent uses.
+        non-empty (campaign/kitchen IDs and the owner scope are read from the
+        ambient ``os.environ``, the owner scope so an L1 launched inside a
+        dispatch tree stays in its owner's scope). A non-empty ``cwd`` supplies
+        both the command's project context and the ``AUTOSKILLIT_STATE_ROOT``
+        signal guards use to locate ``.autoskillit/`` state in worktree
+        topologies. A non-empty ``child_outcome_log_dir`` binds the launched
+        child's own child-terminal-reason snapshot hooks (issue #4623) to the
+        same resolved diagnostic root the launching parent uses.
         """
         extras: dict[str, str] = dict(SHARED_BASELINE_ENV)
         extras["AUTOSKILLIT_HEADLESS"] = "1"

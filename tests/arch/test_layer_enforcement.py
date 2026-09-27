@@ -2036,6 +2036,10 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/fleet/test_fleet_e2e_codex_dispatch_identity.py": frozenset(
         {"autoskillit.execution", "autoskillit.server"}
     ),
+    # dispatch-side owner-scope descendant settlement is proven on real
+    # funnel-spawned worker/grandchild processes and a real DefaultHeadlessExecutor,
+    # which only the execution spawn funnel, owner scope, and tether registry can create
+    "tests/fleet/test_dispatch_descendant_settlement.py": frozenset({"autoskillit.execution"}),
     # session_log retention tests verify campaign protection in the writer
     # transaction — needs fleet.state
     "tests/execution/test_session_log_retention.py": frozenset({"autoskillit.fleet"}),

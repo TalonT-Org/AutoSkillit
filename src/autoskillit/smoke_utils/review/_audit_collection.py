@@ -38,7 +38,6 @@ def _slot_failure(
     reason_code: str,
     detail: str,
     transcript: ChildTaskTranscript | None = None,
-    findings: list[object] | None = None,
     output_form: str = "",
     closing_fence_complete: bool = True,
 ) -> dict[str, object]:
@@ -55,8 +54,6 @@ def _slot_failure(
         "closing_fence_complete": closing_fence_complete,
         "finding_count": 0,
     }
-    if findings is not None:
-        record["findings"] = findings
     if transcript is not None:
         raw_output = transcript.final_text or ""
         record["malformed_envelope"] = build_malformed_review_envelope(

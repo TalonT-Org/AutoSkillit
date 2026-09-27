@@ -35,6 +35,9 @@ are the IL-001 exception pinned by `test_import_linter_contracts.py`.
 `recipe/_type_recipe_sections.py` owns recipe-section registry and pagination-policy
 construction; `constants/_type_constants_registries.py` re-exports its public names.
 
+Imports outside core are limited to the stdlib-only hook-callable root authorities
+listed in `src/autoskillit/AGENTS.md`, which import nothing from autoskillit.
+
 ## Extension Bundle Pattern
 
 New feature fields go on frozen dataclass bundles (`InfraOutcome`, `ProviderOutcome`), not flat on `SkillResult`. Bundles are embedded as `field(default_factory=...)` on `SkillResult`. The `to_json()` method flattens bundle fields to top-level JSON keys for backward compatibility.
@@ -45,7 +48,7 @@ New feature fields go on frozen dataclass bundles (`InfraOutcome`, `ProviderOutc
 
 ### foundation/
 
-- `_type_enums.py` — Core StrEnum discriminators.
+- `_type_enums.py` — Core StrEnum discriminators; re-exports `TokenMeasureState` from `autoskillit._measure_aggregation`.
 - `_type_enums_context_admission.py` — Context-admission StrEnum discriminators.
 - `_type_exceptions.py` — Exception types for recipe loading failures.
 - `_type_exploration.py` — Immutable, deterministic contracts for read-only repository exploration.
@@ -110,7 +113,7 @@ New feature fields go on frozen dataclass bundles (`InfraOutcome`, `ProviderOutc
 - `_type_results.py` — Core result dataclasses — universal types.
 - `_type_results_execution.py` — Execution-scoped result dataclasses.
 - `_type_results_records.py` — Leaf result, adjudication verdict, and persisted-index record contracts.
-- `_type_token.py` — Canonical token usage type.
+- `_type_token.py` — Canonical token usage type; re-exports measure primitives and the aggregation API from `autoskillit._measure_aggregation`.
 - `_type_figure_spec.py` — Figure specification fields and required producer/consumer schema fields.
 
 ### execution/

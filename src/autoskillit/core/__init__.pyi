@@ -659,6 +659,7 @@ from .types import MANAGED_LAUNCH_ID_ENV_VAR as MANAGED_LAUNCH_ID_ENV_VAR
 from .types import MANAGED_LINEAGE_DIGEST_ENV_VAR as MANAGED_LINEAGE_DIGEST_ENV_VAR
 from .types import MANAGED_LINEAGE_REF_ENV_VAR as MANAGED_LINEAGE_REF_ENV_VAR
 from .types import MANAGED_SKILL_FILENAME as MANAGED_SKILL_FILENAME
+from .types import MAXIMUM_FIELDS as MAXIMUM_FIELDS
 from .types import MCP_CLIENT_BACKEND_ENV_VAR as MCP_CLIENT_BACKEND_ENV_VAR
 from .types import (
     NATIVE_SHELL_CAPTURE_MODE_ENV_VAR as NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
@@ -804,6 +805,7 @@ from .types import (
     STOP_STEP_EVIDENCE_DOCTRINE_INDENTED as STOP_STEP_EVIDENCE_DOCTRINE_INDENTED,
 )
 from .types import TERMINAL_FAILURE_POLICY as TERMINAL_FAILURE_POLICY
+from .types import TOKEN_CLASS_FIELDS as TOKEN_CLASS_FIELDS
 from .types import TOKEN_USAGE_SCHEMA_VERSION as TOKEN_USAGE_SCHEMA_VERSION
 from .types import TOOL_SUBSET_TAGS as TOOL_SUBSET_TAGS
 from .types import TURN_USAGE_SCHEMA_VERSION as TURN_USAGE_SCHEMA_VERSION
@@ -1046,6 +1048,7 @@ from .types import FailureRecord as FailureRecord
 from .types import FaultDomain as FaultDomain
 from .types import FeatureDef as FeatureDef
 from .types import FeatureLifecycle as FeatureLifecycle
+from .types import FieldAggregate as FieldAggregate
 from .types import FigureSpec as FigureSpec
 from .types import FinalizedRecipeProjection as FinalizedRecipeProjection
 from .types import FinalizedRecipeSegment as FinalizedRecipeSegment
@@ -1148,7 +1151,11 @@ from .types import ManagedWorkerCapacity as ManagedWorkerCapacity
 from .types import MarkGenerationIndeterminateEvent as MarkGenerationIndeterminateEvent
 from .types import MarkIndeterminateEvent as MarkIndeterminateEvent
 from .types import McpResponseLog as McpResponseLog
+from .types import MeasureAggregate as MeasureAggregate
 from .types import MeasurementKind as MeasurementKind
+from .types import MeasureRatio as MeasureRatio
+from .types import MeasureRecord as MeasureRecord
+from .types import MeasureScope as MeasureScope
 from .types import MergeFailedStep as MergeFailedStep
 from .types import MergeQueueWatcher as MergeQueueWatcher
 from .types import MergeState as MergeState
@@ -1377,6 +1384,7 @@ from .types import SkillUnavailabilityPayload as SkillUnavailabilityPayload
 from .types import SkillUnavailabilityRecord as SkillUnavailabilityRecord
 from .types import SkillVisibilitySpec as SkillVisibilitySpec
 from .types import SnapshotUnavailable as SnapshotUnavailable
+from .types import SourcePair as SourcePair
 from .types import SpilledOutput as SpilledOutput
 from .types import SpillSpec as SpillSpec
 from .types import StageHistoryEvent as StageHistoryEvent
@@ -1404,6 +1412,7 @@ from .types import TokenLimit as TokenLimit
 from .types import TokenLog as TokenLog
 from .types import TokenMeasure as TokenMeasure
 from .types import TokenMeasureState as TokenMeasureState
+from .types import TokenNormalization as TokenNormalization
 from .types import ToolCallId as ToolCallId
 from .types import ToolDef as ToolDef
 from .types import ToolInitializationOperation as ToolInitializationOperation
@@ -1415,6 +1424,7 @@ from .types import TurnTokenEntry as TurnTokenEntry
 from .types import (
     UninitializedContextAdmissionState as UninitializedContextAdmissionState,
 )
+from .types import UnnormalizedPoolError as UnnormalizedPoolError
 from .types import UpstreamSupportStatus as UpstreamSupportStatus
 from .types import Utf8ByteLimit as Utf8ByteLimit
 from .types import ValidatedAddDir as ValidatedAddDir
@@ -1432,6 +1442,7 @@ from .types import WriteEvidence as WriteEvidence
 from .types import WriteExpectedResolver as WriteExpectedResolver
 from .types import adapt_session_invariant as adapt_session_invariant
 from .types import admit_anchor as admit_anchor
+from .types import aggregate_measures as aggregate_measures
 from .types import assert_prompt_sentinel as assert_prompt_sentinel
 from .types import (
     build_recipe_execution_credential as build_recipe_execution_credential,
@@ -1468,6 +1479,7 @@ from .types import extract_path_arg as extract_path_arg
 from .types import extract_positional_args as extract_positional_args
 from .types import extract_skill_name as extract_skill_name
 from .types import fleet_error as fleet_error
+from .types import group_by_pair as group_by_pair
 from .types import hookdef_session_scope as hookdef_session_scope
 from .types import (
     is_canonical_plugin_artifact_digest as is_canonical_plugin_artifact_digest,
@@ -1498,6 +1510,7 @@ from .types import managed_home_for as managed_home_for
 from .types import managed_join_parent_id as managed_join_parent_id
 from .types import managed_route_backend as managed_route_backend
 from .types import managed_skill_relative_path as managed_skill_relative_path
+from .types import measure_ratio as measure_ratio
 from .types import model_class as model_class
 from .types import new_managed_attempt_id as new_managed_attempt_id
 from .types import new_managed_launch_id as new_managed_launch_id
@@ -1516,6 +1529,8 @@ from .types import recipe_section_element_digest as recipe_section_element_diges
 from .types import recipe_section_plan_digest as recipe_section_plan_digest
 from .types import refusal_awaits_launch_evidence as refusal_awaits_launch_evidence
 from .types import render_intake_digest as render_intake_digest
+from .types import render_measure as render_measure
+from .types import render_ratio as render_ratio
 from .types import render_target_skill_command as render_target_skill_command
 from .types import required_join_is_unsupported as required_join_is_unsupported
 from .types import (

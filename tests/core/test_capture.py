@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+from typing import get_args
+
 import pytest
 
-from autoskillit.core.types import CaptureEntrySpec, resolve_payload_field
+from autoskillit.core.types import (
+    CAPTURE_VALID_VALUE_TYPES,
+    CaptureEntrySpec,
+    CaptureValueType,
+    is_capture_value_type,
+    resolve_payload_field,
+)
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -49,3 +57,16 @@ class TestResolvePayloadField:
 def test_value_type_is_required() -> None:
     with pytest.raises(TypeError, match="value_type"):
         CaptureEntrySpec(from_="${{ result.x }}")
+
+
+def test_valid_value_types_match_the_literal() -> None:
+    assert CAPTURE_VALID_VALUE_TYPES == frozenset(get_args(CaptureValueType))
+
+
+@pytest.mark.parametrize("value", sorted(CAPTURE_VALID_VALUE_TYPES))
+def test_is_capture_value_type_accepts_declared_types(value: str) -> None:
+    assert is_capture_value_type(value)
+
+
+def test_is_capture_value_type_rejects_unknown_type() -> None:
+    assert not is_capture_value_type("integer")

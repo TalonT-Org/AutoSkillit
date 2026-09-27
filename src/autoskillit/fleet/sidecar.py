@@ -5,11 +5,15 @@ from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Literal, NamedTuple
+from typing import Literal, NamedTuple, TypeGuard
 
 from autoskillit.core import ensure_project_temp, get_logger
 
 logger = get_logger(__name__)
+
+
+def _is_sidecar_status(value: str) -> TypeGuard[Literal["completed", "failed"]]:
+    return value in ("completed", "failed")
 
 
 class SidecarReadStatus(StrEnum):
@@ -35,13 +39,15 @@ class IssueSidecarEntry:
         status = data["status"]
         if not isinstance(status, str):
             raise TypeError(f"status must be str, got {type(status).__name__!r}")
+        if not _is_sidecar_status(status):
+            raise ValueError(f"status must be 'completed' or 'failed', got {status!r}")
         ts_raw = data.get("ts")
         pr_url_raw = data.get("pr_url")
         reason_raw = data.get("reason")
         terminal_step_raw = data.get("terminal_step")
         return cls(
             issue_url=issue_url,
-            status=status,  # type: ignore[arg-type]
+            status=status,
             ts=str(ts_raw) if ts_raw is not None else "",
             pr_url=str(pr_url_raw) if pr_url_raw is not None else None,
             reason=str(reason_raw) if reason_raw is not None else None,
@@ -78,7 +84,7 @@ def read_sidecar(dispatch_id: str, project_dir: Path) -> list[IssueSidecarEntry]
         try:
             data = json.loads(line)
             entries.append(IssueSidecarEntry.from_dict(data))
-        except (json.JSONDecodeError, KeyError) as exc:
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
             logger.debug("sidecar: skipping corrupt JSONL line", path=str(path), error=str(exc))
             continue
     return entries
@@ -106,7 +112,7 @@ def read_sidecar_from_path(path: Path) -> SidecarReadResult:
         try:
             data = json.loads(line)
             entries.append(IssueSidecarEntry.from_dict(data))
-        except (json.JSONDecodeError, KeyError) as exc:
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
             logger.debug("sidecar: skipping corrupt JSONL line", path=str(path), error=str(exc))
             continue
     return SidecarReadResult(entries=entries, source=SidecarReadStatus.FOUND)

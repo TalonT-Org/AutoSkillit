@@ -7,10 +7,11 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from autoskillit.core import (
-    CAPTURE_VALID_VALUE_TYPES,
     CaptureEntrySpec,
+    CaptureValueType,
     CaptureValueTypeError,
     get_logger,
+    is_capture_value_type,
     resolve_payload_field,
 )
 
@@ -144,15 +145,18 @@ def _normalize_capture_spec(
                 logger.warning("capture_spec_malformed_longform", capture_name=key, raw=val)
                 continue
             type_ = val.get("type", "string")
-            if type_ not in CAPTURE_VALID_VALUE_TYPES:
+            value_type: CaptureValueType
+            if is_capture_value_type(type_):
+                value_type = type_
+            else:
                 logger.warning(
                     "capture_spec_unknown_type",
                     capture_name=key,
                     type_value=type_,
                     fallback="string",
                 )
-                type_ = "string"
-            result[key] = CaptureEntrySpec(from_=from_, value_type=type_)  # type: ignore[arg-type]
+                value_type = "string"
+            result[key] = CaptureEntrySpec(from_=from_, value_type=value_type)
         else:
             result[key] = CaptureEntrySpec(from_=str(val), value_type="string")
     return result

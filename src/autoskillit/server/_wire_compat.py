@@ -22,7 +22,7 @@ from fastmcp.server.middleware import Middleware
 if TYPE_CHECKING:
     import mcp.types as mt
     from fastmcp.server.middleware import CallNext, MiddlewareContext
-    from fastmcp.tools.tool import Tool
+    from fastmcp.tools import Tool
 
 _STRIPPED_FIELDS: dict[str, None] = {"output_schema": None, "title": None}
 

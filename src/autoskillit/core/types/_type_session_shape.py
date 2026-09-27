@@ -23,6 +23,8 @@ __all__ = [
     "select_child_session_deadline",
 ]
 
+HeadlessAxis = Literal["any", "headless_only", "interactive_only"]
+
 
 def select_child_session_deadline(local_deadline: float, inherited_deadline: str) -> str:
     """Select an inherited positive deadline or the caller's local deadline."""
@@ -117,7 +119,7 @@ class SessionScope:
     def of(
         cls,
         *,
-        headless: Literal["any", "headless_only", "interactive_only"] = "any",
+        headless: HeadlessAxis = "any",
         tiers: Iterable[SessionType] = (),
         exempt_tiers: Iterable[SessionType] = (),
     ) -> SessionScope:
@@ -156,10 +158,10 @@ def session_shape() -> SessionShape:
 
 
 def hookdef_session_scope(
-    session_scope: str, exempt_session_types: frozenset[str]
+    session_scope: HeadlessAxis, exempt_session_types: frozenset[str]
 ) -> SessionScope:
     """Convert the two HookDef admission fields into their core scope."""
     return SessionScope.of(
-        headless=session_scope,  # type: ignore[arg-type]
+        headless=session_scope,
         exempt_tiers=(SessionType(value) for value in exempt_session_types),
     )

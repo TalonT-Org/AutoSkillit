@@ -150,13 +150,8 @@ def _materialize_audit_result(state: _RunSkillDispatchState) -> str | None:
     assert state.skill_result is not None
     assert not isinstance(state.skill_result, CandidatePreSpawnRejection)
     assert state._completion_invocation_id is not None
-    # outcome_fields values are BoundScalar-ish (str | int | ...); the
-    # isinstance check below is the real type guard, matching the flat
-    # code's untyped-local behavior before this became a state field.
-    state._semantic_path = (state.skill_result.outcome_fields or {}).get(
-        "audit_semantic_result_path"
-    )  # type: ignore[assignment]
-    if not isinstance(state._semantic_path, str) or not state._semantic_path:
+    semantic_path = (state.skill_result.outcome_fields or {}).get("audit_semantic_result_path")
+    if not isinstance(semantic_path, str) or not semantic_path:
         state._materialized = _te_pkg._reject_missing_semantic_result(
             state.tool_ctx,
             state._audit_reservation,
@@ -174,7 +169,7 @@ def _materialize_audit_result(state: _RunSkillDispatchState) -> str | None:
             else:
                 state._materialized = state.tool_ctx.audit_authority_materializer.materialize(
                     reservation=state._audit_reservation,
-                    semantic_result_path=Path(state._semantic_path),
+                    semantic_result_path=Path(semantic_path),
                     preflight_step_names=state._audit_preflight_steps,
                 )
     state._materialized_status = _te_pkg._materialization_outcome_status(state._materialized)

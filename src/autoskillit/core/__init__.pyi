@@ -1471,6 +1471,7 @@ from .types import (
 from .types import (
     is_canonical_plugin_artifact_incarnation_id as is_canonical_plugin_artifact_incarnation_id,
 )
+from .types import is_capture_value_type as is_capture_value_type
 from .types import is_final_github_review_state as is_final_github_review_state
 from .types import is_path_like_token as is_path_like_token
 from .types import (

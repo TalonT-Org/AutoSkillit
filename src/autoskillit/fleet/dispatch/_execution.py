@@ -219,6 +219,7 @@ async def run_execution(
     the orchestrator's outer try/except — this function only manages
     state-internal cleanup for the spawn-error gate.
     """
+    assert tool_ctx.executor is not None  # run_lineage_preparation refuses a missing executor
     # Populate the spawn_ctx with the inputs the closures will need.
     spawn_ctx.issue_urls_raw = issue_urls_raw
     spawn_ctx.prior_ids = list(prior_ids)
@@ -414,7 +415,7 @@ async def run_execution(
         async with _dispatch_heartbeat(
             dispatches_dir or tool_ctx.temp_dir / "dispatches", dispatch_id
         ):
-            skill_result = await tool_ctx.executor.dispatch_food_truck(  # type: ignore[union-attr]
+            skill_result = await tool_ctx.executor.dispatch_food_truck(
                 orchestrator_prompt=prompt,
                 cwd=str(tool_ctx.project_dir),
                 completion_marker=completion_marker,

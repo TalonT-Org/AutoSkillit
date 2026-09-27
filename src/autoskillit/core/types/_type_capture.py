@@ -7,13 +7,14 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, TypeGuard
 
 __all__ = [
     "CAPTURE_VALID_VALUE_TYPES",
     "CaptureEntrySpec",
     "CaptureValueType",
     "CaptureValueTypeError",
+    "is_capture_value_type",
     "resolve_payload_field",
 ]
 
@@ -38,6 +39,11 @@ def resolve_payload_field(entry: CaptureEntrySpec) -> str | None:
 CAPTURE_VALID_VALUE_TYPES = frozenset({"path", "url", "string", "optional_string"})
 
 CaptureValueType = Literal["path", "url", "string", "optional_string"]
+
+
+def is_capture_value_type(value: str) -> TypeGuard[CaptureValueType]:
+    """Return whether ``value`` names one of the declared capture value types."""
+    return value in CAPTURE_VALID_VALUE_TYPES
 
 
 @dataclass(frozen=True, slots=True)

@@ -89,13 +89,12 @@ async def _cleanup_stale_loop(interval: float = TETHER_SWEEP_INTERVAL_SECONDS) -
     while True:
         await _asyncio.sleep(interval)
         ctx = _lifespan_pkg._get_ctx_or_none()
-        if ctx is not None and ctx.session_skill_manager is not None:
+        manager = ctx.session_skill_manager if ctx is not None else None
+        if manager is not None:
             try:
                 removed = await loop.run_in_executor(
                     None,
-                    lambda: ctx.session_skill_manager.cleanup_stale(  # type: ignore[union-attr]
-                        max_age_seconds=SESSION_STALE_SECONDS
-                    ),
+                    lambda: manager.cleanup_stale(max_age_seconds=SESSION_STALE_SECONDS),
                 )
                 if removed:
                     logger.info("cleanup_stale_sweep", removed=removed)

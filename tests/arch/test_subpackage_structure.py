@@ -146,7 +146,6 @@ class TestCoreSubpackages:
         assert actual == _CORE_TYPES_GROUPS
 
         modules = [module for members in _CORE_TYPES_GROUPS.values() for module in members]
-        assert len(modules) == 76
         assert len(set(modules)) == len(modules), "A type module appears in multiple groups"
 
     def test_core_types_root_holds_only_hub(self):

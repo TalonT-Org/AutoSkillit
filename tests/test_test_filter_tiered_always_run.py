@@ -107,14 +107,22 @@ class TestTieredAlwaysRun:
         assert "infra" in dir_names
 
     def test_unconditional_files_constants_have_correct_counts(self) -> None:
-        """_INFRA_UNCONDITIONAL_FILES has 10 entries; hooks has 3 entries.
+        """_INFRA_UNCONDITIONAL_FILES has 12 entries; hooks has 3 entries.
 
         Pin the unconditional-files contract: a silent mutation to these
         frozensets changes the always-run behavior, so any new entry must be
         reflected here as well.
         """
-        assert len(_INFRA_UNCONDITIONAL_FILES) == 10
+        assert len(_INFRA_UNCONDITIONAL_FILES) == 12
         assert len(_HOOKS_UNCONDITIONAL_FILES) == 3
+
+    def test_lint_gate_selection_contract_is_unconditional(self) -> None:
+        """The lint-gate selection contract must run on every conservative changeset.
+
+        Its verdict depends on the tracked-file layout (a directory move or a new
+        ``.pyi``), not on any infra trigger file, so path routing must never drop it.
+        """
+        assert "test_lint_gate_selection.py" in _INFRA_UNCONDITIONAL_FILES
 
     def test_empty_changed_files_uses_full_always_run(self, tmp_path: Path) -> None:
         """REQ-TIER-004: empty changed_files → fail-open → full always-run set as dirs."""

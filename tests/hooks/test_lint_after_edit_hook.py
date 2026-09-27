@@ -241,6 +241,35 @@ class TestLintBehavior:
         assert LINT_AUTOFIX_TRIGGER in updated
         assert "re-read" in updated.lower()
 
+    def test_autofix_resorts_pyi_stub_imports(self, tmp_path, monkeypatch):
+        (tmp_path / "pyproject.toml").write_text('[tool.ruff.lint]\nselect = ["I"]\n')
+        pkg = tmp_path / "pkg"
+        pkg.mkdir()
+        (pkg / "mod.py").write_text(
+            "class Alpha:\n    pass\n\n\nclass Beta:\n    pass\n\n\n"
+            "def launch_digest() -> None:\n    pass\n"
+        )
+        stub = pkg / "__init__.pyi"
+        stub.write_text(
+            "from .mod import Alpha as Alpha\n"
+            "from .mod import launch_digest as launch_digest\n"
+            "from .mod import Beta as Beta\n"
+        )
+        out, code = _run_hook(
+            _build_event("Edit", str(stub)),
+            headless=True,
+            skill_name="implement-worktree",
+            monkeypatch=monkeypatch,
+        )
+        assert code == 0
+        from autoskillit.hooks.lint_after_edit_hook import LINT_AUTOFIX_TRIGGER
+
+        assert out != "", "the hook must lint .pyi stubs, not skip them"
+        updated = json.loads(out)["hookSpecificOutput"]["updatedToolResult"]
+        assert LINT_AUTOFIX_TRIGGER in updated
+        sorted_stub = stub.read_text()
+        assert sorted_stub.index("import Beta") < sorted_stub.index("import launch_digest")
+
     def test_unused_import_not_removed(self, tmp_path, monkeypatch):
         """F4xx import rules must NOT be auto-fixed — import may be used in a later edit."""
         f = tmp_path / "staged_import.py"

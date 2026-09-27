@@ -275,22 +275,16 @@ def _validate_experimental_slots(
     return [], [], "failed"
 
 
-def _findings_for_dimension(records: list[dict[str, object]], dimension: str) -> list[object]:
+def _validated_findings(
+    records: list[dict[str, object]], kind: str, dimension: str | None = None
+) -> list[object]:
     findings: list[object] = []
     for record in records:
         if (
-            record.get("kind") == "standard"
-            and record.get("dimension") == dimension
+            record.get("kind") == kind
+            and (dimension is None or record.get("dimension") == dimension)
             and record.get("status") == "validated"
         ):
-            findings.extend(cast(list[object], record["findings"]))
-    return findings
-
-
-def _deletion_findings(records: list[dict[str, object]]) -> list[object]:
-    findings: list[object] = []
-    for record in records:
-        if record.get("kind") == "deletion" and record.get("status") == "validated":
             findings.extend(cast(list[object], record["findings"]))
     return findings
 
@@ -345,9 +339,9 @@ def evaluate_review_audit_slots(
     standard_findings = [
         finding
         for dimension in _STANDARD_REVIEW_DIMENSIONS
-        for finding in _findings_for_dimension(records, dimension)
+        for finding in _validated_findings(records, "standard", dimension)
     ]
-    deletion_findings = _deletion_findings(records)
+    deletion_findings = _validated_findings(records, "deletion")
     return {
         "slot_records": records,
         "standard_findings": standard_findings,

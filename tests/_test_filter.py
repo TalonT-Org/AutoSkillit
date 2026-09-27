@@ -133,7 +133,9 @@ ALWAYS_RUN_AGGRESSIVE: frozenset[str] = frozenset(
 # ---------------------------------------------------------------------------
 
 # Structural infra files that run unconditionally regardless of trigger conditions.
-# These enforce cross-cutting registration, executability, and schema contracts.
+# These enforce cross-cutting registration, executability, and schema contracts, plus
+# tracked-layout invariants (gate-selector coverage) whose verdict changes with file
+# moves outside the infra trigger set.
 _INFRA_UNCONDITIONAL_FILES: frozenset[str] = frozenset(
     {
         "test_manifest_completeness.py",
@@ -146,6 +148,7 @@ _INFRA_UNCONDITIONAL_FILES: frozenset[str] = frozenset(
         "test_background_exec_guard.py",
         "test_adr_runtime_guard_coverage.py",
         "test_plugin_source_ratchets.py",
+        "test_lint_gate_selection.py",
     }
 )
 

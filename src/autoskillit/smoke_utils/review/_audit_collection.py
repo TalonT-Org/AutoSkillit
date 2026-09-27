@@ -14,6 +14,7 @@ from autoskillit.core import (
     read_versioned_json,
 )
 from autoskillit.smoke_utils.review._audit_manifest import (
+    REVIEW_AUDIT_SCHEMA_VERSION,
     ReviewAuditInputError,
     _write_review_audit_artifact,
     load_review_audit_anchor_authority,
@@ -359,7 +360,9 @@ def evaluate_review_audit_slots(
 
 def _read_ledger(path: Path, audit_run_id: str) -> dict[str, object]:
     try:
-        value = read_versioned_json(path, 1, logger=logger, raise_io_errors=True)
+        value = read_versioned_json(
+            path, REVIEW_AUDIT_SCHEMA_VERSION, logger=logger, raise_io_errors=True
+        )
     except OSError as exc:
         raise ReviewAuditInputError("review-audit ledger is unreadable") from exc
     if value is None:

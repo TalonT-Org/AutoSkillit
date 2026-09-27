@@ -169,7 +169,7 @@ class TestResponseFieldsAreTypeSafe:
     """Every discriminator field in MCP tool responses uses enum values."""
 
     @pytest.mark.anyio
-    async def test_retry_reason_is_enum_value(self, tool_ctx, git_linked_worktree):
+    async def test_retry_reason_is_enum_value(self, tool_ctx_kitchen_open, git_linked_worktree):
         stdout = json.dumps(
             {
                 "type": "result",
@@ -181,16 +181,18 @@ class TestResponseFieldsAreTypeSafe:
                 "errors": [],
             }
         )
-        tool_ctx.runner.push(_make_result(1, stdout, ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(1, stdout, ""))
         result = json.loads(await run_skill("/retry-worktree plan.md", str(git_linked_worktree)))
         assert result["retry_reason"] in {e.value for e in RetryReason}
-        assert tool_ctx.runner.call_args_list[0][0][0] in {
+        assert tool_ctx_kitchen_open.runner.call_args_list[0][0][0] in {
             "/test-bin/claude",
             "/test-bin/codex",
         }
 
     @pytest.mark.anyio
-    async def test_retry_reason_none_is_enum_value(self, tool_ctx, git_linked_worktree):
+    async def test_retry_reason_none_is_enum_value(
+        self, tool_ctx_kitchen_open, git_linked_worktree
+    ):
         stdout = json.dumps(
             {
                 "type": "result",
@@ -201,11 +203,11 @@ class TestResponseFieldsAreTypeSafe:
                 "num_turns": 50,
             }
         )
-        tool_ctx.runner.push(_make_result(0, stdout, ""))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, stdout, ""))
         result = json.loads(await run_skill("/retry-worktree plan.md", str(git_linked_worktree)))
         assert result["retry_reason"] in {e.value for e in RetryReason}
         assert result["result"] == "Done."
-        assert tool_ctx.runner.call_args_list[0][0][0] in {
+        assert tool_ctx_kitchen_open.runner.call_args_list[0][0][0] in {
             "/test-bin/claude",
             "/test-bin/codex",
         }

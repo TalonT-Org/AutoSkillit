@@ -26,7 +26,9 @@ async def _run_session(
     from tests.execution.conftest import _mock_backend
 
     minimal_ctx.backend = _mock_backend()
-    minimal_ctx.runner = scripted_session_runner(side_effect)
+    minimal_ctx.runner = scripted_session_runner(
+        side_effect, usage={"input_tokens": 1, "output_tokens": 1}
+    )
     minimal_ctx.config.linux_tracing.log_dir = str(tmp_path)
     return await run_headless_core(_SKILL, str(cwd), minimal_ctx, completion_marker="")
 

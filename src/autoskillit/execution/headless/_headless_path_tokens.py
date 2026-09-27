@@ -30,12 +30,20 @@ _WORKTREE_PATH_PATTERN: re.Pattern[str] = re.compile(r"^worktree_path\s*=\s*(.+)
 _BRANCH_NAME_PATTERN: re.Pattern[str] = re.compile(r"^branch_name\s*=\s*(.+)$", re.MULTILINE)
 
 
-def _extract_worktree_path(assistant_messages: NormalizedMessages) -> str | None:
-    """Return the last absolute path emitted as worktree_path=<value>."""
+def _extract_worktree_path(
+    assistant_messages: NormalizedMessages,
+    *,
+    include_relative: bool = False,
+) -> str | None:
+    """Return the last worktree_path token, absolute by default."""
     last: str | None = None
     for msg in assistant_messages:
         m = _WORKTREE_PATH_PATTERN.search(msg)
-        if m and os.path.isabs(candidate := m.group(1).strip()):
+        if (
+            m
+            and (candidate := m.group(1).strip())
+            and (include_relative or os.path.isabs(candidate))
+        ):
             last = candidate
     return last
 

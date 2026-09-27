@@ -232,7 +232,9 @@ def _observe_session_git_evidence(
     pre: PreSessionGitState,
     assistant_messages: Sequence[str],
 ) -> SessionGitEvidence:
-    token = _extract_worktree_path(_normalize_messages(list(assistant_messages)))
+    token = _extract_worktree_path(
+        _normalize_messages(list(assistant_messages)), include_relative=True
+    )
 
     def finish(
         worktree: EvidenceWorktree,

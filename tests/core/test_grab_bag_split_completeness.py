@@ -458,6 +458,7 @@ def test_no_unintended_new_test_files_under_tests_core() -> None:
             "test_append_only_store_bounds.py",
             "test_artifact_lease.py",
             "test_worktree_gate_lease.py",
+            "test_worktree_porcelain.py",
             "test_audit_admission_contracts.py",
             "test_audit_admission_ledger_contracts.py",
             "test_audit_assessment_vocabulary.py",

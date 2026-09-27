@@ -483,7 +483,13 @@ DECOMPOSITION_MOVE_SETS: dict[str, frozenset[str]] = {
     ),
     "execution_recording": frozenset({"recording", "_recording_skills"}),
     "execution_session_log": frozenset(
-        {"session_log", "_session_log_recovery", "_session_log_retention", "session_index"}
+        {
+            "session_log",
+            "_session_log_evidence",
+            "_session_log_recovery",
+            "_session_log_retention",
+            "session_index",
+        }
     ),
     "execution_runtime": frozenset(
         {"launch_resolution", "commands", "clone_guard", "testing", "db"}

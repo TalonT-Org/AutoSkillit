@@ -224,13 +224,12 @@ async def test_marker_gate_precedes_digest_admission(tmp_path: Path, tool_ctx) -
     indirect=True,
 )
 async def test_attested_marker_precedes_plan_set_digest_preflight(
-    tmp_path: Path, tool_ctx_ready_recipe
+    tool_ctx_ready_recipe, git_checkout: Path
 ) -> None:
     ready = tool_ctx_ready_recipe
     assert ready.tool_ctx.config.safety.require_dry_walkthrough
     step, credential = _ready_recipe_segment_step(ready.tool_ctx, "implement")
-    work_dir = tmp_path / "work"
-    work_dir.mkdir()
+    work_dir = git_checkout
     allowed_root = resolve_temp_dir(work_dir, ready.tool_ctx.config.workspace.temp_dir)
     bound, parts, _ = await _bind(
         allowed_root / "make-plan",

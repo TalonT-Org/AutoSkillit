@@ -541,7 +541,7 @@ async def _execute_claude_headless(
                         ctx.audit,
                         skill_command=skill_command,
                         policy=_clone_guard_policy,
-                        new_worktrees=_git_evidence.new_worktrees if _git_evidence else (),
+                        new_worktrees=_git_evidence.new_worktrees,
                         exclude_prefix=_exclude_prefix,
                     )
                 except InfrastructureFaultError:

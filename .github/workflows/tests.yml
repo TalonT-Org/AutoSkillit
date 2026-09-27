@@ -37,9 +37,6 @@ jobs:
       - name: Verify lockfile is up to date
         run: uv lock --check
 
-      - name: Lint with ruff
-        run: uvx ruff check
-
       - name: Report tool versions
         run: |
           echo "uv: $(uv --version)"
@@ -276,6 +273,10 @@ jobs:
       - name: Lint imports
         if: matrix.shard == 'execution'
         run: uv run lint-imports
+
+      - name: Lint with ruff
+        if: matrix.shard == 'execution'
+        run: task lint
 
       - name: Type check
         if: matrix.shard == 'execution'

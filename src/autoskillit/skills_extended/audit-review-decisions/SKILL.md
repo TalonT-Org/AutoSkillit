@@ -51,14 +51,32 @@ implemented. Identify review debt before it compounds.
 
 - `$1` — Time period (e.g. `14d`, `30d`, `7d`). Default: `14d`.
 - `$2` — Output path. Default:
-  `${AUTOSKILLIT_TEMP}/audit-review-decisions/review_decisions_audit_$(date +%Y-%m-%d_%H%M%S).md`
+  `{{AUTOSKILLIT_TEMP}}/audit-review-decisions/review_decisions_audit_{run_id}.md`
+- `{pr_number}` — Locally captured literal PR number from each GraphQL result; use it in the
+  corresponding raw-data filename. It is not a positional input.
+- `{run_id}` — locally captured timestamp-and-UUID value from the read-only command
+  below; use it in the default path. It is not a positional input.
+- `{output_path}` — locally resolved literal absolute path: `$2` when supplied, otherwise the
+  default above. It is not a positional input.
+- `{output_parent_dir}` — locally captured literal parent directory printed from
+  `{output_path}` in Step 4; use it for the later `mkdir`. It is not a positional input.
+
+Resolve any relative caller-supplied path from the current working directory before
+binding it as `{output_path}`.
+
+Generate `{run_id}` once with this read-only command. Use its printed value in the
+default output path when `$2` is omitted:
+
+```bash
+python -c 'from datetime import datetime; from uuid import uuid4; print(datetime.now().strftime("%Y-%m-%d_%H%M%S") + "_" + uuid4().hex)'
+```
 
 ## Critical Constraints
 
 **NEVER:**
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
-- Create files outside `${AUTOSKILLIT_TEMP}/audit-review-decisions/`
+- Create files outside `{{AUTOSKILLIT_TEMP}}/audit-review-decisions/`
 - Have triage or validation subagents make GitHub API calls (local data only for Step 2)
 - Post duplicate `[AUDIT]` markers — check for existing marker before posting
 - Detach child delegations instead of joining them (joining every child is required)
@@ -118,7 +136,7 @@ implemented. Identify review debt before it compounds.
 
 2. Create temp directory:
    ```bash
-   mkdir -p "${AUTOSKILLIT_TEMP}/audit-review-decisions/raw"
+   mkdir -p "{{AUTOSKILLIT_TEMP}}/audit-review-decisions/raw"
    ```
 
 3. Batch fetch in groups of 20 using GraphQL aliases. For each batch, build a query
@@ -156,7 +174,7 @@ implemented. Identify review debt before it compounds.
      starting with `[AUDIT]` (already watermarked — skip entirely).
    - If the PR has zero remaining threads: skip saving.
    - Otherwise: save filtered data to
-     `${AUTOSKILLIT_TEMP}/audit-review-decisions/raw/pr_${number}.json`
+     `{{AUTOSKILLIT_TEMP}}/audit-review-decisions/raw/pr_{pr_number}.json`
 
 ---
 
@@ -183,7 +201,7 @@ Do not output any prose between subagent dispatches. Immediately proceed to the 
      - Review body `state: COMMENTED` with no corresponding thread (needs_human indicator)
    - Returns candidates as **response text only — no file writes**. Per-candidate format:
      ```
-     PR: {number}
+     PR: {pr_number}
      thread_index: {N}
      comment_id: {databaseId of first comment in thread}
      path: {file path or empty}
@@ -218,7 +236,7 @@ Do not output any prose between subagent dispatches. Immediately proceed to the 
      - `STALE` — code deleted/refactored; finding irrelevant
    - Returns findings as **response text only — no file writes**. Per-finding format:
      ```
-     PR: {number}
+     PR: {pr_number}
      comment_id: {databaseId}
      classification: VALID|RESOLVED|STALE
      path: {file:line or empty}
@@ -241,10 +259,19 @@ Do not output any prose between subagent dispatches. Immediately proceed to the 
 1. Collect all validated findings from Step 3 subagent responses.
 2. Sort findings: VALID first (by priority HIGH→MEDIUM→LOW), then RESOLVED, then STALE.
 3. Resolve the output path:
-   - Use `$2` if provided.
-   - Otherwise: `${AUTOSKILLIT_TEMP}/audit-review-decisions/review_decisions_audit_$(date +%Y-%m-%d_%H%M%S).md`
-4. Create parent directory: `mkdir -p "$(dirname "${OUTPUT_PATH}")"`
-5. Write the markdown report to `${OUTPUT_PATH}`. Structure:
+   - Use `$2` as the literal `{output_path}` if provided.
+   - Otherwise use `{{AUTOSKILLIT_TEMP}}/audit-review-decisions/review_decisions_audit_{run_id}.md`,
+     with the same `{run_id}` generated above.
+4. Print the parent directory of `{output_path}` with a read-only call and capture it as
+   `{output_parent_dir}`:
+   ```bash
+   dirname "{output_path}"
+   ```
+   In a later Bash call, create that directory using the captured literal:
+   ```bash
+   mkdir -p "{output_parent_dir}"
+   ```
+5. Write the markdown report to `{output_path}`. Structure:
 
 ---
 
@@ -271,7 +298,7 @@ For each HIGH VALID finding, write a section:
 ```
 ### {suggested_title}
 
-**PR:** #{number} | **File:** {path}:{line} | **Severity:** {severity} | **Dimension:** {dimension}
+**PR:** #{pr_number} | **File:** {path}:{line} | **Severity:** {severity} | **Dimension:** {dimension}
 
 > {reviewer_quote}
 
@@ -318,7 +345,7 @@ Same per-finding structure but labeled as pending.}
 6. After writing the file, print a terminal summary:
    ```
    audit-review-decisions complete
-   Output: {OUTPUT_PATH}
+   Output: {output_path}
    VALID: {N} | RESOLVED: {N} | STALE: {N}
    Top finding: {first HIGH priority suggested_title, or "none"}
    ```
@@ -360,4 +387,4 @@ For every finding processed in Steps 2–3 (all classifications — VALID, RESOL
    requires an individual POST. The 1s delay between calls is mandatory per GitHub API
    discipline.
 
-5. Log progress per finding: `[AUDIT] Posted marker on PR #{number} thread {comment_id}: {marker_body}`
+5. Log progress per finding: `[AUDIT] Posted marker on PR #{pr_number} thread {comment_id}: {marker_body}`

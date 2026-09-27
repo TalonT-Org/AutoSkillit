@@ -513,6 +513,7 @@
         "skill_inputs": {
           "worktree_path": "${{ inputs.worktree_path }}",
           "results_path": "${{ context.experiment_results }}",
+          "research_dir": "${{ inputs.research_dir }}",
           "output_mode": "${{ inputs.output_mode }}",
           "issue_url": "${{ inputs.issue_url }}"
         },

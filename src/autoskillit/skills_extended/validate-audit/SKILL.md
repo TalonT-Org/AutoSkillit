@@ -62,12 +62,13 @@ validated report carries a `validated: true` marker to signal downstream process
   If no files exist under any of these directories, print an error message and exit
   with a non-zero status.
 
+- `{run_id}` — locally captured timestamp-and-UUID value from the read-only command in
+  Step 5; use it only as the default output-directory suffix. It is not a positional input.
+- `{audit_base_dir}` — locally captured literal path printed by the Step 5 environment
+  choice; paste it into every output path. It is not a positional input.
 - `AUTOSKILLIT_AUDIT_RUN_DIR` — optional environment variable. When set, all output
-  files are written directly under `$AUTOSKILLIT_AUDIT_RUN_DIR/` instead of
-  `{{AUTOSKILLIT_TEMP}}/validate-audit/`. The recipe sets this to the per-run
-  directory created by `init_audit_run` (which already includes the
-  `validate-audit/run-{stamp}-{hex}` path segments) to prevent cross-run file
-  accumulation.
+  files are written directly under `{audit_base_dir}`, the per-run directory selected
+  in Step 5. Otherwise Step 5 selects a new run-scoped temporary directory.
 
 ## Critical Constraints
 
@@ -75,7 +76,7 @@ validated report carries a `validated: true` marker to signal downstream process
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
 - Modify any source code files
-- Create files outside `$AUDIT_BASE_DIR/` (the per-run directory set in Step 5)
+- Create files outside `{audit_base_dir}/` (the per-run directory set in Step 5)
 - Start independent child delegations sequentially
 - Write output files before synthesizing ALL subagent results
 - Subagents must NOT create their own files — they return findings in response text only
@@ -259,21 +260,32 @@ After all agents return:
 
 ### Step 5 — Generate Output Files
 
-Set the output base directory. When `AUTOSKILLIT_AUDIT_RUN_DIR` is set (by the
-recipe's `init_audit_run` step), files are written to the per-run directory to
-prevent cross-run accumulation:
+Generate `{run_id}` once with the read-only command below. Replace `{run_id}` in the
+default path with the captured value. Then print the selected directory with this
+read-only branch: it preserves the supplied directory when the environment
+variable is set and uses a run-scoped temporary directory otherwise.
+
+```bash
+python -c 'from datetime import datetime; from uuid import uuid4; print(datetime.now().strftime("%Y-%m-%d_%H%M%S") + "_" + uuid4().hex)'
+```
 
 ```bash
 if [ -n "$AUTOSKILLIT_AUDIT_RUN_DIR" ]; then
-    AUDIT_BASE_DIR="$AUTOSKILLIT_AUDIT_RUN_DIR"
+    printf '%s\n' "$AUTOSKILLIT_AUDIT_RUN_DIR"
 else
-    AUDIT_BASE_DIR="{{AUTOSKILLIT_TEMP}}/validate-audit-$(date -u +%Y-%m-%d_%H%M%S)"
+    printf '%s\n' "{{AUTOSKILLIT_TEMP}}/validate-audit-{run_id}"
 fi
-mkdir -p "$AUDIT_BASE_DIR"
+```
+
+Capture the printed path as `{audit_base_dir}` and paste it in every output path below.
+After capturing it, create the directory in a separate Bash call:
+
+```bash
+mkdir -p "{audit_base_dir}"
 ```
 
 **File 1 — Validated report**
-Path: `$AUDIT_BASE_DIR/validated_report_{source}.md`
+Path: `{audit_base_dir}/validated_report_{source}.md`
 
 Structure:
 
@@ -307,7 +319,7 @@ Format: original finding text, VALID verdict badge, severity adjustment note if 
 ```
 
 **File 2 — Contested findings** (write only when `N_contested > 0`)
-Path: `$AUDIT_BASE_DIR/contested_findings_{source}.md`
+Path: `{audit_base_dir}/contested_findings_{source}.md`
 
 Structure:
 
@@ -330,7 +342,7 @@ Write the full audit trail to a separate file. This file is NOT part of the issu
 it is a pipeline audit artifact stored in the run directory for traceability. The
 file-audit-issues skill must not append this content to issue bodies.
 
-Path: `$AUDIT_BASE_DIR/validation_summary_{source}.md`
+Path: `{audit_base_dir}/validation_summary_{source}.md`
 
 Structure:
 
@@ -484,11 +496,11 @@ For each ticket group in the grouping manifest:
    - A subset Summary Table (only the rows for included finding IDs)
    - Only the `## Validated Findings` sub-sections for included finding IDs
    - A footer: `*Part of validated {source} audit — see full report for remaining tickets.*`
-3. Write to: `$AUDIT_BASE_DIR/ticket_body_{source}_{N}.md`
+3. Write to: `{audit_base_dir}/ticket_body_{source}_{N}.md`
    where `{N}` is 1-indexed from the grouping manifest.
 
 Also write the grouping manifest itself to:
-`$AUDIT_BASE_DIR/grouping_manifest_{source}.md`
+`{audit_base_dir}/grouping_manifest_{source}.md`
 
 The grouping manifest file is the structured text returned by the ticket grouper subagent,
 prefixed with:
@@ -534,12 +546,11 @@ from the ticket body files.
 
 ## Output Location
 
-All output files are written under `$AUDIT_BASE_DIR/` where `AUDIT_BASE_DIR` is determined as follows:
-- If `AUTOSKILLIT_AUDIT_RUN_DIR` is set (by the recipe's `init_audit_run` step): `$AUDIT_BASE_DIR = $AUTOSKILLIT_AUDIT_RUN_DIR`
-- Otherwise: `$AUDIT_BASE_DIR = {{AUTOSKILLIT_TEMP}}/validate-audit-$(date -u +%Y-%m-%d_%H%M%S)`:
+All output files are written under `{audit_base_dir}/`, selected by the Step 5
+read-only branch from `AUTOSKILLIT_AUDIT_RUN_DIR` or the run-scoped temporary path:
 
 ```
-$AUDIT_BASE_DIR/
+{audit_base_dir}/
 ├── validated_report_{source}.md           (always written; VALID findings only)
 ├── contested_findings_{source}.md         (when N_contested > 0)
 ├── validation_summary_{source}.md         (always written; audit trail)

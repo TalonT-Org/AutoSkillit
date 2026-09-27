@@ -43,6 +43,9 @@ is the sole writer for this phase's assignments — no concurrent write races.
 - **$1** — Absolute path to the phase context file (written by `expand_assignments`) (contains `id=<phase_id>`, `metadata.assignment_count`, `metadata.assignment_ids`, `metadata.assignment_names`, `prior_results`)
 - **$2** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`)
 
+Use the literal absolute directory supplied as `$2` as `{output_dir}` in every
+path below. Substitute that directory before making any tool call.
+
 ## Critical Constraints
 
 **NEVER:**
@@ -50,7 +53,7 @@ is the sole writer for this phase's assignments — no concurrent write races.
 
 - Allow L0 subagents to write files directly — L0s return JSON only
 - Let an L0 failure abort the phase — always write a stub and continue
-- Write output outside `$2/assignments/`
+- Write output outside `{output_dir}/assignments/`
 - Spawn L0s sequentially — always in parallel
 - Read `{{AUTOSKILLIT_TEMP}}` artifacts outside your designated input files and output directory
 - Explore parent directories of your input paths (e.g., `ls $(dirname $1)/..`)
@@ -82,7 +85,7 @@ authority used for packet construction, child-ID tracking, result association, a
 
 ### Step 2: Load phase context
 
-Read `$2/phases/{id}_result.json` (the elaborated phase result). Extract:
+Read `{output_dir}/phases/{id}_result.json` (the elaborated phase result). Extract:
 - `goal` — phase-level goal
 - `scope` — phase-level scope list
 - `technical_approach` — overall technical approach for the phase
@@ -169,9 +172,9 @@ For each L0 response:
 
 ### Step 6: Write per-assignment files
 
-For each successful L0 result, write `$2/assignments/{assignment_id}_result.json` with the full result JSON.
+For each successful L0 result, write `{output_dir}/assignments/{assignment_id}_result.json` with the full result JSON.
 
-For each failed L0, write `$2/assignments/{assignment_id}_result.json` with:
+For each failed L0, write `{output_dir}/assignments/{assignment_id}_result.json` with:
 ```json
 {
   "id": "...",
@@ -184,23 +187,23 @@ For each failed L0, write `$2/assignments/{assignment_id}_result.json` with:
 }
 ```
 
-After writing all assignment files, update `$2/work_packages/wp_index.json` by appending compact entries
+After writing all assignment files, update `{output_dir}/work_packages/wp_index.json` by appending compact entries
 for all **successful** results only (skip stubs). Read the current index, append, and write back
 atomically. L1 is the sole writer for this phase's assignments — no concurrent writes.
 
-Finally, write the phase sentinel file to `$2/assignments/assign_sentinels/{phase_id}_result.json`:
+Finally, write the phase sentinel file to `{output_dir}/assignments/assign_sentinels/{phase_id}_result.json`:
 ```json
 {"id": "<phase_id>", "status": "complete", "assignment_count": N, "failed_count": M}
 ```
 
-> The sentinel path MUST be `$2/assignments/assign_sentinels/{phase_id}_result.json`. The manifest's
-> `result_dir` points to `$2/assignments/assign_sentinels/`, and this path is used to detect phase
+> The sentinel path MUST be `{output_dir}/assignments/assign_sentinels/{phase_id}_result.json`. The manifest's
+> `result_dir` points to `{output_dir}/assignments/assign_sentinels/`, and this path is used to detect phase
 > completion. Verify the path before writing.
 
 ### Step 7: Emit output token
 
 ```
-phase_assignments_result_dir = <absolute path to $2/assignments>
+phase_assignments_result_dir = {output_dir}/assignments
 ```
 
 ## Context Limit Behavior

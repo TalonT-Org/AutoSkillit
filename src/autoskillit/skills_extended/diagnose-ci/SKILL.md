@@ -16,7 +16,7 @@ hooks:
 # diagnose-ci Skill
 
 Fetch CI logs for a failing branch, classify the failure type, and write a structured
-diagnosis report under `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/diagnose-ci}`.
+diagnosis report under `{output_dir}`.
 Called by the orchestrator on `ci_watch` failure
 before routing to `resolve-failures`.
 
@@ -35,6 +35,12 @@ before routing to `resolve-failures`.
 
 For structured recipe invocations, `-` is the explicit vacancy value for both
 `ci_failed_jobs` and `event`; treat it exactly as that optional filter being absent.
+
+Workflow values:
+- `{output_dir}` is the literal directory printed in Step 5 and pasted into its later
+  `mkdir` call; it is not a positional argument.
+- `{diagnosis_run_id}` is the timestamp-and-UUID filename identifier generated in
+  Step 5. It is distinct from `{run_id}`, the optional CI workflow run ID.
 
 ## Critical Constraints
 
@@ -153,11 +159,24 @@ Determine `is_fixable`:
 
 ### Step 5: Write Diagnosis Report
 
-Set the recipe-scoped output directory and create it if it does not exist:
+Resolve the recipe-scoped output directory:
 
 ```bash
-DIAGNOSIS_OUTPUT_DIR="${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/diagnose-ci}"
-mkdir -p "${DIAGNOSIS_OUTPUT_DIR}"
+printf '%s\n' "${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/diagnose-ci}"
+```
+
+Paste the printed path as `{output_dir}` in every write below. Generate one
+timestamp-and-UUID identifier with the read-only command below and use it as `{diagnosis_run_id}` for the filename.
+Keep the supplied `{run_id}` for the CI workflow.
+
+```bash
+python -c 'from datetime import datetime; from uuid import uuid4; print(datetime.now().strftime("%Y-%m-%d_%H%M%S") + "_" + uuid4().hex)'
+```
+
+In a separate tool call after capturing the literal path:
+
+```bash
+mkdir -p "{output_dir}"
 ```
 
 Write the diagnosis file:
@@ -188,7 +207,7 @@ failure_subtype = {failure_subtype}
 **Suggested Starting Verdict:** {suggested starting verdict from the subtype table above}
 ```
 
-Save to `${DIAGNOSIS_OUTPUT_DIR}/diagnosis_{timestamp}.md`.
+Save to `{output_dir}/diagnosis_{diagnosis_run_id}.md`.
 
 ### Step 6: Emit Output Tokens
 
@@ -201,7 +220,7 @@ Emit these tokens on their own lines at the end of your response:
 > code fences cause match failure.
 
 ```
-diagnosis_path = /absolute/path/to/${DIAGNOSIS_OUTPUT_DIR}/diagnosis_{timestamp}.md
+diagnosis_path = {output_dir}/diagnosis_{diagnosis_run_id}.md
 failure_type = test|lint|build|type_check|env|unknown|no_failure
 failure_subtype = flaky|timing_race|deterministic|fixture|import|env|unknown|no_failure
 is_fixable = true|false

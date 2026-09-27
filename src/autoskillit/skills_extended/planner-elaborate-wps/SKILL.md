@@ -46,6 +46,9 @@ is the sole writer for this phase's WPs — no concurrent write races.
 - **$1** — Absolute path to the phase context file (written by `expand_wps`) (contains `id=<phase_id>`, `metadata.wp_count`, `metadata.wp_ids`, `metadata.wp_names`, `metadata.wp_scopes`, `metadata.wp_estimated_files`, `prior_results`)
 - **$2** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`)
 
+Use the literal absolute directory supplied as `$2` as `{output_dir}` in every
+path below. Substitute that directory before making any tool call.
+
 ## Critical Constraints
 
 **NEVER:**
@@ -53,7 +56,7 @@ is the sole writer for this phase's WPs — no concurrent write races.
 
 - Allow L0 subagents to write files directly — L0s return JSON only
 - Let an L0 failure abort the phase — always write a stub and continue
-- Write output outside `$2/work_packages/`
+- Write output outside `{output_dir}/work_packages/`
 - Spawn L0s sequentially — always in parallel
 - Spawn more than 6 L0s in one batch — if WP count exceeds 6, use sequential batches of 6
 - Read `{{AUTOSKILLIT_TEMP}}` artifacts outside your designated input files and output directory
@@ -85,12 +88,12 @@ Read the context file at `$1`. Extract:
 
 ### Step 2: Load phase and assignment context
 
-Read `$2/phases/{id}_result.json` (the elaborated phase result). Extract:
+Read `{output_dir}/phases/{id}_result.json` (the elaborated phase result). Extract:
 - `goal` — phase-level goal
 - `scope` — phase-level scope list
 - `technical_approach` — overall technical approach for the phase
 
-Read all `$2/assignments/P{N}-A*_result.json` matching this phase to get assignment-level context:
+Read all `{output_dir}/assignments/P{N}-A*_result.json` matching this phase to get assignment-level context:
 - `goal` — assignment goal
 - `technical_approach` — assignment technical approach
 - `proposed_work_packages` — the WP decomposition from the assignment pass
@@ -116,7 +119,7 @@ Each packet contains:
 
 ### Step 4: Spawn L0 subagents in PARALLEL (SINGLE MESSAGE)
 
-Before spawning any L0, filter the WP list to skip any WP whose `$2/work_packages/{wp_id}_result.json`
+Before spawning any L0, filter the WP list to skip any WP whose `{output_dir}/work_packages/{wp_id}_result.json`
 already exists on disk. This idempotency guard prevents redundant L0 re-spawns on retry after
 partial completion (e.g., when an L1 session is resumed after context recovery).
 
@@ -156,9 +159,9 @@ For each L0 response:
 
 ### Step 6: Write per-WP files
 
-For each successful L0 result, write `$2/work_packages/{wp_id}_result.json` with the full result JSON.
+For each successful L0 result, write `{output_dir}/work_packages/{wp_id}_result.json` with the full result JSON.
 
-For each failed L0, write `$2/work_packages/{wp_id}_result.json` with:
+For each failed L0, write `{output_dir}/work_packages/{wp_id}_result.json` with:
 ```json
 {
   "id": "...",
@@ -180,19 +183,19 @@ After writing all WP files, the manifest is rebuilt downstream by `finalize_wp_m
 which scans disk for all `{wp_id}_result.json` files and writes `wp_index.json` atomically.
 Do not append to `wp_index.json` directly — concurrent L1 sessions would race on the shared file.
 
-Finally, write the phase sentinel file to `$2/work_packages/wp_sentinels/{phase_id}_result.json`:
+Finally, write the phase sentinel file to `{output_dir}/work_packages/wp_sentinels/{phase_id}_result.json`:
 ```json
 {"id": "<phase_id>", "status": "complete", "wp_count": N, "failed_count": M}
 ```
 
-> The sentinel path MUST be `$2/work_packages/wp_sentinels/{phase_id}_result.json`. The manifest's
-> `result_dir` points to `$2/work_packages/wp_sentinels/`, and this path is used to detect
+> The sentinel path MUST be `{output_dir}/work_packages/wp_sentinels/{phase_id}_result.json`. The manifest's
+> `result_dir` points to `{output_dir}/work_packages/wp_sentinels/`, and this path is used to detect
 > phase completion. Verify the path before writing.
 
 ### Step 7: Emit output token
 
 ```
-phase_wps_result_dir = <absolute path to $2/work_packages>
+phase_wps_result_dir = {output_dir}/work_packages
 ```
 
 ## Context Limit Behavior

@@ -3,7 +3,7 @@ name: generate-report
 categories:
 - research
 uses_capabilities: []
-description: Synthesize experiment results into a structured research report in the research/ folder. Supports --inconclusive
+description: Synthesize experiment results into a structured report in the supplied research directory. Supports --inconclusive
   flag.
 hooks:
   PreToolUse:
@@ -37,8 +37,8 @@ semantic_requirements:
 # Write Report Skill
 
 Synthesize scope findings, experiment design, and experiment results into a
-structured research report. The report is committed to the `research/` directory
-in the worktree and becomes the primary deliverable of the research recipe.
+structured research report. The report is committed to the supplied research
+directory in the worktree and becomes the primary deliverable of the research recipe.
 
 This skill handles both conclusive and inconclusive outcomes — inconclusive
 results are valid findings, not failures.
@@ -51,7 +51,7 @@ results are valid findings, not failures.
 ## Arguments
 
 ```
-/autoskillit:generate-report {worktree_path} {results_path} [--inconclusive]
+/autoskillit:generate-report {worktree_path} {results_path} {research_dir} [--inconclusive]
 [--output-mode {local|pr}] [--issue-url {url}]
 [--experiment-type {type}] [--methodology-traditions {tradition}]
 [--group-manifest {path}]
@@ -61,6 +61,8 @@ results are valid findings, not failures.
   token after the skill name.
 - `{results_path}` — Absolute path to the experiment results file (required).
   Second path-like token.
+- `{research_dir}` — Absolute path to the supplied research directory (required).
+  Third path-like token. Write the report and its artifacts there.
 - `--inconclusive` — Optional flag indicating experiments were inconclusive
   (retry exhaustion or insufficient evidence). When present, the report
   emphasizes what was learned and why evidence was insufficient, rather than
@@ -92,26 +94,26 @@ produced. Treat those values exactly like the corresponding optional flag being 
 ## Inputs
 
 In addition to the arguments above, this skill reads from the worktree:
-- `${RESEARCH_DIR}/visualization-plan.md` — figure inventory and `yaml:figure-spec`
+- `{research_dir}/visualization-plan.md` — figure inventory and `yaml:figure-spec`
   blocks produced by `synthesize-vis-plan`. Read in Step 2.5 to drive plot generation.
-- `${RESEARCH_DIR}/report-plan.md` — section outline mapping figure IDs to report
+- `{research_dir}/report-plan.md` — section outline mapping figure IDs to report
   sections. Read in Step 3 to place figure references correctly.
 
 ## Critical Constraints
 
 **NEVER:**
-- Modify source code files outside the `research/` directory
+- Modify source code files outside `{research_dir}`
 - Fabricate or embellish results — report exactly what was measured
 - Attribute missing data to "time constraints", "resource limitations", or other invented explanations not present in the results file. When data is absent, state the factual status: what is present, what is absent, and if the results file does not explain why, state "reason not recorded in results."
 - Omit the methodology section — reproducibility requires it
 - Frame inconclusive results as failures — they are valid findings
-- Create the report outside the worktree's `research/` directory
+- Create the report outside `{research_dir}`
 - Detach child delegations instead of joining them (joining every child is required)
 - Start independent child delegations sequentially
 
 **ALWAYS:**
 - Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
-- Write the report to `research/` in the worktree root
+- Write the report to `{research_dir}` in the worktree
 - Include experiment scripts inline as fenced code blocks for reproducibility
 - Commit the report to the worktree before returning
 - Include a "What We Learned" section regardless of outcome
@@ -196,7 +198,7 @@ Based on the `--inconclusive` flag and the experiment results status:
 
 ### Step 2.5 — Produce Visualizations
 
-If `${RESEARCH_DIR}/visualization-plan.md` exists:
+If `{research_dir}/visualization-plan.md` exists:
 
 1. Read `visualization-plan.md`. If it contains zero figure specs (empty plan),
    omit all sub-steps and proceed to Step 3.
@@ -205,34 +207,34 @@ If `${RESEARCH_DIR}/visualization-plan.md` exists:
    `{slug}` is the experiment directory name. Verify the image exists:
    ```bash
    docker image inspect "research-{slug}" > /dev/null 2>&1 || \
-       (cd "${RESEARCH_DIR}" && docker build --build-arg MAMBA_ENV={slug} -t "research-{slug}" .)
+       (cd "{research_dir}" && docker build --build-arg MAMBA_ENV={slug} -t "research-{slug}" .)
    ```
 
 3. For each `yaml:figure-spec` block in `visualization-plan.md`:
    a. Write a Python plotting script to
-      `${RESEARCH_DIR}/scripts/fig{N}_{slug}.py`
+      `{research_dir}/scripts/fig{N}_{slug}.py`
       that reads from `data_source.path` (or scans `results/` and `data/` if
       the path does not exist — treat `data_source.path` as a hint).
    b. Run the script inside the experiment container (volume-mount research dir):
       ```bash
       docker run --rm \
-        -v "${RESEARCH_DIR}:/workspace" \
+        -v "{research_dir}:/workspace" \
         "research-{slug}" \
         bash -c "pip install --quiet matplotlib seaborn plotly kaleido 2>/dev/null; \
-                 python /workspace/scripts/fig${N}_${slug}.py"
+                 python /workspace/scripts/fig{N}_{slug}.py"
       ```
-   c. Confirm output exists at `${RESEARCH_DIR}/images/fig-${N}.{png,svg}`.
+   c. Confirm output exists at `{research_dir}/images/fig-{N}.{png,svg}`.
    d. After confirming the image exists, update the corresponding `yaml:figure-spec`
       block in `visualization-plan.md` by appending
-      `image_path: images/fig-${N}.{ext}` to that block (using the actual filename
+      `image_path: images/fig-{N}.{ext}` to that block (using the actual filename
       produced, e.g. `images/fig-1.pdf` or `images/fig-2.png`). This field is
       required by `bundle-local-report` for image insertion.
-   e. On failure: emit `MISSING: fig-${N} — {error summary}` to stdout and
+   e. On failure: emit `MISSING: fig-{N} — {error summary}` to stdout and
       continue with remaining figures. Do not abort the skill.
 
 4. Commit scripts and images (if any were produced):
    ```bash
-   git add research/ && git commit -m "Add visualization scripts and figures"
+   git add "{research_dir}" && git commit -m "Add visualization scripts and figures"
    # Do NOT use --amend — always create new commits.
    ```
 
@@ -265,13 +267,14 @@ originates from a non-engineering field:
 - When reordering, only the section position changes — content requirements are
   unchanged.
 
-Create the report directory and file:
+Use the supplied research directory for the report and optional scripts:
 ```
-research/YYYY-MM-DD-{slug}/
+{research_dir}/
   report.md       # The main research report
   scripts/        # Extracted experiment scripts (optional, if complex)
 ```
 
+The workflow supplies this directory; do not select another report directory.
 The `{slug}` is a kebab-case summary of the research topic (max 40 chars).
 
 Write a YAML frontmatter block (fenced with `---`) at the very top of report.md,
@@ -470,7 +473,7 @@ for reproducibility even after the worktree is cleaned up.}
 
 ## Appendix: Visualization Scripts
 
-{Enumerate each script in `${RESEARCH_DIR}/scripts/fig*.py` produced during
+{Enumerate each script in `{research_dir}/scripts/fig*.py` produced during
 Step 2.5. Include the full script as a fenced Python code block. These are
 preserved for figure reproducibility even after the worktree is cleaned up.}
 
@@ -482,14 +485,16 @@ files committed alongside this report.}
 
 ### Step 4 — Commit and Emit
 
-1. Create the research directory in the worktree:
-   `mkdir -p research/YYYY-MM-DD-{slug}/`
-2. Write `report.md` to that directory.
-3. If experiment scripts are complex (>50 lines), also save them as separate
-   files in `research/YYYY-MM-DD-{slug}/scripts/`.
-4. Commit to the worktree:
+1. Create the supplied research directory in the worktree if needed:
+   ```bash
+   mkdir -p "{research_dir}"
    ```
-   git add research/
+2. Write the report to `{research_dir}/report.md`.
+3. If experiment scripts are complex (>50 lines), also save them as separate
+   files in `{research_dir}/scripts/`.
+4. Commit to the worktree:
+   ```bash
+   git add "{research_dir}"
    git commit -m "Add research report: {brief title}"
    # Do NOT use --amend — always create new commits.
    ```
@@ -504,5 +509,5 @@ your text output:
 > code fences cause match failure.
 
 ```
-report_path = {absolute_path_to_report.md}
+report_path = {research_dir}/report.md
 ```

@@ -49,6 +49,9 @@ The worktree is left intact for the orchestrator to test and merge separately.
 
 `{plan_path}`   — Absolute path to the implementation plan file (required)
 
+- `{worktree_path}` — Locally captured literal path from the Step 1 `WORKTREE_PATH=` output;
+  use it in subsequent commands and file references. It is not a positional input.
+
 ## Critical Constraints
 
 **NEVER:**
@@ -145,9 +148,9 @@ else
 fi
 ```
 
-Read the Bash tool output to capture WORKTREE_PATH — it is an absolute path to the worktree. Use this literal path in every subsequent `cd` and file reference. Shell variables do not persist across Bash tool calls.
+Read the Bash tool output and capture the value after `WORKTREE_PATH=` as `{worktree_path}` — it is the absolute path to the worktree. Use this literal path in every subsequent `cd` and file reference. Shell variables do not persist across Bash tool calls.
 
-- **If `PRE_CREATED_WORKTREE=true`**: The skill is already inside a linked worktree (`.git` is a file, not a directory). `WORKTREE_PATH` is the current working directory. **Skip worktree creation** — proceed directly to Step 1 (cont.).
+- **If `PRE_CREATED_WORKTREE=true`**: The skill is already inside a linked worktree (`.git` is a file, not a directory). `{worktree_path}` is the current working directory. **Skip worktree creation** — proceed directly to Step 1 (cont.).
 - **If `PRE_CREATED_WORKTREE=false`**: The skill is running in the main repo (Claude Code backward-compat path). The worktree was just created by `create_impl_worktree.sh`.
 
 ### Step 1 (cont.): Emit Structured Tokens Early
@@ -163,7 +166,7 @@ if context is exhausted before Step 6:
 > code fences cause match failure.
 
 ```
-worktree_path = ${WORKTREE_PATH}
+worktree_path = {worktree_path}
 branch_name = ${BRANCH_NAME}
 ```
 
@@ -192,14 +195,14 @@ IDs keyed by responsibility through the join.
 Set up the project's development environment in the worktree. Use the project's configured `worktree_setup.command` from `.autoskillit/config.yaml` if available. If not configured, check for a Taskfile with `install-worktree` task, or detect the project type and run appropriate setup.
 
 ```bash
-cd "${WORKTREE_PATH}"
+cd "{worktree_path}"
 # If worktree_setup.command is configured, run it. Otherwise:
 task install-worktree   # or equivalent for the project type
 ```
 
 **Why isolated env matters:** Installing packages without isolation overwrites the global state. When the worktree is deleted, CLI commands break with import errors.
 
-**All commands in Steps 4–5 must run from `${WORKTREE_PATH}`.** Use absolute paths to avoid CWD drift across Bash tool calls.
+**All commands in Steps 4–5 must run from `{worktree_path}`.** Use absolute paths to avoid CWD drift across Bash tool calls.
 
 ### Step 4: Implement Phase by Phase
 
@@ -222,7 +225,7 @@ requirement; do not consult the issue or sibling plans. This applies outside the
 PR-inventory check in Step 5.5.
 
 ```bash
-cd "${WORKTREE_PATH}" && pre-commit run --all-files
+cd "{worktree_path}" && pre-commit run --all-files
 ```
 
 Fix any formatting or linting issues. Do NOT run tests in the shell — NEVER invoke pytest,
@@ -230,7 +233,7 @@ python -m pytest, or a test runner directly. When verification is explicitly req
 the `test_check` MCP tool with the worktree path.
 
 ```
-test_check(worktree_path="${WORKTREE_PATH}")
+test_check(worktree_path="{worktree_path}")
 ```
 
 If pre-commit auto-fixes files, stage them and create a **new** commit (do NOT use `--amend`):
@@ -257,7 +260,7 @@ conflict resolution and must be preserved in full.
 ### Step 6: Handoff Report
 
 Output to terminal:
-- **Worktree path:** `${WORKTREE_PATH}`
+- **Worktree path:** `{worktree_path}`
 - **Branch name:** `${WORKTREE_NAME}`
 - **Base branch:** the branch the worktree was created from
 - **Summary:** list of implemented phases and key changes
@@ -273,7 +276,7 @@ Then emit these structured output tokens on their own lines so recipe capture bl
 > code fences cause match failure.
 
 ```
-worktree_path = ${WORKTREE_PATH}
+worktree_path = {worktree_path}
 branch_name = ${BRANCH_NAME}
 ```
 

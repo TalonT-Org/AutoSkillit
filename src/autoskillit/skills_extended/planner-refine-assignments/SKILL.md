@@ -38,30 +38,33 @@ by `merge_tier_results` → `_write_refine_contexts`, which contains only this p
 and `peer_summaries` (id/name/goal stubs) for all other phases. Each L0 reviews its assignment
 in the context of peer_summaries and `refined_plan.json`, returning structured suggestions. L1
 applies suggestions, resolves intra-phase WP ownership conflicts, and writes the phase result
-file to `$3/refine_contexts/{phase_id}_result.json`.
+file to `{output_dir}/refine_contexts/{phase_id}_result.json`.
 
 ## When to Use
 
 - Dispatched by the L2 planner recipe in parallel — one session per phase
-- Accepts a per-phase context file from `$3/refine_contexts/context_{phase_id}.json` and `refined_plan.json` for phase context
+- Accepts a per-phase context file from `{output_dir}/refine_contexts/context_{phase_id}.json` and `refined_plan.json` for phase context
 - Produces `{phase_id}_result.json` as input for the downstream `merge_refined_assignments` step
 
 ## Arguments
 
-- **$1** — Absolute path to the per-phase context file (`$3/refine_contexts/context_{phase_id}.json`). The file contains:
+- **$1** — Absolute path to the per-phase context file (`{output_dir}/refine_contexts/context_{phase_id}.json`). The file contains:
   - `phase_id` — identifier for the phase this session processes
   - `task_file_path` — path to the task description file (read from disk, not inline)
   - `assignments` — full AssignmentElaborated objects for this phase only (3–5 entries)
   - `peer_summaries` — `{id, name, goal}` stubs for all assignments in other phases
 - **$2** — Absolute path to `refined_plan.json` (PlanDocument with phases as PhaseElaborated, for phase context)
-- **$3** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`). Output is written to `$3/refine_contexts/{phase_id}_result.json`.
+- **$3** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`). Output is written to `{output_dir}/refine_contexts/{phase_id}_result.json`.
+
+Use the literal absolute directory supplied as `$3` as `{output_dir}` in every
+path below. Substitute that directory before making any tool call.
 
 ## Critical Constraints
 
 **NEVER:**
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
-- Write any file outside `$3/`
+- Write any file outside `{output_dir}/`
 - Directly modify the context file ($1) — always write a new result file
 - Allow an L0 subagent to write files directly (L0s return structured text only)
 - Emit `phase_refined_path` before writing the result file
@@ -82,7 +85,7 @@ file to `$3/refine_contexts/{phase_id}_result.json`.
 - Log `WARNING` to stdout for any L0 response that fails validation (skip that assignment)
 - Log `CRITICAL` to stdout for any L0 subagent that fails entirely (proceed with N-1, partial result)
 - When two assignments propose WPs covering the same files, assign ownership to the numerically earlier assignment_id using natural sort on numeric suffixes (e.g. `P1-A1` beats `P1-A2`; `P1-A2` beats `P1-A10`); log each resolution
-- Emit: `phase_refined_path = <absolute path to $3/refine_contexts/{phase_id}_result.json>`
+- Emit the absolute saved path: `phase_refined_path = {output_dir}/refine_contexts/{phase_id}_result.json`
 - Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
@@ -211,7 +214,7 @@ Apply `dependency_corrections` by appending to the `dependency_notes` field.
 
 ### Step 7: Write output
 
-Write the phase result file to `$3/refine_contexts/{phase_id}_result.json`, where
+Write the phase result file to `{output_dir}/refine_contexts/{phase_id}_result.json`, where
 `phase_id` is read from the context file. The output schema:
 ```json
 {
@@ -224,7 +227,7 @@ The `assignments` list contains only this phase's assignments (3–5 entries) wi
 ### Step 8: Emit output token
 
 ```
-phase_refined_path = <absolute path to $3/refine_contexts/{phase_id}_result.json>
+phase_refined_path = {output_dir}/refine_contexts/{phase_id}_result.json
 ```
 
 ## Context Limit Behavior

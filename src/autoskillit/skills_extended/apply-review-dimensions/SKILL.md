@@ -64,6 +64,8 @@ invoked standalone — the recipe step named `apply` with
 - **experiment_plan_path** — Absolute path to the experiment plan file.
 - **experiment_type** — Snake-case experiment type name from classification.
 - **classification_timestamp** — ISO 8601 UTC timestamp from classification.
+- Workflow value `{output_dir}` — the literal directory printed in Step 0 and pasted
+  into the later `mkdir` call; it is not a positional argument.
 
 ## Critical Constraints
 
@@ -79,7 +81,7 @@ invoked standalone — the recipe step named `apply` with
 - Use `child delegation under the declared `sonnet` model-class policy` for all subagents
 - Write `findings_manifest` and `evaluation_dashboard` before emitting tokens
 - Emit both output tokens as absolute paths
-- Write output to `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/apply-review-dimensions}`
+- Write output to `{output_dir}`
 - Issue all subagent calls in a single message to maximize parallel execution
 
 ## Workflow
@@ -87,18 +89,30 @@ invoked standalone — the recipe step named `apply` with
 ### Step 0: Setup
 
 ```bash
-APPLY_OUTPUT_DIR="${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/apply-review-dimensions}"
-mkdir -p "${APPLY_OUTPUT_DIR}"
+printf '%s\n' "${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/apply-review-dimensions}"
 ```
 
-1. Use `APPLY_OUTPUT_DIR` for every output path.
+Paste the printed path as `{output_dir}` in every write below. Generate one
+`{run_id}` with the timestamp-and-UUID read-only command below and reuse it in every output filename.
+
+```bash
+python -c 'from datetime import datetime; from uuid import uuid4; print(datetime.now().strftime("%Y-%m-%d_%H%M%S") + "_" + uuid4().hex)'
+```
+
+In a separate tool call after capturing the literal path:
+
+```bash
+mkdir -p "{output_dir}"
+```
+
+1. Use `{output_dir}` for every output path.
 2. Load dimensions_manifest JSON from `dimensions_manifest_path`.
 3. **Empty / all-silent detection:** If all dimension weights are `S` (SILENT) or
    the dimension list is empty:
    - Write an empty `findings_manifest` JSON (empty array) to
-     `${APPLY_OUTPUT_DIR}/findings_manifest_{slug}_{YYYY-MM-DD_HHMMSS}.json`
+     `{output_dir}/findings_manifest_{slug}_{run_id}.json`
    - Write a "Scope Advisory" `evaluation_dashboard` to
-     `${APPLY_OUTPUT_DIR}/evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md`
+     `{output_dir}/evaluation_dashboard_{slug}_{run_id}.md`
    - Emit output tokens and return without spawning any subagents.
 
 ### Step 1: L1 Fail-Fast Gate (Level 1)
@@ -221,7 +235,7 @@ Merge all red-team findings into the finding pool with
 ### Step 6: Write Findings Manifest
 
 Write
-`${APPLY_OUTPUT_DIR}/findings_manifest_{slug}_{YYYY-MM-DD_HHMMSS}.json`.
+`{output_dir}/findings_manifest_{slug}_{run_id}.json`.
 
 **Explicit JSON schema (machine contract):**
 
@@ -264,7 +278,7 @@ sub-array.
 ### Step 7: Write Evaluation Dashboard
 
 Write
-`${APPLY_OUTPUT_DIR}/evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md`
+`{output_dir}/evaluation_dashboard_{slug}_{run_id}.md`
 always (full-analysis path or STRUCTURAL halt path).
 
 **Full-analysis path contents:**
@@ -305,8 +319,8 @@ NOTE: NO `verdict` field in this YAML block — verdict is computed by
 ### Step 8: Emit Structured Output Tokens
 
 ```
-findings_manifest_path = ${APPLY_OUTPUT_DIR}/findings_manifest_{slug}_{YYYY-MM-DD_HHMMSS}.json
-evaluation_dashboard_path = ${APPLY_OUTPUT_DIR}/evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md
+findings_manifest_path = {output_dir}/findings_manifest_{slug}_{run_id}.json
+evaluation_dashboard_path = {output_dir}/evaluation_dashboard_{slug}_{run_id}.md
 ```
 
 > **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
@@ -319,15 +333,15 @@ No `verdict` token. No `revision_guidance` token.
 
 ## Output
 
-Output tokens (relative to the current working directory):
+Output tokens (absolute paths under the captured output directory):
 
-- `findings_manifest_path` — `${APPLY_OUTPUT_DIR}/findings_manifest_{slug}_{YYYY-MM-DD_HHMMSS}.json`
-- `evaluation_dashboard_path` — `${APPLY_OUTPUT_DIR}/evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md`
+- `findings_manifest_path` — `{output_dir}/findings_manifest_{slug}_{run_id}.json`
+- `evaluation_dashboard_path` — `{output_dir}/evaluation_dashboard_{slug}_{run_id}.md`
 
 ```
-${APPLY_OUTPUT_DIR}/
-├── findings_manifest_{slug}_{YYYY-MM-DD_HHMMSS}.json   (always)
-└── evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md  (always)
+{output_dir}/
+├── findings_manifest_{slug}_{run_id}.json   (always)
+└── evaluation_dashboard_{slug}_{run_id}.md  (always)
 ```
 
 ## Related Skills
@@ -342,7 +356,7 @@ ${APPLY_OUTPUT_DIR}/
 ## Context Limit Behavior
 
 When context is exhausted mid-execution, the `findings_manifest_path` and
-`evaluation_dashboard_path` in `${APPLY_OUTPUT_DIR}/`
+`evaluation_dashboard_path` under `{output_dir}/`
 may be partially written but missing the deeper L3/L4 review findings. The
 recipe's `on_context_limit` route triggers `create_worktree`, preserving
 whatever findings were captured so the downstream synthesis step can still

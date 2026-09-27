@@ -292,6 +292,7 @@ def arrange_cook(
         "autoskillit.config.load_config",
         lambda: config or AutomationConfig(),
     )
+    monkeypatch.setattr("autoskillit.core.configure_logging", lambda **_kwargs: None)
     monkeypatch.setattr(
         _patch_session__session_cook,
         "resolve_project_dir",

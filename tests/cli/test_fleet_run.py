@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import autoskillit.cli.fleet._fleet_run as _patch_fleet__fleet_run
+from autoskillit.config import LoggingConfig
 from autoskillit.core import DIRECT_PREFIX, PLUGIN_PREFIX, FleetErrorCode
 from autoskillit.fleet import (
     DispatchCompleted,
@@ -27,6 +28,12 @@ pytestmark = [
 _TEST_PROVENANCE = DispatchEffectProvenance(operation_id="fleet-run-test")
 
 
+@pytest.fixture(autouse=True)
+def _stub_configure_logging(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep fleet_run's terminal logging policy from configuring real structlog."""
+    monkeypatch.setattr("autoskillit.core.configure_logging", lambda **_kwargs: None)
+
+
 def _make_test_config(
     *, fleet: bool = False, fleet_headless_run: bool = False, experimental_enabled: bool = False
 ) -> object:
@@ -41,6 +48,7 @@ def _make_test_config(
                 model_override=None,
                 default_model="fixture-default-model",
             ),
+            "logging": LoggingConfig(),
         },
     )()
 

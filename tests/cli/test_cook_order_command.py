@@ -19,7 +19,7 @@ import autoskillit.cli.session._session_launch as _patch_session__session_launch
 import autoskillit.cli.session._session_order as _patch_session__session_order
 import autoskillit.cli.session._session_process as _patch_session__session_process
 from autoskillit import cli
-from autoskillit.config import ProcessTetherConfig
+from autoskillit.config import LoggingConfig, ProcessTetherConfig
 from autoskillit.core import ClaudeFlags, InteractiveInvocationValidation, PreLaunchReadiness
 from tests.cli._cook_launch_helpers import cook_attempt_result
 from tests.cli._interactive_process import InteractiveProcessStub, configure_popen
@@ -58,6 +58,11 @@ class TestCLIOrderCommand:
             "autoskillit.cli.session._session_order"
         ) or importlib.import_module("autoskillit.cli.session._session_order")
         monkeypatch.setattr(_app_mod, "_get_ingredients_table", lambda *a, **kw: "| col | val |")
+
+    @pytest.fixture(autouse=True)
+    def _stub_configure_logging(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Keep order()'s terminal logging policy from configuring real structlog."""
+        monkeypatch.setattr("autoskillit.core.configure_logging", lambda **_kwargs: None)
 
     def test_order_blocked_inside_claude_session(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
@@ -583,6 +588,7 @@ class TestCLIOrderCommand:
         mock_config.model.default_model = "fixture-default-model"
         mock_config.branching.default_base_branch = "develop"
         mock_config.workspace.temp_dir = ".autoskillit/temp"
+        mock_config.logging = LoggingConfig()
         monkeypatch.setattr("autoskillit.config.load_config", lambda *_a, **_kw: mock_config)
         monkeypatch.setattr(
             _patch_session__session_backend,

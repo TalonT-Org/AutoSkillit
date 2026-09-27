@@ -18,6 +18,7 @@ import pytest
 
 import autoskillit.cli.fleet._fleet_run as _patch_fleet__fleet_run
 import autoskillit.cli.session._session_launch as _patch_session__session_launch
+from autoskillit.config import LoggingConfig
 from autoskillit.fleet import (
     DispatchCompleted,
     DispatchEffectProvenance,
@@ -33,6 +34,12 @@ pytestmark = [
 ]
 
 _TEST_PROVENANCE = DispatchEffectProvenance(operation_id="fleet-admission-test")
+
+
+@pytest.fixture(autouse=True)
+def _stub_configure_logging(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep fleet_run's terminal logging policy from configuring real structlog."""
+    monkeypatch.setattr("autoskillit.core.configure_logging", lambda **_kwargs: None)
 
 
 def _make_success_result() -> DispatchResult:
@@ -286,6 +293,7 @@ class TestFleetRunCliAdmission:
                 {
                     "features": {"fleet": True, "fleet_headless_run": True},
                     "experimental_enabled": True,
+                    "logging": LoggingConfig(),
                 },
             )(),
         )

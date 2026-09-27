@@ -592,6 +592,7 @@ def cook(
     backend: CodingAgentBackend | None = None,
 ) -> None:
     """Launch Claude with all bundled AutoSkillit skills as slash commands."""
+    from autoskillit.cli.ui._terminal_logging import TerminalLogPolicy, apply_terminal_logging
     from autoskillit.config import load_config
     from autoskillit.execution import all_backends
     from autoskillit.exploration import resolve_repository_profile
@@ -606,6 +607,7 @@ def cook(
     )
 
     config = load_config()
+    apply_terminal_logging(config.logging, TerminalLogPolicy.INTERACTIVE)
     force_inactive_agent_teams = config.agent_backend.force_inactive_agent_teams
     project_dir = resolve_project_dir()
     skill_resolver = DefaultSkillResolver()
@@ -639,7 +641,6 @@ def cook(
     _render_cook_banner(config, color=color)
     print(permissions_warning())
 
-    core.configure_logging()
     resume_spec = core.resume_spec_from_cli(resume=resume, session_id=session_id)
     trace_enabled = _resolve_cook_trace_enabled(backend)
     persistent_roots = resolve_persistent_session_roots(

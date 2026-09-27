@@ -27,8 +27,9 @@ class DispatchDescriptor(NamedTuple):
 
 
 def _stub_guards(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Stub all fleet_run guard conditions to pass."""
+    """Stub all fleet_run guard conditions to pass and keep terminal logging unconfigured."""
     monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/claude")
+    monkeypatch.setattr("autoskillit.core.configure_logging", lambda **_kwargs: None)
 
 
 def _stub_campaign_resolution(

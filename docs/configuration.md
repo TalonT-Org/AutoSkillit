@@ -428,13 +428,26 @@ migration:
 
 ```yaml
 logging:
-  level: "INFO"         # "DEBUG" | "INFO" | "WARNING" | "ERROR"
+  level: null           # null = per-command baseline | "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL"
   json_output: null     # true = JSON lines, false = human-readable, null = auto (stderr tty detection)
 ```
 
-Controls the autoskillit server logger. Useful for debugging:
+Sets the stderr log level of `serve`, `cook`, `order`, `fleet dispatch`, `fleet campaign`, and `fleet run`. When `level` is unset, each command uses its baseline:
+
+| Command | Baseline |
+|---|---|
+| `serve` | `INFO` (`DEBUG` with `--verbose`) |
+| `fleet run` | `INFO` |
+| `cook`, `order`, `fleet dispatch`, `fleet campaign` | `WARNING` |
+
+The interactive commands default to `WARNING` so routine `INFO` success records stay off the prompt, while `WARNING` failure records (such as a plugin artifact lifecycle outcome other than `succeeded`) stay visible.
+
+An explicit `level` can raise verbosity above a command's baseline but never lower it: `level: ERROR` still shows `WARNING` records. An empty `AUTOSKILLIT_LOGGING__LEVEL=` means unset, like `null`. Unknown level names are rejected when the config loads, and `autoskillit doctor` reports them as a `config_loadable` error.
+
+With `json_output: null`, output is human-readable on a terminal and JSON lines when stderr is piped or redirected, for every command above.
 
 ```bash
+AUTOSKILLIT_LOGGING__LEVEL=DEBUG autoskillit cook    # show routine lifecycle records again
 AUTOSKILLIT_LOGGING__LEVEL=DEBUG autoskillit serve
 ```
 

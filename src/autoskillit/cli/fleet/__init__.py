@@ -82,9 +82,11 @@ def fleet_dispatch() -> None:
         print("ERROR: 'fleet dispatch' cannot run inside a skill session.")
         sys.exit(1)
 
+    from autoskillit.cli.ui._terminal_logging import TerminalLogPolicy, apply_terminal_logging
     from autoskillit.config import load_config
 
     cfg = load_config(Path.cwd())
+    apply_terminal_logging(cfg.logging, TerminalLogPolicy.INTERACTIVE)
     _require_fleet(cfg)
 
     recipe_table = _print_dispatch_preview()
@@ -124,9 +126,11 @@ def fleet_campaign(
         print("ERROR: 'fleet campaign' cannot run inside a skill session.")
         sys.exit(1)
 
+    from autoskillit.cli.ui._terminal_logging import TerminalLogPolicy, apply_terminal_logging
     from autoskillit.config import load_config
 
     cfg = load_config(Path.cwd())
+    apply_terminal_logging(cfg.logging, TerminalLogPolicy.INTERACTIVE)
     _require_fleet(cfg)
     campaign_name, resume_campaign = _select_campaign(campaign_name, resume_campaign)
     parsed, match = _load_campaign_recipe(campaign_name)

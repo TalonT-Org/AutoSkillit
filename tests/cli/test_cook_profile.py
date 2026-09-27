@@ -15,7 +15,7 @@ import autoskillit.cli.session._session_onboarding as _patch_session__session_on
 import autoskillit.cli.session._session_process as _patch_session__session_process
 import autoskillit.cli.session._session_reload as _patch_session__session_reload
 import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
-from autoskillit.config import AutomationConfig
+from autoskillit.config import AutomationConfig, LoggingConfig
 from autoskillit.core import (
     BackendConventions,
     CmdSpec,
@@ -207,6 +207,7 @@ def test_cook_skips_repository_profile_resolution_for_ordinary_catalog(
     tmp_path: Path,
 ) -> None:
     cfg = MagicMock()
+    cfg.logging = LoggingConfig()
     cfg.experimental_enabled = True
     cfg.providers.profiles = {}
     ordinary_path = pkg_root() / "skills" / "open-kitchen" / "SKILL.md"
@@ -240,6 +241,7 @@ def test_cook_resolves_repository_profile_for_active_auto_vector(
     tmp_path: Path,
 ) -> None:
     cfg = MagicMock()
+    cfg.logging = LoggingConfig()
     cfg.experimental_enabled = True
     cfg.providers.profiles = {}
 
@@ -255,6 +257,7 @@ def test_cook_resolves_repository_profile_for_active_auto_vector(
 def test_profile_valid_injects_provider_env_var(_mock_mgr, tmp_path: Path):
     """AUTOSKILLIT_PROVIDER_PROFILE must be in env_extras when --profile is given."""
     cfg = MagicMock()
+    cfg.logging = LoggingConfig()
     cfg.experimental_enabled = True
     cfg.providers.profiles = {"minimax": {"ANTHROPIC_BASE_URL": "https://minimax.example"}}
     captured = _run_cook("minimax", cfg, _mock_mgr, tmp_path / "generated-home")
@@ -266,6 +269,7 @@ def test_profile_valid_injects_provider_env_var(_mock_mgr, tmp_path: Path):
 def test_profile_valid_injects_profile_env_vars(_mock_mgr, tmp_path: Path):
     """Profile's own env vars (API creds) must be injected into env_extras."""
     cfg = MagicMock()
+    cfg.logging = LoggingConfig()
     cfg.experimental_enabled = True
     cfg.providers.profiles = {
         "minimax": {"ANTHROPIC_BASE_URL": "https://mm.io", "ANTHROPIC_API_KEY": "sk-mm"}
@@ -280,6 +284,7 @@ def test_profile_valid_injects_profile_env_vars(_mock_mgr, tmp_path: Path):
 def test_profile_none_does_not_inject_provider_env(_mock_mgr, tmp_path: Path):
     """When profile=None, AUTOSKILLIT_PROVIDER_PROFILE must NOT appear in env_extras."""
     cfg = MagicMock()
+    cfg.logging = LoggingConfig()
     cfg.experimental_enabled = True
     cfg.providers.profiles = {}
     captured = _run_cook(None, cfg, _mock_mgr, tmp_path / "generated-home")
@@ -294,6 +299,7 @@ def test_cook_renders_grouped_unavailability_while_none_prompt_stays_none(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     cfg = MagicMock()
+    cfg.logging = LoggingConfig()
     cfg.experimental_enabled = True
     cfg.providers.profiles = {}
     launches: list[object] = []
@@ -341,6 +347,7 @@ def test_cook_only_fresh_attempts_receive_one_unavailability_block(
     tmp_path: Path,
 ) -> None:
     cfg = MagicMock()
+    cfg.logging = LoggingConfig()
     cfg.experimental_enabled = True
     cfg.providers.profiles = {}
     launches: list[object] = []
@@ -387,6 +394,7 @@ def test_cook_only_fresh_attempts_receive_one_unavailability_block(
 def test_profile_feature_disabled_exits(capsys, _mock_mgr):
     """SystemExit(1) with informative message when providers feature is not enabled."""
     cfg = MagicMock()
+    cfg.logging = LoggingConfig()
     cfg.experimental_enabled = False
     cfg.providers.profiles = {"minimax": {}}
     mock_backend_cls, _ = _make_mock_backend_class()
@@ -405,6 +413,7 @@ def test_profile_feature_disabled_exits(capsys, _mock_mgr):
 def test_profile_unknown_exits(capsys, _mock_mgr):
     """SystemExit(1) with informative message listing known profiles for unknown name."""
     cfg = MagicMock()
+    cfg.logging = LoggingConfig()
     cfg.experimental_enabled = True
     cfg.providers.profiles = {"anthropic": {}, "openai": {}}
     mock_backend_cls, _ = _make_mock_backend_class()
@@ -544,6 +553,7 @@ def _run_finalized_profile_cook(
         return result
 
     cfg = MagicMock()
+    cfg.logging = LoggingConfig()
     cfg.experimental_enabled = True
     cfg.providers.profiles = {
         "minimax": {

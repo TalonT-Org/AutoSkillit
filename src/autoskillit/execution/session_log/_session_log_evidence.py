@@ -58,7 +58,7 @@ def _prepare_channel_b_log(
             end_dt = datetime.fromisoformat(end_ts)
             silent_gap_seconds = max(0.0, end_dt.timestamp() - claude_log_mtime)
         except (OSError, ValueError):
-            pass
+            logger.debug("silent_gap_timing_unavailable", path=claude_log_str, exc_info=True)
 
     channel_b_text: str | None = None
     if claude_log and claude_log.exists():

@@ -65,20 +65,8 @@ _PLUGIN_ARTIFACT_OUTCOMES = frozenset(
 _EXCEPTION_FORMATTER = structlog.dev.plain_traceback
 
 
-# The pre-configure chain is provisional and deliberately uncached. A proxy that
-# emits before a process's authoritative configure_logging() call re-resolves on
-# its next call instead of freezing at this INFO/console chain, so no emission
-# made before a command applies its terminal log level can pin a proxy. Only
-# configure_logging() (authoritative, cached) binds proxies for the rest of the
-# process.
-#
-# It routes to stderr, never structlog's stdout default, which would fatally
-# corrupt the MCP stdio transport. processors= is explicit (not left to
-# structlog's internal default) so this chain also renders through
-# _EXCEPTION_FORMATTER: every autoskillit path that logs before
-# configure_logging() runs — including the entire update transaction, which
-# runs ahead of any configure_logging() call (see cli/app.py's main()) — is
-# covered by the crash-proof contract from the very first log call.
+# Keep provisional loggers uncached so early calls do not pin the INFO chain
+# before configure_logging() applies the process's authoritative settings.
 def _configure_provisional_logging() -> None:
     structlog.configure(
         processors=[

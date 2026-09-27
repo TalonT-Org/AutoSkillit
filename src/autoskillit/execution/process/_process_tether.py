@@ -9,6 +9,10 @@ absolute bound. The sweep treats a lapsed lease as abandonment in either case.
 It acts only when the child's (or PTY-wrapper workload's) identity is positively
 re-verified, so kills are never issued on ambiguous evidence.
 
+A tether may also carry an owner-scope token (see ``_lifecycle/owner_scope.py``).
+Sealing a scope writes a ``<token>.sealed`` marker beside the tethers, after
+which the funnel refuses further spawns into that scope.
+
 Linux-only: identity primitives (`read_boot_id`/`read_starttime_ticks`) return
 ``None`` on every other platform, so writing and sweeping are no-ops there —
 the same platform gating `bind_session_owner` already uses.
@@ -17,6 +21,7 @@ the same platform gating `bind_session_owner` already uses.
 from __future__ import annotations
 
 import math
+import os
 import shutil
 import subprocess
 import sys
@@ -31,6 +36,7 @@ import anyio
 
 from autoskillit.core import (
     ProcessCleanupResult,
+    atomic_write,
     default_log_dir,
     get_logger,
     is_pid_alive,
@@ -48,6 +54,7 @@ TETHER_LEASE_SECONDS: Final = 4 * TETHER_SWEEP_INTERVAL_SECONDS
 TETHER_LEASE_RENEW_SECONDS: Final = TETHER_LEASE_SECONDS / 4
 
 _TETHER_DIR_NAME: Final = "process-tethers"
+_SEALED_SCOPE_DIR_NAME: Final = "sealed-scopes"
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +69,9 @@ class TetherRecord:
     ``workload_pid``/``workload_starttime_ticks`` are unset at spawn time and
     filled in later, only for PTY-wrapped spawns, via ``update_tether_workload``
     once the real workload's identity has been resolved.
+
+    ``owner_scope`` names the owner scope whose settlement must end this child
+    before the owner returns; ``None`` for spawns made outside any scope.
     """
 
     child_pid: int
@@ -77,6 +87,7 @@ class TetherRecord:
     pidns_inode: int | None = None
     workload_pid: int | None = None
     workload_starttime_ticks: int | None = None
+    owner_scope: str | None = None
 
     def __post_init__(self) -> None:
         if self.child_pid <= 0 or self.child_pgid <= 0 or self.spawner_pid <= 0:
@@ -124,9 +135,41 @@ class TetherSweepReport:
         return sum(1 for o in self.outcomes if o.outcome in ("reaped_orphan", "reaped_ceiling"))
 
 
+class OwnerScopeSealedError(RuntimeError):
+    """Raised when a funnel spawn targets an owner scope that has already been sealed."""
+
+    def __init__(self, token: str) -> None:
+        super().__init__(f"owner scope {token!r} is sealed; no further spawns are admitted")
+        self.token = token
+
+
 def default_tether_dir() -> Path:
     """Per-user, host-wide tether directory — every writer and sweeper resolves here."""
     return default_log_dir() / _TETHER_DIR_NAME
+
+
+def sealed_scope_dir(tether_dir: Path) -> Path:
+    """Directory holding one ``<token>.sealed`` marker per sealed owner scope."""
+    return tether_dir / _SEALED_SCOPE_DIR_NAME
+
+
+def seal_owner_scope(tether_dir: Path, token: str) -> None:
+    """Atomically mark *token* sealed; idempotent, since owner and reaper may both seal."""
+    if sys.platform != "linux":
+        return
+    seal_dir = sealed_scope_dir(tether_dir)
+    seal_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        atomic_write(seal_dir / f"{token}.sealed", "", exclusive=True)
+    except FileExistsError:
+        pass
+
+
+def is_owner_scope_sealed(tether_dir: Path, token: str) -> bool:
+    """Whether *token* is sealed — any existing entry counts, matching the O_EXCL claim."""
+    if sys.platform != "linux":
+        return False
+    return os.path.lexists(sealed_scope_dir(tether_dir) / f"{token}.sealed")
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,6 +201,7 @@ def _tether_record_to_dict(record: TetherRecord) -> dict[str, Any]:
         "origin": record.origin,
         "workload_pid": record.workload_pid,
         "workload_starttime_ticks": record.workload_starttime_ticks,
+        "owner_scope": record.owner_scope,
     }
 
 
@@ -183,6 +227,7 @@ def _tether_record_from_dict(data: dict[str, Any] | None) -> TetherRecord:
             if data.get("workload_starttime_ticks") is not None
             else None
         ),
+        owner_scope=(str(data["owner_scope"]) if data.get("owner_scope") is not None else None),
     )
 
 
@@ -429,7 +474,19 @@ def sweep_orphaned_tethers(
             )
             outcomes.append(TetherSweepOutcome(str(path), record.child_pid, "kill_failed"))
 
+    _expire_seal_markers(tether_dir, now)
     return TetherSweepReport(outcomes=tuple(outcomes))
+
+
+def _expire_seal_markers(tether_dir: Path, now: float) -> None:
+    """Drop seal markers older than any tether ceiling; no spawn can still target them."""
+    for marker in sorted(sealed_scope_dir(tether_dir).glob("*.sealed")):
+        try:
+            marker_age = now - marker.stat().st_mtime
+        except OSError:
+            continue
+        if marker_age >= DEFAULT_TETHER_CEILING_SECONDS:
+            remove_tether(marker)
 
 
 async def sweep_orphaned_tethers_async(

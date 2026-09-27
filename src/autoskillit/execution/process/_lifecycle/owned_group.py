@@ -10,11 +10,13 @@ import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import psutil
 
 from autoskillit.core import (
+    OWNER_SCOPE_DIR_ENV_VAR,
+    OWNER_SCOPE_ENV_VAR,
     ProcessCleanupResult,
     get_logger,
     read_boot_id,
@@ -29,9 +31,11 @@ from autoskillit.execution.process._process_kill import (
     kill_process_tree,
 )
 from autoskillit.execution.process._process_tether import (
+    OwnerScopeSealedError,
     TetherRecord,
     TetherSpec,
     default_tether_dir,
+    is_owner_scope_sealed,
     remove_tether,
     write_tether,
 )
@@ -543,6 +547,62 @@ def _cleanup_failed_owned_spawn(process: subprocess.Popen[Any]) -> None:
         logger.warning("owned_process_spawn_reap_failed", pid=process.pid, exc_info=True)
 
 
+class _OwnerScopeBinding(NamedTuple):
+    token: str
+    tether_dir: Path
+
+    def sealed(self) -> bool:
+        return is_owner_scope_sealed(self.tether_dir, self.token)
+
+
+def _resolve_owner_scope(env: Mapping[str, str] | None) -> _OwnerScopeBinding | None:
+    """Return the owner scope a spawn registers into, if any.
+
+    A scope carried by the child env wins; otherwise the spawner's own scope is
+    inherited, so spawns with a freshly built env stay scoped inside a dispatch tree.
+    """
+    if env is not None and env.get(OWNER_SCOPE_ENV_VAR):
+        token = env[OWNER_SCOPE_ENV_VAR]
+        scope_dir = env.get(OWNER_SCOPE_DIR_ENV_VAR, "")
+    else:
+        token = os.environ.get(OWNER_SCOPE_ENV_VAR, "")
+        scope_dir = os.environ.get(OWNER_SCOPE_DIR_ENV_VAR, "")
+    if not token:
+        return None
+    if not scope_dir:
+        raise ValueError(f"{OWNER_SCOPE_ENV_VAR} is set without {OWNER_SCOPE_DIR_ENV_VAR}")
+    return _OwnerScopeBinding(token, Path(scope_dir))
+
+
+def _register_tether(
+    process: subprocess.Popen[Any],
+    record: TetherRecord,
+    tether: TetherSpec,
+    scope: _OwnerScopeBinding | None,
+) -> Path:
+    """Durably write the spawn's tether where its owner reads it, failing closed.
+
+    A scoped tether lands in the scope directory, because ownership requires that
+    the owner can find it. A seal that landed between the pre-spawn check and the
+    write means the owner's settlement may already have listed its tethers without
+    this one, so the child is killed and the spawn refused.
+    """
+    if scope is not None:
+        tether_dir = scope.tether_dir
+    else:
+        tether_dir = tether.tether_dir if tether.tether_dir is not None else default_tether_dir()
+    try:
+        tether_path = write_tether(record, tether_dir)
+    except OSError:
+        _cleanup_failed_owned_spawn(process)
+        raise
+    if scope is not None and scope.sealed():
+        _cleanup_failed_owned_spawn(process)
+        remove_tether(tether_path)
+        raise OwnerScopeSealedError(scope.token)
+    return tether_path
+
+
 def spawn_owned_process(
     args: Sequence[str] | str,
     *,
@@ -564,6 +624,9 @@ def spawn_owned_process(
         popen_kwargs["process_group"] = process_group
     if env is not None:
         popen_kwargs["env"] = dict(env)
+    scope = _resolve_owner_scope(env)
+    if scope is not None and scope.sealed():
+        raise OwnerScopeSealedError(scope.token)
     process = subprocess.Popen(args, **popen_kwargs)
     try:
         pgid = os.getpgid(process.pid)
@@ -581,7 +644,6 @@ def spawn_owned_process(
         raise RuntimeError("owned process spawned but its identity could not be read")
 
     spawner_pid = os.getpid()
-    tether_dir = tether.tether_dir if tether.tether_dir is not None else default_tether_dir()
     record = TetherRecord(
         child_pid=process.pid,
         child_pgid=pgid,
@@ -593,12 +655,9 @@ def spawn_owned_process(
         not_after=time.time() + tether.ceiling_seconds,
         origin=tether.origin,
         pidns_inode=read_pid_namespace_inode(process.pid),
+        owner_scope=scope.token if scope is not None else None,
     )
-    try:
-        tether_path = write_tether(record, tether_dir)
-    except OSError:
-        _cleanup_failed_owned_spawn(process)
-        raise
+    tether_path = _register_tether(process, record, tether, scope)
 
     return OwnedProcessGroup(
         process, pgid, _spawn_token=_OWNED_PROCESS_SPAWN_TOKEN, tether_path=tether_path

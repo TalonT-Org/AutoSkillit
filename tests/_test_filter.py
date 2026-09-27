@@ -101,6 +101,8 @@ TEST_HELPER_CASCADE: dict[str, frozenset[str]] = {
     "tests/arch/_helpers.py": _ARCH_HELPER_TEST_DIRS,
     "tests/arch/_rules.py": _ARCH_HELPER_TEST_DIRS,
     "tests/fleet/_reaper_test_support.py": frozenset({"fleet"}),
+    "tests/fleet/_codex_mcp_env.py": frozenset({"fleet", "integration"}),
+    "tests/fleet/_descendant_worker.py": frozenset({"fleet"}),
 }
 
 # Matches lines that only change a version string: -version = "0.9.x" / +version = "0.9.y"
@@ -133,7 +135,13 @@ ALWAYS_RUN_AGGRESSIVE: frozenset[str] = frozenset(
 # ---------------------------------------------------------------------------
 
 # Structural infra files that run unconditionally regardless of trigger conditions.
-# These enforce cross-cutting registration, executability, and schema contracts.
+# These enforce cross-cutting registration, executability, and schema contracts, plus
+# tracked-layout invariants (gate-selector coverage) whose verdict changes with file
+# moves outside the infra trigger set. Gate-contract tests pinned here (e.g.
+# test_typecheck_gate.py) read tracked files like .python-version and
+# scripts/docker/verification/Dockerfile that are NOT covered by the infra trigger
+# prefixes/files, so a Dockerfile-only or .python-version-only change would otherwise
+# skip the test and let a drift pass silently.
 _INFRA_UNCONDITIONAL_FILES: frozenset[str] = frozenset(
     {
         "test_manifest_completeness.py",
@@ -146,6 +154,8 @@ _INFRA_UNCONDITIONAL_FILES: frozenset[str] = frozenset(
         "test_background_exec_guard.py",
         "test_adr_runtime_guard_coverage.py",
         "test_plugin_source_ratchets.py",
+        "test_lint_gate_selection.py",
+        "test_typecheck_gate.py",
     }
 )
 
@@ -1314,6 +1324,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "fleet/test_dispatch_failure_semantics.py",
             "fleet/test_dispatch_labels_cleaned.py",
             "fleet/test_gate_state_persistence.py",
+            "fleet/test_dispatch_outcome_codex_backend.py",
             # Other file-level entries:
             "infra/test_pretty_output_recipe.py",
             "infra/test_generated_files.py",

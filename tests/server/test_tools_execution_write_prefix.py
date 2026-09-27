@@ -334,7 +334,12 @@ def _extend(state) -> dict | None:
 def test_bounded_root_rejects_output_dir_outside_its_scope(tmp_path: Path) -> None:
     root = _scoped_skill(tmp_path, "widget", "['{{AUTOSKILLIT_TEMP}}/widgets/']")
 
-    failure = _extend(_scope_state(tmp_path, root, output_dir=".autoskillit/temp/other"))
+    state = _scope_state(tmp_path, root, output_dir=".autoskillit/temp/other")
+    original_dirs = state.write_watch_dirs.copy()
+
+    failure = _extend(state)
+
+    assert state.write_watch_dirs == original_dirs
 
     assert failure is not None
     assert failure["error"] == "run_skill output_dir is outside the skill's declared write scope"
@@ -373,9 +378,11 @@ def test_closure_member_escaping_the_temp_root_fails_dispatch(tmp_path: Path) ->
     temp = Path(state.cwd) / ".autoskillit" / "temp"
     temp.mkdir(parents=True)
     (temp / "escape").symlink_to(tmp_path, target_is_directory=True)
+    original_dirs = state.write_watch_dirs.copy()
 
     failure = _extend(state)
 
+    assert state.write_watch_dirs == original_dirs
     assert failure is not None
     assert "declared write scope for closure member escape" in failure["error"]
     assert failure["stage"] == "validate_args:run_skill"

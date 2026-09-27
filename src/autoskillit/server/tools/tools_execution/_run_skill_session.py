@@ -600,16 +600,14 @@ def _extend_closure_write_scope(state: _RunSkillDispatchState) -> str | None:
         )
     except SkillContractError as exc:
         return _write_scope_failure(str(exc))
-    state.write_watch_dirs.extend(closure_dirs)
     root_scope = state.invocation.root.write_scope
     if root_scope is None:
         return _write_scope_failure("run_skill root skill lacks a valid write scope")
     match root_scope.kind:
         case WriteScopeKind.BOUNDED:
             # `_resolve_dispatch_paths` populates write_watch_dirs from state.output_dir
-            # before this runs, and the only intervening mutation is `extend`, so [0]
-            # is the requested output_dir whenever state.output_dir is truthy. Without
-            # an output_dir, [0] is the default temp floor, which is not narrowed.
+            # before this runs, so [0] is the requested output_dir when supplied,
+            # or the default temp floor otherwise. The default floor is not narrowed.
             if state.output_dir and not bounded_scope_contains(
                 root_scope, str(state.write_watch_dirs[0]), state.cwd
             ):
@@ -620,4 +618,5 @@ def _extend_closure_write_scope(state: _RunSkillDispatchState) -> str | None:
             pass
         case _ as unreachable:
             assert_never(unreachable)
+    state.write_watch_dirs.extend(closure_dirs)
     return None

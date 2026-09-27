@@ -24,6 +24,7 @@ from autoskillit.core import (
     SkillSource,
     SkillSourceRef,
 )
+from autoskillit.hooks._write_scope import WriteScopeKind
 from autoskillit.migration.adapters_skill import SkillMigrationAdapter
 from autoskillit.migration.engine import MigrationFile
 from autoskillit.workspace import (
@@ -248,6 +249,9 @@ async def test_corpus_is_valid_advisory_or_deterministically_migratable(
     skill_path.write_text(result.migrated_content, encoding="utf-8")
 
     revalidated = _current_info()
+    if fixture_name == "undeclared_write_scope.md":
+        assert revalidated.write_scope is not None
+        assert revalidated.write_scope.kind is WriteScopeKind.INHERIT
     residual_kinds = {invalidity.kind for invalidity in revalidated.invalidities}
     assert residual_kinds <= advisory_kinds, (
         f"{fixture_name}: migration must resolve every DETERMINISTIC kind and introduce "

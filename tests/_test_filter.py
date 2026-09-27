@@ -13,12 +13,13 @@ import re
 import subprocess
 import warnings
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
 import pathspec
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from typing import Any
 
 
@@ -45,6 +46,7 @@ class FullRunReason(enum.StrEnum):
     GIT_UNAVAILABLE = "git_unavailable"
     BUCKET_A = "bucket_a"
     UNMAPPED_FILE = "unmapped_file"
+    UNSCOPED_TEST_SUPPORT = "unscoped_test_support"
 
 
 class ImportContext(enum.StrEnum):
@@ -94,12 +96,58 @@ BUCKET_A_PATTERNS: frozenset[str] = frozenset(
 
 BUCKET_A_GLOBS: tuple[str, ...] = ("tests/*/conftest.py",)
 
-_ARCH_HELPER_TEST_DIRS: frozenset[str] = frozenset(
-    {"arch", "contracts", "execution", "recipe/rules_skills", "skills", "workspace"}
+_ARCH_HELPER_TEST_TARGETS: frozenset[str] = frozenset(
+    {
+        "arch",
+        "contracts",
+        "core/test_grab_bag_split_completeness.py",
+        "execution",
+        "recipe/rules_skills",
+        "skills",
+        "workspace",
+    }
 )
+
+_TEST_FILTER_VALIDATORS: frozenset[str] = frozenset(
+    {
+        "arch",
+        "contracts/test_config_decomposition_cascade.py",
+        "infra/test_check_complexity_ruff_parity.py",
+        "infra/test_ci_shard_config.py",
+        "infra/test_filter_activation.py",
+        "recipe/rules_merge/test_split_filter_cascade.py",
+        "recipe/rules_skills/test_split_filter_cascade.py",
+        "test_test_filter.py",
+        "test_test_filter_cascade.py",
+        "test_test_filter_config_cascade.py",
+        "test_test_filter_content_aware.py",
+        "test_test_filter_core_cascade.py",
+        "test_test_filter_core_closure.py",
+        "test_test_filter_core_completeness.py",
+        "test_test_filter_coverage_map.py",
+        "test_test_filter_execution_cascade.py",
+        "test_test_filter_local_diff.py",
+        "test_test_filter_monotonicity.py",
+        "test_test_filter_pipeline_cascade.py",
+        "test_test_filter_plugin.py",
+        "test_test_filter_reexport.py",
+        "test_test_filter_scope_extras.py",
+        "test_test_filter_script_manifest.py",
+        "test_test_filter_step7.py",
+        "test_test_filter_support_scope.py",
+        "test_test_filter_tiered_always_run.py",
+    }
+)
+
+# Declared support modules. Each entry's targets (directories or test modules relative
+# to tests/) are authoritative when that module changes and stop the static dependent
+# scan when the module is reached as a dependent.
+# tests/arch/test_test_support_scope_guard.py requires each entry to cover every test
+# target the scan reaches from it.
 TEST_HELPER_CASCADE: dict[str, frozenset[str]] = {
-    "tests/arch/_helpers.py": _ARCH_HELPER_TEST_DIRS,
-    "tests/arch/_rules.py": _ARCH_HELPER_TEST_DIRS,
+    "tests/_test_filter.py": _TEST_FILTER_VALIDATORS,
+    "tests/arch/_helpers.py": _ARCH_HELPER_TEST_TARGETS,
+    "tests/arch/_rules.py": _ARCH_HELPER_TEST_TARGETS,
     "tests/fleet/_reaper_test_support.py": frozenset({"fleet"}),
 }
 
@@ -1881,7 +1929,7 @@ def git_changed_files_local(
 
 
 def _scoped_test_dirs_for_file(path: str) -> set[str]:
-    """Return test directories affected by a scoped support file.
+    """Return test targets (directories or test modules) affected by a declared support file.
 
     ``fnmatch`` lets ``*`` cross ``/``, including nested conftests; glob,
     ``PurePath.match``, and pytest's ``--ignore-glob`` match path segments instead.
@@ -1894,13 +1942,193 @@ def _scoped_test_dirs_for_file(path: str) -> set[str]:
 
 
 def compute_bucket_a_scope(changed_files: set[str]) -> set[str] | None:
-    """Return None for a global full run, otherwise scoped test directories."""
+    """Return None for a global full run, otherwise scoped test targets."""
     scoped_test_dirs: set[str] = set()
     for f in changed_files:
         if f in BUCKET_A_PATTERNS:
             return None
         scoped_test_dirs.update(_scoped_test_dirs_for_file(f))
     return scoped_test_dirs
+
+
+# ---------------------------------------------------------------------------
+# Test support module dependents
+# ---------------------------------------------------------------------------
+
+
+def _is_test_module(path: str) -> bool:
+    """Return True when *path* names a ``test_*.py`` module."""
+    return fnmatch.fnmatch(PurePosixPath(path).name, "test_*.py")
+
+
+def _module_paths(dotted: str) -> tuple[str, ...]:
+    """Return candidate module and ancestor package-initializer paths a name may load."""
+    parts = dotted.split(".")
+    base = "/".join(parts)
+    return (
+        f"{base}.py",
+        *(f"{'/'.join(parts[:end])}/__init__.py" for end in range(1, len(parts) + 1)),
+    )
+
+
+def _import_from_names(node: ast.ImportFrom, package: list[str]) -> set[str]:
+    """Return the dotted names an ``ImportFrom`` may load, including imported submodules."""
+    if node.level:
+        anchor = package[: max(len(package) - node.level + 1, 0)]
+        module = ".".join([*anchor, node.module] if node.module else anchor)
+    else:
+        module = node.module or ""
+    return {module, *(f"{module}.{alias.name}" for alias in node.names)}
+
+
+def _dotted_literal_names(value: str, package_root: str) -> set[str]:
+    """Return the module-name prefixes of a string literal naming a *package_root* module."""
+    parts = value.split(".")
+    if len(parts) < 2 or parts[0] != package_root or not all(p.isidentifier() for p in parts):
+        return set()
+    return {".".join(parts[:end]) for end in range(2, len(parts) + 1)}
+
+
+def _referenced_names(tree: ast.Module, package: list[str], package_root: str) -> set[str]:
+    """Return dotted module names referenced by imports and dotted string literals."""
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            names.update(_import_from_names(node, package))
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            names.update(_dotted_literal_names(node.value, package_root))
+    return names
+
+
+def _module_dependencies(rel: str, tree: ast.Module, package_root: str) -> set[str]:
+    """Return the *package_root* modules that module *rel* statically depends on."""
+    package = rel.removesuffix(".py").split("/")[:-1]
+    paths = {
+        path
+        for name in _referenced_names(tree, package, package_root)
+        for path in _module_paths(name)
+    }
+    paths.update(f"{'/'.join(package[:end])}/__init__.py" for end in range(1, len(package) + 1))
+    prefix = f"{package_root}/"
+    return {path for path in paths if path.startswith(prefix) and path != rel}
+
+
+def build_test_import_index(tests_root: Path) -> dict[str, frozenset[str]]:
+    """Map each module under *tests_root* to the modules that statically depend on it.
+
+    Paths are repo-relative POSIX strings rooted at ``tests_root.name``. A module depends
+    on what it imports (absolute, relative, and ``from pkg import submodule`` forms), on
+    modules named by a dotted string literal rooted at the test package, and on source
+    and imported modules' ancestor package initializers, including ancestors above
+    namespace-package directories. Path-string references are not dependencies. Raises
+    ``OSError``, ``SyntaxError``, or ``ValueError`` when a module cannot be read or parsed.
+    """
+    package_root = tests_root.name
+    dependents: dict[str, set[str]] = {}
+    for source in tests_root.rglob("*.py"):
+        rel = f"{package_root}/{source.relative_to(tests_root).as_posix()}"
+        tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+        for target in _module_dependencies(rel, tree, package_root):
+            dependents.setdefault(target, set()).add(rel)
+    return {target: frozenset(importers) for target, importers in dependents.items()}
+
+
+@dataclass(frozen=True, slots=True)
+class SupportDependents:
+    """Test targets reached from a tests/ support module through its static dependents."""
+
+    targets: frozenset[str]
+    global_dependents: frozenset[str]
+
+    @property
+    def bounded(self) -> bool:
+        """True when the dependents select tests without forcing a full run."""
+        return bool(self.targets) and not self.global_dependents
+
+
+def resolve_support_dependents(
+    path: str,
+    import_index: Mapping[str, frozenset[str]],
+) -> SupportDependents:
+    """Walk the static dependents of support module *path* (see build_test_import_index).
+
+    Test modules, undeclared support modules, and nested conftests are expanded
+    transitively. A test module contributes itself and a nested conftest its directory
+    subtree. A ``TEST_HELPER_CASCADE`` entry contributes its declared targets and stops
+    the walk. A ``BUCKET_A_PATTERNS`` file is a global dependent and stops the walk.
+    Targets are relative to the tests root.
+    """
+    targets: set[str] = set()
+    global_dependents: set[str] = set()
+    seen = {path}
+    pending = [path]
+    while pending:
+        for dependent in import_index.get(pending.pop(), frozenset()):
+            if dependent in seen:
+                continue
+            seen.add(dependent)
+            if dependent in BUCKET_A_PATTERNS:
+                global_dependents.add(dependent)
+            elif dependent in TEST_HELPER_CASCADE:
+                targets.update(TEST_HELPER_CASCADE[dependent])
+            else:
+                targets.update(_scoped_test_dirs_for_file(dependent))
+                if _is_test_module(dependent):
+                    targets.add(dependent.partition("/")[2])
+                pending.append(dependent)
+    return SupportDependents(frozenset(targets), frozenset(global_dependents))
+
+
+def _support_file_targets(support_files: set[str], tests_root: Path) -> set[str] | FullRunReason:
+    """Return test targets for changed undeclared support modules, or a full-run reason."""
+    try:
+        import_index = build_test_import_index(tests_root)
+    except (OSError, SyntaxError, ValueError):
+        logging.getLogger(__name__).debug(  # noqa: TID251
+            "test import index unavailable", exc_info=True
+        )  # fail-open: an incomplete index cannot bound a support module's dependents
+        return FullRunReason.UNSCOPED_TEST_SUPPORT
+    targets: set[str] = set()
+    for path in sorted(support_files):
+        dependents = resolve_support_dependents(path, import_index)
+        if not dependents.bounded:
+            return FullRunReason.UNSCOPED_TEST_SUPPORT
+        targets.update(dependents.targets)
+    return targets
+
+
+def _is_tests_python(path: str) -> bool:
+    """Return True for a repo-relative Python file under ``tests/``."""
+    return path.startswith("tests/") and path.endswith(".py")
+
+
+def _classify_changed_test_files(
+    changed_files: set[str],
+    tests_root: Path,
+) -> tuple[set[str], set[str]] | FullRunReason:
+    """Split changed tests/ Python into support-module test targets and direct test modules.
+
+    Declared scoped support files (``TEST_HELPER_CASCADE`` keys, ``BUCKET_A_GLOBS``
+    matches) were folded into the initial scope and are skipped. A support module is
+    never a direct target: it selects its static dependents or forces a full run.
+    """
+    direct_test_files: set[str] = set()
+    support_files: set[str] = set()
+    for filepath in changed_files:
+        if not _is_tests_python(filepath) or _scoped_test_dirs_for_file(filepath):
+            continue
+        if _is_test_module(filepath):
+            direct_test_files.add(filepath)
+        else:
+            support_files.add(filepath)
+    if not support_files:
+        return set(), direct_test_files
+    support_targets = _support_file_targets(support_files, tests_root)
+    if isinstance(support_targets, FullRunReason):
+        return support_targets
+    return support_targets, direct_test_files
 
 
 def _is_only_version_changes_in_diff(
@@ -2551,10 +2779,13 @@ def _classify_changed_files(
     cascade_map: dict[str, frozenset[str]],
     cwd: str | Path | None,
     base_ref: str | None,
+    tests_root: Path,
 ) -> tuple[set[str], set[str], set[str]] | FullRunReason:
-    """Classify direct tests, source cascades, and manifest-selected paths."""
-    test_dirs: set[str] = set()
-    direct_test_files: set[str] = set()
+    """Classify direct tests, support dependents, source cascades, and manifest-selected paths."""
+    classified_tests = _classify_changed_test_files(changed_files, tests_root)
+    if isinstance(classified_tests, FullRunReason):
+        return classified_tests
+    test_dirs, direct_test_files = classified_tests
     changed_src_py = {
         filepath
         for filepath in changed_files
@@ -2562,10 +2793,9 @@ def _classify_changed_files(
     }
     compiled_matchers: dict[str, pathspec.PathSpec] | None = None
     for filepath in changed_files:
-        if filepath.startswith("tests/") and filepath.endswith(".py"):
-            if not _scoped_test_dirs_for_file(filepath):
-                direct_test_files.add(filepath)
-        elif filepath in changed_src_py:
+        if _is_tests_python(filepath):
+            continue
+        if filepath in changed_src_py:
             source_dirs = _resolve_source_cascade(
                 filepath,
                 mode,
@@ -2751,6 +2981,7 @@ def build_test_scope(
         cascade_map,
         cwd,
         base_ref,
+        tests_root,
     )
     if isinstance(classified, FullRunReason):
         return classified

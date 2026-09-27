@@ -161,14 +161,19 @@ changed files. Controlled by env var + CLI flags:
 1. **Fail-open gate**: If env var is unset/falsy, all tests run. On any error, all tests run.
 2. **Changed files**: `git merge-base HEAD base_ref` → SHA, then `git diff --name-only <sha>` (working tree vs merge-base: committed + staged + unstaged tracked) + `git ls-files --others --exclude-standard` (new untracked files). Preserve tracked and untracked provenance through scope construction. With a loaded manifest, unmatched untracked paths outside `src/` and `tests/` are discarded; tracked paths, manifest-matched untracked paths, and all untracked source/test paths continue through normal classification. A missing manifest preserves every path and external unknowns fail open. **Known limitation**: `git rm --cached` (stage-only deletions) are not captured — the file still exists on disk so the working-tree diff misses the deletion. This is acceptable given the fail-open design.
    - **Aggressive mode override**: Uses `git diff HEAD --name-only` (working-tree-only) instead of merge-base diff. This prevents committed-but-old files from inflating the changed set.
-3. **Bucket A**: Root `tests/conftest.py` and other global-impact files -> full run. A package or nested conftest selects its literal directory subtree; `tests/arch/_helpers.py` and `_rules.py` select their known dependent test directories. Scoped support files are not direct test targets.
-4. **Classification**: src Python -> layer cascade, ordinary test Python -> direct, other Python -> manifest lookup, non-Python -> manifest lookup. Scoped directories add to other changed-file selections.
+3. **Bucket A**: Root `tests/conftest.py` and other global-impact files -> full run. A nested conftest selects its literal directory subtree. A `TEST_HELPER_CASCADE` support module (for example `tests/_test_filter.py`, `tests/arch/_helpers.py`) selects its declared test targets, which may be directories or test modules. Scoped support files are not direct test targets.
+4. **Classification**: src Python -> layer cascade, `test_*.py` -> direct, other `tests/` Python (undeclared support modules and package `__init__.py`) -> its static test dependents: modules that import it directly or transitively, that name it in a `tests.`-rooted dotted string literal, or that load the package initializer through source membership or imports, including regular ancestors above namespace directories. A support module that is reached by a global-impact file, has no static test dependents, or cannot be indexed fails open to a full run (`unscoped_test_support`), other Python -> manifest lookup, non-Python -> manifest lookup. Scoped directories add to other changed-file selections.
 5. **Always-run**: `arch/` + `contracts/` in every mode. Conservative mode with a non-empty changeset adds the named `_INFRA_UNCONDITIONAL_FILES` / `_HOOKS_UNCONDITIONAL_FILES`, the full `infra/` only when a hook/CI trigger file changed, and the full `docs/` when a docs trigger changed (otherwise only `docs/test_doc_counts.py`); an empty changeset fails open to full `arch/ contracts/ infra/ docs/`.
 6. **Coverage augmentation**: A valid map may only *add* test files to the structurally-selected scope, never remove a directory — a dynamic observation can prove a source/test relationship exists but never that one is absent. Map admission requires a repository `cwd` and checks that the stamped source commit is an ancestor of that checkout's `HEAD`.
 7. **Deselection**: `pytest_collection_modifyitems` deselects items outside scope paths
 
-Directory-scoped conftests do not follow cross-package Python imports. The arch helper
-mapping does not follow imports through arbitrary intermediate test modules.
+A changed nested conftest selects only its directory subtree and does not follow
+cross-package imports of the conftest module. `TEST_HELPER_CASCADE` entries are
+authoritative and stop the static dependent scan when reached as dependents.
+`tests/arch/test_test_support_scope_guard.py` fails when an entry no longer covers the
+test targets the scan reaches from it, or names a target that does not exist.
+Path-string references create no dependency edges. An undeclared module with no other
+static test dependents fails open.
 
 **Modes**:
 

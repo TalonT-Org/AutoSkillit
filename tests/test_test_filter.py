@@ -137,6 +137,7 @@ class TestCheckBucketA:
         assert compute_bucket_a_scope({file}) == {
             "arch",
             "contracts",
+            "core/test_grab_bag_split_completeness.py",
             "execution",
             "recipe/rules_skills",
             "skills",

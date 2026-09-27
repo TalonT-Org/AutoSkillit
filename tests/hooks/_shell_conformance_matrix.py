@@ -291,21 +291,21 @@ CONFORMANCE_CASES: Final[tuple[ConformanceCaseDef, ...]] = (
     _case(
         "redirected-job",
         "descendant-settlement",
-        "J() { (sleep 0.3; echo ok > marker) >/dev/null 2>&1; }; J & echo started",
+        "(sleep 0.3; echo ok > marker) >/dev/null 2>&1 & echo started",
         *_MARKER_SETTLED_EXPECTATIONS.values(),
     ),
     _case(
         "redirected-job-trap-cleared",
         "descendant-settlement",
-        "J() { (sleep 0.3; echo ok > marker) >/dev/null 2>&1; }; trap - EXIT; J & echo started",
+        "trap - EXIT; (sleep 0.3; echo ok > marker) >/dev/null 2>&1 & echo started",
         *_MARKER_SETTLED_EXPECTATIONS.values(),
     ),
     _case(
         "redirected-job-user-trap",
         "descendant-settlement",
         (
-            "J() { (sleep 0.3; echo ok > marker) >/dev/null 2>&1; }; trap 'echo "
-            "user-exit' EXIT; J & echo started"
+            "trap 'echo user-exit' EXIT; "
+            "(sleep 0.3; echo ok > marker) >/dev/null 2>&1 & echo started"
         ),
         *_MARKER_SETTLED_EXPECTATIONS.values(),
     ),
@@ -313,15 +313,15 @@ CONFORMANCE_CASES: Final[tuple[ConformanceCaseDef, ...]] = (
         "redirected-job-cleanup-trap",
         "descendant-settlement",
         (
-            "J() { (sleep 0.3; echo ok > marker) >/dev/null 2>&1; }; t=$(mktemp "
-            '"$PWD/tmp.XXXXXX"); trap \'rm -f "$t"\' EXIT; J & echo started'
+            't=$(mktemp "$PWD/tmp.XXXXXX"); trap \'rm -f "$t"\' EXIT; '
+            "(sleep 0.3; echo ok > marker) >/dev/null 2>&1 & echo started"
         ),
         *_MARKER_SETTLED_EXPECTATIONS.values(),
     ),
     _case(
         "redirected-job-nested-subshell",
         "descendant-settlement",
-        "J() { (sleep 0.3; echo ok > marker) >/dev/null 2>&1; }; ( J & ); echo started",
+        "( (sleep 0.3; echo ok > marker) >/dev/null 2>&1 & ); echo started",
         *_MARKER_SETTLED_EXPECTATIONS.values(),
     ),
     _case(
@@ -333,13 +333,13 @@ CONFORMANCE_CASES: Final[tuple[ConformanceCaseDef, ...]] = (
     _case(
         "redirected-job-disown",
         "descendant-settlement",
-        "J() { (sleep 0.3; echo ok > marker) >/dev/null 2>&1; }; J & disown; echo started",
+        "(sleep 0.3; echo ok > marker) >/dev/null 2>&1 & disown; echo started",
         *_MARKER_SETTLED_EXPECTATIONS.values(),
     ),
     _case(
         "redirected-job-exec",
         "descendant-settlement",
-        "J() { (sleep 0.3; echo ok > marker) >/dev/null 2>&1; }; J & exec true",
+        "(sleep 0.3; echo ok > marker) >/dev/null 2>&1 & exec true",
         *_MARKER_SETTLED_EXPECTATIONS.values(),
     ),
     _case(

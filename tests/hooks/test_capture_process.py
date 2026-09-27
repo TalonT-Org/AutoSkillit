@@ -667,7 +667,8 @@ def test_spawn_owned_process_stdin_matches_capture_output(
     def fake_popen(*_args: object, **kwargs: object) -> object:
         popen_kwargs.append(kwargs)
         stdout = kwargs.get("stdout")
-        if isinstance(stdout, int):
+        if len(popen_kwargs) == 1:
+            assert isinstance(stdout, int)
             os.write(stdout, b"\n")
         return process
 
@@ -1018,6 +1019,7 @@ def test_owned_spawn_original_cwd_open_failure_releases_anchor(
     anchor = _fake_anchor(4242)
     open_error = OSError(errno.EMFILE, "injected cwd open failure")
     abandoned: list[tuple[object, int, BaseException]] = []
+    monkeypatch.setattr(capture_process, "_resolve_bash", lambda: "/bin/bash")
     monkeypatch.setattr(
         capture_spawn,
         "_spawn_anchor",
@@ -1428,6 +1430,7 @@ def test_owned_spawn_restore_error_preserves_settlement_failure(
     )
     restore_error = OSError("restore failed")
     fchdir_calls = 0
+    monkeypatch.setattr(capture_process, "_resolve_bash", lambda: "/bin/bash")
 
     def fail_restore(_fd: int) -> None:
         nonlocal fchdir_calls

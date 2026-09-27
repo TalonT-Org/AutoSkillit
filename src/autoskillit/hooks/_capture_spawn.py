@@ -74,6 +74,7 @@ def _spawn_anchor(bash_path: str) -> tuple[subprocess.Popen[bytes], int]:
             try:
                 close_fd(fd)
             except BaseException as cleanup_error:
+                logger.error("owned_process_anchor_pipe_cleanup_failed", exc_info=True)
                 _capture_process._add_cleanup_failure_note(
                     primary_error,
                     "owned process anchor pipe cleanup also failed",
@@ -91,6 +92,7 @@ def _abandon_anchor(
     try:
         os.close(lifeline_fd)
     except BaseException as cleanup_error:
+        logger.error("owned_process_anchor_lifeline_close_failed", exc_info=True)
         _capture_process._add_cleanup_failure_note(
             primary_error,
             "owned process anchor cleanup also failed",
@@ -102,6 +104,7 @@ def _abandon_anchor(
         try:
             anchor.kill()
         except BaseException as cleanup_error:
+            logger.error("owned_process_anchor_kill_failed", exc_info=True)
             _capture_process._add_cleanup_failure_note(
                 primary_error,
                 "owned process anchor cleanup also failed",
@@ -110,12 +113,14 @@ def _abandon_anchor(
         try:
             anchor.wait(timeout=_capture_process._KILL_TIMEOUT_SECONDS)
         except BaseException as cleanup_error:
+            logger.error("owned_process_anchor_reap_failed", exc_info=True)
             _capture_process._add_cleanup_failure_note(
                 primary_error,
                 "owned process anchor cleanup also failed",
                 cleanup_error,
             )
     except BaseException as cleanup_error:
+        logger.error("owned_process_anchor_reap_failed", exc_info=True)
         _capture_process._add_cleanup_failure_note(
             primary_error,
             "owned process anchor cleanup also failed",

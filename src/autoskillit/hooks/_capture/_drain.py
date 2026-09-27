@@ -111,7 +111,8 @@ def _drain_owned_pipe(
     consume: Callable[[bytes], None],
 ) -> None:
     os.set_blocking(descriptor, False)
-    selector = selectors.DefaultSelector()
+    selector_factory = selectors.DefaultSelector
+    selector = selector_factory()
     selector.register(descriptor, selectors.EVENT_READ)
     try:
         while True:

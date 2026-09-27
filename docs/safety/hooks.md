@@ -232,7 +232,8 @@ Codex hook generation includes the cleanup-only SessionStart owner and excludes 
 separate interactive-only resume reminder. Runner-tail cleanup is the
 authoritative interactive/headless Bash owner; cleanup-only `SessionStart` is
 the supplemental startup owner. ADR-0008 resolves #4322 for Codex shell capture
-only. Trap isolation (#4323), a rendered ceiling (#4324), public bounded retrieval
+only. #4323 is resolved by runner-owned completion (ADR-0008 § Process lifetime
+ownership). A rendered ceiling (#4324), public bounded retrieval
 (#4325), broader private-publication policy (#4326), partial/quota accounting
 (#4327), upstream live visibility (#4329), and general producer adoption (#4335)
 remain downstream work.

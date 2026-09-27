@@ -1621,6 +1621,11 @@ def test_spawn_scrubs_all_protected_controls_from_user_bash_environment(
     monkeypatch.setattr(capture_runner.subprocess, "Popen", record_popen)
     monkeypatch.setattr(
         capture_spawn,
+        "_spawn_anchor",
+        lambda *_args: (SimpleNamespace(pid=4242, returncode=None), -1),
+    )
+    monkeypatch.setattr(
+        capture_spawn,
         "_finish_owned_spawn",
         lambda process, **_kwargs: process,
     )
@@ -3358,7 +3363,8 @@ def test_runner_settlement_before_eof_commits_failure_not_final(
     record = _capture_record(project)
     assert failure.reason is CaptureFailureReason.RUNNER_SETTLEMENT
     assert record.state is CaptureState.FAILED
-    assert record.failure_reason == "RUNNER_SETTLEMENT"
+    assert record.failure is not None
+    assert record.failure.failure_reason == "RUNNER_SETTLEMENT"
     assert record.manifest is None
     assert "shell capture v2:" not in captured.out + captured.err
     assert processes

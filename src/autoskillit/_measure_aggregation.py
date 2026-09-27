@@ -505,7 +505,9 @@ def aggregate_measures(
                 else reducer(running, measure)
             )
         if running is None:
-            raise RuntimeError("aggregate_measures received an empty record set")
+            raise RuntimeError(
+                "aggregate_measures invariant violated: fold produced no running measure"
+            )
         aggregates[field] = FieldAggregate(field, running, counts)
     return MeasureAggregate(scope, len(record_list), aggregates)
 

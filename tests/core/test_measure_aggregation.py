@@ -605,6 +605,18 @@ class TestAggregateInputContract:
         with pytest.raises(ValueError, match="scope pairs must not be empty"):
             aggregation.MeasureScope(frozenset())
 
+    def test_scope_rejects_non_frozenset_pairs(self) -> None:
+        with pytest.raises(TypeError, match="pairs must be a frozenset"):
+            aggregation.MeasureScope(
+                cast(frozenset[aggregation.SourcePair], {aggregation.SourcePair("h", "p")})
+            )
+
+    def test_scope_rejects_non_source_pair_elements(self) -> None:
+        with pytest.raises(TypeError, match="pairs must contain only SourcePair"):
+            aggregation.MeasureScope(
+                cast(frozenset[aggregation.SourcePair], frozenset({"not-a-pair"}))
+            )
+
 
 class TestAggregateInvariants:
     def _baseline_measure_aggregate(self) -> aggregation.MeasureAggregate:
@@ -636,6 +648,22 @@ class TestAggregateInvariants:
         negative = {**baseline.state_counts, _State.MEASURED: -1}
         with pytest.raises(ValueError, match="non-negative ints"):
             dataclasses.replace(baseline, state_counts=negative)
+
+    def test_field_aggregate_rejects_negative_state_counts_on_zero_state(self) -> None:
+        baseline = aggregation.aggregate_measures(
+            [_rec("claude-code", "anthropic", input_tokens=_obs(4))], ["input_tokens"]
+        ).fields["input_tokens"]
+        negative = {**baseline.state_counts, _State.MEASURED_ZERO: -2}
+        with pytest.raises(ValueError, match="non-negative ints"):
+            dataclasses.replace(baseline, state_counts=negative)
+
+    def test_field_aggregate_rejects_non_int_state_counts(self) -> None:
+        baseline = aggregation.aggregate_measures(
+            [_rec("claude-code", "anthropic", input_tokens=_obs(4))], ["input_tokens"]
+        ).fields["input_tokens"]
+        bogus = {**baseline.state_counts, _State.MEASURED: "three"}
+        with pytest.raises(ValueError, match="non-negative ints"):
+            dataclasses.replace(baseline, state_counts=bogus)  # type: ignore[arg-type]
 
     def test_field_aggregate_rejects_non_measure_value(self) -> None:
         baseline = aggregation.aggregate_measures(

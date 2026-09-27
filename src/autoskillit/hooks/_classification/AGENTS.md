@@ -11,8 +11,11 @@ block B bootstrap so hook scripts can keep importing via
 - `_tokenizer.py` — `shlex`-backed tokenization plus `ArgvToken` / `_CommandSegment`
   data classes. Sole producer of those token types; consumed by every other
   module in this folder and by the facade's TYPE_CHECKING block.
-- `_shell_structure.py` — quote-aware substitution masking and grouping syntax
-  used only by `_tokenizer.py` before lexing.
+- `_source_map.py` — `SourceMappedText` / `SourceMapBuilder` carry per-character
+  original-command intervals through pre-lex rewrites; leaf module.
+- `_shell_structure.py` — quote-aware substitution masking, newline normalization,
+  output-redirect marking, and grouping rewrites used by `_tokenizer.py` before
+  lexing.
 - `_interpreters.py` — interpreter and nested-shell payload classification
   (`all_evaluated_segments_with_provenance`, `live_command_text`,
   `EvaluatedSegment`, `StdinLiteral`, `strip_heredoc_bodies`).
@@ -48,7 +51,8 @@ from .._runtime import _command_classification as _classification` so both
 the facade's relative imports and any bare-name bootstrap (hook scripts that
 push `hooks/_classification/` onto `sys.path`) resolve the same symbols.
 
-Within-folder imports of leaf siblings (`_tokenizer.py`, `_flag_arity_classification.py`)
+Within-folder imports of leaf siblings (`_tokenizer.py`, `_flag_arity_classification.py`,
+`_source_map.py`)
 stay at module top-level — they have no back-references into the facade or
 into other `_classification/` modules, so the relative-import dance isn't
 required.

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from autoskillit.hooks._write_scope import WriteScope, WriteScopeKind
@@ -19,7 +21,7 @@ pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 _REVIEW_PR = WriteScope(WriteScopeKind.BOUNDED, ("{{AUTOSKILLIT_TEMP}}/review-pr/",))
 
 
-def test_review_pr_boundary_denies_outside_and_allows_inside(tmp_path) -> None:
+def test_review_pr_boundary_denies_outside_and_allows_inside(tmp_path: Path) -> None:
     runtime = make_runtime(tmp_path, {"review-pr": manifest_entry(_REVIEW_PR)})
     bind(runtime, ("review-pr",))
 
@@ -27,7 +29,7 @@ def test_review_pr_boundary_denies_outside_and_allows_inside(tmp_path) -> None:
     assert write_guard(runtime, temp_target(runtime, "review-pr/report.md")).decision == "allow"
 
 
-def test_unmatched_session_id_binding_leaves_skill_scope_inactive(tmp_path) -> None:
+def test_unmatched_session_id_binding_leaves_skill_scope_inactive(tmp_path: Path) -> None:
     runtime = make_runtime(tmp_path, {"review-pr": manifest_entry(_REVIEW_PR)})
     ordinary = runtime.project / "src" / "ordinary.py"
     assert write_guard(runtime, ordinary).reason_code == "no_scope"
@@ -94,7 +96,7 @@ def test_unmatched_session_id_binding_leaves_skill_scope_inactive(tmp_path) -> N
     ],
 )
 def test_loaded_skill_boundaries_compose_by_union(
-    tmp_path, second: WriteScope, target_suffix: str, allowed: bool
+    tmp_path: Path, second: WriteScope, target_suffix: str, allowed: bool
 ) -> None:
     runtime = make_runtime(
         tmp_path,

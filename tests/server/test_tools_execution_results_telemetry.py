@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -196,9 +197,9 @@ class TestResponseFieldsAreTypeSafe:
             )
         )
         assert result["retry_reason"] in {e.value for e in RetryReason}
-        assert tool_ctx_kitchen_open.runner.call_args_list[0][0][0] in {
-            "/test-bin/claude",
-            "/test-bin/codex",
+        assert Path(tool_ctx_kitchen_open.runner.call_args_list[0][0][0]).name in {
+            "claude",
+            "codex",
         }
 
     @pytest.mark.anyio
@@ -231,9 +232,9 @@ class TestResponseFieldsAreTypeSafe:
         )
         assert result["retry_reason"] in {e.value for e in RetryReason}
         assert result["result"] == "Done."
-        assert tool_ctx_kitchen_open.runner.call_args_list[0][0][0] in {
-            "/test-bin/claude",
-            "/test-bin/codex",
+        assert Path(tool_ctx_kitchen_open.runner.call_args_list[0][0][0]).name in {
+            "claude",
+            "codex",
         }
 
 

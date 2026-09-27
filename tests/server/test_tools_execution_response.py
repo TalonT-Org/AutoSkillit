@@ -42,6 +42,10 @@ class TestResponseFieldsAreTypeSafe:
     async def test_retry_reason_is_enum_value(self, tool_ctx_kitchen_open, git_linked_worktree):
         plan_path = git_linked_worktree / "plan.md"
         plan_path.write_text("# Plan\n")
+        skill_inputs = {
+            "plan_path": str(plan_path),
+            "worktree_path": str(git_linked_worktree),
+        }
         stdout = json.dumps(
             {
                 "type": "result",
@@ -55,7 +59,11 @@ class TestResponseFieldsAreTypeSafe:
         )
         tool_ctx_kitchen_open.runner.push(_make_session_result(1, stdout, ""))
         result = json.loads(
-            await run_skill(f"/retry-worktree {plan_path}", str(git_linked_worktree))
+            await run_skill(
+                "/autoskillit:retry-worktree",
+                str(git_linked_worktree),
+                skill_inputs=skill_inputs,
+            )
         )
         assert result["retry_reason"] in {e.value for e in RetryReason}
         assert tool_ctx_kitchen_open.runner.call_args_list[0][0][0] in {
@@ -69,6 +77,10 @@ class TestResponseFieldsAreTypeSafe:
     ):
         plan_path = git_linked_worktree / "plan.md"
         plan_path.write_text("# Plan\n")
+        skill_inputs = {
+            "plan_path": str(plan_path),
+            "worktree_path": str(git_linked_worktree),
+        }
         stdout = json.dumps(
             {
                 "type": "result",
@@ -81,7 +93,11 @@ class TestResponseFieldsAreTypeSafe:
         )
         tool_ctx_kitchen_open.runner.push(_make_session_result(0, stdout, ""))
         result = json.loads(
-            await run_skill(f"/retry-worktree {plan_path}", str(git_linked_worktree))
+            await run_skill(
+                "/autoskillit:retry-worktree",
+                str(git_linked_worktree),
+                skill_inputs=skill_inputs,
+            )
         )
         assert result["retry_reason"] in {e.value for e in RetryReason}
         assert result["result"] == "Done."

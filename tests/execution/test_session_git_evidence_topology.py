@@ -9,8 +9,6 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.pipeline import ToolContext
-
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 _SKILL = "/autoskillit:implement-worktree-no-merge plan.md"
@@ -18,7 +16,7 @@ _SKILL = "/autoskillit:implement-worktree-no-merge plan.md"
 
 async def _run_session(
     tmp_path: Path,
-    minimal_ctx: ToolContext,
+    minimal_ctx,
     scripted_session_runner,
     *,
     cwd: Path,
@@ -57,7 +55,7 @@ def _assert_recorded_evidence(
     return summary, index
 
 
-def _loc_insertions(ctx: ToolContext) -> int:
+def _loc_insertions(ctx) -> int:
     return sum(row["loc_insertions"] for row in ctx.token_log.get_report())
 
 

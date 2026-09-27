@@ -214,6 +214,34 @@ class TestIngredientLockGuardPipelineScoped:
         decision = json.loads(stdout)
         assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
 
+    def test_ingredient_lock_guard_env_dispatch_id_ignores_stale_scopes(self, tmp_path):
+        temp_dir = tmp_path / ".autoskillit" / "temp"
+        temp_dir.mkdir(parents=True)
+
+        overlay = temp_dir / ".hook_config_overlay.json"
+        overlay.write_text(
+            json.dumps(
+                {
+                    "locked_steps": {
+                        "": {"investigate": False},
+                        "4171": {"investigate": False},
+                    },
+                    "locked_ingredients": {
+                        "": {"investigate": "false"},
+                        "4171": {"investigate": "false"},
+                    },
+                }
+            )
+        )
+
+        event = json.dumps({"tool_input": {"step_name": "investigate", "order_id": ""}})
+
+        code, stdout = _run(
+            event, env={"AUTOSKILLIT_DISPATCH_ID": "dispatch-active"}, cwd=tmp_path
+        )
+        assert code == 0
+        assert stdout.strip() == ""
+
 
 class TestIngredientLockGuardEmptyStepName:
     """Hook guard stays fail-open for empty step_name — defers to server-side resolution."""

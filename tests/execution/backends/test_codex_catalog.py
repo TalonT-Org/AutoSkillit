@@ -269,7 +269,10 @@ def test_managed_effort_refuses_unhashable_catalog_level(malformed_effort: objec
 
 def test_codex_managed_join_adaptation_requires_context_without_native_capability() -> None:
     from autoskillit.core import JoinSpec, SkillSemanticPlan
-    from autoskillit.core.types._type_backend import CODEX_EFFORT_MAPPING, CODEX_MODEL_ALIASES
+    from autoskillit.core.types.execution._type_backend import (
+        CODEX_EFFORT_MAPPING,
+        CODEX_MODEL_ALIASES,
+    )
     from autoskillit.execution.backends import CodexBackend
     from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
 

@@ -33,7 +33,7 @@ from autoskillit.core import (
     is_valid_github_review_repository,
     review_receipt_validation_error,
 )
-from autoskillit.core.types import _type_github_review
+from autoskillit.core.types.github import _type_github_review
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 

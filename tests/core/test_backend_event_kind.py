@@ -42,7 +42,7 @@ def test_backend_event_kind_values():
 
 
 def test_backend_event_kind_in_enums_all():
-    from autoskillit.core.types._type_enums import __all__
+    from autoskillit.core.types.foundation._type_enums import __all__
 
     assert "BackendEventKind" in __all__
 

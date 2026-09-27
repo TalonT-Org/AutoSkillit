@@ -10,7 +10,7 @@ all kitchen-tagged tools when explicit activation or reopening is required.
 
 Application-Gate (Python): most tools call _require_enabled() internally, which
 checks ctx.gate.enabled and returns a gate_error envelope if the kitchen is closed.
-See GATED_TOOLS and UNGATED_TOOLS in core/types/_type_constants.py.
+See GATED_TOOLS and UNGATED_TOOLS in core/types/constants/_type_constants.py.
 
 Startup tag visibility is determined by AUTOSKILLIT_SESSION_TYPE (3-branch dispatch):
   FLEET — fleet-tagged tools pre-revealed

@@ -10,7 +10,7 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 # REQ-PACK-001: PACK_REGISTRY defines all packs with default_enabled
 def test_core_packs_constant_defined() -> None:
     """CORE_PACKS must be a frozenset defined in _type_constants and exported via core."""
-    from autoskillit.core.types._type_constants_registries import CORE_PACKS
+    from autoskillit.core.types.constants._type_constants_registries import CORE_PACKS
 
     assert isinstance(CORE_PACKS, frozenset)
     assert CORE_PACKS == frozenset({"github", "ci", "clone", "telemetry"})

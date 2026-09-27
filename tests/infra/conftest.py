@@ -23,7 +23,7 @@ def _run_skill_json_producer() -> dict:
     import dataclasses
     import json
 
-    from autoskillit.core.types._type_results import SkillResult
+    from autoskillit.core.types.results._type_results import SkillResult
 
     r1 = SkillResult.crashed(Exception("test"))
     r2 = dataclasses.replace(r1, worktree_path="/tmp/test-worktree")
@@ -106,7 +106,7 @@ def _dispatch_food_truck_json_producer() -> dict:
 
 
 def _build_registry() -> dict[str, FormatterCoverageDef]:
-    from autoskillit.core.types._type_results import CloneSuccessResult
+    from autoskillit.core.types.results._type_results import CloneSuccessResult
     from autoskillit.hooks.formatters.pretty_output_hook import (
         _FMT_CLONE_REPO_RENDERED,
         _FMT_CLONE_REPO_SUPPRESSED,

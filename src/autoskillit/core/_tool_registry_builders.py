@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from types import MappingProxyType
 
-from .types._type_recipe_binding import (
+from .types.recipe._type_recipe_binding import (
     ToolDef,
     ToolInitializationOperation,
     ToolParamDef,

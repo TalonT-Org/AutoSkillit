@@ -15,7 +15,7 @@ from autoskillit.config import (
     RunSkillConfig,
 )
 from autoskillit.core.claude_conventions import ClaudeDirectoryConventions
-from autoskillit.core.types._type_backend import CLAUDE_MODEL_ALIASES
+from autoskillit.core.types.execution._type_backend import CLAUDE_MODEL_ALIASES
 from autoskillit.execution.runtime.commands import _inject_completion_directive
 from autoskillit.server.tools import tools_execution
 from autoskillit.server.tools.tools_execution import run_skill

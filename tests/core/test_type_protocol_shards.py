@@ -4,7 +4,7 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
 def test_logging_shard_all():
-    from autoskillit.core.types._type_protocols_logging import __all__
+    from autoskillit.core.types.protocols._type_protocols_logging import __all__
 
     assert set(__all__) == {
         "AuditLog",
@@ -19,7 +19,7 @@ def test_logging_shard_all():
 
 
 def test_execution_shard_all():
-    from autoskillit.core.types._type_protocols_execution import __all__
+    from autoskillit.core.types.protocols._type_protocols_execution import __all__
 
     assert set(__all__) == {
         "CompletionRequiredResolver",
@@ -38,7 +38,7 @@ def test_execution_shard_all():
 
 
 def test_skill_projection_preparation_runtime_protocol(tmp_path):
-    from autoskillit.core.types._type_protocols_execution import (
+    from autoskillit.core.types.protocols._type_protocols_execution import (
         SkillProjectionPreparation,
     )
 
@@ -65,7 +65,7 @@ def test_headless_skill_dispatch_preparation_finalize_contract():
     from typing import get_type_hints
 
     from autoskillit.core import CodingAgentBackend, PluginLaunchBinding, SkillProjectionBinding
-    from autoskillit.core.types._type_protocols_execution import (
+    from autoskillit.core.types.protocols._type_protocols_execution import (
         SkillProjectionPreparation,
     )
 
@@ -88,7 +88,7 @@ def test_headless_skill_dispatch_preparation_materialization_context_contract():
         PluginLaunchBinding,
         SkillProjectionContextAuthority,
     )
-    from autoskillit.core.types._type_protocols_execution import (
+    from autoskillit.core.types.protocols._type_protocols_execution import (
         SkillProjectionPreparation,
     )
 
@@ -103,7 +103,7 @@ def test_headless_skill_dispatch_preparation_materialization_context_contract():
 
 
 def test_github_shard_all():
-    from autoskillit.core.types._type_protocols_github import __all__
+    from autoskillit.core.types.protocols._type_protocols_github import __all__
 
     assert set(__all__) == {
         "GitHubFetcher",
@@ -114,7 +114,7 @@ def test_github_shard_all():
 
 
 def test_workspace_shard_all():
-    from autoskillit.core.types._type_protocols_workspace import __all__
+    from autoskillit.core.types.protocols._type_protocols_workspace import __all__
 
     assert set(__all__) == {
         "WorkspaceManager",
@@ -198,7 +198,7 @@ def test_session_skill_manager_managed_catalog_signature():
 
 
 def test_recipe_shard_all():
-    from autoskillit.core.types._type_protocols_recipe import __all__
+    from autoskillit.core.types.protocols._type_protocols_recipe import __all__
 
     assert set(__all__) == {
         "RecipeRepository",
@@ -211,7 +211,7 @@ def test_recipe_shard_all():
 
 
 def test_infra_shard_all():
-    from autoskillit.core.types._type_protocols_infra import __all__
+    from autoskillit.core.types.protocols._type_protocols_infra import __all__
 
     assert set(__all__) == {
         "GateState",
@@ -231,7 +231,7 @@ def test_infra_shard_all():
 
 
 def test_backend_shard_all():
-    from autoskillit.core.types._type_protocols_backend import __all__
+    from autoskillit.core.types.protocols._type_protocols_backend import __all__
 
     assert set(__all__) == {
         "StreamParser",
@@ -352,7 +352,10 @@ def test_pyi_stub_exports_skill_constants():
 
 
 def test_runtime_checkable_flags():
-    from autoskillit.core.types._type_protocols_logging import SupportsDebug, SupportsLogger
+    from autoskillit.core.types.protocols._type_protocols_logging import (
+        SupportsDebug,
+        SupportsLogger,
+    )
 
     for proto in (SupportsDebug, SupportsLogger):
         assert not getattr(proto, "_is_runtime_protocol", False), (

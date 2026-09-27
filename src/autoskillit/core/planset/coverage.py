@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 
-from ..types._type_plan_set_authority import (
+from ..types.audit._type_plan_set_authority import (
     AllocationKind,
     AllocationRowDef,
     AssignedRequirementDef,

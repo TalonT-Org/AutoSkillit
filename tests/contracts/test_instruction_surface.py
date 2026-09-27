@@ -701,7 +701,7 @@ class TestPathArgSkillsContract:
 
 
 class TestSkillCommandParsingContract:
-    """skill_cmd_guard._PATH_PREFIXES must match core._type_helpers._PATH_PREFIXES."""
+    """skill_cmd_guard._PATH_PREFIXES must match core.types.launch._type_helpers._PATH_PREFIXES."""
 
     def _load_hook_module(self):
         import importlib.util
@@ -721,12 +721,12 @@ class TestSkillCommandParsingContract:
         return mod
 
     def test_hook_path_prefixes_match_core(self):
-        from autoskillit.core.types._type_helpers import _PATH_PREFIXES as core_prefixes
+        from autoskillit.core.types.launch._type_helpers import _PATH_PREFIXES as core_prefixes
 
         mod = self._load_hook_module()
         assert set(mod._PATH_PREFIXES) == set(core_prefixes), (
             f"skill_cmd_guard._PATH_PREFIXES {set(mod._PATH_PREFIXES)!r} "
-            f"diverges from core._type_helpers._PATH_PREFIXES {set(core_prefixes)!r}."
+            f"diverges from core.types.launch._type_helpers._PATH_PREFIXES {set(core_prefixes)!r}."
         )
 
     def test_hook_path_arg_skills_matches_contract_list(self):

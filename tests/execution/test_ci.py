@@ -633,7 +633,7 @@ async def test_phase2_recheck_finds_late_completing_run():
 
 
 def test_known_ci_events_frozenset_exists() -> None:
-    from autoskillit.core.types._type_constants import KNOWN_CI_EVENTS
+    from autoskillit.core.types.constants._type_constants import KNOWN_CI_EVENTS
 
     assert isinstance(KNOWN_CI_EVENTS, frozenset)
     assert len(KNOWN_CI_EVENTS) >= 4

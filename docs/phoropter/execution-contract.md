@@ -98,7 +98,7 @@ When `phoropter_family` is set, the `phoropter-step-interleaving` rule treats an
 
 ## §6. SynthesisStrategy Catalog
 
-The `SynthesisStrategy` enum in `src/autoskillit/core/types/_type_enums.py` defines the recognized synthesis algorithms:
+The `SynthesisStrategy` enum in `src/autoskillit/core/types/foundation/_type_enums.py` defines the recognized synthesis algorithms:
 
 | Strategy | Enum Value | Families | Status | Description |
 |----------|-----------|----------|--------|-------------|
@@ -111,12 +111,12 @@ Note: The `SynthesisStrategy` enum also includes a `CUSTOM` value for future ext
 
 ## §7. IL-0 Type Cross-Reference
 
-Phoropter types are defined in the IL-0 core types layer (`src/autoskillit/core/types/_type_phoropter.py` and `_type_enums.py`):
+Phoropter types are defined in the IL-0 core types layer (`src/autoskillit/core/types/recipe/_type_recipe_binding.py` and `foundation/_type_enums.py`):
 
 | Type | Module | Status | Fields | Purpose |
 |------|--------|--------|--------|---------|
-| `PhoropterPrescription` | `_type_phoropter.py` | Implemented | `selected_lenses: str`, `lens_context_paths: str`, `failure_mode: str = "continue"` | Dial phase output — records which lenses were selected and their context paths. |
-| `ReadingToken` | `_type_phoropter.py` | Implemented | `output_prefix: str`, `path_value: str` | Structured capture of a single lens reading (path to output file with its prefix). `READING_TOKEN_PATTERN` regex: `r"^(?P<prefix>\w+) = (?P<path>/.+)$"`. |
+| `PhoropterPrescription` | `_type_recipe_binding.py` | Implemented | `selected_lenses: str`, `lens_context_paths: str`, `failure_mode: str = "continue"` | Dial phase output — records which lenses were selected and their context paths. |
+| `ReadingToken` | `_type_recipe_binding.py` | Implemented | `output_prefix: str`, `path_value: str` | Structured capture of a single lens reading (path to output file with its prefix). `READING_TOKEN_PATTERN` regex: `r"^(?P<prefix>\w+) = (?P<path>/.+)$"`. |
 | `SynthesisStrategy` | `_type_enums.py` | Implemented | `NULL`, `PRIORITY_HIERARCHY`, `ELECTRE_III`, `DEX`, `CUSTOM` | Enum of recognized synthesis algorithms (see §6 catalog). |
 
 All types are frozen dataclasses with `slots=True` (except `SynthesisStrategy` which is a `StrEnum`). All are exported from `src/autoskillit/core/types/` via the `__init__.py` re-export hub.

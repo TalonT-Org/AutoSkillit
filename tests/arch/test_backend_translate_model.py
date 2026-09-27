@@ -69,7 +69,7 @@ def test_translate_model_called_at_terminal_model_sites() -> None:
 
 
 def test_translate_model_resolution_respects_alias_classes() -> None:
-    from autoskillit.core.types._type_backend import CLAUDE_MODEL_ALIASES
+    from autoskillit.core.types.execution._type_backend import CLAUDE_MODEL_ALIASES
 
     alias_keys = list(CLAUDE_MODEL_ALIASES.keys())
     for backend_name, cls in BACKEND_REGISTRY.items():

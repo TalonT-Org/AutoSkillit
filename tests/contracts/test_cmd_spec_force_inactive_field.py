@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core.types._type_backend import CmdSpec
+from autoskillit.core.types.execution._type_backend import CmdSpec
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 

@@ -367,25 +367,25 @@ registered entity must update its retirement registry in the SAME commit:
   `test_no_retired_name_has_a_live_file` fails otherwise.
 - **Skills** (`src/autoskillit/skills_extended/` or `skills/`): update the skill's
   `SKILL.md` `name:` field AND add the old directory name to `RETIRED_SKILL_NAMES`
-  in `src/autoskillit/core/types/_type_constants.py`.
+  in `src/autoskillit/core/types/constants/_type_constants_retirements.py`.
   `test_no_retired_skill_name_has_a_live_directory` fails otherwise.
 - **Install artifact shapes** (`~/.autoskillit/`, `~/.claude/plugins/`): changing an
   artifact's *shape* (symlink → real directory, file → directory, …) must add an entry
   to `RETIRED_INSTALL_ARTIFACT_SHAPES` in
-  `src/autoskillit/core/types/_type_constants_retirements.py`. `~/.autoskillit/`
+  `src/autoskillit/core/types/constants/_type_constants_retirements.py`. `~/.autoskillit/`
   persists across years of releases while every contract test builds it fresh in
   `tmp_path` — a shape change with no registry entry strands every pre-existing
   install and no test notices. `test_no_retired_artifact_shape_is_unhandled` and
   `test_reconciler_handles_every_retired_artifact_shape` fail otherwise.
-- **Intake rule ids** (`src/autoskillit/core/types/_type_intake_policy.py`): removing a
+- **Intake rule ids** (`src/autoskillit/core/types/constants/_type_intake_policy.py`): removing a
   rule id from `CODEX_INTAKE_RULES` must add it to `RETIRED_INTAKE_RULE_IDS` in
-  `src/autoskillit/core/types/_type_constants.py`. `test_no_retired_intake_rule_id_is_live`
+  `src/autoskillit/core/types/constants/_type_constants_retirements.py`. `test_no_retired_intake_rule_id_is_live`
   and `test_retired_intake_rule_ids_are_lowercase_and_kebab_case` in
   `tests/arch/test_intake_rule_registry.py` fail otherwise.
 - **Skill contract validations**: adding or tightening an `invalid_reason`-producing
   skill validation must mint a `SkillInvalidityKind` member AND register a
   `SkillContractRemediationDef` in `SKILL_CONTRACT_REMEDIATIONS`
-  (`core/types/_type_constants.py`), extending
+  (`core/types/constants/_type_constants_skill_contract.py`), extending
   `tests/contracts/fixtures/skill_contract_corpus/` when the new validation would
   strand a previously-valid shape. Project-local skill copies persist in external
   repos with no way to see a tightened contract coming; the registry forces every new
@@ -393,7 +393,7 @@ registered entity must update its retirement registry in the SAME commit:
   ship. `tests/contracts/test_skill_contract_remediations.py` fails otherwise.
 - **Durable-artifact writers** (`src/autoskillit/`): any function that writes an
   artifact whose lifetime exceeds the writing process must be registered in
-  `DURABLE_ARTIFACT_WRITERS` in `core/types/_type_constants.py` with its
+  `DURABLE_ARTIFACT_WRITERS` in `core/types/constants/_type_constants_durable_writers.py` with its
   relocatability contract (`machine_local=False` → output must contain no
   environment-pinned segments; `machine_local=True` → must declare a `detection`
   callable for startup staleness detection).

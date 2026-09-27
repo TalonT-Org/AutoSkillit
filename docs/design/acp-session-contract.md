@@ -37,7 +37,7 @@ routing fields (`recipe/schema.py` lines 119–121).
 
 The `CodingAgentBackend` protocol and its `StreamParser`, `ResultParser`,
 `EnvPolicy`, and `SessionLocator` sub-protocols are defined in
-`src/autoskillit/core/types/_type_protocols_backend.py`. The per-method table below maps each backend protocol
+`src/autoskillit/core/types/protocols/_type_protocols_backend.py`. The per-method table below maps each backend protocol
 method to its ACP session method analogue for both `ClaudeCodeBackend` and
 `CodexBackend`, with explicit notes where the Codex implementation deviates.
 
@@ -195,7 +195,7 @@ and has no ACP analogue. Both backends raise `CapabilityNotSupportedError`
 ## Section 2: Recovery Ladder
 
 The recovery ladder maps each of the 20 `RetryReason` enum values
-(`src/autoskillit/core/types/_type_enums.py`, lines 44–64) to one of three ACP
+(`src/autoskillit/core/types/foundation/_type_enums.py`, lines 44–64) to one of three ACP
 session rungs — `session/resume`, `session/load`, `session/new` — or to a
 terminal/wait-and-retry classification.
 
@@ -282,7 +282,7 @@ The contract nudge exclusively targets `session/resume`; it never invokes
 
 ## Section 3: Capabilities Translation
 
-`BackendCapabilities` (`src/autoskillit/core/types/_type_backend.py`) is a
+`BackendCapabilities` (`src/autoskillit/core/types/execution/_type_backend.py`) is a
 frozen dataclass that declares feature flags the orchestrator
 consumes when selecting an ACP rung or backend-specific code path. Each field
 falls into one of three categories:
@@ -527,15 +527,15 @@ human-facing ratios remain inside one source pair.
 
 | Section | Source of truth | File |
 |---|---|---|
-| §1 Lifecycle | `CodingAgentBackend` Protocol | `src/autoskillit/core/types/_type_protocols_backend.py` |
+| §1 Lifecycle | `CodingAgentBackend` Protocol | `src/autoskillit/core/types/protocols/_type_protocols_backend.py` |
 | §1 Claude Code methods | `ClaudeCodeBackend` | `src/autoskillit/execution/backends/claude.py` |
 | §1 Codex methods | `CodexBackend` | `src/autoskillit/execution/backends/codex.py` |
-| §1 Capabilities constant | `CLAUDE_CODE_CAPABILITIES` | `src/autoskillit/core/types/_type_backend.py` lines 217–259 |
-| §2 RetryReason enum | `RetryReason` | `src/autoskillit/core/types/_type_enums.py` lines 44–64 |
+| §1 Capabilities constant | `CLAUDE_CODE_CAPABILITIES` | `src/autoskillit/core/types/execution/_type_backend.py` lines 217–259 |
+| §2 RetryReason enum | `RetryReason` | `src/autoskillit/core/types/foundation/_type_enums.py` lines 44–64 |
 | §2 Retry routing | `_compute_retry`, `_build_skill_result` overrides | `src/autoskillit/execution/session/_retry_fsm.py`, `src/autoskillit/execution/headless/_headless_result.py` |
 | §2 Contract nudge | `_attempt_contract_nudge`, `_merge_token_usage` | `src/autoskillit/execution/headless/_headless_recovery.py` |
 | §4.9 Token evidence | `TokenMeasure`, source-pair classifier, OTLP sink | `src/autoskillit/_measure_aggregation.py`, `src/autoskillit/execution/session/turn_usage.py`, `src/autoskillit/execution/evidence/otlp_sink.py` |
-| §3 Capabilities | `BackendCapabilities` (47 fields) | `src/autoskillit/core/types/_type_backend.py` |
+| §3 Capabilities | `BackendCapabilities` (47 fields) | `src/autoskillit/core/types/execution/_type_backend.py` |
 | §3 Forward-declared | `_FORWARD_DECLARED` | `tests/arch/test_capability_consumption.py` |
 | §4 Codex flags | `CodexFlags` | `src/autoskillit/execution/backends/codex.py` lines 98–107 |
 | §4 Codex divergence mappings | Binding, output-mode, idle-stop, and warning sites | `src/autoskillit/execution/backends/codex.py` |

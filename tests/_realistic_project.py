@@ -21,7 +21,7 @@ from autoskillit.core import atomic_write
 AGENT_TEAMS_ENV_VAR = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 
 # Pinned version output the fake `claude --version` shim emits. Floors must match
-# `CLAUDE_CODE_CAPABILITIES.min_version` in src/autoskillit/core/types/_type_backend.py.
+# `CLAUDE_CODE_CAPABILITIES.min_version` in src/autoskillit/core/types/execution/_type_backend.py.
 # Bumping the product floor requires bumping this constant and any inline shim
 # scripts that still embed the literal directly.
 PINNED_CLAUDE_SHIM_VERSION_OUTPUT = "2.1.280 (Claude Code)"

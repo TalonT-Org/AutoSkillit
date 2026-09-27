@@ -48,7 +48,7 @@ SiteKey = tuple[str, str, str]
 
 _NO_EVIDENCE_SITES: dict[SiteKey, str] = {
     (
-        "core/types/_type_skill_semantics.py",
+        "core/types/skill/_type_skill_semantics.py",
         "adapt_session_invariant",
         "adapt_skill_semantics",
     ): (

@@ -10,7 +10,10 @@ VALID_CLAUDE_MODEL_IDS: frozenset[str] = frozenset({"claude-sonnet-5", "claude-o
 
 
 def test_anomaly_detection_aliases_keys_match_shared() -> None:
-    from autoskillit.core.types._type_backend import CLAUDE_MODEL_ALIASES, CODEX_MODEL_ALIASES
+    from autoskillit.core.types.execution._type_backend import (
+        CLAUDE_MODEL_ALIASES,
+        CODEX_MODEL_ALIASES,
+    )
     from autoskillit.execution.evidence.anomaly_detection import _MODEL_SHORT_ALIASES
 
     for key in _MODEL_SHORT_ALIASES:
@@ -25,7 +28,10 @@ def test_anomaly_detection_aliases_keys_match_shared() -> None:
 
 
 def test_codex_alias_values_in_allowlist() -> None:
-    from autoskillit.core.types._type_backend import CODEX_MODEL_ALIASES, is_valid_codex_model_id
+    from autoskillit.core.types.execution._type_backend import (
+        CODEX_MODEL_ALIASES,
+        is_valid_codex_model_id,
+    )
 
     for key, value in CODEX_MODEL_ALIASES.items():
         assert is_valid_codex_model_id(value), (
@@ -35,7 +41,10 @@ def test_codex_alias_values_in_allowlist() -> None:
 
 
 def test_codex_aliases_map_classes_to_tiers() -> None:
-    from autoskillit.core.types._type_backend import CODEX_EFFORT_MAPPING, CODEX_MODEL_ALIASES
+    from autoskillit.core.types.execution._type_backend import (
+        CODEX_EFFORT_MAPPING,
+        CODEX_MODEL_ALIASES,
+    )
 
     assert dict(CODEX_MODEL_ALIASES) == {
         "sonnet": "gpt-6-sol",
@@ -46,7 +55,7 @@ def test_codex_aliases_map_classes_to_tiers() -> None:
 
 
 def test_codex_native_model_allowlist_preserves_compatibility() -> None:
-    from autoskillit.core.types._type_backend import (
+    from autoskillit.core.types.execution._type_backend import (
         CODEX_VALID_REASONING_EFFORTS,
         is_valid_codex_model_id,
     )
@@ -63,7 +72,7 @@ def test_codex_native_model_allowlist_preserves_compatibility() -> None:
 
 
 def test_claude_alias_values_in_allowlist() -> None:
-    from autoskillit.core.types._type_backend import CLAUDE_MODEL_ALIASES
+    from autoskillit.core.types.execution._type_backend import CLAUDE_MODEL_ALIASES
 
     for key, value in CLAUDE_MODEL_ALIASES.items():
         assert value in VALID_CLAUDE_MODEL_IDS, (
@@ -73,19 +82,19 @@ def test_claude_alias_values_in_allowlist() -> None:
 
 
 def test_claude_sonnet_alias_uses_sonnet_5() -> None:
-    from autoskillit.core.types._type_backend import CLAUDE_MODEL_ALIASES
+    from autoskillit.core.types.execution._type_backend import CLAUDE_MODEL_ALIASES
 
     assert CLAUDE_MODEL_ALIASES["sonnet"] == "claude-sonnet-5"
 
 
 def test_claude_opus_alias_uses_opus_5_5() -> None:
-    from autoskillit.core.types._type_backend import CLAUDE_MODEL_ALIASES
+    from autoskillit.core.types.execution._type_backend import CLAUDE_MODEL_ALIASES
 
     assert CLAUDE_MODEL_ALIASES["opus"] == "claude-opus-5-5"
 
 
 def test_codex_alias_values_differ_from_keys() -> None:
-    from autoskillit.core.types._type_backend import CODEX_MODEL_ALIASES
+    from autoskillit.core.types.execution._type_backend import CODEX_MODEL_ALIASES
 
     for key, value in CODEX_MODEL_ALIASES.items():
         assert value != key, (

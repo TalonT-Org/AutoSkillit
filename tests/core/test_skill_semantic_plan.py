@@ -16,7 +16,7 @@ def test_skill_semantic_taxonomy_is_closed_and_exported() -> None:
         SKILL_REASONING_EFFORTS,
         SkillSemanticOperation,
     )
-    from autoskillit.core.types import _type_skill_semantics
+    from autoskillit.core.types.skill import _type_skill_semantics
 
     assert {operation.value for operation in SkillSemanticOperation} == {
         "child_spawn",

@@ -1199,7 +1199,7 @@ def _resolve_test_config() -> "AutomationConfig":
     downgrading the test scope to per-feature ``default_enabled`` (which is
     ``False`` for every currently-registered feature — see
     ``FEATURE_REGISTRY`` in
-    ``src/autoskillit/core/types/_type_constants_features.py:42-100``).
+    ``src/autoskillit/core/types/constants/_type_constants_features.py:42-100``).
 
     ``lru_cache`` only caches successful returns; a transient failure will
     retry on the next call.

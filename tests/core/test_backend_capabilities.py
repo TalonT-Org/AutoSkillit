@@ -312,7 +312,7 @@ def test_no_autoskillit_imports():
     """_type_backend.py has zero imports from autoskillit.* (IL-0 constraint)."""
     from autoskillit.core import paths
 
-    backend_path = paths.pkg_root() / "core" / "types" / "_type_backend.py"
+    backend_path = paths.pkg_root() / "core" / "types" / "execution" / "_type_backend.py"
     assert backend_path.exists(), f"Source file not found: {backend_path}"
     source = backend_path.read_text()
     for line in source.splitlines():

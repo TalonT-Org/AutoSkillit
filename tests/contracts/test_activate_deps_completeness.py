@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core.types._type_constants import SKILL_ACTIVATE_DEPS_REQUIRED
-from autoskillit.core.types._type_constants_registries import PACK_REGISTRY
+from autoskillit.core.types.constants._type_constants import SKILL_ACTIVATE_DEPS_REQUIRED
+from autoskillit.core.types.constants._type_constants_registries import PACK_REGISTRY
 from autoskillit.workspace.session_skills import (
     SkillsDirectoryProvider,
     _parse_write_paths,

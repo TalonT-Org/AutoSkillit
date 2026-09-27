@@ -51,7 +51,7 @@ def test_stale_fetch_cache_after_install_detected_by_epoch(
     """Cache entry with stale installed_version is treated as a miss even within TTL."""
     import time
 
-    from autoskillit.core.types._type_constants_env import (
+    from autoskillit.core.types.constants._type_constants_env import (
         AUTOSKILLIT_INSTALLED_VERSION as _REAL_VERSION,
     )
 

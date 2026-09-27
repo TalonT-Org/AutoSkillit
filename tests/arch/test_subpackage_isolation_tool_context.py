@@ -12,27 +12,8 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 def _explicit_core_protocol_names() -> set[str]:
     core_protocols: set[str] = set()
-    for types_filename in (
-        "core/types/__init__.py",
-        "core/types/_type_audit_admission.py",
-        "core/types/_type_audit_admission_ledger.py",
-        "core/types/_type_protocols_logging.py",
-        "core/types/_type_protocols_execution.py",
-        "core/types/_type_protocols_github.py",
-        "core/types/_type_protocols_workspace.py",
-        "core/types/_type_protocols_recipe.py",
-        "core/types/_type_protocols_infra.py",
-        "core/types/_type_protocols_backend.py",
-        "core/types/_type_recipe_execution.py",
-        "core/types/_type_subprocess.py",
-        "core/types/_type_context_admission_persistence.py",
-        "core/types/_type_context_admission_persistence_envelope.py",
-        "core/types/_type_native_shell_capture.py",
-        "core/types/_type_exploration.py",
-    ):
-        types_path = SRC_ROOT / types_filename
-        if not types_path.exists():
-            continue
+    types_dir = SRC_ROOT / "core" / "types"
+    for types_path in sorted(types_dir.rglob("*.py")):
         types_tree = ast.parse(types_path.read_text())
         for node in ast.walk(types_tree):
             if not isinstance(node, ast.ClassDef):
@@ -63,7 +44,7 @@ def _make_context_assigned_fields(factory_path: Path) -> set[str]:
 
 
 def test_tool_context_service_fields_use_protocol_types() -> None:
-    """REQ-ARCH-002: Every non-exempt ToolContext field must use a Protocol from core/types.py.
+    """REQ-ARCH-002: Every non-exempt ToolContext field must use a Protocol from core/types/.
 
     Exempt fields:
     - plugin_authority: PluginArtifactAuthority (lifetime-owning authority)
@@ -130,7 +111,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
                     ):
                         violations.append(
                             f"ToolContext.{field_name}: '{type_name}' is not a "
-                            f"Protocol in core/types.py"
+                            f"Protocol in core/types/"
                         )
 
     assert not violations, (

@@ -22,7 +22,7 @@ def test_exclusive_feature_tools_removed() -> None:
 
 def test_exclusive_feature_tools_not_in_all() -> None:
     """EXCLUSIVE_FEATURE_TOOLS must not appear in _type_constants.__all__."""
-    from autoskillit.core.types import _type_constants
+    from autoskillit.core.types.constants import _type_constants
 
     assert "EXCLUSIVE_FEATURE_TOOLS" not in _type_constants.__all__  # type: ignore[attr-defined]
 
@@ -64,7 +64,7 @@ def test_feature_def_has_no_name_field() -> None:
     """FeatureDef.name is redundant with the FEATURE_REGISTRY dict key and must not exist."""
     import dataclasses
 
-    from autoskillit.core.types._type_constants_features import FeatureDef
+    from autoskillit.core.types.constants._type_constants_features import FeatureDef
 
     field_names = {f.name for f in dataclasses.fields(FeatureDef)}
     assert "name" not in field_names, "FeatureDef.name is redundant with FEATURE_REGISTRY dict key"

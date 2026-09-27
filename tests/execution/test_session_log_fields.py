@@ -18,7 +18,7 @@ from autoskillit.core import (
     ExecutionIdentity,
     SessionType,
 )
-from autoskillit.core.types._type_results import ModelIdentity
+from autoskillit.core.types.results._type_results import ModelIdentity
 from tests.execution.conftest import (
     _flush,
     _make_cc_jsonl_record,
@@ -54,7 +54,7 @@ class _FakeLocator:
 
 def test_candidate_manifest_updates_before_session_bundle_flush(tmp_path):
     """Selection updates stay ordered and are bundled only with a real session."""
-    from autoskillit.core.types._type_results_execution import (
+    from autoskillit.core.types.results._type_results_execution import (
         ExecutionCandidateAttempt,
         ExecutionSelection,
     )

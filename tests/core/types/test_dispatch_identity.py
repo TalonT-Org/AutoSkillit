@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.core.types._type_dispatch_identity import (
+from autoskillit.core.types.launch._type_dispatch_identity import (
     DispatchIdentity,
     PromptContractError,
     assert_prompt_sentinel,

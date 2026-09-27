@@ -260,7 +260,7 @@ class _SessionTypeStringVisitor(ast.NodeVisitor):
 
 def test_session_type_hook_strings_match_enum() -> None:
     from autoskillit.core import pkg_root
-    from autoskillit.core.types._type_enums import SessionType
+    from autoskillit.core.types.foundation._type_enums import SessionType
 
     hooks_root = pkg_root() / "hooks"
     found_literals: set[str] = set()

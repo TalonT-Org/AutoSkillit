@@ -16,7 +16,7 @@ _LAUNCH_CONTRACT_DIGEST = "a" * 64
 class TestBackendAuthorityInSessionsJsonl:
     def test_launch_authority_fields_present(self) -> None:
         """sessions.jsonl entries include typed launch evidence."""
-        from autoskillit.core.types._type_results import (
+        from autoskillit.core.types.results._type_results import (
             SessionIndexEntry,
         )
 
@@ -26,7 +26,7 @@ class TestBackendAuthorityInSessionsJsonl:
 
     def test_session_index_entry_default_value(self) -> None:
         """When no override is used, the field defaults to None."""
-        from autoskillit.core.types._type_results import (
+        from autoskillit.core.types.results._type_results import (
             SESSION_INDEX_SCHEMA_VERSION,
             SessionIndexEntry,
         )

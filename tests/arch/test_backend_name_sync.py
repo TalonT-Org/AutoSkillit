@@ -15,5 +15,5 @@ def test_known_backend_names_matches_registry():
     assert KNOWN_BACKEND_NAMES == frozenset(BACKEND_REGISTRY), (
         f"KNOWN_BACKEND_NAMES={sorted(KNOWN_BACKEND_NAMES)} does not match "
         f"BACKEND_REGISTRY keys={sorted(BACKEND_REGISTRY)}. "
-        "Update KNOWN_BACKEND_NAMES in core/types/_type_constants_env.py."
+        "Update KNOWN_BACKEND_NAMES in core/types/constants/_type_constants_env.py."
     )

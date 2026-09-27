@@ -27,8 +27,8 @@ def test_fleet_dispatch_tools_constant_exists() -> None:
 
 
 def test_fleet_menu_tools_in_type_constants() -> None:
-    """FLEET_MENU_TOOLS must live in core._type_constants, not fleet.__init__."""
-    from autoskillit.core.types._type_constants_registries import FLEET_MENU_TOOLS
+    """FLEET_MENU_TOOLS must live in core.types.constants._type_constants, not fleet.__init__."""
+    from autoskillit.core.types.constants._type_constants_registries import FLEET_MENU_TOOLS
 
     assert isinstance(FLEET_MENU_TOOLS, tuple)
     assert "dispatch_food_truck" in FLEET_MENU_TOOLS
@@ -48,7 +48,8 @@ def test_fleet_menu_tools_not_in_fleet_init() -> None:
     )
     assert result.returncode == 0, f"Subprocess failed:\n{result.stderr}"
     assert result.stdout.strip() == "False", (
-        "FLEET_MENU_TOOLS still lives in fleet.__init__; move it to core._type_constants"
+        "FLEET_MENU_TOOLS still lives in fleet.__init__; "
+        "move it to core.types.constants._type_constants"
     )
 
 

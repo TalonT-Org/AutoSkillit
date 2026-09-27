@@ -90,7 +90,11 @@ def test_a_new_execution_tuning_param_appears_with_no_generator_edit(monkeypatch
     state — the generator must surface it with zero code changes, proving it
     derives from the live registry rather than a hardcoded list."""
     import autoskillit.core.tool_registry as tool_registry_module
-    from autoskillit.core.types._type_recipe_binding import ToolDef, ToolParamDef, ToolWireType
+    from autoskillit.core.types.recipe._type_recipe_binding import (
+        ToolDef,
+        ToolParamDef,
+        ToolWireType,
+    )
 
     real_tool_def = tool_registry_module.get_tool_def("run_skill")
     assert real_tool_def is not None

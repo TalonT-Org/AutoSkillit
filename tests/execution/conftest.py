@@ -458,12 +458,12 @@ def _subagent_assistant_ndjson(
 def _flush(
     tmp_path: Path, *, backend: str = "claude-code", session_locator=None, **overrides
 ) -> None:
-    from autoskillit.core.types._type_results import (
+    from autoskillit.core.types.results._type_results import (
         InfraOutcome,
         ModelIdentity,
         ProviderOutcome,
     )
-    from autoskillit.core.types._type_results_execution import (
+    from autoskillit.core.types.results._type_results_execution import (
         RecipeIdentity,
         SessionTelemetry,
     )

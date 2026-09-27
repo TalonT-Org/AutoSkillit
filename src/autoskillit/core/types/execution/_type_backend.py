@@ -1,0 +1,772 @@
+"""Backend capability declaration type. Zero autoskillit imports."""
+
+from __future__ import annotations
+
+import posixpath
+import re as _re
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
+from enum import StrEnum
+from pathlib import Path, PurePosixPath
+from types import MappingProxyType
+from typing import Any
+
+from ..constants._type_constants import SESSION_ADD_DIR_SUBDIR
+from ..constants._type_constants_registries import (
+    CLAUDE_DEFAULT_CLIENT_RESULT_TOKENS,
+    CONSERVATIVE_GATE_HEADROOM_DENOMINATOR,
+    CONSERVATIVE_GATE_HEADROOM_NUMERATOR,
+)
+from ..foundation._type_enums import (
+    BackendEventKind,
+    HookTrustPolicy,
+    OutputFormat,
+    SkillDiscoveryMechanism,
+    UpstreamSupportStatus,
+)
+from ..foundation._type_execution_identity import CodexRuntimeSpec, ExecutableLaunchBinding
+from ..install._type_plugin_source import PluginLaunchBinding, normalize_inherited_fds
+from ..recipe._type_recipe_delivery import RecipeDeliveryBudgetDef
+from ..results._type_results import ValidatedAddDir
+from ..skill._type_skill_semantics import SKILL_MODEL_CLASS_REGISTRY, SKILL_REASONING_EFFORTS
+from ._type_checkpoint import SessionCheckpoint
+from ._type_native_shell_capture import (
+    ManagedHeadlessSessionLineageRef,
+    NativeShellCaptureDecision,
+)
+
+__all__ = [
+    "ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS",
+    "BackendCapabilities",
+    "BackendConventions",
+    "CLAUDE_CODE_CAPABILITIES",
+    "CLAUDE_MODEL_ALIASES",
+    "CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE",
+    "CODEX_EFFORT_MAPPING",
+    "CODEX_MODEL_ALIASES",
+    "CODEX_MODEL_ALIASES_LAST_VERIFIED",
+    "CODEX_VALID_REASONING_EFFORTS",
+    "CODEX_VALID_MODEL_IDS",
+    "SKILL_MODEL_CLASSES",
+    "SKILL_REASONING_EFFORTS",
+    "CmdOrigin",
+    "CmdSpec",
+    "InteractiveInvocationValidation",
+    "PositionalRole",
+    "CodexRuntimeSpec",
+    "CodexAppServerPlan",
+    "ExecutableLaunchBinding",
+    "ModelTranslation",
+    "SessionSummary",
+    "SkillDiscoveryRouteDef",
+    "SkillSessionConfig",
+    "ClaudeEventData",
+    "CodexEventData",
+    "SessionEvent",
+    "AgentSessionResult",
+    "is_valid_codex_model_id",
+    "model_class",
+    "strip_context_window_suffix",
+]
+
+
+CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE: str = (
+    "Automatic Codex context compaction was blocked. Start an explicit new session, "
+    "or compact manually and deliberately resume."
+)
+
+
+@dataclass(frozen=True, slots=True)
+class InteractiveInvocationValidation:
+    """Validated interactive invocation evidence retained until process spawn."""
+
+    errors: tuple[str, ...]
+    pre_spawn_check: Callable[[], None] | None = None
+
+    def __post_init__(self) -> None:
+        if self.errors and self.pre_spawn_check is not None:
+            raise ValueError("pre_spawn_check is only valid when errors is empty")
+
+
+@dataclass(frozen=True, slots=True)
+class SkillDiscoveryRouteDef:
+    """One way a backend loader reaches an admitted skill catalog."""
+
+    name: str
+    mechanism: SkillDiscoveryMechanism
+    upstream_status: UpstreamSupportStatus
+    tracking_issue: int | None
+    catalog_relpath: str
+    discovery_root_relpath: str | None
+    upstream_citation: str
+
+    def __post_init__(self) -> None:
+        if not self.name.strip():
+            raise ValueError("skill discovery route name must be non-empty")
+        if not self.upstream_citation.strip():
+            raise ValueError("skill discovery route upstream citation must be non-empty")
+        deprecated = self.upstream_status is UpstreamSupportStatus.DEPRECATED
+        if deprecated != (self.tracking_issue is not None):
+            raise ValueError("tracking_issue is required exactly for deprecated routes")
+        self._validate_relpath("catalog_relpath", self.catalog_relpath)
+        if self.discovery_root_relpath is not None:
+            self._validate_relpath("discovery_root_relpath", self.discovery_root_relpath)
+
+    @staticmethod
+    def _validate_relpath(field_name: str, value: str) -> None:
+        path = PurePosixPath(value)
+        if not value or value == "." or "\\" in value or path.is_absolute() or ".." in path.parts:
+            raise ValueError(f"{field_name} must be a non-empty relative POSIX path")
+
+    @property
+    def entry_point_is_alias(self) -> bool:
+        return (
+            self.discovery_root_relpath is not None
+            and self.discovery_root_relpath != self.catalog_relpath
+        )
+
+    @property
+    def alias_target(self) -> str:
+        if not self.entry_point_is_alias:
+            raise ValueError("skill discovery route does not declare an alias entry point")
+        assert self.discovery_root_relpath is not None
+        parent = posixpath.dirname(self.discovery_root_relpath) or "."
+        return posixpath.relpath(self.catalog_relpath, parent)
+
+    def catalog_dir(self, home: Path) -> Path:
+        return home / self.catalog_relpath
+
+    def discovery_root(self, home: Path) -> Path | None:
+        if self.discovery_root_relpath is None:
+            return None
+        return home / self.discovery_root_relpath
+
+
+@dataclass(frozen=True, slots=True)
+class BackendConventions:
+    """Per-backend filesystem layout conventions for skill discovery.
+
+    Distinct from :class:`BackendCapabilities` (which declares behavioral
+    capability flags). Conventions describe backend-owned directory layout:
+    where the backend looks for skills.
+    """
+
+    #: Relative path from backend session root to the skills directory.
+    skills_subdir: Path = Path("skills")
+    #: Backend-owned profile skill source admitted into generated session homes.
+    profile_skills_source: Path | None = None
+    #: Persistent generated-home root below the configured project temp directory.
+    persistent_session_root_subdir: Path | None = None
+    #: Native model-facing skill invocation sigil.
+    skill_sigil: str = "/"
+    #: Declared loader route for the managed session catalog.
+    managed_skill_discovery: SkillDiscoveryRouteDef | None = None
+
+    def __post_init__(self) -> None:
+        route = self.managed_skill_discovery
+        if route is None:
+            return
+        expected_catalog = PurePosixPath(SESSION_ADD_DIR_SUBDIR) / self.skills_subdir.as_posix()
+        if PurePosixPath(route.catalog_relpath) != expected_catalog:
+            raise ValueError(
+                f"catalog {route.catalog_relpath!r} must match {expected_catalog.as_posix()!r}"
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class BackendCapabilities:
+    """Per-backend capability declaration consumed by runtime gates.
+
+    Every field must have at least one production read site in src/ —
+    enforced by tests/arch/test_capability_consumption.py. Fields without
+    a consumer must be added to the _FORWARD_DECLARED exemption set as a
+    ForwardDeclaredField(issue=NNNN, rationale="...", added_date=date(...))
+    entry with a linked tracking issue.
+    """
+
+    # True when backend streams a side-channel JSONL log (Channel B)
+    channel_b_capable: bool = field(default=False)
+    # True when backend emits owned task lifecycle records
+    supports_task_lifecycle_events: bool = field(default=False)
+    # True when the subprocess needs a pseudo-TTY allocation
+    pty_required: bool = field(default=False)
+    # True when backend supports --resume <session_id>
+    session_resume_capable: bool = field(default=False)
+    # True when backend accepts --add-dir / --plugin-dir skill injection
+    skill_injection_capable: bool = field(default=False)
+    # Forward-declared: planned for thinking-block rendering
+    supports_thinking_blocks: bool = field(default=False)
+    # True when backend stdout is Claude JSON format
+    supports_claude_format_stdout: bool = field(default=False)
+    # True when non-zero exit code definitively signals failure
+    exit_code_is_terminal: bool = field(default=False)
+    # Forward-declared: planned for MCP config wiring
+    mcp_config_capable: bool = field(default=False)
+    # True when backend can be used for food-truck (fleet) dispatches
+    food_truck_capable: bool = field(default=False)
+    # JSONL record types that signal session completion
+    completion_record_types: frozenset[str] = field(default_factory=frozenset)
+    # JSONL record types that constitute session activity
+    session_record_types: frozenset[str] = field(default_factory=frozenset)
+    # True when backend supports LLM triage via claude -p
+    triage_capable: bool = field(default=False)
+    # Forward-declared: planned for context exhaustion handling
+    supports_context_exhaustion_detection: bool = field(default=False)
+    # True when provider error evidence can identify exact model-capacity failures
+    supports_model_capacity_error_detection: bool = field(default=False)
+    # False triggers pre-reveal kitchen at startup instead of notification-driven reveal
+    supports_tool_list_changed: bool = field(default=True)
+    # SKILL.md front-matter fields required by this backend
+    required_skill_fields: frozenset[str] = field(default_factory=frozenset)
+    # Files that must be copied into the session directory at launch
+    required_session_files: frozenset[str] = field(default_factory=frozenset)
+    # Symlink targets to create in the session directory at launch
+    session_dir_symlinks: frozenset[str] = field(default_factory=frozenset)
+    # Guard script names that apply to sessions for this backend
+    applicable_guards: frozenset[str] = field(default_factory=frozenset)
+    # Tool names whose calls are subject to write_guard enforcement for this backend
+    write_guard_tool_names: frozenset[str] = field(default_factory=frozenset)
+    # Env var prefixes stripped before session launch
+    env_denylist_prefixes: tuple[str, ...] = field(default=())
+    # Forward-declared: planned for version validation in doctor
+    min_version: str = ""
+    # Forward-declared: planned for version validation in doctor
+    version_check_command: str = ""
+    # Binary stem used for backend coherence check at session launch
+    process_name: str = ""
+    # All process names the backend binary may appear as in /proc/comm
+    # or ps output (e.g., interpreter names for shebang scripts)
+    process_name_aliases: frozenset[str] = field(default_factory=frozenset)
+    # Hook config format identifier (e.g. settings.json vs config.toml)
+    hook_config_format: str = ""
+    # Write detection strategy (e.g. tool_names, file_change)
+    write_detection_strategy: str = ""
+    # Patch format for write-guard path extraction (e.g. unified_diff)
+    patch_format: str = ""
+    # Default sandbox mode for skill sessions
+    default_skill_sandbox_mode: str = ""
+    # Env vars that must appear in CmdSpec.env for all cmd-builders (MCP forwarding)
+    mcp_env_forward_vars: frozenset[str] = field(default_factory=frozenset)
+    # True when backend supports api_simulator-based REPLAY_SCENARIO runner wrapping
+    replay_capable: bool = field(default=False)
+    # True when backend supports api_simulator-based RECORD_SCENARIO runner wrapping
+    record_capable: bool = field(default=False)
+    # True when backend is the Anthropic provider (Claude Code) — used to gate
+    # provider-override routing in run_skill() on capability rather than backend name.
+    anthropic_provider_capable: bool = field(default=False)
+    # True when backend supports Claude plugin install/list CLI
+    plugin_install_capable: bool = field(default=False)
+    # True when AutoSkillit launches this backend with AutoSkillit loaded as a
+    # Claude plugin, so its MCP tools carry PLUGIN_PREFIX.
+    claude_plugin_tool_namespace: bool = field(default=False)
+    # True when backend supports Health Inspector LLM-callback idle detection
+    inspector_capable: bool = field(default=False)
+    # True when backend CLI natively understands context-window suffixes like [1m]
+    # and translate_model must preserve them in the --model flag value
+    supports_context_window_suffix: bool = field(default=False)
+    # Gates backend-specific prompt supplements that warn against reading raw package files
+    has_unguarded_filesystem_access: bool = field(default=False)
+    # True when a backend can materialize the isolated terminal explorer role surface.
+    terminal_explorer_capable: bool = field(default=False)
+    # True when the backend supports session-scoped in-process exploration authority
+    # (Claude subagents share the parent process — the per-child terminal model
+    # structurally cannot apply; this flag routes to the session-scoped model).
+    session_scoped_explorer_capable: bool = field(default=False)
+    # True when the backend can make outbound GitHub API write calls without sandbox restriction
+    github_api_callable: bool = field(default=False)
+    # Native skill invocation prefix character used by this backend's model/CLI.
+    # Claude Code uses "/" (slash-commands via the Skill tool).
+    # Codex uses "$" (dollar-mention via extract_tool_mentions).
+    skill_sigil: str = "/"
+    # Whether the backend requires persistent (non-ephemeral) session directories.
+    # When True, session skill directories are placed under the project-relative
+    # temp directory (via resolve_temp_dir) instead of volatile tmpfs (/dev/shm).
+    # This is necessary when subagents inherit the session directory path as an
+    # environment variable and may access it after the parent process exits.
+    session_dir_persistent: bool = False
+    # True when interactive cook launches support the guarded startup observer.
+    cook_startup_observer_capable: bool = False
+    # Explicit-path environment selector used when resolving the backend executable.
+    explicit_path_env_var: str = ""
+    # True when cook needs an exact executable probe before sealing its launch env.
+    cook_exact_binding_probe_required: bool = field(default=False)
+    # True when backend honors the disable-model-invocation SKILL.md frontmatter
+    # key. When False, tier-2 skills are structurally omitted from the session
+    # directory rather than written with gating frontmatter that the backend
+    # would ignore.
+    supports_model_invocation_gating: bool = True
+    # Unnegotiated tool-result bound in tokens: the lowest operative bound
+    # when a caller has not supplied protected host evidence for a larger
+    # result. Distinct from history-retention configuration and negotiated
+    # recipe delivery decisions.
+    #
+    # Default of 10,000 matches the smallest registered backend bound
+    # (Codex code-mode). Any new backend that omits this field inherits
+    # conservative bounding rather than the historical 0-sentinel "skip
+    # bounding" behavior — preventing a silent opt-out where a future
+    # backend without an explicit capability setting would be delivered
+    # without any delivery-bound enforcement.
+    unnegotiated_tool_result_token_limit: int = 10_000
+    # True only when a protected host channel can attest the selected outer
+    # result limit before nested MCP execution. Current backends remain False
+    # until a version-pinned conformance report enables an evidence identity.
+    protected_recipe_delivery_capable: bool = False
+    # Backend-owned authority for ordinary and protected recipe delivery.
+    # None means the backend has no version-pinned recipe-delivery contract;
+    # protected delivery must then fail closed even if capability data drifts.
+    recipe_delivery_budget: RecipeDeliveryBudgetDef | None = None
+    # Interactive hook trust behavior. Automated builders retain their explicit
+    # bypass policy; interactive launchers translate this policy into CLI flags.
+    hook_trust_policy: HookTrustPolicy = HookTrustPolicy.AUTOMATED
+    # True only when the backend natively provides fixed-set join semantics:
+    # a declared batch declaration tool, an Agent PreToolUse claim guard,
+    # PostToolUse and PostToolUseFailure settlers, an unresolved-follow-up
+    # gate, and a Stop completion gate are all installed and capability-attested.
+    # This is a static declaration that must be paired with unconditional
+    # registration of every required hook in HOOK_REGISTRY in the same commit.
+    # Codex does NOT satisfy this contract — its wait-any/mailbox semantics
+    # cannot realize exact-set fixed membership, so its `fixed_set_join_capable`
+    # must remain False until the active harness exposes a real fixed-set primitive.
+    fixed_set_join_capable: bool = False
+    # True when the backend can materialize an attested server-owned fixed-batch route.
+    managed_fixed_batch_route_capable: bool = False
+    # Raw model identifiers only this backend can serve. Empty means this backend
+    # declares no native models; see CODEX_MODEL_ALIASES_LAST_VERIFIED for freshness.
+    native_model_ids: frozenset[str] = field(default_factory=frozenset)
+
+
+ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS: tuple[str, ...] = (
+    ".claude/skills",
+    ".autoskillit/skills",
+    ".codex/skills",
+    ".agents/skills",
+)
+
+
+_CONTEXT_WINDOW_SUFFIX_RE: _re.Pattern[str] = _re.compile(r"\[\d+[mk]?\]$", _re.IGNORECASE)
+
+CLAUDE_MODEL_ALIASES: dict[str, str] = {
+    "sonnet": "claude-sonnet-5",
+    "opus": "claude-opus-5-5",
+    "haiku": "haiku",
+}
+
+CODEX_MODEL_ALIASES: Mapping[str, str] = MappingProxyType(
+    {
+        "sonnet": "gpt-6-sol",
+        "opus": "gpt-6-sol",
+        # The haiku class marks volume-heavy, logic-light work; Luna is the
+        # Codex tier for that class, never Sol.
+        "haiku": "gpt-6-luna",
+    }
+)
+
+CODEX_MODEL_ALIASES_LAST_VERIFIED: str = "2026-09-23"
+
+CODEX_VALID_MODEL_IDS: frozenset[str] = frozenset({"gpt-5.5", "gpt-6-luna", "gpt-6-sol"})
+CODEX_VALID_REASONING_EFFORTS: frozenset[str] = frozenset(
+    {"low", "medium", "high", "xhigh", "max", "ultra"}
+)
+
+assert set(CODEX_MODEL_ALIASES.values()).issubset(CODEX_VALID_MODEL_IDS), (
+    "CODEX_MODEL_ALIASES values must all be members of CODEX_VALID_MODEL_IDS; "
+    f"got {sorted(set(CODEX_MODEL_ALIASES.values()) - CODEX_VALID_MODEL_IDS)}"
+)
+
+CODEX_EFFORT_MAPPING: dict[str, str] = {
+    "sonnet": "medium",
+    "opus": "high",
+    "haiku": "high",
+}
+
+# Backend adapters remain the only authority that translates a logical class
+# to a physical model ID and effort setting.
+SKILL_MODEL_CLASSES: frozenset[str] = frozenset(SKILL_MODEL_CLASS_REGISTRY)
+assert SKILL_MODEL_CLASSES == frozenset(CLAUDE_MODEL_ALIASES), (
+    "Claude model aliases must cover every registered logical model class"
+)
+assert SKILL_MODEL_CLASSES == frozenset(CODEX_MODEL_ALIASES), (
+    "Codex model aliases must cover every registered logical model class"
+)
+assert SKILL_REASONING_EFFORTS == frozenset(CODEX_EFFORT_MAPPING.values()), (
+    "Codex effort mappings must cover every registered semantic reasoning effort"
+)
+
+
+def _codex_unique_model_reverse(aliases: Mapping[str, str]) -> Mapping[str, str]:
+    """Return reverse aliases only for native model IDs used by one local class.
+
+    Shared native IDs are intentionally omitted so model_class() falls back to
+    the Codex model ID instead of projecting to an arbitrary local class.
+    """
+    values = tuple(aliases.values())
+    return {model_id: alias for alias, model_id in aliases.items() if values.count(model_id) == 1}
+
+
+# Reverse lookup is valid only for one-to-one native IDs. When multiple local
+# classes share a Codex model, the class is carried by model_reasoning_effort.
+_CODEX_MODEL_REVERSE: Mapping[str, str] = _codex_unique_model_reverse(CODEX_MODEL_ALIASES)
+
+
+@dataclass(frozen=True, slots=True)
+class ModelTranslation:
+    """Bundled result of model alias translation for future protocol unification.
+
+    Forward-declared to enable a future migration from translate_model() -> str
+    plus model_config_overrides() -> tuple to a single translate_model() ->
+    ModelTranslation protocol method.
+    """
+
+    model_id: str
+    config_overrides: tuple[str, ...] = ()
+
+
+def strip_context_window_suffix(model: str) -> str:
+    return _CONTEXT_WINDOW_SUFFIX_RE.sub("", model)
+
+
+def is_valid_codex_model_id(model_id: str) -> bool:
+    return model_id in CODEX_VALID_MODEL_IDS
+
+
+def model_class(model: str) -> str:
+    base = strip_context_window_suffix(model)
+    if base in CLAUDE_MODEL_ALIASES:
+        return base
+    return _CODEX_MODEL_REVERSE.get(base, base)
+
+
+CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
+    channel_b_capable=True,
+    supports_task_lifecycle_events=True,
+    pty_required=True,
+    session_resume_capable=True,
+    skill_injection_capable=True,
+    supports_thinking_blocks=True,
+    supports_claude_format_stdout=True,
+    exit_code_is_terminal=False,
+    mcp_config_capable=False,
+    food_truck_capable=True,
+    completion_record_types=frozenset({"result"}),
+    session_record_types=frozenset({"assistant"}),
+    triage_capable=True,
+    supports_context_exhaustion_detection=True,
+    supports_model_capacity_error_detection=False,
+    supports_tool_list_changed=False,
+    required_skill_fields=frozenset({"name", "description"}),
+    required_session_files=frozenset(),
+    session_dir_symlinks=frozenset(),
+    applicable_guards=frozenset(
+        {
+            "background_exec_guard",
+            "join_claim_guard",
+            "join_followup_guard",
+            "join_settle_guard",
+            "join_stop_guard",
+            "skill_load_guard",
+        }
+    ),
+    write_guard_tool_names=frozenset({"Write", "Edit", "Bash", "apply_patch"}),
+    env_denylist_prefixes=(),
+    min_version="2.1.280",
+    version_check_command="claude --version",
+    process_name="claude",
+    process_name_aliases=frozenset({"claude"}),
+    hook_config_format="",
+    write_detection_strategy="tool_names",
+    patch_format="unified_diff",
+    default_skill_sandbox_mode="",
+    mcp_env_forward_vars=frozenset(),
+    replay_capable=True,
+    record_capable=True,
+    anthropic_provider_capable=True,
+    plugin_install_capable=True,
+    claude_plugin_tool_namespace=True,
+    inspector_capable=False,
+    supports_context_window_suffix=True,
+    has_unguarded_filesystem_access=False,
+    terminal_explorer_capable=False,
+    session_scoped_explorer_capable=True,
+    github_api_callable=True,
+    skill_sigil="/",
+    session_dir_persistent=False,
+    cook_startup_observer_capable=False,
+    explicit_path_env_var="CLAUDE_CODE_EXECPATH",
+    cook_exact_binding_probe_required=True,
+    supports_model_invocation_gating=True,
+    # 23,250 = CLAUDE_DEFAULT_CLIENT_RESULT_TOKENS × CONSERVATIVE_GATE_HEADROOM
+    # (25,000 × 93 / 100).  The static capability derives from the conservative
+    # (unattested) 25,000-token client gate with a named 7% headroom fraction.
+    # The attested 50,000 value flows only through host attestation at runtime,
+    # never through this static table.  Recipes exceeding this threshold but
+    # fitting the attested ceiling are handled by the annotation-aware inline
+    # path when attestation is present.
+    unnegotiated_tool_result_token_limit=(
+        CLAUDE_DEFAULT_CLIENT_RESULT_TOKENS
+        * CONSERVATIVE_GATE_HEADROOM_NUMERATOR
+        // CONSERVATIVE_GATE_HEADROOM_DENOMINATOR
+    ),
+    protected_recipe_delivery_capable=False,
+    recipe_delivery_budget=None,
+    hook_trust_policy=HookTrustPolicy.AUTOMATED,
+    fixed_set_join_capable=True,
+    managed_fixed_batch_route_capable=False,
+    native_model_ids=frozenset(),
+)
+
+
+@dataclass(frozen=True, slots=True)
+class SessionSummary:
+    """Backend-neutral summary of a resumable coding-agent session."""
+
+    backend_name: str
+    session_id: str
+    launch_id: str | None
+    cwd: str
+    first_prompt: str
+    summary: str
+    git_branch: str | None
+    modified: str | None
+    is_sidechain: bool
+    session_type_hint: str | None
+
+
+class PositionalRole(StrEnum):
+    """Semantic role of a positional command argument."""
+
+    RESUME_TARGET = "resume_target"
+    PROMPT = "prompt"
+
+
+@dataclass(frozen=True, slots=True)
+class CmdOrigin:
+    """Provenance metadata for a CmdSpec, capturing the structural role of each element."""
+
+    binary: str
+    mode_flags: tuple[str, ...] = ()
+    kv_flags: tuple[tuple[str, str], ...] = ()
+    positional: tuple[tuple[PositionalRole, str], ...] = ()
+    variadic_pairs: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class CodexAppServerPlan:
+    """Per-launch driver plan for a managed Codex `app-server` skill session.
+
+    Carries every value the app-server JSON-RPC line driver needs that no
+    longer lives in ``argv`` once the transport moves off ``codex exec``:
+    the frozen catalog to register via ``skills/extraRoots/set``, the
+    prompt and thread-start/resume overrides, and the client identity used
+    to negotiate ``initialize``.
+    """
+
+    session_home: str
+    catalog_root: str
+    expected_skill_names: frozenset[str]
+    expected_skill_entries: tuple[tuple[str, str], ...]
+    cwd: str
+    prompt: str
+    model: str | None
+    sandbox: str
+    approval_policy: str
+    bypass_hook_trust: bool
+    developer_instructions: str | None
+    config_overrides: Mapping[str, object]
+    client_version: str
+    resume_thread_id: str = ""
+    runtime_workspace_roots: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.client_version:
+            raise ValueError("client_version must not be blank")
+        if self.catalog_root:
+            if not self.expected_skill_names or not self.expected_skill_entries:
+                raise ValueError(
+                    "a nonempty catalog_root requires nonempty expected skill names and entries"
+                )
+        elif self.expected_skill_names or self.expected_skill_entries:
+            raise ValueError(
+                "an empty catalog_root requires empty expected skill names and entries"
+            )
+        names_from_entries = frozenset(name for name, _ in self.expected_skill_entries)
+        if self.expected_skill_names != names_from_entries:
+            raise ValueError("expected_skill_names must match the names in expected_skill_entries")
+        for root in self.runtime_workspace_roots:
+            if not Path(root).is_absolute():
+                raise ValueError(
+                    f"runtime_workspace_roots entries must be absolute paths: {root!r}"
+                )
+
+    def digest_payload(self) -> Mapping[str, object]:
+        """Deterministic JSON-safe rendering of this plan for ``adapter_digest``.
+
+        Owning the field enumeration here (rather than in a caller several
+        files/layers away) keeps the digest contract in sync with the field
+        set by construction — a new field only has to be added once.
+        """
+        return {
+            "session_home": self.session_home,
+            "catalog_root": self.catalog_root,
+            "expected_skill_names": sorted(self.expected_skill_names),
+            "expected_skill_entries": [list(pair) for pair in self.expected_skill_entries],
+            "cwd": self.cwd,
+            "prompt": self.prompt,
+            "model": self.model,
+            "sandbox": self.sandbox,
+            "approval_policy": self.approval_policy,
+            "bypass_hook_trust": self.bypass_hook_trust,
+            "developer_instructions": self.developer_instructions,
+            "config_overrides": dict(self.config_overrides),
+            "client_version": self.client_version,
+            "resume_thread_id": self.resume_thread_id,
+            "runtime_workspace_roots": list(self.runtime_workspace_roots),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class CmdSpec:
+    """Fully-resolved subprocess command specification passed to the runner."""
+
+    cmd: tuple[str, ...]
+    env: Mapping[str, str]
+    cwd: str = ""
+    origin: CmdOrigin | None = None
+    is_resume: bool = False
+    process_idle_timeout_ms: int = 0
+    inherited_fds: tuple[int, ...] = ()
+    managed_skill_catalog: ValidatedAddDir | None = None
+    projected_skill_entries: tuple[tuple[str, str], ...] = ()
+    skill_discovery_route: SkillDiscoveryRouteDef | None = None
+    app_server_plan: CodexAppServerPlan | None = None
+    # Records that the builder was asked to keep Claude agent teams inactive
+    # and honored that request at construction. Post-spawn checkpoints read
+    # this intent rather than inferring policy from environment content.
+    force_inactive_agent_teams: bool = False
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "inherited_fds",
+            normalize_inherited_fds(self.inherited_fds),
+        )
+        object.__setattr__(
+            self,
+            "projected_skill_entries",
+            tuple((name, relative_path) for name, relative_path in self.projected_skill_entries),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class SkillSessionConfig:
+    """Configuration for a single skill session launch."""
+
+    completion_marker: str = ""
+    model: str | None = None
+    plugin_binding: PluginLaunchBinding | None = None
+    output_format: OutputFormat = OutputFormat.JSON
+    add_dirs: tuple[ValidatedAddDir, ...] = ()
+    exit_after_stop_delay_ms: int = 0
+    stream_idle_timeout_ms: int = 0
+    mcp_tool_timeout_sec: float = 0.0
+    scenario_step_name: str = ""
+    child_outcome_log_dir: str = ""
+    temp_dir_relpath: str | None = None
+    allowed_write_prefix: str = ""
+    allowed_write_prefixes: tuple[str, ...] = ()
+    provider_extras: Mapping[str, str] | None = None
+    profile_name: str = ""
+    resume_session_id: str = ""
+    resume_checkpoint: SessionCheckpoint | None = None
+    resume_message: str | None = None
+    sandbox_mode: str = "workspace-write"
+    network_access: bool = False
+    include_scope_discipline: bool = False
+    native_shell_capture_decision: NativeShellCaptureDecision | None = None
+    managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None
+    managed_attempt_id: str | None = None
+    force_inactive_agent_teams: bool = False
+
+    def __post_init__(self) -> None:
+        managed_values = (
+            self.native_shell_capture_decision,
+            self.managed_lineage_ref,
+            self.managed_attempt_id,
+        )
+        if any(value is not None for value in managed_values) and not all(
+            value is not None for value in managed_values
+        ):
+            raise ValueError("managed native shell capture fields must be supplied together")
+        if self.managed_attempt_id is not None and not _re.fullmatch(
+            r"[0-9a-f]{32}", self.managed_attempt_id
+        ):
+            raise ValueError("managed_attempt_id must be 32 lowercase hexadecimal characters")
+
+
+@dataclass(frozen=True, slots=True)
+class ClaudeEventData:
+    """Event data from the Claude Code backend.
+
+    Field naming follows Claude Code's JSONL schema: `session_id` identifies
+    the Claude Code session and `subtype` carries the assistant-event subtype.
+    These differ from CodexEventData (which uses `thread_id`/`item_type`)
+    because each backend uses its own native terminology.
+    Mutation of `raw` is prohibited by convention — the frozen constraint
+    prevents field reassignment but not dict mutation.
+    """
+
+    record_type: str
+    subtype: str
+    session_id: str
+    raw: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class CodexEventData:
+    """Event data from the Codex/OpenAI backend.
+
+    Field naming follows the OpenAI Responses API schema: `thread_id`
+    identifies the conversation thread and `item_type` carries the item kind.
+    These differ from ClaudeEventData (which uses `session_id`/`subtype`)
+    because each backend uses its own native terminology.
+    See `ClaudeEventData` for the `raw`-field mutation convention.
+    """
+
+    record_type: str
+    thread_id: str
+    item_type: str
+    raw: Mapping[str, Any] = field(default_factory=dict)
+    usage: Mapping[str, Any] | None = None
+    # Cumulative (resumed-history-inclusive) usage diagnostics from the
+    # app-server transport's thread/tokenUsage/updated.total — never summed
+    # into `usage` (the single-turn snapshot). None on exec-transport launches.
+    cumulative_usage: Mapping[str, Any] | None = None
+    file_changes: tuple[Mapping[str, Any], ...] | None = None
+    command: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SessionEvent:
+    """A single parsed event emitted by a running backend session."""
+
+    kind: BackendEventKind
+    is_terminal: bool
+    has_marker: bool
+    session_id: str | None = None
+    exit_code: int | None = None
+    backend_data: ClaudeEventData | CodexEventData | None = None
+    task_id: str | None = None
+    task_active: bool | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AgentSessionResult:
+    """Final result produced by a completed agent session."""
+
+    success: bool
+    exit_code: int
+    backend_name: str
+    elapsed_seconds: float
+    session_id: str | None = None
+    output: str = ""
+    error: str = ""
+    raw: Mapping[str, Any] = field(default_factory=dict)

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import cast
 
 from autoskillit.core import SkillSemanticAdaptationResult, SkillSemanticPlan
-from autoskillit.core.types._type_enums import CodexEventType
+from autoskillit.core.types.foundation._type_enums import CodexEventType
 from autoskillit.execution.process._process_jsonl import _marker_is_standalone
 from autoskillit.hooks._capture._snapshot import CaptureFinalManifest
 from autoskillit.hooks._capture._types import HOT_PATH_LOCK_WAIT

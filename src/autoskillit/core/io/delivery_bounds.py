@@ -7,14 +7,14 @@ import json
 import time
 
 from ..types import CLIENT_CHARS_PER_TOKEN_POLICY, SerializedChars
-from ..types._type_backend import BackendCapabilities
-from ..types._type_constants_registries import (
+from ..types.constants._type_constants_registries import (
     ANNOTATION_HARD_CAP_CHARS,
     CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,
     CONSERVATIVE_GATE_HEADROOM_DENOMINATOR,
     CONSERVATIVE_GATE_HEADROOM_NUMERATOR,
 )
-from ..types._type_recipe_delivery import (
+from ..types.execution._type_backend import BackendCapabilities
+from ..types.recipe._type_recipe_delivery import (
     RECIPE_DELIVERY_ATTESTATION_AUDIENCE,
     HostClientAttestation,
     RecipeDeliveryAttestation,

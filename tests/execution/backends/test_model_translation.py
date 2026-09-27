@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import SkillSessionConfig
-from autoskillit.core.types._type_backend import (
+from autoskillit.core.types.execution._type_backend import (
     CLAUDE_MODEL_ALIASES,
     CODEX_EFFORT_MAPPING,
     CODEX_MODEL_ALIASES,

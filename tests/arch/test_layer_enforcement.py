@@ -710,7 +710,7 @@ def test_fleet_tools_declare_fleet_scope() -> None:
     # tool-module import time. Import the relevant tool modules here so the
     # registry is populated regardless of xdist test ordering or any future
     # change to autoskillit/server/__init__.py's eager-import list.
-    from autoskillit.core.types._type_constants_registries import FLEET_TOOLS
+    from autoskillit.core.types.constants._type_constants_registries import FLEET_TOOLS
     from autoskillit.server.lifecycle._session_scope import SCOPE_FLEET, TOOL_SESSION_SCOPES
 
     expected = FLEET_TOOLS - {"batch_cleanup_clones"}
@@ -1665,12 +1665,12 @@ def test_evidence_reader_display_category_is_exact() -> None:
 def test_tool_categories_not_in_core() -> None:
     """TOOL_CATEGORIES must not be exported from the IL-0 core layer."""
     import autoskillit.core
-    import autoskillit.core.types._type_constants
+    import autoskillit.core.types.constants._type_constants
 
     assert "TOOL_CATEGORIES" not in dir(autoskillit.core)
-    assert "TOOL_CATEGORIES" not in dir(autoskillit.core.types._type_constants)
+    assert "TOOL_CATEGORIES" not in dir(autoskillit.core.types.constants._type_constants)
     assert "TOOL_CATEGORIES" not in autoskillit.core.__all__
-    assert "TOOL_CATEGORIES" not in autoskillit.core.types._type_constants.__all__
+    assert "TOOL_CATEGORIES" not in autoskillit.core.types.constants._type_constants.__all__
 
 
 def test_ci_tools_not_in_github_category() -> None:

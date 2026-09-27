@@ -601,8 +601,7 @@ def _extend_closure_write_scope(state: _RunSkillDispatchState) -> str | None:
     except SkillContractError as exc:
         return _write_scope_failure(str(exc))
     root_scope = state.invocation.root.write_scope
-    if root_scope is None:
-        return _write_scope_failure("run_skill root skill lacks a valid write scope")
+    assert root_scope is not None
     match root_scope.kind:
         case WriteScopeKind.BOUNDED:
             # `_resolve_dispatch_paths` populates write_watch_dirs from state.output_dir

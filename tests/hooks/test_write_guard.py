@@ -1922,6 +1922,24 @@ class TestUnparseableBashUnderActiveScope:
         self._assert_unparseable_deny(_run_hook(self._bash_event(tmp_path)))
 
 
+def test_interactive_unrestricted_scope_records_allow_reason(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    _set_headless(monkeypatch, headless=False)
+    _bind_interactive(
+        monkeypatch,
+        tmp_path,
+        {"free": manifest_entry(WriteScope(WriteScopeKind.UNRESTRICTED))},
+        ("free",),
+    )
+    reasons = _record_reasons(monkeypatch)
+
+    result = _run_hook(_interactive_event(tmp_path, str(tmp_path / "outside.py")))
+
+    assert result == ""
+    assert reasons == ["unrestricted_skill"]
+
+
 class TestEmptyPolicyDenialHint:
     """Empty-boundary denials should name the configuration source that produced
     the empty set so operators can self-diagnose without reading log files."""

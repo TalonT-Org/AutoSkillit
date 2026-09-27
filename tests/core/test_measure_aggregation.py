@@ -10,6 +10,7 @@ from typing import cast
 import pytest
 
 import autoskillit.core as aggregation
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.medium]
 
@@ -88,6 +89,7 @@ print("ok")
 """
         result = subprocess.run(
             [sys.executable, "-I", "-c", code],
+            env=production_interpreter_env(),
             capture_output=True,
             text=True,
             timeout=60,

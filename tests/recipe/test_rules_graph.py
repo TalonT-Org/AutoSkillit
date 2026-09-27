@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.core import Severity
+from autoskillit.core import WORKTREE_SKILLS, Severity
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep, StepResultCondition, StepResultRoute
 from autoskillit.recipe.validator import validate_recipe_structure
@@ -747,6 +747,154 @@ def test_worktree_path_from_worktree_capture_is_clean() -> None:
             "done": RecipeStep(action="stop", message="done"),
         }
     )
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "clone-root-as-worktree"]
+    assert flagged == []
+
+
+@pytest.mark.parametrize("skill_name", sorted(WORKTREE_SKILLS))
+def test_worktree_skill_cwd_from_clone_path_is_error(skill_name: str) -> None:
+    """A worktree skill's cwd cannot resolve to the cloned repository root."""
+    recipe = _make_recipe(
+        {
+            "clone": RecipeStep(
+                tool="clone_repo",
+                with_args={"source_dir": "/tmp/repo"},
+                capture={"work_dir": "result.clone_path"},
+                on_success="implement",
+            ),
+            "implement": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": f"/autoskillit:{skill_name} plan.md",
+                    "cwd": "${{ context.work_dir }}",
+                },
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "clone-root-as-worktree"]
+    assert len(flagged) == 1
+    assert flagged[0].severity == Severity.ERROR
+    assert "cwd" in flagged[0].message
+    assert "context.work_dir" in flagged[0].message
+    assert "result.clone_path" in flagged[0].message
+    assert "create_impl_worktree.sh" in flagged[0].message
+    assert "worktree_path" in flagged[0].message
+
+
+def test_worktree_skill_cwd_from_worktree_capture_is_clean() -> None:
+    recipe = _make_recipe(
+        {
+            "create_worktree": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "bash create_impl_worktree.sh"},
+                capture={"worktree_path": "result.worktree_path"},
+                on_success="implement",
+                on_failure="done",
+            ),
+            "implement": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": "/autoskillit:implement-worktree-no-merge plan.md",
+                    "cwd": "${{ context.worktree_path }}",
+                },
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "clone-root-as-worktree"]
+    assert flagged == []
+
+
+def test_worktree_skill_cwd_from_input_is_clean() -> None:
+    recipe = _make_recipe(
+        {
+            "clone": RecipeStep(
+                tool="clone_repo",
+                with_args={"source_dir": "/tmp/repo"},
+                capture={"work_dir": "result.clone_path"},
+                on_success="implement",
+            ),
+            "implement": RecipeStep(
+                tool="run_skill",
+                with_args={
+                    "skill_command": "/autoskillit:implement-worktree-no-merge plan.md",
+                    "cwd": "${{ inputs.worktree_path }}",
+                },
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "clone-root-as-worktree"]
+    assert flagged == []
+
+
+@pytest.mark.parametrize(
+    "skill_command",
+    [
+        "/autoskillit:resolve-merge-conflicts conflict.md",
+        "/autoskillit:dry-walkthrough plan.md",
+    ],
+)
+def test_non_worktree_skill_cwd_from_clone_path_is_clean(skill_command: str) -> None:
+    recipe = _make_recipe(
+        {
+            "clone": RecipeStep(
+                tool="clone_repo",
+                with_args={"source_dir": "/tmp/repo"},
+                capture={"work_dir": "result.clone_path"},
+                on_success="skill",
+            ),
+            "skill": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": skill_command, "cwd": "${{ context.work_dir }}"},
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "clone-root-as-worktree"]
+    assert flagged == []
+
+
+def test_run_cmd_cwd_from_clone_path_is_clean() -> None:
+    recipe = _make_recipe(
+        {
+            "clone": RecipeStep(
+                tool="clone_repo",
+                with_args={"source_dir": "/tmp/repo"},
+                capture={"work_dir": "result.clone_path"},
+                on_success="create_worktree",
+            ),
+            "create_worktree": RecipeStep(
+                tool="run_cmd",
+                with_args={
+                    "cmd": "bash create_impl_worktree.sh",
+                    "cwd": "${{ context.work_dir }}",
+                },
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+
     findings = run_semantic_rules(recipe)
     flagged = [f for f in findings if f.rule == "clone-root-as-worktree"]
     assert flagged == []

@@ -14,6 +14,20 @@ def recipe():
     return load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
 
 
+def test_merge_prs_implement_launches_in_precreated_worktree(recipe) -> None:
+    implement = recipe.steps["implement"]
+    assert implement.with_args["cwd"] == "${{ context.worktree_path }}"
+
+    verify = recipe.steps["verify"]
+    assert verify.on_success == "create_conflict_worktree"
+    create_worktree = recipe.steps[verify.on_success]
+    assert create_worktree.tool == "run_cmd"
+    assert create_worktree.on_success == "implement"
+    assert "create_impl_worktree.sh" in create_worktree.with_args["cmd"]
+    assert create_worktree.capture["worktree_path"].from_ == "${{ result.worktree_path }}"
+    assert create_worktree.capture["worktree_branch_name"].from_ == "${{ result.branch_name }}"
+
+
 def test_pmp_collect_and_check_impl_plans_step_exists(recipe) -> None:
     """collect_and_check_impl_plans step must exist in the recipe."""
     assert "collect_and_check_impl_plans" in recipe.steps, (

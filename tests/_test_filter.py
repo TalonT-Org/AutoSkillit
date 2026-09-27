@@ -1484,6 +1484,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
         }
     ),
     "_llm_triage": frozenset({"test_llm_triage.py", "server"}),
+    "_measure_aggregation": frozenset(
+        {"arch", "cli", "contracts", "core", "execution", "fleet", "pipeline"}
+    ),
     "_parent_assistant_turns": frozenset(
         {"arch", "contracts", "core", "execution", "fleet", "hooks"}
     ),
@@ -1631,6 +1634,9 @@ LAYER_CASCADE_AGGRESSIVE: dict[str, frozenset[str]] = {
     "hook_registry": frozenset({"hooks", "core"}),
     "planner": frozenset({"planner"}),
     "_llm_triage": frozenset({"test_llm_triage.py"}),
+    "_measure_aggregation": frozenset(
+        {"arch", "cli", "contracts", "core", "execution", "fleet", "pipeline"}
+    ),
     "_parent_assistant_turns": frozenset(
         {"arch", "contracts", "core", "execution", "fleet", "hooks"}
     ),

@@ -409,6 +409,7 @@ def test_root_module_allowlist() -> None:
             "__init__.py",
             "__main__.py",
             "_llm_triage.py",
+            "_measure_aggregation.py",
             "_parent_assistant_turns.py",
             "_probe_canary.py",
             "_recipe_delivery_framing.py",

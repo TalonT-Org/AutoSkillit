@@ -584,7 +584,7 @@ def test_stdlib_only_hook_callable_modules_have_zero_autoskillit_imports() -> No
     outside the package venv, loaded via bare-name sys.path bootstrap
     (hooks/guards/quota_guard.py, hooks/quota_post_hook.py). Unlike hooks/*.py
     (guarded above by test_hooks_are_stdlib_only), nothing previously guarded
-    these two root-level modules against silently growing an autoskillit.*
+    these root-level modules against silently growing an autoskillit.*
     import, which would break at runtime for any hook subprocess without the
     package venv active.
 
@@ -593,6 +593,7 @@ def test_stdlib_only_hook_callable_modules_have_zero_autoskillit_imports() -> No
     """
     stdlib_only_modules = (
         "quota_constraints.py",
+        "_measure_aggregation.py",
         "_parent_assistant_turns.py",
         "_recipe_delivery_framing.py",
     )

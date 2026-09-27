@@ -27,6 +27,10 @@ from ._type_context_admission import (
     ResolveIndeterminateRollbackEvent,
     RollbackAdmissionEvent,
 )
+from ._type_context_admission_base import (
+    _validate_non_negative,
+    _validate_reason_code,
+)
 from ._type_context_admission_persistence_envelope import (
     ContextAdmissionStreamKey,
     ShadowContextAdmissionRecord,
@@ -35,10 +39,6 @@ from ._type_enums import (
     ContextAdmissionAccountingStatus,
     ContextAdmissionStorageFailureReason,
     ContextAdmissionStorageHealthStatus,
-)
-from ._type_helpers import (
-    _validate_non_negative,
-    _validate_reason_code,
 )
 
 

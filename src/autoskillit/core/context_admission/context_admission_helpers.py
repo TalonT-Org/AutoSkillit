@@ -72,6 +72,7 @@ from ..types._type_context_admission import (
     RolloverEpochEvent,
     UninitializedContextAdmissionState,
 )
+from ..types._type_context_admission_base import _reconciled_snapshot_counts
 from ..types._type_enums import (
     AdmissionDecisionKind,
     AdmissionState,
@@ -79,7 +80,6 @@ from ..types._type_enums import (
     ReserveClass,
     WitnessKind,
 )
-from ..types._type_helpers import _reconciled_snapshot_counts
 
 if TYPE_CHECKING:
     from ..types._type_context_admission import (

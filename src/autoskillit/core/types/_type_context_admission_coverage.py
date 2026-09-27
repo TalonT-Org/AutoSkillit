@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ._type_context_admission_base import _ContractValue
-from ._type_enums import CoverageEvidenceKind, CoverageState, ProducerSurface
-from ._type_helpers import (
+from ._type_context_admission_base import (
+    _ContractValue,
     _raise_invalid,
     _validate_bounded_text,
     _validate_canonical_tuple,
@@ -15,6 +14,7 @@ from ._type_helpers import (
     _validate_iso_date,
     _validate_reason_code,
 )
+from ._type_enums import CoverageEvidenceKind, CoverageState, ProducerSurface
 
 
 @dataclass(frozen=True, slots=True)

@@ -5,7 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TypeAlias
 
-from ._type_context_admission_base import _ContractValue
+from ._type_context_admission_base import (
+    _ContractValue,
+    _raise_invalid,
+    _validate_canonical_tuple,
+    _validate_non_negative,
+    _validate_protocol_version,
+    _validate_reason_code,
+)
 from ._type_context_admission_identities import (
     AdmissionBatchId,
     AdmissionEventId,
@@ -30,13 +37,6 @@ from ._type_context_admission_records import (
     RepresentationBindingWitness,
 )
 from ._type_enums import CoverageState, GenerationState, MeasurementKind
-from ._type_helpers import (
-    _raise_invalid,
-    _validate_canonical_tuple,
-    _validate_non_negative,
-    _validate_protocol_version,
-    _validate_reason_code,
-)
 
 
 @dataclass(frozen=True, slots=True)

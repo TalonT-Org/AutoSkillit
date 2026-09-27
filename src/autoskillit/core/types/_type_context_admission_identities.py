@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ._type_context_admission_base import _ContractValue
+from ._type_context_admission_base import (
+    _ContractValue,
+    _raise_invalid,
+    _validate_bounded_text,
+    _validate_non_negative,
+)
 from ._type_dispatch_identity import DispatchIdentity
 from ._type_enums import ProducerSurface
-from ._type_helpers import _raise_invalid, _validate_bounded_text, _validate_non_negative
 
 _NON_DISPATCH_PRODUCER_SURFACES = frozenset(
     {

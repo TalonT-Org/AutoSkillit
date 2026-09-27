@@ -667,3 +667,45 @@ def test_phoropter_all_in_types_all() -> None:
         "READING_TOKEN_PATTERN",
     } - set(types_all)
     assert not missing, f"Missing from core.types.__all__: {missing}"
+
+
+_MOVED_CONTEXT_ADMISSION_VALIDATORS = (
+    "CONTEXT_ADMISSION_PROTOCOL_VERSION",
+    "_MAX_UINT64",
+    "_CONTENT_FREE_TEXT",
+    "_CONTENT_FREE_LOCATOR",
+    "_REASON_CODE",
+    "_GIT_REVISION",
+    "_ISO_DATE",
+    "_FRESHNESS_POLICIES",
+    "_SENSITIVE_TEXT_MARKERS",
+    "ContextAdmissionValidationError",
+    "UnsupportedContextAdmissionProtocolError",
+    "_raise_invalid",
+    "_validate_protocol_version",
+    "_validate_non_negative",
+    "_reconciled_snapshot_counts",
+    "_validate_bounded_text",
+    "_validate_reason_code",
+    "_validate_iso_date",
+    "_validate_tuple",
+    "_validate_canonical_tuple",
+    "_validate_git_revision",
+    "_validate_freshness_policy",
+    "_validate_expired_idempotency_tombstone",
+    "_validate_context_admission_state_metadata",
+    "_matches_declared_type",
+)
+
+
+@pytest.mark.parametrize("name", _MOVED_CONTEXT_ADMISSION_VALIDATORS)
+def test_context_admission_validators_live_in_base(name: str) -> None:
+    import autoskillit.core as core
+    from autoskillit.core.types import _type_context_admission_base as base
+    from autoskillit.core.types import _type_helpers as helpers
+
+    assert hasattr(base, name)
+    assert not hasattr(helpers, name)
+    if name in {"ContextAdmissionValidationError", "UnsupportedContextAdmissionProtocolError"}:
+        assert getattr(base, name).__module__ == base.__name__
+    assert core.ContextAdmissionValidationError is base.ContextAdmissionValidationError

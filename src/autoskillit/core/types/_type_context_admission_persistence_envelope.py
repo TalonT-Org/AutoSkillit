@@ -38,9 +38,16 @@ from ._type_context_admission import (
     WindowEpochId,
 )
 from ._type_context_admission_base import (
+    CONTEXT_ADMISSION_PROTOCOL_VERSION,
+    ContextAdmissionValidationError,
     _ContractValue,
     _decode,
     _encode,
+    _raise_invalid,
+    _validate_bounded_text,
+    _validate_non_negative,
+    _validate_protocol_version,
+    _validate_reason_code,
 )
 from ._type_enums import (
     AdmissionState,
@@ -48,15 +55,6 @@ from ._type_enums import (
     MeasurementKind,
     ProducerSurface,
     ReserveClass,
-)
-from ._type_helpers import (
-    CONTEXT_ADMISSION_PROTOCOL_VERSION,
-    ContextAdmissionValidationError,
-    _raise_invalid,
-    _validate_bounded_text,
-    _validate_non_negative,
-    _validate_protocol_version,
-    _validate_reason_code,
 )
 
 CONTEXT_ADMISSION_ENCODING_VERSION = 1

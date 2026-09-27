@@ -222,7 +222,7 @@ def test_true_gate_dispatches_both_registered_agents_once() -> None:
 
 
 def test_candidate_validation_requires_non_empty_nested_claims() -> None:
-    section = _section("### Step 4", "### Step 4.5")
+    section = " ".join(_section("### Step 4", "### Step 4.5").split())
     assert "`file`, `message`, and `simpler_behavior` are non-empty strings" in section
     assert "every `path`, `role`, and `claim` is a non-empty" in section
     assert "every `path` and `relation` is a non-empty" in section
@@ -230,12 +230,12 @@ def test_candidate_validation_requires_non_empty_nested_claims() -> None:
 
 
 def test_parent_adjudication_verifies_every_semantic_claim() -> None:
-    section = _section("### Step 4", "### Step 4.5")
+    section = " ".join(_section("### Step 4", "### Step 4.5").split()).lower()
     for obligation in (
         "every role-labelled evidence claim",
         "every one of the seven boundary claims",
         "every hop in the complete ordered trace",
-        "semantic equivalence",
+        "proposed simpler behavior's semantic equivalence",
         "the parent may not accept a sampled subset",
     ):
         assert obligation in section

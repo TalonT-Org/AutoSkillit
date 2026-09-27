@@ -84,8 +84,8 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 - Mutating checked-out refs is prohibited during review. Review is observational; do not rewrite refs, `HEAD`, the index, or worktree state to satisfy an authority check.
 - Detach child delegations instead of joining them (joining every child is required)
 - Start independent child delegations sequentially
-- Assign a registered logical role to standard or deletion audit agents. The only permitted
-  registered calls are the exact reachability and abstraction-surface roles in Step 3.
+- Specify `subagent_type` for standard or deletion audit agents. The only permitted
+  registered calls are the exact reachability and abstraction-surface calls in Step 3.
 - Give standard or deletion agents repository-read access. Only the two registered
   proof-only auditors may use `Read`, `Grep`, and `Glob`, and only under
   `{checkout_root}`.
@@ -695,7 +695,7 @@ Subagent prompt template (dimension 7 — deletion_regression, only when the pla
 > array of findings. If there are no findings, put an empty array [] in that block. Do not emit
 > any other json block in the final message.
 
-### Step 4: Adjudicate and Finalize Findings
+### Step 4: Aggregate and Deduplicate Findings
 
 `collect_review_audit` reads each child's own transcript, enforces the output schema, and returns
 only validated findings. The experimental candidate keys are exactly `file`, `line`, `dimension`,
@@ -729,13 +729,14 @@ The collector creates each
 only as a bounded envelope with producer, terminal status, byte length and digest, a bounded
 excerpt or iteration-scoped raw reference, parse/schema errors, and rejection reason.
 
-Read repository evidence only after revalidating checkout head/base/merge-base, the mode-appropriate
-live refs, the byte-identical metrics marker, diff identity/profile, and artifact digests. Quote and
-read each cited location under `{checkout_root}`. Verify every role-labelled evidence claim, all
-seven boundary claims, every hop in the complete ordered trace as a reachable chain, and the
-proposed simpler behavior's equivalence for return values, exceptions, ordering, persistence,
-concurrency, and compatibility. Missing, contradictory, or unverified claims reject the candidate;
-do not accept a sampled subset. Confidence never implies acceptance.
+Before repository evidence reads, revalidate checkout head/base/merge-base, the mode-appropriate
+live refs, the byte-identical metrics marker, diff identity/profile, and all artifact digests. Quote
+and read each cited location under `{checkout_root}`. The parent must verify every role-labelled
+evidence claim, every one of the seven boundary claims, every hop in the complete ordered trace as
+a reachable chain, and the proposed simpler behavior's semantic equivalence for return values,
+exceptions, ordering, persistence, concurrency, and compatibility. Missing, contradictory, or
+unverified claims reject the candidate; the parent may not accept a sampled subset. Confidence
+never implies acceptance.
 
 After those evidence reads, record one disposition per `EXPERIMENTAL_CANDIDATES` item in
 `AUDIT_DISPOSITIONS`. Each entry contains exactly `candidate_id`, `reason_code`, and `explanation`;
@@ -746,13 +747,21 @@ server mints disposition identities. The closed disposition/rejection reason cod
 `simpler_behavior_not_equivalent`, `suppressed_prior_thread`, `duplicate_candidate`, and
 `publication_failed`.
 
-`finalize_review_audit` applies accepted-only suppression before deduplication across the combined
-standard, deletion, reachability, and abstraction-surface sequence, preserving fixed source order
-and original array index. It suppresses a finding matching `prior_resolved_findings` by the same
-file and a line within ±5, recording `suppressed_prior_thread` for experimental candidates; it
-deduplicates diff-anchored findings by `(file, line)` using severity, `requires_decision=false`,
-source rank, and original array index, then records every `dedup_group_id`, member, winner, and
-rationale. Duplicate losers receive `duplicate_candidate` records. Only exact anchors admitted by
+`finalize_review_audit` is the single normal-aggregation boundary. Feed only parent-accepted
+experimental findings into normal aggregation; standard and deletion findings enter without
+experimental dispositions. It normalizes sources in fixed order: standard dimensions, deletion
+regression, reachability, then abstraction-surface, preserving original array index. Suppress and
+deduplicate exactly once across that combined sequence; do not append a second standard/deletion
+list afterward.
+
+The suppression pass runs before deduplication and removes findings matching
+`prior_resolved_findings` by the same file and a line within ±5. Log
+`"Suppressing finding at {file}:{line} — matches prior resolved thread"`. For experimental
+candidates, create a linked immutable aggregation record with reason `suppressed_prior_thread`;
+do not mutate the candidate or disposition. Deduplicate diff-anchored findings by `(file, line)`
+using severity, `requires_decision=false`, source rank, and original array index, then record
+every `dedup_group_id`, member, winner, and rationale. Duplicate losers receive
+`duplicate_candidate` records. Only exact anchors admitted by
 `anchor_authority_path` may become inline comments. Unpostable findings retain their admission
 reasons and appear in the review body's "Outside Diff Range" section. Unavailable or empty
 authority admits no inline findings; missing authority permits body-only publication, never a

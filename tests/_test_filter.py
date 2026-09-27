@@ -486,7 +486,9 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_results": _TYPE_RESULTS_CASCADE,
     "_type_results_records": _TYPE_RESULTS_CASCADE,
     "_type_results_execution": frozenset({"core", "execution", "server", "pipeline"}),
-    "_type_execution_identity": frozenset({"core", "execution", "server", "cli", "fleet"}),
+    "_type_execution_identity": frozenset(
+        {"core", "execution", "server", "cli", "fleet", "smoke_utils"}
+    ),
     "_type_exploration": frozenset({"core", "exploration", "pipeline", "server"}),
     "_type_backend": frozenset(
         {"core", "config", "execution", "cli", "migration", "recipe", "server", "workspace"}
@@ -1632,7 +1634,7 @@ LAYER_CASCADE_AGGRESSIVE: dict[str, frozenset[str]] = {
         {"arch", "contracts", "core", "execution", "fleet", "hooks"}
     ),
     "_recipe_delivery_framing": frozenset({"server", "hooks", "infra"}),
-    "smoke_utils": frozenset({"smoke_utils"}),
+    "smoke_utils": frozenset({"smoke_utils", "server"}),
     "version": frozenset({"test_version.py"}),
     "_test_filter": frozenset({"arch", "contracts"}),
     "report": frozenset({"report"}),

@@ -199,7 +199,10 @@ def test_plan_derives_slots_and_manifest_integrity(tmp_path: Path) -> None:
 
     authority = review / "gate_snapshot.x" / "gate_authority.json"
     next_plan = plan_review_audit(
-        authority_path=str(authority), review_output_dir=str(review), deletion_merge_base=MERGE_SHA
+        authority_path=str(authority),
+        review_output_dir=str(review),
+        deletion_merge_base=MERGE_SHA,
+        repository="acme/repo",
     )
     assert next_plan["audit_run_id"] != planned["audit_run_id"]
     assert Path(str(next_plan["manifest_path"])).is_file()

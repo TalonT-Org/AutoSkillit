@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
-import json
 from collections import Counter
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import cast
 
-from autoskillit.core import ChildTaskTranscript, is_valid_child_task_id
-from autoskillit.core.io import atomic_write
+from autoskillit.core import (
+    ChildTaskTranscript,
+    get_logger,
+    is_valid_child_task_id,
+    read_versioned_json,
+)
 from autoskillit.smoke_utils.review._audit_manifest import (
     ReviewAuditInputError,
+    _write_review_audit_artifact,
     load_review_audit_anchor_authority,
     load_review_audit_manifest,
 )
@@ -22,6 +26,8 @@ from autoskillit.smoke_utils.review._validation import (
     build_malformed_review_envelope,
     validate_experimental_auditor_outputs,
 )
+
+logger = get_logger(__name__)
 
 
 def _slot_failure(
@@ -93,6 +99,11 @@ def _load_bound_transcript(
     try:
         transcript = read_child_task(handle)
     except Exception as exc:
+        logger.warning(
+            "failed to read review-audit child transcript for %s",
+            handle,
+            exc_info=True,
+        )
         return None, _slot_failure(
             slot,
             handle=handle,
@@ -347,17 +358,15 @@ def evaluate_review_audit_slots(
 
 
 def _read_ledger(path: Path, audit_run_id: str) -> dict[str, object]:
-    if not path.exists():
-        return {"audit_run_id": audit_run_id, "slots": {}}
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        value = read_versioned_json(path, 1, logger=logger, raise_io_errors=True)
+    except OSError as exc:
         raise ReviewAuditInputError("review-audit ledger is unreadable") from exc
-    if (
-        not isinstance(value, dict)
-        or value.get("audit_run_id") != audit_run_id
-        or not isinstance(value.get("slots"), dict)
-    ):
+    if value is None:
+        if not path.exists():
+            return {"audit_run_id": audit_run_id, "slots": {}}
+        raise ReviewAuditInputError("review-audit ledger schema is invalid")
+    if value.get("audit_run_id") != audit_run_id or not isinstance(value.get("slots"), dict):
         raise ReviewAuditInputError("review-audit ledger shape is invalid")
     return value
 
@@ -542,7 +551,7 @@ def collect_review_audit(
         *_standard_relaunches(raw_slots, records_by_id, ledger_slots),
     ]
 
-    atomic_write(path, json.dumps(ledger, sort_keys=True, indent=2) + "\n", strict_durability=True)
+    _write_review_audit_artifact(path, ledger)
     state = _collection_state(slot_records, relaunch, experimental_state)
     return {
         "audit_run_id": audit_run_id,

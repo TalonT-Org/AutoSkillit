@@ -74,8 +74,8 @@ def _publication_call_blocks(text: str) -> list[str]:
 
 def test_findings_and_verdict_come_from_finalize_result() -> None:
     text = _skill_text("review-pr")
-    step4 = text[text.index("### Step 4") : text.index("### Step 4.5")]
-    step5 = text[text.index("### Step 5") : text.index("### Step 6")]
+    step4 = " ".join(text[text.index("### Step 4") : text.index("### Step 4.5")].split())
+    step5 = " ".join(text[text.index("### Step 5") : text.index("### Step 6")].split())
     finalized_steps = step4 + step5
 
     assert "AUDIT_FINALIZATION = finalize_review_audit(" in step4
@@ -87,8 +87,8 @@ def test_findings_and_verdict_come_from_finalize_result() -> None:
 
 def test_auditor_status_uses_one_authoritative_mapping() -> None:
     text = _skill_text("review-pr")
-    step4 = text[text.index("### Step 4") : text.index("### Step 4.5")]
-    step8 = text[text.index("### Step 8") :]
+    step4 = " ".join(text[text.index("### Step 4") : text.index("### Step 4.5")].split())
+    step8 = " ".join(text[text.index("### Step 8") :].split())
     assert "AUDITOR_RECORDS = auditor_records" in step4
     assert "AUDIT_FINALIZATION" in step4
     assert "finalize-issued `AUDITOR_RECORDS` terminal-status authority" in step8

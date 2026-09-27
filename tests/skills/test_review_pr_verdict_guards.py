@@ -110,9 +110,9 @@ def test_review_pr_delegates_own_pr_event_transformation():
 
 def test_experimental_degradation_blocks_approval() -> None:
     text = _skill_text()
-    step5 = text[text.index("### Step 5") : text.index("### Step 6")]
-    assert 'verdict = AUDIT_FINALIZATION["verdict"]' in step5
-    assert "finalize_review_audit" in step5
+    step5 = " ".join(text[text.index("### Step 5") : text.index("### Step 6")].split())
+    assert '`verdict` is `AUDIT_FINALIZATION["verdict"]`' in step5
+    assert "`finalize_review_audit`" in step5
     assert step5.index("stale_snapshot") < step5.index("changes_requested")
 
 

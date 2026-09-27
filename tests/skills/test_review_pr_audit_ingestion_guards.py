@@ -31,6 +31,9 @@ def test_review_audit_plan_collect_and_finalize_are_the_only_ingestion_path() ->
     step3 = _section(text, "### Step 3", "### Step 4")
     step4 = _section(text, "### Step 4", "### Step 4.5")
     step8 = _section(text, "### Step 8")
+    step3_normalized = " ".join(step3.split())
+    step4_normalized = " ".join(step4.split())
+    step8_normalized = " ".join(step8.split())
 
     plan_call = text.index("plan_review_audit(")
     collect_call = text.index("collect_review_audit(")
@@ -53,12 +56,11 @@ def test_review_audit_plan_collect_and_finalize_are_the_only_ingestion_path() ->
     )
     assert all(phrase not in text for phrase in removed_transcription_paths)
 
-    step3_normalized = " ".join(step3.split())
-    assert "marker_line" in step3
-    assert "slot_token" in step3
-    assert "relaunch" in step3.lower()
-    assert "Start every child prompt with that slot's `marker_line` verbatim" in step3
-    contract = "End your final message with exactly one fenced code block whose opening line is"
+    assert "marker_line" in step3_normalized
+    assert "slot_token" in step3_normalized
+    assert "relaunch" in step3_normalized.lower()
+    assert "Start every child prompt with that slot's `marker_line` verbatim" in step3_normalized
+    contract = "End your final message with exactly one fenced code block"
     prompt_contracts: list[str] = []
     cursor = 0
     for _ in range(2):
@@ -70,21 +72,24 @@ def test_review_audit_plan_collect_and_finalize_are_the_only_ingestion_path() ->
         cursor = end
     for prompt_contract in prompt_contracts:
         assert "```json" in prompt_contract
-        assert "whose closing line is" in prompt_contract
+        assert (
+            "whose closing line is" in prompt_contract
+            or "closes with a line containing only" in prompt_contract
+        )
         assert "complete JSON array of findings" in prompt_contract
         assert "empty array [] in that block" in prompt_contract
 
     assert "Transcribe, merge, summarize, repair, or re-type any auditor output" in text
     assert "Compute, assume, or hard-code the gate state, audit state" in text
     for field in ("candidate_id", "reason_code", "explanation"):
-        assert field in step4
-    assert "one entry per `EXPERIMENTAL_CANDIDATES` item" in step4
-    assert "FINAL_REVIEW_FINDINGS = FILTERED_FINDINGS = survivors" in step4
-    assert "UNPOSTABLE_FINDINGS = unpostable" in step4
-    assert "REVIEW_LEVEL_FINDINGS = review_level_findings" in step4
-    assert 'verdict = AUDIT_FINALIZATION["verdict"]' in step4
+        assert field in step4_normalized
+    assert "one disposition per `EXPERIMENTAL_CANDIDATES` item" in step4_normalized
+    assert "FINAL_REVIEW_FINDINGS = FILTERED_FINDINGS = survivors" in step4_normalized
+    assert "UNPOSTABLE_FINDINGS = unpostable" in step4_normalized
+    assert "REVIEW_LEVEL_FINDINGS = review_level_findings" in step4_normalized
+    assert 'verdict = AUDIT_FINALIZATION["verdict"]' in step4_normalized
 
-    assert "finalize-issued `AUDITOR_RECORDS` terminal-status authority" in step8
+    assert "finalize-issued `AUDITOR_RECORDS` terminal-status authority" in step8_normalized
     assert 'verdict = "' not in text[plan_call:]
 
 
@@ -92,8 +97,8 @@ def test_review_audit_plan_uses_caller_repository_and_no_model_supplied_head() -
     text = _SKILL_PATH.read_text()
     plan_start = text.index("plan_review_audit(")
     plan_end = text.index(")", plan_start) + 1
-    plan_call = text[plan_start:plan_end]
-    step6 = _section(text, "### Step 6", "### Step 7")
+    plan_call = " ".join(text[plan_start:plan_end].split())
+    step6 = " ".join(_section(text, "### Step 6", "### Step 7").split())
 
     assert 'repository="{repository}"' in plan_call
     assert "pr_head_sha" not in plan_call
@@ -103,7 +108,7 @@ def test_review_audit_plan_uses_caller_repository_and_no_model_supplied_head() -
 
 def test_review_audit_dispositions_have_only_the_documented_fields() -> None:
     text = _SKILL_PATH.read_text()
-    step4 = _section(text, "### Step 4", "### Step 4.5")
+    step4 = " ".join(_section(text, "### Step 4", "### Step 4.5").split())
     dispositions_start = step4.index("AUDIT_DISPOSITIONS")
     disposition_section = step4[dispositions_start:]
 

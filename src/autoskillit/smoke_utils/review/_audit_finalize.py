@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import cast
 
 from autoskillit.core import ChildTaskTranscript
-from autoskillit.core.io import atomic_write
 from autoskillit.smoke_utils.review._aggregation import (
     aggregate_combined_review_candidates,
     determine_experimental_review_verdict,
@@ -18,6 +17,7 @@ from autoskillit.smoke_utils.review._aggregation import (
 from autoskillit.smoke_utils.review._audit_collection import evaluate_review_audit_slots
 from autoskillit.smoke_utils.review._audit_manifest import (
     ReviewAuditInputError,
+    _write_review_audit_artifact,
     load_review_audit_anchor_authority,
     load_review_audit_manifest,
 )
@@ -237,7 +237,5 @@ def finalize_review_audit(
     path = Path(manifest_path).with_name(
         f"review_audit_finalization_{manifest['audit_run_id']}.json"
     )
-    atomic_write(
-        path, json.dumps(finalization, sort_keys=True, indent=2) + "\n", strict_durability=True
-    )
+    _write_review_audit_artifact(path, finalization)
     return {**finalization, "finalization_path": str(path)}

@@ -8,12 +8,12 @@ from typing import Any
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
+import autoskillit.smoke_utils.review as _review_audit
 from autoskillit.core import get_logger
 from autoskillit.server import mcp
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
-from autoskillit.smoke_utils import review as _review_audit
 
 logger = get_logger(__name__)
 

@@ -213,16 +213,21 @@ def test_pr_review_auditors_require_fenced_findings_block() -> None:
         content = md_file.read_text()
         parts = content.split("---", 2)
         body = parts[2] if len(parts) >= 3 else content
-        has_contract = any(
-            "End your final message with exactly one fenced code block" in paragraph
-            and "```json" in paragraph
+        normalized_body = " ".join(re.sub(r"(?m)^\s*>\s?", "", body).split())
+        contract_start = normalized_body.find(
+            "End your final message with exactly one fenced code block"
+        )
+        contract = normalized_body[contract_start : contract_start + 700]
+        has_contract = (
+            contract_start >= 0
+            and "```json" in contract
             and (
-                "whose closing line is" in paragraph
-                or "closes with a line containing only" in paragraph
+                "whose closing line is" in contract
+                or "closes with a line containing only" in contract
             )
-            and "complete JSON array of findings" in paragraph
-            and "empty array [] in that block" in paragraph
-            for paragraph in body.split("\n\n")
+            and "complete JSON array of findings" in contract
+            and "empty array" in contract.lower()
+            and "[]" in contract
         )
         if not has_contract:
             failures.append(f"{md_file.name}: missing the final fenced JSON findings contract")

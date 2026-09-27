@@ -276,7 +276,7 @@ def test_claude_locator_resolves_across_projects_using_home(
 ) -> None:
     from autoskillit.execution.backends import ClaudeSessionLocator
 
-    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
     expected = _write_home_child(tmp_path, "child-home", project="nested/project")
 
     result = ClaudeSessionLocator().read_child_task("child-home")
@@ -290,7 +290,7 @@ def test_claude_locator_returns_none_for_missing_and_ambiguous_children(
 ) -> None:
     from autoskillit.execution.backends import ClaudeSessionLocator
 
-    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
     _write_home_child(tmp_path, "ambiguous", project="project-a/nested")
     _write_home_child(tmp_path, "ambiguous", project="project-b/nested")
     locator = ClaudeSessionLocator()
@@ -305,7 +305,7 @@ def test_claude_locator_rejects_glob_unsafe_child_ids(
 ) -> None:
     from autoskillit.execution.backends import ClaudeSessionLocator
 
-    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
 
     assert ClaudeSessionLocator().read_child_task(child_id) is None
 

@@ -253,12 +253,13 @@ def test_write_versioned_json_preserves_existing_keys_atomically(tmp_path, monke
     calls: list[tuple[str, str]] = []
     real_atomic_write = io_mod.atomic_write
 
-    def spy(path, content, *, strict_durability=False):
+    def spy(path, content, *, strict_durability=False, exclusive=False):
         calls.append((str(path), content))
         return real_atomic_write(
             path,
             content,
             strict_durability=strict_durability,
+            exclusive=exclusive,
         )
 
     monkeypatch.setattr(io_mod, "atomic_write", spy)
@@ -366,8 +367,9 @@ def test_write_versioned_json_forwards_strict_durability(tmp_path, monkeypatch):
 
     observed: list[bool] = []
 
-    def spy(path, content, *, strict_durability=False):
+    def spy(path, content, *, strict_durability=False, exclusive=False):
         del path, content
+        del exclusive
         observed.append(strict_durability)
 
     monkeypatch.setattr(io_mod, "atomic_write", spy)
@@ -380,6 +382,16 @@ def test_write_versioned_json_forwards_strict_durability(tmp_path, monkeypatch):
     )
 
     assert observed == [True]
+
+
+def test_write_versioned_json_claims_exclusive_path(tmp_path):
+    target = tmp_path / "claimed.json"
+    target.write_text("pre-existing")
+
+    with pytest.raises(FileExistsError):
+        write_versioned_json(target, {"value": 1}, schema_version=1, exclusive=True)
+
+    assert target.read_text() == "pre-existing"
 
 
 def test_write_versioned_json_rejects_non_dict_payload(tmp_path):

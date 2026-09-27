@@ -11,18 +11,24 @@ from pathlib import Path
 
 import regex as re
 
-from autoskillit.core import DiffAnchorAuthority
-from autoskillit.core.io import atomic_write
+from autoskillit.core import (
+    DiffAnchorAuthority,
+    get_logger,
+    read_versioned_json,
+    write_versioned_json,
+)
 from autoskillit.smoke_utils._review_contracts import select_experimental_review_dispatch
 from autoskillit.smoke_utils.review._constants import _STANDARD_REVIEW_DIMENSIONS
 from autoskillit.smoke_utils.review._validation import deletion_regression_is_eligible
 
-REVIEW_AUDIT_MANIFEST_SCHEMA_VERSION = 1
+REVIEW_AUDIT_SCHEMA_VERSION = 1
+REVIEW_AUDIT_MANIFEST_SCHEMA_VERSION = REVIEW_AUDIT_SCHEMA_VERSION
 REVIEW_AUDIT_MAX_ATTEMPTS = 3
 REVIEW_AUDIT_SLOT_FIELD = "autoskillit-review-audit-slot"
 
 _REPOSITORY_RE = re.compile(r"^[^/\s]+/[^/\s]+$")
 _HEAD_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+logger = get_logger(__name__)
 
 
 class ReviewAuditInputError(ValueError):
@@ -268,13 +274,25 @@ def _bind_anchor_identity(
 def _write_review_audit_manifest(output: Path, body: dict[str, object]) -> Path:
     manifest = {**body, "content_sha256": _content_digest(body)}
     manifest_path = output / f"review_audit_manifest_{body['audit_run_id']}.json"
-    atomic_write(
+    _write_review_audit_artifact(
         manifest_path,
-        json.dumps(manifest, sort_keys=True, indent=2) + "\n",
+        manifest,
         exclusive=True,
-        strict_durability=True,
     )
     return manifest_path
+
+
+def _write_review_audit_artifact(
+    path: Path, payload: dict[str, object], *, exclusive: bool = False
+) -> None:
+    """Persist one review-audit JSON artifact with durable versioned atomicity."""
+    write_versioned_json(
+        path,
+        payload,
+        schema_version=REVIEW_AUDIT_SCHEMA_VERSION,
+        strict_durability=True,
+        exclusive=exclusive,
+    )
 
 
 def plan_review_audit(
@@ -341,13 +359,15 @@ def plan_review_audit(
 def load_review_audit_manifest(manifest_path: str) -> dict[str, object]:
     """Load a manifest only while each retained authority file is unchanged."""
     try:
-        value = _read_json(Path(manifest_path))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        value = read_versioned_json(
+            Path(manifest_path),
+            REVIEW_AUDIT_MANIFEST_SCHEMA_VERSION,
+            logger=logger,
+            raise_io_errors=True,
+        )
+    except OSError as exc:
         raise ReviewAuditInputError("review-audit manifest is unreadable") from exc
-    if (
-        not isinstance(value, dict)
-        or value.get("schema_version") != REVIEW_AUDIT_MANIFEST_SCHEMA_VERSION
-    ):
+    if value is None:
         raise ReviewAuditInputError("review-audit manifest schema is invalid")
     if value.get("content_sha256") != _content_digest(value):
         raise ReviewAuditInputError("review-audit manifest digest does not match")

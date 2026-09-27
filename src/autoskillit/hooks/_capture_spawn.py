@@ -60,7 +60,9 @@ def _spawn_anchor(bash_path: str) -> tuple[subprocess.Popen[bytes], int]:
         armed = os.read(ready_read, 1) == b"\n"
         close_fd(ready_read)
         if not armed:
-            error = OSError(errno.ECHILD, "owned process anchor did not arm")
+            error = CaptureSetupError.unknown(
+                "cannot spawn capture shell: owned process anchor did not arm"
+            )
             open_fds.remove(lifeline_write)
             _abandon_anchor(anchor, lifeline_write, primary_error=error)
             raise error

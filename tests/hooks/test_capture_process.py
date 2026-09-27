@@ -17,6 +17,7 @@ import pytest
 
 import autoskillit.hooks._capture_process as capture_process
 import autoskillit.hooks._capture_spawn as capture_spawn
+from autoskillit.hooks._capture._failure_policy import CaptureFailureReason
 from autoskillit.hooks._capture_process import (
     OwnedProcessError,
     OwnedProcessGroup,
@@ -918,6 +919,7 @@ def test_anchor_that_dies_before_arming_fails_spawn(
         capture_spawn._spawn_bash("/bin/bash", "exit 0", capture_output=False)
 
     assert type(raised.value).__name__ == "CaptureSetupError"
+    assert raised.value.reason is CaptureFailureReason.UNKNOWN_SETUP
     assert leader_calls == []
     assert len(anchors) == 1
     assert anchors[0].returncode is not None

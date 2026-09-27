@@ -1,8 +1,7 @@
 """Strict parser for findings arrays returned by review auditors.
 
-A successfully parsed JSON array cannot be a proper prefix of a longer JSON
-array. Parsing the complete body therefore rejects output truncated inside an
-array while still allowing an empty array as a valid result.
+Parsing the complete body rejects syntactically incomplete JSON and accepts
+empty arrays. A cutoff after a complete array cannot be detected by parsing alone.
 """
 
 from __future__ import annotations

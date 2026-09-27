@@ -950,9 +950,9 @@ from .types import ChildExecutionIdentity as ChildExecutionIdentity
 from .types import ChildExecutionIdentityDict as ChildExecutionIdentityDict
 from .types import ChildModelPolicySpec as ChildModelPolicySpec
 from .types import ChildOutcomeDict as ChildOutcomeDict
-from .types import ChildTaskTranscript as ChildTaskTranscript
 from .types import ChildSpawnCardinalityError as ChildSpawnCardinalityError
 from .types import ChildSpawnSpec as ChildSpawnSpec
+from .types import ChildTaskTranscript as ChildTaskTranscript
 from .types import CIRunScope as CIRunScope
 from .types import CIWatcher as CIWatcher
 from .types import ClaudeContentBlockType as ClaudeContentBlockType

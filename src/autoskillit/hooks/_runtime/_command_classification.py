@@ -18,7 +18,6 @@ if TYPE_CHECKING:
         EvaluatedSegment,
         StdinLiteral,
         _CommandSegment,
-        _normalize_newlines_for_tokenize,
         _tokenize_command_segments_with_redirects,
     )
     from autoskillit.hooks._classification._tokenizer import (
@@ -37,7 +36,6 @@ else:
     EvaluatedSegment = _tokenizer.EvaluatedSegment
     StdinLiteral = _tokenizer.StdinLiteral
     _CommandSegment = _tokenizer._CommandSegment
-    _normalize_newlines_for_tokenize = _tokenizer._normalize_newlines_for_tokenize
     _tokenize_command_segments_with_redirects = (
         _tokenizer._tokenize_command_segments_with_redirects
     )

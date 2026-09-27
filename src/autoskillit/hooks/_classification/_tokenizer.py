@@ -11,24 +11,37 @@ from typing import TYPE_CHECKING, cast
 if TYPE_CHECKING:
     from autoskillit.hooks._classification._shell_structure import (
         _mark_grouping_delimiters,
+        _mark_unquoted_output_redirects,
         _mask_substitutions,
+        _normalize_newlines_for_tokenize,
         _render_replacements,
         _skip_shell_quote,
     )
+    from autoskillit.hooks._classification._source_map import SourceMappedText
 elif __package__:
+    from . import _source_map
     from ._shell_structure import (
         _mark_grouping_delimiters,
+        _mark_unquoted_output_redirects,
         _mask_substitutions,
+        _normalize_newlines_for_tokenize,
         _render_replacements,
         _skip_shell_quote,
     )
+
+    SourceMappedText = _source_map.SourceMappedText
 else:
+    import _source_map
     from _shell_structure import (
         _mark_grouping_delimiters,
+        _mark_unquoted_output_redirects,
         _mask_substitutions,
+        _normalize_newlines_for_tokenize,
         _render_replacements,
         _skip_shell_quote,
     )
+
+    SourceMappedText = _source_map.SourceMappedText
 
 # Operators that terminate a shlex token and split command segments.
 _SHELL_OPERATORS: frozenset[str] = frozenset({"&&", "||", ";", "|", "&"})
@@ -283,16 +296,20 @@ def _heredoc_occurrences(command: str) -> list[_HeredocOccurrence]:
     return occurrences
 
 
+def _strip_heredoc_bodies_mapped(command: str) -> SourceMappedText:
+    return _render_replacements(
+        SourceMappedText.identity(command),
+        [(*occurrence.body_deletion_span, "") for occurrence in _heredoc_occurrences(command)],
+    )
+
+
 def strip_heredoc_bodies(command: str) -> str:
     """Strip heredoc body content, preserving the opening line and terminator.
 
     The opening line (containing << and any real redirects) is kept intact.
     Only the body lines between the opening and terminator are removed.
     """
-    return _render_replacements(
-        command,
-        [(*occurrence.body_deletion_span, "") for occurrence in _heredoc_occurrences(command)],
-    )
+    return _strip_heredoc_bodies_mapped(command).text
 
 
 @dataclass(frozen=True, slots=True)
@@ -320,35 +337,6 @@ class StdinLiteral:
     outer_expansion: bool
     source_span: tuple[int, int] | None = None
     feeds_stdin: bool = True
-
-
-def _normalize_newlines_for_tokenize(command: str) -> str:
-    """Make bare newlines command boundaries while preserving quoted newlines."""
-    result: list[str] = []
-    in_single = False
-    in_double = False
-    i = 0
-    while i < len(command):
-        c = command[i]
-        if c == "\\" and not in_single and i + 1 < len(command):
-            if command[i + 1] == "\n":
-                i += 2
-                continue
-            result.append(c)
-            result.append(command[i + 1])
-            i += 2
-            continue
-        if c == "'" and not in_double:
-            in_single = not in_single
-        elif c == '"' and not in_single:
-            in_double = not in_double
-        elif c == "\n" and not in_single and not in_double:
-            result.append(" ; \n")
-            i += 1
-            continue
-        result.append(c)
-        i += 1
-    return "".join(result)
 
 
 @dataclass(frozen=True, slots=True)
@@ -437,7 +425,7 @@ class EvaluatedSegment:
                 )
 
 
-def _capture_heredocs(command: str) -> tuple[str, list[StdinLiteral]]:
+def _capture_heredocs(command: str) -> tuple[SourceMappedText, list[StdinLiteral]]:
     """Replace each `<<EOF` heredoc with a placeholder; return the bound literals."""
     occurrences = _heredoc_occurrences(command)
     literals = [
@@ -456,7 +444,8 @@ def _capture_heredocs(command: str) -> tuple[str, list[StdinLiteral]]:
     replacements.extend(
         (*span, "") for span in {occurrence.capture_tail_span for occurrence in occurrences}
     )
-    return (_render_replacements(command, replacements), literals)
+    mapped = _render_replacements(SourceMappedText.identity(command), replacements)
+    return mapped, literals
 
 
 def _finalize_stdin_literals(literals: list[StdinLiteral]) -> tuple[StdinLiteral, ...]:
@@ -464,77 +453,6 @@ def _finalize_stdin_literals(literals: list[StdinLiteral]) -> tuple[StdinLiteral
         replace(literal, feeds_stdin=index == len(literals) - 1)
         for index, literal in enumerate(literals)
     )
-
-
-def _output_redirect_end(command: str, start: int) -> int | None:
-    i = start
-    char = command[i]
-    if char.isdecimal() and (i == 0 or command[i - 1].isspace() or command[i - 1] in ";&|("):
-        while i < len(command) and command[i].isdecimal():
-            i += 1
-        if i >= len(command) or command[i] != ">":
-            return None
-    elif char != ">":
-        return None
-
-    operator_end = i + 1
-    if operator_end < len(command) and command[operator_end] == ">":
-        operator_end += 1
-    if operator_end < len(command) and command[operator_end] == "(":
-        return None
-    if (
-        operator_end < len(command)
-        and command[operator_end] == "&"
-        and (not command[start:i] or command[start:i].isdecimal())
-    ):
-        fd_end = operator_end + 1
-        while fd_end < len(command) and command[fd_end].isdecimal():
-            fd_end += 1
-        if fd_end == operator_end + 1:
-            return None
-        operator_end = fd_end
-    return operator_end
-
-
-def _mark_unquoted_output_redirects(command: str) -> tuple[str, dict[str, str]]:
-    """Replace recognized redirect operators with shlex-stable placeholders."""
-    rendered: list[str] = []
-    redirects: dict[str, str] = {}
-    in_single = False
-    in_double = False
-    i = 0
-    while i < len(command):
-        char = command[i]
-        if char == "\\" and not in_single and i + 1 < len(command):
-            rendered.extend((char, command[i + 1]))
-            i += 2
-            continue
-        if char == "'" and not in_double:
-            in_single = not in_single
-            rendered.append(char)
-            i += 1
-            continue
-        if char == '"' and not in_single:
-            in_double = not in_double
-            rendered.append(char)
-            i += 1
-            continue
-        if in_single or in_double:
-            rendered.append(char)
-            i += 1
-            continue
-
-        operator_end = _output_redirect_end(command, i)
-        if operator_end is None:
-            rendered.append(char)
-            i += 1
-            continue
-
-        marker = f"__AUTOSKILLIT_REDIRECT_{len(redirects)}__"
-        redirects[marker] = command[i:operator_end]
-        rendered.extend((" ", marker, " "))
-        i = operator_end
-    return ("".join(rendered), redirects)
 
 
 _LexedCommand = tuple[
@@ -561,7 +479,8 @@ def _lex_command(command: str) -> _LexedCommand | None:
         grouped = _mark_grouping_delimiters(redirects_marked)
         if grouped is None:
             return None
-        marked, groups = grouped
+        mapped, groups = grouped
+        marked = mapped.text
         lexer = shlex.shlex(
             marked,
             posix=True,

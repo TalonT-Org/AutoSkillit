@@ -893,67 +893,67 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "rather than risk enumerating an untrusted-mode directory."
     ),
     # -- fleet._dispatch_reaper::reap_stale_dispatches --
-    f"{_D}::L392": _self_limiting(
+    f"{_D}::L426": _self_limiting(
         "No campaign state file at all; nothing to reap for this campaign."
     ),
-    f"{_D}::L397": _retries_after_input_changes(
+    f"{_D}::L431": _retries_after_input_changes(
         "The state file could not be parsed; an unreadable state must not be interpreted "
         "as zero running dispatches."
     ),
-    f"{_D}::L402": _self_limiting(
+    f"{_D}::L436": _self_limiting(
         "Nothing in RUNNING status for this campaign; the candidate set is empty."
     ),
-    f"{_D}::L410": RetentionDecision(
+    f"{_D}::L444": RetentionDecision(
         Revocability.REVOCABLE,
         "A reaper never reaps its own campaign's siblings -- self-exclusion is a live-owner "
         "equivalent, verified by the caller's own campaign_id match, not by any /proc read.",
     ),
     # -- fleet._dispatch_reaper::_handle_immediate_reap_disposition --
-    f"{_DI}::L171": RetentionDecision(
+    f"{_DI}::L205": RetentionDecision(
         Revocability.REVOCABLE,
         "A caller-declared protected dispatch id set is honoured unconditionally, the same "
         "self-exclusion family as the own-campaign skip-all.",
     ),
-    f"{_DI}::L181": RetentionDecision(
+    f"{_DI}::L215": RetentionDecision(
         Revocability.REVOCABLE,
         "A dispatch younger than min_reap_age_seconds is retained -- the textbook grace "
         "period gate on process age.",
     ),
-    f"{_DI}::L189": RetentionDecision(
+    f"{_DI}::L223": RetentionDecision(
         Revocability.REVOCABLE,
         "An active dispatch heartbeat (a live kernel-observable mtime freshness check) "
         "retains the dispatch -- the domain equivalent of a revocable kernel reference.",
     ),
-    f"{_DI}::L200": _self_limiting(
+    f"{_DI}::L234": _self_limiting(
         "pid == 0 is a reap outcome (marks the dispatch dead), not an eligibility skip -- "
         "the return here follows the reclaim action, it does not precede it."
     ),
-    f"{_DI}::L212": _self_limiting(
+    f"{_DI}::L246": _self_limiting(
         "A boot-id mismatch is a reap outcome (marks the dispatch pid-recycled), not an "
         "eligibility skip -- the return follows the reclaim action."
     ),
-    f"{_DI}::L216": _self_limiting(
+    f"{_DI}::L250": _self_limiting(
         "psutil.pid_exists() false is a reap outcome (marks the dispatch dead), not an "
         "eligibility skip -- the return follows the reclaim action."
     ),
     # -- fleet._dispatch_reaper::_confirm_dispatch_pid_identity --
-    f"{_DPI}::L244": _self_limiting(
+    f"{_DPI}::L278": _self_limiting(
         "psutil.NoSuchProcess during create_time comparison is a reap outcome (marks the "
         "dispatch dead), not an eligibility skip."
     ),
     # -- fleet._dispatch_reaper::_reap_confirmed_orphan --
-    f"{_DCO}::L284": _retries_after_input_changes(
+    f"{_DCO}::L318": _retries_after_input_changes(
         "kill_process_tree raised; execution failure, not an eligibility gate on the "
         "candidate itself."
     ),
-    f"{_DCO}::L297": RetentionDecision(
+    f"{_DCO}::L331": RetentionDecision(
         Revocability.REVOCABLE,
         "Survivors reported by kill_process_tree's cleanup_result mean the process may "
         "still be alive -- the dispatch record is deliberately left RUNNING for a retry, "
         "an observed-liveness result standing in for a direct /proc reference check.",
     ),
     # -- fleet._dispatch_reaper::_reap_running_dispatch --
-    f"{_DR}::L326": _self_limiting(
+    f"{_DR}::L360": _self_limiting(
         "An immediate disposition already handled this dispatch, so the identity pipeline "
         "does not reconsider it."
     ),

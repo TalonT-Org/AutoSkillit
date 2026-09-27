@@ -268,32 +268,32 @@ def _review_finding_schema_error(
     deletion_only: bool,
     allowed_dimensions: Collection[str],
     review_root: Path,
-) -> str | None:
+) -> tuple[str, str] | None:
     key_error = _closed_key_set_error(
         finding,
         expected=_STANDARD_FINDING_KEYS,
         subject="finding",
     )
     if key_error is not None:
-        return key_error
+        return ("schema_invalid", key_error)
     assert isinstance(finding, dict)
     expected_dimensions = {"deletion_regression"} if deletion_only else allowed_dimensions
     if not _is_non_empty_string(finding["dimension"]):
-        return "dimension must be a non-empty string"
+        return ("schema_invalid", "dimension must be a non-empty string")
     if finding["dimension"] not in expected_dimensions:
-        return "dimension does not match the standard finding source"
+        return ("schema_invalid", "dimension does not match the standard finding source")
     if not _is_non_empty_string(finding["severity"]):
-        return "severity must be a non-empty string"
+        return ("schema_invalid", "severity must be a non-empty string")
     if finding["severity"] not in _REVIEW_SEVERITIES:
-        return "severity is outside the closed enum"
+        return ("schema_invalid", "severity is outside the closed enum")
     if type(finding["requires_decision"]) is not bool:
-        return "requires_decision must be an exact boolean"
+        return ("schema_invalid", "requires_decision must be an exact boolean")
     if not _is_non_empty_string(finding["file"]) or not _is_non_empty_string(finding["message"]):
-        return "file and message must be non-empty strings"
+        return ("schema_invalid", "file and message must be non-empty strings")
     if not _is_positive_int(finding["line"]):
-        return "line must be a positive integer"
+        return ("schema_invalid", "line must be a positive integer")
     if not _is_contained_relative_path(finding["file"], review_root):
-        return "file escapes the review root"
+        return ("path_escape", "file escapes the review root")
     return None
 
 
@@ -312,7 +312,7 @@ def _standard_finding_validation_error(
         review_root=review_root,
     )
     if error is not None:
-        return error
+        return error[1]
     assert isinstance(finding, dict)
     admission = anchor_authority.classify(str(finding["file"]), int(finding["line"]), "RIGHT")
     return None if admission is AnchorAdmission.ADMITTED else admission

@@ -18,14 +18,13 @@ from autoskillit.core import ArtifactLease, managed_home_for, read_retiring_cach
 from autoskillit.hook_registry import render_hooks_json_text
 from autoskillit.server.lifecycle import _lifespan
 from tests._helpers import _flush_structlog_proxy_caches
-from tests.fixtures.plugin_artifact_state import write_marketplace_surfaces
+from tests.fixtures.plugin_artifact_state import write_marketplace_surfaces, write_registry
 from tests.fixtures.startup_steady_state import (
     DORMANT_QUOTA_WINDOW,
     enqueue_projection_retirement,
     fake_quota_http_client,
     plant_stale_projection,
     write_migrated_legacy_evidence,
-    write_registry,
 )
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]

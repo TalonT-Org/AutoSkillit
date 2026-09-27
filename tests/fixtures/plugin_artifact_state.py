@@ -160,21 +160,21 @@ def _spec(
     )
 
 
-def _write_registry(spec: InstallStateSpec, install_path: Path) -> Path:
-    registry = spec.home / ".claude" / "plugins" / "installed_plugins.json"
+def write_registry(
+    home: Path,
+    install_path: Path,
+    *,
+    plugin_ref: str = DEFAULT_PLUGIN_REF,
+    version: str | None = None,
+) -> Path:
+    """Register ``install_path`` as ``plugin_ref`` in ``installed_plugins.json``."""
+    entry = {"installPath": str(install_path)}
+    if version is not None:
+        entry["version"] = version
+    registry = home / ".claude" / "plugins" / "installed_plugins.json"
     registry.parent.mkdir(parents=True, exist_ok=True)
     registry.write_text(
-        json.dumps(
-            {
-                "version": 2,
-                "plugins": {
-                    spec.plugin_ref: {
-                        "installPath": str(install_path),
-                        "version": spec.expected_version,
-                    }
-                },
-            }
-        ),
+        json.dumps({"version": 2, "plugins": {plugin_ref: entry}}),
         encoding="utf-8",
     )
     return registry
@@ -310,9 +310,19 @@ def build_plugin_artifact_state(
         )
         _publish_exact(older_spec)
         older_root = older_spec.managed_root
-        _write_registry(older_spec, older_root)
+        write_registry(
+            older_spec.home,
+            older_root,
+            plugin_ref=older_spec.plugin_ref,
+            version=older_spec.expected_version,
+        )
     elif selected is PluginArtifactStateKind.DANGLING_REGISTRY:
-        _write_registry(spec, spec.managed_root.parent / "missing")
+        write_registry(
+            spec.home,
+            spec.managed_root.parent / "missing",
+            plugin_ref=spec.plugin_ref,
+            version=spec.expected_version,
+        )
     elif selected is PluginArtifactStateKind.DANGLING_MANAGED_ROOT:
         identity = _publish_exact(spec)
         shutil.rmtree(spec.managed_root)
@@ -332,7 +342,12 @@ def build_plugin_artifact_state(
         spec.lease_path.unlink()
         spec.lease_path.symlink_to(spec.lease_path.parent / "missing-lease")
     elif selected is not PluginArtifactStateKind.NO_INSTALLATION:
-        _write_registry(spec, spec.managed_root)
+        write_registry(
+            spec.home,
+            spec.managed_root,
+            plugin_ref=spec.plugin_ref,
+            version=spec.expected_version,
+        )
         if selected is PluginArtifactStateKind.MISSING_IDENTITY:
             metadata = spec.managed_root / ".claude-plugin" / "plugin.json"
             metadata.parent.mkdir(parents=True, exist_ok=True)

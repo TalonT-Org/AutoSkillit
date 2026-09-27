@@ -12,7 +12,6 @@ from autoskillit.core import (
     managed_home_for,
     new_plugin_artifact_incarnation_id,
 )
-from tests.fixtures.plugin_artifact_state import DEFAULT_PLUGIN_REF
 
 
 def plant_stale_projection(
@@ -116,17 +115,6 @@ def write_migrated_legacy_evidence(home: Path, legacy_path: Path) -> None:
     migrate_retiring_cache_v1(
         {PluginArtifactKind.INSTALLED_PLUGIN: legacy_path.parent},
         home=managed_home_for(home),
-    )
-
-
-def write_registry(home: Path, install_path: Path) -> None:
-    """Register ``install_path`` as the AutoSkillit plugin in ``installed_plugins.json``."""
-    registry = home / ".claude" / "plugins" / "installed_plugins.json"
-    registry.parent.mkdir(parents=True, exist_ok=True)
-    registry.write_text(
-        json.dumps(
-            {"version": 2, "plugins": {DEFAULT_PLUGIN_REF: {"installPath": str(install_path)}}}
-        )
     )
 
 

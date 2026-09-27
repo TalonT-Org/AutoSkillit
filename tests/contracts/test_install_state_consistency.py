@@ -27,11 +27,8 @@ from tests._retention_surface import (
     RECLAIMER_CONVERGENCE_CASES,
     assert_second_pass_is_quiet,
 )
-from tests.fixtures.plugin_artifact_state import write_marketplace_surfaces
-from tests.fixtures.startup_steady_state import (
-    write_migrated_legacy_evidence,
-    write_registry,
-)
+from tests.fixtures.plugin_artifact_state import write_marketplace_surfaces, write_registry
+from tests.fixtures.startup_steady_state import write_migrated_legacy_evidence
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 

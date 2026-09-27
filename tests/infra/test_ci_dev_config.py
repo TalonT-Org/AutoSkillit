@@ -7,6 +7,7 @@ their structural properties. If a gate is deleted from the config, a test fails.
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import tomllib
@@ -23,7 +24,7 @@ PRECOMMIT_CONFIG = REPO_ROOT / ".pre-commit-config.yaml"
 CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "tests.yml"
 CONFTEST_PATH = REPO_ROOT / "tests" / "conftest.py"
 
-_E501_EXEMPTION_CAP = 19
+_E501_EXEMPTION_CAP = 13
 
 
 class TestPreCommitConfig:
@@ -172,6 +173,60 @@ class TestPreCommitConfig:
             f"E501 exemptions in per-file-ignores exceeded cap of {_E501_EXEMPTION_CAP}: "
             f"found {e501_count} entries. Refactor long lines instead of adding exemptions."
         )
+
+    def test_per_file_ignores_are_exercised(self):
+        """Every per-file-ignores entry must name an existing file that violates each code.
+
+        A dead exemption silently licenses future violations and keeps the E501 cap inflated.
+        """
+        with (REPO_ROOT / "pyproject.toml").open("rb") as f:
+            ruff_config = tomllib.load(f)["tool"]["ruff"]
+        per_file_ignores: dict[str, list[str]] = ruff_config["lint"]["per-file-ignores"]
+        missing = [path for path in per_file_ignores if not (REPO_ROOT / path).is_file()]
+        assert not missing, f"per-file-ignores names files that do not exist: {missing}"
+
+        exempted_by_code: dict[str, list[str]] = {}
+        for path, codes in per_file_ignores.items():
+            for code in codes:
+                exempted_by_code.setdefault(code, []).append(path)
+
+        dead: list[str] = []
+        for code, paths in sorted(exempted_by_code.items()):
+            result = subprocess.run(
+                [
+                    "uv",
+                    "run",
+                    "ruff",
+                    "check",
+                    "--isolated",
+                    "--no-cache",
+                    "--output-format",
+                    "json",
+                    "--select",
+                    code,
+                    "--line-length",
+                    str(ruff_config["line-length"]),
+                    "--target-version",
+                    ruff_config["target-version"],
+                    *paths,
+                ],
+                capture_output=True,
+                text=True,
+                cwd=str(REPO_ROOT),
+            )
+            assert result.returncode in (0, 1), f"ruff check failed:\n{result.stderr}"
+            violated = {
+                Path(diagnostic["filename"]).resolve()
+                for diagnostic in json.loads(result.stdout)
+                if diagnostic["code"] == code
+            }
+            dead.extend(
+                f"exemption for {path} [{code}] is dead — delete it and lower "
+                "`_E501_EXEMPTION_CAP`."
+                for path in paths
+                if (REPO_ROOT / path).resolve() not in violated
+            )
+        assert not dead, "\n".join(dead)
 
 
 class TestCIWorkflow:

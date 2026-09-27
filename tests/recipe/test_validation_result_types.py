@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import inspect
 import os
-import shutil
 import subprocess
+import sys
 from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Any, Literal, get_type_hints
@@ -225,10 +225,6 @@ def test_validate_from_path_completed_reports_have_the_declared_shape(
 
 
 def test_mypy_accepts_recipe_path_validation_result_narrowing(tmp_path: Path) -> None:
-    mypy_path = shutil.which("mypy")
-    if mypy_path is None:
-        pytest.skip("mypy not on PATH")
-
     snippet = """
 from pathlib import Path
 from typing import Any, Literal, assert_type
@@ -264,7 +260,9 @@ def examine(
     env = {**os.environ, "MYPYPATH": str(src_dir)}
     result = subprocess.run(
         [
-            mypy_path,
+            sys.executable,
+            "-m",
+            "mypy",
             "--ignore-missing-imports",
             "--no-color-output",
             "--cache-dir",

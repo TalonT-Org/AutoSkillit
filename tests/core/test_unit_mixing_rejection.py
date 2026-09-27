@@ -9,8 +9,8 @@ and construction-time validation.
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -57,10 +57,6 @@ def test_mypy_rejects_cross_unit_assignment(tmp_path: Path) -> None:
     directly rather than as deferred strings) and asserts it rejects both
     directions of the mismatch.
     """
-    mypy_path = shutil.which("mypy")
-    if mypy_path is None:
-        pytest.skip("mypy not on PATH")
-
     snippet = """
 from autoskillit.core.types._type_dimensions import SerializedChars, Utf8ByteLimit
 
@@ -85,7 +81,9 @@ take_chars(Utf8ByteLimit(100))  # should be rejected: Utf8ByteLimit is not Seria
     env = {**os.environ, "MYPYPATH": str(src_dir)}
     result = subprocess.run(
         [
-            mypy_path,
+            sys.executable,
+            "-m",
+            "mypy",
             "--ignore-missing-imports",
             # The assertions below match plain substrings. Without this, mypy
             # honours FORCE_COLOR/COLORTERM from the inherited environment and

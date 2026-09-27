@@ -645,6 +645,29 @@ class TestMergeQueueVocabularyContract:
             f"{positive_stall_statuses - KNOWN_MQ_MERGE_STATE_STATUSES}"
         )
 
+    def test_classifier_terminal_states_partition_prstate(self):
+        """Every PRState is either a classifier terminal state or a watcher-only outcome.
+
+        The dispatcher's ``assert_never`` proves it handles every ClassifierTerminalState;
+        this pins that the alias itself cannot silently omit a new PRState member.
+        """
+        from typing import get_args
+
+        from autoskillit.execution.merge_queue._merge_queue_classifier import (
+            ClassifierTerminalState,
+        )
+
+        def _flatten(tp: object) -> set[object]:
+            members: set[object] = set()
+            for arg in get_args(tp):
+                members |= _flatten(arg) if get_args(arg) else {arg}
+            return members
+
+        classifier_states = _flatten(ClassifierTerminalState)
+        watcher_only = {PRState.TIMEOUT, PRState.ERROR}
+        assert classifier_states.isdisjoint(watcher_only)
+        assert classifier_states | watcher_only == set(PRState)
+
 
 class TestDroppedMergeGroupCI:
     """Tests for the DROPPED_MERGE_GROUP_CI classifier state (merge-group CI blind spot fix)."""

@@ -112,7 +112,6 @@ def test_declared_dependent_contributes_declared_scope(tmp_path: Path) -> None:
     _write(tests_root, "pkg/_support.py", "VALUE = 1")
     _write(tests_root, "fleet/__init__.py")
     _write(tests_root, "fleet/_reaper_test_support.py", "from tests.pkg._support import VALUE")
-    _write(tests_root, "fleet/test_dispatch_reaper.py")
     result = build_test_scope(
         {"tests/pkg/_support.py"}, FilterMode.CONSERVATIVE, tests_root=tests_root
     )

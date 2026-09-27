@@ -1928,7 +1928,7 @@ def git_changed_files_local(
     return ChangedFiles(tracked=tracked, untracked=_list_untracked_paths(cwd))
 
 
-def _scoped_test_dirs_for_file(path: str) -> set[str]:
+def _scoped_test_targets_for_file(path: str) -> set[str]:
     """Return test targets (directories or test modules) affected by a declared support file.
 
     ``fnmatch`` lets ``*`` cross ``/``, including nested conftests; glob,
@@ -1943,12 +1943,12 @@ def _scoped_test_dirs_for_file(path: str) -> set[str]:
 
 def compute_bucket_a_scope(changed_files: set[str]) -> set[str] | None:
     """Return None for a global full run, otherwise scoped test targets."""
-    scoped_test_dirs: set[str] = set()
+    scoped_test_targets: set[str] = set()
     for f in changed_files:
         if f in BUCKET_A_PATTERNS:
             return None
-        scoped_test_dirs.update(_scoped_test_dirs_for_file(f))
-    return scoped_test_dirs
+        scoped_test_targets.update(_scoped_test_targets_for_file(f))
+    return scoped_test_targets
 
 
 # ---------------------------------------------------------------------------
@@ -2064,6 +2064,7 @@ def resolve_support_dependents(
     global_dependents: set[str] = set()
     seen = {path}
     pending = [path]
+    tests_prefix = f"{path.split('/', 1)[0]}/"
     while pending:
         for dependent in import_index.get(pending.pop(), frozenset()):
             if dependent in seen:
@@ -2074,9 +2075,13 @@ def resolve_support_dependents(
             elif dependent in TEST_HELPER_CASCADE:
                 targets.update(TEST_HELPER_CASCADE[dependent])
             else:
-                targets.update(_scoped_test_dirs_for_file(dependent))
+                targets.update(_scoped_test_targets_for_file(dependent))
                 if _is_test_module(dependent):
-                    targets.add(dependent.partition("/")[2])
+                    if not dependent.startswith(tests_prefix):
+                        raise ValueError(
+                            f"Dependent {dependent!r} is not rooted at {tests_prefix!r}"
+                        )
+                    targets.add(dependent[len(tests_prefix) :])
                 pending.append(dependent)
     return SupportDependents(frozenset(targets), frozenset(global_dependents))
 
@@ -2099,6 +2104,19 @@ def _support_file_targets(support_files: set[str], tests_root: Path) -> set[str]
     return targets
 
 
+@dataclass(frozen=True, slots=True)
+class _ClassifiedTestFiles:
+    """Split of changed tests/ Python into support-module targets and direct test modules.
+
+    ``support_targets`` is the union of test directories and test modules a changed
+    undeclared support module selects through its static dependents. ``direct_test_files``
+    are the ``test_*.py`` modules in ``changed_files`` that are also direct test targets.
+    """
+
+    support_targets: set[str]
+    direct_test_files: set[str]
+
+
 def _is_tests_python(path: str) -> bool:
     """Return True for a repo-relative Python file under ``tests/``."""
     return path.startswith("tests/") and path.endswith(".py")
@@ -2107,7 +2125,7 @@ def _is_tests_python(path: str) -> bool:
 def _classify_changed_test_files(
     changed_files: set[str],
     tests_root: Path,
-) -> tuple[set[str], set[str]] | FullRunReason:
+) -> _ClassifiedTestFiles | FullRunReason:
     """Split changed tests/ Python into support-module test targets and direct test modules.
 
     Declared scoped support files (``TEST_HELPER_CASCADE`` keys, ``BUCKET_A_GLOBS``
@@ -2117,18 +2135,18 @@ def _classify_changed_test_files(
     direct_test_files: set[str] = set()
     support_files: set[str] = set()
     for filepath in changed_files:
-        if not _is_tests_python(filepath) or _scoped_test_dirs_for_file(filepath):
+        if not _is_tests_python(filepath) or _scoped_test_targets_for_file(filepath):
             continue
         if _is_test_module(filepath):
             direct_test_files.add(filepath)
         else:
             support_files.add(filepath)
     if not support_files:
-        return set(), direct_test_files
+        return _ClassifiedTestFiles(set(), direct_test_files)
     support_targets = _support_file_targets(support_files, tests_root)
     if isinstance(support_targets, FullRunReason):
         return support_targets
-    return support_targets, direct_test_files
+    return _ClassifiedTestFiles(support_targets, direct_test_files)
 
 
 def _is_only_version_changes_in_diff(
@@ -2242,18 +2260,18 @@ def compute_bucket_a_scope_content_aware(
     Scoped support-file directories are preserved when version files are exempted.
     """
     non_version_files = changed_files - _VERSION_BUMP_FILES
-    scoped_test_dirs = compute_bucket_a_scope(non_version_files)
-    if scoped_test_dirs is None:
+    scoped_test_targets = compute_bucket_a_scope(non_version_files)
+    if scoped_test_targets is None:
         return None
 
     # Check version-bump-candidate files that are also in BUCKET_A_PATTERNS
     version_hits = changed_files & _VERSION_BUMP_FILES & BUCKET_A_PATTERNS
     if not version_hits:
-        return scoped_test_dirs
+        return scoped_test_targets
 
     # Content check: if every diff line is a version string, skip Bucket A
     if _is_only_version_changes_in_diff(cwd, base_ref, *version_hits):
-        return scoped_test_dirs
+        return scoped_test_targets
 
     return None
 
@@ -2601,17 +2619,17 @@ def _initial_scope(
     if changed_files is None:
         return FullRunReason.GIT_UNAVAILABLE
     if cwd is not None and base_ref is not None:
-        scoped_test_dirs = compute_bucket_a_scope_content_aware(changed_files, cwd, base_ref)
-        if scoped_test_dirs is None:
+        scoped_test_targets = compute_bucket_a_scope_content_aware(changed_files, cwd, base_ref)
+        if scoped_test_targets is None:
             return FullRunReason.BUCKET_A
         version_bump_in_bucket_a = changed_files & _VERSION_BUMP_FILES & BUCKET_A_PATTERNS
         if version_bump_in_bucket_a:
             changed_files = changed_files - version_bump_in_bucket_a
     else:
-        scoped_test_dirs = compute_bucket_a_scope(changed_files)
-        if scoped_test_dirs is None:
+        scoped_test_targets = compute_bucket_a_scope(changed_files)
+        if scoped_test_targets is None:
             return FullRunReason.BUCKET_A
-    return changed_files, scoped_test_dirs
+    return changed_files, scoped_test_targets
 
 
 def _resolve_core_cascade(
@@ -2785,7 +2803,8 @@ def _classify_changed_files(
     classified_tests = _classify_changed_test_files(changed_files, tests_root)
     if isinstance(classified_tests, FullRunReason):
         return classified_tests
-    test_dirs, direct_test_files = classified_tests
+    test_dirs = classified_tests.support_targets
+    direct_test_files = classified_tests.direct_test_files
     changed_src_py = {
         filepath
         for filepath in changed_files
@@ -2964,7 +2983,7 @@ def build_test_scope(
     initial_scope = _initial_scope(effective_changed_files, mode, cwd, base_ref)
     if isinstance(initial_scope, FullRunReason):
         return initial_scope
-    changed_files, scoped_test_dirs = initial_scope
+    changed_files, scoped_test_targets = initial_scope
     tests_root = Path(tests_root)
 
     cascade_map = (
@@ -2988,7 +3007,7 @@ def build_test_scope(
     classified_dirs, direct_test_files, changed_src_py = classified
 
     scope = ScopeAccumulator()
-    scope.add_targets(*scoped_test_dirs)
+    scope.add_targets(*scoped_test_targets)
     scope.add_targets(*classified_dirs)
     scope.add_files(*direct_test_files)
 

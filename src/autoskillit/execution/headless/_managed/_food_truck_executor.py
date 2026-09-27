@@ -254,7 +254,13 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
             cwd=cwd,
         )
         backend_authority, dispatch_backend = self._resolve_food_truck_backend(backend_authority)
-        owner_scope_token = new_dispatch_owner_scope_token(dispatch_id)
+        # The scope token's dispatch_id leg is what the reaper's regex matches on.
+        # Production callers always pass a real dispatch_id; tests / headless-only
+        # callers that omit one get a unique hex so the token is at least distinct
+        # from any other unkeyed call (the previous 'anon' fallback collapsed every
+        # unkeyed call into the same reaper-side group).
+        scope_dispatch_id = dispatch_id or uuid.uuid4().hex[:12]
+        owner_scope_token = new_dispatch_owner_scope_token(scope_dispatch_id)
         cfg = self._ctx.config
         fleet_cfg = cfg.fleet
         merged_extras = _merge_food_truck_extras(

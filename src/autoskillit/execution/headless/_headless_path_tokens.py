@@ -39,12 +39,9 @@ def _extract_worktree_path(
     last: str | None = None
     for msg in assistant_messages:
         m = _WORKTREE_PATH_PATTERN.search(msg)
-        if (
-            m
-            and (candidate := m.group(1).strip())
-            and (include_relative or os.path.isabs(candidate))
-        ):
-            last = candidate
+        if m and (candidate := m.group(1).strip()):
+            if include_relative or os.path.isabs(candidate):
+                last = candidate
     return last
 
 
@@ -128,22 +125,16 @@ _OUTPUT_PATH_TOKENS_BY_SKILL, _OUTPUT_PATH_TOKENS, _RECOVERABLE_PATH_TOKENS = (
 
 def _select_output_path_tokens(skill_name: str | None) -> frozenset[str]:
     """Return token candidate set for the running skill."""
-    if not skill_name:
-        return _OUTPUT_PATH_TOKENS
-    raw = _OUTPUT_PATH_TOKENS_BY_SKILL.get(skill_name)
-    if raw is None or not raw:
-        return _OUTPUT_PATH_TOKENS
-    return raw & _OUTPUT_PATH_TOKENS
+    raw = _OUTPUT_PATH_TOKENS_BY_SKILL.get(skill_name) if skill_name else None
+    return raw & _OUTPUT_PATH_TOKENS if raw else _OUTPUT_PATH_TOKENS
 
 
-_OUTPUT_PATH_PATTERN: re.Pattern[str] = (
-    re.compile(
-        r"^(" + "|".join(re.escape(t) for t in sorted(_OUTPUT_PATH_TOKENS)) + r")\s*=\s*(.+)$",
-        re.MULTILINE,
-    )
+_output_path_pattern = (
+    r"^(" + "|".join(re.escape(t) for t in sorted(_OUTPUT_PATH_TOKENS)) + r")\s*=\s*(.+)$"
     if _OUTPUT_PATH_TOKENS
-    else re.compile(r"(?!)")
+    else r"(?!)"
 )
+_OUTPUT_PATH_PATTERN: re.Pattern[str] = re.compile(_output_path_pattern, re.MULTILINE)
 
 
 def _extract_output_paths(
@@ -156,9 +147,7 @@ def _extract_output_paths(
     for msg in assistant_messages:
         for m in _OUTPUT_PATH_PATTERN.finditer(msg):
             token, value = m.group(1), m.group(2).strip()
-            if token not in token_scope:
-                continue
-            if os.path.isabs(value):
+            if token in token_scope and os.path.isabs(value):
                 paths[token] = value
     return paths
 

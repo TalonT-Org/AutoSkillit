@@ -93,7 +93,7 @@ _EXPECTED_GIT_REF_SITES: tuple[tuple[str, str, int, str, str], ...] = (
     (
         "execution/headless/_headless_git.py",
         "_capture_main_checkout_state",
-        89,
+        86,
         "for-each-ref",
         "UNRESOLVABLE",
     ),

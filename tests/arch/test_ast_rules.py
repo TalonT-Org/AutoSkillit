@@ -586,7 +586,9 @@ def test_stdlib_only_hook_callable_modules_have_zero_autoskillit_imports() -> No
     (guarded above by test_hooks_are_stdlib_only), nothing previously guarded
     these root-level modules against silently growing an autoskillit.*
     import, which would break at runtime for any hook subprocess without the
-    package venv active.
+    package venv active. The stdlib_only_modules tuple below lists every such
+    root-level module; extend it whenever a new stdlib-only hook-callable
+    authority is added.
 
     Exemption: imports inside `if TYPE_CHECKING:` blocks are annotation-only
     and are never executed at runtime, so they do not break the constraint.

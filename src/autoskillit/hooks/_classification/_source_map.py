@@ -21,7 +21,9 @@ class SourceMappedText:
 
     def source_span(self, start: int, end: int) -> tuple[int, int]:
         if not 0 <= start < end <= len(self.text):
-            raise ValueError(f"empty or out-of-range span [{start}, {end})")
+            raise ValueError(
+                f"empty or out-of-range span [{start}, {end}) for text length {len(self.text)}"
+            )
         return self.starts[start], self.ends[end - 1]
 
 

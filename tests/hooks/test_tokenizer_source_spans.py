@@ -54,7 +54,7 @@ def test_dropped_text_remains_inside_combined_source_span():
 
 @pytest.mark.parametrize("start,end", [(1, 1), (0, 99), (-1, 1)])
 def test_source_span_rejects_empty_or_out_of_range_bounds(start, end):
-    with pytest.raises(ValueError, match="empty or out-of-range span"):
+    with pytest.raises(ValueError, match=r"empty or out-of-range span.*length 3"):
         SourceMappedText.identity("abc").source_span(start, end)
 
 

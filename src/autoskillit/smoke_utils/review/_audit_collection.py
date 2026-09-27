@@ -121,7 +121,7 @@ def _load_bound_transcript(
     marker = str(slot["marker_line"])
     prompt_lines = {line.strip() for line in transcript.assignment_prompt.splitlines()}
     if marker not in prompt_lines and transcript.assignment_label != slot["slot_token"]:
-        return transcript, _slot_failure(
+        return None, _slot_failure(
             slot,
             handle=handle,
             reason_code="slot_binding_mismatch",

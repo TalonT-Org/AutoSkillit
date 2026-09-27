@@ -11,7 +11,14 @@ from typing import TYPE_CHECKING
 import psutil
 
 from autoskillit.core import append_and_trim_jsonl, default_log_dir, get_logger
-from autoskillit.execution import kill_process_tree, read_boot_id, read_starttime_ticks
+from autoskillit.execution import (
+    default_tether_dir,
+    dispatch_scope_tokens,
+    kill_process_tree,
+    read_boot_id,
+    read_starttime_ticks,
+    settle_owner_scope,
+)
 
 if TYPE_CHECKING:
     from autoskillit.fleet import CampaignStateMutator, DispatchRecord
@@ -109,17 +116,51 @@ def _is_dispatch_heartbeating(
         return False
 
 
+def _settle_dispatch_owner_scopes(dispatch: DispatchRecord, *, dry_run: bool) -> None:
+    """Seal and settle every owner scope the stale dispatch's runs left registered."""
+    tether_dir = default_tether_dir()
+    for token in sorted(dispatch_scope_tokens(tether_dir, dispatch.dispatch_id)):
+        if dry_run:
+            logger.info("reap: [WOULD SETTLE] %s  scope=%s", dispatch.name, token)
+            continue
+        try:
+            settlement = settle_owner_scope(tether_dir, token, seal=True)
+        except Exception:
+            logger.warning(
+                "reap: owner scope settlement failed for %s scope=%s",
+                dispatch.name,
+                token,
+                exc_info=True,
+            )
+            continue
+        log = logger.info if settlement.complete else logger.warning
+        log(
+            "reap: [SETTLED]     %s  scope=%s reaped=%s survivors=%s complete=%s",
+            dispatch.name,
+            token,
+            settlement.reaped_pids,
+            settlement.survivor_pids,
+            settlement.complete,
+        )
+
+
 def _handle_immediate_reap_disposition(
     dispatch: DispatchRecord,
     *,
+    dispatches_dir: Path,
     dry_run: bool,
     skip_dispatch_ids: frozenset[str] | None,
     min_reap_age_seconds: float,
     current_boot_id: str | None,
+    heartbeat_grace_seconds: float,
     m: CampaignStateMutator,
     reaper_dispatch_id: str,
 ) -> bool:
-    """Handle exclusions and stale dispositions that do not need PID identity checks."""
+    """Handle exclusions and stale dispositions that do not need PID identity checks.
+
+    A fresh heartbeat means a live L3 owns the dispatch and its owner scopes, so
+    it retains the dispatch before any disposition can settle or write state.
+    """
     name = dispatch.name
     if skip_dispatch_ids and dispatch.dispatch_id in skip_dispatch_ids:
         logger.info(
@@ -138,6 +179,16 @@ def _handle_immediate_reap_disposition(
             age,
         )
         return True
+
+    if _is_dispatch_heartbeating(dispatches_dir, dispatch.dispatch_id, heartbeat_grace_seconds):
+        logger.info(
+            "reap: [SKIPPED]     %s  dispatch_id=%s  (dispatch heartbeat active)",
+            name,
+            dispatch.dispatch_id,
+        )
+        return True
+
+    _settle_dispatch_owner_scopes(dispatch, dry_run=dry_run)
 
     pid = dispatch.dispatched_pid
     if pid == 0:
@@ -203,25 +254,15 @@ def _confirm_dispatch_pid_identity(
 def _reap_confirmed_orphan(
     dispatch: DispatchRecord,
     *,
-    state_path: Path,
     dry_run: bool,
     use_tick_identity: bool,
     confirmed_create_time: float | None,
-    heartbeat_grace_seconds: float,
     m: CampaignStateMutator,
     reaper_dispatch_id: str,
 ) -> None:
-    """Respect a fresh heartbeat, otherwise terminate a confirmed orphan."""
+    """Terminate a confirmed orphan."""
     name = dispatch.name
     pid = dispatch.dispatched_pid
-    if _is_dispatch_heartbeating(state_path.parent, dispatch.dispatch_id, heartbeat_grace_seconds):
-        logger.info(
-            "reap: [SKIPPED]     %s  dispatch_id=%s  (dispatch heartbeat active)",
-            name,
-            dispatch.dispatch_id,
-        )
-        return
-
     if dry_run:
         logger.info("reap: [WOULD KILL]  %s  pid=%d  (orphan, identity match)", name, pid)
     else:
@@ -273,10 +314,12 @@ def _reap_running_dispatch(
     """Run the immediate, identity, and termination reaping pipeline for one dispatch."""
     if _handle_immediate_reap_disposition(
         dispatch,
+        dispatches_dir=state_path.parent,
         dry_run=dry_run,
         skip_dispatch_ids=skip_dispatch_ids,
         min_reap_age_seconds=min_reap_age_seconds,
         current_boot_id=current_boot_id,
+        heartbeat_grace_seconds=heartbeat_grace_seconds,
         m=m,
         reaper_dispatch_id=reaper_dispatch_id,
     ):
@@ -296,11 +339,9 @@ def _reap_running_dispatch(
         _, use_tick_identity, confirmed_create_time = identity
         _reap_confirmed_orphan(
             dispatch,
-            state_path=state_path,
             dry_run=dry_run,
             use_tick_identity=use_tick_identity,
             confirmed_create_time=confirmed_create_time,
-            heartbeat_grace_seconds=heartbeat_grace_seconds,
             m=m,
             reaper_dispatch_id=reaper_dispatch_id,
         )

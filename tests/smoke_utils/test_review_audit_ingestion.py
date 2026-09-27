@@ -330,7 +330,7 @@ def test_well_formed_empty_findings_remain_valid(tmp_path: Path) -> None:
         ("duplicate", ("arch", "tests"), "duplicate_handle"),
         ("invalid_duplicate", ("arch", "tests"), "duplicate_handle"),
         ("missing", ("tests", "cohesion"), "missing_handle"),
-        ("label", ("arch",), ""),
+        ("label", ("arch",), "accepted"),
     ],
 )
 def test_handle_binding_checks(
@@ -362,7 +362,7 @@ def test_handle_binding_checks(
     )
     by_slot = {row["slot_id"]: row for row in result["slots"]}
     for slot_id in affected_slots:
-        assert by_slot[slot_id]["status"] == ("failed" if reason else "validated")
+        assert by_slot[slot_id]["status"] == ("validated" if reason == "accepted" else "failed")
         assert by_slot[slot_id]["reason_code"] == reason
 
 

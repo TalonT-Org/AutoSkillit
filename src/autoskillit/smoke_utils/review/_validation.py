@@ -16,12 +16,11 @@ from autoskillit.smoke_utils._review_contracts import (
     _closed_key_set_error,
     _is_non_empty_string,
 )
-from autoskillit.smoke_utils.review._constants import _bounded_utf8
+from autoskillit.smoke_utils.review._constants import AUDITOR_FINDINGS_MAX_BYTES, _bounded_utf8
 
 _EXPERIMENTAL_DIMENSIONS = dict(EXPERIMENTAL_REVIEW_AUDITOR_REGISTRY)
 
 _MAX_ENVELOPE_ERRORS = 32
-_MAX_EXPERIMENTAL_OUTPUT_BYTES = 1024 * 1024
 
 _STANDARD_FINDING_KEYS = {
     "file",
@@ -373,11 +372,11 @@ def validate_experimental_auditor_outputs(
                 terminal_status if terminal_status in _TERMINAL_FAILURE_REASONS else "tool_failure"
             )
         elif len(raw_output.encode("utf-8") if isinstance(raw_output, str) else raw_output) > (
-            _MAX_EXPERIMENTAL_OUTPUT_BYTES
+            AUDITOR_FINDINGS_MAX_BYTES
         ):
             error = "schema_invalid"
             validation_details.append(
-                f"output exceeds {_MAX_EXPERIMENTAL_OUTPUT_BYTES} byte validation limit"
+                f"output exceeds {AUDITOR_FINDINGS_MAX_BYTES} byte validation limit"
             )
         else:
             try:

@@ -11,9 +11,7 @@ import json
 
 import regex as re
 
-from autoskillit.smoke_utils.review._validation import _MAX_EXPERIMENTAL_OUTPUT_BYTES
-
-AUDITOR_FINDINGS_MAX_BYTES = _MAX_EXPERIMENTAL_OUTPUT_BYTES
+from autoskillit.smoke_utils.review._constants import AUDITOR_FINDINGS_MAX_BYTES
 
 _JSON_FENCE_OPEN = re.compile(r"^[ \t]*```[ \t]*json[ \t]*$", re.IGNORECASE | re.MULTILINE)
 _FENCE_CLOSE = re.compile(r"^[ \t]*```[ \t]*$", re.MULTILINE)

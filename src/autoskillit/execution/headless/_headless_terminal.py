@@ -10,6 +10,7 @@ from typing import Any
 from autoskillit.core import (
     CodingAgentBackend,
     ContinuationRecommendation,
+    EvidenceWorktree,
     ExecutionCandidateAttempt,
     ExecutionSelection,
     KillReason,
@@ -303,6 +304,7 @@ def build_terminal_flush_kwargs(
     launch_contract_digest: str,
     native_shell_capture: NativeShellCaptureDiagnostic | None,
     session_type: SessionType | None,
+    evidence_worktree: EvidenceWorktree | None,
     execution_selection: ExecutionSelection | None,
     clone_contamination_reverted: bool,
     is_resume: bool,
@@ -348,6 +350,7 @@ def build_terminal_flush_kwargs(
         "launch_contract_digest": launch_contract_digest,
         "native_shell_capture": native_shell_capture,
         "session_type": session_type,
+        "evidence_worktree": evidence_worktree,
         "execution_selection": execution_selection,
     }
     if result is not None:

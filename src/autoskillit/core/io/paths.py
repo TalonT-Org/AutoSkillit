@@ -18,6 +18,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import NamedTuple
@@ -179,6 +180,62 @@ class _GitAncestorResult(NamedTuple):
     root: Path
 
 
+@dataclass(frozen=True, slots=True)
+class WorktreeRecord:
+    path: str
+    head: str
+    branch: str | None
+    is_main: bool
+    prunable: bool
+
+
+def parse_worktree_porcelain(stdout: str) -> tuple[WorktreeRecord, ...]:
+    """Parse NUL-delimited ``git worktree list --porcelain -z`` output."""
+    records: list[WorktreeRecord] = []
+    path = ""
+    head = ""
+    branch: str | None = None
+    prunable = False
+    has_record = False
+
+    def finish_record() -> None:
+        nonlocal path, head, branch, prunable, has_record
+        if has_record:
+            records.append(
+                WorktreeRecord(
+                    path=path,
+                    head=head,
+                    branch=branch,
+                    is_main=not records,
+                    prunable=prunable,
+                )
+            )
+        path = ""
+        head = ""
+        branch = None
+        prunable = False
+        has_record = False
+
+    for field in stdout.split("\0"):
+        if not field:
+            finish_record()
+            continue
+        key, _, value = field.partition(" ")
+        if key == "worktree":
+            finish_record()
+            path = value
+            has_record = True
+        elif has_record and key == "HEAD":
+            head = value
+        elif has_record and key == "branch":
+            branch = value.removeprefix("refs/heads/")
+        elif has_record and key == "prunable":
+            prunable = True
+
+    finish_record()
+    return tuple(records)
+
+
 def _find_git_ancestor(path: Path) -> _GitAncestorResult | None:
     """Walk the ancestor chain to find the nearest structurally valid git root.
 
@@ -223,6 +280,14 @@ def is_git_main_checkout(path: Path) -> bool:
     """
     result = _find_git_ancestor(path)
     return result is not None and result.kind == _GitAncestorKind.MAIN
+
+
+def main_checkout_root(path: Path) -> Path | None:
+    """Return the nearest main-checkout root containing ``path``."""
+    result = _find_git_ancestor(path)
+    if result is None or result.kind != _GitAncestorKind.MAIN:
+        return None
+    return result.root
 
 
 def is_in_git_repo(path: Path) -> bool:

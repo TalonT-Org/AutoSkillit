@@ -102,3 +102,13 @@ def test_find_stale_session_archive_references_deduplicates_paths(tmp_path: Path
     )
 
     assert find_stale_session_archive_references(tmp_path) == [missing]
+
+
+def test_find_stale_session_archive_references_includes_missing_evidence_worktree(
+    tmp_path: Path,
+) -> None:
+    evidence_path = str(tmp_path / "removed-worktree")
+    archive = tmp_path / "sessions-archive.jsonl"
+    archive.write_text(json.dumps({"evidence_worktree_path": evidence_path}) + "\n")
+
+    assert find_stale_session_archive_references(tmp_path) == [evidence_path]

@@ -21,7 +21,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from autoskillit.execution.backends._codex_config import _serialize_toml  # noqa: E402
+from autoskillit.execution.backends import _serialize_toml  # noqa: E402
 from autoskillit.execution.backends._codex_hooks import generate_codex_hooks_config  # noqa: E402
 from autoskillit.hooks._capture_contract import (  # noqa: E402
     NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,

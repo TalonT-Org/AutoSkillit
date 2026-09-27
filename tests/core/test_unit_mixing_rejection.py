@@ -8,12 +8,13 @@ and construction-time validation.
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
@@ -78,7 +79,7 @@ take_chars(Utf8ByteLimit(100))  # should be rejected: Utf8ByteLimit is not Seria
     # MYPYPATH points at src/ so the snippet resolves against source directly,
     # with no dependency on an editable/wheel install of autoskillit.
     src_dir = Path(__file__).resolve().parents[2] / "src"
-    env = {**os.environ, "MYPYPATH": str(src_dir)}
+    env = {**production_interpreter_env(), "MYPYPATH": str(src_dir)}
     result = subprocess.run(
         [
             sys.executable,

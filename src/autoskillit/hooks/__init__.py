@@ -64,7 +64,7 @@ from autoskillit.hooks._runtime._github_mutation_analysis import analyze_github_
 # consumers can import them without going through the canonical submodule.
 # ``_hook_constants`` itself remains the canonical authority and is still
 # importable directly by standalone guard scripts (via ``_HOOKS_DIR`` bootstrap).
-from autoskillit.hooks._runtime._hook_constants import (  # noqa: E402,F401
+from autoskillit.hooks._runtime._hook_constants import (
     CODEX_AUTO_COMPACTION_DENIED_REASON,
     DENY_REASON_BY_GUARD,
     DENY_TRIGGER_BY_GUARD,

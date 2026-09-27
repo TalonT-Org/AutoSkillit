@@ -29,9 +29,9 @@ _FLOCK_POLL_INTERVAL_S = 0.05
 # import there — a relative ImportFrom node has no "autoskillit"-prefixed module name
 # and so does not trip the stdlib-only AST guard (test_hooks_are_stdlib_only).
 if TYPE_CHECKING or __package__:
-    from ._runtime import _hook_payload as _hook_payload_module  # noqa: E402
+    from ._runtime import _hook_payload as _hook_payload_module
 else:
-    import _hook_payload as _hook_payload_module  # noqa: E402
+    import _hook_payload as _hook_payload_module
 
 SESSION_BINDING_SCHEMA_VERSION: int = 3
 PROJECTION_MANIFEST_SCHEMA_VERSION: int = 2

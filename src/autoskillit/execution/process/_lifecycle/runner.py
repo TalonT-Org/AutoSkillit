@@ -64,7 +64,7 @@ def run_managed_sync(
     ):
         stdout_path = Path(stdout_file.name)
         stderr_path = Path(stderr_file.name)
-        stdin_handle = open(stdin_path) if stdin_path is not None else None  # noqa: SIM115
+        stdin_handle = open(stdin_path) if stdin_path is not None else None
 
         owner: OwnedProcessGroup | None = None
         process: subprocess.Popen[Any] | None = None

@@ -78,7 +78,7 @@ def test_process_issues_supports_merge_batch_flag(skill_text: str) -> None:
 def test_process_issues_derives_issue_url(skill_text: str) -> None:
     """process-issues must document constructing issue URL from issue number + repo."""
     assert "issue_url" in skill_text
-    github_url_ref = "github" + ".com"  # noqa: S105 — split to avoid CodeQL substring alert
+    github_url_ref = "github" + ".com"
     assert github_url_ref in skill_text or "default_repo" in skill_text
 
 

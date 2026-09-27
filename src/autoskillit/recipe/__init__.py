@@ -64,19 +64,19 @@ for _name in _LEGACY_SHIM_MODULES:
 del _importlib, _name
 
 # Rule registration — import triggers @semantic_rule registration.
-from autoskillit.recipe import registry as _reg  # noqa: E402, PLC0415
-from autoskillit.recipe._binding import bind_recipe, bind_step_invocation  # noqa: E402
-from autoskillit.recipe.analysis._analysis import (  # noqa: E402
+from autoskillit.recipe import registry as _reg
+from autoskillit.recipe._binding import bind_recipe, bind_step_invocation
+from autoskillit.recipe.analysis._analysis import (
     RouteEdge,
     _extract_routing_edges,
 )
-from autoskillit.recipe.api._api import (  # noqa: E402
+from autoskillit.recipe.api._api import (
     format_recipe_list_response,
     list_all,
     load_and_validate,
     validate_from_path,
 )
-from autoskillit.recipe.contracts.contracts import (  # noqa: E402
+from autoskillit.recipe.contracts.contracts import (
     OutcomeInvariantEntry,
     ResultFieldSpec,
     SkillContract,
@@ -93,23 +93,23 @@ from autoskillit.recipe.contracts.contracts import (  # noqa: E402
     resolve_skill_name,
     validate_recipe_cards,
 )
-from autoskillit.recipe.contracts.staleness_cache import (  # noqa: E402
+from autoskillit.recipe.contracts.staleness_cache import (
     StalenessEntry,
     compute_recipe_hash,
     read_staleness_cache,
     write_staleness_cache,
 )
-from autoskillit.recipe.diagrams import (  # noqa: E402
+from autoskillit.recipe.diagrams import (
     annotate_diagram_with_pruning,
     check_diagram_staleness,
     diagram_stale_to_suggestions,
     load_recipe_diagram,
 )
-from autoskillit.recipe.identity import (  # noqa: E402
+from autoskillit.recipe.identity import (
     check_rerun_detection,
     find_prior_runs,
 )
-from autoskillit.recipe.ingredients._recipe_ingredients import (  # noqa: E402
+from autoskillit.recipe.ingredients._recipe_ingredients import (
     ListRecipesResult,
     LoadRecipeResult,
     OpenKitchenResult,
@@ -117,7 +117,7 @@ from autoskillit.recipe.ingredients._recipe_ingredients import (  # noqa: E402
     build_ingredient_rows,
     format_ingredients_table,
 )
-from autoskillit.recipe.io import (  # noqa: E402
+from autoskillit.recipe.io import (
     GROUP_LABELS,
     all_validated_recipe_names,
     all_validated_recipe_paths,
@@ -133,8 +133,8 @@ from autoskillit.recipe.io import (  # noqa: E402
     load_recipe,
     step_byte_ranges_from_yaml,
 )
-from autoskillit.recipe.loader import parse_recipe_metadata  # noqa: E402
-from autoskillit.recipe.methodology.experiment_type_registry import (  # noqa: E402
+from autoskillit.recipe.loader import parse_recipe_metadata
+from autoskillit.recipe.methodology.experiment_type_registry import (
     BUNDLED_EXPERIMENT_TYPES_DIR,
     ExperimentTypeSpec,
     get_experiment_type_by_name,
@@ -143,7 +143,7 @@ from autoskillit.recipe.methodology.experiment_type_registry import (  # noqa: E
     load_types_from_dir,
     parse_experiment_type,
 )
-from autoskillit.recipe.methodology.methodology_disambiguation import (  # noqa: E402
+from autoskillit.recipe.methodology.methodology_disambiguation import (
     CrossTraditionOverlapDef,
     DisambiguationExceptionDef,
     DisambiguationResult,
@@ -151,7 +151,7 @@ from autoskillit.recipe.methodology.methodology_disambiguation import (  # noqa:
     disambiguate,
     load_disambiguation_rules,
 )
-from autoskillit.recipe.methodology.methodology_tradition_registry import (  # noqa: E402
+from autoskillit.recipe.methodology.methodology_tradition_registry import (
     BUNDLED_METHODOLOGY_TRADITIONS_DIR,
     MethodologyTraditionSpec,
     VenueAppendixDef,
@@ -161,194 +161,194 @@ from autoskillit.recipe.methodology.methodology_tradition_registry import (  # n
     load_traditions_from_dir,
     parse_methodology_tradition,
 )
-from autoskillit.recipe.methodology.methodology_tradition_router import (  # noqa: E402
+from autoskillit.recipe.methodology.methodology_tradition_router import (
     TraditionRouterResult,
     UnionRuleDef,
     classify_methodology,
 )
-from autoskillit.recipe.methodology.methodology_venue_appendix import (  # noqa: E402
+from autoskillit.recipe.methodology.methodology_venue_appendix import (
     AlternateParentDef,
     MLSubAreaFoldingDef,
     VenueAppendixMatch,
     load_ml_sub_area_folding,
     resolve_venue_appendices,
 )
-from autoskillit.recipe.repository import DefaultRecipeRepository  # noqa: E402
-from autoskillit.recipe.rules import rules_actions as _rules_actions  # noqa: E402 F401
-from autoskillit.recipe.rules import (  # noqa: E402 F401
+from autoskillit.recipe.repository import DefaultRecipeRepository
+from autoskillit.recipe.rules import rules_actions as _rules_actions  # noqa: F401
+from autoskillit.recipe.rules import (  # noqa: F401
     rules_audit_impl_plan_scope as _rules_audit_impl_plan_scope,
 )
-from autoskillit.recipe.rules import (  # noqa: E402 F401
+from autoskillit.recipe.rules import (  # noqa: F401
     rules_audit_impl_topology as _rules_audit_impl_topology,
 )
-from autoskillit.recipe.rules import (  # noqa: E402 F401
+from autoskillit.recipe.rules import (  # noqa: F401
     rules_audit_outcome_routing as _rules_audit_outcome_routing,
 )
-from autoskillit.recipe.rules import (  # noqa: E402 F401
+from autoskillit.recipe.rules import (  # noqa: F401
     rules_backend_compat as _rules_backend_compat,
 )
-from autoskillit.recipe.rules import rules_blocks as _rules_blocks  # noqa: E402 F401
-from autoskillit.recipe.rules import rules_bypass as _rules_bypass  # noqa: E402 F401
-from autoskillit.recipe.rules import (  # noqa: E402
+from autoskillit.recipe.rules import rules_blocks as _rules_blocks  # noqa: F401
+from autoskillit.recipe.rules import rules_bypass as _rules_bypass  # noqa: F401
+from autoskillit.recipe.rules import (
     rules_callable_scope as _rules_callable_scope,  # noqa: F401
 )
-from autoskillit.recipe.rules import rules_cmd as _rules_cmd  # noqa: E402 F401
-from autoskillit.recipe.rules import (  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_cmd as _rules_cmd  # noqa: F401
+from autoskillit.recipe.rules import (  # noqa: F401
     rules_commit_guard_regression_route as _rules_commit_guard_regression_route,
 )
-from autoskillit.recipe.rules import (  # noqa: E402 F401
+from autoskillit.recipe.rules import (  # noqa: F401
     rules_contract_recovery as _rules_contract_recovery,
 )
-from autoskillit.recipe.rules import rules_contracts as _rules_contracts  # noqa: E402 F401
-from autoskillit.recipe.rules import (  # noqa: E402 F401
-    rules_criterion_schema_drift as _rules_criterion_schema_drift,  # noqa: F401
+from autoskillit.recipe.rules import rules_contracts as _rules_contracts  # noqa: F401
+from autoskillit.recipe.rules import (  # noqa: F401
+    rules_criterion_schema_drift as _rules_criterion_schema_drift,
 )
-from autoskillit.recipe.rules import (  # noqa: E402 F401
+from autoskillit.recipe.rules import (  # noqa: F401
     rules_failure_verdict_bypass as _rules_failure_verdict_bypass,
 )
-from autoskillit.recipe.rules import rules_features as _rules_features  # noqa: E402 F401
-from autoskillit.recipe.rules import rules_fixing as _rules_fixing  # noqa: E402 F401
-from autoskillit.recipe.rules import rules_flake_loop as _rules_flake_loop  # noqa: E402 F401
-from autoskillit.recipe.rules import rules_food_truck as _rules_food_truck  # noqa: E402 F401
-from autoskillit.recipe.rules import (  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_features as _rules_features  # noqa: F401
+from autoskillit.recipe.rules import rules_fixing as _rules_fixing  # noqa: F401
+from autoskillit.recipe.rules import rules_flake_loop as _rules_flake_loop  # noqa: F401
+from autoskillit.recipe.rules import rules_food_truck as _rules_food_truck  # noqa: F401
+from autoskillit.recipe.rules import (  # noqa: F401
     rules_gitignored_deliverable as _rules_gitignored_deliverable,
 )
-from autoskillit.recipe.rules import (  # noqa: E402 F401
+from autoskillit.recipe.rules import (  # noqa: F401
     rules_ingredient_step_name as _rules_ingredient_step_name,
 )
-from autoskillit.recipe.rules import rules_inline_script as _rules_inline_script  # noqa: E402 F401
-from autoskillit.recipe.rules import rules_inputs as _rules_inputs  # noqa: E402 F401
-from autoskillit.recipe.rules import (  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_inline_script as _rules_inline_script  # noqa: F401
+from autoskillit.recipe.rules import rules_inputs as _rules_inputs  # noqa: F401
+from autoskillit.recipe.rules import (  # noqa: F401
     rules_inventory_gate_bilateral as _rules_inventory_gate_bilateral,
 )
-from autoskillit.recipe.rules import rules_isolation as _rules_isolation  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_isolation as _rules_isolation  # noqa: F401
 from autoskillit.recipe.rules import (
-    rules_issue_scope_threading as _rules_issue_scope_threading,  # noqa: E402 F401
+    rules_issue_scope_threading as _rules_issue_scope_threading,  # noqa: F401
 )
 from autoskillit.recipe.rules import (
-    rules_loop_artifact_scope as _rules_loop_artifact_scope,  # noqa: E402 F401
+    rules_loop_artifact_scope as _rules_loop_artifact_scope,  # noqa: F401
 )
-from autoskillit.recipe.rules import rules_loop_counter as _rules_loop_counter  # noqa: E402 F401
-from autoskillit.recipe.rules import rules_loop_progress as _rules_loop_progress  # noqa: E402 F401
-from autoskillit.recipe.rules import rules_merge as _rules_merge  # noqa: E402 F401
-from autoskillit.recipe.rules import (  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_loop_counter as _rules_loop_counter  # noqa: F401
+from autoskillit.recipe.rules import rules_loop_progress as _rules_loop_progress  # noqa: F401
+from autoskillit.recipe.rules import rules_merge as _rules_merge  # noqa: F401
+from autoskillit.recipe.rules import (  # noqa: F401
     rules_merge_context as _rules_merge_context,
 )
-from autoskillit.recipe.rules import (  # noqa: E402 F401
+from autoskillit.recipe.rules import (  # noqa: F401
     rules_merge_enrollment as _rules_merge_enrollment,
 )
-from autoskillit.recipe.rules import rules_merge_guards as _rules_merge_guards  # noqa: E402 F401
-from autoskillit.recipe.rules import (  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_merge_guards as _rules_merge_guards  # noqa: F401
+from autoskillit.recipe.rules import (  # noqa: F401
     rules_merge_push_symmetry as _rules_merge_push_symmetry,
 )
-from autoskillit.recipe.rules import rules_merge_queue as _rules_merge_queue  # noqa: E402 F401
-from autoskillit.recipe.rules import rules_merge_routing as _rules_merge_routing  # noqa: E402 F401
-from autoskillit.recipe.rules import rules_merge_wait as _rules_merge_wait  # noqa: E402 F401
-from autoskillit.recipe.rules import rules_model as _rules_model  # noqa: E402 F401
-from autoskillit.recipe.rules import (  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_merge_queue as _rules_merge_queue  # noqa: F401
+from autoskillit.recipe.rules import rules_merge_routing as _rules_merge_routing  # noqa: F401
+from autoskillit.recipe.rules import rules_merge_wait as _rules_merge_wait  # noqa: F401
+from autoskillit.recipe.rules import rules_model as _rules_model  # noqa: F401
+from autoskillit.recipe.rules import (  # noqa: F401
     rules_note_shape_contradiction as _rules_note_shape_contradiction,
 )
-from autoskillit.recipe.rules import (  # noqa: E402
+from autoskillit.recipe.rules import (
     rules_optional_capture as _rules_optional_capture,  # noqa: F401
 )
-from autoskillit.recipe.rules import rules_packs as _rules_packs  # noqa: E402 F401
-from autoskillit.recipe.rules import (  # noqa: E402 F401
-    rules_phoropter_adjacency as _rules_phoropter_adjacency,  # noqa: F401
+from autoskillit.recipe.rules import rules_packs as _rules_packs  # noqa: F401
+from autoskillit.recipe.rules import (  # noqa: F401
+    rules_phoropter_adjacency as _rules_phoropter_adjacency,
 )
-from autoskillit.recipe.rules import rules_plan_set_gate as _rules_plan_set_gate  # noqa: E402 F401
-from autoskillit.recipe.rules import (  # noqa: E402 F401
-    rules_pseudocode_sync as _rules_pseudocode_sync,  # noqa: F401
+from autoskillit.recipe.rules import rules_plan_set_gate as _rules_plan_set_gate  # noqa: F401
+from autoskillit.recipe.rules import (  # noqa: F401
+    rules_pseudocode_sync as _rules_pseudocode_sync,
 )
-from autoskillit.recipe.rules import rules_reachability as _rules_reachability  # noqa: E402 F401
-from autoskillit.recipe.rules import rules_recipe as _rules_recipe  # noqa: E402 F401
-from autoskillit.recipe.rules import rules_remediation as _rules_remediation  # noqa: E402 F401
-from autoskillit.recipe.rules import rules_route_gate as _rules_route_gate  # noqa: E402 F401
-from autoskillit.recipe.rules import rules_skill_content as _rules_skill_content  # noqa: E402 F401
-from autoskillit.recipe.rules import (  # noqa: E402
+from autoskillit.recipe.rules import rules_reachability as _rules_reachability  # noqa: F401
+from autoskillit.recipe.rules import rules_recipe as _rules_recipe  # noqa: F401
+from autoskillit.recipe.rules import rules_remediation as _rules_remediation  # noqa: F401
+from autoskillit.recipe.rules import rules_route_gate as _rules_route_gate  # noqa: F401
+from autoskillit.recipe.rules import rules_skill_content as _rules_skill_content  # noqa: F401
+from autoskillit.recipe.rules import (
     rules_skill_content_content_structure as _rules_skill_content_content_structure,  # noqa: F401
 )
-from autoskillit.recipe.rules import (  # noqa: E402
+from autoskillit.recipe.rules import (
     rules_skill_content_github_api_safety as _rules_skill_content_github_api_safety,  # noqa: F401
 )
-from autoskillit.recipe.rules import (  # noqa: E402
+from autoskillit.recipe.rules import (
     rules_skill_content_shell_safety as _rules_skill_content_shell_safety,  # noqa: F401
 )
-from autoskillit.recipe.rules import (  # noqa: E402
+from autoskillit.recipe.rules import (
     rules_skill_content_skill_contract as _rules_skill_content_skill_contract,  # noqa: F401
 )
-from autoskillit.recipe.rules import (  # noqa: E402 F401
+from autoskillit.recipe.rules import (  # noqa: F401
     rules_skill_write_path_alignment as _rules_skill_write_path_alignment,
 )
-from autoskillit.recipe.rules import rules_skills as _rules_skills  # noqa: E402 F401
-from autoskillit.recipe.rules import (  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_skills as _rules_skills  # noqa: F401
+from autoskillit.recipe.rules import (  # noqa: F401
     rules_skip_inviting_notes as _rules_skip_inviting_notes,
 )
-from autoskillit.recipe.rules import (  # noqa: E402 F401
+from autoskillit.recipe.rules import (  # noqa: F401
     rules_stamp_ownership as _rules_stamp_ownership,
 )
-from autoskillit.recipe.rules import rules_step_naming as _rules_step_naming  # noqa: E402 F401
-from autoskillit.recipe.rules import (  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_step_naming as _rules_step_naming  # noqa: F401
+from autoskillit.recipe.rules import (  # noqa: F401
     rules_stop_sentinel_direction as _rules_stop_sentinel_direction,
 )
-from autoskillit.recipe.rules import rules_temp_path as _rules_temp_path  # noqa: E402 F401
-from autoskillit.recipe.rules import (  # noqa: E402
+from autoskillit.recipe.rules import rules_temp_path as _rules_temp_path  # noqa: F401
+from autoskillit.recipe.rules import (
     rules_terminal_convergence as _rules_terminal_convergence,  # noqa: F401
 )
-from autoskillit.recipe.rules import rules_tools as _rules_tools  # noqa: E402 F401
-from autoskillit.recipe.rules import rules_verdict as _rules_verdict  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_tools as _rules_tools  # noqa: F401
+from autoskillit.recipe.rules import rules_verdict as _rules_verdict  # noqa: F401
 from autoskillit.recipe.rules import (
-    rules_verdict_context as _rules_verdict_context,  # noqa: E402 F401
+    rules_verdict_context as _rules_verdict_context,  # noqa: F401
 )
 from autoskillit.recipe.rules import (
-    rules_verdict_degradation as _rules_verdict_degradation,  # noqa: E402 F401
+    rules_verdict_degradation as _rules_verdict_degradation,  # noqa: F401
 )
-from autoskillit.recipe.rules import rules_worktree as _rules_worktree  # noqa: E402 F401
-from autoskillit.recipe.rules.campaign import (  # noqa: E402
+from autoskillit.recipe.rules import rules_worktree as _rules_worktree  # noqa: F401
+from autoskillit.recipe.rules.campaign import (
     rules_campaign_capture as _rules_campaign_capture,  # noqa: F401
 )
-from autoskillit.recipe.rules.campaign import (  # noqa: E402
+from autoskillit.recipe.rules.campaign import (
     rules_campaign_deps as _rules_campaign_deps,  # noqa: F401
 )
-from autoskillit.recipe.rules.campaign import (  # noqa: E402
+from autoskillit.recipe.rules.campaign import (
     rules_campaign_dispatch as _rules_campaign_dispatch,  # noqa: F401
 )
-from autoskillit.recipe.rules.campaign import (  # noqa: E402
+from autoskillit.recipe.rules.campaign import (
     rules_campaign_flow as _rules_campaign_flow,  # noqa: F401
 )
-from autoskillit.recipe.rules.campaign import (  # noqa: E402
+from autoskillit.recipe.rules.campaign import (
     rules_campaign_ingredients as _rules_campaign_ingredients,  # noqa: F401
 )
-from autoskillit.recipe.rules.ci import rules_ci as _rules_ci  # noqa: E402 F401
-from autoskillit.recipe.rules.ci import rules_ci_conflict as _rules_ci_conflict  # noqa: E402 F401
-from autoskillit.recipe.rules.ci import rules_ci_guards as _rules_ci_guards  # noqa: E402 F401
+from autoskillit.recipe.rules.ci import rules_ci as _rules_ci  # noqa: F401
+from autoskillit.recipe.rules.ci import rules_ci_conflict as _rules_ci_conflict  # noqa: F401
+from autoskillit.recipe.rules.ci import rules_ci_guards as _rules_ci_guards  # noqa: F401
 from autoskillit.recipe.rules.ci import (
-    rules_ci_merge_queue as _rules_ci_merge_queue,  # noqa: E402 F401
+    rules_ci_merge_queue as _rules_ci_merge_queue,  # noqa: F401
 )
-from autoskillit.recipe.rules.dataflow import rules_clone as _rules_clone  # noqa: E402 F401
-from autoskillit.recipe.rules.dataflow import rules_dataflow as _rules_dataflow  # noqa: E402 F401
+from autoskillit.recipe.rules.dataflow import rules_clone as _rules_clone  # noqa: F401
+from autoskillit.recipe.rules.dataflow import rules_dataflow as _rules_dataflow  # noqa: F401
 from autoskillit.recipe.rules.dataflow import (
-    rules_dataflow_callable as _rules_dataflow_callable,  # noqa: E402 F401
-)
-from autoskillit.recipe.rules.dataflow import (
-    rules_dataflow_handoff as _rules_dataflow_handoff,  # noqa: E402 F401
+    rules_dataflow_callable as _rules_dataflow_callable,  # noqa: F401
 )
 from autoskillit.recipe.rules.dataflow import (
-    rules_dataflow_multipart as _rules_dataflow_multipart,  # noqa: E402 F401
+    rules_dataflow_handoff as _rules_dataflow_handoff,  # noqa: F401
 )
-from autoskillit.recipe.rules.graph import rules_graph as _rules_graph  # noqa: E402 F401
-from autoskillit.recipe.rules.graph import (
-    rules_graph_output as _rules_graph_output,  # noqa: E402 F401
+from autoskillit.recipe.rules.dataflow import (
+    rules_dataflow_multipart as _rules_dataflow_multipart,  # noqa: F401
 )
+from autoskillit.recipe.rules.graph import rules_graph as _rules_graph  # noqa: F401
 from autoskillit.recipe.rules.graph import (
-    rules_graph_review as _rules_graph_review,  # noqa: E402 F401
-)
-from autoskillit.recipe.rules.graph import (
-    rules_graph_routes as _rules_graph_routes,  # noqa: E402 F401
+    rules_graph_output as _rules_graph_output,  # noqa: F401
 )
 from autoskillit.recipe.rules.graph import (
-    rules_graph_summary as _rules_graph_summary,  # noqa: E402 F401
+    rules_graph_review as _rules_graph_review,  # noqa: F401
 )
-from autoskillit.recipe.schema import (  # noqa: E402
+from autoskillit.recipe.rules.graph import (
+    rules_graph_routes as _rules_graph_routes,  # noqa: F401
+)
+from autoskillit.recipe.rules.graph import (
+    rules_graph_summary as _rules_graph_summary,  # noqa: F401
+)
+from autoskillit.recipe.schema import (
     AUTOSKILLIT_VERSION_KEY,
     CAMPAIGN_REF_RE,
     NON_INTERACTIVE_KINDS,
@@ -363,7 +363,7 @@ from autoskillit.recipe.schema import (  # noqa: E402
     StepResultCondition,
     StepResultRoute,
 )
-from autoskillit.recipe.validator import (  # noqa: E402
+from autoskillit.recipe.validator import (
     RuleFinding,
     analyze_dataflow,
     make_validation_context,
@@ -374,17 +374,17 @@ from autoskillit.recipe.validator import (  # noqa: E402
 _reg._finalize_registry()  # pyright: ignore[reportAttributeAccessIssue]  # lazy-registry: method added by _register_rule_module() side effects
 del _reg
 
-from autoskillit.recipe._binding import (  # noqa: E402
+from autoskillit.recipe._binding import (
     RuntimeBindingError,
     bind_runtime_skill_invocation,
     compute_skill_contract_identity,
 )
-from autoskillit.recipe.contracts.contracts import (  # noqa: E402
+from autoskillit.recipe.contracts.contracts import (
     AuditAuthorityPublicationSpec,
     AuditOutputMode,
     select_audit_output_contract,
 )
-from autoskillit.recipe.validator import (  # noqa: E402
+from autoskillit.recipe.validator import (
     edge_routes_success,
 )
 

@@ -229,7 +229,7 @@ class _OtlpHandler(BaseHTTPRequestHandler):
     def log_message(self, _format: str, *args: object) -> None:
         return None
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         sink = self.server.sink
         sink._handler_enter()
         try:
@@ -240,22 +240,22 @@ class _OtlpHandler(BaseHTTPRequestHandler):
         finally:
             sink._handler_exit()
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         self._wrong_method()
 
-    def do_PUT(self) -> None:  # noqa: N802
+    def do_PUT(self) -> None:
         self._wrong_method()
 
-    def do_PATCH(self) -> None:  # noqa: N802
+    def do_PATCH(self) -> None:
         self._wrong_method()
 
-    def do_DELETE(self) -> None:  # noqa: N802
+    def do_DELETE(self) -> None:
         self._wrong_method()
 
-    def do_OPTIONS(self) -> None:  # noqa: N802
+    def do_OPTIONS(self) -> None:
         self._wrong_method()
 
-    def do_HEAD(self) -> None:  # noqa: N802
+    def do_HEAD(self) -> None:
         self._wrong_method()
 
     def _wrong_method(self) -> None:

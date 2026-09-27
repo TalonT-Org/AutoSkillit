@@ -22,7 +22,7 @@ from autoskillit.core import (
     NativeShellCaptureDecision,
     ProviderBinding,
     ResolvedLaunchContract,
-    SessionCheckpoint,  # noqa: F401, TC001
+    SessionCheckpoint,
     SkillProjectionBinding,
     SkillResult,
     ValidatedAddDir,

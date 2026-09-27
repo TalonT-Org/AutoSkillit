@@ -243,7 +243,7 @@ def _atomic_write_marker(marker_path: Path, payload: str) -> None:
     Re-exported from ``_hook_log_dispatch`` so the quota-disable marker
     below can use the same atomic-write helper as the JSONL sinks.
     """
-    import _hook_log_dispatch  # noqa: PLC0415
+    import _hook_log_dispatch
 
     _hook_log_dispatch._atomic_write_marker(marker_path, payload)
 
@@ -430,10 +430,10 @@ def resolve_quota_log_dir(*, caller: str = "") -> Path | None:
 # module is loaded as ``autoskillit.hooks._runtime._hook_settings`` (test
 # mode); the bare-name form runs when ``_dispatch.py`` loads it directly
 # via ``from _hook_settings import …`` (no parent package set).
-if TYPE_CHECKING or __package__:  # noqa: E402
-    from . import _hook_log_dispatch  # noqa: PLC0415
-else:  # noqa: E402
-    import _hook_log_dispatch  # noqa: PLC0415
+if TYPE_CHECKING or __package__:
+    from . import _hook_log_dispatch
+else:
+    import _hook_log_dispatch
 
 DIAGNOSTIC_KEYS = _hook_log_dispatch.DIAGNOSTIC_KEYS
 _MAX_HOOK_LOG_LINES = _hook_log_dispatch._MAX_HOOK_LOG_LINES

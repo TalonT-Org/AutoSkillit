@@ -73,7 +73,7 @@ async def handle_cancellation(
         )
     if spawn_ctx.dispatched_pid:
         try:
-            from autoskillit.execution import kill_process_tree  # noqa: PLC0415
+            from autoskillit.execution import kill_process_tree
 
             provenance.start(
                 DispatchEffectName.LOCAL_PROCESS_CLEANUP,
@@ -110,7 +110,7 @@ async def handle_cancellation(
                 exc_info=True,
             )
         try:
-            from autoskillit.fleet.campaign_state.state import (  # noqa: PLC0415
+            from autoskillit.fleet.campaign_state.state import (
                 mark_dispatch_interrupted,
             )
 
@@ -176,7 +176,7 @@ async def run_finally_label_cleanup(
     the dispatch did NOT complete normally, mirroring the original guard on
     ``if not _dispatch_completed_normally:``.
     """
-    from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels  # noqa: PLC0415
+    from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels
 
     with anyio.CancelScope(shield=True):
         provenance.start(

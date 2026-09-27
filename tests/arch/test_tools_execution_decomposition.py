@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.server.tools import tools_execution  # noqa: F401
+from autoskillit.server.tools import tools_execution
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 

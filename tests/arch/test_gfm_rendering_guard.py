@@ -33,7 +33,7 @@ def test_format_ingredients_table_delegates_to_render_gfm_table():
 
 def test_render_gfm_table_importable_from_core():
     """_render_gfm_table must be importable from autoskillit.core (exported surface check)."""
-    from autoskillit.core import _render_gfm_table  # noqa: PLC0415
+    from autoskillit.core import _render_gfm_table
 
     assert callable(_render_gfm_table)
 

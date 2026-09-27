@@ -39,7 +39,7 @@ from autoskillit.recipe.analysis._analysis_graph import (
     _is_infrastructure_step,
     build_recipe_graph,
 )
-from autoskillit.recipe.io import iter_steps_with_context  # noqa: F401 — re-exported for rules
+from autoskillit.recipe.io import iter_steps_with_context
 from autoskillit.recipe.schema import (
     DataFlowReport,
     DataFlowWarning,

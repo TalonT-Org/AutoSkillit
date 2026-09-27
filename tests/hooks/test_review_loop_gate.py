@@ -40,7 +40,7 @@ def _write_state(tmp_dir, gate: str, called: bool, pr_number: str = "1290") -> N
 
 def _run_gate(tool_name: str, tmp_dir, raw_stdin: str | None = None) -> str:
     """Invoke review_loop_gate.main() and return captured stdout."""
-    from autoskillit.hooks.guards.review_loop_gate import main  # noqa: PLC0415
+    from autoskillit.hooks.guards.review_loop_gate import main
 
     if raw_stdin is not None:
         stdin_content = raw_stdin

@@ -506,7 +506,7 @@ def _migrate_skill_file(
                 temp_dir=temp_dir,
             )
         )
-    except Exception as exc:  # noqa: BLE001 - composition root reports per-file failure
+    except Exception as exc:
         logger.error(
             "skill_migration_failed",
             skill=skill_file.name,

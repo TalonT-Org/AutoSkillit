@@ -18,20 +18,20 @@ import tempfile as _tempfile
 _hypothesis_storage_dir = _tempfile.mkdtemp(prefix="autoskillit-hypothesis-")
 _os.environ["HYPOTHESIS_STORAGE_DIRECTORY"] = _hypothesis_storage_dir
 
-# noqa: E402 — see comment block above; intentional pre-import bootstrap
-import functools  # noqa: E402
-import os  # noqa: E402
-import shutil  # noqa: E402
-import subprocess  # noqa: E402
-import sys  # noqa: E402
-import warnings  # noqa: E402
-from collections.abc import Mapping  # noqa: E402
-from pathlib import Path as _Path  # noqa: E402
-from types import MappingProxyType  # noqa: E402
-from typing import TYPE_CHECKING, cast  # noqa: E402
-from unittest.mock import MagicMock  # noqa: E402
 
-import pytest  # noqa: E402
+import functools
+import os
+import shutil
+import subprocess
+import sys
+import warnings
+from collections.abc import Mapping
+from pathlib import Path as _Path
+from types import MappingProxyType
+from typing import TYPE_CHECKING, cast
+from unittest.mock import MagicMock
+
+import pytest
 
 if TYPE_CHECKING:
     from autoskillit.config.settings import AutomationConfig

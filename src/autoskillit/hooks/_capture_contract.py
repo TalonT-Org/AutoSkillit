@@ -37,15 +37,15 @@ else:
 CaptureFailureReason = _failure_policy.CaptureFailureReason
 
 if TYPE_CHECKING:
-    from autoskillit.hooks._capture._errors import CaptureContractError  # noqa: F401
+    from autoskillit.hooks._capture._errors import CaptureContractError
 elif __package__:
-    from ._capture._errors import CaptureContractError  # noqa: F401
+    from ._capture._errors import CaptureContractError
 else:
-    from _capture._errors import CaptureContractError  # noqa: F401
+    from _capture._errors import CaptureContractError
 
 
 if TYPE_CHECKING:
-    from autoskillit.hooks._capture._request_lineage import (  # noqa: F401
+    from autoskillit.hooks._capture._request_lineage import (
         _CAPTURE_ID_RE,
         _IDENTITY_RE,
         _MAX_DECODED_REQUEST_BYTES,
@@ -70,7 +70,7 @@ if TYPE_CHECKING:
         decode_lineage_ref_json,
         encode_capture_request,
     )
-    from autoskillit.hooks._capture._v2_protocol import (  # noqa: F401
+    from autoskillit.hooks._capture._v2_protocol import (
         _FRAME_SUFFIX,
         CAPTURE_V2_PRODUCER,
         CAPTURE_V2_SCHEMA_VERSION,
@@ -92,7 +92,7 @@ if TYPE_CHECKING:
         render_capture_v2,
     )
 elif __package__:
-    from ._capture._request_lineage import (  # noqa: F401
+    from ._capture._request_lineage import (
         _CAPTURE_ID_RE,
         _IDENTITY_RE,
         _MAX_DECODED_REQUEST_BYTES,
@@ -117,7 +117,7 @@ elif __package__:
         decode_lineage_ref_json,
         encode_capture_request,
     )
-    from ._capture._v2_protocol import (  # noqa: F401
+    from ._capture._v2_protocol import (
         _FRAME_SUFFIX,
         CAPTURE_V2_PRODUCER,
         CAPTURE_V2_SCHEMA_VERSION,
@@ -164,7 +164,7 @@ else:
         decode_lineage_ref_json,
         encode_capture_request,
     )
-    from _capture._v2_protocol import (  # noqa: F401
+    from _capture._v2_protocol import (
         _FRAME_SUFFIX,
         CAPTURE_V2_PRODUCER,
         CAPTURE_V2_SCHEMA_VERSION,

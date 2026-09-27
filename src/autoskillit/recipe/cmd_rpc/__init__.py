@@ -36,8 +36,8 @@ if TYPE_CHECKING:
         wait_for_direct_merge,
         wait_for_immediate_merge,
         wait_for_review_pr_mergeability,
-    )  # noqa: F401
-    from ._cmd_rpc_guards import (  # noqa: F401
+    )
+    from ._cmd_rpc_guards import (
         _MAX_ASSOCIATION_FILES,
         _PLAN_ASSOCIATION_DOMAIN,
         _PLAN_ASSOCIATION_KEYS,
@@ -63,7 +63,7 @@ if TYPE_CHECKING:
         read_stable_contained_bytes,
         run_git,
     )
-    from ._cmd_rpc_issues import (  # noqa: F401
+    from ._cmd_rpc_issues import (
         VANISHED_ERRORS,
         _ensure_and_resolve_labels,
         _extract_title,
@@ -78,7 +78,7 @@ if TYPE_CHECKING:
         _detect_remote,
         _write_rebase_conflict_report,
         truncate_text,
-    )  # noqa: F401
+    )
 
 
 def __getattr__(name: str):

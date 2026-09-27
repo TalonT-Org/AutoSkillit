@@ -105,7 +105,7 @@ def test_stale_to_suggestions_format() -> None:
 
 def test_extract_routing_edges_covers_on_context_limit() -> None:
     """T8: _extract_routing_edges returns an edge for on_context_limit."""
-    from autoskillit.recipe._analysis import _extract_routing_edges  # noqa: PLC0415
+    from autoskillit.recipe._analysis import _extract_routing_edges
     from autoskillit.recipe.schema import RecipeStep
 
     step = RecipeStep(
@@ -123,7 +123,7 @@ def test_extract_routing_edges_covers_on_context_limit() -> None:
 
 def test_extract_routing_edges_covers_all_routing_fields() -> None:
     """T9: _extract_routing_edges covers all RecipeStep routing fields (completeness invariant)."""
-    from autoskillit.recipe._analysis import _extract_routing_edges  # noqa: PLC0415
+    from autoskillit.recipe._analysis import _extract_routing_edges
     from autoskillit.recipe.schema import RecipeStep, StepResultCondition, StepResultRoute
 
     step = RecipeStep(
@@ -268,9 +268,9 @@ class TestBuildRecipeGraphSentinels:
 
     def test_no_warning_for_default_escalate_sentinel(self, sentinel_recipe):
         """T-SENT-1: Default on_exhausted='escalate' sentinel emits zero warnings."""
-        import structlog.testing  # noqa: PLC0415
+        import structlog.testing
 
-        from autoskillit.recipe._analysis import build_recipe_graph  # noqa: PLC0415
+        from autoskillit.recipe._analysis import build_recipe_graph
 
         with structlog.testing.capture_logs() as cap_logs:
             build_recipe_graph(sentinel_recipe)
@@ -279,9 +279,9 @@ class TestBuildRecipeGraphSentinels:
 
     def test_no_warning_for_explicit_done_sentinel(self, tmp_path):
         """T-SENT-2: Explicit on_exhausted='done' sentinel emits zero warnings."""
-        import structlog.testing  # noqa: PLC0415
+        import structlog.testing
 
-        from autoskillit.recipe._analysis import build_recipe_graph  # noqa: PLC0415
+        from autoskillit.recipe._analysis import build_recipe_graph
 
         yaml_content = """
 name: done-sentinel-test
@@ -307,9 +307,9 @@ steps:
 
     def test_still_warns_for_truly_unknown_target(self, tmp_path):
         """T-SENT-3: Genuinely unknown routing targets still emit warnings."""
-        import structlog.testing  # noqa: PLC0415
+        import structlog.testing
 
-        from autoskillit.recipe._analysis import build_recipe_graph  # noqa: PLC0415
+        from autoskillit.recipe._analysis import build_recipe_graph
 
         yaml_content = """
 name: unknown-target-test
@@ -336,9 +336,9 @@ steps:
 
     def test_build_recipe_graph_no_warning_for_action_step_exhausted(self, tmp_path):
         """T-SENT-4: Action steps (stop/confirm/route) do not warn on on_exhausted edges."""
-        import structlog.testing  # noqa: PLC0415
+        import structlog.testing
 
-        from autoskillit.recipe._analysis import build_recipe_graph  # noqa: PLC0415
+        from autoskillit.recipe._analysis import build_recipe_graph
 
         yaml_content = """
 name: action-step-test
@@ -366,9 +366,9 @@ steps:
 
     def test_build_recipe_graph_returns_nx_digraph_with_correct_attributes(self, sentinel_recipe):
         """T-SENT-5: build_recipe_graph returns nx.DiGraph with expected node/edge attrs."""
-        import networkx as nx  # noqa: PLC0415
+        import networkx as nx
 
-        from autoskillit.recipe._analysis import build_recipe_graph  # noqa: PLC0415
+        from autoskillit.recipe._analysis import build_recipe_graph
 
         g = build_recipe_graph(sentinel_recipe)
         assert isinstance(g, nx.DiGraph), f"Expected nx.DiGraph, got {type(g)}"
@@ -418,7 +418,7 @@ def test_spec_fixture_version_matches_diagram_format_constant() -> None:
     updates the spec → T-VER-1 fails if DIAGRAM_FORMAT_VERSION wasn't also bumped.
     Both must be updated together. This gate makes version bumps mandatory.
     """
-    import re  # noqa: PLC0415
+    import re
 
     spec_expected = _SPEC_FIXTURES / "spec_diagram_expected.md"
     content = spec_expected.read_text()

@@ -26,7 +26,7 @@ def _check_display_name(fn: Callable[[], object]) -> str:
     it is also used on the exception path inside _run_check."""
     try:
         name = getattr(getattr(fn, "func", fn), "__name__", "unknown")
-    except Exception:  # noqa: BLE001 - diagnostic metadata cannot escape isolation
+    except Exception:
         logger.exception("doctor_check_name_resolution_failed")
         return "unknown"
     return name.removeprefix("_check_") if isinstance(name, str) else "unknown"
@@ -49,7 +49,7 @@ def _run_check(
         if isinstance(result, list) and all(isinstance(item, DoctorResult) for item in result):
             return result
         raise TypeError("doctor check must return DoctorResult or list[DoctorResult]")
-    except Exception as exc:  # noqa: BLE001 - isolates one check from all others
+    except Exception as exc:
         logger.exception("doctor_check_crashed", check=resolved_check_name)
         return [DoctorResult(Severity.ERROR, resolved_check_name, f"Check crashed: {exc}")]
 

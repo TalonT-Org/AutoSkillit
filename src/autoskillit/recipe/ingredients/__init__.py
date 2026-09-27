@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ._recipe_composition import (  # noqa: F401
+    from ._recipe_composition import (
         _MODEL_COND_RE,
         FALSY_STRINGS,
         INPUT_REF_RE,
@@ -55,7 +55,7 @@ if TYPE_CHECKING:
         find_sub_recipe_by_name,
         load_yaml,
     )
-    from ._recipe_ingredients import (  # noqa: F401
+    from ._recipe_ingredients import (
         _GFM_DESC_MAX_WIDTH,
         _GFM_INGREDIENT_COLUMNS,
         CALLER_SOVEREIGN_INGREDIENTS,
@@ -76,7 +76,7 @@ if TYPE_CHECKING:
         _resolve_skip_guards_in_content,
         compose_yaml,
         is_yaml_mapping_node,
-    )  # noqa: F401
+    )
 
 
 def __getattr__(name: str):

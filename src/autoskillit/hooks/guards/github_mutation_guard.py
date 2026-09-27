@@ -42,12 +42,12 @@ if TYPE_CHECKING:
         parse_hook_command,
     )
 else:
-    from _github_mutation_analysis import (  # noqa: E402
+    from _github_mutation_analysis import (
         GitHubMutationKind,
         GitHubMutationStatus,
         analyze_github_mutations,
     )
-    from _hook_payload import (  # noqa: E402
+    from _hook_payload import (
         ParsedHookCommand,
         PayloadAnomaly,
         parse_hook_command,

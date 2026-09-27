@@ -32,7 +32,7 @@ def _build_event(tool_name: str, tool_input: dict, tool_response: str = "") -> d
 def _run_hook(
     event: dict | None = None, raw_stdin: str | None = None, tmp_dir=None
 ) -> tuple[str, int]:
-    from autoskillit.hooks.resume_gate_post_hook import main  # noqa: PLC0415
+    from autoskillit.hooks.resume_gate_post_hook import main
 
     stdin_text = raw_stdin if raw_stdin is not None else json.dumps(event or {})
 
@@ -62,7 +62,7 @@ def test_resume_gate_lock_contention_stops_at_its_fake_deadline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A held resume-gate lock cannot turn its post-hook into an unbounded wait."""
-    from autoskillit.hooks import resume_gate_post_hook as hook_module  # noqa: PLC0415
+    from autoskillit.hooks import resume_gate_post_hook as hook_module
 
     timestamps = iter((0.0, 0.1, 0.25))
     sleeps: list[float] = []

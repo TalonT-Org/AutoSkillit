@@ -47,7 +47,7 @@ def _run_guard(
     session_type: str | None = None,
 ) -> str:
     """Invoke pr_create_guard.main() and return captured stdout."""
-    from autoskillit.hooks.guards.pr_create_guard import main  # noqa: PLC0415
+    from autoskillit.hooks.guards.pr_create_guard import main
 
     if raw_stdin is not None:
         stdin_content = raw_stdin
@@ -85,7 +85,7 @@ def _run_bash_guard(
     session_type: str | None = None,
 ) -> str:
     """Invoke pr_create_guard.main() with Bash tool format and return captured stdout."""
-    from autoskillit.hooks.guards.pr_create_guard import main  # noqa: PLC0415
+    from autoskillit.hooks.guards.pr_create_guard import main
 
     if raw_stdin is not None:
         stdin_content = raw_stdin

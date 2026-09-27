@@ -38,7 +38,7 @@ def _run_hook(
     raw_stdin: str | None = None,
 ) -> str:
     """Import main(), patch sys.stdin, capture stdout. Returns stdout string."""
-    from autoskillit.hooks.guards.test_runner_guard import main  # noqa: PLC0415
+    from autoskillit.hooks.guards.test_runner_guard import main
 
     if headless:
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
@@ -315,8 +315,8 @@ class TestFailOpen:
 
 class TestDenyMessage:
     def test_deny_message_contains_corrective_guidance(self, monkeypatch):
-        from autoskillit.hooks.guards import test_runner_guard  # noqa: PLC0415
-        from autoskillit.hooks.guards.test_runner_guard import (  # noqa: PLC0415
+        from autoskillit.hooks.guards import test_runner_guard
+        from autoskillit.hooks.guards.test_runner_guard import (
             TEST_RUNNER_DENY_TRIGGER,
         )
 
@@ -365,7 +365,7 @@ class TestRegistration:
         HookDef.exempt_skills for the test_runner_guard entry.
         """
         from autoskillit.hooks._runtime._hook_constants import EXEMPT_SKILLS_BY_GUARD
-        from autoskillit.hooks.guards.test_runner_guard import _EXEMPT_SKILLS  # noqa: PLC0415
+        from autoskillit.hooks.guards.test_runner_guard import _EXEMPT_SKILLS
 
         matching = [h for h in HOOK_REGISTRY if "guards/test_runner_guard.py" in h.scripts]
         assert matching, "No HookDef found for test_runner_guard.py"

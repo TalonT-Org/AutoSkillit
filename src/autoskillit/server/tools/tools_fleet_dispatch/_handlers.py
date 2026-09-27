@@ -56,7 +56,7 @@ from autoskillit.server.managed_join_prelaunch import (
     acquire_managed_join_evidence,
 )
 from autoskillit.server.tools import (
-    tools_fleet_dispatch,  # noqa: F401 — late-binding for monkeypatch reach
+    tools_fleet_dispatch,
 )
 from autoskillit.server.tools._auto_overrides import (
     _compute_effective_backend_map,

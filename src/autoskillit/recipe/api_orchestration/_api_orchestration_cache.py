@@ -61,10 +61,10 @@ def _resolve_cache_inputs(
     pkg_version = _api_cache._get_pkg_version()
     project_recipes_dir = _pdir / ".autoskillit" / "recipes"
     builtin_dir = builtin_recipes_dir()
-    from autoskillit.recipe.methodology.experiment_type_registry import (  # noqa: PLC0415
+    from autoskillit.recipe.methodology.experiment_type_registry import (
         BUNDLED_EXPERIMENT_TYPES_DIR,
     )
-    from autoskillit.recipe.methodology.methodology_tradition_registry import (  # noqa: PLC0415
+    from autoskillit.recipe.methodology.methodology_tradition_registry import (
         BUNDLED_METHODOLOGY_TRADITIONS_DIR,
     )
 
@@ -138,7 +138,7 @@ def _resolve_cache_inputs(
         _ml_sub_area_size,
     )
 
-    from autoskillit.recipe import registry as _registry  # noqa: PLC0415
+    from autoskillit.recipe import registry as _registry
 
     # lazy-registry: global set by _finalize_registry()
     _rule_hash: str = _registry.RULE_REGISTRY_HASH  # pyright: ignore[reportAttributeAccessIssue]

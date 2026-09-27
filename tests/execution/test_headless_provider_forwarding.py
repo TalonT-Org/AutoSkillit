@@ -39,7 +39,7 @@ def test_launch_quota_scope_failure_is_diagnostic(minimal_ctx, monkeypatch) -> N
 
     backend = _mock_backend(anthropic_provider_capable=True)
 
-    def unavailable_scope(*args, **kwargs):  # noqa: ARG001
+    def unavailable_scope(*args, **kwargs):
         raise OSError("credentials unavailable")
 
     monkeypatch.setattr(helpers, "quota_scope", unavailable_scope)
@@ -253,7 +253,7 @@ async def test_run_headless_core_forwards_provider_name(
     )
     minimal_ctx.backend = backend
 
-    async def fake_execute(spec, cwd, ctx, **kwargs):  # noqa: ARG001
+    async def fake_execute(spec, cwd, ctx, **kwargs):
         execute_kwargs.update(kwargs)
         return _STUB_RESULT
 
@@ -291,7 +291,7 @@ async def test_run_headless_core_bridges_profile_to_provider_when_empty(
     )
     minimal_ctx.backend = backend
 
-    async def fake_execute(spec, cwd, ctx, **kwargs):  # noqa: ARG001
+    async def fake_execute(spec, cwd, ctx, **kwargs):
         execute_kwargs.update(kwargs)
         return _STUB_RESULT
 
@@ -317,7 +317,7 @@ async def test_default_executor_run_forwards_provider_name(
 
     captured: dict = {}
 
-    async def fake_core(skill_command, cwd, ctx, **kwargs):  # noqa: ARG001
+    async def fake_core(skill_command, cwd, ctx, **kwargs):
         captured.update(kwargs)
         return _STUB_RESULT
 
@@ -344,7 +344,7 @@ async def test_native_launch_without_profile_uses_anthropic_provider(
     _spec = ClaudeHeadlessCmd(cmd=("echo", "test"), env={})
     _sub_result = _sr()
 
-    async def fake_runner(cmd, **kwargs):  # noqa: ARG001
+    async def fake_runner(cmd, **kwargs):
         return _sub_result
 
     minimal_ctx.runner = fake_runner
@@ -353,17 +353,17 @@ async def test_native_launch_without_profile_uses_anthropic_provider(
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_build_skill_result",
-        lambda *a, **kw: _STUB_RESULT,  # noqa: ARG005
+        lambda *a, **kw: _STUB_RESULT,
     )
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_compute_post_session_metrics",
-        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),  # noqa: ARG005
+        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
     )
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_capture_git_head_sha",
-        lambda *a: "",  # noqa: ARG005
+        lambda *a: "",
     )
 
     result = await _execute_claude_headless(
@@ -390,7 +390,7 @@ async def test_empty_skill_command_keeps_shared_fleet_lifecycle_observation_disa
 
     captured_runner_kwargs: dict[str, object] = {}
 
-    async def fake_runner(cmd, **kwargs):  # noqa: ARG001
+    async def fake_runner(cmd, **kwargs):
         captured_runner_kwargs.update(kwargs)
         return _sr()
 
@@ -403,17 +403,17 @@ async def test_empty_skill_command_keeps_shared_fleet_lifecycle_observation_disa
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_build_skill_result",
-        lambda *a, **kw: _STUB_RESULT,  # noqa: ARG005
+        lambda *a, **kw: _STUB_RESULT,
     )
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_compute_post_session_metrics",
-        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),  # noqa: ARG005
+        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
     )
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_capture_git_head_sha",
-        lambda *a: "",  # noqa: ARG005
+        lambda *a: "",
     )
 
     await _execute_claude_headless(
@@ -463,7 +463,7 @@ async def test_terminal_launch_provider_stamps_selection_and_result(
     persisted_selections: list[ExecutionSelection] = []
     resolved_contracts: list = []
 
-    async def fake_runner(cmd, **kwargs):  # noqa: ARG001
+    async def fake_runner(cmd, **kwargs):
         return _sub_result
 
     minimal_ctx.runner = fake_runner
@@ -472,22 +472,22 @@ async def test_terminal_launch_provider_stamps_selection_and_result(
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_build_skill_result",
-        lambda *a, **kw: _STUB_RESULT,  # noqa: ARG005
+        lambda *a, **kw: _STUB_RESULT,
     )
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_compute_post_session_metrics",
-        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),  # noqa: ARG005
+        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
     )
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_capture_git_head_sha",
-        lambda *a: "",  # noqa: ARG005
+        lambda *a: "",
     )
     monkeypatch.setattr(
         session_log,
         "write_execution_candidate_manifest",
-        lambda persisted, log_dir, **_kwargs: persisted_selections.append(persisted),  # noqa: ARG005
+        lambda persisted, log_dir, **_kwargs: persisted_selections.append(persisted),
     )
 
     result = await _execute_claude_headless(
@@ -538,10 +538,10 @@ async def test_manifest_write_failure_does_not_skip_terminal_flush(
     )
     flushed: list[dict] = []
 
-    async def fake_runner(cmd, **kwargs):  # noqa: ARG001
+    async def fake_runner(cmd, **kwargs):
         return subprocess_result
 
-    def fail_manifest_write(*args, **kwargs):  # noqa: ARG001
+    def fail_manifest_write(*args, **kwargs):
         raise OSError("manifest unavailable")
 
     minimal_ctx.runner = fake_runner
@@ -549,17 +549,17 @@ async def test_manifest_write_failure_does_not_skip_terminal_flush(
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_build_skill_result",
-        lambda *args, **kwargs: _STUB_RESULT,  # noqa: ARG005
+        lambda *args, **kwargs: _STUB_RESULT,
     )
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_compute_post_session_metrics",
-        lambda *args, **kwargs: PostSessionMetrics(0, 0, str(tmp_path)),  # noqa: ARG005
+        lambda *args, **kwargs: PostSessionMetrics(0, 0, str(tmp_path)),
     )
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_capture_git_head_sha",
-        lambda *args: "",  # noqa: ARG005
+        lambda *args: "",
     )
     monkeypatch.setattr(session_log, "write_execution_candidate_manifest", fail_manifest_write)
     monkeypatch.setattr(session_log, "flush_session_log", lambda **kwargs: flushed.append(kwargs))
@@ -1213,7 +1213,7 @@ async def test_run_headless_core_forwards_marker_dir_and_caller_session_id(
     )
     minimal_ctx.backend = backend
 
-    async def fake_execute(spec, cwd, ctx, **kwargs):  # noqa: ARG001
+    async def fake_execute(spec, cwd, ctx, **kwargs):
         execute_kwargs.update(kwargs)
         return _STUB_RESULT
 
@@ -1243,7 +1243,7 @@ async def test_default_executor_run_forwards_marker_dir_and_caller_session_id(
     marker_dir = tmp_path / "markers"
     marker_dir.mkdir()
 
-    async def fake_core(skill_command, cwd, ctx, **kwargs):  # noqa: ARG001
+    async def fake_core(skill_command, cwd, ctx, **kwargs):
         captured.update(kwargs)
         return _STUB_RESULT
 

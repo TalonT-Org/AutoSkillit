@@ -490,7 +490,8 @@ def make_context(
         quota_refresh_task=None,
         session_serve_overrides=None,
     )
-    from autoskillit.server.tools.tools_execution._managed_fixed_batch import (  # noqa: PLC0415  # circular-break: compose after ToolContext exists
+    # circular-break: compose after ToolContext exists.
+    from autoskillit.server.tools.tools_execution._managed_fixed_batch import (  # circular-break
         DefaultManagedFixedBatchSupervisor,
     )
 

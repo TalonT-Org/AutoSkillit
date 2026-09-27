@@ -304,7 +304,7 @@ async def run_managed_async(
         # inheriting parent's stdin (e.g. MCP server socket that never closes)
         stdin_handle = None
         if stdin_path is not None:
-            stdin_handle = open(stdin_path)  # noqa: SIM115
+            stdin_handle = open(stdin_path)
         reap_callback_attempted = False
 
         try:

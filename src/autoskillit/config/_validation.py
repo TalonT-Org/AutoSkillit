@@ -69,7 +69,7 @@ def _build_config_schema() -> dict[str, frozenset[str]]:
 # NOTE: keep this as a module-load expression. Re-binding after the eager build
 # would mask late changes to AutomationConfig fields and break the immutable
 # contract downstream callers (e.g. validate_layer_keys) rely on.
-_CONFIG_SCHEMA: dict[str, frozenset[str]] = _build_config_schema()  # noqa: F841
+_CONFIG_SCHEMA: dict[str, frozenset[str]] = _build_config_schema()
 
 
 def validate_layer_keys(

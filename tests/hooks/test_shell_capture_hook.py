@@ -40,7 +40,7 @@ def _build_event(command, cwd: str = "/abs/project") -> dict:
 
 
 def _run_hook(event_data, monkeypatch, *, env_backend: str | None = None) -> str:
-    from autoskillit.hooks.shell_capture_hook import main  # noqa: PLC0415
+    from autoskillit.hooks.shell_capture_hook import main
 
     if env_backend is not None:
         monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", env_backend)
@@ -205,7 +205,7 @@ def test_resolve_control_declared_capture_mode_has_no_diagnostic(
 ) -> None:
     """(i) mode=capture, no managed-identity vars: a normal declared state —
     absence of the 4 identity vars is expected, not anomalous."""
-    from autoskillit.hooks.shell_capture_hook import _resolve_control  # noqa: PLC0415
+    from autoskillit.hooks.shell_capture_hook import _resolve_control
 
     monkeypatch.setenv(NATIVE_SHELL_CAPTURE_MODE_ENV_VAR, "capture")
     for var in (
@@ -229,7 +229,7 @@ def test_resolve_control_complete_direct_identity_has_no_diagnostic(
 ) -> None:
     """(ii) mode=direct + complete valid identity tuple: managed path, no
     diagnostic."""
-    from autoskillit.hooks.shell_capture_hook import _resolve_control  # noqa: PLC0415
+    from autoskillit.hooks.shell_capture_hook import _resolve_control
 
     reference = _set_managed_controls(monkeypatch, mode="direct")
 
@@ -243,7 +243,7 @@ def test_resolve_control_complete_direct_identity_has_no_diagnostic(
 
 def test_resolve_control_undeclared_note_is_neutral(monkeypatch: pytest.MonkeyPatch) -> None:
     """(iv) mode unset entirely: a neutral note, no failure-grade words."""
-    from autoskillit.hooks.shell_capture_hook import _resolve_control  # noqa: PLC0415
+    from autoskillit.hooks.shell_capture_hook import _resolve_control
 
     for var in (
         NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
@@ -403,7 +403,7 @@ def test_reject_envelope_retains_valid_managed_direct_authority(
 
 
 def test_valid_command_remains_policy_visible_without_becoming_shell_code() -> None:
-    from autoskillit.hooks.shell_capture_hook import _build_harness  # noqa: PLC0415
+    from autoskillit.hooks.shell_capture_hook import _build_harness
 
     command = "printf safe; rm -rf /policy-probe"
 

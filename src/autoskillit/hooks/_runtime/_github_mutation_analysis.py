@@ -31,7 +31,7 @@ else:
     else:
         from _classification import _github_mutation_cli_analysis as _cli
         from _classification import _github_mutation_request_analysis as _request
-    from _command_classification import (  # noqa: E402
+    from _command_classification import (
         ArgvToken,
         _select_executable_argv_tokens,
         _verb_start_index,

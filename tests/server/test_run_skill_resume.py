@@ -86,10 +86,10 @@ def _attach_lineage_reference(
     session_id: str,
     lineage: ManagedHeadlessSessionLineage,
 ) -> None:
-    entry = store._session_path(session_id)  # noqa: SLF001
-    manifest = store._read_manifest(entry)  # noqa: SLF001
+    entry = store._session_path(session_id)
+    manifest = store._read_manifest(entry)
     manifest["managed_lineage_ref"] = lineage.reference.to_dict()
-    store._write_manifest(entry, manifest)  # noqa: SLF001
+    store._write_manifest(entry, manifest)
 
 
 def _load_resume_execution_selection(tool_ctx: Any, session_id: str) -> ExecutionSelection:
@@ -1040,8 +1040,8 @@ async def test_resume_rejects_incompatible_bound_contract_before_executor(
         cwd="/tmp",
     )
     store = tool_ctx_kitchen_open.skill_session_contract_store
-    entry = store._session_path("incompatible")  # noqa: SLF001
-    manifest = store._read_manifest(entry)  # noqa: SLF001
+    entry = store._session_path("incompatible")
+    manifest = store._read_manifest(entry)
     contract = manifest["contract"]
     if field == "capabilities":
         contract["member_capabilities"]["implement"] = value
@@ -1049,7 +1049,7 @@ async def test_resume_rejects_incompatible_bound_contract_before_executor(
     else:
         contract[field] = value
     manifest["contract_digest"] = _digest_json(contract)
-    store._write_manifest(entry, manifest)  # noqa: SLF001
+    store._write_manifest(entry, manifest)
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     result = json.loads(await run_skill("/implement", "/tmp", resume_session_id="incompatible"))

@@ -367,7 +367,7 @@ def classify_command(cmd: str) -> BoundedRead | None:
 def measure_rollout(rollout_path: Path) -> dict[str, Any]:
     try:
         records = read_rollout(rollout_path)
-    except Exception as exc:  # noqa: BLE001 - operator-safety net: never abort a batch
+    except Exception as exc:
         # Preserve error type/message so operators investigating unreadable rollouts
         # can distinguish 'truncated file' from 'permission denied' from 'zstd
         # decompression failed'. Previously a narrow (OSError, RuntimeError,

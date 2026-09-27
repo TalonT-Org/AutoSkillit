@@ -128,7 +128,7 @@ def test_hardcoded_origin_does_not_fire_on_fixed_resolve_merge_conflicts(tmp_pat
     Uses SKILL_SEARCH_DIRS isolation: copies the real bundled skill content into tmp_path so
     the test fails with a clear assertion error (not an opaque ENOENT) if the skill is renamed.
     """
-    from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
+    from autoskillit.workspace import DefaultSkillResolver
 
     skill_info = DefaultSkillResolver().resolve("resolve-merge-conflicts")
     assert skill_info is not None, "bundled resolve-merge-conflicts skill not found"
@@ -159,7 +159,7 @@ def test_hardcoded_origin_does_not_fire_on_fixed_retry_worktree(tmp_path: Path) 
     Uses SKILL_SEARCH_DIRS isolation: copies the real bundled skill content into tmp_path so
     the test fails with a clear assertion error (not an opaque ENOENT) if the skill is renamed.
     """
-    from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
+    from autoskillit.workspace import DefaultSkillResolver
 
     skill_info = DefaultSkillResolver().resolve("retry-worktree")
     assert skill_info is not None, "bundled retry-worktree skill not found"
@@ -269,7 +269,7 @@ def test_hardcoded_origin_does_not_fire_on_part_b_fixed_skills(
     Uses SKILL_SEARCH_DIRS isolation so the test fails with a clear assertion error
     (not an opaque ENOENT) if the skill is renamed.
     """
-    from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
+    from autoskillit.workspace import DefaultSkillResolver
 
     skill_info = DefaultSkillResolver().resolve(skill_name)
     assert skill_info is not None, f"bundled {skill_name!r} skill not found"
@@ -423,7 +423,7 @@ def test_no_autoskillit_import_zero_findings_on_bundled_recipes() -> None:
 
     All violations in bundled skills (open-integration-pr, review-pr, analyze-prs)
     have been resolved by Part C — python3 blocks replaced with stdlib file-reads."""
-    from autoskillit.recipe.io import builtin_recipes_dir  # noqa: PLC0415
+    from autoskillit.recipe.io import builtin_recipes_dir
 
     recipe = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
     findings = run_semantic_rules(recipe)

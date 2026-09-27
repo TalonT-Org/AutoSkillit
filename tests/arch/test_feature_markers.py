@@ -314,8 +314,8 @@ def test_linux_proc_importers_have_platform_guard() -> None:
 def test_import_safety_with_features_disabled():
     """Top-level package and MCP server import cleanly regardless of AUTOSKILLIT_TEST_FEATURES."""
     with patch.dict(os.environ, {"AUTOSKILLIT_TEST_FEATURES": ""}):
-        import autoskillit  # noqa: F401
-        from autoskillit.server import mcp  # noqa: F401
+        import autoskillit
+        from autoskillit.server import mcp
 
         assert autoskillit is not None
         assert mcp is not None

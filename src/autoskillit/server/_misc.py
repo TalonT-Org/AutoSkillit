@@ -350,7 +350,7 @@ def _ensure_quota_refresh_started(ctx: Any) -> None:
 
 
 def persist_run_skill_state(skill_result: SkillResult, project_dir: Path) -> None:
-    import os  # noqa: PLC0415
+    import os
 
     if not skill_result.session_id:
         return

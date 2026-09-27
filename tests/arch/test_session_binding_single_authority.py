@@ -67,10 +67,10 @@ def test_no_module_recomputes_the_binding_path() -> None:
 
 def test_projection_manifest_schema_version_hook_copy_is_pinned_to_core() -> None:
     """The unavoidable stdlib-side schema copy stays synchronized with core."""
-    from autoskillit.hooks._session_binding import (  # noqa: PLC0415
+    from autoskillit.hooks._session_binding import (
         PROJECTION_MANIFEST_SCHEMA_VERSION,
     )
-    from autoskillit.workspace._installed._projection_cache import (  # noqa: PLC0415
+    from autoskillit.workspace._installed._projection_cache import (
         PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
     )
 

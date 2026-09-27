@@ -169,7 +169,7 @@ def _load_dispatch_target(dispatch: CampaignDispatch, project_dir: Path | None) 
     if project_dir is None:
         return None
     try:
-        from autoskillit.recipe.io import find_recipe_by_name, load_recipe  # noqa: PLC0415
+        from autoskillit.recipe.io import find_recipe_by_name, load_recipe
 
         info = find_recipe_by_name(dispatch.recipe, project_dir)
         if info is None:

@@ -25,7 +25,7 @@ _BASH_TOOL_NAME = "Bash"
 
 def _run_guard(cmd: str, raw_stdin: str | None = None) -> str:
     """Invoke artifact_download_guard.main() with run_cmd format and return stdout."""
-    from autoskillit.hooks.guards.artifact_download_guard import main  # noqa: PLC0415
+    from autoskillit.hooks.guards.artifact_download_guard import main
 
     if raw_stdin is not None:
         stdin_content = raw_stdin
@@ -47,7 +47,7 @@ def _run_guard(cmd: str, raw_stdin: str | None = None) -> str:
 
 def _run_bash_guard(cmd: str, raw_stdin: str | None = None) -> str:
     """Invoke artifact_download_guard.main() with Bash tool format and return stdout."""
-    from autoskillit.hooks.guards.artifact_download_guard import main  # noqa: PLC0415
+    from autoskillit.hooks.guards.artifact_download_guard import main
 
     if raw_stdin is not None:
         stdin_content = raw_stdin

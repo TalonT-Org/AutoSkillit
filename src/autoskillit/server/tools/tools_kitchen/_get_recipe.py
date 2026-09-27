@@ -186,7 +186,7 @@ def _render_ingredients_only_response(
 
     tool_ctx = _get_ctx_or_none()
     if tool_ctx is not None:
-        from autoskillit.server.tools.tools_kitchen._open_kitchen_transition import (  # noqa: E501 # circular-break
+        from autoskillit.server.tools.tools_kitchen._open_kitchen_transition import (  # circular-break  # noqa: E501
             _attach_transition_fields,
         )
 

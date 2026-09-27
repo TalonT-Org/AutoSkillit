@@ -25,7 +25,7 @@ class RecipeMigrationAdapter(HeadlessMigrationAdapter):
     file_type = "recipe"
 
     def discover(self, project_dir: Path) -> list[MigrationFile]:
-        from autoskillit.recipe import parse_recipe_metadata  # noqa: PLC0415
+        from autoskillit.recipe import parse_recipe_metadata
 
         recipes_dir = project_dir / ".autoskillit" / "recipes"
         if not recipes_dir.exists():
@@ -118,8 +118,8 @@ class RecipeMigrationAdapter(HeadlessMigrationAdapter):
         return temp_dir / "migrations" / f"{file.path.stem}.yaml"
 
     def validate(self, path: Path) -> tuple[bool, str]:
-        from autoskillit.recipe import load_recipe as _parse_recipe  # noqa: PLC0415
-        from autoskillit.recipe import validate_recipe_structure  # noqa: PLC0415
+        from autoskillit.recipe import load_recipe as _parse_recipe
+        from autoskillit.recipe import validate_recipe_structure
 
         try:
             recipe = _parse_recipe(path)

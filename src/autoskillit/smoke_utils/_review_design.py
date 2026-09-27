@@ -177,7 +177,7 @@ def _build_enriched_handoff(
     context_lines: int,
 ) -> tuple[dict[str, Any] | None, int, str | None]:
     """Build a v2 replacement in memory, leaving the v1 handoff untouched."""
-    from autoskillit.execution import (  # noqa: PLC0415
+    from autoskillit.execution import (
         extract_annotated_source_line,
         extract_code_region,
         hash_source_line,
@@ -286,7 +286,7 @@ def pre_iteration_cleanup(
     With iteration-scoped directories this is defense-in-depth; the primary
     isolation comes from writing to iter_N/ subdirectories.
     """
-    import fnmatch  # noqa: PLC0415
+    import fnmatch
 
     out = Path(output_dir)
     if not out.is_absolute():
@@ -369,7 +369,7 @@ def aggregate_review_verdict(
     severity caps, computes proportional warning thresholds, identifies
     structural stop triggers, and writes evaluation artifacts.
     """
-    from datetime import datetime  # noqa: PLC0415
+    from datetime import datetime
 
     out = Path(output_dir)
     if not out.is_absolute():
@@ -399,7 +399,7 @@ def aggregate_review_verdict(
 
     rt_cap = rt_max_severity.strip() if rt_max_severity.strip() else "critical"
     if not rt_max_severity.strip() and experiment_type.strip():
-        from autoskillit.recipe import get_experiment_type_by_name  # noqa: PLC0415
+        from autoskillit.recipe import get_experiment_type_by_name
 
         spec = get_experiment_type_by_name(experiment_type.strip())
         if spec is not None:

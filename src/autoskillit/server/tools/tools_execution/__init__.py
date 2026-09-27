@@ -25,81 +25,81 @@ implementation plan). Layout:
 
 from __future__ import annotations
 
-import shutil  # noqa: F401 — mock.patch("...tools_execution.shutil.which") resolves by
+import shutil
 
 # attribute lookup (tools_execution.shutil) before reaching .which, so the facade
 # needs its own shutil attribute even though it's a shared stdlib module object.
 from autoskillit.core import (
-    EXECUTION_TUNING_EXTERNALLY_RESOLVED,  # noqa: F401
-    EXECUTION_TUNING_STEP_FIELDS,  # noqa: F401
-    AuditResultOutcome,  # noqa: F401
-    execution_marker,  # noqa: F401
-    find_caller_session_id,  # noqa: F401
+    EXECUTION_TUNING_EXTERNALLY_RESOLVED,
+    EXECUTION_TUNING_STEP_FIELDS,
+    AuditResultOutcome,
+    execution_marker,
+    find_caller_session_id,
     get_logger,
-    get_tool_def,  # noqa: F401
-    is_feature_enabled,  # noqa: F401
-    read_registry,  # noqa: F401
+    get_tool_def,
+    is_feature_enabled,
+    read_registry,
 )
 from autoskillit.server._explorer_projection import (
-    _cleanup_explorer_launch,  # noqa: F401
-    _explorer_launch_identity,  # noqa: F401
-    _issue_explorer_binding_env,  # noqa: F401
+    _cleanup_explorer_launch,
+    _explorer_launch_identity,
+    _issue_explorer_binding_env,
 )
 from autoskillit.server._misc import (
-    resolve_closure_write_dirs,  # noqa: F401
+    resolve_closure_write_dirs,
 )
-from autoskillit.server._notify import _notify  # noqa: F401
+from autoskillit.server._notify import _notify
 from autoskillit.server._progress_heartbeat import (
-    progress_heartbeat,  # noqa: F401
+    progress_heartbeat,
 )
 from autoskillit.server._subprocess import (
-    _run_subprocess_captured,  # noqa: F401
+    _run_subprocess_captured,
 )
 from autoskillit.server.recipe._recipe_execution import (
-    complete_audit_finalization_effects as _complete_audit_finalization_effects,  # noqa: F401
+    complete_audit_finalization_effects as _complete_audit_finalization_effects,
 )
 from autoskillit.server.recipe._recipe_segment_delivery import (
-    prepare_recipe_segment_delivery,  # noqa: F401
+    prepare_recipe_segment_delivery,
 )
 from autoskillit.server.tools._backend_compat import (
-    _check_backend_compat,  # noqa: F401
+    _check_backend_compat,
 )
 from autoskillit.server.tools._execution_helpers import (
-    _import_and_call,  # noqa: F401
-    _RunSkillContractLifecycle,  # noqa: F401 — default_factory source; also re-exported
-    shape_execution_response,  # noqa: F401
+    _import_and_call,
+    _RunSkillContractLifecycle,
+    shape_execution_response,
 )
 from autoskillit.server.tools._execution_helpers import (
-    check_review_approach_plan_path as _check_review_approach_plan_path,  # noqa: F401
+    check_review_approach_plan_path as _check_review_approach_plan_path,
 )
 from autoskillit.server.tools._execution_helpers import (
-    compute_write_prefixes as _compute_write_prefixes,  # noqa: F401
+    compute_write_prefixes as _compute_write_prefixes,
 )
 from autoskillit.server.tools._execution_helpers import (
-    resolve_step_name_from_recipe as _resolve_step_name_from_recipe,  # noqa: F401
+    resolve_step_name_from_recipe as _resolve_step_name_from_recipe,
 )
 from autoskillit.server.tools._overlay_state import (
-    read_overlay,  # noqa: F401
+    read_overlay,
 )
 from autoskillit.server.tools.tools_pipeline_tracker import (
-    mark_step_skipped,  # noqa: F401
+    mark_step_skipped,
 )
-from autoskillit.workspace import (  # noqa: F401
+from autoskillit.workspace import (
     create_git_worktree,
     remove_git_worktree,
 )
 
-from ._audit_response import (  # noqa: F401
+from ._audit_response import (
     _audit_response,
     _complete_resumed_audit,
     _materialization_outcome_status,
     _reject_missing_semantic_result,
 )
-from ._fixed_batch_handlers import (  # noqa: F401
+from ._fixed_batch_handlers import (
     read_fixed_batch_result,
     run_fixed_batch,
 )
-from ._gates import (  # noqa: F401
+from ._gates import (
     DEPENDENCY_DENY_PREFIX,
     INGREDIENT_LOCK_DENY_PREFIX,
     _begin_run_skill_completion,
@@ -108,29 +108,29 @@ from ._gates import (  # noqa: F401
     _finalize_run_skill_completion,
     _has_active_locks,
 )
-from ._managed_leaf import scoped_child_resource_owner  # noqa: F401
-from ._run_cmd import _PURE_SLEEP_RE, run_cmd  # noqa: F401
-from ._run_python import run_python  # noqa: F401
-from ._run_skill_admission import (  # noqa: F401
+from ._managed_leaf import scoped_child_resource_owner
+from ._run_cmd import _PURE_SLEEP_RE, run_cmd
+from ._run_python import run_python
+from ._run_skill_admission import (
     _admit_recipe_execution,
     _audit_preflight_step_names,
     _build_actual_mcp_kwargs,
     _recipe_execution_deny,
 )
-from ._run_skill_dispatch import run_skill  # noqa: F401
-from ._run_skill_finalize import _execute_and_finalize_run_skill  # noqa: F401
-from ._run_skill_prepare import (  # noqa: F401
+from ._run_skill_dispatch import run_skill
+from ._run_skill_finalize import _execute_and_finalize_run_skill
+from ._run_skill_prepare import (
     _ExplorerLaunchLease,
     _prepare_dispatch_backend,
     _record_explorer_launch_lease,
 )
-from ._run_skill_session import (  # noqa: F401
+from ._run_skill_session import (
     _mint_fresh_explorer_binding,
     _prepare_dispatch_session,
     _resolve_dispatch_paths,
     _resolve_fresh_invocation,
 )
-from ._state import _RunSkillDispatchState  # noqa: F401
+from ._state import _RunSkillDispatchState
 
 logger = get_logger(__name__)
 

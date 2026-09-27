@@ -167,7 +167,7 @@ def test_concurrent_workers_share_one_store_entry(tmp_path: Path) -> None:
             dest = projections_root / f"proj-{index}"
             dest.mkdir(parents=True)
             _copy_non_skill_plugin_assets(source, dest)
-        except BaseException as exc:  # noqa: BLE001 - collected and re-raised on the main thread
+        except BaseException as exc:
             errors.append(exc)
 
     threads = [threading.Thread(target=_materialize, args=(i,)) for i in range(8)]

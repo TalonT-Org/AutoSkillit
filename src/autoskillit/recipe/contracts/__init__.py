@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ._contracts_card import (  # noqa: F401
+    from ._contracts_card import (
         SKILL_TOOLS,
         Severity,
         _compute_block_fingerprint,
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
         load_yaml,
         logger,
     )
-    from ._contracts_manifest import (  # noqa: F401
+    from ._contracts_manifest import (
         _MANIFEST_CACHE,
         _SKILL_CONTRACT_IDENTITY_DOMAIN,
         EXTERNAL_EFFECT_CHOICES,
@@ -38,13 +38,13 @@ if TYPE_CHECKING:
         compute_skill_contract_identity,
         pkg_root,
     )
-    from ._contracts_staleness import (  # noqa: F401
+    from ._contracts_staleness import (
         StalenessEntry,
         compute_recipe_hash,
         read_staleness_cache,
         write_staleness_cache,
     )
-    from ._contracts_types import PreflightKind  # noqa: F401
+    from ._contracts_types import PreflightKind
     from .contracts import (
         _CONTEXT_REF_RE,
         _TEMPLATE_REF_RE,
@@ -84,7 +84,7 @@ if TYPE_CHECKING:
         select_audit_output_contract,
         stale_to_suggestions,
         validate_recipe_cards,
-    )  # noqa: F401
+    )
 
 
 def __getattr__(name: str):

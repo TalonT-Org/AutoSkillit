@@ -162,7 +162,7 @@ _LAZY_RISKY_GIT = "RISKY_GIT_OPERATIONS"
 def __getattr__(name: str):
     """Resolve the lazy RISKY_* re-exports through ``autoskillit.hooks``."""
     if name == _LAZY_RISKY_GH or name == _LAZY_RISKY_GIT:
-        from autoskillit.hooks import (  # noqa: PLC0415
+        from autoskillit.hooks import (
             RISKY_GH_SUBCOMMANDS,
             RISKY_GIT_OPERATIONS,
         )

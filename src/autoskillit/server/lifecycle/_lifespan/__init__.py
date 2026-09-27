@@ -30,7 +30,7 @@ from autoskillit.core import (  # noqa: F401  (mock.patch reachability)
     resolve_kitchen_id,
     write_readiness_sentinel,
 )
-from autoskillit.execution import (  # noqa: F401  (mock.patch reachability)
+from autoskillit.execution import (
     default_tether_dir,
     sweep_orphaned_tethers_async,
 )

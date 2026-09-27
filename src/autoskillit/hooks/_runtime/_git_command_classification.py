@@ -45,7 +45,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from _command_classification import (  # noqa: E402
+from _command_classification import (
     _command_position_candidate_spans,
     _consume_str_flag,
     _FlagArity,
@@ -55,7 +55,7 @@ from _command_classification import (  # noqa: E402
     extract_interpreter_command_payloads,
     live_command_text,
 )
-from _github_mutation_analysis import (  # noqa: E402
+from _github_mutation_analysis import (
     _DYNAMIC_SHELL_TOKEN_RE,
 )
 

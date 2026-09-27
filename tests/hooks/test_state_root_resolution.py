@@ -22,7 +22,7 @@ import pytest
 # The sys.path bootstrap for bare-name hook-sibling imports (e.g.
 # _hook_payload below) is centralized in tests/conftest.py -- it must run
 # before this module's own top-level imports, which a fixture cannot do.
-from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+from _hook_payload import (  # type: ignore[import-not-found]
     normalize_payload_cwd,
     resolve_kitchen_state_dir,
     resolve_state_root,

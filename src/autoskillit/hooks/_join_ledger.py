@@ -21,7 +21,7 @@ else:
     )
 
 if TYPE_CHECKING or __package__:
-    from ._join import (  # noqa: F401
+    from ._join import (
         _NON_SUCCESS_WAVE_OUTCOMES,
         JOIN_LEDGER_SCHEMA_VERSION,
         LEDGER_FILENAME,

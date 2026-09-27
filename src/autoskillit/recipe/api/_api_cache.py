@@ -171,7 +171,7 @@ def _compute_content_hash() -> str:
 
 
 def _get_process_start_mtime() -> int:
-    global _PROCESS_START_PKG_MTIME, _DEEP_CONTENT_BASELINE  # noqa: PLW0603
+    global _PROCESS_START_PKG_MTIME, _DEEP_CONTENT_BASELINE
     if _PROCESS_START_PKG_MTIME is None:
         _PROCESS_START_PKG_MTIME = _path_mtime_ns(pkg_root())
         _DEEP_CONTENT_BASELINE = _compute_content_hash()
@@ -209,7 +209,7 @@ def _check_process_staleness() -> bool:
         _get_process_start_mtime()
         return False
 
-    global _STALENESS_LAST_CHECK, _STALENESS_IS_STALE  # noqa: PLW0603
+    global _STALENESS_LAST_CHECK, _STALENESS_IS_STALE
     now = time.monotonic()
     if now - _STALENESS_LAST_CHECK < _STALENESS_TTL:
         return _STALENESS_IS_STALE
@@ -230,8 +230,8 @@ def _check_process_staleness() -> bool:
 
 def _refresh_staleness_baseline() -> None:
     """Re-capture baselines after a confirmed-good load."""
-    global _PROCESS_START_PKG_MTIME, _DEEP_CONTENT_BASELINE  # noqa: PLW0603
-    global _STALENESS_LAST_CHECK, _STALENESS_IS_STALE  # noqa: PLW0603
+    global _PROCESS_START_PKG_MTIME, _DEEP_CONTENT_BASELINE
+    global _STALENESS_LAST_CHECK, _STALENESS_IS_STALE
     with _STALENESS_LOCK:
         _PROCESS_START_PKG_MTIME = _path_mtime_ns(pkg_root())
         _DEEP_CONTENT_BASELINE = _compute_content_hash()
@@ -241,20 +241,20 @@ def _refresh_staleness_baseline() -> None:
 
 def _clear_stale_caches() -> None:
     """Clear all caches and the load cache when staleness is detected."""
-    global _STALENESS_CACHES_CLEARED  # noqa: PLW0603
-    from autoskillit.recipe.contracts._contracts_manifest import _MANIFEST_CACHE  # noqa: PLC0415
-    from autoskillit.recipe.helpers._io_loading import (  # noqa: PLC0415
+    global _STALENESS_CACHES_CLEARED
+    from autoskillit.recipe.contracts._contracts_manifest import _MANIFEST_CACHE
+    from autoskillit.recipe.helpers._io_loading import (
         clear_recipe_discovery_caches,
     )
-    from autoskillit.recipe.helpers._skill_helpers import (  # noqa: PLC0415
+    from autoskillit.recipe.helpers._skill_helpers import (
         _SKILL_CATEGORY_CACHE,
         _SKILL_NAMES_CACHE,
     )
-    from autoskillit.recipe.methodology.methodology_venue_appendix import (  # noqa: PLC0415
+    from autoskillit.recipe.methodology.methodology_venue_appendix import (
         _ML_SUB_AREA_CACHE,
     )
-    from autoskillit.recipe.rules.rules_blocks import _BUDGETS_CACHE  # noqa: PLC0415
-    from autoskillit.recipe.rules.rules_phoropter_adjacency import (  # noqa: PLC0415
+    from autoskillit.recipe.rules.rules_blocks import _BUDGETS_CACHE
+    from autoskillit.recipe.rules.rules_phoropter_adjacency import (
         _PREFIXES_CACHE,
     )
 

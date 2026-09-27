@@ -58,7 +58,7 @@ def _run_hook(
     event: dict | None = None, raw_stdin: str | None = None, tmp_dir=None
 ) -> tuple[str, int]:
     """Run review_gate_post_hook.main() and return (stdout, exit_code)."""
-    from autoskillit.hooks.review_gate_post_hook import main  # noqa: PLC0415
+    from autoskillit.hooks.review_gate_post_hook import main
 
     stdin_text = raw_stdin if raw_stdin is not None else json.dumps(event or {})
 

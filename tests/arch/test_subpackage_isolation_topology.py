@@ -110,7 +110,7 @@ def test_validator_module_has_validate() -> None:
 
 def test_migration_subpackage_importable() -> None:
     """T4: migration/ package exposes MigrationEngine, applicable_migrations, FailureStore."""
-    from autoskillit.migration import (  # noqa: F401
+    from autoskillit.migration import (
         FailureStore,
         MigrationEngine,
         applicable_migrations,

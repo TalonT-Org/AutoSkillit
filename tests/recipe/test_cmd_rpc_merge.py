@@ -27,7 +27,7 @@ def _fake_run_git_factory(
     _responses = list(responses) if responses else []
     _call_log = call_log if call_log is not None else []
 
-    def fake(cmd, *, cwd=None, check=False):  # noqa: ARG001
+    def fake(cmd, *, cwd=None, check=False):
         _call_log.append(list(cmd))
         if _responses:
             result = _responses.pop(0)

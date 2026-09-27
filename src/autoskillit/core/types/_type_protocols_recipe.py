@@ -16,7 +16,7 @@ else:
     # Re-exported at runtime so typing.get_type_hints() can resolve the string
     # annotations in the RecipeRepository protocol below (from __future__ import
     # annotations defers everything to strings).
-    from ._type_backend import BackendCapabilities  # noqa: F401
+    from ._type_backend import BackendCapabilities
 
 from ._type_results import LoadResult, RecipePathValidationResult
 

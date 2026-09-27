@@ -237,7 +237,7 @@ async def run_execution(
             pass
 
     # State-record upsert before spawn.
-    from autoskillit.fleet.campaign_state.state import (  # noqa: PLC0415
+    from autoskillit.fleet.campaign_state.state import (
         DispatchRecord,
         read_state,
         upsert_dispatch_record_by_name,
@@ -324,7 +324,7 @@ async def run_execution(
     ended_at: float | None = None
 
     # execution_marker is needed by the spawn-context blocks further below.
-    from autoskillit.core import execution_marker  # noqa: PLC0415
+    from autoskillit.core import execution_marker
 
     # Closures captured by tool_ctx.executor.dispatch_food_truck. They mutate
     # spawn_ctx in place.

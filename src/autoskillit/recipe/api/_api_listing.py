@@ -76,8 +76,8 @@ def list_all(
         {"recipes": list[{"name", "description", "summary"}]}
         Includes "errors" key when recipes fail to parse.
     """
-    from autoskillit.core import is_feature_enabled  # noqa: PLC0415
-    from autoskillit.recipe.schema import NON_INTERACTIVE_KINDS  # noqa: PLC0415
+    from autoskillit.core import is_feature_enabled
+    from autoskillit.recipe.schema import NON_INTERACTIVE_KINDS
 
     _pdir = project_dir if project_dir is not None else Path.cwd()
     _features = features or {}
@@ -125,11 +125,11 @@ def validate_from_path(
         return _invalid_validation_result("File must contain a YAML mapping")
 
     if lister is None:
-        from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
+        from autoskillit.workspace import DefaultSkillResolver
 
         lister = DefaultSkillResolver()
 
-    from autoskillit.core import SkillResolver as _SkillResolver  # noqa: PLC0415
+    from autoskillit.core import SkillResolver as _SkillResolver
 
     _skill_resolver = lister if isinstance(lister, _SkillResolver) else None
 

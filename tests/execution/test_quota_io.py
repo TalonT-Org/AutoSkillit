@@ -533,7 +533,7 @@ def test_quota_scope_fallback_preserves_failure_diagnostics(monkeypatch):
 
     import autoskillit.execution.quota._quota_gate as quota_gate
 
-    def unavailable_scope(*args, **kwargs):  # noqa: ARG001
+    def unavailable_scope(*args, **kwargs):
         raise OSError("credentials unavailable")
 
     monkeypatch.setattr(quota_gate, "quota_scope", unavailable_scope)

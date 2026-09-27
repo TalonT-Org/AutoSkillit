@@ -148,10 +148,10 @@ def _run_validation_pipeline(
         t0 = _orch._t("validate_recipe_structure", t0, name)
 
         if lister is None:
-            from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
+            from autoskillit.workspace import DefaultSkillResolver
 
             lister = DefaultSkillResolver()
-        from autoskillit.core import SkillResolver as _SkillResolver  # noqa: PLC0415
+        from autoskillit.core import SkillResolver as _SkillResolver
 
         _skill_resolver = lister if isinstance(lister, _SkillResolver) else None
 

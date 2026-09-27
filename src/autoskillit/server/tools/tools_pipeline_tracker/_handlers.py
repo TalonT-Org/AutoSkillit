@@ -39,7 +39,7 @@ from autoskillit.server.lifecycle._session_scope import (
 from autoskillit.server.recipe._recipe_segment_delivery import attach_recipe_segment
 from autoskillit.server.response._run_skill_completion import _request_session_identity
 from autoskillit.server.tools import (
-    tools_pipeline_tracker,  # noqa: F401 — late-binding for monkeypatch reach
+    tools_pipeline_tracker,
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._overlay_state import read_overlay

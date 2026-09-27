@@ -604,7 +604,7 @@ def main() -> None:
 
     except SystemExit:
         raise
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         sys.stderr.write(f"token_summary_hook: unexpected error: {exc}\n")
         sys.exit(0)
 

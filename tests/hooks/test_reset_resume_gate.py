@@ -58,7 +58,7 @@ def _run_guard(
     tmp_dir: Path | None = None,
     raw_stdin: str | None = None,
 ) -> str:
-    from autoskillit.hooks.guards.reset_resume_gate import main  # noqa: PLC0415
+    from autoskillit.hooks.guards.reset_resume_gate import main
 
     if raw_stdin is not None:
         stdin_content = raw_stdin

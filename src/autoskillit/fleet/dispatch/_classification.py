@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any
 # the facade attribute at call time keeps the public patch surface stable
 # across shard refactors. The facade is partial during module import, but
 # fully populated by the time these functions execute.
-import autoskillit.fleet._api as _facade  # noqa: PLC0415
+import autoskillit.fleet._api as _facade
 from autoskillit.core import (
     CaptureEntrySpec,
     ManagedHeadlessSessionTerminalState,
@@ -108,7 +108,7 @@ def _materialize_outcome(
     prior_dispatch_ids: list[str] | None,
 ) -> _OutcomeMaterialization:
     """Load dispatch progress and materialize the parsed outcome inputs."""
-    from autoskillit.fleet import _api as _facade  # noqa: PLC0415
+    from autoskillit.fleet import _api as _facade
 
     (
         sidecar_file,
@@ -176,7 +176,7 @@ def _materialize_outcome(
             and parsed_result.outcome == "no_sentinel"
             and sidecar_entries
         ):
-            from autoskillit.fleet._sidecar_synthesis import (  # noqa: PLC0415
+            from autoskillit.fleet._sidecar_synthesis import (
                 synthesize_from_sidecar,
             )
 
@@ -209,7 +209,7 @@ async def _cleanup_non_success_non_resumable_labels(
     if final_status in (DispatchStatus.SUCCESS, DispatchStatus.RESUMABLE):
         return False
 
-    from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels  # noqa: PLC0415
+    from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels
 
     provenance.start(
         DispatchEffectName.LABEL_CLEANUP,
@@ -335,7 +335,7 @@ async def run_outcome_classification(
                         timeout=15,
                     )
                     if _pr_info.returncode == 0 and _pr_info.stdout:
-                        import json as _json  # noqa: PLC0415
+                        import json as _json
 
                         _branch_name = _json.loads(_pr_info.stdout).get("headRefName", "")
                 except Exception:

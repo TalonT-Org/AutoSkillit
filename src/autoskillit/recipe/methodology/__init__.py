@@ -23,8 +23,8 @@ if TYPE_CHECKING:
         load_all_experiment_types,
         load_types_from_dir,
         parse_experiment_type,
-    )  # noqa: F401
-    from .methodology_disambiguation import (  # noqa: F401
+    )
+    from .methodology_disambiguation import (
         BUNDLED_METHODOLOGY_TRADITIONS_DIR,
         CrossTraditionOverlapDef,
         DisambiguationExceptionDef,
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
         load_yaml,
         pkg_root,
     )
-    from .methodology_tradition_registry import (  # noqa: F401
+    from .methodology_tradition_registry import (
         _MISSING_MTIME,
         EXPECTED_SCHEMA_VERSION,
         MethodologyTraditionSpec,
@@ -55,7 +55,7 @@ if TYPE_CHECKING:
         parse_int_field,
         parse_methodology_tradition,
     )
-    from .methodology_tradition_router import (  # noqa: F401
+    from .methodology_tradition_router import (
         TraditionRouterResult,
         UnionRuleDef,
         _count_keyword_matches,
@@ -63,7 +63,7 @@ if TYPE_CHECKING:
         _try_union_rules,
         classify_methodology,
     )
-    from .methodology_venue_appendix import (  # noqa: F401
+    from .methodology_venue_appendix import (
         _CONSTRAINT_EVALUATORS,
         _ML_SUB_AREA_CACHE,
         AlternateParentDef,

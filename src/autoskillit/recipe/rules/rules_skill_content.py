@@ -57,16 +57,16 @@ from autoskillit.recipe.contracts import load_bundled_manifest
 # long-form aliases (`_rules_skill_content_<category>`) mirror the package-level
 # convention used in `recipe/__init__.py` so the facade's imports stay
 # symmetric with the rest of the package.
-from autoskillit.recipe.rules import (  # noqa: E402, F401
+from autoskillit.recipe.rules import (  # noqa: F401
     rules_skill_content_content_structure as _rules_skill_content_content_structure,
 )
-from autoskillit.recipe.rules import (  # noqa: E402, F401
+from autoskillit.recipe.rules import (  # noqa: F401
     rules_skill_content_github_api_safety as _rules_skill_content_github_api_safety,
 )
-from autoskillit.recipe.rules import (  # noqa: E402, F401
+from autoskillit.recipe.rules import (  # noqa: F401
     rules_skill_content_shell_safety as _rules_skill_content_shell_safety,
 )
-from autoskillit.recipe.rules import (  # noqa: E402, F401
+from autoskillit.recipe.rules import (  # noqa: F401
     rules_skill_content_skill_contract as _rules_skill_content_skill_contract,
 )
 from autoskillit.recipe.rules.rules_skill_content_shell_safety import (

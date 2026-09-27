@@ -45,7 +45,7 @@ def _parse_and_compose(
         return None, None, None, []
 
     recipe = _orch._parse_recipe(data, declared_data=_declared)
-    from autoskillit.recipe.identity import compute_composite_hash  # noqa: PLC0415
+    from autoskillit.recipe.identity import compute_composite_hash
 
     _recipe_bytes = match.path.read_bytes()
     recipe.content_hash = (

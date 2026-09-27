@@ -11,7 +11,7 @@ logger = get_logger(__name__)
 
 
 def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
-    from autoskillit.fleet import reap_stale_dispatches  # noqa: PLC0415
+    from autoskillit.fleet import reap_stale_dispatches
 
     # User-invoked fleet reap bypasses the age guard — explicitly reap everything found.
     reap_stale_dispatches(state_path, dry_run=dry_run, min_reap_age_seconds=0.0)
@@ -19,8 +19,8 @@ def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
 
 def _pick_resume_campaign(project_dir: Path) -> tuple[str, str]:
     """Interactively pick a resumable campaign. Returns (campaign_name, campaign_id) or exits."""
-    from autoskillit.cli.ui._menu import run_selection_menu  # noqa: PLC0415
-    from autoskillit.fleet import TERMINAL_DISPATCH_STATUSES, read_state  # noqa: PLC0415
+    from autoskillit.cli.ui._menu import run_selection_menu
+    from autoskillit.fleet import TERMINAL_DISPATCH_STATUSES, read_state
 
     fleet_dir = project_dir / ".autoskillit" / "temp" / "fleet"
     active = []

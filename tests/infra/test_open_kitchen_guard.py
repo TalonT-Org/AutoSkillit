@@ -331,7 +331,7 @@ def test_registry_bridge_lock_contention_stops_at_its_fake_deadline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The permit-path registry bridge never waits indefinitely for its flock."""
-    from autoskillit.hooks._runtime import (  # noqa: PLC0415
+    from autoskillit.hooks._runtime import (
         _session_registry_bridge as bridge_module,
     )
 

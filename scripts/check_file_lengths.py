@@ -109,7 +109,7 @@ def check_file(path: Path) -> str | None:
     rule_id = exemption.rationale.split(":", 1)[0]
     try:
         predicate_holds = exemption.predicate()
-    except Exception as exc:  # noqa: BLE001 - fail closed: a raising predicate voids the exemption
+    except Exception as exc:
         return (
             f"{rel}: {line_count} non-import lines -- exemption predicate for {rule_id} "
             f"raised {exc.__class__.__name__}: {exc}; the justification cannot be verified"

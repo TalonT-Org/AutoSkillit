@@ -716,7 +716,7 @@ class TestToolSchemas:
     }
 
     @property
-    def FORBIDDEN_NATIVE_TOOLS(self) -> list[str]:  # noqa: N802
+    def FORBIDDEN_NATIVE_TOOLS(self) -> list[str]:
         from autoskillit.server import PIPELINE_FORBIDDEN_TOOLS
 
         return list(PIPELINE_FORBIDDEN_TOOLS)

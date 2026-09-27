@@ -8,7 +8,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from .._capacity import SpaceProbe, default_space_probe
 from ._type_backend import CmdSpec
-from ._type_checkpoint import SessionCheckpoint  # noqa: F401, TC001
+from ._type_checkpoint import SessionCheckpoint
 from ._type_enums import FaultDomain
 from ._type_execution_identity import ExecutionIdentity
 from ._type_launch import (

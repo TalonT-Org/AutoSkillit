@@ -309,7 +309,7 @@ def _exchange_driver_frame(
     decoded_line = frame.decode("utf-8", errors="replace")
     try:
         outgoing = driver.on_line(decoded_line)
-    except Exception as exc:  # noqa: BLE001 — a driver bug is a driver failure
+    except Exception as exc:
         logger.warning("line_driver_on_line_failed", exc_info=True)
         return False, f"line driver raised in on_line: {exc}"
     try:
@@ -396,7 +396,7 @@ def drive_process_io(
     try:
         try:
             _write_driver_lines(stdin_pipe, driver.initial_lines())
-        except Exception as exc:  # noqa: BLE001 — any driver/pipe fault here is a failure
+        except Exception as exc:
             logger.warning("line_driver_initial_lines_failed", exc_info=True)
             _fail(f"line driver failed building the initial request: {exc}")
 

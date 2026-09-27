@@ -77,7 +77,7 @@ def joined_pending_wave_watcher(
 
 def write_luna_direct_catalog(session_home: Path, env: dict[str, str]) -> None:
     """Install the validated Luna direct-tool catalog used by live Codex parents."""
-    catalog = subprocess.run(  # noqa: S603
+    catalog = subprocess.run(
         ["codex", "debug", "models", "--bundled"],
         env=env,
         capture_output=True,
@@ -228,7 +228,7 @@ def run_live_codex_parent(
         extra_overrides=extra_overrides,
         sandbox=sandbox,
     )
-    return subprocess.run(  # noqa: S603
+    return subprocess.run(
         invocation,
         cwd=cwd,
         env=env,

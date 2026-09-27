@@ -15,7 +15,7 @@ from autoskillit.core import (
     get_logger,
     get_tool_def,
 )
-from autoskillit.recipe.analysis._analysis import (  # noqa: F401
+from autoskillit.recipe.analysis._analysis import (
     ValidationContext,
     _build_step_graph,
     _extract_routing_edges,

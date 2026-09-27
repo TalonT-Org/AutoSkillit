@@ -222,7 +222,7 @@ def _invoke_guard(
     Returns the parsed stdout JSON dict, or empty dict on empty stdout.
     """
     merged_env = {**_clean_env(), **env_overrides}
-    result = subprocess.run(  # noqa: S603  (intentional subprocess probe)
+    result = subprocess.run(
         [sys.executable, str(script_path)],
         input=json.dumps(stdin_payload),
         env=merged_env,

@@ -102,7 +102,7 @@ def _repair_retired_capability_frontmatter(
     data: dict[str, Any], declared_caps: set[str]
 ) -> str | None:
     """Repair declared retired capabilities; raw-body-only findings cannot be fixed."""
-    from autoskillit.workspace import (  # noqa: PLC0415
+    from autoskillit.workspace import (
         RETIRED_SEMANTIC_CAPABILITIES,
     )
 
@@ -154,7 +154,7 @@ class SkillMigrationAdapter(DeterministicMigrationAdapter):
         # step: resolve_effective() would fall through to a valid bundled
         # twin (or a valid lower-precedence local copy) and validate that
         # instead of the stale file this adapter was asked to fix.
-        from autoskillit.workspace import default_skill_resolver  # noqa: PLC0415
+        from autoskillit.workspace import default_skill_resolver
 
         project_dir = _skill_project_dir(file.path)
         return default_skill_resolver().resolve_local_candidate(file.name, project_dir)
@@ -230,7 +230,7 @@ class SkillMigrationAdapter(DeterministicMigrationAdapter):
         return MigrationResult(success=True, name=file.name, migrated_content=migrated_content)
 
     def validate(self, path: Path) -> tuple[bool, str]:
-        from autoskillit.workspace import (  # noqa: PLC0415
+        from autoskillit.workspace import (
             default_skill_resolver,
             read_skill_frontmatter,
         )

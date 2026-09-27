@@ -167,7 +167,7 @@ async def run_pre_launch_gating(
     if "task" in full_recipe.ingredients and "task" not in effective_ingredients:
         effective_ingredients = {"task": task, **effective_ingredients}
 
-    from autoskillit.config import (  # noqa: PLC0415
+    from autoskillit.config import (
         strip_server_authoritative_overrides,
     )
 
@@ -223,7 +223,7 @@ def _load_and_validate_for_dispatch(
             ),
             per_dispatch_state_path=None,
         )
-    except Exception as exc:  # noqa: BLE001 — see tests/server/test_tools_dispatch_validation.py::test_dispatch_rejects_when_load_and_validate_raises
+    except Exception as exc:
         logger.warning("load_and_validate failed for '%s'", recipe, exc_info=True)
         return DispatchResult(
             DispatchRejected(

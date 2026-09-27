@@ -46,7 +46,7 @@ class _OwnerTrackingVisitor(ast.NodeVisitor):
         self._owners: list[str | None] = [None]
 
     def _visit_function_body(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
-        """Hook: subclasses inspect the function node while it is the current owner."""  # noqa: ARG002
+        """Hook: subclasses inspect the function node while it is the current owner."""
 
     def _visit_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         self._owners.append(node.name)

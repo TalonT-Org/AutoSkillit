@@ -51,7 +51,7 @@ def _pre_launch_campaign(
 
     Returns (itable, proceed). proceed=False means the user declined the launch.
     """
-    from autoskillit.cli.prompts import _get_ingredients_table  # noqa: PLC0415
+    from autoskillit.cli.prompts import _get_ingredients_table
 
     if not is_resume:
         show_campaign_preview(campaign_name, parsed_recipe, match.path.parent, project_dir)
@@ -60,7 +60,7 @@ def _pre_launch_campaign(
     if is_resume:
         return itable, True
 
-    from autoskillit.cli.ui._timed_input import timed_prompt  # noqa: PLC0415
+    from autoskillit.cli.ui._timed_input import timed_prompt
 
     confirm = timed_prompt(
         "Launch campaign? [Enter/n]", default="", timeout=120, label="autoskillit fleet campaign"

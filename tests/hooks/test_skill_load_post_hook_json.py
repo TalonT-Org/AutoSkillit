@@ -32,7 +32,7 @@ def _run_hook(
     state_root: Path | None = None,
 ) -> tuple[str, int]:
     """Run skill_load_post_hook.main(), return (stdout, exit_code)."""
-    from autoskillit.hooks.skill_load_post_hook import main  # noqa: PLC0415
+    from autoskillit.hooks.skill_load_post_hook import main
 
     root = state_root if state_root is not None else tmp_dir
     (root / ".autoskillit").mkdir(parents=True, exist_ok=True)

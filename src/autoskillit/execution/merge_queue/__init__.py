@@ -38,9 +38,9 @@ from autoskillit.execution.merge_queue._merge_queue_group_ci import (
     _MUTATION_DISABLE_AUTO_MERGE,
     _MUTATION_ENABLE_AUTO_MERGE,
     _MUTATION_ENQUEUE_PR,
-    _QUERY,  # noqa: F401 — re-export: tests assert merge_queue._QUERY exists
+    _QUERY,
     _QUERY_AUTO_MERGE_STATUS,
-    _query_merge_group_ci,  # noqa: F401 — re-export: tests patch merge_queue._query_merge_group_ci
+    _query_merge_group_ci,
 )
 from autoskillit.execution.merge_queue._merge_queue_repo_state import (
     _GRAPHQL_ENDPOINT,

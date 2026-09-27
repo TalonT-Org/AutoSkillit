@@ -416,12 +416,12 @@ def test_store_rejects_malformed_serialized_contract_authority(
         contract=_contract(tmp_path, text),
         snapshot={".claude/skills/root/SKILL.md": text},
     )
-    entry = store._provisional_path(correlation_key)  # noqa: SLF001
-    manifest = store._read_manifest(entry)  # noqa: SLF001
+    entry = store._provisional_path(correlation_key)
+    manifest = store._read_manifest(entry)
     contract_data = manifest["contract"]
     contract_data[field] = invalid_value
     manifest["contract_digest"] = _digest_json(contract_data)
-    store._write_manifest(entry, manifest)  # noqa: SLF001
+    store._write_manifest(entry, manifest)
 
     with pytest.raises(ValueError, match="Invalid serialized"):
         store.finalize(correlation_key, "malformed")
@@ -437,12 +437,12 @@ def test_store_rejects_exploration_vector_body_digest_tampering(tmp_path: Path) 
         contract=_contract(tmp_path, text),
         snapshot={".claude/skills/root/SKILL.md": text},
     )
-    entry = store._provisional_path(correlation_key)  # noqa: SLF001
-    manifest = store._read_manifest(entry)  # noqa: SLF001
+    entry = store._provisional_path(correlation_key)
+    manifest = store._read_manifest(entry)
     contract_data = manifest["contract"]
     contract_data["exploration_vectors"]["root"][0]["body"] = "tampered body"
     manifest["contract_digest"] = _digest_json(contract_data)
-    store._write_manifest(entry, manifest)  # noqa: SLF001
+    store._write_manifest(entry, manifest)
 
     with pytest.raises(ValueError, match="Invalid serialized"):
         store.finalize(correlation_key, "tampered-vector")
@@ -461,13 +461,13 @@ def test_stale_projection_version_rejected_before_enum_construction(tmp_path: Pa
         contract=_contract(tmp_path, text),
         snapshot={".claude/skills/root/SKILL.md": text},
     )
-    entry = store._provisional_path(correlation_key)  # noqa: SLF001
-    manifest = store._read_manifest(entry)  # noqa: SLF001
+    entry = store._provisional_path(correlation_key)
+    manifest = store._read_manifest(entry)
     contract_data = manifest["contract"]
     contract_data["projection_version"] = 5
     contract_data["active_exploration_applicabilities"] = ["investigate-standard"]
     manifest["contract_digest"] = _digest_json(contract_data)
-    store._write_manifest(entry, manifest)  # noqa: SLF001
+    store._write_manifest(entry, manifest)
 
     with pytest.raises(
         ValueError,
@@ -489,12 +489,12 @@ def test_store_load_rejects_an_otherwise_valid_finalized_v8_contract(tmp_path: P
         snapshot={".claude/skills/root/SKILL.md": text},
     )
     store.finalize(correlation_key, session_id)
-    entry = store._session_path(session_id)  # noqa: SLF001
-    manifest = store._read_manifest(entry)  # noqa: SLF001
+    entry = store._session_path(session_id)
+    manifest = store._read_manifest(entry)
     contract_data = manifest["contract"]
     contract_data["projection_version"] = 8
     manifest["contract_digest"] = _digest_json(contract_data)
-    store._write_manifest(entry, manifest)  # noqa: SLF001
+    store._write_manifest(entry, manifest)
 
     with pytest.raises(
         ValueError,
@@ -541,13 +541,13 @@ def test_store_quarantines_unknown_exploration_vector_enums_and_preserves_raw_re
         contract=contract,
         snapshot={".claude/skills/root/SKILL.md": text},
     )
-    entry = store._provisional_path(correlation_key)  # noqa: SLF001
-    manifest = store._read_manifest(entry)  # noqa: SLF001
+    entry = store._provisional_path(correlation_key)
+    manifest = store._read_manifest(entry)
     raw_vector = manifest["contract"]["exploration_vectors"]["root"][0]
     raw_vector[field] = future_value
     expected_raw = deepcopy(raw_vector)
     manifest["contract_digest"] = _digest_json(manifest["contract"])
-    store._write_manifest(entry, manifest)  # noqa: SLF001
+    store._write_manifest(entry, manifest)
 
     store.finalize(correlation_key, "future-vector")
     stored = store.load("future-vector")
@@ -577,8 +577,8 @@ def test_store_preserves_unknown_top_level_exploration_enums_without_routing_the
         contract=_contract(tmp_path, text),
         snapshot={".claude/skills/root/SKILL.md": text},
     )
-    entry = store._provisional_path(correlation_key)  # noqa: SLF001
-    manifest = store._read_manifest(entry)  # noqa: SLF001
+    entry = store._provisional_path(correlation_key)
+    manifest = store._read_manifest(entry)
     contract_data = manifest["contract"]
     contract_data["resolved_exploration_profile"] = "future-profile"
     contract_data["active_exploration_applicabilities"] = [
@@ -586,7 +586,7 @@ def test_store_preserves_unknown_top_level_exploration_enums_without_routing_the
         "future-applicability",
     ]
     manifest["contract_digest"] = _digest_json(contract_data)
-    store._write_manifest(entry, manifest)  # noqa: SLF001
+    store._write_manifest(entry, manifest)
 
     store.finalize(correlation_key, "future-top-level-enums")
     contract = store.load("future-top-level-enums").contract
@@ -614,7 +614,7 @@ def test_store_load_classifies_future_outer_schema(tmp_path: Path) -> None:
         snapshot={".claude/skills/root/SKILL.md": text},
     )
     store.finalize(correlation_key, "future-schema")
-    entry = store._session_path("future-schema")  # noqa: SLF001
+    entry = store._session_path("future-schema")
     manifest_path = entry / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["schema_version"] = 3

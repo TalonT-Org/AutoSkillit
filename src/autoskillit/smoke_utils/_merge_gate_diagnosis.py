@@ -133,7 +133,7 @@ def diagnose_merge_gate(
         f"{structured_timeout}"
     )
 
-    from autoskillit.core import atomic_write  # noqa: PLC0415
+    from autoskillit.core import atomic_write
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     try:

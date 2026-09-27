@@ -167,7 +167,7 @@ def fleet_campaign(
         dispatches = [DispatchRecord(name=d.name) for d in parsed.dispatches]
         write_initial_state(state_path, campaign_id, campaign_name, str(match.path), dispatches)
 
-    from autoskillit.cli._preview import _pre_launch_campaign  # noqa: PLC0415
+    from autoskillit.cli._preview import _pre_launch_campaign
 
     _itable, proceed = _pre_launch_campaign(
         campaign_name, parsed, match, Path.cwd(), is_resume=resume_campaign is not None

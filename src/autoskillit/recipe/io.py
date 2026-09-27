@@ -89,11 +89,11 @@ def load_recipe(path: Path, temp_dir_relpath: str = ".autoskillit/temp") -> Reci
         temp_dir_relpath=temp_dir_relpath,
     )
     recipe = _parse_recipe(data, declared_data=declared_data)
-    from autoskillit.recipe.contracts.staleness_cache import compute_recipe_hash  # noqa: PLC0415
+    from autoskillit.recipe.contracts.staleness_cache import compute_recipe_hash
 
     recipe.content_hash = compute_recipe_hash(path)
     # Deferred import breaks the circular dependency with _analysis.py.
-    from autoskillit.recipe.analysis._analysis import (  # noqa: PLC0415
+    from autoskillit.recipe.analysis._analysis import (
         _build_step_graph,
         extract_blocks,
     )

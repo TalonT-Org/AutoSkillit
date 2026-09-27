@@ -4,7 +4,7 @@ Re-export facade. Implementation: _contracts_types.py, _contracts_manifest.py,
 _contracts_card.py, _contracts_staleness.py.
 """
 
-from autoskillit.core import resolve_skill_name as resolve_skill_name  # noqa: F401
+from autoskillit.core import resolve_skill_name as resolve_skill_name
 from autoskillit.recipe.contracts._contracts_card import (  # noqa: F401
     _generate_recipe_card_for_recipe,
     generate_recipe_card,

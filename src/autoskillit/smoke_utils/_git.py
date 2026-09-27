@@ -33,10 +33,10 @@ def compute_domain_partitions(
     Runs git diff to get changed files, partitions them by domain, and writes the
     result JSON to output_dir/domain_partitions.json.
     """
-    import subprocess  # noqa: PLC0415
+    import subprocess
 
-    from autoskillit.core import atomic_write  # noqa: PLC0415
-    from autoskillit.execution import partition_files_by_domain  # noqa: PLC0415
+    from autoskillit.core import atomic_write
+    from autoskillit.execution import partition_files_by_domain
 
     if not Path(output_dir).is_absolute():
         raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
@@ -63,10 +63,10 @@ def fetch_merge_queue_data(base_branch: str, cwd: str, output_dir: str) -> dict[
     Runs the GraphQL query used in analyze-prs Step 0.5 and parses the response
     with parse_merge_queue_response, writing the result to disk.
     """
-    import subprocess  # noqa: PLC0415
+    import subprocess
 
-    from autoskillit.core import atomic_write  # noqa: PLC0415
-    from autoskillit.execution import parse_merge_queue_response  # noqa: PLC0415
+    from autoskillit.core import atomic_write
+    from autoskillit.execution import parse_merge_queue_response
 
     if not Path(output_dir).is_absolute():
         raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
@@ -123,7 +123,7 @@ def detect_zero_changes(
     contradictions between git evidence and the override flag (e.g., CodeX sandbox
     scenarios where ``.git/`` is read-only).
     """
-    import subprocess  # noqa: PLC0415
+    import subprocess
 
     _override_active = str(write_evidence_override).lower() == "true"
     result: dict[str, str] = {}
@@ -173,7 +173,7 @@ def check_commits_ahead(cwd: str, base_branch: str) -> dict[str, str]:
     """
     if not base_branch:
         raise ValueError("base_branch must be non-empty")
-    import subprocess  # noqa: PLC0415
+    import subprocess
 
     result = subprocess.run(
         ["git", "rev-list", "--count", f"{base_branch}..HEAD"],
@@ -201,9 +201,9 @@ def check_ref_state(worktree_path: str, branch: str) -> dict[str, str]:
     divergence (local and remote have diverged — escalation required).
     Issue #4274, Part B Step 8.
     """
-    import subprocess  # noqa: PLC0415
+    import subprocess
 
-    from autoskillit.core import (  # noqa: PLC0415
+    from autoskillit.core import (
         local_branch_ref,
         resolve_clone_remote_name_sync,
         verify_qualified_ref_sync,
@@ -277,7 +277,7 @@ def close_issue_already_done(issue_url: str) -> dict[str, str]:
     Called by close_issue_already_done recipe step when check_has_commits
     detects zero commits ahead of base (feature already merged).
     """
-    import subprocess  # noqa: PLC0415
+    import subprocess
 
     subprocess.run(
         ["gh", "issue", "edit", issue_url, "--remove-label", "in-progress"],

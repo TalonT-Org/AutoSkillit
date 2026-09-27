@@ -80,7 +80,7 @@ def _run_hook(
         )
         return completed.stdout, completed.returncode
 
-    from autoskillit.hooks.skill_load_post_hook import main  # noqa: PLC0415
+    from autoskillit.hooks.skill_load_post_hook import main
 
     buf = io.StringIO()
     exit_code = 0
@@ -197,7 +197,7 @@ def test_reports_existing_binding_read_error(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """A corrupt prior binding remains fail-closed and observable."""
-    from autoskillit.hooks import skill_load_post_hook as hook_module  # noqa: PLC0415
+    from autoskillit.hooks import skill_load_post_hook as hook_module
 
     projection_root = tmp_path / "projection"
     projection_root.mkdir()
@@ -230,7 +230,7 @@ def test_reports_write_failure_traceback(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Atomic-write failures retain their exception type and traceback."""
-    from autoskillit.hooks import skill_load_post_hook as hook_module  # noqa: PLC0415
+    from autoskillit.hooks import skill_load_post_hook as hook_module
 
     def fail_write(*_args: object, **_kwargs: object) -> None:
         raise RuntimeError("write exploded")
@@ -274,7 +274,7 @@ def _run_hook_with_marker(
     state_root: Path | None = None,
 ) -> tuple[str, int]:
     """Run skill_load_post_hook.main() with AUTOSKILLIT_COMPLETION_MARKER support."""
-    from autoskillit.hooks.skill_load_post_hook import main  # noqa: PLC0415
+    from autoskillit.hooks.skill_load_post_hook import main
 
     root = state_root if state_root is not None else tmp_dir
     (root / ".autoskillit").mkdir(parents=True, exist_ok=True)

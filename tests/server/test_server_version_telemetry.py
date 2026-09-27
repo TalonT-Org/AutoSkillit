@@ -133,7 +133,7 @@ class TestServerLazyInit:
         monkeypatch.delitem(sys.modules, "autoskillit.server", raising=False)
 
         with patch("autoskillit.config.load_config") as mock_load:
-            import autoskillit.server  # noqa: F401
+            import autoskillit.server
         assert not mock_load.called
 
     def test_get_ctx_raises_before_initialize(self, monkeypatch):

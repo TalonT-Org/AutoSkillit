@@ -1877,6 +1877,4 @@ def test_validate_pre_spawn_view_raises_when_subtree_vanishes_mid_walk(
     from autoskillit.core.io import TreeVanishedError
 
     with pytest.raises(TreeVanishedError):
-        store._validate_pre_spawn_view(  # noqa: SLF001
-            lease.view_path, {}, allow_missing_resume=True
-        )
+        store._validate_pre_spawn_view(lease.view_path, {}, allow_missing_resume=True)

@@ -8,9 +8,9 @@ through this package facade.
 from __future__ import annotations
 
 # Module-level logger for tests that patch ``..._response_budget.logger``.
-from autoskillit.core import atomic_write  # noqa: F401  (mock.patch reachability)
+from autoskillit.core import atomic_write
 from autoskillit.core import get_logger as _get_logger
-from autoskillit.server.recipe._recipe_segment_delivery import (  # noqa: F401  (mock.patch reachability)
+from autoskillit.server.recipe._recipe_segment_delivery import (
     RecipeSegmentDeliveryError,
     build_post_effect_segment_failure,
 )

@@ -63,7 +63,7 @@ class _RepositoryState:
 
 
 def _git(repository: Path, *args: str) -> str:
-    return subprocess.run(  # noqa: S603
+    return subprocess.run(
         ["git", "-C", str(repository), *args],
         check=True,
         capture_output=True,
@@ -139,7 +139,7 @@ def _repository_state(repository: Path) -> _RepositoryState:
     if not index_path.is_absolute():
         index_path = repository / index_path
     index_digest = "sha256:" + hashlib.sha256(index_path.read_bytes()).hexdigest()
-    porcelain = subprocess.run(  # noqa: S603
+    porcelain = subprocess.run(
         [
             "git",
             "--no-optional-locks",

@@ -27,11 +27,11 @@ if _RUNTIME_DIR not in sys.path:
 from _classification._interpreters import (  # noqa: E402
     _iter_shell_payload_segment_groups,
 )
-from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
+from _command_classification import (  # noqa: E402
     _command_position_candidate_spans,
     command_verb_and_args,
 )
-from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+from _hook_payload import (  # noqa: E402
     parse_hook_command,
     resolve_state_root,
 )

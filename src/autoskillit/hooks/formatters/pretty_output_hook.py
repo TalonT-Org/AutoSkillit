@@ -33,12 +33,12 @@ for _import_dir in (_HOOKS_DIR, _PACKAGE_ROOT):
     if _import_dir not in sys.path:
         sys.path.insert(0, _import_dir)
 
-from _fmt_dispatch import (  # type: ignore[import-not-found]  # noqa: E402, F401
+from _fmt_dispatch import (  # noqa: E402, F401
     _FMT_DISPATCH_FOOD_TRUCK_RENDERED,
     _FMT_DISPATCH_FOOD_TRUCK_SUPPRESSED,
     _fmt_dispatch_food_truck,
 )
-from _fmt_execution import (  # type: ignore[import-not-found]  # noqa: E402, F401
+from _fmt_execution import (  # noqa: E402, F401
     _FMT_MERGE_WORKTREE_RENDERED,
     _FMT_MERGE_WORKTREE_SUPPRESSED,
     _FMT_RUN_CMD_RENDERED,
@@ -52,7 +52,7 @@ from _fmt_execution import (  # type: ignore[import-not-found]  # noqa: E402, F4
     _fmt_run_skill,
     _fmt_test_check,
 )
-from _fmt_primitives import (  # type: ignore[import-not-found]  # noqa: E402, F401
+from _fmt_primitives import (  # noqa: E402, F401
     _CHECK_MARK,
     _CROSS_MARK,
     _HOOK_CONFIG_PATH_COMPONENTS,
@@ -71,7 +71,7 @@ from _fmt_primitives import (  # type: ignore[import-not-found]  # noqa: E402, F
     _PlainTextPayload,
     _validate_response_spill_metadata,
 )
-from _fmt_recipe import (  # type: ignore[import-not-found]  # noqa: E402, F401
+from _fmt_recipe import (  # noqa: E402, F401
     _FMT_LIST_RECIPES_RENDERED,
     _FMT_LIST_RECIPES_SUPPRESSED,
     _FMT_LOAD_RECIPE_RENDERED,
@@ -89,7 +89,7 @@ from _fmt_recipe import (  # type: ignore[import-not-found]  # noqa: E402, F401
     _fmt_recipe_segment,
     _strip_yaml_ingredients_block,
 )
-from _fmt_status import (  # type: ignore[import-not-found]  # noqa: E402, F401
+from _fmt_status import (  # noqa: E402, F401
     _FMT_CLONE_REPO_RENDERED,
     _FMT_CLONE_REPO_SUPPRESSED,
     _FMT_KITCHEN_STATUS_RENDERED,

@@ -15,19 +15,19 @@ _RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
 if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
-from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
+from _command_classification import (  # noqa: E402
     UNRESOLVED_WRITE_TARGET_REMEDIATION,
     extract_interpreter_write_paths,
     extract_patch_paths,
     resolve_write_target,
     scan_write_targets,
 )
-from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+from _hook_payload import (  # noqa: E402
     extract_apply_patch_text,
     normalize_payload_cwd,
     parse_hook_command,
 )
-from _policy_event import (  # type: ignore[import-not-found]  # noqa: E402
+from _policy_event import (  # noqa: E402
     PolicyEvent,
     render_provenance_prefix,
 )

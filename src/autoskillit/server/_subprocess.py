@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from autoskillit.core import SubprocessResult
 
 
-def _get_ctx():  # type: ignore[return]
+def _get_ctx():
     """Deferred import of _get_ctx from _state to avoid circular imports."""
     from autoskillit.server.lifecycle._state import _get_ctx as _ctx_fn  # circular-break
 

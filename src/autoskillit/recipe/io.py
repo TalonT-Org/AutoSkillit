@@ -443,7 +443,7 @@ def _parse_campaign_dispatches(dispatches_raw: Any) -> list[CampaignDispatch]:
                 DispatchGateType(raw_gate) if raw_gate else None
             )
         except ValueError:
-            dispatch_gate = raw_gate  # type: ignore[assignment]  # Invalid; caught by validate_recipe_structure
+            dispatch_gate = raw_gate  # Invalid; caught by validate_recipe_structure
         dispatch_recipe = dispatch_raw.get("recipe", "")
         if not dispatch_name:
             raise ValueError(

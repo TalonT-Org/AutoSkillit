@@ -139,7 +139,7 @@ def _insert_images(html_body: str, specs: list[FigureSpec]) -> str:
 def _markdown_to_html(md_text: str) -> str:
     """Convert markdown to HTML using markdown-it-py."""
     try:
-        from markdown_it import MarkdownIt  # type: ignore[import]
+        from markdown_it import MarkdownIt
 
         md = MarkdownIt()
         rendered = md.render(md_text)

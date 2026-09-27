@@ -61,8 +61,8 @@ class GapStats:
 
 @dataclass
 class DFG:
-    bigrams: Counter  # type: ignore[type-arg]
-    ngrams: Counter  # type: ignore[type-arg]
+    bigrams: Counter
+    ngrams: Counter
     pair_gaps: dict[tuple[str, str], list[int]]
     total_turns: int
 

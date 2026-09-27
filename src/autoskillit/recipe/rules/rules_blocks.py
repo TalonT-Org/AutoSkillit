@@ -28,7 +28,7 @@ def _load_budgets_yaml(path: Path) -> Mapping[str, Mapping[str, Any]]:
         return {}
     if not isinstance(data, dict):
         return {}
-    return data  # type: ignore[return-value]
+    return data
 
 
 def _block_budgets() -> Mapping[str, Mapping[str, Any]]:

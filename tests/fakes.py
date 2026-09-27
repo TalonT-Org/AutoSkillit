@@ -1666,7 +1666,7 @@ class InMemoryDatabaseReader(DatabaseReader):
         self,
         db_path: str,
         sql: str,
-        params: list | dict,  # type: ignore[type-arg]
+        params: list | dict,
         timeout_sec: int,
         max_rows: int,
     ) -> dict[str, Any]:
@@ -1780,7 +1780,7 @@ class MockSubprocessRunner(SubprocessRunner):
             termination=TerminationReason.NATURAL_EXIT,
             pid=99999,
         )
-        self.call_args_list: list[tuple] = []  # type: ignore[type-arg]
+        self.call_args_list: list[tuple] = []
         self.last_pty_mode: bool | None = None
 
     def push(self, result: SubprocessResult, *, expect: list[str] | None = None) -> None:

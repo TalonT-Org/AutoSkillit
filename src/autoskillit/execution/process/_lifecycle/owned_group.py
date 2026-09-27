@@ -222,13 +222,17 @@ class OwnedProcessGroup:
             self._reaped = True
             self._observed_returncode = self.process.returncode
             return self._observed_returncode
-        if self.supports_nonreaping_observation:
+        # os.waitid exists on macOS only from Python 3.13; the leading static clause
+        # states that platform fact where the type checker can evaluate it.
+        if (
+            sys.platform != "darwin" or sys.version_info >= (3, 13)
+        ) and self.supports_nonreaping_observation:
             stopped_observation = include_stopped and self.supports_stopped_observation
-            wait_flags = (  # type: ignore[attr-defined]
+            wait_flags = (
                 os.WEXITED | os.WNOHANG | os.WNOWAIT | (os.WSTOPPED if stopped_observation else 0)
             )
             try:
-                status = os.waitid(  # type: ignore[attr-defined]
+                status = os.waitid(
                     os.P_PID,
                     self.pid,
                     wait_flags,
@@ -243,7 +247,7 @@ class OwnedProcessGroup:
                 return None
             if status is None:
                 return None
-            if stopped_observation and status.si_code == os.CLD_STOPPED:  # type: ignore[attr-defined]
+            if stopped_observation and status.si_code == os.CLD_STOPPED:
                 raise OwnedProcessStoppedError(self.pid, self.pgid, int(status.si_status))
             if status.si_code == os.CLD_EXITED:
                 self._observed_returncode = status.si_status

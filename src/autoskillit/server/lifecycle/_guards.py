@@ -47,13 +47,13 @@ RECIPE_READ_DENY_TRIGGER: str = "must not read recipe/skill/agent files directly
 _RECIPE_READ_CALLABLE_PATTERN: re.Pattern[str] = re.compile(r"autoskillit\.recipe\.(?!_cmd_rpc)")
 
 
-def _get_ctx():  # type: ignore[return]
+def _get_ctx():
     from autoskillit.server.lifecycle._state import _get_ctx as _ctx_fn  # circular-break
 
     return _ctx_fn()
 
 
-def _get_config():  # type: ignore[return]
+def _get_config():
     from autoskillit.server.lifecycle._state import _get_config as _cfg_fn  # circular-break
 
     return _cfg_fn()

@@ -35,11 +35,11 @@ _T = TypeVar("_T")
 def _field_defaults(cls: type) -> dict[str, Any]:
     """Extract default values from dataclass fields into a dict keyed by field name."""
     defaults: dict[str, Any] = {}
-    for f in dataclasses.fields(cls):  # type: ignore[arg-type]
+    for f in dataclasses.fields(cls):
         if f.default is not dataclasses.MISSING:
             defaults[f.name] = f.default
-        elif f.default_factory is not dataclasses.MISSING:  # type: ignore[misc]
-            defaults[f.name] = f.default_factory()  # type: ignore[call-arg]
+        elif f.default_factory is not dataclasses.MISSING:
+            defaults[f.name] = f.default_factory()
     return defaults
 
 
@@ -253,7 +253,7 @@ def _build_subconfig(cls: type[_T], section: dict[str, Any], section_name: str) 
             )
         kwargs[f.name] = _coerce_value(raw, hints[f.name], f"{section_name}.{yaml_key}")
 
-    return cls(**kwargs)  # type: ignore[return-value]
+    return cls(**kwargs)
 
 
 # Re-export mapping type for backward compatibility with the prior public

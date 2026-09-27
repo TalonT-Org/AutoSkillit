@@ -201,7 +201,7 @@ if TYPE_CHECKING:
 elif __package__ == "_capture_lifecycle":
     import os as _os
 
-    from _capture_lifecycle._store import (  # type: ignore[no-redef]
+    from _capture_lifecycle._store import (
         _COMPACTION_THRESHOLD_BYTES,
         _STORE_FACTORY_TOKEN,
         _capture_capacity,

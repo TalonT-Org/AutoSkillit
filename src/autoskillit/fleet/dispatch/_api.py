@@ -420,7 +420,7 @@ async def _run_dispatch(
     lineage_result = await run_lineage_preparation(
         tool_ctx=tool_ctx,
         recipe=recipe,
-        recipe_obj=recipe_ctx.recipe_obj,  # type: ignore[arg-type]
+        recipe_obj=recipe_ctx.recipe_obj,
         task=task,
         effective_ingredients=recipe_ctx.effective_ingredients,
         effective_name=recipe_ctx.effective_name,

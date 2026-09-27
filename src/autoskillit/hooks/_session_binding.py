@@ -18,7 +18,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from enum import StrEnum, unique
 from pathlib import Path
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 _FLOCK_TIMEOUT_S = 5.0
 _FLOCK_POLL_INTERVAL_S = 0.05
@@ -28,10 +28,10 @@ _FLOCK_POLL_INTERVAL_S = 0.05
 # this module as `autoskillit.hooks._session_binding`, so fall back to a *relative*
 # import there — a relative ImportFrom node has no "autoskillit"-prefixed module name
 # and so does not trip the stdlib-only AST guard (test_hooks_are_stdlib_only).
-if __package__:
+if TYPE_CHECKING or __package__:
     from ._runtime import _hook_payload as _hook_payload_module  # noqa: E402
 else:
-    import _hook_payload as _hook_payload_module  # type: ignore[import-not-found,no-redef]  # noqa: E402
+    import _hook_payload as _hook_payload_module  # noqa: E402
 
 SESSION_BINDING_SCHEMA_VERSION: int = 3
 PROJECTION_MANIFEST_SCHEMA_VERSION: int = 2

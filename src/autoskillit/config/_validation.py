@@ -49,8 +49,8 @@ def _build_config_schema() -> dict[str, frozenset[str]]:
         if f.name == "experimental_enabled":
             continue
         sub_type: type | None = None
-        if f.default_factory is not dataclasses.MISSING:  # type: ignore[misc]
-            factory = f.default_factory  # type: ignore[assignment]
+        if f.default_factory is not dataclasses.MISSING:
+            factory = f.default_factory
             if dataclasses.is_dataclass(factory):
                 sub_type = factory
         elif f.default is not dataclasses.MISSING and dataclasses.is_dataclass(f.default):

@@ -54,6 +54,11 @@ tasks:
           PYTEST_CMD="pytest"
         fi
 
+        set +e
+        task typecheck
+        TYPECHECK_EXIT=$?
+        set -e
+
         set -o pipefail
         set +e
         $PYTEST_CMD ${PYTEST_TEST_PATHS:-tests/} -q --tb=short -n 4 --dist worksteal -m "not smoke and not canary" ${PYTEST_IGNORE_PATHS:-} --disable-warnings -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
@@ -63,7 +68,17 @@ tasks:
 
         echo ""
         echo "Test output saved to: $TEST_OUTPUT"
+        if [ "$TYPECHECK_EXIT" -ne 0 ]; then
+          echo "TYPECHECK_EXIT_CODE=$TYPECHECK_EXIT"
+          exit 1
+        fi
         exit $PYTEST_EXIT
+
+  typecheck:
+    desc: Run the pinned mypy gate ([tool.mypy]) for every supported platform target
+    cmds:
+      - .venv/bin/mypy --platform linux
+      - .venv/bin/mypy --platform darwin --cache-dir .mypy_cache/darwin
 
   test-check:
     desc: Run all tests and return unambiguous PASS/FAIL (for automation)

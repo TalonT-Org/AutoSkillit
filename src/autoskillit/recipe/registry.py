@@ -256,7 +256,7 @@ def build_quality_dict(report: DataFlowReport) -> dict[str, object]:
 def compute_recipe_validity(
     errors: list[str],
     semantic_findings: list[RuleFinding],
-    contract_findings: list[dict],  # type: ignore[type-arg]
+    contract_findings: list[dict],
 ) -> bool:
     """Return True if no schema, semantic, or contract errors are present."""
     has_schema_errors = bool(errors)

@@ -309,7 +309,7 @@ def make_context(
                             "RECORD_SCENARIO is set but 'api_simulator' is not installed "
                             "— skipping recording"
                         )
-                        make_scenario_recorder = None  # type: ignore[assignment]
+                        make_scenario_recorder = None
 
                     if make_scenario_recorder is not None:
                         recorder = make_scenario_recorder(
@@ -374,7 +374,7 @@ def make_context(
     # load mode.
     resolved_plugin_authority: PluginArtifactAuthority
     if plugin_authority is not _UNSET:
-        resolved_plugin_authority = plugin_authority  # type: ignore[assignment]
+        resolved_plugin_authority = plugin_authority
     elif plugin_dir is not _UNSET and isinstance(plugin_dir, (str, Path)):
         resolved_plugin_authority = project_direct_install_authority(
             DirectInstall(plugin_dir=Path(plugin_dir)),

@@ -200,6 +200,4 @@ class RecipeCard:
     skill_hashes: dict[str, str]
     skills: dict[str, SkillContract]
     dataflow: list[DataFlowEntry]
-    block_fingerprints: tuple[BlockFingerprint, ...] = dataclasses.field(
-        default_factory=tuple  # type: ignore[arg-type]
-    )
+    block_fingerprints: tuple[BlockFingerprint, ...] = dataclasses.field(default_factory=tuple)

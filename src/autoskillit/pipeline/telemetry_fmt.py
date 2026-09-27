@@ -559,8 +559,8 @@ class TelemetryFormatter:
             lines.append(
                 f"| {model} | {m.get('step_count', 0)}"
                 f" | {h(m.get('input_tokens', 0))} | {h(m.get('output_tokens', 0))}"
-                f" | {h(m.get('cache_read_tokens'))}"  # type: ignore[arg-type]
-                f" | {h(m.get('cache_write_tokens'))}"  # type: ignore[arg-type]
+                f" | {h(m.get('cache_read_tokens'))}"
+                f" | {h(m.get('cache_write_tokens'))}"
                 f" | {fmt_dur(m.get('elapsed_seconds', 0.0))} |"
             )
         return "\n".join(lines)
@@ -581,8 +581,8 @@ class TelemetryFormatter:
                     str(m.get("step_count", 0)),
                     h(m.get("input_tokens", 0)),
                     h(m.get("output_tokens", 0)),
-                    h(m.get("cache_read_tokens")),  # type: ignore[arg-type]
-                    h(m.get("cache_write_tokens")),  # type: ignore[arg-type]
+                    h(m.get("cache_read_tokens")),
+                    h(m.get("cache_write_tokens")),
                     fmt_dur(m.get("elapsed_seconds", 0.0)),
                 )
             )

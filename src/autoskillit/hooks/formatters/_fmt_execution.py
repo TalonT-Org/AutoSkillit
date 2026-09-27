@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from _fmt_primitives import (  # type: ignore[import-not-found]
+from _fmt_primitives import (
     _CHECK_MARK,
     _CROSS_MARK,
     _filter_pytest_output,

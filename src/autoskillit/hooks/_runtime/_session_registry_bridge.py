@@ -8,13 +8,14 @@ import os
 import tempfile
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-if __package__:
+if TYPE_CHECKING or __package__:
     from .._session_binding import read_session_binding
     from ._hook_payload import resolve_state_root
 else:
-    from _hook_payload import resolve_state_root  # type: ignore[import-not-found,no-redef]
-    from _session_binding import (  # type: ignore[import-not-found,no-redef]
+    from _hook_payload import resolve_state_root
+    from _session_binding import (
         read_session_binding,
     )
 

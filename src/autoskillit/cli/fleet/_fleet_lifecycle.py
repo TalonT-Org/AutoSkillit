@@ -51,4 +51,4 @@ def _pick_resume_campaign(project_dir: Path) -> tuple[str, str]:
     if selected is None or isinstance(selected, str):
         print("No campaign selected.")
         sys.exit(1)
-    return selected.campaign_name, selected.campaign_id  # type: ignore[union-attr]
+    return selected.campaign_name, selected.campaign_id

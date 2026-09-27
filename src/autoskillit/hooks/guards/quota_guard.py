@@ -38,11 +38,11 @@ from _hook_settings import (  # noqa: E402
     resolve_quota_log_dir,
     resolve_quota_settings,
     write_quota_log_event,
-)  # type: ignore[import-not-found]
+)
 from quota_constraints import (  # noqa: E402
     QuotaConstraint,
     decide_quota_block,
-)  # type: ignore[import-not-found]
+)
 
 
 def quota_guard_decision(

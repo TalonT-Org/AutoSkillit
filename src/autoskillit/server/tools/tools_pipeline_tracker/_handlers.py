@@ -165,7 +165,7 @@ def _handle_init(
     lease: ArtifactLease,
     dependencies: dict[str, list[str]] | None,
 ) -> str:
-    active_steps = ctx.active_recipe_steps  # type: ignore[attr-defined]
+    active_steps = ctx.active_recipe_steps
     if active_steps is None:
         return json.dumps(
             {

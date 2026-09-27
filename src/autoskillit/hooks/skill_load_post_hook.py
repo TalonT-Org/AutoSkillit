@@ -27,7 +27,7 @@ if _RUNTIME_DIR not in sys.path:
 from _guard_decision_diagnostics import (  # noqa: E402
     record_guard_decision,
 )
-from _hook_payload import normalize_payload_cwd  # type: ignore[import-not-found]  # noqa: E402
+from _hook_payload import normalize_payload_cwd  # noqa: E402
 from _hook_settings import (  # noqa: E402
     bridge_session_registry,
     hook_join_applicability,

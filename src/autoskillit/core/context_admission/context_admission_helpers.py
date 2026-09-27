@@ -82,7 +82,7 @@ from ..types._type_enums import (
 from ..types._type_helpers import _reconciled_snapshot_counts
 
 if TYPE_CHECKING:
-    from .types._type_context_admission import (
+    from ..types._type_context_admission import (
         AcceptInputEvent,
         ResolveIndeterminateAcceptedEvent,
     )

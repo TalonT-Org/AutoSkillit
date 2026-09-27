@@ -58,7 +58,7 @@ implemented. Identify review debt before it compounds.
   below; use it in the default path. It is not a positional input.
 - `{output_path}` — locally resolved literal absolute path: `$2` when supplied, otherwise the
   default above. It is not a positional input.
-- `{output_dir}` — locally captured literal parent directory printed from
+- `{output_parent_dir}` — locally captured literal parent directory printed from
   `{output_path}` in Step 4; use it for the later `mkdir`. It is not a positional input.
 
 Resolve any relative caller-supplied path from the current working directory before
@@ -263,13 +263,13 @@ Do not output any prose between subagent dispatches. Immediately proceed to the 
    - Otherwise use `{{AUTOSKILLIT_TEMP}}/audit-review-decisions/review_decisions_audit_{run_id}.md`,
      with the same `{run_id}` generated above.
 4. Print the parent directory of `{output_path}` with a read-only call and capture it as
-   `{output_dir}`:
+   `{output_parent_dir}`:
    ```bash
    dirname "{output_path}"
    ```
    In a later Bash call, create that directory using the captured literal:
    ```bash
-   mkdir -p "{output_dir}"
+   mkdir -p "{output_parent_dir}"
    ```
 5. Write the markdown report to `{output_path}`. Structure:
 

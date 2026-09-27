@@ -558,6 +558,10 @@ class TestNewDispatchOwnerScopeToken:
         with pytest.raises(ValueError):
             new_dispatch_owner_scope_token("abc/def")
 
+    def test_rejects_empty_dispatch_id(self) -> None:
+        with pytest.raises(ValueError):
+            new_dispatch_owner_scope_token("")
+
 
 class TestSettleOwnerScopeWaitsForWorkloadIdentity:
     def test_settle_waits_for_workload_identity_before_removing_tether(
@@ -598,7 +602,7 @@ class TestSettleOwnerScopeWaitsForWorkloadIdentity:
 
 class TestOwnerScopeSettleRetry:
     @pytest.mark.anyio
-    async def test_settle_retries_once_then_records_incomplete_without_raising(
+    async def test_settle_records_incomplete_without_retrying_or_raising(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         calls = 0
@@ -614,9 +618,10 @@ class TestOwnerScopeSettleRetry:
         with structlog.testing.capture_logs() as cap_logs:
             settlement = await scope.settle_descendants(seal=False)
 
-        assert calls == 2
+        assert calls == 1
         assert settlement.complete is False
         assert any(entry.get("event") == "owner_scope_settlement_incomplete" for entry in cap_logs)
+        assert any(entry.get("event") == "owner_scope_settlement_failed" for entry in cap_logs)
 
 
 class TestDispatchScopeTokens:

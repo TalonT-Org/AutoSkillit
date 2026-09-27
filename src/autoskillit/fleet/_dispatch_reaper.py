@@ -135,11 +135,13 @@ def _settle_dispatch_owner_scopes(dispatch: DispatchRecord, *, dry_run: bool) ->
             continue
         log = logger.info if settlement.complete else logger.warning
         log(
-            "reap: [SETTLED]     %s  scope=%s reaped=%s survivors=%s complete=%s",
+            "reap: [SETTLED]     %s  scope=%s reaped=%s "
+            "kill_survivors=%s unresolved=%s complete=%s",
             dispatch.name,
             token,
             settlement.reaped_pids,
-            settlement.survivor_pids,
+            settlement.kill_survivor_pids,
+            settlement.unresolved_pids,
             settlement.complete,
         )
 

@@ -50,6 +50,11 @@ OWNER_SCOPE_PASS_INTERVAL_SECONDS: Final = 0.2
 # Exceeds the PTY workload-resolution window of the managed runner, so a
 # workload identity recorded after spawn is still examined before removal.
 OWNER_SCOPE_WORKLOAD_RESOLVE_SECONDS: Final = 3.0
+# Upper bound on _settle_scoped_tether's refresh iterations, so a future caller
+# that repeatedly rewrites the tether during settlement cannot busy-spin in the
+# inner loop. Production callers update_tether_workload exactly once per tether,
+# so two iterations; the cap leaves real workloads untouched.
+OWNER_SCOPE_SETTLE_MAX_REFRESHES: Final = 16
 
 _TOKEN_PATTERN = re.compile(r"[A-Za-z0-9._-]+")
 _DISPATCH_TOKEN_PREFIX: Final = "dispatch-"
@@ -66,8 +71,10 @@ def _validated_token(token: str) -> str:
 
 def new_dispatch_owner_scope_token(dispatch_id: str) -> str:
     """Mint a token unique to one dispatch run, so a resume is never blocked by a prior seal."""
+    if not dispatch_id:
+        raise ValueError("dispatch_id must be non-empty so the reaper can match its token")
     nonce = uuid.uuid4().hex[:_TOKEN_NONCE_HEX_CHARS]
-    return _validated_token(f"{_DISPATCH_TOKEN_PREFIX}{dispatch_id or 'anon'}-{nonce}")
+    return _validated_token(f"{_DISPATCH_TOKEN_PREFIX}{dispatch_id}-{nonce}")
 
 
 def _iter_tether_records(tether_dir: Path) -> Iterator[tuple[Path, TetherRecord]]:
@@ -106,7 +113,13 @@ class OwnerScopeSettlement:
     token: str
     supported: bool = True
     reaped_pids: tuple[int, ...] = ()
-    survivor_pids: tuple[int, ...] = ()
+    # SIGKILL-resistant pids + access-denied pids: kills were issued and
+    # reported as still alive. Distinct from ``unresolved_pids`` so a reaper
+    # operator can tell "kill failed" from "kill was not issued."
+    kill_survivor_pids: tuple[int, ...] = ()
+    # Live targets whose tether was concurrently rewritten mid-pass, plus
+    # tethers whose stat() transiently failed and must be retried next pass.
+    unresolved_pids: tuple[int, ...] = ()
     passes: int = 0
     converged: bool = False
     outcomes: tuple[TetherSweepOutcome, ...] = ()
@@ -114,7 +127,12 @@ class OwnerScopeSettlement:
 
     @property
     def complete(self) -> bool:
-        return self.supported and self.converged and not self.survivor_pids
+        return (
+            self.supported
+            and self.converged
+            and not self.kill_survivor_pids
+            and not self.unresolved_pids
+        )
 
     def to_log_fields(self) -> dict[str, object]:
         return {
@@ -124,7 +142,8 @@ class OwnerScopeSettlement:
             "converged": self.converged,
             "passes": self.passes,
             "reaped_pids": list(self.reaped_pids),
-            "survivor_pids": list(self.survivor_pids),
+            "kill_survivor_pids": list(self.kill_survivor_pids),
+            "unresolved_pids": list(self.unresolved_pids),
             "outcomes": [f"{o.child_pid}:{o.outcome}" for o in self.outcomes],
             "error": self.error,
         }
@@ -146,35 +165,66 @@ class _SettlementEvidence:
 
 def _settle_scoped_tether(path: Path, record: TetherRecord, evidence: _SettlementEvidence) -> str:
     """Settle one scoped tether and return its disposition for this pass."""
-    killed = False
-    while True:
-        for result in _settle_tether_targets(record, _tether_target_statuses(record)):
-            killed = True
-            evidence.absorb(result)
-        # A workload identity recorded concurrently is settled in this same pass.
-        refreshed = _read_tether(path)
-        if refreshed is None:
-            return "reaped" if killed else "vanished"
-        workload = (refreshed.workload_pid, refreshed.workload_starttime_ticks)
-        if workload == (record.workload_pid, record.workload_starttime_ticks):
-            break
-        record = refreshed
-    statuses = _tether_target_statuses(record)
-    live = [pid for name, pid, _ in _tether_targets(record) if statuses[name] == "live"]
+    killed, record = _refresh_until_stable(path, record, evidence)
+    live = _live_target_pids(record)
     if live:
         evidence.unsettled.update(live)
         return "unsettled"
     if record.workload_pid is None:
-        try:
-            age = time.time() - path.stat().st_mtime
-        except OSError:
-            return "reaped" if killed else "vanished"
-        if age < OWNER_SCOPE_WORKLOAD_RESOLVE_SECONDS:
-            return "awaiting_workload"
+        workload_disposition = _awaiting_workload_or_vanished(path, killed)
+        if workload_disposition is not None:
+            return workload_disposition
     remove_tether(path)
     if killed:
         return "reaped"
+    return _final_disposition(record)
+
+
+def _live_target_pids(record: TetherRecord) -> list[int]:
+    statuses = _tether_target_statuses(record)
+    return [pid for name, pid, _ in _tether_targets(record) if statuses[name] == "live"]
+
+
+def _final_disposition(record: TetherRecord) -> str:
+    statuses = _tether_target_statuses(record)
     return "identity_mismatch" if "mismatch" in statuses.values() else "dead_child"
+
+
+def _refresh_until_stable(
+    path: Path, record: TetherRecord, evidence: _SettlementEvidence
+) -> tuple[bool, TetherRecord]:
+    """Kill current targets then re-read the tether until its workload identity stabilises."""
+    killed = False
+    for _ in range(OWNER_SCOPE_SETTLE_MAX_REFRESHES):
+        for result in _settle_tether_targets(record, _tether_target_statuses(record)):
+            killed = True
+            evidence.absorb(result)
+        refreshed = _read_tether(path)
+        if refreshed is None:
+            return killed, record
+        refreshed_identity = (refreshed.workload_pid, refreshed.workload_starttime_ticks)
+        record_identity = (record.workload_pid, record.workload_starttime_ticks)
+        if refreshed_identity == record_identity:
+            return killed, refreshed
+        record = refreshed
+    logger.warning("owner_scope_tether_refresh_exhausted", path=str(path))
+    return killed, record
+
+
+def _awaiting_workload_or_vanished(path: Path, killed: bool) -> str | None:
+    """Return the awaiting/vanished disposition, or None to keep settling the tether."""
+    try:
+        age = time.time() - path.stat().st_mtime
+    except FileNotFoundError:
+        # Tether was removed between refresh and stat; settlement did its job.
+        return "reaped" if killed else "vanished"
+    except OSError:
+        # Transient stat failure (NFS/FUSE/FD pressure); keep the tether and
+        # try again next pass rather than leaking it as silently gone.
+        return "awaiting_workload"
+    if age < OWNER_SCOPE_WORKLOAD_RESOLVE_SECONDS:
+        return "awaiting_workload"
+    return None
 
 
 def settle_owner_scope(
@@ -221,7 +271,8 @@ def settle_owner_scope(
     return OwnerScopeSettlement(
         token=token,
         reaped_pids=tuple(sorted(evidence.reaped)),
-        survivor_pids=tuple(sorted(evidence.unsettled | evidence.survivors)),
+        kill_survivor_pids=tuple(sorted(evidence.survivors)),
+        unresolved_pids=tuple(sorted(evidence.unsettled)),
         passes=passes,
         converged=converged,
         outcomes=tuple(outcomes.values()),
@@ -236,12 +287,17 @@ class OwnerScope:
     tether_dir: Path
     settlements: list[OwnerScopeSettlement] = field(default_factory=list)
 
+    def __post_init__(self) -> None:
+        # Mirror the validate-on-entry discipline the ``owner_scope`` manager
+        # enforces, so direct construction (tests, ``replace(...)``) cannot store
+        # an invalid token and surface the error deep inside settlement.
+        _validated_token(self.token)
+
     def child_env(self) -> dict[str, str]:
         return {OWNER_SCOPE_ENV_VAR: self.token, OWNER_SCOPE_DIR_ENV_VAR: str(self.tether_dir)}
 
     async def settle_descendants(self, *, seal: bool) -> OwnerScopeSettlement:
         """Settle the scope off the event loop; shielded, and never raises."""
-        settlement = OwnerScopeSettlement(token=self.token, error="settlement did not run")
         with anyio.CancelScope(shield=True):
             settlement = await self._run_settlement(seal=seal)
         self._log(settlement)
@@ -252,13 +308,16 @@ class OwnerScope:
         settle = partial(settle_owner_scope, self.tether_dir, self.token, seal=seal)
         try:
             return await anyio.to_thread.run_sync(settle, abandon_on_cancel=False)
-        except Exception:
-            logger.warning("owner_scope_settlement_retry", scope=self.token, exc_info=True)
-        try:
-            return await anyio.to_thread.run_sync(settle, abandon_on_cancel=False)
         except Exception as exc:
             logger.error("owner_scope_settlement_failed", scope=self.token, exc_info=True)
-            return OwnerScopeSettlement(token=self.token, error=f"{type(exc).__name__}: {exc}")
+            # Preserve the exception chain so callers reading the ``error`` field
+            # (e.g. ``fold_cleanup_evidence`` consumers) can distinguish a primary
+            # failure from one raised under a swallow-and-retry caller.
+            message = f"{type(exc).__name__}: {exc}"
+            cause = exc.__cause__ or exc.__context__
+            if cause is not None and cause is not exc:
+                message = f"{message} [chained {type(cause).__name__}: {cause}]"
+            return OwnerScopeSettlement(token=self.token, error=message)
 
     def _log(self, settlement: OwnerScopeSettlement) -> None:
         if not settlement.supported:

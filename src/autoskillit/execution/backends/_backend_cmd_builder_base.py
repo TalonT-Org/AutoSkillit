@@ -147,9 +147,13 @@ def _add_workflow_context_env(extras: dict[str, str], scenario_step_name: str) -
     if kitchen_session_id:
         extras[KITCHEN_SESSION_ID_ENV_VAR] = kitchen_session_id
     owner_scope = os.environ.get(OWNER_SCOPE_ENV_VAR)
-    if owner_scope:
+    owner_scope_dir = os.environ.get(OWNER_SCOPE_DIR_ENV_VAR, "")
+    if owner_scope and owner_scope_dir:
+        # Forward both legs of the pair atomically. A half-set pair would otherwise
+        # be caught deep inside spawn_owned_process as a confusing ValueError; the
+        # funnel enforces both-or-neither at _resolve_owner_scope.
         extras[OWNER_SCOPE_ENV_VAR] = owner_scope
-        extras[OWNER_SCOPE_DIR_ENV_VAR] = os.environ.get(OWNER_SCOPE_DIR_ENV_VAR, "")
+        extras[OWNER_SCOPE_DIR_ENV_VAR] = owner_scope_dir
 
 
 class FlagVocabulary(NamedTuple):

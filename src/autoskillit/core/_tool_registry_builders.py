@@ -102,6 +102,9 @@ _MUTATION_TOOLS = frozenset(
         "wait_for_ci",
         "wait_for_merge_queue",
         "write_audit_disposition_bundle",
+        "plan_review_audit",
+        "collect_review_audit",
+        "finalize_review_audit",
         "write_audit_semantic_result",
         "write_standalone_audit_evidence",
         "write_telemetry_files",
@@ -169,6 +172,49 @@ def _tool(
         automatic_recipe_delivery=automatic_recipe_delivery,
         recovery_recipe_delivery=recovery_recipe_delivery,
     )
+
+
+_REVIEW_AUDIT_TOOL_DEFS = (
+    _tool(
+        "plan_review_audit",
+        (
+            "authority_path",
+            "review_output_dir",
+            "deletion_merge_base",
+            "anchor_authority_path",
+            "repository",
+        ),
+        required=("authority_path", "review_output_dir"),
+    ),
+    _tool(
+        "collect_review_audit",
+        ("manifest_path", "handles"),
+        required=("manifest_path", "handles"),
+        wire_types={"handles": ToolWireType.OBJECT},
+    ),
+    _tool(
+        "finalize_review_audit",
+        (
+            "manifest_path",
+            "handles",
+            "dispositions",
+            "prior_resolved_findings",
+            "final_snapshot_state",
+        ),
+        required=(
+            "manifest_path",
+            "handles",
+            "dispositions",
+            "prior_resolved_findings",
+            "final_snapshot_state",
+        ),
+        wire_types={
+            "handles": ToolWireType.OBJECT,
+            "dispositions": ToolWireType.ARRAY,
+            "prior_resolved_findings": ToolWireType.ARRAY,
+        },
+    ),
+)
 
 
 def _verify_review_receipt() -> ToolDef:

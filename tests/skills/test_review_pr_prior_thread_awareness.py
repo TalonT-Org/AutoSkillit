@@ -129,13 +129,14 @@ def test_parent_acceptance_precedes_prior_thread_suppression() -> None:
         )
     ]
 
-    validation = step_4.index("validate both arrays completely")
-    disposition = step_4.index("separate immutable disposition record")
+    step_4 = " ".join(step_4.split())
+    validation = step_4.index("only validated findings")
+    disposition = step_4.index("record one disposition per")
     accepted_only = step_4.index(
         "Feed only parent-accepted experimental findings into normal aggregation"
     )
-    suppression = step_4.index("1. Suppression pass")
-    deduplication = step_4.index("2. Deduplicate")
+    suppression = step_4.index("The suppression pass runs before deduplication")
+    deduplication = step_4.index("Deduplicate diff-anchored findings")
 
     assert validation < disposition < accepted_only < suppression < deduplication
 

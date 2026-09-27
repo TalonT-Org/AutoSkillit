@@ -319,15 +319,12 @@ def test_review_pr_experimental_dispatch_is_separate_and_exact() -> None:
     skill_text = _SKILL_MD.read_text()
     step_2_9 = _heading_slice(
         skill_text,
-        "### Step 2.9: Diff-Size Adaptive Agent Selection",
-        "### Step 3: Run Parallel Audit Subagents",
+        "### Step 2.9",
+        "### Step 3",
     )
-    assert "STANDARD_DISPATCH_AGENTS" in step_2_9
-    assert "EXPERIMENTAL_DISPATCH_AGENTS" in step_2_9
-    assert "select_experimental_review_dispatch" in step_2_9
-    assert "standard_agent_names=STANDARD_AGENT_ALLOWLIST.split" in step_2_9
-    assert "comm -12" not in step_2_9
-    assert "EXPERIMENTAL_AGENT_ALLOWLIST" not in step_2_9
+    assert "plan_review_audit(" in step_2_9
+    assert all(kind in step_2_9.lower() for kind in ("standard", "deletion", "experimental"))
+    assert "separate authorities" in step_2_9.lower()
     for agent_name in (
         "pr-review-auditor-reachability",
         "pr-review-auditor-abstraction-surface",
@@ -341,10 +338,4 @@ def test_review_pr_experimental_dispatch_is_separate_and_exact() -> None:
                 for policy in requirements["child_model_policies"]
             )
             == 1
-        )
-        assert (
-            agent_name
-            not in step_2_9.split('STANDARD_AGENT_ALLOWLIST="', maxsplit=1)[1].split(
-                '"', maxsplit=1
-            )[0]
         )

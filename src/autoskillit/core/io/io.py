@@ -582,13 +582,15 @@ def write_versioned_json(
     schema_version: int,
     *,
     strict_durability: bool = False,
+    exclusive: bool = False,
 ) -> None:
     """Write a dict JSON artifact enriched with ``schema_version``.
 
     Covers **write atomicity only** (single-writer semantics via
-    ``atomic_write``). Callers performing read-modify-write composites
-    (e.g. the clone registry) must layer their own ``fcntl.flock`` —
-    this helper does not serialize concurrent mutators.
+    ``atomic_write``). ``exclusive`` atomically claims a new path. Callers
+    performing read-modify-write composites (e.g. the clone registry) must
+    layer their own ``fcntl.flock`` — this helper does not serialize
+    concurrent mutators.
 
     Raises ``TypeError`` if ``payload`` is not a dict (wrap bare arrays
     as ``{"items": [...]}`` at the call site).
@@ -600,6 +602,7 @@ def write_versioned_json(
         path,
         _fast_dumps(enriched, indent=True),
         strict_durability=strict_durability,
+        exclusive=exclusive,
     )
 
 

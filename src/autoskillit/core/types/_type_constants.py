@@ -329,6 +329,10 @@ DATA_MANIFEST_SOURCE_TYPES: frozenset[str] = frozenset(
 
 RUN_PYTHON_PATH_LIKE_ARGS: frozenset[str] = frozenset(
     {
+        "anchor_authority_path",
+        "authority_path",
+        "review_output_dir",
+        "manifest_path",
         "output_dir",
         "workspace",
         "diagnostics_log_dir",

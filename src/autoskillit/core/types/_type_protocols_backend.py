@@ -25,7 +25,7 @@ from ._type_backend import (
 )
 from ._type_checkpoint import SessionCheckpoint
 from ._type_enums import ObserverStatus, OutputFormat, SkillExecutionRole
-from ._type_execution_identity import ExecutionIdentity
+from ._type_execution_identity import ChildTaskTranscript, ExecutionIdentity
 from ._type_exploration import ExplorationRouterPlan
 from ._type_launch_intent import FreshLaunch, InteractiveLaunch, ResumeSpec
 from ._type_native_shell_capture import (
@@ -190,6 +190,10 @@ class SessionLocator(Protocol):
         ...
 
     def session_log_path(self, cwd: str, session_id: str) -> Path | None: ...
+
+    def read_child_task(self, child_id: str) -> ChildTaskTranscript | None:
+        """Return the view of one delegated child's own transcript, or None when unresolvable."""
+        ...
 
 
 @runtime_checkable

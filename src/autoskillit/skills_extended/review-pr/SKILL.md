@@ -93,6 +93,11 @@ by the recipe pipeline after `open_pr_step` opens the PR.
   agents continue to consume the annotated artifact path.
 - Pass an experimental auditor only artifact paths or a narrative. Both registered calls
   must receive the actual annotated `[LNNN]` content and exact valid-line authority.
+- Transcribe, merge, summarize, repair, or re-type any auditor output. Auditor results reach
+  validation only through `collect_review_audit` and `finalize_review_audit`, which read each
+  child's own transcript.
+- Compute, assume, or hard-code the gate state, audit state, candidate or disposition
+  identity, or verdict. Use the values `plan_review_audit` and `finalize_review_audit` return.
 
 **ALWAYS:**
 - Find the PR by feature branch at invocation time (not from a pre-captured URL)
@@ -107,6 +112,9 @@ by the recipe pipeline after `open_pr_step` opens the PR.
   verdict, artifact handoff, or GitHub mutation
 - Deduplicate findings by (file, line) pairs before posting
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Start every auditor prompt with its slot's `marker_line`, label the child with its
+  `slot_token`, keep the child identifier the launch returns, and relaunch exactly the slots
+  `collect_review_audit` lists.
 - For each manual fixed-name publication, print a fresh timestamp plus UUID as
   `publish_id`, paste it into the literal same-directory path
   `{review_output_dir}{artifact_name}.tmp-{publish_id}`, write there, then
@@ -433,6 +441,7 @@ if [ -n "$PR_FILES" ] && [ -n "$MERGE_BASE" ]; then
 else
   DELETED_SYMBOLS=""
 fi
+printf 'MERGE_BASE=%s\n' "$MERGE_BASE"
 ```
 
 Store as `deletion_context`:
@@ -445,60 +454,31 @@ deletion_context = {
 }
 ```
 
-If `MERGE_BASE` is empty or any git command fails, set `deletion_context = null`.
-The parallel deletion regression audit is skipped when `deletion_context` is null.
-Resolve the dispatch decision with the installed production helper; it accepts no
-overengineering gate input, so the two authorities cannot become coupled:
+Paste the printed `MERGE_BASE` value (empty when unavailable) as
+`{DELETION_MERGE_BASE}`. `plan_review_audit` applies deletion eligibility independently of the
+overengineering gate; the deletion audit runs only when the plan returns a `deletion` slot.
 
-```python
-from autoskillit.smoke_utils import deletion_regression_is_eligible
+### Step 2.9: Deterministic Audit Plan
 
-DELETION_DISPATCH_REQUIRED = deletion_regression_is_eligible(deletion_context)
-```
+The plan applies the standard adaptive-selection tiers, experimental eligibility, and deletion
+eligibility as separate authorities. It reads the retained authority and artifacts, then returns
+the manifest and ordered slots that Step 3 launches.
 
-### Step 2.9: Diff-Size Adaptive Agent Selection
-
-Keep standard adaptive selection, experimental eligibility, and deletion
-eligibility as separate authorities:
-Paste `GATE_AUTHORITY["metrics_marker_snapshot_path"]` as the literal
-`{metrics_marker_snapshot_path}` in this call.
-
-```bash
-STANDARD_AGENT_ALLOWLIST="arch,tests,defense,bugs,cohesion,slop"
-STANDARD_DISPATCH_AGENTS=""
-
-if [ -f "{metrics_marker_snapshot_path}" ]; then
-    STANDARD_DISPATCH_AGENTS="$(
-      jq -r 'if (.dispatch_agents | type) == "array"
-             then .dispatch_agents | join(",") else "" end' \
-        < "{metrics_marker_snapshot_path}" 2>/dev/null || true
-    )"
-fi
-
-if [ -z "$STANDARD_DISPATCH_AGENTS" ]; then
-    STANDARD_DISPATCH_AGENTS="$STANDARD_AGENT_ALLOWLIST"
-fi
-```
-
-Resolve experimental dispatch from the installed ordered registry and keep its
-agent/dimension relationship structured:
-
-```python
-from autoskillit.smoke_utils import select_experimental_review_dispatch
-
-EXPERIMENTAL_DISPATCH = select_experimental_review_dispatch(
-    gate_state=GATE_STATE,
-    annotated_diff=ANNOTATED_DIFF,
-    valid_diff_lines=VALID_DIFF_LINES,
-    standard_agent_names=STANDARD_AGENT_ALLOWLIST.split(","),
+```text
+AUDIT_PLAN = plan_review_audit(
+    authority_path="{authority_path}",
+    review_output_dir="{review_output_dir}",
+    deletion_merge_base="{DELETION_MERGE_BASE}",
+    anchor_authority_path="{anchor_authority_path}",
+    repository="{repository}",
 )
-EXPERIMENTAL_DISPATCH_AGENTS = EXPERIMENTAL_DISPATCH["dispatch_agents"]
-EXPERIMENTAL_AUDIT_STATE = EXPERIMENTAL_DISPATCH["audit_state"]
 ```
 
-Do not rebuild the registry as a shell comma-string or print Python values back
-through a shell bridge. The helper checks that the standard allowlist intersection is
-empty and returns `degraded` with no proof-only dispatch if it is not.
+When `anchor_authority_path` is absent, pass `""`. The plan builds unavailable anchor
+authority from `repository` and the retained snapshot head, preserving body-only review mode.
+Require `AUDIT_PLAN.success`. Otherwise emit `verdict=needs_human` and
+`%%REVIEW_GATE::CLEAR%%`, then stop before launching a child. Bind
+`AUDIT_MANIFEST_PATH`, `AUDIT_SLOTS`, and `EXPERIMENTAL_AUDIT_STATE` from the plan result.
 
 `GATE_STATE=valid_false` dispatches neither proof-only auditor and leaves
 `EXPERIMENTAL_AUDIT_STATE=not_required`; by itself it does not block approval.
@@ -510,26 +490,29 @@ sidecars, or model reasoning.
 - **Small diff** (<200 added LoC and <5 changed files): `tests`, `cohesion`, and optionally `arch` if structural files changed (e.g., `__init__.py`, `pyproject.toml`).
 - **Medium/large diff** (>= 200 added LoC or >= 5 changed files): All 6 standard agents (`arch`, `tests`, `defense`, `bugs`, `cohesion`, `slop`).
 
-Experimental degradation never clears, cancels, replaces, or dynamically subtracts
-standard calls. `deletion_context` remains independently gated. Missing or malformed
-adaptive selection falls back to all six standard agents and never adds a proof-only
-auditor to that fallback.
+The plan keeps standard, deletion, and experimental slots separate. Experimental degradation
+never clears, cancels, replaces, or dynamically subtracts standard calls. Missing or malformed
+adaptive selection falls back to all six standard agents and never adds a proof-only auditor to
+that fallback.
 
 ### Step 3: Run Parallel Audit Subagents (SINGLE MESSAGE)
 
-Parse `STANDARD_DISPATCH_AGENTS` and iterate the structured
-`EXPERIMENTAL_DISPATCH_AGENTS` records independently.
-Add deletion work only when `DELETION_DISPATCH_REQUIRED` is true, independently of
-`GATE_STATE`, and only while constructing the existing single foreground parallel batch.
+Launch one child per `AUDIT_SLOTS` entry.
 
 **Issue ALL child delegations in a single message — one per dimension — so they execute
 in parallel. Do NOT iterate through dimensions across multiple turns.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Standard and deletion subagents use ephemeral `child delegation under the declared `sonnet` model-class policy` calls and receive
-only PR diff content. The two experimental agents use the exact registered calls below
-and run with cwd `{checkout_root}`.
+Iterate `AUDIT_SLOTS` in order and issue one child delegation per slot in the single parallel
+message. Initialize `AUDIT_HANDLES = {}` before the wave. A `kind == "standard"` slot uses the
+dimensions 1–6 template for its `dimension`;
+`kind == "deletion"` uses the dimension 7 template; `kind == "experimental"` uses the exact
+registered logical-role call for its `producer` below and runs with cwd `{checkout_root}`.
+Start every child prompt with that slot's `marker_line` verbatim, and use its `slot_token` as
+the delegation label. If a join declaration precedes the wave, use the same `slot_token` for its
+assignment label. Bind `AUDIT_HANDLES[slot_id]` to the identifier the delegation returns for
+that child. Standard and deletion children receive only PR diff content.
 
 ```json
 [
@@ -571,7 +554,7 @@ and run with cwd `{checkout_root}`.
    requires_decision: false for every finding. Cross-references the PR diff against
    `deletion_context` (deleted files and symbols computed in Step 2.5) to detect code
    that was intentionally removed from the base branch but re-added by this PR.
-   Only spawned when `deletion_context` is non-null.
+   Spawned only when the plan returns a `deletion` slot.
 
 8. **overengineering_reachability** — Packless, proof-only, repository-reading
    reachability audit. It is eligible only for `GATE_STATE=valid_true`.
@@ -593,23 +576,40 @@ For both registered calls, inline the actual `ANNOTATED_DIFF` string, the exact
 insufficient. Reads are restricted to the current checkout root; modifications and
 network access are forbidden.
 
-Await both outcomes and retain them in fixed configured agent order, never completion
-order. A parent cancellation cancels the whole foreground group. A proof-only auditor
-completes only after a successful terminal status and a top-level JSON array whose
-every item passes the closed schema. A valid `[]` is a successful empty result.
+After every launched child has reported completion, collect its own transcript:
+
+```text
+AUDIT_COLLECTION = collect_review_audit(
+    manifest_path="{AUDIT_MANIFEST_PATH}",
+    handles={AUDIT_HANDLES},
+)
+```
+
+If `AUDIT_COLLECTION.success` is false, emit `needs_human`, emit
+`%%REVIEW_GATE::CLEAR%%`, and stop. While `AUDIT_COLLECTION["relaunch"]` is non-empty,
+launch one replacement child per listed entry in a single message, using the same template,
+`marker_line`, and `slot_token` label. Replace those `AUDIT_HANDLES` entries and call
+`collect_review_audit` again. Each relaunch wave is a new delegation wave under the same
+backend execution contract. The server bounds attempts per slot; never skip a listed relaunch
+or relaunch an unlisted slot.
 
 Any tool failure, refusal, interruption, truncation, missing result, malformed JSON,
-non-array result, or schema-invalid item sets `EXPERIMENTAL_AUDIT_STATE=degraded`.
-Record the producer and deterministic reason in `AUDITOR_STATUS_BY_NAME`; do not add a
-replacement to standard fallback. One success plus one failure produces
-no partial experimental findings. Populate `EXPERIMENTAL_CANDIDATES` only after both complete
-and all items validate, preserving auditor order and original array index.
+non-array result, or schema-invalid item is detected by `collect_review_audit` from the child's
+own transcript. This includes output-limit stops and a missing final message, and leaves that
+slot unvalidated. A valid `[]` is a successful empty result. One success plus one failure produces
+no partial experimental findings. `EXPERIMENTAL_CANDIDATES` is
+`AUDIT_COLLECTION["experimental_candidates"]`, populated only when both experimental slots
+validated.
 
 Subagent prompt template (dimensions 1–6):
 
 > You are reviewing a GitHub PR diff for [{dimension}] issues only.
 > Scope: examine only the diff content provided. Do not fetch or read files outside the diff.
-> Return a JSON array of findings. Each finding must have:
+> End your final message with exactly one fenced code block whose opening line is
+> ```` ```json ```` and whose closing line is ```` ``` ````, containing the complete JSON
+> array of findings. If there are no findings, put an empty array [] in that block. Do not emit
+> any other json block in the final message.
+> Each finding must have:
 >   file, line, severity (critical/warning/info), dimension, message,
 >   requires_decision (boolean).
 >
@@ -628,7 +628,6 @@ Subagent prompt template (dimensions 1–6):
 > If the finding cannot be anchored to a specific `[LNNN]` marker, use the nearest
 > `+` or context line's marker in the same hunk.
 >
-> If no issues found, return an empty array [].
 > Read the annotated diff file at path: {annotated_diff_path}
 > Each line in the file is prefixed with [LNNN] markers indicating the GitHub diff line number.
 > Use the [LNNN] number as the `line` value in your findings JSON.
@@ -666,9 +665,9 @@ subagent prompt via template substitution. The annotated diff is available at `a
 — instruct subagents to Read it. If `annotated_diff_path` is unset or the file does not exist,
 state "No annotated diff is available for this run — evaluate the diff without [LNNN] anchors and
 approximate `line` from context" instead of emitting a reference to a nonexistent path. This
-mirrors the existing graceful-degradation fallback for `DISPATCH_AGENTS` documented in Step 2.9.
+follows the plan-owned graceful-degradation fallback documented in Step 2.9.
 
-Subagent prompt template (dimension 7 — deletion_regression, only when `deletion_context` is non-null):
+Subagent prompt template (dimension 7 — deletion_regression, only when the plan returns a `deletion` slot):
 
 > You are checking a GitHub PR diff for DELETION REGRESSIONS only.
 > A deletion regression is when a PR reintroduces code (a file, function, or class)
@@ -692,254 +691,131 @@ Subagent prompt template (dimension 7 — deletion_regression, only when `deleti
 >   - requires_decision: false
 >   - message: "Deletion regression: '{name}' was deliberately deleted from {pr_base}
 >     but this PR reintroduces it. Remove it."
-> - If no regressions found, return [].
+> - If no regressions are found, the findings array in the final block is empty.
 >
-> Return a JSON array of findings.
+> End your final message with exactly one fenced code block whose opening line is
+> ```` ```json ```` and whose closing line is ```` ``` ```, containing the complete JSON
+> array of findings. If there are no findings, put an empty array [] in that block. Do not emit
+> any other json block in the final message.
 
 ### Step 4: Aggregate and Deduplicate Findings
 
-Keep `STANDARD_AUDITOR_RAW_FINDINGS` separate from `EXPERIMENTAL_CANDIDATES`.
-Append standard and deletion responses only to `STANDARD_AUDITOR_RAW_FINDINGS`, then
-use it as `STANDARD_RAW_FINDINGS` for validation and aggregation.
+`collect_review_audit` reads each child's own transcript, enforces the output schema, and returns
+only validated findings. The experimental candidate keys are exactly `file`, `line`, `dimension`,
+`severity`, `message`, `requires_decision`, `evidence`, `trace`, `boundary_checks`,
+`confidence`, and `simpler_behavior`; reject missing or extra keys. The collector enforces:
 
-Before accepting any experimental item, validate both arrays completely. The exact
-candidate key set is `file`, `line`, `dimension`, `severity`, `message`,
-`requires_decision`, `evidence`, `trace`, `boundary_checks`, `confidence`, and
-`simpler_behavior`; reject missing or extra keys. Enforce:
+- `dimension` is exactly `overengineering_reachability` or
+  `overengineering_abstraction_surface`; `severity` is `critical`, `warning`, or `info`;
+  `requires_decision` is an exact boolean.
+- `file`, `message`, and `simpler_behavior` are non-empty strings after trimming. Primary,
+  evidence, and trace lines are positive integers excluding booleans, and the primary
+  `(file, line)` must occur in exact `VALID_DIFF_LINES`, never only a hunk range.
+- Evidence items have exactly `{path,line,role,claim}`, include at least two distinct
+  repository-relative `path:line` locations, and use only `anchor`, `caller`, `consumer`,
+  `registration`, `invariant`, or `counterevidence_checked`; every `path`, `role`, and `claim`
+  is a non-empty string after trimming.
+- Trace items have exactly `{path,line,relation}` and form a non-empty ordered chain; every
+  `path` and `relation` is a non-empty string after trimming.
+- Boundary checks contain exactly one `{boundary,status,claim}` row for each
+  `reflection_decorators`, `dependency_injection`, `plugin_registry`, `cli_entrypoint`,
+  `serialization`, `generated_code`, and `public_api`. Status is
+  `checked_absent`, `checked_no_reachable_path`, or `not_applicable`; every boundary `claim`
+  is a non-empty string after trimming.
+- Paths are relative, contain no `..`, and canonically remain under `{checkout_root}`.
+  `confidence` is exactly an integer or float, never boolean, finite, and in `[0,1]`.
+  `simpler_behavior` covers return values, exceptions, ordering, persistence, concurrency,
+  and compatibility.
 
-- dimension is exactly `overengineering_reachability` or
-  `overengineering_abstraction_surface`; severity is `critical`, `warning`, or
-  `info`; `requires_decision` is an exact boolean;
-- `file`, `message`, and `simpler_behavior` are non-empty strings after trimming;
-- primary, evidence, and trace lines are positive integers excluding booleans;
-- the primary `(file, line)` occurs in exact `VALID_DIFF_LINES`, never only a hunk
-  range;
-- evidence items have exactly `{path,line,role,claim}`, contain at least two
-  distinct repository-relative `path:line` locations, and use only `anchor`,
-  `caller`, `consumer`, `registration`, `invariant`, or
-  `counterevidence_checked`; every `path`, `role`, and `claim` is a non-empty
-  string after trimming;
-- trace items have exactly `{path,line,relation}` and form a non-empty ordered
-  chain; every `path` and `relation` is a non-empty string after trimming;
-- boundary checks contain exactly one `{boundary,status,claim}` row for each
-  `reflection_decorators`, `dependency_injection`, `plugin_registry`,
-  `cli_entrypoint`, `serialization`, `generated_code`, and `public_api`, with
-  status `checked_absent`, `checked_no_reachable_path`, or `not_applicable`;
-  every boundary `claim` is a non-empty string after trimming;
-- paths are relative, contain no `..`, and canonically remain under
-  `{checkout_root}`;
-- `type(confidence)` is exactly integer or float, never boolean, is finite, and
-  lies in `[0,1]`;
-- `simpler_behavior` is non-empty and covers return values, exceptions, ordering,
-  persistence, concurrency, and compatibility.
+The collector creates each
+`record_digest` and `candidate_id` from the transcript result. Any malformed output is retained
+only as a bounded envelope with producer, terminal status, byte length and digest, a bounded
+excerpt or iteration-scoped raw reference, parse/schema errors, and rejection reason.
 
-For each structurally valid item, generate `record_digest` from canonical JSON and
-generate `candidate_id` from the snapshot identity, auditor name, original array
-index, and digest. These are parent-owned fields. Any structural, containment,
-changed-line, or authority failure degrades the whole experimental run and prevents
-every sibling from entering normal aggregation.
+Before repository evidence reads, revalidate checkout head/base/merge-base, the mode-appropriate
+live refs, the byte-identical metrics marker, diff identity/profile, and all artifact digests. Quote
+and read each cited location under `{checkout_root}`. The parent must verify every role-labelled
+evidence claim, every one of the seven boundary claims, every hop in the complete ordered trace as
+a reachable chain, and the proposed simpler behavior's semantic equivalence for return values,
+exceptions, ordering, persistence, concurrency, and compatibility. Missing, contradictory, or
+unverified claims reject the candidate; the parent may not accept a sampled subset. Confidence
+never implies acceptance.
 
-Before repository evidence reads, revalidate checkout head/base/merge-base, the
-mode-appropriate live refs, the byte-identical metrics marker, diff identity/profile,
-and all artifact digests. Quote and read each cited location under
-`{checkout_root}`. Write a separate immutable disposition record with a
-parent-generated `disposition_id` referencing `candidate_id`. Confidence never
-implies acceptance. The parent must verify every role-labelled evidence claim,
-every one of the seven boundary claims, every hop in the complete ordered trace
-as a reachable chain, and the proposed simpler behavior's semantic equivalence
-for return values, exceptions, ordering, persistence, concurrency, and
-compatibility. Missing, contradictory, or unverified claims reject the candidate;
-the parent may not accept a sampled subset. The closed disposition/rejection
-reason codes are:
-`accepted`, `schema_invalid`, `path_escape`, `not_changed_line`,
-`stale_snapshot`, `insufficient_evidence`, `boundary_unchecked`,
-`reachable_counterexample`, `simpler_behavior_not_equivalent`,
-`suppressed_prior_thread`, `duplicate_candidate`, and `publication_failed`.
-Bound free-text explanation to 1 KiB UTF-8.
+After those evidence reads, record one disposition per `EXPERIMENTAL_CANDIDATES` item in
+`AUDIT_DISPOSITIONS`. Each entry contains exactly `candidate_id`, `reason_code`, and `explanation`;
+use a reason code from the closed list below and keep the explanation within 1 KiB UTF-8. The
+server mints disposition identities. The closed disposition/rejection reason codes are:
+`accepted`, `schema_invalid`, `path_escape`, `not_changed_line`, `stale_snapshot`,
+`insufficient_evidence`, `boundary_unchecked`, `reachable_counterexample`,
+`simpler_behavior_not_equivalent`, `suppressed_prior_thread`, `duplicate_candidate`, and
+`publication_failed`.
 
-Malformed output is stored only as a bounded envelope: producer, terminal status,
-received byte length and SHA-256, at most a 4 KiB excerpt or iteration-scoped raw
-reference, parse/schema errors, and rejection reason. Never copy unbounded model
-output into an ordinary summary.
+`finalize_review_audit` is the single normal-aggregation boundary. Feed only parent-accepted
+experimental findings into normal aggregation; standard and deletion findings enter without
+experimental dispositions. It normalizes sources in fixed order: standard dimensions, deletion
+regression, reachability, then abstraction-surface, preserving original array index. Suppress and
+deduplicate exactly once across that combined sequence; do not append a second standard/deletion
+list afterward.
 
-Use the installed helpers
-`autoskillit.smoke_utils.validate_experimental_auditor_outputs`,
-`build_malformed_review_envelope`, and
-`aggregate_combined_review_candidates` as the canonical executable semantics
-for fixed-order all-or-nothing validation, bounded malformed envelopes, and
-accepted-only suppression-before-dedup. The aggregation call is the single combined
-standard/deletion/experimental aggregation boundary: pass the retained snapshot
-identity, exact changed-line and hunk-range authority, all standard/deletion findings, parent
-dispositions, and prior resolved findings.
-Use `prepare_experimental_review_publication` as the canonical executable semantics
-for common generation identity, local-findings-last ordering, and stale effect
-suppression. Use `publish_experimental_review_artifacts` for same-directory temporary
-writes, marker-last atomic renames, cleanup, and rollback. Validation, aggregation,
-and preparation perform no repository reads or writes; publication writes only the
-already-prepared documents. Parent evidence adjudication and every snapshot
-revalidation remain mandatory here.
+The suppression pass runs before deduplication and removes findings matching
+`prior_resolved_findings` by the same file and a line within ±5. Log
+`"Suppressing finding at {file}:{line} — matches prior resolved thread"`. For experimental
+candidates, create a linked immutable aggregation record with reason `suppressed_prior_thread`;
+do not mutate the candidate or disposition. Deduplicate diff-anchored findings by `(file, line)`
+using severity, `requires_decision=false`, source rank, and original array index, then record
+every `dedup_group_id`, member, winner, and rationale; retain every member in the linked records.
+Duplicate losers receive
+`duplicate_candidate` records. Only exact anchors admitted by
+`anchor_authority_path` may become inline comments. Unpostable findings retain their admission
+reasons and appear in the review body's "Outside Diff Range" section. Unavailable or empty
+authority admits no inline findings; missing authority permits body-only publication, never a
+file-level or individual-comment fallback. Findings are bucketed as actionable, decision, or info
+findings, and all findings, including unpostable ones, contribute to the verdict.
 
-Invoke validation and aggregation directly and thread their returned records into
-the named review state; do not reimplement their behavior in prose:
-
-```python
-import json
-
-from pathlib import Path
-from autoskillit.core import DiffAnchorAuthority
-from autoskillit.smoke_utils import (
-    aggregate_combined_review_candidates,
-    render_review_finding_body,
-    validate_experimental_auditor_outputs,
-)
-ANCHOR_AUTHORITY = (
-    DiffAnchorAuthority.from_wire(json.loads(Path(anchor_authority_path).read_text()))
-    if anchor_authority_path
-    else DiffAnchorAuthority.unavailable(
-        repository=repository, pr_number=int(pr_number), head_sha=pr_head_sha
-    )
-)
-
-STANDARD_VALIDATION_ERRORS = []
-try:
-    STANDARD_FINDINGS_DECODED = json.loads(STANDARD_AUDITOR_RAW_FINDINGS)
-except json.JSONDecodeError:
-    STANDARD_FINDINGS = []
-    STANDARD_VALIDATION_ERRORS.append("standard findings are not valid JSON")
-else:
-    if isinstance(STANDARD_FINDINGS_DECODED, list):
-        STANDARD_FINDINGS = STANDARD_FINDINGS_DECODED
-    else:
-        STANDARD_FINDINGS = []
-        STANDARD_VALIDATION_ERRORS.append("standard findings must be a JSON array")
-STANDARD_RAW_FINDINGS = json.dumps(STANDARD_FINDINGS)
-if GATE_STATE == "valid_true":
-    VALIDATION_RESULT = validate_experimental_auditor_outputs(
-        outputs=EXPERIMENTAL_OUTCOMES_BY_NAME,
-        anchor_authority=ANCHOR_AUTHORITY,
-        snapshot=GATE_AUTHORITY["snapshot"],
-        review_root="{checkout_root}",
-    )
-elif GATE_STATE == "valid_false":
-    VALIDATION_RESULT = {
-        "state": "not_required",
-        "candidates": [],
-        "status_by_name": {},
-        "malformed_envelopes": [],
-    }
-else:
-    VALIDATION_RESULT = {
-        "state": "degraded",
-        "candidates": [],
-        "status_by_name": {},
-        "malformed_envelopes": [],
-    }
-EXPERIMENTAL_AUDIT_STATE = VALIDATION_RESULT["state"]
-EXPERIMENTAL_CANDIDATES = VALIDATION_RESULT["candidates"]
-AUDITOR_STATUS_BY_NAME.update(VALIDATION_RESULT["status_by_name"])
-MALFORMED_ENVELOPES = VALIDATION_RESULT["malformed_envelopes"]
-
-# Construct DISPOSITION_RECORDS only after the mandatory parent evidence reads.
-if STANDARD_VALIDATION_ERRORS:
-    AGGREGATION_RESULT = {
-        "state": "degraded",
-        "survivors": [],
-        "unpostable": [],
-        "review_level_findings": [],
-        "aggregation_records": [],
-        "validation_errors": STANDARD_VALIDATION_ERRORS,
-    }
-else:
-    AGGREGATION_RESULT = aggregate_combined_review_candidates(
-        candidates=EXPERIMENTAL_CANDIDATES,
-        dispositions=DISPOSITION_RECORDS,
-        prior_resolved_findings=prior_resolved_findings,
-        standard_findings=STANDARD_FINDINGS,
-        anchor_authority=ANCHOR_AUTHORITY,
-        snapshot=GATE_AUTHORITY["snapshot"],
-        review_root="{checkout_root}",
-    )
-if AGGREGATION_RESULT["state"] == "degraded":
-    EXPERIMENTAL_AUDIT_STATE = "degraded"
-FINAL_REVIEW_FINDINGS = [
-    {**finding, "rendered_body": render_review_finding_body(finding)}
-    for finding in AGGREGATION_RESULT["survivors"]
-]
-FILTERED_FINDINGS = FINAL_REVIEW_FINDINGS
-UNPOSTABLE_FINDINGS = AGGREGATION_RESULT["unpostable"]
-REVIEW_LEVEL_FINDINGS = AGGREGATION_RESULT["review_level_findings"]
-REVIEW_LEVEL_CANDIDATE_IDS = {finding["candidate_id"] for finding in REVIEW_LEVEL_FINDINGS}
-INLINE_FINDINGS = [
-    finding
-    for finding in FILTERED_FINDINGS
-    if finding["candidate_id"] not in REVIEW_LEVEL_CANDIDATE_IDS
-]
-all_findings = FILTERED_FINDINGS + UNPOSTABLE_FINDINGS
-AGGREGATION_RECORDS = AGGREGATION_RESULT["aggregation_records"]
-```
-
-Feed only parent-accepted experimental findings into normal aggregation. The helper
-is that single normal-aggregation boundary; standard and deletion findings enter
-without experimental dispositions. It normalizes every source in fixed order: the
-standard dimension allowlist, deletion regression, reachability, then
-abstraction-surface, preserving original array index. Suppress and deduplicate
-exactly once across that combined sequence; do not append a second
-standard/deletion list afterward.
-
-1. Suppression pass — before deduplication, remove a finding matching
-   `prior_resolved_findings` by the same file and a line within ±5. Log
-   `"Suppressing finding at {file}:{line} — matches prior resolved thread"`.
-   For experimental candidates create a linked immutable aggregation record with
-   reason `suppressed_prior_thread`; do not mutate the candidate or disposition.
-2. Deduplicate diff-anchored findings by `(file, line)` after suppression. Rank
-   collisions by severity, then prefer `requires_decision=false`, then fixed source
-   rank and original array index. Create a deterministic `dedup_group_id`; retain every member
-   `candidate_id`, the winner, and rationale. Losers receive linked
-   `duplicate_candidate` aggregation records.
-3. Use the programmatic aggregation partition and preserve authority availability:
-   - `FILTERED_FINDINGS` are `AGGREGATION_RESULT["survivors"]`; only exact anchors
-     admitted by the supplied `anchor_authority_path` may become inline comments.
-   - `UNPOSTABLE_FINDINGS` are `AGGREGATION_RESULT["unpostable"]`. Include all of them
-     in the review body's "Outside Diff Range" section with their admission reasons.
-   - Authority has three states: unavailable, available with no valid lines, and
-     available with valid lines. Unavailable or empty authority admits no inline
-     findings. Never substitute hunk intervals or infer availability from truthiness.
-   - Missing authority permits body-only publication; it never authorizes a file-level
-     or individual-comment fallback. Existing stale-snapshot guards still stop effects.
-4. Apply verdict logic (Step 5) to ALL findings (`FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS`
-   combined), so unpostable findings still contribute to the `changes_requested` verdict.
-5. Bucket by actionability (applied to combined findings):
-   - `actionable_findings` — requires_decision=false AND severity in ("critical", "warning")
-   - `decision_findings` — requires_decision=true (any severity)
-   - `info_findings` — severity == "info" AND requires_decision=false
-
-Preserve accepted experimental evidence, trace, boundary checks, confidence,
-simpler behavior, `candidate_id`, `disposition_id`, and snapshot on the dedup winner,
-diff context, local handoff, GitHub rendering, and summary. Represent validation,
-disposition, aggregation, verdict use, and publication as separate immutable linked
-records.
-
-Immediately before verdict computation and again before any artifact handoff or GitHub
-effect, run the gate with the literal authority path:
+Immediately before finalization, revalidate the gate with the literal authority path:
 
 ```bash
 bash "{{AUTOSKILLIT_SCRIPTS}}/review_pr_gate.sh" revalidate "{authority_path}"
 ```
 
-Bind `FINAL_SNAPSHOT_STATE` from the one printed word using Step 2.7's failure rule.
-If an initially valid retained snapshot
-is now unavailable or differs, discard survivor sets from effect-producing consumers,
-permit only diagnostic raw/summary envelopes with empty survivors, and emit
-`stale_snapshot`. In that movement branch the revalidation result sets
-`FINAL_SNAPSHOT_STATE=stale` before any consumer is selected. Initial gate
-degradation remains `authority_degraded` and emits
-`needs_human`. Do not publish diff context, local findings, receipts, comments,
-reviews, or approvals from either state. On freshness, set
+Bind `FINAL_SNAPSHOT_STATE` from the one printed word using Step 2.7's failure rule, then call:
+
+```text
+AUDIT_FINALIZATION = finalize_review_audit(
+    manifest_path="{AUDIT_MANIFEST_PATH}",
+    handles={AUDIT_HANDLES},
+    dispositions={AUDIT_DISPOSITIONS},
+    prior_resolved_findings={prior_resolved_findings},
+    final_snapshot_state="{FINAL_SNAPSHOT_STATE}",
+)
+```
+
+If `AUDIT_FINALIZATION.success` is false, set `verdict=needs_human`, publish nothing effect-bearing,
+and emit `%%REVIEW_GATE::CLEAR%%`. Otherwise bind
+`FINAL_REVIEW_FINDINGS = FILTERED_FINDINGS = survivors` (already carrying `rendered_body`),
+`UNPOSTABLE_FINDINGS = unpostable`, and `REVIEW_LEVEL_FINDINGS = review_level_findings` from
+`AUDIT_FINALIZATION`. Set `INLINE_FINDINGS` to survivors whose `candidate_id` is not review-level,
+then set `all_findings = FILTERED_FINDINGS + UNPOSTABLE_FINDINGS`.
+Bind `AGGREGATION_RECORDS = aggregation_records`, `AUDITOR_RECORDS = auditor_records`, and
+`verdict = AUDIT_FINALIZATION["verdict"]`. Record `FINALIZED_SNAPSHOT_STATE` as the state passed to
+this finalization; Steps 5 and 8 re-finalize if a later check changes it.
+
+Preserve accepted experimental evidence, trace, boundary checks, confidence, simpler behavior,
+`candidate_id`, server-issued `disposition_id`, and snapshot on the dedup winner, diff context,
+local handoff, GitHub rendering, and summary. Keep validation, disposition, aggregation, verdict
+use, and publication as separate immutable linked records.
+
+If an initially valid retained snapshot is now unavailable or differs, finalization discards
+survivor sets from effect-producing consumers, permits only diagnostic raw/summary envelopes with
+empty survivors, and emits `stale_snapshot`. In that movement branch revalidation sets
+`FINAL_SNAPSHOT_STATE=stale` before any consumer is selected. Initial gate degradation remains
+`authority_degraded` and emits `needs_human`. Do not publish diff context, local findings, receipts,
+comments, reviews, or approvals from either state. On freshness, set
 `COMMIT_ID="$METRICS_HEAD_SHA"` once and never query a later head to replace it.
 
 ### Step 4.5: Echo Primary Obligation
 
-After aggregating all subagent findings, before proceeding to verdict or posting, you MUST state aloud:
+After aggregating all subagent findings, before proceeding to publication or posting, you MUST state aloud:
 
 > "I have N findings. My primary job is to post inline comments on specific code lines for each finding. I must use the GitHub Reviews API to leave comments anchored to the exact lines in the diff."
 
@@ -969,19 +845,14 @@ bash "{{AUTOSKILLIT_SCRIPTS}}/review_pr_gate.sh" revalidate "{authority_path}"
 
 Bind `FINAL_SNAPSHOT_STATE` from the result using Step 2.7's failure rule.
 
-```python
-from autoskillit.smoke_utils import determine_experimental_review_verdict
-
-RETAINED_SNAPSHOT_WAS_VALID = GATE_STATE in {"valid_true", "valid_false"}
-SNAPSHOT_IS_FRESH = FINAL_SNAPSHOT_STATE == "fresh"
-verdict = determine_experimental_review_verdict(
-    retained_snapshot_was_valid=RETAINED_SNAPSHOT_WAS_VALID,
-    final_snapshot_is_fresh=SNAPSHOT_IS_FRESH,
-    gate_state=GATE_STATE,
-    experimental_audit_state=EXPERIMENTAL_AUDIT_STATE,
-    findings=all_findings,
-)
-```
+`verdict` is `AUDIT_FINALIZATION["verdict"]`, computed by `finalize_review_audit` from the
+retained gate state, collector-derived audit state, and `FINAL_SNAPSHOT_STATE`. It includes
+`stale_snapshot` for a moved snapshot and `needs_human` for `authority_degraded`. Never
+recompute, override, or assign a verdict literal. If this revalidation produces a
+`FINAL_SNAPSHOT_STATE` different from the one last passed to `finalize_review_audit`, call
+`finalize_review_audit` again with the same manifest, handles, dispositions, and prior resolved
+findings from Step 4, pass the new snapshot state, and rebind the finalization result and its
+derived findings, records, and verdict. Update `FINALIZED_SNAPSHOT_STATE` to the state passed.
 
 Before Step 6, finish `RAW_LEDGER` and `HANDOFF_METADATA` in memory. The metadata
 contains the existing `summary`, `verdict`, `pr_number`, `iteration`,
@@ -1183,10 +1054,11 @@ The raw ledger contains immutable linked arrays named `candidate_records`,
 `verdict_use_records`, and `publication_records`. Every candidate has
 `candidate_id` and `record_digest`; later records reference that ID rather than
 mutating the candidate. Dedup records include `dedup_group_id`, all member IDs,
-winner ID, and rationale. Include `GATE_AUTHORITY`, the fixed-order
-`AUDITOR_STATUS_BY_NAME` terminal-status authority, review mode, snapshot,
-generations, accepted/rejected counts, and bounded
-malformed envelopes.
+winner ID, and rationale. The finalize-issued `AUDITOR_RECORDS` terminal-status
+authority supplies child status. `RAW_LEDGER` starts from
+`AUDIT_FINALIZATION["ledger_records"]` plus `pr_number`, `GATE_AUTHORITY`,
+`verdict_use_records`, and `publication_records`. Include review mode, snapshot,
+generations, accepted/rejected counts, and bounded malformed envelopes.
 
 Save findings summary to `{review_output_dir}summary_{pr_number}_{timestamp}.md`. (relative to the current working directory)
 
@@ -1203,6 +1075,24 @@ Bind `FINAL_SNAPSHOT_STATE` using Step 2.7's failure rule, then assign
 `FINAL_SNAPSHOT_STATE == "fresh"` to the Python boolean `SNAPSHOT_IS_FRESH`.
 Parse `RECEIPT_DOCUMENT` only when it is non-empty:
 
+```text
+if FINAL_SNAPSHOT_STATE != FINALIZED_SNAPSHOT_STATE:
+    AUDIT_FINALIZATION = finalize_review_audit(
+        manifest_path="{AUDIT_MANIFEST_PATH}",
+        handles={AUDIT_HANDLES},
+        dispositions={AUDIT_DISPOSITIONS},
+        prior_resolved_findings={prior_resolved_findings},
+        final_snapshot_state="{FINAL_SNAPSHOT_STATE}",
+    )
+    FINAL_REVIEW_FINDINGS = FILTERED_FINDINGS = AUDIT_FINALIZATION["survivors"]
+    UNPOSTABLE_FINDINGS = AUDIT_FINALIZATION["unpostable"]
+    REVIEW_LEVEL_FINDINGS = AUDIT_FINALIZATION["review_level_findings"]
+    AGGREGATION_RECORDS = AUDIT_FINALIZATION["aggregation_records"]
+    AUDITOR_RECORDS = AUDIT_FINALIZATION["auditor_records"]
+    verdict = AUDIT_FINALIZATION["verdict"]
+    FINALIZED_SNAPSHOT_STATE = FINAL_SNAPSHOT_STATE
+```
+
 ```python
 import json
 
@@ -1214,12 +1104,12 @@ from autoskillit.smoke_utils import (
 SNAPSHOT_IS_FRESH = FINAL_SNAPSHOT_STATE == "fresh"
 if not SNAPSHOT_IS_FRESH:
     if FINAL_SNAPSHOT_STATE == "stale":
-        verdict = "stale_snapshot"
+        verdict = AUDIT_FINALIZATION["verdict"]
         FINAL_REVIEW_FINDINGS = []
         HANDOFF_METADATA = {**HANDOFF_METADATA, "verdict": verdict}
         RAW_LEDGER = {**RAW_LEDGER, "verdict": verdict}
     elif FINAL_SNAPSHOT_STATE == "authority_degraded":
-        verdict = "needs_human"
+        verdict = AUDIT_FINALIZATION["verdict"]
         FINAL_REVIEW_FINDINGS = []
         HANDOFF_METADATA = {**HANDOFF_METADATA, "verdict": verdict}
         RAW_LEDGER = {**RAW_LEDGER, "verdict": verdict}

@@ -199,6 +199,9 @@ HEADLESS_TOOLS: frozenset[str] = frozenset(
         "write_audit_semantic_result",
         "write_standalone_audit_evidence",
         "write_audit_disposition_bundle",
+        "plan_review_audit",
+        "collect_review_audit",
+        "finalize_review_audit",
     }
 )
 
@@ -576,6 +579,9 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "write_audit_semantic_result": frozenset({"kitchen-core"}),
     "write_standalone_audit_evidence": frozenset({"kitchen-core"}),
     "write_audit_disposition_bundle": frozenset({"kitchen-core"}),
+    "plan_review_audit": frozenset({"kitchen-core"}),
+    "collect_review_audit": frozenset({"kitchen-core"}),
+    "finalize_review_audit": frozenset({"kitchen-core"}),
     "delegate_evidence_reader": frozenset({"kitchen-core"}),
     "read_authorized_artifact": frozenset({"evidence-reader"}),
     "get_authorized_artifact_page": frozenset({"evidence-reader"}),

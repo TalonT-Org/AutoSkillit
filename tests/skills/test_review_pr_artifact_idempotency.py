@@ -103,24 +103,15 @@ def test_runtime_threads_validation_aggregation_and_publication_results() -> Non
     step4 = text[text.index("### Step 4") : text.index("### Step 4.5")]
     step8 = text[text.index("### Step 8") :]
 
-    assert "VALIDATION_RESULT = validate_experimental_auditor_outputs(" in step4
-    assert 'EXPERIMENTAL_CANDIDATES = VALIDATION_RESULT["candidates"]' in step4
-    assert "AGGREGATION_RESULT = aggregate_combined_review_candidates(" in step4
-    assert 'for finding in AGGREGATION_RESULT["survivors"]' in step4
-    assert "FINAL_REVIEW_FINDINGS" in step4
-    assert "standard_findings=STANDARD_FINDINGS" in step4
-    assert "anchor_authority=ANCHOR_AUTHORITY" in step4
-    assert 'snapshot=GATE_AUTHORITY["snapshot"]' in step4
-    assert 'review_root="{checkout_root}"' in step4
-    assert 'if GATE_STATE == "valid_true":' in step4
-    assert 'elif GATE_STATE == "valid_false":' in step4
-    assert '"state": "not_required"' in step4
+    assert "AUDIT_FINALIZATION = finalize_review_audit(" in step4
+    assert "FINAL_REVIEW_FINDINGS = FILTERED_FINDINGS = survivors" in step4
     assert "PUBLICATION = prepare_experimental_review_publication(" in step8
     assert "survivors=FINAL_REVIEW_FINDINGS" in step8
     assert "receipt=" in step8
     assert "PUBLICATION_RESULT = publish_experimental_review_artifacts(" in step8
     assert "if not SNAPSHOT_IS_FRESH:" in step8
-    assert 'verdict = "stale_snapshot"' in step8
+    assert 'verdict = AUDIT_FINALIZATION["verdict"]' in step8
+    assert "finalize_review_audit(" in step8
     assert "FINAL_REVIEW_FINDINGS = []" in step8
     assert 'raise RuntimeError("publication generation changed after external effects")' in step8
 

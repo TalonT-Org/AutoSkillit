@@ -244,12 +244,15 @@ def test_review_pr_overengineering_gate_is_independent_of_deletion_eligibility(
     step_25_start = review_pr_text.index("### Step 2.5:")
     step_3_start = review_pr_text.index("### Step 3:")
     deletion_section = review_pr_text[step_25_start:step_3_start]
-    assert "deletion_regression_is_eligible(deletion_context)" in deletion_section
-    call_index = deletion_section.index("deletion_regression_is_eligible(deletion_context)")
-    helper_call = deletion_section[call_index - 100 : call_index + 100]
-    assert "GATE_STATE" not in helper_call
+    assert "DELETION_MERGE_BASE" in deletion_section
+    assert "plan_review_audit" in deletion_section
+    plan_start = review_pr_text.index("plan_review_audit(")
+    plan_end = review_pr_text.index(")", plan_start)
+    plan_call = review_pr_text[plan_start:plan_end]
+    assert "deletion_merge_base=" in plan_call
+    assert "GATE_STATE" not in plan_call
 
     step_4_start = review_pr_text.index("### Step 4:", step_3_start)
     step_3 = review_pr_text[step_3_start:step_4_start]
-    assert "DELETION_DISPATCH_REQUIRED" in step_3
-    assert "Only spawned when `deletion_context` is non-null." in step_3
+    assert 'kind == "deletion"' in step_3
+    assert "deletion_regression" in step_3

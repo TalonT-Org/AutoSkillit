@@ -37,7 +37,10 @@ proof, or informational finding.
 
 ## Output contract
 
-Return one top-level JSON array. Return `[]` when there is no proved finding.
+End your final message with exactly one fenced code block whose opening line is ```` ```json ````
+and whose closing line is ```` ``` ````, containing the complete JSON array of findings — use an
+empty array `[]` inside that block when there are no findings. Do not emit any other `json`
+block in the final message.
 Every finding must use exactly these keys:
 
 `file`, `line`, `dimension`, `severity`, `message`, `requires_decision`,

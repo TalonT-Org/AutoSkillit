@@ -411,6 +411,7 @@ _SERVER_TOOL_MODULES = [
     "autoskillit.server.tools.tools_workspace",
     "autoskillit.server.tools.tools_agents",
     "autoskillit.server.tools.tools_audit_artifacts",
+    "autoskillit.server.tools.tools_review_audit",
     "autoskillit.server.tools.tools_plan_set",
     "autoskillit.server.tools.tools_config",
     "autoskillit.server.tools.tools_kitchen",

@@ -7,6 +7,7 @@ without introducing the ``_type_backend`` <-> ``_type_results`` cycle.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -19,11 +20,36 @@ __all__ = [
     "ChildExecutionIdentity",
     "ChildExecutionIdentityDict",
     "ChildOutcomeDict",
+    "ChildTaskTranscript",
+    "CHILD_TASK_ID_RE",
     "ExecutionIdentity",
     "ExecutionIdentityDict",
     "default_provider_for",
+    "is_valid_child_task_id",
     "resolve_provider_used",
 ]
+
+
+CHILD_TASK_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$")
+
+
+def is_valid_child_task_id(value: object) -> bool:
+    """Return whether value is a glob-safe backend child identifier."""
+    return isinstance(value, str) and CHILD_TASK_ID_RE.fullmatch(value) is not None
+
+
+@dataclass(frozen=True, slots=True)
+class ChildTaskTranscript:
+    """Backend-neutral view of one delegated child's own transcript (#5200)."""
+
+    child_id: str
+    transcript_locator: str
+    assignment_prompt: str  # plaintext parent task; empty when the backend stores it encrypted
+    assignment_label: str  # backend-preserved name or description, or empty when absent
+    terminal: bool  # the final turn ended naturally
+    final_text: str | None  # text of the final assistant message, or None when absent
+    final_stop_reason: str  # backend stop reason of the final message, or empty when unknown
+    output_limit_stops: int  # assistant message groups stopped by the output-token limit
 
 
 def resolve_provider_used(backend: str, anthropic_provider_capable: bool) -> str:

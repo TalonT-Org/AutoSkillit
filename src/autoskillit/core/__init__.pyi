@@ -520,6 +520,7 @@ from .types import CANONICAL_LAUNCH_DIGEST_FIELDS as CANONICAL_LAUNCH_DIGEST_FIE
 from .types import CAPTURE_VALID_VALUE_TYPES as CAPTURE_VALID_VALUE_TYPES
 from .types import CATEGORY_TAGS as CATEGORY_TAGS
 from .types import CHILD_OUTCOME_LOG_DIR_ENV_VAR as CHILD_OUTCOME_LOG_DIR_ENV_VAR
+from .types import CHILD_TASK_ID_RE as CHILD_TASK_ID_RE
 from .types import CLAUDE_ANNOTATION_SUPPORT_MIN_VERSION as CLAUDE_ANNOTATION_SUPPORT_MIN_VERSION
 from .types import CLAUDE_CODE_CAPABILITIES as CLAUDE_CODE_CAPABILITIES
 from .types import (
@@ -951,6 +952,7 @@ from .types import ChildModelPolicySpec as ChildModelPolicySpec
 from .types import ChildOutcomeDict as ChildOutcomeDict
 from .types import ChildSpawnCardinalityError as ChildSpawnCardinalityError
 from .types import ChildSpawnSpec as ChildSpawnSpec
+from .types import ChildTaskTranscript as ChildTaskTranscript
 from .types import CIRunScope as CIRunScope
 from .types import CIWatcher as CIWatcher
 from .types import ClaudeContentBlockType as ClaudeContentBlockType
@@ -1477,6 +1479,7 @@ from .types import is_path_like_token as is_path_like_token
 from .types import (
     is_recipe_path_validation_report as is_recipe_path_validation_report,
 )
+from .types import is_valid_child_task_id as is_valid_child_task_id
 from .types import is_valid_codex_model_id as is_valid_codex_model_id
 from .types import is_valid_github_review_head_sha as is_valid_github_review_head_sha
 from .types import (

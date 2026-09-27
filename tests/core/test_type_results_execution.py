@@ -104,13 +104,16 @@ class TestExecutionTypesNotInResults:
         from typing import get_type_hints
 
         from autoskillit.core import (
+            CHILD_TASK_ID_RE,
             BackendAuthorityKind,
             BackendPinResolution,
             ChildExecutionIdentity,
             ChildExecutionIdentityDict,
             ChildOutcomeDict,
+            ChildTaskTranscript,
             ExecutionIdentity,
             ExecutionIdentityDict,
+            is_valid_child_task_id,
             resolve_provider_used,
         )
         from autoskillit.core.types._type_execution_identity import __all__ as identity_all
@@ -121,15 +124,21 @@ class TestExecutionTypesNotInResults:
         assert get_type_hints(BackendPinResolution)["kind"] == BackendAuthorityKind | None
         assert BackendAuthorityKind.__module__.endswith("._type_execution_identity")
         assert ChildOutcomeDict.__module__.endswith("._type_execution_identity")
+        assert ChildTaskTranscript.__module__.endswith("._type_execution_identity")
+        assert CHILD_TASK_ID_RE.fullmatch("child-1") is not None
+        assert is_valid_child_task_id("child-1") is True
         assert set(identity_all) == {
             "BackendAuthorityKind",
             "BackendPinResolution",
+            "CHILD_TASK_ID_RE",
             "ChildExecutionIdentity",
             "ChildExecutionIdentityDict",
             "ChildOutcomeDict",
+            "ChildTaskTranscript",
             "ExecutionIdentity",
             "ExecutionIdentityDict",
             "default_provider_for",
+            "is_valid_child_task_id",
             "resolve_provider_used",
         }
         assert resolve_provider_used("codex", False) == "codex"

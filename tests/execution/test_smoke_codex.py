@@ -288,6 +288,9 @@ class TestCodexSmokeRecipeComposition:
             def session_log_path(self, cwd: str, session_id: str) -> Path:
                 return self._path
 
+            def read_child_task(self, child_id: str) -> None:
+                return None
+
             def list_sessions(self, cwd: str) -> tuple:
                 return ()
 
@@ -326,6 +329,9 @@ class TestCodexSmokeRecipeComposition:
 
             def session_log_path(self, cwd: str, session_id: str) -> Path:
                 return self._path
+
+            def read_child_task(self, child_id: str) -> None:
+                return None
 
             def list_sessions(self, cwd: str) -> tuple:
                 return ()

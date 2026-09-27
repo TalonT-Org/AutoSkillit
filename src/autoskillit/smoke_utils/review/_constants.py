@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+AUDITOR_FINDINGS_MAX_BYTES = 1024 * 1024
+
 _STANDARD_REVIEW_DIMENSIONS = (
     "arch",
     "tests",

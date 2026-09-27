@@ -8,7 +8,11 @@ maxTurns: 80
 
 You are reviewing a GitHub PR diff for [{dimension}] issues only.
 Scope: examine only the diff content provided. Do not fetch or read files outside the diff.
-Return a JSON array of findings. Each finding must have:
+End your final message with exactly one fenced code block whose opening line is ```` ```json ````
+and whose closing line is ```` ``` ````, containing the complete JSON array of findings — use an
+empty array `[]` inside that block when there are no findings. Do not emit any other `json`
+block in the final message.
+Each finding must have:
   file, line, severity (critical/warning/info), dimension, message,
   requires_decision (boolean).
 
@@ -27,8 +31,6 @@ Do not compute line numbers yourself — use the marker.
 If the finding cannot be anchored to a specific `[LNNN]` marker, use the nearest
 `+` or context line's marker in the same hunk.
 
-If no issues found, return an empty array [].
-
 ### Verdict
 
 ```json
@@ -43,5 +45,3 @@ If no issues found, return an empty array [].
   }
 ]
 ```
-
-Return `[]` (empty array) when no issues are found in the diff.

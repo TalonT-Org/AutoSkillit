@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
 from pathlib import Path
 
 import pytest
 
+from autoskillit.smoke_utils import plan_review_audit_slots
 from autoskillit.workspace.skills._format import read_skill_frontmatter
 from tests.skills._review_pr_gate_helpers import (
     GATE_SCRIPT,
@@ -40,13 +40,6 @@ def _section(start_heading: str, end_heading: str) -> str:
     return text[start:end]
 
 
-def _bash_block(start_heading: str, end_heading: str) -> str:
-    section = _section(start_heading, end_heading)
-    start = section.index("```bash") + len("```bash")
-    end = section.index("```", start)
-    return section[start:end]
-
-
 def _gate_bash_block() -> str:
     section = _section("### Step 2.7", "### Step 2.5")
     return next(
@@ -56,13 +49,26 @@ def _gate_bash_block() -> str:
     )
 
 
-def _adaptive_dispatch_script(metrics_marker: Path) -> str:
-    script = _bash_block("### Step 2.9", "### Step 3")
-    assert "{metrics_marker_snapshot_path}" in script
-    return (
-        script.replace("{metrics_marker_snapshot_path}", str(metrics_marker))
-        + "\nprintf 'STANDARD_RESULT=%s\\n' \"$STANDARD_DISPATCH_AGENTS\"\n"
+def _plan_slots(
+    metrics_marker: object,
+    *,
+    gate_state: str,
+    deletion_merge_base: str = "",
+) -> dict[str, object]:
+    return plan_review_audit_slots(
+        gate_state=gate_state,
+        metrics_marker=metrics_marker,
+        annotated_diff="",
+        valid_diff_lines={},
+        deletion_merge_base=deletion_merge_base,
+        audit_run_id="a" * 16,
     )
+
+
+def _slots(planned: dict[str, object]) -> list[dict[str, object]]:
+    slots = planned["slots"]
+    assert isinstance(slots, list)
+    return slots
 
 
 def test_skill_accepts_diff_metrics_path_argument():
@@ -94,17 +100,10 @@ def test_full_fanout_for_medium_and_large():
 
 def test_step3_requires_single_message_dispatch():
     """Step 3 must contain explicit single-message parallel dispatch instruction."""
-    import re
-
-    text = _skill_text()
-    step_blocks = re.split(r"(?m)^#{1,3}\s+Step\s+\d+", text)
-    step3_blocks = [
-        b
-        for b in step_blocks
-        if "DISPATCH_AGENTS" in b and ("spawn" in b.lower() or "task tool" in b.lower())
-    ]
-    assert step3_blocks, "Could not locate Step 3 (dispatch step) in review-pr SKILL.md"
-    assert any("single message" in b.lower() for b in step3_blocks), (
+    step3 = _section("### Step 3", "### Step 4")
+    assert "AUDIT_SLOTS" in step3
+    assert "spawn" in step3.lower() or "task tool" in step3.lower()
+    assert "single message" in step3.lower(), (
         "review-pr/SKILL.md Step 3 must contain 'single message' dispatch "
         "instruction to prevent sequential subagent dispatch"
     )
@@ -163,58 +162,46 @@ def test_standard_dispatch_reads_retained_marker_and_preserves_adaptive_selectio
     tmp_path: Path, gate: bool
 ) -> None:
     case = make_gate_case(tmp_path, gate=gate)
+    case["metrics"]["dispatch_agents"] = ["cohesion", "tests"]
+    write_metrics(case)
     result = snapshot(case)
     assert result.returncode == 0, result.stderr
     authority = json.loads(result.stdout)
     case["metrics"]["dispatch_agents"] = ["arch"]
     write_metrics(case)
-    result = subprocess.run(
-        ["bash", "-c", _adaptive_dispatch_script(Path(authority["metrics_marker_snapshot_path"]))],
-        cwd=case["repo"],
-        env=case["env"],
-        check=True,
-        capture_output=True,
-        text=True,
+    retained_marker = json.loads(Path(authority["metrics_marker_snapshot_path"]).read_text())
+    slots = _plan_slots(
+        retained_marker,
+        gate_state=authority["state"],
     )
-    assert "STANDARD_RESULT=tests,cohesion" in result.stdout.splitlines()
+    standard_dimensions = [
+        slot["dimension"] for slot in _slots(slots) if slot["kind"] == "standard"
+    ]
+    assert standard_dimensions == ["tests", "cohesion"]
+
+
+def test_standard_dispatch_falls_back_to_all_six_for_missing_metrics() -> None:
+    slots = _plan_slots({}, gate_state="valid_false")
+
+    standard_dimensions = [
+        slot["dimension"] for slot in _slots(slots) if slot["kind"] == "standard"
+    ]
+    assert standard_dimensions == ["arch", "tests", "defense", "bugs", "cohesion", "slop"]
 
 
 def test_standard_and_experimental_dispatch_are_separate() -> None:
     section = _section("### Step 2.9", "### Step 3")
-    assert "STANDARD_DISPATCH_AGENTS" in section
-    assert "EXPERIMENTAL_DISPATCH_AGENTS" in section
-    assert "STANDARD_AGENT_ALLOWLIST" in section
-    assert "select_experimental_review_dispatch" in section
-    assert "EXPERIMENTAL_AGENT_ALLOWLIST" not in section
-    assert "intersection" in section.lower()
-    assert "deletion_context" in section
+    assert "plan_review_audit(" in section
+    assert "AUDIT_SLOTS" in section
+    assert all(kind in section.lower() for kind in ("standard", "deletion", "experimental"))
+    assert "separate authorities" in section.lower()
 
 
-@pytest.mark.parametrize(
-    ("deletion_context", "expected"),
-    [({"merge_base": "merge-base-sha"}, True), (None, False)],
-)
-def test_deletion_dispatch_decision_is_gate_independent(
-    deletion_context: object,
-    expected: bool,
-) -> None:
-    text = _skill_text()
-    marker = "from autoskillit.smoke_utils import deletion_regression_is_eligible"
-    marker_index = text.index(marker)
-    block_start = text.rfind("```python", 0, marker_index) + len("```python")
-    block_end = text.index("```", marker_index)
-    deletion_dispatch_script = text[block_start:block_end]
+@pytest.mark.parametrize("gate_state", ["valid_true", "valid_false", "degraded"])
+def test_deletion_slot_is_planned_independently_of_gate_state(gate_state: str) -> None:
+    slots = _plan_slots({}, gate_state=gate_state, deletion_merge_base="merge-base-sha")
 
-    results = {}
-    for gate_state in ("valid_true", "valid_false", "degraded"):
-        namespace = {
-            "deletion_context": deletion_context,
-            "GATE_STATE": gate_state,
-        }
-        exec(deletion_dispatch_script, namespace)
-        results[gate_state] = namespace["DELETION_DISPATCH_REQUIRED"]
-
-    assert results == {gate_state: expected for gate_state in results}
+    assert any(slot["kind"] == "deletion" for slot in _slots(slots))
 
 
 def test_true_gate_dispatches_both_registered_agents_once() -> None:
@@ -231,11 +218,11 @@ def test_true_gate_dispatches_both_registered_agents_once() -> None:
     assert {policy["model_class"] for policy in requirements["child_model_policies"]} == {"sonnet"}
     assert "ANNOTATED_DIFF" in section
     assert "VALID_DIFF_LINES" in section
-    assert "fixed configured agent order" in section
+    assert "AUDIT_SLOTS` in order" in section
 
 
 def test_candidate_validation_requires_non_empty_nested_claims() -> None:
-    section = _section("### Step 4", "### Step 4.5")
+    section = " ".join(_section("### Step 4", "### Step 4.5").split())
     assert "`file`, `message`, and `simpler_behavior` are non-empty strings" in section
     assert "every `path`, `role`, and `claim` is a non-empty" in section
     assert "every `path` and `relation` is a non-empty" in section
@@ -243,12 +230,12 @@ def test_candidate_validation_requires_non_empty_nested_claims() -> None:
 
 
 def test_parent_adjudication_verifies_every_semantic_claim() -> None:
-    section = _section("### Step 4", "### Step 4.5")
+    section = " ".join(_section("### Step 4", "### Step 4.5").split()).lower()
     for obligation in (
         "every role-labelled evidence claim",
         "every one of the seven boundary claims",
         "every hop in the complete ordered trace",
-        "semantic equivalence",
+        "proposed simpler behavior's semantic equivalence",
         "the parent may not accept a sampled subset",
     ):
         assert obligation in section

@@ -11,6 +11,13 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 
 REVIEW_FUNCTION_ANCHORS: dict[str, str] = {
+    "parse_auditor_findings_output": "_auditor_output",
+    "plan_review_audit_slots": "_audit_manifest",
+    "plan_review_audit": "_audit_manifest",
+    "load_review_audit_manifest": "_audit_manifest",
+    "evaluate_review_audit_slots": "_audit_collection",
+    "collect_review_audit": "_audit_collection",
+    "finalize_review_audit": "_audit_finalize",
     "build_malformed_review_envelope": "_validation",
     "validate_experimental_auditor_outputs": "_validation",
     "deletion_regression_is_eligible": "_validation",
@@ -33,7 +40,16 @@ def test_smoke_utils_review_subpackage_is_a_package() -> None:
     assert (review / "__init__.py").exists(), (
         "smoke_utils/review/__init__.py must exist as a regular package marker"
     )
-    for shard in ("_constants.py", "_validation.py", "_aggregation.py", "_publication.py"):
+    for shard in (
+        "_constants.py",
+        "_validation.py",
+        "_aggregation.py",
+        "_publication.py",
+        "_auditor_output.py",
+        "_audit_manifest.py",
+        "_audit_collection.py",
+        "_audit_finalize.py",
+    ):
         assert (review / shard).exists(), (
             f"smoke_utils/review/{shard} must exist as a private shard"
         )

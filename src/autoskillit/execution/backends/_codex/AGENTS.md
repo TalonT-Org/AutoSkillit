@@ -9,3 +9,4 @@ used by headless and resumed sessions; `app_server.py` and
 `session_setup.py`, `session_storage_layout.py`, `session_attempt_lease.py`,
 and `session_reconciliation.py` prepare, locate, and reconcile sessions.
 `explorer_projection.py` maps explorer requests into the Codex session shape.
+`child_task.py` reads one delegated child's prompt and final lifecycle state.

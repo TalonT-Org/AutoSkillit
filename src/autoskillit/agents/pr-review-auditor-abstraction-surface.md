@@ -37,7 +37,11 @@ equivalence claim remains uncertain. Do not emit an informational hypothesis.
 
 ## Output contract
 
-Return one top-level JSON array, with `[]` meaning no proved finding. Each object
+End your final message with exactly one fenced code block whose opening line is ```` ```json ````
+and whose closing line is ```` ``` ````, containing the complete JSON array of findings — use an
+empty array `[]` inside that block when there are no findings. Do not emit any other `json`
+block in the final message.
+Each object
 has exactly `file`, `line`, `dimension`, `severity`, `message`,
 `requires_decision`, `evidence`, `trace`, `boundary_checks`, `confidence`, and
 `simpler_behavior`.

@@ -267,7 +267,11 @@ def determine_experimental_review_verdict(
     experimental_audit_state: str,
     findings: Sequence[Mapping[str, object]],
 ) -> str:
-    """Keep gate-authority degradation distinct from later snapshot movement."""
+    """Derive the review verdict from gate, snapshot, and combined audit state.
+
+    ``experimental_audit_state`` may carry the combined finalization audit
+    state when called by ``finalize_review_audit``.
+    """
     if retained_snapshot_was_valid and not final_snapshot_is_fresh:
         return "stale_snapshot"
     if any(

@@ -493,11 +493,10 @@ def _preflight_checked_out_ref_mutation(
     outer_segments, additional_segments, additional_owners, interpreter_unresolved = (
         _preflight_segments(command)
     )
-    # The live-text projection (rectify #4941 Part A): a heredoc body whose
-    # consumer executes it is blanked at its source position and appended
-    # once; an inert heredoc body is blanked and never appended. A herestring
-    # body is left at its single natural position either way (see
-    # live_command_text's docstring). Both the structural-mutation regex and
+    # The live-text projection (rectify #4941 Part A): heredoc and herestring
+    # bodies are blanked at their source spans and appended once when their
+    # consumer executes them. Inert bodies are never appended.
+    # Both the structural-mutation regex and
     # _raw_target_mutations' write-path scan read this projection instead of
     # the raw command, so an inert `cat <<'EOF'` body mentioning
     # "git push --force" as prose no longer matches, while a heredoc/pipe-fed

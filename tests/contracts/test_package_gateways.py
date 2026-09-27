@@ -409,6 +409,7 @@ def test_root_module_allowlist() -> None:
             "__init__.py",
             "__main__.py",
             "_llm_triage.py",
+            "_measure_aggregation.py",
             "_parent_assistant_turns.py",
             "_probe_canary.py",
             "_recipe_delivery_framing.py",
@@ -460,6 +461,36 @@ def test_parent_assistant_predicate_reexports_share_one_identity() -> None:
     assert shim_predicate is canonical
     for module_name in consumers:
         assert importlib.import_module(module_name).is_parent_assistant_record is canonical
+
+
+def test_measure_aggregation_reexports_share_one_identity() -> None:
+    import importlib
+
+    import autoskillit.core as core
+    from autoskillit import _measure_aggregation
+    from autoskillit.core.types import _type_enums, _type_token
+
+    for name in _measure_aggregation.__all__:
+        assert getattr(core, name) is getattr(_measure_aggregation, name)
+    assert _type_enums.TokenMeasureState is _measure_aggregation.TokenMeasureState
+    assert _type_token.TokenMeasure is _measure_aggregation.TokenMeasure
+    for module_name in (
+        "autoskillit.execution.evidence.otlp_tokens",
+        "autoskillit.pipeline.tokens",
+        "autoskillit.execution.session.turn_usage",
+    ):
+        assert (
+            importlib.import_module(module_name).TokenMeasure is _measure_aggregation.TokenMeasure
+        )
+
+
+def test_measure_aggregation_ships_as_projected_hook_asset() -> None:
+    from autoskillit.core import pkg_root
+    from autoskillit.workspace import iter_public_plugin_asset_files
+
+    assert pkg_root() / "_measure_aggregation.py" in set(
+        iter_public_plugin_asset_files(pkg_root())
+    )
 
 
 # REQ-GATEWAY-PARITY: gateway re-exports pre-move names

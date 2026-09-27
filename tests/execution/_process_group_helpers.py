@@ -5,10 +5,54 @@ from __future__ import annotations
 import os
 import signal
 import subprocess
+import textwrap
 import time
 from collections.abc import Mapping
 
 import psutil
+
+# Forks children that setsid() and ignore SIGTERM, escaping both the parent's
+# process group and ordinary signal handling; used to exercise cleanup paths
+# that must reach descendants a pgid-scoped kill would miss.
+GROUP_ESCAPING_DESCENDANTS_SCRIPT = textwrap.dedent("""\
+    import json, os, signal, sys, time
+    from pathlib import Path
+
+    import psutil
+
+    ready_path = Path(sys.argv[1])
+    child_count = int(sys.argv[2])
+    exit_after_ready = sys.argv[3] == "exit"
+    read_fds = []
+    for _ in range(child_count):
+        read_fd, write_fd = os.pipe()
+        child = os.fork()
+        if child == 0:
+            os.close(read_fd)
+            os.setsid()
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+            record = json.dumps({
+                "pid": os.getpid(),
+                "create_time": psutil.Process().create_time(),
+            }).encode()
+            os.write(write_fd, record)
+            os.close(write_fd)
+            time.sleep(60)
+            raise SystemExit(0)
+        os.close(write_fd)
+        read_fds.append(read_fd)
+
+    records = []
+    for read_fd in read_fds:
+        records.append(json.loads(os.read(read_fd, 4096)))
+        os.close(read_fd)
+    temporary_path = ready_path.with_name(f"{ready_path.name}.tmp")
+    temporary_path.write_text(json.dumps(records))
+    temporary_path.replace(ready_path)
+    if exit_after_ready:
+        raise SystemExit(0)
+    time.sleep(60)
+""")
 
 
 def _capture_owned_group_identities(

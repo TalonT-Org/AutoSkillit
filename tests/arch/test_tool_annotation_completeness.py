@@ -51,7 +51,7 @@ def _collect_missing_annotations(path: Path) -> list[tuple[str, int]]:
 
 
 class TestToolAnnotationCompleteness:
-    """Every @mcp.tool() decorator in server/tools_*.py must declare annotations=."""
+    """Every @mcp.tool() decorator in server/tools/tools_*.py must declare annotations=."""
 
     def test_all_mcp_tools_have_annotations_keyword(self):
         """AST scan: each @mcp.tool(...) must include the annotations= keyword argument.

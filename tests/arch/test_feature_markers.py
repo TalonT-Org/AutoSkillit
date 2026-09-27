@@ -45,6 +45,7 @@ _FLEET_CROSS_DIR_FILES: frozenset[Path] = frozenset(
         _TESTS_ROOT / "cli" / "test_l3_orchestrator_prompt.py",
         _TESTS_ROOT / "cli" / "test_reap.py",
         _TESTS_ROOT / "integration" / "test_fleet_concurrency.py",
+        _TESTS_ROOT / "integration" / "test_codex_mcp_tracker_dispatch_identity.py",
     ]
 )
 

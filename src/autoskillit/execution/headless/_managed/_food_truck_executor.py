@@ -64,6 +64,7 @@ from autoskillit.execution.headless._managed._executor import _DefaultHeadlessEx
 from autoskillit.execution.headless._managed._launch_adapter import (
     _food_truck_launch_spec_builder,
 )
+from autoskillit.execution.process import new_dispatch_owner_scope_token, owner_scope
 from autoskillit.execution.quota import admit_quota
 
 
@@ -253,6 +254,13 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
             cwd=cwd,
         )
         backend_authority, dispatch_backend = self._resolve_food_truck_backend(backend_authority)
+        # The scope token's dispatch_id leg is what the reaper's regex matches on.
+        # Production callers always pass a real dispatch_id; tests / headless-only
+        # callers that omit one get a unique hex so the token is at least distinct
+        # from any other unkeyed call (the previous 'anon' fallback collapsed every
+        # unkeyed call into the same reaper-side group).
+        scope_dispatch_id = dispatch_id or uuid.uuid4().hex[:12]
+        owner_scope_token = new_dispatch_owner_scope_token(scope_dispatch_id)
         cfg = self._ctx.config
         fleet_cfg = cfg.fleet
         merged_extras = _merge_food_truck_extras(
@@ -493,50 +501,58 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                 )
 
                 try:
-                    skill_result = await headless_facade._execute_claude_headless(
-                        build_spec,
-                        cwd,
-                        self._ctx,
-                        skill_command="",
-                        step_name=step_name,
-                        kitchen_id=kitchen_id,
-                        caller_session_id=caller_session_id,
-                        order_id=order_id,
-                        campaign_id=campaign_id,
-                        dispatch_id=dispatch_id,
-                        project_dir=project_dir,
-                        timeout=float(effective_timeout),
-                        stale_threshold=float(effective_stale),
-                        idle_output_timeout=effective_idle_out,
-                        natural_exit_grace_seconds=effective_natural_exit_grace_seconds,
-                        completion_marker=completion_marker,
-                        prior_completion_markers=prior_completion_markers,
-                        on_spawn=on_spawn,
-                        skip_clone_guard=True,
-                        pty_override=False,
-                        provider_name=default_provider_for(
-                            backend.name,
-                            backend.capabilities.anthropic_provider_capable,
-                            provider_name=provider_name,
-                        ),
-                        provider_extras=merged_extras or None,
-                        enable_deadline_extension=effective_deadline_ext,
-                        max_extension_seconds=effective_max_ext,
-                        ceiling_seconds=effective_ceiling_seconds,
-                        systemd_scope_enabled=effective_systemd_scope_enabled,
-                        marker_dir=effective_marker_dir,
-                        session_id=session_id,
-                        model_identity=model_identity,
-                        on_session_id_resolved=on_session_id_resolved,
-                        launch_resolver=self._ctx.launch_resolver,
-                        launch_preparation=launch_preparation,
-                        pre_spawn_admission=_admit_finalized_launch,
-                        on_launch_resolved=on_launch_resolved,
-                        plugin_authority=resolved_plugin_authority,
-                        plugin_load_mode=plugin_load_mode,
-                        retained_binding=launch_binding,
-                        managed_lineage_observer=managed_lineage_observer,
-                    )
+                    async with owner_scope(owner_scope_token) as scope:
+
+                        async def _settle_then_admit(
+                            contract: ResolvedLaunchContract,
+                        ) -> CandidatePreSpawnRejection | None:
+                            await scope.settle_descendants(seal=False)
+                            return await _admit_finalized_launch(contract)
+
+                        skill_result = await headless_facade._execute_claude_headless(
+                            build_spec,
+                            cwd,
+                            self._ctx,
+                            skill_command="",
+                            step_name=step_name,
+                            kitchen_id=kitchen_id,
+                            caller_session_id=caller_session_id,
+                            order_id=order_id,
+                            campaign_id=campaign_id,
+                            dispatch_id=dispatch_id,
+                            project_dir=project_dir,
+                            timeout=float(effective_timeout),
+                            stale_threshold=float(effective_stale),
+                            idle_output_timeout=effective_idle_out,
+                            natural_exit_grace_seconds=effective_natural_exit_grace_seconds,
+                            completion_marker=completion_marker,
+                            prior_completion_markers=prior_completion_markers,
+                            on_spawn=on_spawn,
+                            skip_clone_guard=True,
+                            pty_override=False,
+                            provider_name=default_provider_for(
+                                backend.name,
+                                backend.capabilities.anthropic_provider_capable,
+                                provider_name=provider_name,
+                            ),
+                            provider_extras=(merged_extras | scope.child_env()) or None,
+                            enable_deadline_extension=effective_deadline_ext,
+                            max_extension_seconds=effective_max_ext,
+                            ceiling_seconds=effective_ceiling_seconds,
+                            systemd_scope_enabled=effective_systemd_scope_enabled,
+                            marker_dir=effective_marker_dir,
+                            session_id=session_id,
+                            model_identity=model_identity,
+                            on_session_id_resolved=on_session_id_resolved,
+                            launch_resolver=self._ctx.launch_resolver,
+                            launch_preparation=launch_preparation,
+                            pre_spawn_admission=_settle_then_admit,
+                            on_launch_resolved=on_launch_resolved,
+                            plugin_authority=resolved_plugin_authority,
+                            plugin_load_mode=plugin_load_mode,
+                            retained_binding=launch_binding,
+                            managed_lineage_observer=managed_lineage_observer,
+                        )
                 except anyio.get_cancelled_exc_class():
                     if managed_lineage_observer is not None:
                         managed_lineage_observer.close(
@@ -547,10 +563,12 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                     if managed_lineage_observer is not None:
                         managed_lineage_observer.close(ManagedHeadlessSessionTerminalState.FAILED)
                     raise
-                return self._finalize_food_truck_result(
-                    skill_result=skill_result,
-                    managed_lineage_observer=managed_lineage_observer,
-                    order_id=order_id,
+                return scope.fold_cleanup_evidence(
+                    self._finalize_food_truck_result(
+                        skill_result=skill_result,
+                        managed_lineage_observer=managed_lineage_observer,
+                        order_id=order_id,
+                    )
                 )
 
 

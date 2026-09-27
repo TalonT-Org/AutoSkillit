@@ -144,6 +144,7 @@ from autoskillit.execution.headless import (
 from autoskillit.execution.merge_queue import DefaultMergeQueueWatcher, fetch_repo_merge_state
 from autoskillit.execution.process import (
     DEFAULT_TETHER_CEILING_SECONDS,
+    SEAL_MARKER_TTL_SECONDS,
     TETHER_LEASE_RENEW_SECONDS,
     TETHER_LEASE_SECONDS,
     TETHER_SWEEP_INTERVAL_SECONDS,
@@ -164,6 +165,7 @@ from autoskillit.execution.process import (
     _has_active_execution_marker,  # noqa: F401 — re-exported for cli/app.py signal guard
     async_kill_process_tree,
     default_tether_dir,
+    dispatch_scope_tokens,
     find_orphaned_autoskillit_daemons,
     find_orphaned_codex_processes,
     find_orphaned_tethers,
@@ -175,6 +177,7 @@ from autoskillit.execution.process import (
     renew_tether,
     run_managed_async,
     run_managed_sync,
+    settle_owner_scope,
     spawn_owned_process,
     summarize_capture,
     sweep_orphaned_tethers,
@@ -280,6 +283,7 @@ __all__ = [
     "ClaudeHeadlessCmd",
     # process
     "DEFAULT_TETHER_CEILING_SECONDS",
+    "SEAL_MARKER_TTL_SECONDS",
     "TETHER_LEASE_RENEW_SECONDS",
     "TETHER_LEASE_SECONDS",
     "TETHER_SWEEP_INTERVAL_SECONDS",
@@ -298,6 +302,7 @@ __all__ = [
     "TetherSweepOutcome",
     "TetherSweepReport",
     "default_tether_dir",
+    "dispatch_scope_tokens",
     "find_orphaned_autoskillit_daemons",
     "find_orphaned_codex_processes",
     "find_orphaned_tethers",
@@ -307,6 +312,7 @@ __all__ = [
     "reap_orphaned_codex_processes",
     "run_managed_async",
     "run_managed_sync",
+    "settle_owner_scope",
     "spawn_owned_process",
     "summarize_capture",
     "sweep_orphaned_tethers",

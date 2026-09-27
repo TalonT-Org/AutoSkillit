@@ -3,7 +3,7 @@ Structural import-path compliance tests.
 
 REQ-IMP-001: No cross-package sub-module imports in production code.
 REQ-IMP-002: from autoskillit.core.logging/io/types → from autoskillit.core.
-REQ-IMP-003: server/tools_*.py imports from at most autoskillit.core and autoskillit.pipeline.
+REQ-IMP-003: server/tools/tools_*.py imports only from autoskillit.core and autoskillit.pipeline.
 REQ-IMP-004: cli/app.py imports from at most autoskillit.core, .config, .pipeline, and .execution.
 REQ-IMP-005: server/git.py only imports autoskillit.core at runtime (TYPE_CHECKING excluded).
 REQ-IMP-006: server/tools/tools_kitchen/ has no direct import of DefaultGateState or pipeline.gate.
@@ -150,7 +150,7 @@ def test_req_imp_001_no_cross_package_submodule_imports() -> None:
 
 
 # ---------------------------------------------------------------------------
-# REQ-IMP-003: server/tools_*.py imports only core and pipeline (+ intra-server)
+# REQ-IMP-003: server/tools/tools_*.py imports only core and pipeline (+ intra-server)
 # ---------------------------------------------------------------------------
 
 

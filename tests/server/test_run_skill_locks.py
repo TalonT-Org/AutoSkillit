@@ -14,6 +14,12 @@ from tests.server._helpers import _install_active_recipe_projection
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
+_ACTIVE_DISPATCH = "dispatch-active"
+_STALE_LOCKED_STEPS: dict[str, dict[str, bool]] = {
+    "": {"investigate": False},
+    "4171": {"investigate": False},
+}
+
 
 def _make_finalized_step(
     name: str,
@@ -26,6 +32,19 @@ def _make_finalized_step(
         name=name,
         skip_when_false=skip_when_false,
         with_args=with_args,
+    )
+
+
+def _write_overlay(
+    tmp_path: Path,
+    locked_steps: dict[str, dict[str, bool]],
+    locked_ingredients: dict[str, dict[str, str]] | None = None,
+) -> None:
+    temp_dir = tmp_path / ".autoskillit" / "temp"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    (temp_dir / ".hook_config.json").write_text("{}")
+    (temp_dir / ".hook_config_overlay.json").write_text(
+        json.dumps({"locked_steps": locked_steps, "locked_ingredients": locked_ingredients or {}})
     )
 
 
@@ -576,3 +595,91 @@ class TestRunSkillResolvesStepNameFromRecipe:
             )
         )
         assert "INGREDIENT LOCK" not in result.get("error", "")
+
+
+class TestDispatchScopedLockIsolation:
+    """The env dispatch ID scopes lock checks to the active dispatch, ignoring stale scopes."""
+
+    @pytest.mark.parametrize(
+        "own_scope",
+        [{}, {_ACTIVE_DISPATCH: {}}],
+        ids=["own-scope-absent", "own-scope-unlocked"],
+    )
+    def test_check_ingredient_locks_dispatch_env_ignores_stale_scopes(
+        self, own_scope, tool_ctx_kitchen_open, tmp_path, monkeypatch
+    ) -> None:
+        from autoskillit.server.tools.tools_execution import _check_ingredient_locks
+
+        monkeypatch.setenv("AUTOSKILLIT_DISPATCH_ID", _ACTIVE_DISPATCH)
+        _write_overlay(tmp_path, {**_STALE_LOCKED_STEPS, **own_scope})
+        tool_ctx_kitchen_open.project_dir = tmp_path
+
+        assert _check_ingredient_locks("investigate", "") is None
+
+    def test_check_ingredient_locks_dispatch_env_enforces_own_scope(
+        self, tool_ctx_kitchen_open, tmp_path, monkeypatch
+    ) -> None:
+        from autoskillit.server.tools.tools_execution import _check_ingredient_locks
+
+        monkeypatch.setenv("AUTOSKILLIT_DISPATCH_ID", _ACTIVE_DISPATCH)
+        _write_overlay(
+            tmp_path,
+            {"4171": {"investigate": False}, _ACTIVE_DISPATCH: {"investigate": False}},
+            {_ACTIVE_DISPATCH: {"investigate": "false"}},
+        )
+        tool_ctx_kitchen_open.project_dir = tmp_path
+
+        result_str = _check_ingredient_locks("investigate", "")
+        assert result_str is not None
+        result = json.loads(result_str)
+
+        assert result["success"] is False
+        assert result["stage"] == "preflight:ingredient_locks"
+        assert _ACTIVE_DISPATCH in result["error"]
+        assert "4171" not in result["error"]
+
+    def test_has_active_locks_dispatch_env_stale_scopes_do_not_block(
+        self, tool_ctx_kitchen_open, tmp_path, monkeypatch
+    ) -> None:
+        from autoskillit.server.tools.tools_execution import _has_active_locks
+
+        monkeypatch.setenv("AUTOSKILLIT_DISPATCH_ID", _ACTIVE_DISPATCH)
+        _write_overlay(tmp_path, _STALE_LOCKED_STEPS)
+        tool_ctx_kitchen_open.project_dir = tmp_path
+
+        assert _has_active_locks("") is False
+
+    def test_has_active_locks_dispatch_env_own_scope_blocks(
+        self, tool_ctx_kitchen_open, tmp_path, monkeypatch
+    ) -> None:
+        from autoskillit.server.tools.tools_execution import _has_active_locks
+
+        monkeypatch.setenv("AUTOSKILLIT_DISPATCH_ID", _ACTIVE_DISPATCH)
+        _write_overlay(tmp_path, {**_STALE_LOCKED_STEPS, _ACTIVE_DISPATCH: {"investigate": False}})
+        tool_ctx_kitchen_open.project_dir = tmp_path
+
+        assert _has_active_locks("") is True
+
+    @pytest.mark.anyio
+    async def test_run_skill_dispatch_env_stale_scopes_do_not_block_first_step(
+        self, tool_ctx_kitchen_open, tmp_path, monkeypatch
+    ) -> None:
+        monkeypatch.setenv("AUTOSKILLIT_DISPATCH_ID", _ACTIVE_DISPATCH)
+        _write_overlay(tmp_path, _STALE_LOCKED_STEPS)
+        tool_ctx_kitchen_open.project_dir = tmp_path
+        _install_active_recipe_projection(
+            tool_ctx_kitchen_open,
+            {"investigate": _make_finalized_step("investigate", "inputs.investigate")},
+        )
+
+        result = json.loads(
+            await run_skill(
+                "/investigate error",
+                str(tmp_path),
+                step_name="investigate",
+                order_id="",
+            )
+        )
+
+        assert "INGREDIENT LOCK" not in result.get("error", "")
+        assert result.get("stage") != "preflight:ingredient_locks"

@@ -524,6 +524,7 @@ def test_no_unintended_new_test_files_under_tests_core() -> None:
             "test_kitchen_state.py",
             "test_label_lifecycle.py",
             "test_logging.py",
+            "test_measure_aggregation.py",
             "test_parse_plan_paths.py",
             "test_path_containment.py",
             "test_paths.py",

@@ -23,6 +23,7 @@ from _hook_settings import enforce_session_scope  # noqa: E402
 _IMPLEMENT_PREFIXES = ("implement-", "resolve-")
 LINT_AUTOFIX_TRIGGER = "--- RUFF AUTOFIX ---"
 LINT_ERROR_TRIGGER = "--- RUFF LINT ---"
+RUFF_SOURCE_SUFFIXES: tuple[str, ...] = (".py", ".pyi")
 
 _TIMEOUT_S = 15
 
@@ -107,7 +108,7 @@ def main() -> None:
         sys.exit(0)
     file_path = tool_input.get("file_path", "")
 
-    if not file_path or not file_path.endswith(".py"):
+    if not file_path or not file_path.endswith(RUFF_SOURCE_SUFFIXES):
         sys.exit(0)
 
     if not Path(file_path).is_file():

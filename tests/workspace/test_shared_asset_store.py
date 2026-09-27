@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 
 import pytest
+import structlog.testing
 
 from autoskillit.core import SkillContractError
 from autoskillit.workspace._installed._shared_asset_store import (
@@ -225,4 +226,37 @@ def test_resolve_shared_asset_store_root_returns_none_on_device_mismatch(
     projections_root = tmp_path / "home" / ".autoskillit" / "plugin-projections"
     projections_root.mkdir(parents=True)
 
-    assert resolve_shared_asset_store_root(projections_root) is None
+    with structlog.testing.capture_logs() as logs:
+        assert resolve_shared_asset_store_root(projections_root) is None
+
+    mismatches = [e for e in logs if e["event"] == "shared_asset_store_device_mismatch"]
+    assert len(mismatches) == 1
+    assert mismatches[0]["log_level"] == "debug"
+
+
+def test_resolve_shared_asset_store_root_unprobeable_candidate_warns(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A candidate store that cannot be created is a genuine anomaly and stays loud."""
+    import autoskillit.workspace._installed._shared_asset_store as store_module
+
+    isolated_tmp = tmp_path / "tmp"
+    candidate = isolated_tmp / store_module.SHARED_ASSET_STORE_DIRNAME
+    real_mkdir = os.mkdir
+
+    def _fake_mkdir(path: object, *args: object, **kwargs: object) -> None:
+        if Path(path) == candidate:  # type: ignore[arg-type]
+            raise OSError("synthetic candidate mkdir failure")
+        real_mkdir(path, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(store_module.tempfile, "gettempdir", lambda: str(isolated_tmp))
+    monkeypatch.setattr(store_module.os, "mkdir", _fake_mkdir)
+    projections_root = tmp_path / "home" / ".autoskillit" / "plugin-projections"
+    projections_root.mkdir(parents=True)
+
+    with structlog.testing.capture_logs() as logs:
+        assert resolve_shared_asset_store_root(projections_root) is None
+
+    unprobeable = [e for e in logs if e["event"] == "shared_asset_store_candidate_unprobeable"]
+    assert len(unprobeable) == 1
+    assert unprobeable[0]["log_level"] == "warning"

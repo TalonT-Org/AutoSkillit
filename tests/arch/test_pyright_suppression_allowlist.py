@@ -28,24 +28,9 @@ _PYRIGHT_HONORED_TYPE_IGNORE_RE = re.compile(r"(^|#)\s*type:\s*ignore\b")
 _ANY_SUPPRESSION_RE = re.compile(r"(^|#)\s*(type|pyright):\s*ignore\b")
 _STALENESS_SWITCH_RE = re.compile(r"unused-ignore|ignore-without-code|warn[-_]unused[-_]ignores")
 
-PRODUCTION_ALLOWLIST: dict[tuple[str, int], str] = {
-    (
-        "recipe/__init__.py",
-        374,
-    ): "lazy-registry: _reg._finalize_registry() attribute access on dynamically-built registry",
-    ("recipe/api_orchestration/_api_orchestration_cache.py", 144): (
-        "lazy-registry: RULE_REGISTRY_HASH set by _finalize_registry()"
-    ),
-}
+PRODUCTION_ALLOWLIST: dict[tuple[str, int], str] = {}
 
-TEST_ALLOWLIST: dict[tuple[str, int], str] = {
-    (
-        "arch/test_recipe_rule_registration.py",
-        74,
-    ): "global-mutated variable Pyright cannot resolve",
-    ("recipe/test_research_campaign_rules.py", 7): "side-effect import for rule registration",
-    ("recipe/test_research_sub_recipe_rules.py", 9): "side-effect import for rule registration",
-}
+TEST_ALLOWLIST: dict[tuple[str, int], str] = {}
 
 # Counts only suppressions mypy validates (see `[tool.mypy]`); `warn_unused_ignores`
 # makes each one proven necessary.

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-import autoskillit.recipe  # noqa: F401 -- pyright: ignore[reportUnusedImport] -- triggers rule registration
+import autoskillit.recipe  # noqa: F401 -- triggers rule registration
 from autoskillit.core import Severity
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import DataFlowReport, RecipeKind

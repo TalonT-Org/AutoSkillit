@@ -141,7 +141,7 @@ def _resolve_cache_inputs(
     from autoskillit.recipe import registry as _registry
 
     # lazy-registry: global set by _finalize_registry()
-    _rule_hash: str = _registry.RULE_REGISTRY_HASH  # pyright: ignore[reportAttributeAccessIssue]
+    _rule_hash: str = _registry.RULE_REGISTRY_HASH
     if not _rule_hash:
         _orch.logger.warning("RULE_REGISTRY_HASH is empty — _finalize_registry() was never called")
 

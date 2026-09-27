@@ -371,7 +371,7 @@ from autoskillit.recipe.validator import (
     validate_recipe_structure,
 )
 
-_reg._finalize_registry()  # pyright: ignore[reportAttributeAccessIssue]  # lazy-registry: method added by _register_rule_module() side effects
+_reg._finalize_registry()
 del _reg
 
 from autoskillit.recipe._binding import (

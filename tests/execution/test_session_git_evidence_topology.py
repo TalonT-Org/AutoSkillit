@@ -454,34 +454,18 @@ async def test_uncommitted_worktree_from_known_non_head_has_no_git_write(
     scripted_session_runner,
     start_kind: str,
 ) -> None:
-    import subprocess
-
-    from tests._git_topology import add_linked_worktree, commit_file, head, init_checkout
+    from tests._git_topology import _run_git, add_linked_worktree, commit_file, head, init_checkout
 
     repo = init_checkout(tmp_path / "clone")
     first_sha = head(repo)
     commit_file(repo, "later.py", "later = True\n", "second main commit")
     if start_kind == "branch":
-        subprocess.run(
-            ["git", "branch", "known-side", first_sha],
-            cwd=repo,
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
+        _run_git("branch", "known-side", first_sha, cwd=repo)
         start = "known-side"
     elif start_kind == "head_parent":
         start = "HEAD~1"
     else:
-        subprocess.run(
-            ["git", "tag", "-a", "known-tag", "-m", "known tag", first_sha],
-            cwd=repo,
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
+        _run_git("tag", "-a", "known-tag", "-m", "known tag", first_sha, cwd=repo)
         start = "known-tag"
     created: dict[str, Path] = {}
 

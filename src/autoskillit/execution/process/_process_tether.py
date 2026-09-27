@@ -21,7 +21,7 @@ import shutil
 import subprocess
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -30,6 +30,7 @@ from typing import Any, Final
 import anyio
 
 from autoskillit.core import (
+    ProcessCleanupResult,
     default_log_dir,
     get_logger,
     is_pid_alive,
@@ -272,6 +273,49 @@ def _target_status(
     return "live"
 
 
+def _tether_targets(record: TetherRecord) -> list[tuple[str, int, int | None]]:
+    """The ``(name, pid, starttime_ticks)`` kill targets one tether record guards."""
+    targets: list[tuple[str, int, int | None]] = [
+        ("child", record.child_pid, record.child_starttime_ticks)
+    ]
+    if record.workload_pid is not None and record.workload_pid != record.child_pid:
+        targets.append(("workload", record.workload_pid, record.workload_starttime_ticks))
+    return targets
+
+
+def _tether_target_statuses(record: TetherRecord) -> dict[str, str]:
+    return {
+        name: _target_status(pid, record.boot_id, ticks, record.pidns_inode)
+        for name, pid, ticks in _tether_targets(record)
+    }
+
+
+def _settle_tether_targets(
+    record: TetherRecord, statuses: Mapping[str, str]
+) -> list[ProcessCleanupResult]:
+    """Identity-fenced tree kill of every target *statuses* reports live.
+
+    Returns one cleanup result per kill issued; the targets are confirmed dead
+    when every result is complete.
+    """
+    # Keep the psutil-backed recovery primitive local so importing tether data
+    # definitions and registry helpers does not initialize process-control code.
+    from autoskillit.execution.process._process_kill import kill_process_tree
+
+    results: list[ProcessCleanupResult] = []
+    for name, pid, ticks in _tether_targets(record):
+        if statuses[name] != "live":
+            continue
+        if not is_pid_alive(pid):
+            # Reaped as a descendant of an earlier target's kill in this
+            # same pass (e.g. the child-wrapper's recursive tree walk).
+            continue
+        results.append(
+            kill_process_tree(pid, expected_boot_id=record.boot_id, expected_starttime_ticks=ticks)
+        )
+    return results
+
+
 def find_orphaned_tethers(
     tether_dir: Path, *, min_age_seconds: float = 60.0
 ) -> list[OrphanedTetherRecord]:
@@ -323,10 +367,6 @@ def sweep_orphaned_tethers(
     if not tether_dir.is_dir():
         return TetherSweepReport()
 
-    # Keep the psutil-backed recovery primitive local so importing tether data
-    # definitions and registry helpers does not initialize process-control code.
-    from autoskillit.execution.process._process_kill import kill_process_tree
-
     now = time.time()
     outcomes: list[TetherSweepOutcome] = []
     for path in sorted(tether_dir.glob("*.json")):
@@ -345,16 +385,7 @@ def sweep_orphaned_tethers(
             outcomes.append(TetherSweepOutcome(str(path), -1, "malformed"))
             continue
 
-        targets: list[tuple[str, int, int | None]] = [
-            ("child", record.child_pid, record.child_starttime_ticks)
-        ]
-        if record.workload_pid is not None and record.workload_pid != record.child_pid:
-            targets.append(("workload", record.workload_pid, record.workload_starttime_ticks))
-
-        statuses = {
-            name: _target_status(pid, record.boot_id, ticks, record.pidns_inode)
-            for name, pid, ticks in targets
-        }
+        statuses = _tether_target_statuses(record)
 
         if all(status != "live" for status in statuses.values()):
             remove_tether(path)
@@ -381,21 +412,8 @@ def sweep_orphaned_tethers(
             overdue_seconds=max(0.0, now - record.not_after),
             path=str(path),
         )
-        all_confirmed_dead = True
-        for name, pid, ticks in targets:
-            if statuses[name] != "live":
-                continue
-            if not is_pid_alive(pid):
-                # Reaped as a descendant of an earlier target's kill in this
-                # same pass (e.g. the child-wrapper's recursive tree walk).
-                continue
-            result = kill_process_tree(
-                pid, expected_boot_id=record.boot_id, expected_starttime_ticks=ticks
-            )
-            if not result.complete:
-                all_confirmed_dead = False
-
-        if all_confirmed_dead:
+        results = _settle_tether_targets(record, statuses)
+        if all(result.complete for result in results):
             remove_tether(path)
             logger.info(
                 "tether_sweep_reaped",

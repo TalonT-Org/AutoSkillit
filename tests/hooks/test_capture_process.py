@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import hashlib
+import errno
 import os
 import signal
 import subprocess
@@ -10,6 +10,7 @@ import sys
 import sysconfig
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
 
 import pytest
@@ -30,12 +31,12 @@ def test_capture_process_reexports_spawn_implementation() -> None:
     assert capture_process.__all__ == [
         "OwnedProcessError",
         "OwnedProcessGroup",
+        "SignalOrigin",
         "spawn_owned_process",
     ]
     for name in (
         "spawn_owned_process",
         "_finish_owned_spawn",
-        "_wrap_user_command",
         "_scrubbed_user_environment",
         "_spawn_bash",
         "_TRUSTED_BASH_CANDIDATES",
@@ -81,7 +82,6 @@ assert package_process._OWNED_PROCESS_SPAWN_TOKEN is bare_process._OWNED_PROCESS
 for name in (
     "spawn_owned_process",
     "_finish_owned_spawn",
-    "_wrap_user_command",
     "_scrubbed_user_environment",
     "_spawn_bash",
     "_TRUSTED_BASH_CANDIDATES",
@@ -130,31 +130,6 @@ class _OrderedProcess:
         return 0
 
 
-class _HeldPipe:
-    def fileno(self) -> int:
-        return 99
-
-
-class _DrainProcess(_OrderedProcess):
-    def __init__(self, events: list[str]) -> None:
-        super().__init__(events)
-        self.stdout = _HeldPipe()
-
-
-class _EmptySelector:
-    def __init__(self) -> None:
-        self.closed = False
-
-    def register(self, _descriptor: int, _events: int) -> None:
-        return
-
-    def select(self, _timeout: float) -> list[tuple[object, int]]:
-        return []
-
-    def close(self) -> None:
-        self.closed = True
-
-
 def _record_group_settlement(
     owner: OwnedProcessGroup,
     events: list[str],
@@ -163,11 +138,20 @@ def _record_group_settlement(
     events.append("settle_group")
 
 
+def _fake_anchor(pid: int) -> SimpleNamespace:
+    return SimpleNamespace(pid=pid, returncode=None)
+
+
 def test_arbitrary_handle_cannot_be_adopted_as_owned_group() -> None:
     process = cast("subprocess.Popen[bytes]", _OrderedProcess([]))
 
     with pytest.raises(TypeError, match="spawn helper"):
-        OwnedProcessGroup(process=process, pgid=process.pid)
+        OwnedProcessGroup(
+            process=process,
+            pgid=process.pid,
+            anchor=_fake_anchor(process.pid),
+            _lifeline_fd=-1,
+        )
 
 
 def test_wait_settles_owned_group_before_reaping_leader(
@@ -178,6 +162,8 @@ def test_wait_settles_owned_group_before_reaping_leader(
     owner = OwnedProcessGroup(
         process=process,
         pgid=process.pid,
+        anchor=_fake_anchor(process.pid),
+        _lifeline_fd=-1,
         _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
     )
     monkeypatch.setattr(
@@ -185,10 +171,18 @@ def test_wait_settles_owned_group_before_reaping_leader(
         "_settle_remaining_group",
         lambda current: _record_group_settlement(current, events),
     )
+    monkeypatch.setattr(
+        OwnedProcessGroup,
+        "_release_lifeline",
+        lambda current: (
+            events.append("release_lifeline"),
+            setattr(current.anchor, "returncode", 0),
+        ),
+    )
     monkeypatch.setattr(capture_process, "_wait_for_group_exit", lambda *_args: True)
 
     assert owner.wait() == 0
-    assert events == ["poll", "settle_group", "wait"]
+    assert events == ["poll", "settle_group", "release_lifeline", "wait"]
 
 
 def test_settle_settles_owned_group_before_reaping_leader(
@@ -199,6 +193,8 @@ def test_settle_settles_owned_group_before_reaping_leader(
     owner = OwnedProcessGroup(
         process=process,
         pgid=process.pid,
+        anchor=_fake_anchor(process.pid),
+        _lifeline_fd=-1,
         _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
     )
     monkeypatch.setattr(
@@ -206,10 +202,18 @@ def test_settle_settles_owned_group_before_reaping_leader(
         "_settle_remaining_group",
         lambda current: _record_group_settlement(current, events),
     )
+    monkeypatch.setattr(
+        OwnedProcessGroup,
+        "_release_lifeline",
+        lambda current: (
+            events.append("release_lifeline"),
+            setattr(current.anchor, "returncode", 0),
+        ),
+    )
     monkeypatch.setattr(capture_process, "_wait_for_group_exit", lambda *_args: True)
 
     assert owner.settle() == 0
-    assert events == ["poll", "settle_group", "wait"]
+    assert events == ["poll", "settle_group", "release_lifeline", "wait"]
 
 
 def test_settle_error_path_settles_owned_group_before_reaping_leader(
@@ -223,6 +227,8 @@ def test_settle_error_path_settles_owned_group_before_reaping_leader(
     owner = OwnedProcessGroup(
         process=process,
         pgid=process.pid,
+        anchor=_fake_anchor(process.pid),
+        _lifeline_fd=-1,
         _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
     )
     monkeypatch.setattr(
@@ -230,35 +236,49 @@ def test_settle_error_path_settles_owned_group_before_reaping_leader(
         "_settle_remaining_group",
         lambda current: _record_group_settlement(current, events),
     )
+    monkeypatch.setattr(
+        OwnedProcessGroup,
+        "_release_lifeline",
+        lambda current: (
+            events.append("release_lifeline"),
+            setattr(current.anchor, "returncode", 0),
+        ),
+    )
     monkeypatch.setattr(capture_process, "_wait_for_group_exit", lambda *_args: True)
 
     with pytest.raises(RuntimeError, match="injected poll failure"):
         owner.settle()
-    assert events == ["poll", "settle_group", "wait"]
+    assert events == ["poll", "settle_group", "release_lifeline", "wait"]
 
 
-def test_remaining_group_gets_bounded_term_grace_before_kill(
+def test_remaining_group_gets_bounded_term_grace_excluding_anchor(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     process = cast("subprocess.Popen[bytes]", _OrderedProcess([]))
     owner = OwnedProcessGroup(
         process=process,
         pgid=process.pid,
+        anchor=_fake_anchor(process.pid),
+        _lifeline_fd=-1,
         _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
     )
-    signals: list[signal.Signals] = []
-    waits: list[tuple[int, float]] = []
-    outcomes = iter((False, True))
+    signals: list[tuple[signal.Signals, object]] = []
+    waits: list[tuple[int, float, int | None]] = []
 
     monkeypatch.setattr(
         capture_process,
         "_process_group_has_live_members",
-        lambda _pgid: True,
+        lambda _pgid, *, ignore_pid=None: True,
     )
 
-    def wait_for_settlement(pgid: int, timeout: float) -> bool:
-        waits.append((pgid, timeout))
-        return next(outcomes)
+    def wait_for_settlement(
+        pgid: int,
+        timeout: float,
+        *,
+        ignore_pid: int | None = None,
+    ) -> bool:
+        waits.append((pgid, timeout, ignore_pid))
+        return False
 
     monkeypatch.setattr(
         capture_process,
@@ -268,16 +288,13 @@ def test_remaining_group_gets_bounded_term_grace_before_kill(
     monkeypatch.setattr(
         OwnedProcessGroup,
         "signal_group",
-        lambda _owner, signum: signals.append(signum),
+        lambda _owner, signum, *, origin: signals.append((signum, origin)),
     )
 
     owner._settle_remaining_group()
 
-    assert waits == [
-        (owner.pgid, capture_process._TERM_TIMEOUT_SECONDS),
-        (owner.pgid, capture_process._KILL_TIMEOUT_SECONDS),
-    ]
-    assert signals == [signal.SIGTERM, signal.SIGKILL]
+    assert waits == [(owner.pgid, capture_process._TERM_TIMEOUT_SECONDS, owner.anchor_pid)]
+    assert signals == [(signal.SIGTERM, capture_process.SignalOrigin.RUNNER)]
     assert process.returncode is None
 
 
@@ -288,29 +305,33 @@ def test_remaining_group_exiting_during_term_grace_is_not_killed(
     owner = OwnedProcessGroup(
         process=process,
         pgid=process.pid,
+        anchor=_fake_anchor(process.pid),
+        _lifeline_fd=-1,
         _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
     )
-    signals: list[signal.Signals] = []
+    signals: list[tuple[signal.Signals, object]] = []
 
     monkeypatch.setattr(
         capture_process,
         "_process_group_has_live_members",
-        lambda _pgid: True,
+        lambda _pgid, *, ignore_pid=None: True,
     )
     monkeypatch.setattr(
         capture_process,
         "_wait_for_remaining_group_settlement",
-        lambda _pgid, timeout: timeout == capture_process._TERM_TIMEOUT_SECONDS,
+        lambda _pgid, timeout, *, ignore_pid=None: (
+            timeout == capture_process._TERM_TIMEOUT_SECONDS
+        ),
     )
     monkeypatch.setattr(
         OwnedProcessGroup,
         "signal_group",
-        lambda _owner, signum: signals.append(signum),
+        lambda _owner, signum, *, origin: signals.append((signum, origin)),
     )
 
     owner._settle_remaining_group()
 
-    assert signals == [signal.SIGTERM]
+    assert signals == [(signal.SIGTERM, capture_process.SignalOrigin.RUNNER)]
     assert process.returncode is None
 
 
@@ -322,6 +343,8 @@ def test_wait_cancellation_still_settles_and_reaps(
     owner = OwnedProcessGroup(
         process=process,
         pgid=process.pid,
+        anchor=_fake_anchor(process.pid),
+        _lifeline_fd=-1,
         _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
     )
 
@@ -345,12 +368,20 @@ def test_wait_cancellation_still_settles_and_reaps(
         "_settle_remaining_group",
         lambda current: _record_group_settlement(current, events),
     )
+    monkeypatch.setattr(
+        OwnedProcessGroup,
+        "_release_lifeline",
+        lambda current: (
+            events.append("release_lifeline"),
+            setattr(current.anchor, "returncode", 0),
+        ),
+    )
     monkeypatch.setattr(capture_process, "_wait_for_group_exit", lambda *_args: True)
 
     with pytest.raises(KeyboardInterrupt):
         owner.wait()
 
-    assert events == ["cancel", "settle_group", "wait"]
+    assert events == ["cancel", "settle_group", "release_lifeline", "wait"]
     assert process.returncode == 0
     assert owner._restored
 
@@ -362,11 +393,13 @@ def test_signal_handlers_forward_every_terminal_signal(
     owner = OwnedProcessGroup(
         process=process,
         pgid=process.pid,
+        anchor=_fake_anchor(process.pid),
+        _lifeline_fd=-1,
         _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
     )
     previous = {signum: object() for signum in capture_process._FORWARDED_SIGNALS}
     installed: dict[signal.Signals, object] = {}
-    forwarded: list[signal.Signals] = []
+    forwarded: list[tuple[signal.Signals, object]] = []
 
     monkeypatch.setattr(
         capture_process.signal,
@@ -381,7 +414,7 @@ def test_signal_handlers_forward_every_terminal_signal(
     monkeypatch.setattr(
         OwnedProcessGroup,
         "signal_group",
-        lambda _owner, signum: forwarded.append(signum),
+        lambda _owner, signum, *, origin: forwarded.append((signum, origin)),
     )
 
     assert capture_process._install_signal_forwarding(owner) == previous
@@ -390,53 +423,10 @@ def test_signal_handlers_forward_every_terminal_signal(
         assert callable(handler)
         handler(signum, None)
 
-    assert forwarded == list(capture_process._FORWARDED_SIGNALS)
-
-
-def test_descendant_held_pipe_has_bounded_term_kill_drain(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    events: list[str] = []
-    process = cast("subprocess.Popen[bytes]", _DrainProcess(events))
-    owner = OwnedProcessGroup(
-        process=process,
-        pgid=process.pid,
-        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
-    )
-    selector = _EmptySelector()
-    signals: list[signal.Signals] = []
-    monotonic_values = iter((0.0, 0.3, 0.9))
-
-    monkeypatch.setattr(capture_process.os, "set_blocking", lambda *_args: None)
-    monkeypatch.setattr(
-        capture_process.selectors,
-        "DefaultSelector",
-        lambda: selector,
-    )
-    monkeypatch.setattr(
-        capture_process.time,
-        "monotonic",
-        lambda: next(monotonic_values),
-    )
-    monkeypatch.setattr(
-        OwnedProcessGroup,
-        "signal_group",
-        lambda _owner, signum: signals.append(signum),
-    )
-
-    result = capture_process._drain_capture(
-        owner,
-        -1,
-        64,
-        digest_factory=hashlib.sha256,
-        write_all=lambda *_args: None,
-    )
-
-    assert result.truncated
-    assert result.measurement.total_bytes == 0
-    assert signals == [signal.SIGTERM, signal.SIGKILL]
-    assert selector.closed
-    assert process.returncode is None
+    assert forwarded == [
+        (signum, capture_process.SignalOrigin.FORWARDED)
+        for signum in capture_process._FORWARDED_SIGNALS
+    ]
 
 
 def test_pty_foreground_handoff_and_parent_state_restoration(
@@ -485,6 +475,8 @@ def test_pty_foreground_handoff_and_parent_state_restoration(
         owner = capture_process.OwnedProcessGroup(
             process=process,
             pgid=process.pid,
+            anchor=_fake_anchor(process.pid),
+            _lifeline_fd=-1,
             _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
         )
         owner._previous_handlers = previous_handlers
@@ -670,13 +662,22 @@ def test_spawn_owned_process_stdin_matches_capture_output(
     use_bash: bool,
 ) -> None:
     popen_kwargs: list[dict[str, object]] = []
-    process = cast("subprocess.Popen[bytes]", object())
-    monkeypatch.setattr(
-        capture_spawn.subprocess,
-        "Popen",
-        lambda *_args, **kwargs: popen_kwargs.append(kwargs) or process,
-    )
-    monkeypatch.setattr(capture_spawn, "_finish_owned_spawn", lambda *_args, **_kwargs: object())
+    process = SimpleNamespace(pid=4242, returncode=None)
+
+    def fake_popen(*_args: object, **kwargs: object) -> object:
+        popen_kwargs.append(kwargs)
+        stdout = kwargs.get("stdout")
+        if isinstance(stdout, int):
+            os.write(stdout, b"\n")
+        return process
+
+    monkeypatch.setattr(capture_spawn.subprocess, "Popen", fake_popen)
+
+    def finish_spawn(*_args: object, **kwargs: object) -> object:
+        os.close(cast("int", kwargs["lifeline_fd"]))
+        return object()
+
+    monkeypatch.setattr(capture_spawn, "_finish_owned_spawn", finish_spawn)
 
     if use_bash:
         capture_spawn._spawn_bash("/bin/bash", "exit 0", capture_output=capture_output)
@@ -689,7 +690,17 @@ def test_spawn_owned_process_stdin_matches_capture_output(
         finally:
             os.close(cwd_fd)
 
-    assert popen_kwargs[0]["stdin"] is (subprocess.DEVNULL if capture_output else None)
+    assert len(popen_kwargs) == 2
+    anchor_kwargs, leader_kwargs = popen_kwargs
+    assert isinstance(anchor_kwargs["stdin"], int)
+    assert isinstance(anchor_kwargs["stdout"], int)
+    assert anchor_kwargs["stderr"] == subprocess.DEVNULL
+    assert anchor_kwargs["process_group"] == 0
+    assert anchor_kwargs["env"] == {}
+    assert anchor_kwargs["cwd"] == "/"
+    assert leader_kwargs["process_group"] == 4242
+    assert leader_kwargs["start_new_session"] is False
+    assert leader_kwargs["stdin"] is (subprocess.DEVNULL if capture_output else None)
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX process groups required")
@@ -705,13 +716,486 @@ def test_owned_process_natural_exit_is_reaped(tmp_path: Path) -> None:
         )
         assert type(owner) is capture_process.OwnedProcessGroup
         assert owner._spawn_token is capture_process._OWNED_PROCESS_SPAWN_TOKEN
-        assert owner.pgid == owner.pid
+        assert owner.pgid == owner.anchor_pid != owner.pid
         assert owner.wait() == 7
         assert not capture_process._process_group_exists(owner.pgid)
     finally:
         if owner is not None and owner.returncode is None:
             owner.settle()
         os.close(cwd_fd)
+
+
+@pytest.mark.skipif(
+    os.name != "posix" or not Path("/proc/self/status").exists(),
+    reason="lifeline anchor probes require procfs",
+)
+def test_owned_group_is_anchored_by_lifeline_process(tmp_path: Path) -> None:
+    cwd_fd = os.open(tmp_path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    owner = spawn_owned_process(
+        ["/bin/bash", "-c", "sleep 30"],
+        cwd_fd=cwd_fd,
+        env=os.environ,
+        capture_output=True,
+    )
+    try:
+        assert owner.pgid == owner.anchor_pid
+        assert owner.anchor_pid != owner.pid
+        assert os.getpgid(owner.pid) == owner.pgid
+        assert os.readlink(f"/proc/{owner.anchor_pid}/fd/0").startswith("pipe:[")
+
+        status = Path(f"/proc/{owner.anchor_pid}/status").read_text(encoding="utf-8")
+        ignored = int(
+            next(line.split()[1] for line in status.splitlines() if line.startswith("SigIgn:")), 16
+        )
+        for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGUSR1):
+            assert ignored & (1 << (int(signum) - 1))
+    finally:
+        if owner.returncode is None:
+            owner.settle()
+        os.close(cwd_fd)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process groups required")
+def test_lifeline_release_is_the_group_kill(tmp_path: Path) -> None:
+    cwd_fd = os.open(tmp_path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    owner = spawn_owned_process(
+        ["/bin/bash", "-c", "(trap '' TERM; sleep 30) & sleep 30"],
+        cwd_fd=cwd_fd,
+        env=os.environ,
+        capture_output=True,
+    )
+    try:
+        owner._release_lifeline()
+
+        assert owner.anchor.returncode is not None
+        assert capture_process._process_group_has_live_members(owner.pgid) is False
+        assert owner._runner_signals == []
+        assert owner.wait() == -signal.SIGKILL
+    finally:
+        if owner.returncode is None:
+            owner.settle()
+        os.close(cwd_fd)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process groups required")
+def test_settlement_ignores_anchor_liveness(tmp_path: Path) -> None:
+    cwd_fd = os.open(tmp_path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    owner = spawn_owned_process(["true"], cwd_fd=cwd_fd, env=os.environ, capture_output=True)
+    try:
+        started = time.monotonic()
+        assert owner.wait() == 0
+        assert time.monotonic() - started < 1.0
+        assert capture_process._process_group_has_live_members(owner.pgid) is not True
+        assert owner.anchor.returncode is not None
+    finally:
+        if owner.returncode is None:
+            owner.settle()
+        os.close(cwd_fd)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process groups required")
+def test_post_eof_settlement_terminates_then_releases_lifeline(tmp_path: Path) -> None:
+    cwd_fd = os.open(tmp_path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    owner = spawn_owned_process(
+        ["/bin/bash", "-c", "(trap '' TERM; sleep 30) >/dev/null 2>&1 & exit 0"],
+        cwd_fd=cwd_fd,
+        env=os.environ,
+        capture_output=True,
+    )
+    try:
+        started = time.monotonic()
+        assert owner.wait() == 0
+        assert time.monotonic() - started < capture_process._TERM_TIMEOUT_SECONDS + 1.5
+        assert capture_process._process_group_has_live_members(owner.pgid) is False
+        assert owner.anchor.returncode is not None
+    finally:
+        if owner.returncode is None:
+            owner.settle()
+        os.close(cwd_fd)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process groups required")
+def test_forwarded_signals_do_not_disarm_lifeline(tmp_path: Path) -> None:
+    origin = capture_process.SignalOrigin
+    cwd_fd = os.open(tmp_path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    owner = spawn_owned_process(
+        ["/bin/bash", "-c", "trap '' INT TERM HUP QUIT; sleep 30"],
+        cwd_fd=cwd_fd,
+        env=os.environ,
+        capture_output=True,
+    )
+    try:
+        for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP, signal.SIGQUIT):
+            owner.signal_group(signum, origin=origin.FORWARDED)
+            assert owner.anchor.poll() is None
+        assert owner.runner_signalled is False
+    finally:
+        if owner.returncode is None:
+            owner.settle()
+
+    second_cwd_fd = os.open(tmp_path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    self_signalling = spawn_owned_process(
+        [
+            "/bin/bash",
+            "-c",
+            "trap '' USR1 USR2 ALRM; kill -USR1 0; kill -USR2 0; kill -ALRM 0; sleep 30",
+        ],
+        cwd_fd=second_cwd_fd,
+        env=os.environ,
+        capture_output=True,
+    )
+    try:
+        time.sleep(0.2)
+        assert self_signalling.anchor.poll() is None
+        assert self_signalling.runner_signalled is False
+    finally:
+        if self_signalling.returncode is None:
+            self_signalling.settle()
+        os.close(second_cwd_fd)
+        os.close(cwd_fd)
+
+
+def test_signal_group_requires_origin_and_records_runner_signals(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    process = cast("subprocess.Popen[bytes]", _OrderedProcess([]))
+    owner = OwnedProcessGroup(
+        process=process,
+        pgid=process.pid,
+        anchor=_fake_anchor(process.pid),
+        _lifeline_fd=-1,
+        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
+    )
+    sent: list[tuple[int, int]] = []
+    monkeypatch.setattr(capture_process.os, "getpgid", lambda _pid: owner.pgid)
+    monkeypatch.setattr(capture_process, "_process_group_exists", lambda _pgid: True)
+    monkeypatch.setattr(
+        capture_process.os,
+        "killpg",
+        lambda pgid, signum: sent.append((pgid, signum)),
+    )
+
+    with pytest.raises(TypeError):
+        owner.signal_group(signal.SIGTERM)
+
+    owner.signal_group(signal.SIGTERM, origin=capture_process.SignalOrigin.RUNNER)
+    owner.terminate()
+    owner.kill()
+
+    assert sent == [
+        (owner.pgid, signal.SIGTERM),
+        (owner.pgid, signal.SIGTERM),
+        (owner.pgid, signal.SIGKILL),
+    ]
+    assert owner.runner_signalled
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process groups required")
+def test_anchor_that_dies_before_arming_fails_spawn(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(capture_spawn, "_ANCHOR_SCRIPT", "exit 3")
+    real_popen = capture_spawn.subprocess.Popen
+    anchors: list[subprocess.Popen[bytes]] = []
+    leader_calls: list[object] = []
+
+    def record_popen(*args: object, **kwargs: object) -> subprocess.Popen[bytes]:
+        process = real_popen(*args, **kwargs)
+        if kwargs.get("process_group") == 0:
+            anchors.append(process)
+        return process
+
+    monkeypatch.setattr(capture_spawn.subprocess, "Popen", record_popen)
+    monkeypatch.setattr(
+        capture_spawn,
+        "_popen_leader",
+        lambda *args, **kwargs: leader_calls.append((args, kwargs)),
+    )
+
+    with pytest.raises(Exception, match="cannot spawn capture shell") as raised:
+        capture_spawn._spawn_bash("/bin/bash", "exit 0", capture_output=False)
+
+    assert type(raised.value).__name__ == "CaptureSetupError"
+    assert leader_calls == []
+    assert len(anchors) == 1
+    assert anchors[0].returncode is not None
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process groups required")
+def test_leader_spawn_failure_releases_anchor(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    real_spawn_anchor = capture_spawn._spawn_anchor
+    anchors: list[subprocess.Popen[bytes]] = []
+
+    def record_anchor(*args: object, **kwargs: object):
+        anchor, lifeline_fd = real_spawn_anchor(*args, **kwargs)
+        anchors.append(anchor)
+        return anchor, lifeline_fd
+
+    monkeypatch.setattr(capture_spawn, "_spawn_anchor", record_anchor)
+    monkeypatch.setattr(
+        capture_spawn,
+        "_popen_leader",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            OSError(errno.E2BIG, "injected leader spawn failure")
+        ),
+    )
+
+    with pytest.raises(Exception, match="argument/environment exceeds system limit") as mapped:
+        capture_spawn._spawn_bash("/bin/bash", "exit 0", capture_output=False)
+
+    assert type(mapped.value).__name__ == "CaptureSetupError"
+    assert anchors[-1].returncode is not None
+
+    cwd_fd = os.open(tmp_path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    original_error = OSError(errno.E2BIG, "injected argv spawn failure")
+    monkeypatch.setattr(
+        capture_spawn,
+        "_popen_leader",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(original_error),
+    )
+    try:
+        with pytest.raises(OSError) as raised:
+            spawn_owned_process(["command"], cwd_fd=cwd_fd, env=os.environ, capture_output=False)
+        assert raised.value is original_error
+        assert anchors[-1].returncode is not None
+    finally:
+        os.close(cwd_fd)
+
+
+def test_anchor_spawn_failure_maps_without_abandon(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inherited_cwd_fds: list[int] = []
+    closed_fds: list[int] = []
+    abandon_calls: list[BaseException] = []
+    real_open = capture_spawn.os.open
+    real_close = capture_spawn.os.close
+
+    def record_open(path, flags, mode=0o777, *, dir_fd=None):
+        fd = real_open(path, flags, mode, dir_fd=dir_fd)
+        if path == "." and dir_fd is None:
+            inherited_cwd_fds.append(fd)
+        return fd
+
+    def record_close(fd: int) -> None:
+        if fd in inherited_cwd_fds:
+            closed_fds.append(fd)
+        real_close(fd)
+
+    monkeypatch.setattr(capture_spawn.os, "open", record_open)
+    monkeypatch.setattr(capture_spawn.os, "close", record_close)
+    monkeypatch.setattr(
+        capture_spawn,
+        "_spawn_anchor",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            OSError(errno.EMFILE, "injected anchor spawn failure")
+        ),
+    )
+    monkeypatch.setattr(
+        capture_spawn,
+        "_abandon_anchor",
+        lambda _anchor, _fd, *, primary_error: abandon_calls.append(primary_error),
+    )
+
+    with pytest.raises(Exception, match="cannot spawn capture shell") as raised:
+        capture_spawn._spawn_bash("/bin/bash", "exit 0", capture_output=False)
+
+    assert type(raised.value).__name__ == "CaptureSetupError"
+    assert abandon_calls == []
+    assert len(inherited_cwd_fds) == 1
+    assert closed_fds == inherited_cwd_fds
+    with pytest.raises(OSError):
+        os.fstat(inherited_cwd_fds[0])
+
+
+def test_owned_spawn_original_cwd_open_failure_releases_anchor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    anchor = _fake_anchor(4242)
+    open_error = OSError(errno.EMFILE, "injected cwd open failure")
+    abandoned: list[tuple[object, int, BaseException]] = []
+    monkeypatch.setattr(
+        capture_spawn,
+        "_spawn_anchor",
+        lambda *_args, **_kwargs: (anchor, 99),
+    )
+    monkeypatch.setattr(
+        capture_spawn.os,
+        "open",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(open_error),
+    )
+    monkeypatch.setattr(
+        capture_spawn,
+        "_abandon_anchor",
+        lambda spawned_anchor, fd, *, primary_error: abandoned.append(
+            (spawned_anchor, fd, primary_error)
+        ),
+    )
+
+    with pytest.raises(OSError) as raised:
+        spawn_owned_process([], cwd_fd=10, env={}, capture_output=False)
+
+    assert raised.value is open_error
+    assert abandoned == [(anchor, 99, open_error)]
+
+
+@pytest.mark.parametrize(
+    ("anchor_exits", "group_settles", "expected_signals"),
+    [
+        ((False, True), (True,), [signal.SIGKILL]),
+        ((True,), (False, True), [signal.SIGKILL]),
+        ((True,), (True,), []),
+    ],
+    ids=("anchor-needs-kill", "group-needs-kill", "clean-release"),
+)
+def test_release_lifeline_escalates_only_when_anchor_does_not_exit(
+    monkeypatch: pytest.MonkeyPatch,
+    anchor_exits: tuple[bool, ...],
+    group_settles: tuple[bool, ...],
+    expected_signals: list[signal.Signals],
+) -> None:
+    process = cast("subprocess.Popen[bytes]", _OrderedProcess([]))
+    anchor = SimpleNamespace(pid=process.pid, returncode=None)
+
+    def reap_anchor(*, timeout: float | None = None) -> int:
+        del timeout
+        anchor.returncode = 0
+        return 0
+
+    anchor.wait = reap_anchor
+    lifeline_fd = os.open(os.devnull, os.O_RDONLY)
+    owner = OwnedProcessGroup(
+        process=process,
+        pgid=process.pid,
+        anchor=anchor,
+        _lifeline_fd=lifeline_fd,
+        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
+    )
+    anchor_outcomes = iter(anchor_exits)
+    group_outcomes = iter(group_settles)
+    signals: list[signal.Signals] = []
+    closed_fds: list[int] = []
+    real_close = os.close
+
+    def record_close(fd: int) -> None:
+        closed_fds.append(fd)
+        real_close(fd)
+
+    monkeypatch.setattr(
+        capture_process,
+        "_wait_for_leader_exit_without_reaping",
+        lambda *_args, **_kwargs: next(anchor_outcomes),
+    )
+    monkeypatch.setattr(
+        capture_process,
+        "_wait_for_remaining_group_settlement",
+        lambda *_args, **_kwargs: next(group_outcomes),
+    )
+    monkeypatch.setattr(
+        OwnedProcessGroup,
+        "signal_group",
+        lambda _owner, signum, *, origin: signals.append(signum),
+    )
+    monkeypatch.setattr(capture_process.os, "close", record_close)
+
+    owner._release_lifeline()
+
+    assert signals == expected_signals
+    assert closed_fds == [lifeline_fd]
+    assert owner.anchor.returncode == 0
+
+
+@pytest.mark.skipif(
+    os.name != "posix" or not Path("/proc/self/stat").exists(),
+    reason="runner-death oracle requires procfs",
+)
+def test_runner_death_kills_user_group(tmp_path: Path) -> None:
+    src_dir = Path(__file__).parents[2] / "src"
+    hooks_dir = src_dir / "autoskillit" / "hooks"
+    site_packages = sysconfig.get_paths()["purelib"]
+    helper_code = r"""
+import os
+import sys
+import time
+
+sys.path.insert(0, sys.argv[1])
+sys.path.insert(0, sys.argv[2])
+sys.path.append(sys.argv[3])
+from autoskillit.hooks._capture_process import spawn_owned_process
+
+cwd_fd = os.open(".", os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+owner = spawn_owned_process(
+    ["/bin/bash", "-c", "echo $$ > leader.pid; exec sleep 30"],
+    cwd_fd=cwd_fd,
+    env=os.environ,
+    capture_output=False,
+)
+os.close(cwd_fd)
+with open("owned-group.pid", "w", encoding="utf-8") as stream:
+    stream.write(str(owner.pgid))
+open("helper-ready", "w").close()
+time.sleep(30)
+"""
+    helper = subprocess.Popen(
+        [
+            sys.executable,
+            "-I",
+            "-S",
+            "-c",
+            helper_code,
+            str(src_dir),
+            str(hooks_dir),
+            site_packages,
+        ],
+        cwd=tmp_path,
+        env=production_interpreter_env(),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    leader_pid_path = tmp_path / "leader.pid"
+    group_pid_path = tmp_path / "owned-group.pid"
+    ready_path = tmp_path / "helper-ready"
+    deadline = time.monotonic() + 5
+    try:
+        while time.monotonic() < deadline and not (
+            ready_path.exists() and leader_pid_path.exists() and group_pid_path.exists()
+        ):
+            if helper.poll() is not None:
+                break
+            time.sleep(0.01)
+        assert helper.poll() is None
+        assert ready_path.exists()
+        leader_pid = int(leader_pid_path.read_text(encoding="utf-8"))
+        group_pid = int(group_pid_path.read_text(encoding="utf-8"))
+
+        helper.kill()
+        helper.wait(timeout=5)
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            try:
+                stat = Path(f"/proc/{leader_pid}/stat").read_text(encoding="utf-8")
+            except FileNotFoundError:
+                break
+            if stat.rpartition(")")[2].lstrip().startswith("Z"):
+                break
+            time.sleep(0.01)
+        else:
+            pytest.fail("owned leader remained live after its runner died")
+    finally:
+        if helper.poll() is None:
+            helper.kill()
+            helper.wait(timeout=5)
+        if group_pid_path.exists():
+            group_pid = int(group_pid_path.read_text(encoding="utf-8"))
+            try:
+                os.killpg(group_pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX process groups required")
@@ -831,6 +1315,7 @@ time.sleep(30)
         assert owner.settle() == 0
 
         assert not capture_process._process_group_exists(owner.pgid)
+        assert owner.anchor.returncode is not None
         for descendant_pid in (child_pid, grandchild_pid):
             with pytest.raises(ProcessLookupError):
                 os.kill(descendant_pid, 0)
@@ -871,8 +1356,10 @@ def test_group_identity_rejects_unsafe_values() -> None:
         capture_process._process_group_exists(1)
 
 
+@pytest.mark.parametrize("anchor_poll_fails", (False, True))
 def test_owned_spawn_identity_error_is_preserved(
     monkeypatch: pytest.MonkeyPatch,
+    anchor_poll_fails: bool,
 ) -> None:
     class FailedIdentityProcess:
         pid = 4321
@@ -885,22 +1372,47 @@ def test_owned_spawn_identity_error_is_preserved(
             del timeout
             raise OSError("reap cleanup failed")
 
-    identity_error = OSError("identity unavailable")
+    identity_error: BaseException = (
+        OwnedProcessError("anchor identity poll failed")
+        if anchor_poll_fails
+        else OSError("identity unavailable")
+    )
+    anchor = _fake_anchor(4320)
+    lifeline_fd = os.open(os.devnull, os.O_RDONLY)
+    abandoned: list[BaseException] = []
     monkeypatch.setattr(
         capture_process.os,
         "getpgid",
         lambda _pid: (_ for _ in ()).throw(identity_error),
     )
+    monkeypatch.setattr(
+        capture_spawn._capture_process,
+        "_poll_leader_without_reaping",
+        lambda *_args, **_kwargs: (
+            (_ for _ in ()).throw(identity_error) if anchor_poll_fails else None
+        ),
+    )
+    monkeypatch.setattr(
+        capture_spawn,
+        "_abandon_anchor",
+        lambda _anchor, _fd, *, primary_error: abandoned.append(primary_error),
+    )
 
-    with pytest.raises(OwnedProcessError, match="unsafe") as raised:
-        capture_spawn._finish_owned_spawn(
-            cast("subprocess.Popen[bytes]", FailedIdentityProcess()),
-            inherit_terminal=False,
-        )
+    try:
+        with pytest.raises(OwnedProcessError, match="unsafe") as raised:
+            capture_spawn._finish_owned_spawn(
+                cast("subprocess.Popen[bytes]", FailedIdentityProcess()),
+                inherit_terminal=False,
+                anchor=anchor,
+                lifeline_fd=lifeline_fd,
+            )
 
-    assert raised.value.__cause__ is identity_error
-    assert any("kill cleanup failed" in note for note in raised.value.__notes__)
-    assert any("reap cleanup failed" in note for note in raised.value.__notes__)
+        assert raised.value.__cause__ is identity_error
+        assert any("kill cleanup failed" in note for note in raised.value.__notes__)
+        assert any("reap cleanup failed" in note for note in raised.value.__notes__)
+        assert abandoned == [raised.value]
+    finally:
+        os.close(lifeline_fd)
 
 
 def test_owned_spawn_restore_error_preserves_settlement_failure(
@@ -910,6 +1422,8 @@ def test_owned_spawn_restore_error_preserves_settlement_failure(
     owner = OwnedProcessGroup(
         process=process,
         pgid=process.pid,
+        anchor=_fake_anchor(process.pid),
+        _lifeline_fd=-1,
         _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
     )
     restore_error = OSError("restore failed")
@@ -924,6 +1438,11 @@ def test_owned_spawn_restore_error_preserves_settlement_failure(
     monkeypatch.setattr(capture_spawn.os, "open", lambda *_args: 99)
     monkeypatch.setattr(capture_spawn.os, "fchdir", fail_restore)
     monkeypatch.setattr(capture_spawn.os, "close", lambda _fd: None)
+    monkeypatch.setattr(
+        capture_spawn,
+        "_spawn_anchor",
+        lambda *_args, **_kwargs: (_fake_anchor(process.pid), 99),
+    )
     monkeypatch.setattr(capture_spawn.subprocess, "Popen", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(capture_spawn, "_finish_owned_spawn", lambda *_args, **_kwargs: owner)
     monkeypatch.setattr(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -28,6 +29,7 @@ from autoskillit.hooks._capture_lifecycle import (
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DECISION = REPO_ROOT / "docs/decisions/0008-shell-capture-snapshot-authority.md"
 INDEX = REPO_ROOT / "docs/decisions/README.md"
+HOOKS_SAFETY = REPO_ROOT / "docs/safety/hooks.md"
 
 pytestmark = [pytest.mark.layer("docs"), pytest.mark.medium]
 
@@ -155,13 +157,19 @@ def test_stream_durability_and_visibility_boundaries_are_explicit(
         "not an authenticated ledger head",
         "power-loss durability",
         "hostile same-UID",
+        "never signals the owned group before pipe EOF on its own authority",
+        "`RUNNER_SETTLEMENT`",
+        "### Execution conformance matrix",
+        "### Process lifetime ownership",
+        "lifeline",
+        "executes the command text verbatim",
     ):
         assert required in normalized
 
 
 def test_downstream_issues_have_explicit_non_goals(decision_text: str) -> None:
     normalized = " ".join(decision_text.split())
-    for issue in ("#4323", "#4324", "#4325", "#4326", "#4327", "#4329", "#4335"):
+    for issue in ("#4324", "#4325", "#4326", "#4327", "#4329", "#4335"):
         assert issue in normalized
     for non_goal in (
         "does not install shell traps",
@@ -171,3 +179,21 @@ def test_downstream_issues_have_explicit_non_goals(decision_text: str) -> None:
         "does not extend Codex shell authority",
     ):
         assert non_goal in normalized
+
+
+def test_trap_isolation_is_resolved_by_runner_owned_completion(decision_text: str) -> None:
+    normalized = " ".join(decision_text.split())
+    assert re.search(r"\bResolved here\b[^.]*#4323", normalized)
+    assert "does not install shell traps" in normalized
+    assert "owns future trap isolation" not in normalized
+
+
+def test_hooks_safety_doc_matches_resolved_contract() -> None:
+    safety_text = HOOKS_SAFETY.read_text(encoding="utf-8")
+    assert "Trap isolation (#4323)" not in safety_text
+
+    start = safety_text.index("### `shell_capture_hook.py`")
+    end = safety_text.find("\n### ", start + 1)
+    shell_capture_section = safety_text[start:] if end == -1 else safety_text[start:end]
+    assert "setsid()" in shell_capture_section
+    assert "lifeline" in shell_capture_section

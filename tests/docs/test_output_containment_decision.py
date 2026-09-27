@@ -126,5 +126,12 @@ def test_obsolete_cleanup_claims_are_removed(decision_text: str) -> None:
         "`disown` is the fire-and-forget escape",
         "marker reports its path",
         "path is present",
+        "does not enable Codex's experimental `unified_exec`",
+        "A bare trailing backslash at EOF loses its literal backslash",
     ):
         assert obsolete not in decision_text
+
+
+def test_unified_exec_host_model_is_recorded(decision_text: str) -> None:
+    normalized = " ".join(decision_text.split())
+    assert "SIGKILLs the command's process group" in normalized

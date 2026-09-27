@@ -1651,6 +1651,9 @@ def test_spawn_bash_anchors_and_closes_inherited_cwd_fd(
     closed_fds: list[int] = []
     fchdir_fds: list[int] = []
     popen_kwargs: list[dict[str, object]] = []
+    abandon_calls: list[tuple[object, int, BaseException]] = []
+    lifeline_fd = os.open(os.devnull, os.O_RDONLY)
+    anchor = SimpleNamespace(pid=4242, returncode=None)
     real_open = capture_runner.os.open
     real_close = capture_runner.os.close
     real_fchdir = capture_runner.os.fchdir
@@ -1682,6 +1685,18 @@ def test_spawn_bash_anchors_and_closes_inherited_cwd_fd(
     monkeypatch.setattr(capture_runner.os, "close", record_close)
     monkeypatch.setattr(capture_runner.os, "fchdir", record_fchdir)
     monkeypatch.setattr(capture_runner.subprocess, "Popen", record_popen)
+    monkeypatch.setattr(
+        capture_spawn,
+        "_spawn_anchor",
+        lambda *_args, **_kwargs: (anchor, lifeline_fd),
+    )
+    monkeypatch.setattr(
+        capture_spawn,
+        "_abandon_anchor",
+        lambda spawned_anchor, fd, *, primary_error: abandon_calls.append(
+            (spawned_anchor, fd, primary_error)
+        ),
+    )
     monkeypatch.setattr(
         capture_spawn,
         "_finish_owned_spawn",
@@ -1718,6 +1733,15 @@ def test_spawn_bash_anchors_and_closes_inherited_cwd_fd(
         os.fstat(inherited_cwd_fd)
     assert len(popen_kwargs) == 1
     assert popen_kwargs[0]["close_fds"] is True
+    assert popen_kwargs[0]["process_group"] == 4242
+    if spawn_errno is None:
+        assert abandon_calls == []
+    else:
+        assert len(abandon_calls) == 1
+        assert abandon_calls[0][0] is anchor
+        assert abandon_calls[0][1] == lifeline_fd
+        assert type(abandon_calls[0][2]).__name__ == "CaptureSetupError"
+    real_close(lifeline_fd)
 
 
 @pytest.mark.skipif(
@@ -1930,6 +1954,9 @@ def test_restore_failure_closes_pipe_and_inherited_cwd_fd(
     inherited_cwd_fds: list[int] = []
     closed_fds: list[int] = []
     popen_kwargs: list[dict[str, object]] = []
+    abandon_calls: list[tuple[object, int, BaseException]] = []
+    lifeline_fd = os.open(os.devnull, os.O_RDONLY)
+    anchor = SimpleNamespace(pid=4242, returncode=None)
     real_open = capture_runner.os.open
     real_close = capture_runner.os.close
     real_fchdir = capture_runner.os.fchdir
@@ -1963,6 +1990,18 @@ def test_restore_failure_closes_pipe_and_inherited_cwd_fd(
     monkeypatch.setattr(capture_runner.subprocess, "Popen", record_popen)
     monkeypatch.setattr(
         capture_spawn,
+        "_spawn_anchor",
+        lambda *_args, **_kwargs: (anchor, lifeline_fd),
+    )
+    monkeypatch.setattr(
+        capture_spawn,
+        "_abandon_anchor",
+        lambda spawned_anchor, fd, *, primary_error: abandon_calls.append(
+            (spawned_anchor, fd, primary_error)
+        ),
+    )
+    monkeypatch.setattr(
+        capture_spawn,
         "_finish_owned_spawn",
         lambda spawned, **_kwargs: spawned,
     )
@@ -1980,11 +2019,13 @@ def test_restore_failure_closes_pipe_and_inherited_cwd_fd(
         assert len(inherited_cwd_fds) == 1
         assert closed_fds == inherited_cwd_fds
         assert popen_kwargs[0]["close_fds"] is True
+        assert popen_kwargs[0]["process_group"] == 4242
         with pytest.raises(OSError):
             os.fstat(inherited_cwd_fds[0])
     finally:
         real_fchdir(runner_cwd_fd)
         os.close(runner_cwd_fd)
+        real_close(lifeline_fd)
 
 
 def test_post_creation_identity_failure_closes_artifact_and_emits_failure(
@@ -3279,3 +3320,48 @@ def test_publication_binding_failure_emits_typed_failure(
     for fd in observed_fds:
         with pytest.raises(OSError):
             os.fstat(fd)
+
+
+def test_runner_settlement_before_eof_commits_failure_not_final(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    import signal
+
+    from autoskillit.hooks import _capture_process
+    from autoskillit.hooks._capture_process import SignalOrigin
+
+    project = tmp_path / "project"
+    project.mkdir()
+    processes: list[_capture_process.OwnedProcessGroup] = []
+    real_spawn = capture_runner._spawn_bash
+    real_drain = capture_runner._drain_capture
+
+    def record_spawn(*args, **kwargs) -> _capture_process.OwnedProcessGroup:
+        process = real_spawn(*args, **kwargs)
+        assert isinstance(process, _capture_process.OwnedProcessGroup)
+        processes.append(process)
+        return process
+
+    def settle_before_drain(process, artifact_writer_fd, inline_bytes):
+        process.signal_group(signal.SIGTERM, origin=SignalOrigin.RUNNER)
+        return real_drain(process, artifact_writer_fd, inline_bytes)
+
+    monkeypatch.setattr(capture_runner, "_spawn_bash", record_spawn)
+    monkeypatch.setattr(capture_runner, "_drain_capture", settle_before_drain)
+
+    assert run_capture("sleep 5 & printf x", str(project), _CAPTURE_ID) == 1
+
+    captured = capfd.readouterr()
+    failure = _single_failure_marker(captured.err)
+    record = _capture_record(project)
+    assert failure.reason is CaptureFailureReason.RUNNER_SETTLEMENT
+    assert record.state is CaptureState.FAILED
+    assert record.failure_reason == "RUNNER_SETTLEMENT"
+    assert record.manifest is None
+    assert "shell capture v2:" not in captured.out + captured.err
+    assert processes
+    owner = processes[0]
+    assert owner.anchor.returncode is not None
+    assert _capture_process._process_group_has_live_members(owner.pgid) is False

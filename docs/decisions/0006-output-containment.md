@@ -83,12 +83,16 @@ accepted — bounded by tool timeouts — because context cost is what this mech
 exists to bound. Catastrophic side-effect prevention belongs to `write_guard` and
 the Codex sandbox, not to output budgeting.
 
-### Unified Exec Assumption
+### Unified Exec Host Model
 
 The hook contract for `exec_command` is identical (tool `"Bash"`, string `command`),
-so the rewrite applies there too. AutoSkillit does not enable Codex's experimental
-`unified_exec` surface in the config it writes; interactive stdin-driven sessions are
-the only case where file-redirected output would change observable behavior.
+so the rewrite applies there too. Codex CLI 0.156.1 runs `exec_command` through
+`unified_exec` by default. It runs each command in its own POSIX session, and one
+Codex session can hold several such processes at once. It SIGKILLs the command's
+process group when an exited process is released, when a process is evicted at
+capacity (possibly while still running), and at session shutdown. Codex's own
+parent-death signal reaches only its direct child. The capture runner's
+process-lifetime contract is defined against that host model in ADR-0008.
 
 ### Capture Lifecycle Ownership
 
@@ -146,15 +150,13 @@ hook can be retired in favor of that mechanism.
    descendant-writer liveness, part of the managed-stream contract.
 2. Head and tail slices remain byte-cut and may split multibyte UTF-8 at slice
    edges. Verified bytes are available only through the opaque-reference reader.
-3. A bare trailing backslash at EOF loses its literal backslash from output under
-   continuation semantics. Exit code is preserved.
-4. Vendored-tree version discrepancy: the checkout tag is `rust-v0.143.0-alpha.10`
+3. Vendored-tree version discrepancy: the checkout tag is `rust-v0.143.0-alpha.10`
    vs the 0.144.1 description in the issue/ADR. The hook contract must be re-verified
    against the deployed Codex version before shipping.
-5. A supplied symlink spelling of `cwd` is accepted only by opening it first as
+4. A supplied symlink spelling of `cwd` is accepted only by opening it first as
    the `ProjectAnchor`; `.autoskillit`, `temp`, and `shell_capture` symlinks are
    rejected. Physical path strings are display hints, not filesystem authority.
-6. General retrieval, publication/privacy policy, quota accounting, and upstream
+5. General retrieval, publication/privacy policy, quota accounting, and upstream
    live visibility remain downstream work identified by ADR-0008.
 
 ## Resolved

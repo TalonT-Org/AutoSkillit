@@ -43,6 +43,77 @@ One drain pass computes total bytes, SHA-256, bounded inline bytes, and bounded
 head and tail bytes from that same stream domain. Those values cannot be supplied
 again by a caller at finalization.
 
+The runner executes the command text verbatim as `bash -c <command>` and installs
+no trap, subshell, or other finalization in the user's shell. In capture mode,
+pipe holders are waited for until actual pipe EOF whatever their trap state or
+job style. The runner never signals the owned group before pipe EOF on its own
+authority; host signals that the runner forwards are relayed, not runner
+settlement. A runner-originated signal before EOF fails the capture with
+`RUNNER_SETTLEMENT` and commits no FINAL.
+
+### Process lifetime ownership
+
+The runner starts a lifeline anchor before the command leader. The anchor ignores
+every catchable signal whose default action terminates or stops a process, confirms
+that it is armed before the leader is spawned, and holds the owned process-group
+ID. When the runner's lifeline closes, the anchor runs `kill -KILL 0`, ending the
+whole group. This also carries host `SIGKILL` to the user group: the host releases
+its resources when the runner exits, but capacity eviction and session shutdown
+can kill a still-running runner before it can forward that signal.
+
+After pipe EOF and leader exit, normal settlement sends `SIGTERM`, waits through a
+bounded grace period, then releases the lifeline for the anchor's final group
+kill. Direct mode has no capture pipe and settles the group at leader exit to
+match native process lifetime. A descendant that calls `setsid()` leaves the
+owned group and is the only escape; it must close or redirect inherited writers
+so it does not delay capture EOF.
+
+### Execution conformance matrix
+
+Command semantics use raw `bash -c`; process lifetime uses native Codex CLI
+0.156.1 `unified_exec`, which SIGKILLs the command's process group on release,
+capacity eviction, and session shutdown. The pinned baseline is declared by
+`ARG CODEX_VERSION=0.156.1` in `scripts/docker/verification/Dockerfile`, and the
+executable registry is `tests/hooks/_shell_conformance_matrix.py`. Each
+invariant has executable cases in capture and direct mode.
+
+| Invariant | Baseline | Statement |
+|-----------|----------|-----------|
+| `command-text` | raw_bash | The runner executes the command text verbatim as `bash -c <command>`. |
+| `initial-trap-state` | raw_bash | The command starts with the same trap state as raw `bash -c`. |
+| `user-trap-semantics` | raw_bash | User-installed, replaced, and cleared traps run with raw-compatible output and status. |
+| `exit-status` | raw_bash | The shell-compatible status comes from the leader's own wait status; the runner injects no finalization into the shell. |
+| `signal-status` | documented_difference | A command that dies by signal n reports shell-compatible status 128+n. |
+| `merged-descriptors` | documented_difference | Capture mode merges stderr into the managed stdout pipe; direct mode keeps the streams separate. |
+| `pipe-eof-completion` | documented_difference | In capture mode, same-group pipe holders are waited for until actual pipe EOF whatever their trap state or job style; in direct mode they are settled at leader exit. |
+| `descendant-settlement` | native_codex | Same-group descendants that do not hold the pipe are settled after completion whatever their trap state or job style. |
+| `setsid-escape` | documented_difference | A descendant that calls setsid() leaves the owned group and is not settled. |
+| `host-lifetime` | native_codex | When the host kills or terminates the runner, the user process group ends with it. |
+
+### Rejected alternatives
+
+- **Harden the shell trap** (chain user traps, override `trap`, hide state). A
+  shell-level finalizer cannot be made invisible and unbypassable, and `wait`
+  cannot reach nested, disowned, or exec-orphaned jobs.
+- **Release non-pipe descendants without signalling.** Native Codex 0.156.1
+  kills them, and because the user group sits outside Codex's group they would
+  leak without bound.
+- **Wait until the owned group is empty.** This blocks on long-lived jobs until
+  Codex times out or the session ends. Neither raw bash nor native Codex waits.
+- **Bounded drain, then abandon.** ADR-0008 forbids a capture-local deadline.
+- **Keep the leader-exit kill and report it as failure.** Outcomes stay
+  trap-dependent, and legitimate scripts would get spurious failures.
+- **PR_SET_PDEATHSIG or PR_SET_CHILD_SUBREAPER.** Both are Linux-only. PDEATHSIG
+  reaches only the direct child, and both need `ctypes`. Codex's own PDEATHSIG
+  shows the limit: it arms only Codex's direct child, which under the hook is the
+  harness shell, never the user's group.
+- **Execution-layer lease tether** (`_process_tether.py`). It is not stdlib-only
+  and its sweep latency runs to minutes or hours.
+- **Keep the command in Codex's group.** The runner could no longer settle,
+  forward, or hand over the terminal without killing itself, and it would lose
+  settlement authority on Codex's legacy `shell` path, which never kills the
+  group.
+
 ### Verified snapshot and FINAL
 
 After EOF, the runner closes its drain writer, retains the raw process wait
@@ -139,9 +210,10 @@ fails closed rather than being served.
 
 ## Downstream contracts and non-goals
 
-- [#4323](https://github.com/TalonT-Org/AutoSkillit/issues/4323) owns future trap
-  isolation. It consumes the distinct command outcome and runner-settlement
-  statuses; ADR-0008 does not install shell traps.
+- Resolved here: #4323's trap isolation is satisfied by runner-owned completion —
+  the runner does not install shell traps, executes the command verbatim, and
+  owns completion, settlement, and lifetime (see Process lifetime ownership and
+  Execution conformance matrix).
 - [#4324](https://github.com/TalonT-Org/AutoSkillit/issues/4324) owns a future
   rendered-output ceiling. It consumes `capture_v2_encoded_length()` and
   `capture_v2_worst_case_bytes()`; `shell_max_rendered_bytes` is not implemented
@@ -172,5 +244,9 @@ fails closed rather than being served.
   authority.
 - Completeness can wait indefinitely for a live descendant writer, subject only
   to outer execution cancellation.
+- Background work that does not hold the pipe is settled at completion whatever
+  its trap state; `setsid()` is the escape.
+- A regression that signals the group before EOF fails closed as
+  `RUNNER_SETTLEMENT`.
 - Reference and delivery ambiguity is explicit and permanent rather than repaired
   by token rotation or replay.

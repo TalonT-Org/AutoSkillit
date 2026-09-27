@@ -1011,9 +1011,12 @@ _DETACHED_SPAWN_ALLOWLIST: list[tuple[Path, str]] = [
     ),
     (
         SRC_ROOT / "hooks" / "_capture_spawn.py",
-        "stdlib-only standalone hook primitive; sub-second bounded capture shells; "
-        "passes process_group=0 but start_new_session=False — group-isolated, not "
-        "session-detached, so not an orphan source; expansion forbidden",
+        "stdlib-only standalone hook primitive; the owned group is anchored by a "
+        "runner-owned lifeline process that SIGKILLs the whole group when the runner's "
+        "lifeline pipe closes (settlement, runner exit, or host SIGKILL) — proven by "
+        "tests/hooks/test_shell_capture_conformance.py host-lifetime cases and "
+        "tests/hooks/test_capture_process.py::test_runner_death_kills_user_group; "
+        "start_new_session=False; expansion forbidden",
     ),
 ]
 

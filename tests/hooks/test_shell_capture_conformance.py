@@ -1,10 +1,7 @@
-"""Hard semantic-conformance gate for the shell capture harness.
+"""Executable conformance matrix for the shell capture runner.
 
-Runs a corpus of shell commands both raw (``bash -c <command>``) and wrapped
-(``bash -c <harness(command)>``), and asserts the harness is byte-exact and
-exit-code-exact with the raw execution — the harness must never change what a
-command does or what output the agent ultimately sees, only how much of that
-output lands inline vs. in an artifact file.
+Every invariant names its baseline in ``tests/hooks/_shell_conformance_matrix.py``
+and in ADR-0008 § Execution conformance matrix.
 """
 
 from __future__ import annotations
@@ -13,12 +10,14 @@ import hashlib
 import io
 import json
 import os
+import re
 import shlex
 import shutil
 import signal
 import socket
 import subprocess
 import sys
+import time
 from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
@@ -50,6 +49,15 @@ from autoskillit.hooks._capture_contract import (
 from autoskillit.hooks._capture_lifecycle import CaptureState
 from autoskillit.hooks.shell_capture_hook import _build_harness
 from tests.conftest import production_interpreter_env
+from tests.hooks._shell_conformance_matrix import (
+    CONFORMANCE_CASES,
+    CONFORMANCE_INVARIANTS,
+    NATIVE_BASELINE_CODEX_VERSION,
+    ConformanceCaseDef,
+    ConformanceDriver,
+    ConformanceExpectation,
+    ConformanceMode,
+)
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
@@ -71,37 +79,6 @@ _HARNESS_FORBIDDEN_VERBS: frozenset[str] = frozenset(
 
 _NESTED_WRAP_INNER = "echo hi"
 
-_CORPUS = [
-    (
-        "pipe_wc",
-        "find . -path ./.autoskillit -prune -o -type f -print 2>&1 | wc -l | head -c 4000",
-    ),
-    ("ls_wc", "ls . 2>&1 | wc -l"),
-    (
-        "heredoc_append",
-        "cat >> .autoskillit/temp/investigate/report.md <<'MARKER'\nsome content\nMARKER",
-    ),
-    ("multi_stmt", "cd /tmp && echo done # comment"),
-    ("exit_3", "exit 3"),
-    ("false_cmd", "false"),
-    ("mid_exit", "echo pre; exit 7; echo post"),
-    ("errexit", "set -e; false; echo unreachable"),
-    ("stderr_only", "echo err >&2"),
-    ("true_cmd", "true"),
-    ("self_bg", "{ sleep 0.2; echo late; } & echo started"),
-    ("large_output", "seq 1 200000"),
-    ("rg_sort", "rg pat . 2>&1 | sort | uniq -c | head -c 3000"),
-    ("jq_keys", "jq -c 'keys' x.jsonl 2>&1 | head -1 | head -c 1000"),
-    ("heredoc_no_newline", "cat <<'END'\nsome text\nEND"),
-    ("trailing_backslash", "echo one \\"),
-    ("self_signal", "echo pre; kill -TERM $$"),
-    (
-        "unicode_heavy",
-        "python3 -c \"import sys; sys.stdout.buffer.write(b'\\xc3\\xa9' * 8000)\"",
-    ),
-    ("nested_wrap", None),
-]
-
 
 def _make_project_dirs(tmp_path: Path) -> None:
     (tmp_path / _CAPTURE_SUBDIR).mkdir(parents=True, exist_ok=True)
@@ -115,6 +92,15 @@ def _capture_dir(tmp_path: Path) -> Path:
 
 def _artifact_files(tmp_path: Path) -> list[Path]:
     return sorted(_capture_dir(tmp_path).glob("shell_*.log"))
+
+
+def _wait_for_path(path: Path, *, timeout: float) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if path.exists():
+            return True
+        time.sleep(0.02)
+    return path.exists()
 
 
 def _parse_single_capture_v2(output: bytes) -> CaptureV2Fields:
@@ -188,119 +174,80 @@ def _run_wrapped(command: str, tmp_path: Path) -> subprocess.CompletedProcess[by
     )
 
 
-def _run_capture_trial(
-    label: str,
-    command: str,
-    tmp_path: Path,
-) -> tuple[
-    subprocess.CompletedProcess[bytes],
-    bytes,
-    subprocess.CompletedProcess[bytes],
-    list[Path],
-]:
-    _make_project_dirs(tmp_path)
-    if label == "nested_wrap":
-        command = _build_harness(_NESTED_WRAP_INNER, str(tmp_path), uuid4().hex[:16])
-
-    raw = _run_raw(command, tmp_path)
-    raw_combined = raw.stdout + raw.stderr
-
-    if label == "heredoc_append":
-        # raw run already appended once; reset the target file so the
-        # wrapped run's append produces byte-identical content to compare.
-        report = tmp_path / ".autoskillit" / "temp" / "investigate" / "report.md"
-        report.unlink(missing_ok=True)
-    if label == "nested_wrap":
-        shutil.rmtree(_capture_dir(tmp_path))
-        _capture_dir(tmp_path).mkdir()
-
-    wrapped = _run_wrapped(command, tmp_path)
-    return raw, raw_combined, wrapped, _artifact_files(tmp_path)
-
-
-def _assert_capture_outcome(
-    label: str,
+def _assert_shell_status(
     raw: subprocess.CompletedProcess[bytes],
-    raw_combined: bytes,
-    wrapped: subprocess.CompletedProcess[bytes],
-    artifacts: list[Path],
-    tmp_path: Path,
+    runner: subprocess.CompletedProcess[bytes],
 ) -> None:
-    expected_wrapped_returncode = 128 + (-raw.returncode) if raw.returncode < 0 else raw.returncode
-    assert wrapped.returncode == expected_wrapped_returncode, (
-        f"[{label}] exit code mismatch: raw={raw.returncode} wrapped={wrapped.returncode}\n"
-        f"raw stderr={raw.stderr!r}\nwrapped stderr={wrapped.stderr!r}"
-    )
+    expected = 128 + (-raw.returncode) if raw.returncode < 0 else raw.returncode
+    assert runner.returncode == expected
 
-    if label == "true_cmd":
-        assert raw_combined == b""
-        assert wrapped.stdout == b""
-        assert raw.returncode == 0
-        assert artifacts, "[true_cmd] expected artifact retained (Python-side cleanup)"
-        assert len(artifacts) == 1
+
+def _assert_expectation(
+    case: ConformanceCaseDef,
+    mode: ConformanceMode,
+    raw: subprocess.CompletedProcess[bytes],
+    runner: subprocess.CompletedProcess[bytes],
+    projects: dict[str, Path],
+) -> None:
+    expectation = case.expect[mode]
+    runner_project = projects[mode.value]
+
+    if expectation is ConformanceExpectation.SHELL_SIGNAL_STATUS:
+        assert raw.returncode < 0
+        expectation = ConformanceExpectation.RAW_OUTPUT_AND_STATUS
+
+    if expectation is ConformanceExpectation.RAW_OUTPUT_AND_STATUS:
+        _assert_shell_status(raw, runner)
+        if mode is ConformanceMode.CAPTURE:
+            expected = raw.stdout
+            assert raw.stderr is None
+            assert runner.stderr == b""
+            artifacts = _artifact_files(runner_project)
+            assert len(artifacts) == 1
+            assert artifacts[0].read_bytes() == expected
+            if len(expected) <= _INLINE_BYTES:
+                assert runner.stdout == expected
+            else:
+                _assert_published_capture_v2(runner_project, runner.stdout, expected)
+        else:
+            assert runner.stdout == raw.stdout
+            assert runner.stderr == raw.stderr
+            assert not _artifact_files(runner_project)
         return
 
-    if label == "self_bg":
-        assert b"started" in wrapped.stdout
-        assert b"late" in wrapped.stdout
-        assert wrapped.returncode == 0
+    if expectation is ConformanceExpectation.LATE_PIPE_BYTES_INCLUDED:
+        assert mode is ConformanceMode.CAPTURE
+        _assert_shell_status(raw, runner)
+        assert b"late" in raw.stdout
+        assert runner.stdout == raw.stdout
+        assert runner.stderr == b""
+        assert _artifact_files(runner_project)[0].read_bytes() == raw.stdout
         return
 
-    if label == "heredoc_append":
-        report = tmp_path / ".autoskillit" / "temp" / "investigate" / "report.md"
-        assert report.exists()
-        assert "some content" in report.read_text()
+    if expectation is ConformanceExpectation.LATE_PIPE_BYTES_SETTLED:
+        assert mode is ConformanceMode.DIRECT
+        _assert_shell_status(raw, runner)
+        early = raw.stdout.partition(b"late")[0]
+        assert early and b"late" in raw.stdout
+        assert early in runner.stdout
+        assert b"late" not in runner.stdout
+        assert runner.stderr == raw.stderr
         return
 
-    if label == "nested_wrap":
-        assert wrapped.returncode == 0
-        assert b"hi" in wrapped.stdout
+    if expectation is ConformanceExpectation.MARKER_SETTLED:
+        _assert_shell_status(raw, runner)
+        assert _wait_for_path(projects["raw"] / "marker", timeout=1.5)
+        time.sleep(1.0)
+        assert not (runner_project / "marker").exists()
         return
 
-    expected_returncode = {"mid_exit": 7, "errexit": 1}.get(label)
-    if expected_returncode is not None:
-        assert raw.returncode == expected_returncode
-        assert wrapped.returncode == expected_returncode
-
-    if label == "self_signal":
-        # The isolated runner deliberately translates a child signal to the
-        # shell-compatible 128+signal status.
-        assert raw.returncode == -15
-        assert wrapped.returncode == 143
-        if artifacts:
-            assert b"pre" in artifacts[0].read_bytes()
+    if expectation is ConformanceExpectation.MARKER_WRITTEN:
+        _assert_shell_status(raw, runner)
+        assert _wait_for_path(projects["raw"] / "marker", timeout=1.5)
+        assert _wait_for_path(runner_project / "marker", timeout=1.5)
         return
 
-    if label == "trailing_backslash":
-        return
-
-    if label == "unicode_heavy":
-        assert artifacts, f"[{label}] expected an artifact for large unicode output"
-        assert len(artifacts) == 1, f"[{label}] expected exactly one artifact, found {artifacts}"
-        artifact_bytes = artifacts[0].read_bytes()
-        assert artifact_bytes == raw_combined, (
-            f"[{label}] artifact content mismatch with raw combined output"
-        )
-        artifact_bytes.decode("utf-8")
-        _assert_published_capture_v2(tmp_path, wrapped.stdout, raw_combined)
-        return
-
-    if len(raw_combined) <= _INLINE_BYTES:
-        assert wrapped.stdout == raw_combined, (
-            f"[{label}] inline output mismatch.\nraw={raw_combined!r}\nwrapped={wrapped.stdout!r}"
-        )
-        assert artifacts, (
-            f"[{label}] expected artifact retained for small output (Python-side cleanup)"
-        )
-        assert len(artifacts) == 1
-    else:
-        assert artifacts, f"[{label}] expected an artifact for large output, found none"
-        assert len(artifacts) == 1, f"[{label}] expected exactly one artifact, found {artifacts}"
-        artifact_bytes = artifacts[0].read_bytes()
-        assert artifact_bytes == raw_combined, (
-            f"[{label}] artifact content mismatch with raw combined output"
-        )
-        _assert_published_capture_v2(tmp_path, wrapped.stdout, raw_combined)
+    raise AssertionError(f"unhandled conformance expectation: {expectation}")
 
 
 def _write_detached_pipe_helper(tmp_path: Path) -> Path:
@@ -425,17 +372,12 @@ def _direct_lineage_reference(project: Path) -> CaptureLineageRef:
     )
 
 
-def _run_runner(
+def _runner_argv(
     command: str,
     project: Path,
     *,
     mode: str,
-    execution_dir: Path | None = None,
-) -> subprocess.CompletedProcess[bytes]:
-    if execution_dir is None:
-        execution_dir = project
-    else:
-        assert not execution_dir.samefile(project)
+) -> list[str]:
     lineage_ref = _direct_lineage_reference(project) if mode == "direct" else None
     request = CaptureRequest(
         protocol_version=CAPTURE_REQUEST_PROTOCOL_VERSION,
@@ -447,13 +389,27 @@ def _run_runner(
         capture_id=uuid4().hex[:16],
         command=command,
     )
+    return [
+        sys.executable,
+        "-I",
+        str(Path(capture_artifacts.__file__).resolve()),
+        encode_capture_request(request),
+    ]
+
+
+def _run_runner(
+    command: str,
+    project: Path,
+    *,
+    mode: str,
+    execution_dir: Path | None = None,
+) -> subprocess.CompletedProcess[bytes]:
+    if execution_dir is None:
+        execution_dir = project
+    else:
+        assert not execution_dir.samefile(project)
     return subprocess.run(
-        [
-            sys.executable,
-            "-I",
-            str(Path(capture_artifacts.__file__).resolve()),
-            encode_capture_request(request),
-        ],
+        _runner_argv(command, project, mode=mode),
         env=production_interpreter_env(),
         capture_output=True,
         cwd=execution_dir,
@@ -462,37 +418,191 @@ def _run_runner(
     )
 
 
+def test_conformance_matrix_is_total() -> None:
+    assert {case.invariant for case in CONFORMANCE_CASES} == set(CONFORMANCE_INVARIANTS)
+    assert all(case.invariant in CONFORMANCE_INVARIANTS for case in CONFORMANCE_CASES)
+    assert all(set(case.expect) == set(ConformanceMode) for case in CONFORMANCE_CASES)
+    case_ids = [case.id for case in CONFORMANCE_CASES]
+    assert len(case_ids) == len(set(case_ids))
+    assert {
+        expectation for case in CONFORMANCE_CASES for expectation in case.expect.values()
+    } == set(ConformanceExpectation)
+
+
+def test_adr_0008_conformance_matrix_matches_registry() -> None:
+    project_root = Path(__file__).resolve().parents[2]
+    adr = (project_root / "docs/decisions/0008-shell-capture-snapshot-authority.md").read_text()
+    section = re.search(
+        r"(?ms)^### Execution conformance matrix\s*\n(.*?)(?=^#{1,3}\s|\Z)",
+        adr,
+    )
+    assert section is not None
+    table_rows = [line for line in section.group(1).splitlines() if line.lstrip().startswith("|")]
+    header = next(
+        (
+            index
+            for index, row in enumerate(table_rows)
+            if row.strip() == "| Invariant | Baseline | Statement |"
+        ),
+        None,
+    )
+    assert header is not None
+
+    documented: dict[str, tuple[str, str]] = {}
+    for row in table_rows[header + 1 :]:
+        columns = [column.strip() for column in row.strip().strip("|").split("|")]
+        if len(columns) != 3 or all(set(column) <= {"-", ":", " "} for column in columns):
+            continue
+        invariant_id = columns[0].strip("`")
+        documented[invariant_id] = (columns[1].strip("`"), columns[2])
+
+    registered = {
+        invariant.id: (invariant.baseline.value, invariant.statement)
+        for invariant in CONFORMANCE_INVARIANTS.values()
+    }
+    assert documented == registered
+
+
+def test_native_baseline_matches_verification_image() -> None:
+    project_root = Path(__file__).resolve().parents[2]
+    dockerfile = (project_root / "scripts/docker/verification/Dockerfile").read_text()
+    version = re.search(r"(?m)^ARG CODEX_VERSION=(\S+)\s*$", dockerfile)
+    assert version is not None
+    assert version.group(1) == NATIVE_BASELINE_CODEX_VERSION
+
+
 @pytest.mark.parametrize(
-    ("label", "command"),
+    ("case", "mode"),
     [
-        ("separate_streams_nonzero", "printf stdout; printf stderr >&2; exit 7"),
-        ("descriptor_cwd_zero", "printf 'cwd=%s' \"$PWD\""),
-        ("self_signal", "printf before-signal; kill -TERM $$"),
+        pytest.param(case, mode, id=f"{case.id}-{mode.value}")
+        for case in CONFORMANCE_CASES
+        if case.driver is ConformanceDriver.COMMAND
+        for mode in ConformanceMode
     ],
 )
-def test_capture_direct_runner_matrix_preserves_shell_semantics(
+def test_command_conformance(
     tmp_path: Path,
-    label: str,
-    command: str,
+    case: ConformanceCaseDef,
+    mode: ConformanceMode,
 ) -> None:
-    project = tmp_path / "project"
-    project.mkdir()
-    raw = _run_raw(command, project)
-    expected_returncode = 128 + (-raw.returncode) if raw.returncode < 0 else raw.returncode
+    if case.id == "rg_sort" and shutil.which("rg") is None:
+        pytest.skip("rg not available")
+    if case.id == "jq_keys" and shutil.which("jq") is None:
+        pytest.skip("jq not available")
 
-    direct = _run_runner(command, project, mode="direct")
+    projects = {name: tmp_path / name for name in ("raw", "capture", "direct")}
+    for project in projects.values():
+        _make_project_dirs(project)
 
-    assert direct.returncode == expected_returncode, label
-    assert direct.stdout == raw.stdout, label
-    assert direct.stderr == raw.stderr, label
-    assert not _artifact_files(project), label
+    expectation = case.expect[mode]
+    marker_case = expectation in {
+        ConformanceExpectation.MARKER_SETTLED,
+        ConformanceExpectation.MARKER_WRITTEN,
+    }
+    if mode is ConformanceMode.DIRECT or marker_case:
+        raw = _run_raw(case.command, projects["raw"])
+    else:
+        raw = _run_raw_merged(case.command, projects["raw"])
 
-    captured = _run_runner(command, project, mode="capture")
+    runner = _run_runner(case.command, projects[mode.value], mode=mode.value)
+    if mode is ConformanceMode.CAPTURE:
+        assert len(_artifact_files(projects[mode.value])) == 1
+    else:
+        assert not _artifact_files(projects[mode.value])
+    _assert_expectation(case, mode, raw, runner, projects)
 
-    assert captured.returncode == expected_returncode, label
-    assert captured.stdout == raw.stdout + raw.stderr, label
-    assert captured.stderr == b"", label
-    assert len(_artifact_files(project)) == 1, label
+
+def test_nested_harness_runs_inner_command_once(tmp_path: Path) -> None:
+    _make_project_dirs(tmp_path)
+    command = _build_harness(_NESTED_WRAP_INNER, str(tmp_path), uuid4().hex[:16])
+    wrapped = _run_wrapped(command, tmp_path)
+
+    assert wrapped.returncode == 0
+    assert wrapped.stdout.count(b"hi\n") == 1
+
+
+def _proc_gone_or_zombie(pid: int) -> bool:
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+    except FileNotFoundError:
+        return True
+    state_fields = stat[stat.rfind(")") + 1 :].split()
+    return bool(state_fields) and state_fields[0] == "Z"
+
+
+def _wait_for_proc_gone_or_zombie(pid: int, *, timeout: float) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if _proc_gone_or_zombie(pid):
+            return True
+        time.sleep(0.02)
+    return _proc_gone_or_zombie(pid)
+
+
+@pytest.mark.parametrize(
+    ("case", "mode"),
+    [
+        pytest.param(case, mode, id=f"{case.id}-{mode.value}")
+        for case in CONFORMANCE_CASES
+        if case.driver in {ConformanceDriver.HOST_SIGKILL, ConformanceDriver.HOST_SIGTERM}
+        for mode in ConformanceMode
+    ],
+)
+def test_host_lifetime_conformance(
+    tmp_path: Path,
+    case: ConformanceCaseDef,
+    mode: ConformanceMode,
+) -> None:
+    if not Path("/proc/self/stat").is_file():
+        pytest.skip("host-lifetime oracle requires /proc")
+
+    project = tmp_path / mode.value
+    _make_project_dirs(project)
+    if mode is ConformanceMode.CAPTURE:
+        argv = ["bash", "-c", _build_harness(case.command, str(project), uuid4().hex[:16])]
+        environment = None
+    else:
+        argv = _runner_argv(case.command, project, mode=mode.value)
+        environment = production_interpreter_env()
+
+    host = subprocess.Popen(
+        argv,
+        start_new_session=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        cwd=project,
+        env=environment,
+    )
+    leader_pid: int | None = None
+    try:
+        leader_file = project / "leader.pid"
+        assert _wait_for_path(leader_file, timeout=5.0)
+        leader_pid = int(leader_file.read_text().strip())
+        host_signal = (
+            signal.SIGKILL if case.driver is ConformanceDriver.HOST_SIGKILL else signal.SIGTERM
+        )
+        os.killpg(host.pid, host_signal)
+        try:
+            host.communicate(timeout=5.0)
+        except subprocess.TimeoutExpired:
+            os.killpg(host.pid, signal.SIGKILL)
+            host.communicate(timeout=5.0)
+
+        assert _wait_for_proc_gone_or_zombie(leader_pid, timeout=2.0)
+        time.sleep(1.2)
+        assert not (project / "marker").exists()
+    finally:
+        if host.poll() is None:
+            try:
+                os.killpg(host.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            host.communicate(timeout=5.0)
+        if leader_pid is not None:
+            try:
+                os.killpg(leader_pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
 
 
 @pytest.mark.parametrize(
@@ -568,17 +678,6 @@ def test_runner_keeps_project_and_execution_authorities_distinct(
         assert observation.effective_mode is NativeShellCaptureMode.DIRECT
         assert observation.reason.value == "launch_authorized_direct"
         assert not observation.project_policy_disabled
-
-
-@pytest.mark.parametrize("label,command", _CORPUS, ids=[row[0] for row in _CORPUS])
-def test_capture_conformance(label: str, command: str, tmp_path: Path) -> None:
-    if label == "rg_sort" and shutil.which("rg") is None:
-        pytest.skip("rg not available")
-    if label == "jq_keys" and shutil.which("jq") is None:
-        pytest.skip("jq not available")
-
-    raw, raw_combined, wrapped, artifacts = _run_capture_trial(label, command, tmp_path)
-    _assert_capture_outcome(label, raw, raw_combined, wrapped, artifacts, tmp_path)
 
 
 def test_retained_pipe_waits_for_actual_eof_and_includes_late_bytes(

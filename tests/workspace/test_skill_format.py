@@ -32,7 +32,8 @@ class TestValidateSkillFrontmatter:
 
     def test_empty_frontmatter_reports_required_errors(self) -> None:
         result = validate_skill_frontmatter({}, "my-skill")
-        assert len(result) >= 3
+        for field in ("name", "description", "write_paths"):
+            assert any(field in error for error in result)
 
     def test_name_uppercase_rejected(self) -> None:
         result = validate_skill_frontmatter(

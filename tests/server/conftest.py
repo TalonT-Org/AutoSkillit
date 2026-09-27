@@ -23,6 +23,20 @@ if TYPE_CHECKING:
 from autoskillit.pipeline.gate import DefaultGateState
 
 
+@pytest.fixture
+def git_checkout(tmp_path: Path) -> Path:
+    from tests._git_topology import init_checkout
+
+    return init_checkout(tmp_path / "clone")
+
+
+@pytest.fixture
+def git_linked_worktree(git_checkout: Path) -> Path:
+    from tests._git_topology import add_linked_worktree
+
+    return add_linked_worktree(git_checkout, "wt")
+
+
 @pytest.fixture(autouse=True)
 def _reset_server_state():
     """Reset module-level server state around each server test.

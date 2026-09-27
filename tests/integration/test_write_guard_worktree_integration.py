@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
-pytestmark = [pytest.mark.small]
+pytestmark = [pytest.mark.medium]
 
 
 def _run_hook(event: dict | str) -> str:
@@ -69,8 +69,9 @@ class TestWriteGuardWorktreeIntegration:
         executor = InMemoryHeadlessExecutor()
         tool_ctx_kitchen_open.executor = executor
         monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-        clone_dir = tmp_path / "clone"
-        clone_dir.mkdir()
+        from tests._git_topology import init_checkout
+
+        clone_dir = init_checkout(tmp_path / "clone")
         plan = clone_dir / "plan.md"
         plan.write_text("content")
 

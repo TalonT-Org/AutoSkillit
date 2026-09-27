@@ -40,6 +40,7 @@ from autoskillit.server._explorer_projection import _build_requested_execution_i
 from autoskillit.server.lifecycle._guards import _validate_skill_command
 from autoskillit.server.tools import tools_execution as _te_pkg
 from autoskillit.server.tools._execution_helpers import (
+    GitCheckoutRequiredError,
     bind_projection_backend,
     build_fresh_projection_context,
     build_validated_skill_dispatch_contract,
@@ -62,7 +63,7 @@ from autoskillit.server.tools._execution_helpers import (
     serialize_skill_contract as _serialize_skill_contract,
 )
 from autoskillit.server.tools._native_shell_capture import prepare_skill_native_shell_lineage
-from autoskillit.server.tools._types import ToolFailureEnvelope
+from autoskillit.server.tools._types import ToolFailureEnvelope, deny_envelope
 
 if TYPE_CHECKING:
     from autoskillit.server.tools.tools_execution._state import _RunSkillDispatchState
@@ -131,6 +132,8 @@ def _resolve_fresh_invocation(state: _RunSkillDispatchState) -> str | None:
             state.invocation,
             adaptation_context=None,
         )
+    except GitCheckoutRequiredError as exc:
+        return json.dumps(deny_envelope(str(exc), stage="preflight:git_checkout", retriable=False))
     except SkillContractError as exc:
         return SkillResult.crashed(
             exception=exc,

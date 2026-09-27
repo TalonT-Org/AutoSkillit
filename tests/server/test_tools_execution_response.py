@@ -14,7 +14,7 @@ from autoskillit.core.types import (
 )
 from autoskillit.server.tools.tools_execution import run_skill
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 
 def _make_session_result(
@@ -39,23 +39,28 @@ class TestResponseFieldsAreTypeSafe:
     """Every discriminator field in MCP tool responses uses enum values."""
 
     @pytest.mark.anyio
-    async def test_retry_reason_is_enum_value(self, tool_ctx):
+    async def test_retry_reason_is_enum_value(self, tool_ctx, git_linked_worktree):
         stdout = json.dumps(
             {
                 "type": "result",
                 "subtype": "error_max_turns",
                 "is_error": False,
+                "result": "queued error-max-turns result",
                 "session_id": "s1",
                 "num_turns": 200,
                 "errors": [],
             }
         )
         tool_ctx.runner.push(_make_session_result(1, stdout, ""))
-        result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
+        result = json.loads(await run_skill("/retry-worktree plan.md", str(git_linked_worktree)))
         assert result["retry_reason"] in {e.value for e in RetryReason}
+        assert tool_ctx.runner.call_args_list[0][0][0] in {
+            "/test-bin/claude",
+            "/test-bin/codex",
+        }
 
     @pytest.mark.anyio
-    async def test_retry_reason_none_is_enum_value(self, tool_ctx):
+    async def test_retry_reason_none_is_enum_value(self, tool_ctx, git_linked_worktree):
         stdout = json.dumps(
             {
                 "type": "result",
@@ -67,5 +72,10 @@ class TestResponseFieldsAreTypeSafe:
             }
         )
         tool_ctx.runner.push(_make_session_result(0, stdout, ""))
-        result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
+        result = json.loads(await run_skill("/retry-worktree plan.md", str(git_linked_worktree)))
         assert result["retry_reason"] in {e.value for e in RetryReason}
+        assert result["result"] == "Done."
+        assert tool_ctx.runner.call_args_list[0][0][0] in {
+            "/test-bin/claude",
+            "/test-bin/codex",
+        }

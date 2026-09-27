@@ -554,6 +554,7 @@ class TestStdinLiteralConsumers:
 
     @pytest.mark.parametrize("include_execution_cwd", [True, False])
     def test_allows_inert_herestring_git_push(self, tmp_path, include_execution_cwd: bool) -> None:
+        """A `cat` herestring containing an inert git push must not deny."""
         _git(tmp_path, "init", "-b", "develop")
         _git(tmp_path, "config", "user.name", "Guard Test")
         _git(tmp_path, "config", "user.email", "guard@example.invalid")

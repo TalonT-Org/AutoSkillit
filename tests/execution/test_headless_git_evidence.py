@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -16,6 +15,9 @@ from autoskillit.execution.headless._headless_git import (
     _observe_session_git_evidence,
 )
 from tests._git_topology import (
+    _run_git as _git,
+)
+from tests._git_topology import (
     add_linked_worktree,
     commit_file,
     head,
@@ -24,17 +26,6 @@ from tests._git_topology import (
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
-
-
-def _git(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["git", *args],
-        cwd=cwd,
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
 
 
 def test_capture_pre_session_git_state_classifies_launch_topologies(tmp_path: Path) -> None:

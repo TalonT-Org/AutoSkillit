@@ -38,7 +38,10 @@ _MATCH_LITERALS: frozenset[str] = _MATCH_NAMES | frozenset(
 # the constants module's __all__.
 _ALLOWED_OWNER_SCOPE_REFERENCES: frozenset[tuple[str, str]] = frozenset(
     {
-        ("core/types/_type_constants_env.py", "<module>"),  # def, __all__, private-set membership
+        (
+            "core/types/constants/_type_constants_env.py",
+            "<module>",
+        ),  # def, __all__, private-set membership
         ("execution/process/_lifecycle/owner_scope.py", "<module>"),  # import
         ("execution/process/_lifecycle/owner_scope.py", "OwnerScope.child_env"),  # writer
         ("execution/process/_lifecycle/owned_group.py", "<module>"),  # import

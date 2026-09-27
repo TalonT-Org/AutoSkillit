@@ -3,13 +3,13 @@ repos:
     hooks:
       - id: ruff-format
         name: ruff format
-        entry: .venv/bin/ruff format --force-exclude
+        entry: .venv/bin/ruff format
         language: system
         files: \.pyi?$
 
       - id: ruff
         name: ruff
-        entry: .venv/bin/ruff check --fix --force-exclude
+        entry: .venv/bin/ruff check --fix
         language: system
         files: \.pyi?$
 

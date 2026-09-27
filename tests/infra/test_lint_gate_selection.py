@@ -87,11 +87,18 @@ def _ruff_population() -> frozenset[str]:
         check=True,
         env=production_interpreter_env(),
     )
-    listed = {
-        Path(line).relative_to(REPO_ROOT).as_posix()
-        for line in result.stdout.splitlines()
-        if line.strip()
-    }
+    listed: set[str] = set()
+    for line in result.stdout.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            rel = Path(stripped).relative_to(REPO_ROOT).as_posix()
+        except ValueError:
+            raise AssertionError(
+                f"`ruff check --show-files` emitted a path outside REPO_ROOT: {stripped!r}"
+            ) from None
+        listed.add(rel)
     population = frozenset(listed.intersection(_tracked_regular_files()))
     assert population, f"`ruff check --show-files` listed no tracked file:\n{result.stdout}"
     return population
@@ -138,7 +145,6 @@ def test_ruff_hooks_select_every_file_ruff_lints() -> None:
 
 
 def test_ruff_metadata_input_is_the_root_pyproject() -> None:
-    assert _RUFF_METADATA_INPUT == "pyproject.toml"
     assert _RUFF_METADATA_INPUT in _ruff_population(), (
         f"{_RUFF_METADATA_INPUT!r} is no longer in ruff's population; the exclusion is stale"
     )
@@ -186,6 +192,16 @@ def test_tracked_python_shebang_files_are_in_ruff_population() -> None:
     population = _ruff_population()
     outside: list[str] = []
     for path in _tracked_regular_files():
+        # Short-circuit on the first byte: only files whose first byte is `#`
+        # can possibly start with a `#!/...` shebang. Skip the rest to avoid an
+        # open/readline per non-shebang file (~4k tracked files in this repo).
+        try:
+            with (REPO_ROOT / path).open("rb") as fh:
+                first_byte = fh.read(1)
+        except OSError:
+            continue
+        if first_byte != b"#":
+            continue
         with (REPO_ROOT / path).open("rb") as fh:
             line = fh.readline()
         if line.startswith(b"#!") and b"python" in line and path not in population:

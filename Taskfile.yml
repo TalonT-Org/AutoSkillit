@@ -92,11 +92,14 @@ tasks:
 
   lint:
     desc: Run the pinned ruff gate (lint + format) over ruff's own file population
+    preconditions:
+      - sh: test -x .venv/bin/ruff
+        msg: ".venv/bin/ruff not found — run 'task install-worktree' to set up the venv"
     cmds:
       - |
         set +e
-        # The fix preview's --diff exits 1 whenever a fix exists, so errexit stays off
-        # until the remediation line prints; the explicit gate below decides the verdict.
+        # Capture both exit codes; the fix preview's --diff exits 1 whenever a fix exists,
+        # so errexit stays off and `|| true` swallows each diff command's failure.
         .venv/bin/ruff check --output-format=concise
         CHECK_EXIT=$?
         .venv/bin/ruff format --check
@@ -104,10 +107,9 @@ tasks:
         if [ "$CHECK_EXIT" -ne 0 ] || [ "$FORMAT_EXIT" -ne 0 ]; then
           echo ""
           echo "Fix preview (first 200 lines):"
-          { .venv/bin/ruff check --diff; .venv/bin/ruff format --diff; } 2>&1 | head -n 200
+          { .venv/bin/ruff check --diff || true; .venv/bin/ruff format --diff || true; } 2>&1 | head -n 200
           echo "Apply fixes with: .venv/bin/ruff check --fix && .venv/bin/ruff format"
         fi
-        set -e
         if [ "$CHECK_EXIT" -ne 0 ] || [ "$FORMAT_EXIT" -ne 0 ]; then
           exit 1
         fi

@@ -18,7 +18,7 @@ import pytest
 
 from autoskillit.core.io import load_yaml
 
-pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
@@ -202,7 +202,10 @@ def test_test_all_propagates_lint_failure() -> None:
     )
 
 
+@pytest.mark.medium
 def test_lint_task_failure_output_is_actionable(tmp_path: Path) -> None:
+    # The remaining tests are cheap structural-contract assertions that match
+    # `test_typecheck_gate.py`'s granularity (module-level `pytest.mark.small`).
     (tmp_path / "pyproject.toml").write_text('[tool.ruff.lint]\nselect = ["I"]\n')
     pkg = tmp_path / "pkg"
     pkg.mkdir()

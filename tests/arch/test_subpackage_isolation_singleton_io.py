@@ -54,7 +54,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_features",  # cli/_features.py: features_app = App(name="features", ...)
         "_sessions",  # cli/ops/_sessions.py: sessions_app = App(name="sessions", ...)
         "_validate",  # cli/_validate.py: validate_app = App(name="validate", ...)
-        "_type_backend",  # core/types/_type_backend.py: CLAUDE_CODE_CAPABILITIES constant
+        # core/types/execution/_type_backend.py: CLAUDE_CODE_CAPABILITIES constant
+        "_type_backend",
         "claude",  # execution/backends/claude.py: _ANNOTATION_SUPPORT_MIN = Version(...)
         "_prompts",  # cli/prompts/_prompts.py: immutable startup recovery spec and rendering
         "tools_fleet_dispatch",  # request-scoped fleet provenance ContextVars
@@ -158,7 +159,7 @@ _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
 
 _SINGLETON_SAFE_ASSIGNMENTS: frozenset[tuple[str, str]] = frozenset(
     {
-        ("src/autoskillit/core/types/_type_dimensions.py", "ASCII_YAML_POLICY"),
+        ("src/autoskillit/core/types/foundation/_type_dimensions.py", "ASCII_YAML_POLICY"),
         ("src/autoskillit/hooks/_capture/_types.py", "DEBT_ASSIST_BUDGET"),
         ("src/autoskillit/hooks/_capture/_types.py", "HOT_PATH_LOCK_WAIT"),
         ("src/autoskillit/hooks/_capture/_types.py", "REQUIRED_RETENTION_BYTES"),

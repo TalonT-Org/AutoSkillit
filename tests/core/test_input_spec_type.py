@@ -7,7 +7,7 @@ import typing
 import pytest
 
 from autoskillit.core import VALID_INPUT_SPEC_TYPES
-from autoskillit.core.types._type_results import InputSpec
+from autoskillit.core.types.results._type_results import InputSpec
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 

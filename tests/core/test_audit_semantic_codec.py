@@ -17,13 +17,13 @@ from autoskillit.core.audit_semantic_codec import (
 )
 from autoskillit.core.closure_hashing import canonical_json_bytes, compute_bytes_hash
 from autoskillit.core.path_containment import read_stable_contained_bytes
-from autoskillit.core.types._type_audit_admission import (
+from autoskillit.core.types.audit._type_audit_admission import (
     STANDALONE_AUDIT_EVIDENCE_KIND,
     AuditSemanticResult,
     StandaloneAuditEvidence,
 )
-from autoskillit.core.types._type_audit_artifact_ref import ArtifactRef
-from autoskillit.core.types._type_audit_cycle_authority import (
+from autoskillit.core.types.audit._type_audit_artifact_ref import ArtifactRef
+from autoskillit.core.types.audit._type_audit_cycle_authority import (
     AuditAssessment,
     AuditAssessmentRow,
     AuditVerdict,

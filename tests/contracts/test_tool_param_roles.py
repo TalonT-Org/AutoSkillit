@@ -70,7 +70,7 @@ def test_admission_policy_totality_guard_is_live() -> None:
     fires: a synthetic role set containing a name absent from the real policy must
     raise, exactly as it would at import time if a new ToolParamRole member were
     added without a matching RUNTIME_ADMISSION_BY_ROLE entry."""
-    from autoskillit.core.types._type_recipe_binding import _assert_admission_policy_total
+    from autoskillit.core.types.recipe._type_recipe_binding import _assert_admission_policy_total
 
     synthetic_roles = frozenset(ToolParamRole) | {"unmapped_synthetic_role"}
     with pytest.raises(AssertionError, match="unmapped_synthetic_role"):

@@ -11,7 +11,7 @@ import pytest
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _CONSTRUCTION_SITES: list[tuple[str, str]] = [
-    ("CLAUDE_CODE_CAPABILITIES", "core/types/_type_backend.py"),
+    ("CLAUDE_CODE_CAPABILITIES", "core/types/execution/_type_backend.py"),
     ("CodexBackend.capabilities", "execution/backends/codex.py"),
 ]
 
@@ -91,7 +91,7 @@ def test_backend_construction_sites_explicitly_select_hook_trust_policy() -> Non
     from autoskillit.core import pkg_root
 
     expected_members = {
-        "core/types/_type_backend.py": "AUTOMATED",
+        "core/types/execution/_type_backend.py": "AUTOMATED",
         "execution/backends/codex.py": "REVIEW_EACH_SESSION",
     }
     for relpath, expected_member in expected_members.items():

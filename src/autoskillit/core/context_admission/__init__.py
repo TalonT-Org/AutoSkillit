@@ -11,7 +11,7 @@ preserve old import paths after the core/context_admission/ decomposition.
 
 from __future__ import annotations
 
-from ..types._type_enums import ProducerSurface
+from ..types.foundation._type_enums import ProducerSurface
 from .context_admission import (
     CONTEXT_ADMISSION_REDUCER_REGISTRY,
     ContextAdmissionReducerDef,

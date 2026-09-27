@@ -42,7 +42,7 @@ _RECORD_KEYS = frozenset(
 
 
 def _parse_instant(value: str, *, field_name: str) -> datetime:
-    # Duplicated from core.types._type_results._require_aware_timestamp to
+    # Duplicated from core.types.results._type_results._require_aware_timestamp to
     # avoid a cross-package submodule import (REQ-IMP-002 forbids
     # ``autoskillit.core.types.*`` from non-core/server/cli modules). Both
     # sites must apply identical rules; the duplicate is the trade-off the

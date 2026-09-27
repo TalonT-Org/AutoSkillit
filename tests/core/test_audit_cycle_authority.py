@@ -390,7 +390,7 @@ def test_cycle_shard_public_bindings_preserve_object_identity(
 ) -> None:
     types_package = importlib.import_module("autoskillit.core.types")
     core_package = importlib.import_module("autoskillit.core")
-    shard = importlib.import_module(f"autoskillit.core.types.{shard_name}")
+    shard = importlib.import_module(f"autoskillit.core.types.audit.{shard_name}")
 
     shard_binding = getattr(shard, binding)
     assert getattr(types_package, binding) is shard_binding
@@ -412,7 +412,7 @@ def test_cycle_shard_private_bindings_preserve_object_identity(
 ) -> None:
     types_package = importlib.import_module("autoskillit.core.types")
     core_package = importlib.import_module("autoskillit.core")
-    shard = importlib.import_module(f"autoskillit.core.types.{shard_name}")
+    shard = importlib.import_module(f"autoskillit.core.types.audit.{shard_name}")
 
     shard_binding = getattr(shard, binding)
     assert getattr(types_package, binding) is shard_binding

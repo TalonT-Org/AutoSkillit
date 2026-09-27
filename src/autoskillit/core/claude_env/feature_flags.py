@@ -14,8 +14,8 @@ __all__ = [
     "_collect_disabled_feature_tags",
 ]
 
-from ..types._type_constants_features import FEATURE_REGISTRY
-from ..types._type_enums import FeatureLifecycle
+from ..types.constants._type_constants_features import FEATURE_REGISTRY
+from ..types.foundation._type_enums import FeatureLifecycle
 
 
 def is_feature_enabled(

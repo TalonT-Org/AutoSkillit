@@ -6,12 +6,12 @@ import dataclasses
 
 import pytest
 
-from autoskillit.core.types._type_backend import (
+from autoskillit.core.types.execution._type_backend import (
     ClaudeEventData,
     CodexEventData,
     SessionEvent,
 )
-from autoskillit.core.types._type_enums import BackendEventKind
+from autoskillit.core.types.foundation._type_enums import BackendEventKind
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 

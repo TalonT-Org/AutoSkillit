@@ -64,7 +64,7 @@ _REQUIRED_FACTORY_KWARGS = frozenset({"environment", "cwd"})
 # Files that legitimately contain the literal (the canonical builder).
 _ALLOWLIST: frozenset[Path] = frozenset(
     {
-        _REPO_ROOT / "src/autoskillit/core/types/_type_install.py",
+        _REPO_ROOT / "src/autoskillit/core/types/install/_type_install.py",
     },
 )
 

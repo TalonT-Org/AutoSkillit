@@ -606,7 +606,7 @@ def test_cook_session_handle_contract_and_callback_delegation():
 
 
 def test_backend_module_all_exhaustive():
-    from autoskillit.core.types._type_backend import __all__
+    from autoskillit.core.types.execution._type_backend import __all__
 
     assert set(__all__) == {
         "ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS",
@@ -654,7 +654,7 @@ def test_backend_conventions_frozen_slots_fields():
     from dataclasses import FrozenInstanceError
     from pathlib import Path
 
-    from autoskillit.core.types._type_backend import BackendConventions
+    from autoskillit.core.types.execution._type_backend import BackendConventions
 
     assert hasattr(BackendConventions, "__slots__")
 
@@ -679,7 +679,7 @@ def test_backend_conventions_frozen_slots_fields():
 def test_no_autoskillit_imports_in_backend():
     from autoskillit.core import paths
 
-    backend_path = paths.pkg_root() / "core" / "types" / "_type_backend.py"
+    backend_path = paths.pkg_root() / "core" / "types" / "execution" / "_type_backend.py"
     source = backend_path.read_text()
     for line in source.splitlines():
         stripped = line.strip()

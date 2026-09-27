@@ -59,7 +59,7 @@ def test_mypy_rejects_cross_unit_assignment(tmp_path: Path) -> None:
     directions of the mismatch.
     """
     snippet = """
-from autoskillit.core.types._type_dimensions import SerializedChars, Utf8ByteLimit
+from autoskillit.core.types.foundation._type_dimensions import SerializedChars, Utf8ByteLimit
 
 
 def take_bytes(limit: Utf8ByteLimit) -> None:

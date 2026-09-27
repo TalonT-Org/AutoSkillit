@@ -21,6 +21,6 @@ def test_investigation_complete_marker_defined() -> None:
 
 def test_investigation_complete_marker_in_all() -> None:
     """INVESTIGATION_COMPLETE_MARKER must be in _type_constants.__all__."""
-    from autoskillit.core.types import _type_constants
+    from autoskillit.core.types.constants import _type_constants
 
     assert "INVESTIGATION_COMPLETE_MARKER" in _type_constants.__all__  # type: ignore[attr-defined]

@@ -65,5 +65,5 @@ Any new backend adding replay support must:
 - `execution/recording.py` — `_detect_backend_format`, `RecordingSubprocessRunner`
 - `execution/backends/codex_scenario_player.py` — `CodexScenarioPlayer`, `CodexStepRecord`
 - `docs/design/recording-replay-accepted-degradations.md` — accepted degradations
-- `core/types/_type_backend.py:127–129` — `replay_capable`, `record_capable` field definitions
+- `core/types/execution/_type_backend.py:127–129` — `replay_capable`, `record_capable` field definitions
 - `server/_factory.py:223–252` — capability-gated construction

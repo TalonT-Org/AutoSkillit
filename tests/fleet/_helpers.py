@@ -7,7 +7,10 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core.types._type_constants_registries import PACK_REGISTRY, TOOL_SUBSET_TAGS
+from autoskillit.core.types.constants._type_constants_registries import (
+    PACK_REGISTRY,
+    TOOL_SUBSET_TAGS,
+)
 
 # ---------------------------------------------------------------------------
 # Module-level constants — derived from the authoritative TOOL_SUBSET_TAGS map

@@ -161,8 +161,8 @@ def _recipe_section_facade_names() -> tuple[str, ...]:
     adding/removing a re-export in the facade cannot silently drift this
     test's coverage.
     """
-    import autoskillit.core.types._type_constants_registries as legacy_mod
-    import autoskillit.core.types._type_recipe_sections as canonical_mod
+    import autoskillit.core.types.constants._type_constants_registries as legacy_mod
+    import autoskillit.core.types.recipe._type_recipe_sections as canonical_mod
 
     canonical_names = set(canonical_mod.__all__)
     return tuple(
@@ -318,7 +318,7 @@ _CONTEXT_ADMISSION_PUBLIC_SURFACE: tuple[str, ...] = tuple(
 
 
 def test_context_admission_facade_public_surface_is_frozen() -> None:
-    facade = import_module("autoskillit.core.types._type_context_admission")
+    facade = import_module("autoskillit.core.types.context_admission._type_context_admission")
 
     # Set comparison because the derived surface follows shard-ownership order
     # while facade.__all__ interleaves coverage near the top; order does not
@@ -343,15 +343,15 @@ def test_context_admission_facade_reexports_owned_shard_objects(
     owned_names: tuple[str, ...],
 ) -> None:
     """Each shard remains directly importable and owns its facade bindings."""
-    shard = import_module(f"autoskillit.core.types.{shard_stem}")
-    facade = import_module("autoskillit.core.types._type_context_admission")
+    shard = import_module(f"autoskillit.core.types.context_admission.{shard_stem}")
+    facade = import_module("autoskillit.core.types.context_admission._type_context_admission")
 
     for name in owned_names:
         assert getattr(facade, name) is getattr(shard, name)
 
 
 def test_context_admission_package_hub_preserves_facade_identity() -> None:
-    facade = import_module("autoskillit.core.types._type_context_admission")
+    facade = import_module("autoskillit.core.types.context_admission._type_context_admission")
     hub = import_module("autoskillit.core.types")
 
     for name in _CONTEXT_ADMISSION_PUBLIC_SURFACE:
@@ -359,10 +359,12 @@ def test_context_admission_package_hub_preserves_facade_identity() -> None:
 
 
 def test_context_admission_private_codec_and_producer_surface_identity() -> None:
-    base = import_module("autoskillit.core.types._type_context_admission_base")
-    envelope = import_module("autoskillit.core.types._type_context_admission_persistence_envelope")
+    base = import_module("autoskillit.core.types.context_admission._type_context_admission_base")
+    envelope = import_module(
+        "autoskillit.core.types.context_admission._type_context_admission_persistence_envelope"
+    )
     reducer = import_module("autoskillit.core.context_admission")
-    enums = import_module("autoskillit.core.types._type_enums_context_admission")
+    enums = import_module("autoskillit.core.types.foundation._type_enums_context_admission")
 
     for name in ("_ContractValue", "_encode", "_decode"):
         assert getattr(envelope, name) is getattr(base, name), name
@@ -370,7 +372,7 @@ def test_context_admission_private_codec_and_producer_surface_identity() -> None
 
 
 def test_context_admission_registered_types_resolve_annotations_in_owning_shards() -> None:
-    base = import_module("autoskillit.core.types._type_context_admission_base")
+    base = import_module("autoskillit.core.types.context_admission._type_context_admission_base")
 
     assert base._TYPE_REGISTRY
     for name, contract_type in base._TYPE_REGISTRY.items():
@@ -378,8 +380,10 @@ def test_context_admission_registered_types_resolve_annotations_in_owning_shards
 
 
 def test_context_admission_event_union_is_closed_and_ordered() -> None:
-    events = import_module("autoskillit.core.types._type_context_admission_events")
-    facade = import_module("autoskillit.core.types._type_context_admission")
+    events = import_module(
+        "autoskillit.core.types.context_admission._type_context_admission_events"
+    )
+    facade = import_module("autoskillit.core.types.context_admission._type_context_admission")
 
     assert facade.ContextAdmissionEvent is events.ContextAdmissionEvent
     assert get_args(events.ContextAdmissionEvent) == (
@@ -407,8 +411,10 @@ def test_context_admission_event_union_is_closed_and_ordered() -> None:
 
 
 def test_context_admission_effect_union_is_closed_and_ordered() -> None:
-    effects = import_module("autoskillit.core.types._type_context_admission_effects")
-    facade = import_module("autoskillit.core.types._type_context_admission")
+    effects = import_module(
+        "autoskillit.core.types.context_admission._type_context_admission_effects"
+    )
+    facade = import_module("autoskillit.core.types.context_admission._type_context_admission")
 
     assert facade.AdmissionEffect is effects.AdmissionEffect
     assert get_args(effects.AdmissionEffect) == (
@@ -434,8 +440,8 @@ def test_decomposition_preserves_public_symbol_set() -> None:
     reachable through the original facade path with object identity preserved."""
     # Hub __all__ (union of all shards) preserves every original name.
     import autoskillit.core.types as types_hub
-    import autoskillit.core.types._type_constants as constants_mod
-    import autoskillit.core.types._type_enums as enums_mod
+    import autoskillit.core.types.constants._type_constants as constants_mod
+    import autoskillit.core.types.foundation._type_enums as enums_mod
 
     expected_all = _PRE_SPLIT_ENUM_NAMES | _PRE_SPLIT_CONSTANT_NAMES
     assert expected_all <= set(types_hub.__all__), (
@@ -460,7 +466,7 @@ def test_decomposition_preserves_public_symbol_set() -> None:
 
     # Identity preserved: name in facade and the same name imported directly from
     # the new shard resolve to the exact same object (no wrapping).
-    from autoskillit.core.types._type_enums_context_admission import (
+    from autoskillit.core.types.foundation._type_enums_context_admission import (
         AdmissionState,
         ProducerSurface,
     )
@@ -468,11 +474,11 @@ def test_decomposition_preserves_public_symbol_set() -> None:
     assert enums_mod.AdmissionState is AdmissionState
     assert enums_mod.ProducerSurface is ProducerSurface
 
-    from autoskillit.core.types._type_constants_durable_writers import (
+    from autoskillit.core.types.constants._type_constants_durable_writers import (
         DURABLE_ARTIFACT_WRITERS,
     )
-    from autoskillit.core.types._type_constants_retirements import RETIRED_SKILL_NAMES
-    from autoskillit.core.types._type_constants_skill_contract import (
+    from autoskillit.core.types.constants._type_constants_retirements import RETIRED_SKILL_NAMES
+    from autoskillit.core.types.constants._type_constants_skill_contract import (
         SKILL_CONTRACT_REMEDIATIONS,
     )
 
@@ -487,8 +493,12 @@ def test_decomposition_preserves_public_symbol_set() -> None:
         assert hasattr(constants_mod, name), f"_type_constants.{name} missing after decomposition"
 
     # Wavefront 2 split: persistence facade + envelope shard.
-    import autoskillit.core.types._type_context_admission_persistence as persistence_mod
-    import autoskillit.core.types._type_context_admission_persistence_envelope as envelope_mod
+    from autoskillit.core.types.context_admission import (
+        _type_context_admission_persistence as persistence_mod,
+    )
+    from autoskillit.core.types.context_admission import (
+        _type_context_admission_persistence_envelope as envelope_mod,
+    )
 
     # Hub __all__ preserves every pre-split persistence name.
     assert _PRE_SPLIT_PERSISTENCE_NAMES <= set(types_hub.__all__), (
@@ -513,8 +523,8 @@ def test_decomposition_preserves_public_symbol_set() -> None:
 def test_recipe_section_facade_preserves_identity_and_export_ownership(name: str) -> None:
     import autoskillit.core as core_mod
     import autoskillit.core.types as types_hub
-    import autoskillit.core.types._type_constants_registries as legacy_mod
-    import autoskillit.core.types._type_recipe_sections as canonical_mod
+    import autoskillit.core.types.constants._type_constants_registries as legacy_mod
+    import autoskillit.core.types.recipe._type_recipe_sections as canonical_mod
 
     canonical = getattr(canonical_mod, name)
     assert getattr(legacy_mod, name) is canonical
@@ -527,7 +537,7 @@ def test_recipe_section_facade_preserves_identity_and_export_ownership(name: str
 
 
 def test_enums_importable_from_sub_module():
-    from autoskillit.core.types._type_enums import (
+    from autoskillit.core.types.foundation._type_enums import (
         RetryReason,
     )
 
@@ -535,13 +545,15 @@ def test_enums_importable_from_sub_module():
 
 
 def test_protocols_importable_from_sub_module():
-    from autoskillit.core.types._type_protocols_execution import HeadlessExecutor
-    from autoskillit.core.types._type_protocols_infra import GateState
+    from autoskillit.core.types.protocols._type_protocols_execution import HeadlessExecutor
+    from autoskillit.core.types.protocols._type_protocols_infra import GateState
 
     assert callable(GateState)
-    assert GateState.__module__ == "autoskillit.core.types._type_protocols_infra"
+    assert GateState.__module__ == "autoskillit.core.types.protocols._type_protocols_infra"
     assert callable(HeadlessExecutor)
-    assert HeadlessExecutor.__module__ == "autoskillit.core.types._type_protocols_execution"
+    assert (
+        HeadlessExecutor.__module__ == "autoskillit.core.types.protocols._type_protocols_execution"
+    )
 
 
 def test_types_hub_backward_compat():
@@ -606,7 +618,7 @@ def test_supports_debug_in_core_all() -> None:
 
 
 def test_subprocess_shard_all() -> None:
-    from autoskillit.core.types._type_subprocess import __all__
+    from autoskillit.core.types.execution._type_subprocess import __all__
 
     assert set(__all__) == {
         "LineDriver",
@@ -618,7 +630,7 @@ def test_subprocess_shard_all() -> None:
 
 
 def test_subprocess_termination_contract_variable_still_defined() -> None:
-    import autoskillit.core.types._type_subprocess as m
+    import autoskillit.core.types.execution._type_subprocess as m
 
     assert hasattr(m, "_TERMINATION_CONTRACT")
 
@@ -701,8 +713,8 @@ _MOVED_CONTEXT_ADMISSION_VALIDATORS = (
 @pytest.mark.parametrize("name", _MOVED_CONTEXT_ADMISSION_VALIDATORS)
 def test_context_admission_validators_live_in_base(name: str) -> None:
     import autoskillit.core as core
-    from autoskillit.core.types import _type_context_admission_base as base
-    from autoskillit.core.types import _type_helpers as helpers
+    from autoskillit.core.types.context_admission import _type_context_admission_base as base
+    from autoskillit.core.types.launch import _type_helpers as helpers
 
     assert hasattr(base, name)
     assert not hasattr(helpers, name)

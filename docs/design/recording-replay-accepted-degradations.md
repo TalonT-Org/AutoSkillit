@@ -59,4 +59,4 @@ the non-PTY branch.
 - `src/autoskillit/execution/recording.py` — Record/replay subprocess runners
 - `src/autoskillit/execution/backends/codex_scenario_player.py` — Codex replay player
 - `src/autoskillit/execution/headless/_headless_helpers.py` — PTY mode resolution
-- `src/autoskillit/core/types/_type_subprocess.py` — `SubprocessRunner` protocol (`pty_mode` parameter)
+- `src/autoskillit/core/types/execution/_type_subprocess.py` — `SubprocessRunner` protocol (`pty_mode` parameter)

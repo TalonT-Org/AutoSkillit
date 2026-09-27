@@ -23,7 +23,7 @@ from autoskillit.core import (
     SkillResult,
 )
 from autoskillit.core.types import KillReason, SubprocessResult, TerminationReason
-from autoskillit.core.types._type_results import WriteEvidence
+from autoskillit.core.types.results._type_results import WriteEvidence
 from autoskillit.execution.backends import codex as codex_module
 from autoskillit.execution.backends._codex_session_storage import CodexSessionStore
 from autoskillit.execution.backends.codex import CodexBackend

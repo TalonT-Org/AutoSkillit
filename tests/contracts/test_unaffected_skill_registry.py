@@ -4,11 +4,11 @@
 Issue #4684 AC6 requires "No new failure mode is introduced for the
 unaffected skills (regression test on each)." A hardcoded count assertion
 breaks on any new SKILL.md addition; KNOWN_UNAFFECTED_SKILL_IDS
-(core/types/_type_constants.py, alongside RETIRED_SKILL_NAMES) follows the
+(core/types/constants/_type_constants.py, alongside RETIRED_SKILL_NAMES) follows the
 codebase's retirement-registry discipline instead (tests/AGENTS.md §
 Retirement Registries).
 
-Lives in core/types/_type_constants.py rather than a bare module under
+Lives in core/types/constants/_type_constants.py rather than a bare module under
 src/autoskillit/skills/ — that directory is a namespace package holding
 only SKILL.md content today (no __init__.py, no other .py files). Adding
 importable code there would create a skills/__pycache__/ directory, so this

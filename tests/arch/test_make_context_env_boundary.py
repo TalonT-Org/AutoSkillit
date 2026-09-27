@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core.types._type_constants_env import AUTOSKILLIT_PRIVATE_ENV_VARS
+from autoskillit.core.types.constants._type_constants_env import AUTOSKILLIT_PRIVATE_ENV_VARS
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 

@@ -8,7 +8,7 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 
 def test_coding_agent_backend_protocol_includes_skill_session_cmd():
-    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.core.types.protocols._type_protocols_backend import CodingAgentBackend
 
     assert hasattr(CodingAgentBackend, "build_skill_session_cmd"), (
         "CodingAgentBackend protocol must define build_skill_session_cmd"
@@ -19,7 +19,7 @@ def test_coding_agent_backend_protocol_includes_skill_session_cmd():
 
 
 def test_coding_agent_backend_protocol_includes_food_truck_cmd():
-    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.core.types.protocols._type_protocols_backend import CodingAgentBackend
 
     assert hasattr(CodingAgentBackend, "build_food_truck_cmd"), (
         "CodingAgentBackend protocol must define build_food_truck_cmd"
@@ -30,7 +30,7 @@ def test_coding_agent_backend_protocol_includes_food_truck_cmd():
 
 
 def test_coding_agent_backend_protocol_includes_build_interactive_cmd():
-    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.core.types.protocols._type_protocols_backend import CodingAgentBackend
 
     assert hasattr(CodingAgentBackend, "build_interactive_cmd"), (
         "CodingAgentBackend protocol must define build_interactive_cmd"
@@ -77,7 +77,7 @@ def test_all_backends_implement_food_truck_cmd():
 
 
 def test_coding_agent_backend_protocol_includes_validate_session_layout():
-    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.core.types.protocols._type_protocols_backend import CodingAgentBackend
 
     assert hasattr(CodingAgentBackend, "validate_session_layout"), (
         "CodingAgentBackend protocol must define validate_session_layout"
@@ -100,7 +100,7 @@ def test_all_backends_implement_validate_session_layout():
 
 
 def test_coding_agent_backend_protocol_includes_ensure_pre_launch():
-    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.core.types.protocols._type_protocols_backend import CodingAgentBackend
 
     assert hasattr(CodingAgentBackend, "ensure_pre_launch"), (
         "CodingAgentBackend protocol must define ensure_pre_launch"
@@ -123,7 +123,7 @@ def test_all_backends_implement_ensure_pre_launch():
 
 
 def test_coding_agent_backend_protocol_includes_probe_launch_readiness():
-    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.core.types.protocols._type_protocols_backend import CodingAgentBackend
 
     assert callable(getattr(CodingAgentBackend, "probe_launch_readiness", None)), (
         "CodingAgentBackend protocol must define probe_launch_readiness"
@@ -150,7 +150,7 @@ def test_all_backends_implement_probe_launch_readiness():
 def test_coding_agent_backend_protocol_includes_cook_lifecycle_method(
     method_name: str,
 ) -> None:
-    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.core.types.protocols._type_protocols_backend import CodingAgentBackend
 
     assert callable(getattr(CodingAgentBackend, method_name, None)), (
         f"CodingAgentBackend protocol must define {method_name}"
@@ -185,7 +185,7 @@ def test_all_backend_locators_implement_list_sessions() -> None:
 
 
 def test_coding_agent_backend_protocol_includes_translate_model():
-    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.core.types.protocols._type_protocols_backend import CodingAgentBackend
 
     assert hasattr(CodingAgentBackend, "translate_model"), (
         "CodingAgentBackend protocol must define translate_model"
@@ -206,7 +206,7 @@ def test_all_backends_implement_translate_model():
 
 
 def test_coding_agent_backend_protocol_includes_build_inspector_cmd():
-    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.core.types.protocols._type_protocols_backend import CodingAgentBackend
 
     assert hasattr(CodingAgentBackend, "build_inspector_cmd"), (
         "CodingAgentBackend protocol must define build_inspector_cmd"
@@ -229,7 +229,7 @@ def test_all_backends_implement_build_inspector_cmd():
 
 
 def test_coding_agent_backend_protocol_includes_conventions():
-    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.core.types.protocols._type_protocols_backend import CodingAgentBackend
 
     assert hasattr(CodingAgentBackend, "conventions"), (
         "CodingAgentBackend protocol must define conventions"
@@ -252,7 +252,7 @@ def test_all_backends_implement_conventions():
 
 
 def test_coding_agent_backend_protocol_includes_setup_session_dir():
-    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.core.types.protocols._type_protocols_backend import CodingAgentBackend
 
     assert hasattr(CodingAgentBackend, "setup_session_dir"), (
         "CodingAgentBackend protocol must define setup_session_dir"
@@ -263,7 +263,7 @@ def test_coding_agent_backend_protocol_includes_setup_session_dir():
 
 
 def test_coding_agent_backend_protocol_includes_model_config_overrides():
-    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.core.types.protocols._type_protocols_backend import CodingAgentBackend
 
     assert hasattr(CodingAgentBackend, "model_config_overrides"), (
         "CodingAgentBackend protocol must define model_config_overrides"

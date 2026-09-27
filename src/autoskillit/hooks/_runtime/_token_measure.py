@@ -1,7 +1,7 @@
 """Stdlib-only stand-in for ``TokenMeasure`` used by hook scripts.
 
 Mirrors the dict-level surface of
-``autoskillit.core.types._type_token.TokenMeasure`` so the
+``autoskillit.core.types.results._type_token.TokenMeasure`` so the
 ``token_summary_hook`` can decode durable measure records and combine
 or take the maximum of two. Any semantic change here must be reflected
 in ``TokenMeasure``.

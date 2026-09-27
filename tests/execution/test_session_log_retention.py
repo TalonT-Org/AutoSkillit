@@ -118,7 +118,7 @@ def test_candidate_manifest_retention_honors_telemetry_clear_fence(tmp_path):
 
 
 def test_recovery_prunes_completed_candidate_manifests(tmp_path):
-    from autoskillit.core.types._type_results_execution import ExecutionSelection
+    from autoskillit.core.types.results._type_results_execution import ExecutionSelection
     from autoskillit.execution.session_log.session_log import write_execution_candidate_manifest
 
     old_selection = ExecutionSelection(selection_id="old", completed=True)

@@ -16,7 +16,7 @@ class TestSessionIndexRoundtrip:
 
     def test_written_keys_match_typeddict_annotations(self, tmp_path):
         """Every key in sessions.jsonl must be declared in SessionIndexEntry and vice versa."""
-        from autoskillit.core.types._type_results import SessionIndexEntry
+        from autoskillit.core.types.results._type_results import SessionIndexEntry
 
         _flush(tmp_path, session_id="roundtrip-check", proc_snapshots=None)
         entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())

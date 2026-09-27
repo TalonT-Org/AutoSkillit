@@ -14,14 +14,14 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 def test_session_type_cook_order_not_in_core_types() -> None:
     """SESSION_TYPE_COOK/ORDER are CLI labels, not core type constants."""
-    from autoskillit.core.types import _type_constants
+    from autoskillit.core.types.constants import _type_constants
 
     assert not hasattr(_type_constants, "SESSION_TYPE_COOK")
     assert not hasattr(_type_constants, "SESSION_TYPE_ORDER")
 
 
 def test_claude_code_mcp_tool_idle_timeout_env_var_value() -> None:
-    from autoskillit.core.types._type_constants_env import (
+    from autoskillit.core.types.constants._type_constants_env import (
         CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR,
     )
 
@@ -29,7 +29,7 @@ def test_claude_code_mcp_tool_idle_timeout_env_var_value() -> None:
 
 
 def test_claude_code_mcp_tool_idle_timeout_env_var_in_all() -> None:
-    from autoskillit.core.types._type_constants_env import __all__ as env_all
+    from autoskillit.core.types.constants._type_constants_env import __all__ as env_all
 
     assert "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR" in env_all
 
@@ -51,13 +51,13 @@ def test_claude_code_mcp_tool_idle_timeout_env_var_importable_from_core() -> Non
 
 
 def test_headless_auto_gate_env_var_value() -> None:
-    from autoskillit.core.types._type_constants_env import HEADLESS_AUTO_GATE_ENV_VAR
+    from autoskillit.core.types.constants._type_constants_env import HEADLESS_AUTO_GATE_ENV_VAR
 
     assert HEADLESS_AUTO_GATE_ENV_VAR == "AUTOSKILLIT_HEADLESS_AUTO_GATE"
 
 
 def test_headless_auto_gate_env_var_in_all() -> None:
-    from autoskillit.core.types._type_constants_env import __all__ as env_all
+    from autoskillit.core.types.constants._type_constants_env import __all__ as env_all
 
     assert "HEADLESS_AUTO_GATE_ENV_VAR" in env_all
 
@@ -86,7 +86,7 @@ def test_headless_auto_gate_env_var_in_private_env_vars() -> None:
 
 
 def test_order_interactive_required_env_value() -> None:
-    from autoskillit.core.types._type_constants_env import ORDER_INTERACTIVE_REQUIRED_ENV
+    from autoskillit.core.types.constants._type_constants_env import ORDER_INTERACTIVE_REQUIRED_ENV
 
     assert ORDER_INTERACTIVE_REQUIRED_ENV == frozenset(
         {
@@ -101,13 +101,13 @@ def test_order_interactive_required_env_value() -> None:
 
 def test_order_interactive_required_env_excludes_headless() -> None:
     """Interactive order sessions must not require AUTOSKILLIT_HEADLESS."""
-    from autoskillit.core.types._type_constants_env import ORDER_INTERACTIVE_REQUIRED_ENV
+    from autoskillit.core.types.constants._type_constants_env import ORDER_INTERACTIVE_REQUIRED_ENV
 
     assert "AUTOSKILLIT_HEADLESS" not in ORDER_INTERACTIVE_REQUIRED_ENV
 
 
 def test_order_interactive_required_env_in_all() -> None:
-    from autoskillit.core.types._type_constants_env import __all__ as env_all
+    from autoskillit.core.types.constants._type_constants_env import __all__ as env_all
 
     assert "ORDER_INTERACTIVE_REQUIRED_ENV" in env_all
 

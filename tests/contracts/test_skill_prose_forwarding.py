@@ -15,7 +15,7 @@ scanned ``skills/*/SKILL.md`` alone, while the actual offending sentence
 lived in ``server/tools/tools_recipe.py``'s ``load_recipe`` docstring, a
 surface the original glob never reached. The sweep now iterates
 ``ORCHESTRATOR_FACING_INSTRUCTION_SURFACES``
-(core/types/_type_orchestrator_instruction_surfaces.py)
+(core/types/constants/_type_orchestrator_instruction_surfaces.py)
 instead of a hardcoded skills-only glob, honoring each surface's declared
 extraction mode, so a defense aimed at the wrong file cannot recur silently.
 

@@ -28,7 +28,7 @@ The Health Inspector feature (#3534) requires a real implementation on each back
 
 ## Protocol Surface
 
-Already defined in `core/types/_type_inspector.py`:
+Already defined in `core/types/execution/_type_inspector.py`:
 
 - **`InspectorEvidence`** (lines 15–24, frozen dataclass): `idle_seconds`, `stdout_path`,
   `jsonl_lines`, `cpu_trend`, `rss_trend`, `connection_summary`,

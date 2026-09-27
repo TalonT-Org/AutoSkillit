@@ -27,7 +27,7 @@ _CLAUDE_CODE_PASSTHROUGH_VARS: frozenset[str] = frozenset(
         # tests/execution/test_launch_force_inactive_default.py.
         "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",
         "CLAUDE_CODE_OAUTH_TOKEN",  # intentional: Claude OAuth authentication
-        # not a real env var: __all__ list member in core/types/_type_constants_env.py
+        # not a real env var: __all__ list member in core/types/constants/_type_constants_env.py
         # (R4 predicate-(b) scanner false positive) -- the constant's own identifier
         # name, never itself set as an OS environment variable.
         "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR",
@@ -38,7 +38,7 @@ _CLAUDE_CODE_PASSTHROUGH_VARS: frozenset[str] = frozenset(
 def test_codex_mcp_env_forward_vars_subset_of_private() -> None:
     """Every var in CODEX_MCP_ENV_FORWARD_VARS must be in AUTOSKILLIT_PRIVATE_ENV_VARS."""
     from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
-    from autoskillit.core.types._type_constants_env import CODEX_MCP_ENV_FORWARD_VARS
+    from autoskillit.core.types.constants._type_constants_env import CODEX_MCP_ENV_FORWARD_VARS
 
     uncovered = CODEX_MCP_ENV_FORWARD_VARS - AUTOSKILLIT_PRIVATE_ENV_VARS
     assert not uncovered, (
@@ -189,7 +189,7 @@ def test_codex_mcp_env_forward_vars_parity_with_config_toml(tmp_path) -> None:
     """Every CODEX_MCP_ENV_FORWARD_VARS member must appear in config.toml env_vars."""
     import tomllib
 
-    from autoskillit.core.types._type_constants_env import CODEX_MCP_ENV_FORWARD_VARS
+    from autoskillit.core.types.constants._type_constants_env import CODEX_MCP_ENV_FORWARD_VARS
     from autoskillit.execution.backends._codex_config import ensure_codex_mcp_registered
 
     config_path = tmp_path / "config.toml"
@@ -213,7 +213,7 @@ def test_ensure_codex_mcp_registered_includes_mcp_client_backend(tmp_path) -> No
     """ensure_codex_mcp_registered must write MCP_CLIENT_BACKEND_ENV_VAR to env_vars."""
     import tomllib
 
-    from autoskillit.core.types._type_constants_env import MCP_CLIENT_BACKEND_ENV_VAR
+    from autoskillit.core.types.constants._type_constants_env import MCP_CLIENT_BACKEND_ENV_VAR
     from autoskillit.execution.backends._codex_config import ensure_codex_mcp_registered
 
     config_path = tmp_path / "config.toml"

@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from autoskillit.core.types._type_enums import CodexEventType
+from autoskillit.core.types.foundation._type_enums import CodexEventType
 from autoskillit.execution.backends._codex_parse import _scan_codex_ndjson
 from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.execution.process import _marker_is_standalone

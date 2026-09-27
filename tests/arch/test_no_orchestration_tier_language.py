@@ -11,7 +11,7 @@ pytestmark = [pytest.mark.small]
 _REPO_ROOT = pathlib.Path(__file__).parent.parent.parent
 
 _ORCHESTRATION_FILES = [
-    "src/autoskillit/core/types/_type_enums.py",
+    "src/autoskillit/core/types/foundation/_type_enums.py",
     "src/autoskillit/pipeline/gate.py",
     "src/autoskillit/server/lifecycle/_guards.py",
     "src/autoskillit/hooks/guards/skill_orchestration_guard.py",

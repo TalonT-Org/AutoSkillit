@@ -35,7 +35,7 @@ __all__ = [
     "resolve_dbus_session_bus_address",
 ]
 
-from ..types._type_constants_env import (
+from ..types.constants._type_constants_env import (
     AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS,
     AUTOSKILLIT_ATTESTED_META_SUPPORT,
     AUTOSKILLIT_PRIVATE_ENV_VARS,
@@ -258,7 +258,7 @@ def build_agent_env(
         out.update(extras)
     _session_type_raw = out.get("AUTOSKILLIT_SESSION_TYPE")
     if _session_type_raw:
-        from ..types._type_enums import SessionType
+        from ..types.foundation._type_enums import SessionType
 
         try:
             SessionType(_session_type_raw)

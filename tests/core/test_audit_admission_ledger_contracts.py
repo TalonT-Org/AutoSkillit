@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core.types._type_audit_admission import (
+from autoskillit.core.types.audit._type_audit_admission import (
     AuditAttemptId,
     AuditIdentityReservation,
     AuditOutcome,
@@ -23,7 +23,7 @@ from autoskillit.core.types._type_audit_admission import (
     compute_audit_reference_identity,
     compute_audit_slot_id,
 )
-from autoskillit.core.types._type_audit_admission_ledger import (
+from autoskillit.core.types.audit._type_audit_admission_ledger import (
     AuditAdmissionLedger,
     AuditAdmissionRecoveryResult,
     AuditAdmissionStorageError,
@@ -41,8 +41,8 @@ from autoskillit.core.types._type_audit_admission_ledger import (
     AuditReservationOutcome,
     AuditReservationRequest,
 )
-from autoskillit.core.types._type_audit_artifact_ref import ArtifactRef
-from autoskillit.core.types._type_audit_cycle_authority import AuditCycleHead, AuditVerdict
+from autoskillit.core.types.audit._type_audit_artifact_ref import ArtifactRef
+from autoskillit.core.types.audit._type_audit_cycle_authority import AuditCycleHead, AuditVerdict
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 

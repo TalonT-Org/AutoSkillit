@@ -11,7 +11,7 @@ never writes.
 
 1. **Create the backend module** — add `execution/backends/<name>.py` implementing the `CodingAgentBackend` Protocol. Include a concrete `BackendCapabilities` dataclass instance.
 
-2. **Add the name constant** — add `AGENT_BACKEND_<NAME>: str = "<name>"` to `core/types/_type_constants_env.py` and include it in `KNOWN_BACKEND_NAMES`.
+2. **Add the name constant** — add `AGENT_BACKEND_<NAME>: str = "<name>"` to `core/types/constants/_type_constants_env.py` and include it in `KNOWN_BACKEND_NAMES`.
    *Enforced by `test_all_backends_have_name_constant` in `tests/arch/test_backend_coherence.py`.*
 
 3. **Register in `BACKEND_REGISTRY`** — add a `'<name>': <NameBackend>` entry to the `BACKEND_REGISTRY` dict in `execution/backends/__init__.py`.
@@ -22,7 +22,7 @@ never writes.
 5. **Populate doctor fields** — set `version_check_command`, `process_name`, and `min_version` on `BackendCapabilities`. Do not add a new `_check_<name>_version()` function.
    *Enforced by `test_backend_doctor_coverage` in `tests/arch/test_backend_coherence.py`.*
 
-6. **Add a `FeatureDef`** — add an entry to `FEATURE_REGISTRY` in `core/types/_type_constants_features.py` with `default_enabled=False` and `requires_backend_alignment=True`.
+6. **Add a `FeatureDef`** — add an entry to `FEATURE_REGISTRY` in `core/types/constants/_type_constants_features.py` with `default_enabled=False` and `requires_backend_alignment=True`.
 
 7. **Extend test coverage** — add tests to `tests/execution/backends/test_backend_registry.py`, `tests/contracts/test_backend_compliance.py`, and `tests/contracts/test_backend_protocol.py`.
 

@@ -319,7 +319,7 @@ def test_every_bundled_recipe_declares_requires_packs() -> None:
 
 @pytest.mark.anyio
 async def test_no_tool_has_bare_kitchen_tag_only() -> None:
-    from autoskillit.core.types._type_constants_registries import CATEGORY_TAGS
+    from autoskillit.core.types.constants._type_constants_registries import CATEGORY_TAGS
     from autoskillit.server import mcp
 
     all_tools = {t.name: t for t in await mcp.list_tools()}
@@ -332,7 +332,7 @@ async def test_no_tool_has_bare_kitchen_tag_only() -> None:
 
 
 def test_kitchen_core_and_packs_partition_kitchen_gated_tools() -> None:
-    from autoskillit.core.types._type_constants_registries import (
+    from autoskillit.core.types.constants._type_constants_registries import (
         EVIDENCE_READER_TOOLS,
         TOOL_SUBSET_TAGS,
     )

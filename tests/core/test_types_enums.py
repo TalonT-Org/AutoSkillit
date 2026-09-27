@@ -189,7 +189,7 @@ def test_hook_trust_policy_values_and_public_exports() -> None:
         SkillDiscoveryMechanism,
         UpstreamSupportStatus,
     )
-    from autoskillit.core.types._type_enums import __all__ as enum_all
+    from autoskillit.core.types.foundation._type_enums import __all__ as enum_all
 
     assert issubclass(HookTrustPolicy, StrEnum)
     assert set(HookTrustPolicy) == {

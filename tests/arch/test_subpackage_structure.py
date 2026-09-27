@@ -1,5 +1,7 @@
 """REQ-ARCH-010: Validate post-reorganization subpackage structure."""
 
+import ast
+from importlib import import_module
 from pathlib import Path
 
 import pytest
@@ -8,13 +10,29 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
 
-
-class TestCoreSubpackages:
-    def test_core_types_is_package(self):
-        assert (SRC / "core" / "types" / "__init__.py").exists()
-
-    def test_core_types_has_all_type_modules(self):
-        expected = {
+_CORE_TYPES_GROUPS: dict[str, frozenset[str]] = {
+    "foundation": frozenset(
+        {
+            "_type_enums",
+            "_type_enums_context_admission",
+            "_type_exceptions",
+            "_type_exploration",
+            "_type_dimensions",
+            "_type_execution_identity",
+        }
+    ),
+    "install": frozenset(
+        {
+            "_type_plugin_source",
+            "_type_retirement_backstops",
+            "_type_install",
+            "_type_managed_home",
+        }
+    ),
+    "github": frozenset({"_type_github_review", "_type_github_review_anchor"}),
+    "skill": frozenset({"_type_skill_semantics", "_type_session_invariant_admission"}),
+    "audit": frozenset(
+        {
             "_type_audit_admission",
             "_type_audit_admission_artifact_ownership",
             "_type_audit_admission_ledger",
@@ -23,9 +41,22 @@ class TestCoreSubpackages:
             "_type_audit_artifact_ref",
             "_type_audit_cycle_authority",
             "_type_audit_cycle_disposition",
-            "_type_backend",
-            "_type_checkpoint",
             "_type_closure_report",
+            "_type_plan_set_authority",
+        }
+    ),
+    "recipe": frozenset(
+        {
+            "_type_recipe_binding",
+            "_type_recipe_delivery",
+            "_type_recipe_execution",
+            "_type_recipe_sections",
+            "_type_truth",
+            "_type_capture",
+        }
+    ),
+    "constants": frozenset(
+        {
             "_type_constants",
             "_type_constants_durable_writers",
             "_type_constants_env",
@@ -33,6 +64,44 @@ class TestCoreSubpackages:
             "_type_constants_registries",
             "_type_constants_retirements",
             "_type_constants_skill_contract",
+            "_type_invariant_registry",
+            "_type_orchestrator_instruction_surfaces",
+            "_type_intake_policy",
+            "_type_persisted_formats",
+        }
+    ),
+    "results": frozenset(
+        {
+            "_type_results",
+            "_type_results_execution",
+            "_type_results_records",
+            "_type_token",
+            "_type_figure_spec",
+        }
+    ),
+    "execution": frozenset(
+        {
+            "_type_backend",
+            "_type_checkpoint",
+            "_type_native_shell_capture",
+            "_type_subprocess",
+            "_type_inspector",
+        }
+    ),
+    "launch": frozenset(
+        {
+            "_type_launch",
+            "_type_launch_authority",
+            "_type_launch_intent",
+            "_type_launch_projection",
+            "_type_session_shape",
+            "_type_dispatch_identity",
+            "_type_skill_contract",
+            "_type_helpers",
+        }
+    ),
+    "context_admission": frozenset(
+        {
             "_type_context_admission",
             "_type_context_admission_base",
             "_type_context_admission_coverage",
@@ -43,32 +112,10 @@ class TestCoreSubpackages:
             "_type_context_admission_persistence_envelope",
             "_type_context_admission_records",
             "_type_context_admission_states",
-            "_type_dimensions",
-            "_type_dispatch_identity",
-            "_type_enums",
-            "_type_enums_context_admission",
-            "_type_execution_identity",
-            "_type_exploration",
-            "_type_exceptions",
-            "_type_figure_spec",
-            "_type_github_review",
-            "_type_github_review_anchor",
-            "_type_capture",
-            "_type_helpers",
-            "_type_inspector",
-            "_type_install",
-            "_type_intake_policy",
-            "_type_invariant_registry",
-            "_type_launch",
-            "_type_launch_authority",
-            "_type_launch_intent",
-            "_type_launch_projection",
-            "_type_managed_home",
-            "_type_native_shell_capture",
-            "_type_orchestrator_instruction_surfaces",
-            "_type_plan_set_authority",
-            "_type_persisted_formats",
-            "_type_plugin_source",
+        }
+    ),
+    "protocols": frozenset(
+        {
             "_type_protocols_backend",
             "_type_protocols_execution",
             "_type_protocols_github",
@@ -76,36 +123,118 @@ class TestCoreSubpackages:
             "_type_protocols_logging",
             "_type_protocols_recipe",
             "_type_protocols_workspace",
-            "_type_results",
-            "_type_results_execution",
-            "_type_results_records",
-            "_type_recipe_delivery",
-            "_type_recipe_binding",
-            "_type_recipe_execution",
-            "_type_recipe_sections",
-            "_type_retirement_backstops",
-            "_type_session_shape",
-            "_type_skill_contract",
-            "_type_skill_semantics",
-            "_type_session_invariant_admission",
-            "_type_subprocess",
-            "_type_token",
-            "_type_truth",
         }
-        actual = {p.stem for p in (SRC / "core" / "types").glob("_type_*.py")}
-        assert actual == expected
+    ),
+}
+
+
+class TestCoreSubpackages:
+    def test_core_types_is_package(self):
+        assert (SRC / "core" / "types" / "__init__.py").exists()
+
+    def test_core_types_group_layout(self):
+        types_dir = SRC / "core" / "types"
+        actual = {
+            group_dir.name: frozenset(
+                path.stem for path in group_dir.glob("*.py") if path.name != "__init__.py"
+            )
+            for group_dir in types_dir.iterdir()
+            if group_dir.is_dir()
+            and not group_dir.name.startswith("_")
+            and (group_dir / "__init__.py").is_file()
+        }
+        assert actual == _CORE_TYPES_GROUPS
+
+        modules = [module for members in _CORE_TYPES_GROUPS.values() for module in members]
+        assert len(modules) == 76
+        assert len(set(modules)) == len(modules), "A type module appears in multiple groups"
+
+    def test_core_types_root_holds_only_hub(self):
+        root_python_files = {path.name for path in (SRC / "core" / "types").glob("*.py")}
+        assert root_python_files == {"__init__.py"}
+
+    def test_core_types_group_facades_import_only_own_members(self):
+        types_dir = SRC / "core" / "types"
+        for group, members in _CORE_TYPES_GROUPS.items():
+            facade_path = types_dir / group / "__init__.py"
+            tree = ast.parse(facade_path.read_text(encoding="utf-8"), filename=str(facade_path))
+            violations: list[str] = []
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    violations.append(ast.unparse(node))
+                elif isinstance(node, ast.ImportFrom):
+                    if node.level == 0 and (
+                        node.module == "__future__"
+                        or (
+                            node.module == "typing"
+                            and [alias.name for alias in node.names] == ["TYPE_CHECKING"]
+                        )
+                    ):
+                        continue
+                    if node.level != 1 or node.module not in members:
+                        violations.append(ast.unparse(node))
+
+            assigns_all = any(
+                isinstance(node, ast.Assign)
+                and any(
+                    isinstance(target, ast.Name) and target.id == "__all__"
+                    for target in node.targets
+                )
+                for node in ast.walk(tree)
+            )
+            assert not violations, f"{facade_path} has non-owned imports: {violations}"
+            assert assigns_all, f"{facade_path} must assign __all__"
+
+    def test_core_types_hub_imports_only_groups(self):
+        facade_path = SRC / "core" / "types" / "__init__.py"
+        tree = ast.parse(facade_path.read_text(encoding="utf-8"), filename=str(facade_path))
+        imported_groups: set[str] = set()
+        violations: list[str] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                violations.append(ast.unparse(node))
+            elif isinstance(node, ast.ImportFrom):
+                if node.level == 0 and (
+                    node.module == "__future__"
+                    or (
+                        node.module == "typing"
+                        and [alias.name for alias in node.names] == ["TYPE_CHECKING"]
+                    )
+                ):
+                    continue
+                if node.level != 1 or node.module not in _CORE_TYPES_GROUPS:
+                    violations.append(ast.unparse(node))
+                elif node.module is not None:
+                    imported_groups.add(node.module)
+        assert not violations, f"{facade_path} has non-group imports: {violations}"
+        assert imported_groups == set(_CORE_TYPES_GROUPS)
+
+    def test_core_types_public_surface_is_union_of_group_facades(self):
+        group_exports = {
+            name
+            for group in _CORE_TYPES_GROUPS
+            for name in import_module(f"autoskillit.core.types.{group}").__all__
+        }
+        public_facade = import_module("autoskillit.core.types")
+        assert set(public_facade.__all__) == group_exports
+        for name in public_facade.__all__:
+            getattr(public_facade, name)
 
     def test_type_constants_split_completeness(self):
         """Verify __all__ union across all _type_constants*.py modules has no duplicates."""
-        from autoskillit.core.types._type_constants import __all__ as remaining
-        from autoskillit.core.types._type_constants_durable_writers import (
+        from autoskillit.core.types.constants._type_constants import __all__ as remaining
+        from autoskillit.core.types.constants._type_constants_durable_writers import (
             __all__ as durable_writers,
         )
-        from autoskillit.core.types._type_constants_env import __all__ as env
-        from autoskillit.core.types._type_constants_features import __all__ as features
-        from autoskillit.core.types._type_constants_registries import __all__ as registries
-        from autoskillit.core.types._type_constants_retirements import __all__ as retirements
-        from autoskillit.core.types._type_constants_skill_contract import (
+        from autoskillit.core.types.constants._type_constants_env import __all__ as env
+        from autoskillit.core.types.constants._type_constants_features import __all__ as features
+        from autoskillit.core.types.constants._type_constants_registries import (
+            __all__ as registries,
+        )
+        from autoskillit.core.types.constants._type_constants_retirements import (
+            __all__ as retirements,
+        )
+        from autoskillit.core.types.constants._type_constants_skill_contract import (
             __all__ as skill_contract,
         )
 

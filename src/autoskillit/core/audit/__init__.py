@@ -8,9 +8,9 @@ through the ``autoskillit.core.audit`` namespace. Backward-compat shims at
 import paths after the core/audit/ decomposition.
 
 Lazy module loading via PEP 562 ``__getattr__`` is required because
-``core.types._type_audit_admission`` imports ``core.audit.closure_hashing``
+``core.types.audit._type_audit_admission`` imports ``core.audit.closure_hashing``
 at module load time. Eagerly importing the cycle submodules here
-(``closure_verifier`` -> ``core.io.io`` -> ``core.types._type_results``
+(``closure_verifier`` -> ``core.io.io`` -> ``core.types.results._type_results``
 -> ``_type_audit_admission``) would leave ``_type_audit_admission`` in a
 partial-load state. The lazy facade breaks the cycle by deferring
 submodule import until first attribute access.

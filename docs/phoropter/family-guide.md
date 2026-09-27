@@ -31,7 +31,7 @@ Before creating any files, decide which recognized synthesis strategy your famil
 | `electre_iii` | Lens outputs have continuous-valued scores requiring threshold-based concordance/discordance analysis. | Planned; targeted at the future refactor-lens family for outranking-based multi-criteria decision analysis. |
 | `dex` | Categorical outputs ("acceptable"/"unacceptable") are needed instead of ranked lists. | Research candidate; based on [DEXi (2025)](https://kt.ijs.si/MarkoBohanec/dexi.html). Evaluate feasibility before implementing for exp-lens or refactor-lens synthesis. |
 
-The `SynthesisStrategy` enum and `PhoropterPrescription` types are defined in `src/autoskillit/core/types/_type_enums.py` and `src/autoskillit/core/types/_type_phoropter.py`.
+The `SynthesisStrategy` enum and `PhoropterPrescription` types are defined in `src/autoskillit/core/types/foundation/_type_enums.py` and `src/autoskillit/core/types/recipe/_type_recipe_binding.py`.
 
 ## §2. Register in phoropter-registry.yaml
 
@@ -133,5 +133,5 @@ Before merging a new phoropter family, verify all six touchpoints:
 4. **`docs/skills/catalog.md`** updated with new family section listing all lenses.
 5. **`docs/skills/subsets.md`** updated with new category row for the family's tool subset tag.
 6. **`docs/glossary.md`** updated with new family term (enforced by `tests/docs/test_glossary_spelling.py`).
-7. **`PACK_REGISTRY`** entry added to `src/autoskillit/core/types/_type_constants_registries.py` with `PackDef(default_enabled, description)`.
+7. **`PACK_REGISTRY`** entry added to `src/autoskillit/core/types/constants/_type_constants_registries.py` with `PackDef(default_enabled, description)`.
 8. **`tests/skills/test_phoropter_structural.py`** module-level maps (`FAMILY_ARG_INTERFACE`, `DIAL_SKILLS`) updated if any lens family's interface changes — these serve as the contract-expected values paired with body-derived tests.

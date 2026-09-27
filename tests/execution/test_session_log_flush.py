@@ -1527,7 +1527,7 @@ def test_flush_helper_builds_and_passes_session_telemetry():
     import tempfile
     import unittest.mock as mock
 
-    from autoskillit.core.types._type_results_execution import SessionTelemetry
+    from autoskillit.core.types.results._type_results_execution import SessionTelemetry
 
     captured: dict = {}
 

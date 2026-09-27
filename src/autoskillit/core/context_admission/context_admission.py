@@ -14,7 +14,7 @@ from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import assert_never
 
-from ..types._type_context_admission import (
+from ..types.context_admission._type_context_admission import (
     CONTEXT_ADMISSION_COVERAGE,
     AcceptInputEvent,
     ActiveContextAdmissionState,
@@ -46,7 +46,7 @@ from ..types._type_context_admission import (
     StartGenerationEvent,
     UnsupportedContextAdmissionProtocolError,
 )
-from ..types._type_enums import (
+from ..types.foundation._type_enums import (
     AdmissionDecisionKind,
     CoverageState,
     ProducerSurface,

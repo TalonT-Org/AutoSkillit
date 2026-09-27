@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import CmdSpec, PositionalRole
-from autoskillit.core.types._type_backend import CmdOrigin
+from autoskillit.core.types.execution._type_backend import CmdOrigin
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 from autoskillit.execution.headless._headless_helpers import assert_interactive_ordering
 from tests._realistic_project import AGENT_TEAMS_ENV_VAR, make_realistic_project

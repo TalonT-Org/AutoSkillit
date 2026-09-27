@@ -11,7 +11,7 @@ artifact is obligatory. They are never used as path authority, and exact identit
 validated under its stable sidecar lease.
 
 **Changing the shape of an artifact we write under `~/` requires an entry in
-`RETIRED_INSTALL_ARTIFACT_SHAPES`** (`core/types/_type_constants_retirements.py`), consumed
+`RETIRED_INSTALL_ARTIFACT_SHAPES`** (`core/types/constants/_type_constants_retirements.py`), consumed
 at runtime by `reconcile_install_artifacts()` here. `~/.autoskillit/` outlives
 years of releases, so a shape change with no registry entry strands every
 pre-existing install.

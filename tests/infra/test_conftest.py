@@ -468,9 +468,9 @@ def test_is_test_feature_enabled_dynaconf_env_overrides(monkeypatch):
 
 def test_is_test_feature_enabled_respects_experimental_enabled(monkeypatch):
     """EXPERIMENTAL feature resolves True via experimental_enabled=True in config."""
-    import autoskillit.core.types._type_constants_features as tc
-    from autoskillit.core.types._type_constants_features import FeatureDef
-    from autoskillit.core.types._type_enums import FeatureLifecycle
+    import autoskillit.core.types.constants._type_constants_features as tc
+    from autoskillit.core.types.constants._type_constants_features import FeatureDef
+    from autoskillit.core.types.foundation._type_enums import FeatureLifecycle
     from tests.conftest import _is_test_feature_enabled, _resolve_test_config
 
     monkeypatch.delenv("AUTOSKILLIT_TEST_FEATURES", raising=False)
@@ -494,9 +494,9 @@ def test_is_test_feature_enabled_respects_experimental_enabled(monkeypatch):
 
 def test_is_test_feature_enabled_disabled_lifecycle_always_false(monkeypatch):
     """_is_test_feature_enabled returns False for DISABLED feature regardless of config."""
-    import autoskillit.core.types._type_constants_features as tc
-    from autoskillit.core.types._type_constants_features import FeatureDef
-    from autoskillit.core.types._type_enums import FeatureLifecycle
+    import autoskillit.core.types.constants._type_constants_features as tc
+    from autoskillit.core.types.constants._type_constants_features import FeatureDef
+    from autoskillit.core.types.foundation._type_enums import FeatureLifecycle
     from tests.conftest import _is_test_feature_enabled, _resolve_test_config
 
     monkeypatch.delenv("AUTOSKILLIT_TEST_FEATURES", raising=False)
@@ -563,7 +563,7 @@ def test_resolve_test_config_raises_on_load_failure(monkeypatch):
     by --disable-warnings under task test-check), and returned None. The fail-open
     direction silently downgraded the test scope to per-feature default_enabled,
     which is False for every registered feature (FEATURE_REGISTRY at
-    autoskillit/core/types/_type_constants_features.py:42-100). After the fix, a
+    autoskillit/core/types/constants/_type_constants_features.py:42-100). After the fix, a
     broken config aborts collection instead of silently skipping 100+ tests.
     """
     from tests.conftest import _resolve_test_config

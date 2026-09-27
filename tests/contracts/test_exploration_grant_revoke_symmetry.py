@@ -11,7 +11,7 @@ lease behind it if a later step failed after the grant succeeded.
 
 Also asserts the two durable exploration-authority writers
 (``bind_launch``, ``bind_session_scoped_durable``) are registered in
-DURABLE_ARTIFACT_WRITERS (see core/types/_type_constants.py) — the
+DURABLE_ARTIFACT_WRITERS (see core/types/constants/_type_constants.py) — the
 mechanical half of "both write 0600 HMAC-signed authority files whose
 lifetime exceeds the writing process" per the plan's Fix E.
 """
@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core.types._type_constants import DURABLE_ARTIFACT_WRITERS
+from autoskillit.core.types.constants._type_constants import DURABLE_ARTIFACT_WRITERS
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 

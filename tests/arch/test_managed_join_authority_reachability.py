@@ -14,7 +14,7 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SRC_ROOT = _REPO_ROOT / "src" / "autoskillit"
-_PROTOCOL_PATH = _SRC_ROOT / "core" / "types" / "_type_protocols_infra.py"
+_PROTOCOL_PATH = _SRC_ROOT / "core" / "types" / "protocols" / "_type_protocols_infra.py"
 _EXPECTED_CALLERS = Counter(
     {
         ("issue", "server/managed_join_prelaunch.py", "prepare_managed_join_context"): 1,

@@ -9,7 +9,14 @@ import pytest
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
-_TYPES_DIR = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "core" / "types"
+_TYPES_DIR = (
+    Path(__file__).resolve().parents[2]
+    / "src"
+    / "autoskillit"
+    / "core"
+    / "types"
+    / "context_admission"
+)
 _FACADE_STEM = "_type_context_admission"
 _SHARD_IMPORTS: dict[str, frozenset[str]] = {
     "_type_context_admission_base": frozenset(),

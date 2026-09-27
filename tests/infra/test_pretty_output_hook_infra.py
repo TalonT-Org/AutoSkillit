@@ -436,7 +436,7 @@ def test_typeddict_covers_to_json_keys() -> None:
     import json
     import typing
 
-    from autoskillit.core.types._type_results import SkillResult
+    from autoskillit.core.types.results._type_results import SkillResult
     from autoskillit.server.tools._types import RunSkillResult
 
     r1 = SkillResult.crashed(Exception("test"))

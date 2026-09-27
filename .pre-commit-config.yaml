@@ -3,15 +3,15 @@ repos:
     hooks:
       - id: ruff-format
         name: ruff format
-        entry: ruff format
+        entry: .venv/bin/ruff format --force-exclude
         language: system
-        types: [python]
+        files: \.pyi?$
 
       - id: ruff
         name: ruff
-        entry: ruff check --fix
+        entry: .venv/bin/ruff check --fix --force-exclude
         language: system
-        types: [python]
+        files: \.pyi?$
 
       - id: mypy
         name: mypy
@@ -50,7 +50,7 @@ repos:
         name: Check MCP tool readOnlyHint annotations
         language: system
         entry: python scripts/check_tool_annotations.py
-        files: ^src/autoskillit/server/tools_
+        files: ^src/autoskillit/server/tools/tools_
         pass_filenames: false
 
       - id: check-contract-freshness

@@ -130,6 +130,9 @@ def write_registry(home: Path, install_path: Path) -> None:
     )
 
 
+DORMANT_QUOTA_WINDOW = {"utilization": 0.0, "resets_at": None}
+
+
 def fake_quota_http_client(api_response: dict[str, Any]) -> Any:
     """Return a fake ``httpx.AsyncClient`` that serves ``api_response`` for GET requests."""
 

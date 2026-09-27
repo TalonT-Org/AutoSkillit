@@ -20,6 +20,7 @@ from autoskillit.server.lifecycle import _lifespan
 from tests._helpers import _flush_structlog_proxy_caches
 from tests.fixtures.plugin_artifact_state import write_marketplace_surfaces
 from tests.fixtures.startup_steady_state import (
+    DORMANT_QUOTA_WINDOW,
     enqueue_projection_retirement,
     fake_quota_http_client,
     plant_stale_projection,
@@ -30,7 +31,6 @@ from tests.fixtures.startup_steady_state import (
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 _WARNING_LEVELS = frozenset({"warning", "error", "critical"})
-_DORMANT = {"utilization": 0.0, "resets_at": None}
 
 
 @pytest.fixture
@@ -59,7 +59,11 @@ def steady_state_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterat
         "_get_ctx_or_none",
         lambda: SimpleNamespace(plugin_retirement_coordinator=coordinator),
     )
-    api_response = {"nimbus_quill": _DORMANT, "five_hour": _DORMANT, "seven_day": _DORMANT}
+    api_response = {
+        "nimbus_quill": DORMANT_QUOTA_WINDOW,
+        "five_hour": DORMANT_QUOTA_WINDOW,
+        "seven_day": DORMANT_QUOTA_WINDOW,
+    }
     monkeypatch.setattr("httpx.AsyncClient", lambda **kw: fake_quota_http_client(api_response))
     monkeypatch.setattr(_quota_gate, "_read_credentials", lambda path: "fake-token")
 

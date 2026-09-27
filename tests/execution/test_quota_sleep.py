@@ -12,7 +12,7 @@ import pytest
 
 import autoskillit.execution.quota._quota_gate as _patch_quota__quota_gate
 from tests._helpers import make_quota_guard_config
-from tests.fixtures.startup_steady_state import fake_quota_http_client
+from tests.fixtures.startup_steady_state import DORMANT_QUOTA_WINDOW, fake_quota_http_client
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -634,9 +634,6 @@ class TestFetchQuotaNovelWindowWarning:
         )
 
 
-_DORMANT = {"utilization": 0.0, "resets_at": None}
-
-
 async def _fetch_quota_capturing(monkeypatch, api_response: dict) -> tuple[list, object]:
     import structlog.testing
 
@@ -664,7 +661,9 @@ class TestQuotaWindowDormancy:
     @pytest.mark.parametrize(
         ("name", "entry", "is_window", "is_dormant"),
         [
-            pytest.param("nimbus_quill", _DORMANT, False, True, id="unknown-float-zero-null"),
+            pytest.param(
+                "nimbus_quill", DORMANT_QUOTA_WINDOW, False, True, id="unknown-float-zero-null"
+            ),
             pytest.param(
                 "nimbus_quill",
                 {"utilization": 0, "resets_at": None},
@@ -686,7 +685,7 @@ class TestQuotaWindowDormancy:
                 False,
                 id="unknown-used-null-reset",
             ),
-            pytest.param("five_hour", _DORMANT, True, False, id="known-zero-null"),
+            pytest.param("five_hour", DORMANT_QUOTA_WINDOW, True, False, id="known-zero-null"),
             pytest.param(
                 "nimbus_quill", {"utilization": None}, False, False, id="null-utilization"
             ),
@@ -717,7 +716,11 @@ class TestQuotaWindowDormancy:
     async def test_dormant_unknown_window_is_silent_and_non_binding(self, monkeypatch):
         cap, result = await _fetch_quota_capturing(
             monkeypatch,
-            {"nimbus_quill": _DORMANT, "five_hour": _DORMANT, "seven_day": _DORMANT},
+            {
+                "nimbus_quill": DORMANT_QUOTA_WINDOW,
+                "five_hour": DORMANT_QUOTA_WINDOW,
+                "seven_day": DORMANT_QUOTA_WINDOW,
+            },
         )
 
         assert not [rec for rec in cap if "novel_windows" in rec]

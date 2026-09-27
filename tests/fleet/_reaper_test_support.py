@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import time
 from pathlib import Path
 
 from autoskillit.fleet import DispatchRecord, write_initial_state
@@ -42,3 +44,15 @@ def make_running_state(
     )
     state_path.write_text(json.dumps(raw))
     return state_path
+
+
+def write_dispatch_heartbeat(
+    dispatches_dir: Path, dispatch_id: str, *, age_seconds: float = 0.0
+) -> Path:
+    """Write a dispatch heartbeat file, optionally backdated to simulate staleness."""
+    hb_path = dispatches_dir / f"dispatch-{dispatch_id}.heartbeat"
+    hb_path.write_text("{}")
+    if age_seconds:
+        mtime = time.time() - age_seconds
+        os.utime(hb_path, (mtime, mtime))
+    return hb_path

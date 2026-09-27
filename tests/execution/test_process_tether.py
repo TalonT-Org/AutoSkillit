@@ -145,6 +145,18 @@ class TestSpawnOwnedProcessRequiresTether:
             spawn_owned_process(_sleeper_cmd(), start_new_session=True)  # type: ignore[call-arg]
 
 
+class TestTetherSpecValidatesCeilingAgainstSealMarkerTTL:
+    def test_ceiling_above_default_is_rejected(self) -> None:
+        """A ceiling past ``DEFAULT_TETHER_CEILING_SECONDS`` would defeat the
+        seal-marker sweep's guarantee; reject up front rather than rely on
+        the caller staying under the constant."""
+        with pytest.raises(ValueError, match="exceeds the maximum permitted"):
+            TetherSpec(origin="test", ceiling_seconds=DEFAULT_TETHER_CEILING_SECONDS + 1.0)
+
+    def test_ceiling_at_default_is_accepted(self) -> None:
+        TetherSpec(origin="test", ceiling_seconds=DEFAULT_TETHER_CEILING_SECONDS)
+
+
 class TestSettleRemovesTether:
     def test_settle_removes_tether(self, tmp_path) -> None:
         owner = spawn_owned_process(

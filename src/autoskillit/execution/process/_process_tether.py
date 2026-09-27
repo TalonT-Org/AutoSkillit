@@ -9,6 +9,10 @@ absolute bound. The sweep treats a lapsed lease as abandonment in either case.
 It acts only when the child's (or PTY-wrapper workload's) identity is positively
 re-verified, so kills are never issued on ambiguous evidence.
 
+A tether may also carry an owner-scope token (see ``_lifecycle/owner_scope.py``).
+Sealing a scope writes a ``<token>.sealed`` marker beside the tethers, after
+which the funnel refuses further spawns into that scope.
+
 Linux-only: identity primitives (`read_boot_id`/`read_starttime_ticks`) return
 ``None`` on every other platform, so writing and sweeping are no-ops there —
 the same platform gating `bind_session_owner` already uses.
@@ -17,11 +21,12 @@ the same platform gating `bind_session_owner` already uses.
 from __future__ import annotations
 
 import math
+import os
 import shutil
 import subprocess
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -30,6 +35,8 @@ from typing import Any, Final
 import anyio
 
 from autoskillit.core import (
+    ProcessCleanupResult,
+    atomic_write,
     default_log_dir,
     get_logger,
     is_pid_alive,
@@ -45,8 +52,24 @@ DEFAULT_TETHER_CEILING_SECONDS: Final = 86400.0
 TETHER_SWEEP_INTERVAL_SECONDS: Final = 1800.0
 TETHER_LEASE_SECONDS: Final = 4 * TETHER_SWEEP_INTERVAL_SECONDS
 TETHER_LEASE_RENEW_SECONDS: Final = TETHER_LEASE_SECONDS / 4
+# Seal-marker sweep TTL. Two invariants must hold so a sealed marker cannot
+# be swept while its scope is still settling or has any tether within its
+# not_after window:
+#   1. outlive every possible tether ceiling -- enforced by ``TetherSpec``'s
+#      upper-bound check below, which caps ``ceiling_seconds`` at
+#      ``DEFAULT_TETHER_CEILING_SECONDS``.
+#   2. outlive the owner-scope settlement timeout
+#      (``OWNER_SCOPE_SETTLE_TIMEOUT_SECONDS = 30.0`` in
+#      ``_lifecycle/owner_scope.py``) so a seal written at settle start
+#      cannot be swept mid-settle.
+# Today ``DEFAULT_TETHER_CEILING_SECONDS`` (86400s) exceeds the settle
+# timeout by ~3 orders of magnitude, so pinning ``SEAL_MARKER_TTL_SECONDS``
+# to it satisfies both invariants. If either constant ever changes, recompute
+# this expression -- do not silently let them drift apart.
+SEAL_MARKER_TTL_SECONDS: Final = DEFAULT_TETHER_CEILING_SECONDS
 
 _TETHER_DIR_NAME: Final = "process-tethers"
+_SEALED_SCOPE_DIR_NAME: Final = "sealed-scopes"
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +84,9 @@ class TetherRecord:
     ``workload_pid``/``workload_starttime_ticks`` are unset at spawn time and
     filled in later, only for PTY-wrapped spawns, via ``update_tether_workload``
     once the real workload's identity has been resolved.
+
+    ``owner_scope`` names the owner scope whose settlement must end this child
+    before the owner returns; ``None`` for spawns made outside any scope.
     """
 
     child_pid: int
@@ -76,6 +102,7 @@ class TetherRecord:
     pidns_inode: int | None = None
     workload_pid: int | None = None
     workload_starttime_ticks: int | None = None
+    owner_scope: str | None = None
 
     def __post_init__(self) -> None:
         if self.child_pid <= 0 or self.child_pgid <= 0 or self.spawner_pid <= 0:
@@ -101,6 +128,19 @@ class TetherSpec:
             raise ValueError(
                 f"ceiling_seconds must be a positive finite number, got {self.ceiling_seconds}"
             )
+        if self.ceiling_seconds > DEFAULT_TETHER_CEILING_SECONDS:
+            # A ceiling above the seal-marker's TTL would let the sweep remove
+            # the seal while tethers for the scope are still within their
+            # not_after window, defeating the "no spawn can still target
+            # them" invariant. Reject the value up front so the funnel's
+            # contract is enforced rather than coincidentally satisfied.
+            raise ValueError(
+                f"ceiling_seconds ({self.ceiling_seconds}) exceeds the maximum permitted "
+                f"({DEFAULT_TETHER_CEILING_SECONDS}). Larger values would defeat the seal-marker "
+                "sweep's guarantee that a sealed marker outlives every tether for that scope; "
+                f"the sweep's TTL is pinned to SEAL_MARKER_TTL_SECONDS = "
+                f"{DEFAULT_TETHER_CEILING_SECONDS}."
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,9 +163,41 @@ class TetherSweepReport:
         return sum(1 for o in self.outcomes if o.outcome in ("reaped_orphan", "reaped_ceiling"))
 
 
+class OwnerScopeSealedError(RuntimeError):
+    """Raised when a funnel spawn targets an owner scope that has already been sealed."""
+
+    def __init__(self, token: str) -> None:
+        super().__init__(f"owner scope {token!r} is sealed; no further spawns are admitted")
+        self.token = token
+
+
 def default_tether_dir() -> Path:
     """Per-user, host-wide tether directory — every writer and sweeper resolves here."""
     return default_log_dir() / _TETHER_DIR_NAME
+
+
+def sealed_scope_dir(tether_dir: Path) -> Path:
+    """Directory holding one ``<token>.sealed`` marker per sealed owner scope."""
+    return tether_dir / _SEALED_SCOPE_DIR_NAME
+
+
+def seal_owner_scope(tether_dir: Path, token: str) -> None:
+    """Atomically mark *token* sealed; idempotent, since owner and reaper may both seal."""
+    if sys.platform != "linux":
+        return
+    seal_dir = sealed_scope_dir(tether_dir)
+    seal_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        atomic_write(seal_dir / f"{token}.sealed", "", exclusive=True)
+    except FileExistsError:
+        pass
+
+
+def is_owner_scope_sealed(tether_dir: Path, token: str) -> bool:
+    """Whether *token* is sealed — any existing entry counts, matching the O_EXCL claim."""
+    if sys.platform != "linux":
+        return False
+    return os.path.lexists(sealed_scope_dir(tether_dir) / f"{token}.sealed")
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,6 +229,7 @@ def _tether_record_to_dict(record: TetherRecord) -> dict[str, Any]:
         "origin": record.origin,
         "workload_pid": record.workload_pid,
         "workload_starttime_ticks": record.workload_starttime_ticks,
+        "owner_scope": record.owner_scope,
     }
 
 
@@ -182,6 +255,7 @@ def _tether_record_from_dict(data: dict[str, Any] | None) -> TetherRecord:
             if data.get("workload_starttime_ticks") is not None
             else None
         ),
+        owner_scope=(str(data["owner_scope"]) if data.get("owner_scope") is not None else None),
     )
 
 
@@ -272,6 +346,49 @@ def _target_status(
     return "live"
 
 
+def _tether_targets(record: TetherRecord) -> list[tuple[str, int, int | None]]:
+    """The ``(name, pid, starttime_ticks)`` kill targets one tether record guards."""
+    targets: list[tuple[str, int, int | None]] = [
+        ("child", record.child_pid, record.child_starttime_ticks)
+    ]
+    if record.workload_pid is not None and record.workload_pid != record.child_pid:
+        targets.append(("workload", record.workload_pid, record.workload_starttime_ticks))
+    return targets
+
+
+def _tether_target_statuses(record: TetherRecord) -> dict[str, str]:
+    return {
+        name: _target_status(pid, record.boot_id, ticks, record.pidns_inode)
+        for name, pid, ticks in _tether_targets(record)
+    }
+
+
+def _settle_tether_targets(
+    record: TetherRecord, statuses: Mapping[str, str]
+) -> list[ProcessCleanupResult]:
+    """Identity-fenced tree kill of every target *statuses* reports live.
+
+    Returns one cleanup result per kill issued; the targets are confirmed dead
+    when every result is complete.
+    """
+    # Keep the psutil-backed recovery primitive local so importing tether data
+    # definitions and registry helpers does not initialize process-control code.
+    from autoskillit.execution.process._process_kill import kill_process_tree
+
+    results: list[ProcessCleanupResult] = []
+    for name, pid, ticks in _tether_targets(record):
+        if statuses[name] != "live":
+            continue
+        if not is_pid_alive(pid):
+            # Reaped as a descendant of an earlier target's kill in this
+            # same pass (e.g. the child-wrapper's recursive tree walk).
+            continue
+        results.append(
+            kill_process_tree(pid, expected_boot_id=record.boot_id, expected_starttime_ticks=ticks)
+        )
+    return results
+
+
 def find_orphaned_tethers(
     tether_dir: Path, *, min_age_seconds: float = 60.0
 ) -> list[OrphanedTetherRecord]:
@@ -323,10 +440,6 @@ def sweep_orphaned_tethers(
     if not tether_dir.is_dir():
         return TetherSweepReport()
 
-    # Keep the psutil-backed recovery primitive local so importing tether data
-    # definitions and registry helpers does not initialize process-control code.
-    from autoskillit.execution.process._process_kill import kill_process_tree
-
     now = time.time()
     outcomes: list[TetherSweepOutcome] = []
     for path in sorted(tether_dir.glob("*.json")):
@@ -345,16 +458,7 @@ def sweep_orphaned_tethers(
             outcomes.append(TetherSweepOutcome(str(path), -1, "malformed"))
             continue
 
-        targets: list[tuple[str, int, int | None]] = [
-            ("child", record.child_pid, record.child_starttime_ticks)
-        ]
-        if record.workload_pid is not None and record.workload_pid != record.child_pid:
-            targets.append(("workload", record.workload_pid, record.workload_starttime_ticks))
-
-        statuses = {
-            name: _target_status(pid, record.boot_id, ticks, record.pidns_inode)
-            for name, pid, ticks in targets
-        }
+        statuses = _tether_target_statuses(record)
 
         if all(status != "live" for status in statuses.values()):
             remove_tether(path)
@@ -381,21 +485,8 @@ def sweep_orphaned_tethers(
             overdue_seconds=max(0.0, now - record.not_after),
             path=str(path),
         )
-        all_confirmed_dead = True
-        for name, pid, ticks in targets:
-            if statuses[name] != "live":
-                continue
-            if not is_pid_alive(pid):
-                # Reaped as a descendant of an earlier target's kill in this
-                # same pass (e.g. the child-wrapper's recursive tree walk).
-                continue
-            result = kill_process_tree(
-                pid, expected_boot_id=record.boot_id, expected_starttime_ticks=ticks
-            )
-            if not result.complete:
-                all_confirmed_dead = False
-
-        if all_confirmed_dead:
+        results = _settle_tether_targets(record, statuses)
+        if all(result.complete for result in results):
             remove_tether(path)
             logger.info(
                 "tether_sweep_reaped",
@@ -411,7 +502,26 @@ def sweep_orphaned_tethers(
             )
             outcomes.append(TetherSweepOutcome(str(path), record.child_pid, "kill_failed"))
 
+    _expire_seal_markers(tether_dir, now)
     return TetherSweepReport(outcomes=tuple(outcomes))
+
+
+def _expire_seal_markers(tether_dir: Path, now: float) -> None:
+    """Drop seal markers older than ``SEAL_MARKER_TTL_SECONDS``; no spawn can still target them.
+
+    The TTL bounds both invariants stated at ``SEAL_MARKER_TTL_SECONDS`` --
+    every possible tether ceiling (enforced by ``TetherSpec.__post_init__``)
+    and the owner-scope settle timeout -- so a sealed marker cannot be
+    swept while settlement is in progress or while any tether for that
+    scope is still within its not_after window.
+    """
+    for marker in sorted(sealed_scope_dir(tether_dir).glob("*.sealed")):
+        try:
+            marker_age = now - marker.stat().st_mtime
+        except OSError:
+            continue
+        if marker_age >= SEAL_MARKER_TTL_SECONDS:
+            remove_tether(marker)
 
 
 async def sweep_orphaned_tethers_async(

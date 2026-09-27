@@ -33,6 +33,7 @@ from autoskillit.execution.process import (
 from tests.conftest import production_interpreter_env
 from tests.execution import _process_group_helpers
 from tests.execution._process_group_helpers import (
+    GROUP_ESCAPING_DESCENDANTS_SCRIPT,
     _cleanup_owned_process_group,
     _cleanup_process_identities,
     _live_identities,
@@ -102,46 +103,6 @@ NATURAL_EXIT_WITH_OWNED_CHILD_SCRIPT = textwrap.dedent("""\
         raise SystemExit(0)
     print(json.dumps({"type": "task_started", "task_id": "owned-exit"}), flush=True)
     print(json.dumps({"type": "child_pid", "pid": child}), flush=True)
-""")
-
-GROUP_ESCAPING_DESCENDANTS_SCRIPT = textwrap.dedent("""\
-    import json, os, signal, sys, time
-    from pathlib import Path
-
-    import psutil
-
-    ready_path = Path(sys.argv[1])
-    child_count = int(sys.argv[2])
-    exit_after_ready = sys.argv[3] == "exit"
-    read_fds = []
-    for _ in range(child_count):
-        read_fd, write_fd = os.pipe()
-        child = os.fork()
-        if child == 0:
-            os.close(read_fd)
-            os.setsid()
-            signal.signal(signal.SIGTERM, signal.SIG_IGN)
-            record = json.dumps({
-                "pid": os.getpid(),
-                "create_time": psutil.Process().create_time(),
-            }).encode()
-            os.write(write_fd, record)
-            os.close(write_fd)
-            time.sleep(60)
-            raise SystemExit(0)
-        os.close(write_fd)
-        read_fds.append(read_fd)
-
-    records = []
-    for read_fd in read_fds:
-        records.append(json.loads(os.read(read_fd, 4096)))
-        os.close(read_fd)
-    temporary_path = ready_path.with_name(f"{ready_path.name}.tmp")
-    temporary_path.write_text(json.dumps(records))
-    temporary_path.replace(ready_path)
-    if exit_after_ready:
-        raise SystemExit(0)
-    time.sleep(60)
 """)
 
 

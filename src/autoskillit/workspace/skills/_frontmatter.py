@@ -143,13 +143,10 @@ def _skill_info_from_frontmatter(
     data = parsed.data
     invalidities: list[SkillInvalidity] = []
     if parsed.write_scope_issue is not None:
-        issue_kind, issue_detail = parsed.write_scope_issue
         invalidities.append(
             SkillInvalidity(
-                SkillInvalidityKind.WRITE_BOUNDARY_UNDECLARED
-                if issue_kind == "undeclared"
-                else SkillInvalidityKind.WRITE_BOUNDARY_INVALID,
-                issue_detail,
+                parsed.write_scope_issue.kind,
+                parsed.write_scope_issue.detail,
             )
         )
     categories_raw = data.get("categories", [])

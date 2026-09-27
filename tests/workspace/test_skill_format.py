@@ -30,7 +30,7 @@ class TestValidateSkillFrontmatter:
         result = validate_skill_frontmatter({"name": "my-skill"}, "my-skill")
         assert any("description" in err for err in result)
 
-    def test_empty_frontmatter_returns_three_errors(self) -> None:
+    def test_empty_frontmatter_reports_required_errors(self) -> None:
         result = validate_skill_frontmatter({}, "my-skill")
         assert len(result) >= 3
 

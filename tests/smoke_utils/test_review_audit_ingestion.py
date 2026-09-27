@@ -323,67 +323,53 @@ def test_well_formed_empty_findings_remain_valid(tmp_path: Path) -> None:
     assert final["verdict"] == "approved"
 
 
-def test_handle_binding_duplicate_and_unknown_key_checks(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("case", "affected_slots", "reason"),
+    [
+        ("unbound", ("arch",), "slot_binding_mismatch"),
+        ("duplicate", ("arch", "tests"), "duplicate_handle"),
+        ("invalid_duplicate", ("arch", "tests"), "duplicate_handle"),
+        ("missing", ("tests", "cohesion"), "missing_handle"),
+        ("label", ("arch",), ""),
+    ],
+)
+def test_handle_binding_checks(
+    tmp_path: Path, case: str, affected_slots: tuple[str, ...], reason: str
+) -> None:
     _, planned = _run(tmp_path, gate_state="valid_false")
     manifest = load_review_audit_manifest(str(planned["manifest_path"]))
     handles, transcripts = _transcripts(manifest)
     arch_handle = handles["arch"]
-    transcripts[arch_handle] = replace(
-        transcripts[arch_handle], assignment_prompt="unbound prompt", assignment_label=""
-    )
-    binding = collect_review_audit(
-        manifest_path=str(planned["manifest_path"]),
-        handles=handles,
-        read_child_task=transcripts.get,
-    )
-    unbound = next(row for row in binding["slots"] if row["slot_id"] == "arch")
-    assert unbound["status"] == "failed"
-    assert unbound["reason_code"] == "slot_binding_mismatch"
-    handles["tests"] = arch_handle
+    if case == "unbound":
+        transcripts[arch_handle] = replace(
+            transcripts[arch_handle], assignment_prompt="unbound prompt", assignment_label=""
+        )
+    elif case in {"duplicate", "invalid_duplicate"}:
+        handles["arch"] = handles["tests"] = (
+            "bad/handle" if case == "invalid_duplicate" else arch_handle
+        )
+    elif case == "missing":
+        handles["tests"] = handles["cohesion"] = ""
+    elif case == "label":
+        slot = next(slot for slot in manifest["slots"] if slot["slot_id"] == "arch")
+        transcripts[arch_handle] = replace(
+            transcripts[arch_handle], assignment_prompt="", assignment_label=slot["slot_token"]
+        )
     result = collect_review_audit(
         manifest_path=str(planned["manifest_path"]),
         handles=handles,
         read_child_task=transcripts.get,
     )
-    reasons = {row["slot_id"]: row["reason_code"] for row in result["slots"]}
-    assert reasons["arch"] == reasons["tests"] == "duplicate_handle"
-    duplicate_invalid = dict(handles)
-    duplicate_invalid["arch"] = duplicate_invalid["tests"] = "bad/handle"
-    invalid_result = evaluate_review_audit_slots(
-        manifest=manifest,
-        handles=duplicate_invalid,
-        read_child_task=transcripts.get,
-    )
-    invalid_reasons = {
-        row["slot_id"]: row["reason_code"] for row in invalid_result["slot_records"]
-    }
-    assert invalid_reasons["arch"] == invalid_reasons["tests"] == "duplicate_handle"
-    empty_handles = dict(handles)
-    empty_handles["tests"] = empty_handles["cohesion"] = ""
-    empty_result = evaluate_review_audit_slots(
-        manifest=manifest,
-        handles=empty_handles,
-        read_child_task=transcripts.get,
-    )
-    empty_reasons = {row["slot_id"]: row["reason_code"] for row in empty_result["slot_records"]}
-    assert empty_reasons["tests"] == empty_reasons["cohesion"] == "missing_handle"
-    codex_handles, codex_transcripts = _transcripts(manifest)
-    codex_slot = next(slot for slot in manifest["slots"] if slot["slot_id"] == "arch")
-    codex_handle = codex_handles["arch"]
-    codex_transcripts[codex_handle] = replace(
-        codex_transcripts[codex_handle],
-        assignment_prompt="",
-        assignment_label=codex_slot["slot_token"],
-    )
-    codex_result = evaluate_review_audit_slots(
-        manifest=manifest,
-        handles=codex_handles,
-        read_child_task=codex_transcripts.get,
-    )
-    assert (
-        next(row for row in codex_result["slot_records"] if row["slot_id"] == "arch")["status"]
-        == "validated"
-    )
+    by_slot = {row["slot_id"]: row for row in result["slots"]}
+    for slot_id in affected_slots:
+        assert by_slot[slot_id]["status"] == ("failed" if reason else "validated")
+        assert by_slot[slot_id]["reason_code"] == reason
+
+
+def test_unknown_handle_slot_is_rejected(tmp_path: Path) -> None:
+    _, planned = _run(tmp_path, gate_state="valid_false")
+    manifest = load_review_audit_manifest(str(planned["manifest_path"]))
+    handles, transcripts = _transcripts(manifest)
     with pytest.raises(ReviewAuditInputError, match="known slot"):
         collect_review_audit(
             manifest_path=str(planned["manifest_path"]),

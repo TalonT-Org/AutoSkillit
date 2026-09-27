@@ -186,7 +186,7 @@ def _finite_timestamp(value: object, field: str) -> float:
 def _failure_from_dict(value: object) -> CaptureFailureEvidence | None:
     if value is None:
         return None
-    if not isinstance(value, dict) or set(value) != {
+    if not isinstance(value, dict) or set(value) - {"failure_reason"} != {
         "detail",
         "settlement_returncode",
         "stage",
@@ -197,6 +197,7 @@ def _failure_from_dict(value: object) -> CaptureFailureEvidence | None:
             stage=value["stage"],
             detail=value["detail"],
             settlement_returncode=value["settlement_returncode"],
+            failure_reason=value.get("failure_reason"),
         )
     except (RuntimeError, TypeError) as exc:
         raise LedgerCodecError("invalid capture failure evidence") from exc
@@ -216,6 +217,7 @@ def record_to_dict(record: CaptureLifecycleRecord) -> dict[str, object]:
         "failure": (
             {
                 "detail": record.failure.detail,
+                "failure_reason": record.failure.failure_reason,
                 "settlement_returncode": record.failure.settlement_returncode,
                 "stage": record.failure.stage,
             }

@@ -97,7 +97,7 @@ _EXPECTED_GIT_REF_SITES: tuple[tuple[str, str, int, str, str], ...] = (
         "for-each-ref",
         "UNRESOLVABLE",
     ),
-    ("execution/headless/_headless_git.py", "_compute_loc_changed", 373, "diff", "BARE"),
+    ("execution/headless/_headless_git.py", "_compute_loc_changed", 380, "diff", "BARE"),
     (_CLONE_GUARD_PATH, "_prune_stash_overflow", 379, "stash", "UNRESOLVABLE"),
     (_CLONE_GUARD_PATH, "_prune_stash_overflow", 401, "stash", "UNRESOLVABLE"),
     (_CLONE_GUARD_PATH, "_stash_and_clean", 326, "stash", "UNRESOLVABLE"),

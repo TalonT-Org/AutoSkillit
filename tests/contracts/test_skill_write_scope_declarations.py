@@ -8,7 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
+import autoskillit.hooks  # noqa: F401 (populates the deferred registry)
+from autoskillit.core import ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS, load_yaml
+from autoskillit.hook_registry import HOOK_REGISTRY, hook_applies_to_backend
 from autoskillit.hooks._write_scope import WriteScope, WriteScopeKind
 from autoskillit.recipe._skill_placeholder_parser import extract_write_path_declarations
 from autoskillit.workspace.skills import bundled_skills_dir, bundled_skills_extended_dir
@@ -230,3 +232,39 @@ def test_repo_local_skills_never_write_to_repo_root_temp(path: Path) -> None:
         }
     )
     assert not offenders, f"{_label(path)} writes to repo-root temp/: {offenders}"
+
+
+def test_planner_skills_always_have_output_dir() -> None:
+    recipe = load_yaml(_REPO_ROOT / "src" / "autoskillit" / "recipes" / "planner.yaml")
+    missing = [
+        name
+        for name, step in recipe.get("steps", {}).items()
+        if isinstance(step, dict)
+        and step.get("tool") == "run_skill"
+        and not (step.get("with") or {}).get("output_dir")
+    ]
+    assert not missing, f"planner run_skill steps missing output_dir: {missing}"
+
+
+def test_skill_md_guard_claims_are_true() -> None:
+    """Unqualified blocking claims must describe guards reachable in both classes."""
+    claim_pattern = re.compile(
+        r"\b(write guard|[a-z_]+_guard)\s+(?:blocks|denies|prevents)\b", re.I
+    )
+    violations: list[str] = []
+    for skill_path in bundled_skills_extended_dir().glob("*/SKILL.md"):
+        content = skill_path.read_text(encoding="utf-8")
+        for claim in claim_pattern.finditer(content):
+            stem = claim.group(1).lower().replace(" ", "_")
+            guards = [hook for hook in HOOK_REGISTRY if f"guards/{stem}.py" in hook.scripts]
+            if not guards or not all(
+                any(
+                    hook_applies_to_backend(
+                        hook, backend="claude_code", session_scope=session_class
+                    )
+                    for hook in guards
+                )
+                for session_class in ("headless", "interactive")
+            ):
+                violations.append(f"{skill_path.parent.name}: {claim.group(0)}")
+    assert not violations, f"unreachable guard claims: {violations}"

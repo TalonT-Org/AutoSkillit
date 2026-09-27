@@ -657,7 +657,13 @@ class TestMergeQueueVocabularyContract:
             ClassifierTerminalState,
         )
 
-        classifier_states = set(get_args(ClassifierTerminalState))
+        def _flatten(tp: object) -> set[object]:
+            members: set[object] = set()
+            for arg in get_args(tp):
+                members |= _flatten(arg) if get_args(arg) else {arg}
+            return members
+
+        classifier_states = _flatten(ClassifierTerminalState)
         watcher_only = {PRState.TIMEOUT, PRState.ERROR}
         assert classifier_states.isdisjoint(watcher_only)
         assert classifier_states | watcher_only == set(PRState)

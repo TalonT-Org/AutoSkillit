@@ -143,6 +143,16 @@ def _fake_anchor(pid: int) -> SimpleNamespace:
     return SimpleNamespace(pid=pid, returncode=None)
 
 
+def _fake_owned_group(process: subprocess.Popen[bytes]) -> OwnedProcessGroup:
+    return OwnedProcessGroup(
+        process=process,
+        pgid=process.pid,
+        anchor=_fake_anchor(process.pid),
+        _lifeline_fd=-1,
+        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
+    )
+
+
 def test_arbitrary_handle_cannot_be_adopted_as_owned_group() -> None:
     process = cast("subprocess.Popen[bytes]", _OrderedProcess([]))
 
@@ -160,13 +170,7 @@ def test_wait_settles_owned_group_before_reaping_leader(
 ) -> None:
     events: list[str] = []
     process = cast("subprocess.Popen[bytes]", _OrderedProcess(events))
-    owner = OwnedProcessGroup(
-        process=process,
-        pgid=process.pid,
-        anchor=_fake_anchor(process.pid),
-        _lifeline_fd=-1,
-        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
-    )
+    owner = _fake_owned_group(process)
     monkeypatch.setattr(
         OwnedProcessGroup,
         "_settle_remaining_group",
@@ -191,13 +195,7 @@ def test_settle_settles_owned_group_before_reaping_leader(
 ) -> None:
     events: list[str] = []
     process = cast("subprocess.Popen[bytes]", _OrderedProcess(events))
-    owner = OwnedProcessGroup(
-        process=process,
-        pgid=process.pid,
-        anchor=_fake_anchor(process.pid),
-        _lifeline_fd=-1,
-        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
-    )
+    owner = _fake_owned_group(process)
     monkeypatch.setattr(
         OwnedProcessGroup,
         "_settle_remaining_group",
@@ -225,13 +223,7 @@ def test_settle_error_path_settles_owned_group_before_reaping_leader(
         "subprocess.Popen[bytes]",
         _OrderedProcess(events, poll_error=True),
     )
-    owner = OwnedProcessGroup(
-        process=process,
-        pgid=process.pid,
-        anchor=_fake_anchor(process.pid),
-        _lifeline_fd=-1,
-        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
-    )
+    owner = _fake_owned_group(process)
     monkeypatch.setattr(
         OwnedProcessGroup,
         "_settle_remaining_group",
@@ -256,13 +248,7 @@ def test_remaining_group_gets_bounded_term_grace_excluding_anchor(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     process = cast("subprocess.Popen[bytes]", _OrderedProcess([]))
-    owner = OwnedProcessGroup(
-        process=process,
-        pgid=process.pid,
-        anchor=_fake_anchor(process.pid),
-        _lifeline_fd=-1,
-        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
-    )
+    owner = _fake_owned_group(process)
     signals: list[tuple[signal.Signals, object]] = []
     waits: list[tuple[int, float, int | None]] = []
 
@@ -303,13 +289,7 @@ def test_remaining_group_exiting_during_term_grace_is_not_killed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     process = cast("subprocess.Popen[bytes]", _OrderedProcess([]))
-    owner = OwnedProcessGroup(
-        process=process,
-        pgid=process.pid,
-        anchor=_fake_anchor(process.pid),
-        _lifeline_fd=-1,
-        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
-    )
+    owner = _fake_owned_group(process)
     signals: list[tuple[signal.Signals, object]] = []
 
     monkeypatch.setattr(
@@ -341,13 +321,7 @@ def test_wait_cancellation_still_settles_and_reaps(
 ) -> None:
     events: list[str] = []
     process = cast("subprocess.Popen[bytes]", _OrderedProcess(events))
-    owner = OwnedProcessGroup(
-        process=process,
-        pgid=process.pid,
-        anchor=_fake_anchor(process.pid),
-        _lifeline_fd=-1,
-        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
-    )
+    owner = _fake_owned_group(process)
 
     def cancel_wait(
         _process: subprocess.Popen[bytes],
@@ -391,13 +365,7 @@ def test_signal_handlers_forward_every_terminal_signal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     process = cast("subprocess.Popen[bytes]", _OrderedProcess([]))
-    owner = OwnedProcessGroup(
-        process=process,
-        pgid=process.pid,
-        anchor=_fake_anchor(process.pid),
-        _lifeline_fd=-1,
-        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
-    )
+    owner = _fake_owned_group(process)
     previous = {signum: object() for signum in capture_process._FORWARDED_SIGNALS}
     installed: dict[signal.Signals, object] = {}
     forwarded: list[tuple[signal.Signals, object]] = []
@@ -473,13 +441,7 @@ def test_pty_foreground_handoff_and_parent_state_restoration(
     )
 
     try:
-        owner = capture_process.OwnedProcessGroup(
-            process=process,
-            pgid=process.pid,
-            anchor=_fake_anchor(process.pid),
-            _lifeline_fd=-1,
-            _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
-        )
+        owner = _fake_owned_group(process)
         owner._previous_handlers = previous_handlers
         terminal = capture_process._take_foreground_process_group(process.pid)
         assert terminal is not None
@@ -864,13 +826,7 @@ def test_signal_group_requires_origin_and_records_runner_signals(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     process = cast("subprocess.Popen[bytes]", _OrderedProcess([]))
-    owner = OwnedProcessGroup(
-        process=process,
-        pgid=process.pid,
-        anchor=_fake_anchor(process.pid),
-        _lifeline_fd=-1,
-        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
-    )
+    owner = _fake_owned_group(process)
     sent: list[tuple[int, int]] = []
     monkeypatch.setattr(capture_process.os, "getpgid", lambda _pid: owner.pgid)
     monkeypatch.setattr(capture_process, "_process_group_exists", lambda _pgid: True)
@@ -1476,13 +1432,7 @@ def test_owned_spawn_restore_error_preserves_settlement_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     process = cast("subprocess.Popen[bytes]", _OrderedProcess([]))
-    owner = OwnedProcessGroup(
-        process=process,
-        pgid=process.pid,
-        anchor=_fake_anchor(process.pid),
-        _lifeline_fd=-1,
-        _spawn_token=capture_process._OWNED_PROCESS_SPAWN_TOKEN,
-    )
+    owner = _fake_owned_group(process)
     restore_error = OSError("restore failed")
     fchdir_calls = 0
     monkeypatch.setattr(capture_process, "_resolve_bash", lambda: "/bin/bash")

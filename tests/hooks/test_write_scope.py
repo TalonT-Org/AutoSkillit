@@ -74,6 +74,21 @@ def test_empty_list_rejection_steers_toward_inherit() -> None:
         decode_write_scope([])
 
 
+@pytest.mark.parametrize(
+    ("kind", "paths"),
+    [
+        (WriteScopeKind.BOUNDED, ()),
+        (WriteScopeKind.UNRESTRICTED, ("{{AUTOSKILLIT_TEMP}}/x/",)),
+        (WriteScopeKind.INHERIT, ("{{AUTOSKILLIT_TEMP}}/x/",)),
+    ],
+)
+def test_write_scope_rejects_kind_path_mismatch(
+    kind: WriteScopeKind, paths: tuple[str, ...]
+) -> None:
+    with pytest.raises(WriteScopeError, match="paths must be non-empty"):
+        WriteScope(kind, paths)
+
+
 def test_both_temp_spellings_expand_identically(tmp_path: Path) -> None:
     project = str(tmp_path)
     expected = os.path.join(project, ".autoskillit", "temp", "a") + "/"

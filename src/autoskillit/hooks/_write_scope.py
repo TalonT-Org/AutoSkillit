@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterable
+from dataclasses import dataclass
 from enum import StrEnum, unique
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple, assert_never
@@ -32,8 +33,6 @@ else:
     import _hook_payload as _hook_payload_module
 
 TEMP_PLACEHOLDER = "{{AUTOSKILLIT_TEMP}}"
-WRITE_SCOPE_UNRESTRICTED = "unrestricted"
-WRITE_SCOPE_INHERIT = "inherit"
 
 
 @unique
@@ -43,15 +42,24 @@ class WriteScopeKind(StrEnum):
     INHERIT = "inherit"
 
 
-class WriteScope(NamedTuple):
+WRITE_SCOPE_UNRESTRICTED = WriteScopeKind.UNRESTRICTED.value
+WRITE_SCOPE_INHERIT = WriteScopeKind.INHERIT.value
+
+
+class WriteScopeError(ValueError):
+    """Raised when a write-scope declaration violates the contract."""
+
+
+@dataclass(frozen=True)
+class WriteScope:
     """A decoded write-scope declaration; ``paths`` is non-empty iff BOUNDED."""
 
     kind: WriteScopeKind
     paths: tuple[str, ...] = ()
 
-
-class WriteScopeError(ValueError):
-    """Raised when a write-scope declaration violates the contract."""
+    def __post_init__(self) -> None:
+        if (self.kind is WriteScopeKind.BOUNDED) != bool(self.paths):
+            raise WriteScopeError("paths must be non-empty exactly for a bounded write scope")
 
 
 def _temp_relative_prefix() -> str:

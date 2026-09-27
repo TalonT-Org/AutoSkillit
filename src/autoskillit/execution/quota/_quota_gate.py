@@ -300,8 +300,14 @@ def _parse_quota_windows(
     for name, w in data.items():
         if not isinstance(w, dict) or w.get("utilization") is None:
             continue
+        try:
+            utilization = float(w["utilization"])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"quota window {name!r} has non-numeric utilization {w['utilization']!r}"
+            ) from exc
         entry = QuotaWindowEntry(
-            utilization=float(w["utilization"]),
+            utilization=utilization,
             resets_at=_parse_resets_at(w.get("resets_at")),
         )
         if (

@@ -704,6 +704,15 @@ class TestQuotaWindowDormancy:
         assert (name in windows) is is_window
         assert (name in dormant) is is_dormant
 
+    @pytest.mark.parametrize("utilization", ["high", [0.5]], ids=["value-error", "type-error"])
+    def test_non_numeric_utilization_names_the_window(self, utilization: object) -> None:
+        with pytest.raises(ValueError, match="quota window 'five_hour'") as excinfo:
+            _patch_quota__quota_gate._parse_quota_windows(
+                {"five_hour": {"utilization": utilization, "resets_at": None}}
+            )
+
+        assert isinstance(excinfo.value.__cause__, (TypeError, ValueError))
+
     @pytest.mark.anyio
     async def test_dormant_unknown_window_is_silent_and_non_binding(self, monkeypatch):
         cap, result = await _fetch_quota_capturing(

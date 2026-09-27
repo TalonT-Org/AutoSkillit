@@ -19,6 +19,14 @@ def _clone_root_context_refs(value: object, captures: dict[str, str]) -> list[st
     ]
 
 
+def _clone_root_finding(step_name: str, message: str) -> RuleFinding:
+    return make_finding(
+        rule_name="clone-root-as-worktree",
+        step_name=step_name,
+        message=message,
+    )
+
+
 @semantic_rule(
     name="on-result-missing-failure-route",
     description=(
@@ -204,10 +212,9 @@ def _check_clone_root_as_worktree(ctx: ValidationContext) -> list[RuleFinding]:
             worktree_arg = step.with_args.get("worktree_path", "")
             for var_name in _clone_root_context_refs(worktree_arg, captures):
                 findings.append(
-                    make_finding(
-                        rule_name="clone-root-as-worktree",
-                        step_name=step_name,
-                        message=f"Step '{step_name}' passes worktree_path via "
+                    _clone_root_finding(
+                        step_name,
+                        f"Step '{step_name}' passes worktree_path via "
                         f"'context.{var_name}', which was captured from "
                         f"result.clone_path. clone_path is the root of the "
                         f"cloned repository, not a git worktree. "
@@ -223,10 +230,9 @@ def _check_clone_root_as_worktree(ctx: ValidationContext) -> list[RuleFinding]:
             cwd = step.with_args.get("cwd", "")
             for var_name in _clone_root_context_refs(cwd, captures):
                 findings.append(
-                    make_finding(
-                        rule_name="clone-root-as-worktree",
-                        step_name=step_name,
-                        message=f"Step '{step_name}' passes cwd via "
+                    _clone_root_finding(
+                        step_name,
+                        f"Step '{step_name}' passes cwd via "
                         f"'context.{var_name}', which was captured from "
                         f"result.clone_path. Create the worktree in an "
                         f"orchestrator run_cmd step (create_impl_worktree.sh) "

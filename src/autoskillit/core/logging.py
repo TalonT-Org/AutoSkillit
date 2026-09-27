@@ -1,16 +1,21 @@
 """Centralized structlog configuration for the autoskillit package.
 
 Zero autoskillit imports. get_logger() is the single import point for all production
-modules. configure_logging() is called once at CLI startup.
+modules. configure_logging() is called by process entry points once their config is
+loaded.
 
 Library contract:
     Modules import get_logger() from here. Never call structlog.configure()
     or import logging directly in production modules outside this file.
+    Library code never calls configure_logging().
 
 Application contract:
-    The CLI's serve command calls configure_logging() once before the MCP
-    server starts. Before that call, the stdlib NullHandler in __init__.py
-    suppresses all output. After it, structured output goes to stderr only.
+    Entry points apply their terminal log level through
+    ``autoskillit.cli.ui._terminal_logging``; ``serve`` is the only two-phase
+    caller (early init before config load, then the config-derived level).
+    Before the first call, structlog runs on the provisional, uncached chain
+    configured at import and the stdlib NullHandler in __init__.py suppresses
+    stdlib output. After it, structured output goes to stderr only.
 
 MCP server constraint:
     stdout is the MCP protocol wire. Logging MUST go to stderr exclusively.
@@ -59,30 +64,38 @@ _PLUGIN_ARTIFACT_OUTCOMES = frozenset(
 # Shared by every console processor chain.
 _EXCEPTION_FORMATTER = structlog.dev.plain_traceback
 
-# Ensure all module-level get_logger() calls return lazy proxies rather than
-# fully-resolved loggers.  Without this, loggers created before
-# configure_logging() bind to stdout + ConsoleRenderer (structlog defaults),
-# which fatally corrupts the MCP stdio transport.
+
+# The pre-configure chain is provisional and deliberately uncached. A proxy that
+# emits before a process's authoritative configure_logging() call re-resolves on
+# its next call instead of freezing at this INFO/console chain, so no emission
+# made before a command applies its terminal log level can pin a proxy. Only
+# configure_logging() (authoritative, cached) binds proxies for the rest of the
+# process.
 #
-# processors= is explicit (not left to structlog's internal default) so this
-# pre-configure chain also renders through _EXCEPTION_FORMATTER: every
-# autoskillit path that logs before configure_logging() runs — including the
-# entire update transaction, which runs ahead of any configure_logging()
-# call (see cli/app.py's main()) — is covered by the crash-proof contract
-# from the very first log call, not just after CLI startup.
-structlog.configure(
-    processors=[
-        structlog.contextvars.merge_contextvars,
-        structlog.stdlib.add_log_level,
-        structlog.processors.TimeStamper(fmt="iso", utc=True),
-        structlog.processors.StackInfoRenderer(),
-        structlog.dev.set_exc_info,
-        structlog.dev.ConsoleRenderer(exception_formatter=_EXCEPTION_FORMATTER),
-    ],
-    cache_logger_on_first_use=True,
-    logger_factory=structlog.WriteLoggerFactory(file=sys.stderr),
-    wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
-)
+# It routes to stderr, never structlog's stdout default, which would fatally
+# corrupt the MCP stdio transport. processors= is explicit (not left to
+# structlog's internal default) so this chain also renders through
+# _EXCEPTION_FORMATTER: every autoskillit path that logs before
+# configure_logging() runs — including the entire update transaction, which
+# runs ahead of any configure_logging() call (see cli/app.py's main()) — is
+# covered by the crash-proof contract from the very first log call.
+def _configure_provisional_logging() -> None:
+    structlog.configure(
+        processors=[
+            structlog.contextvars.merge_contextvars,
+            structlog.stdlib.add_log_level,
+            structlog.processors.TimeStamper(fmt="iso", utc=True),
+            structlog.processors.StackInfoRenderer(),
+            structlog.dev.set_exc_info,
+            structlog.dev.ConsoleRenderer(exception_formatter=_EXCEPTION_FORMATTER),
+        ],
+        cache_logger_on_first_use=False,
+        logger_factory=structlog.WriteLoggerFactory(file=sys.stderr),
+        wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
+    )
+
+
+_configure_provisional_logging()
 
 
 def get_logger(name: str | None = None) -> Any:
@@ -209,9 +222,12 @@ def configure_logging(
 ) -> None:
     """Configure structlog and stdlib logging for application/server use.
 
-    Call at CLI startup; may be called again after config load for two-phase
-    boot (early init at INFO, then reconfigure with config-derived level).
-    Never call from library code paths.
+    Entry points call this through
+    ``autoskillit.cli.ui._terminal_logging.apply_terminal_logging``; ``serve``
+    calls it directly for its two-phase boot (early init before config load,
+    then reconfigure with the config-derived level). Never call from library
+    code paths. Loggers are cached on first use from here on, so this call
+    binds every proxy for the rest of the process.
 
     Args:
         level: Minimum log level (e.g. logging.INFO, logging.DEBUG).

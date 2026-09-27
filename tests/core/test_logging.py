@@ -314,6 +314,34 @@ class TestConfigureLogging:
         logger.info("should_appear")
         assert "should_appear" in buf.getvalue()
 
+    def test_pre_configure_emission_does_not_freeze_proxy(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A record emitted before configure_logging() must not pin the proxy."""
+        import autoskillit.core.logging as logging_mod
+
+        pre_buf = io.StringIO()
+        monkeypatch.setattr(sys, "stderr", pre_buf)
+        structlog.reset_defaults()
+        logging_mod = importlib.reload(logging_mod)
+        assert structlog.get_config()["cache_logger_on_first_use"] is False
+
+        lg = logging_mod.get_logger("autoskillit.test.cache_trap")
+        lg.info("pre_configure_probe")
+
+        post_buf = io.StringIO()
+        logging_mod.configure_logging(level=logging.WARNING, json_output=False, stream=post_buf)
+        assert structlog.get_config()["cache_logger_on_first_use"] is True
+        lg.info("post_info_probe")
+        lg.warning("post_warning_probe")
+
+        assert "pre_configure_probe" in pre_buf.getvalue()
+        assert "post_info_probe" not in pre_buf.getvalue()
+        assert "post_info_probe" not in post_buf.getvalue()
+        assert "post_warning_probe" in post_buf.getvalue()
+        assert "post_warning_probe" not in pre_buf.getvalue()
+
     def test_pre_boot_configure_has_wrapper_class(self):
         """Module-level structlog.configure() must include wrapper_class for defense-in-depth."""
         import importlib
@@ -409,3 +437,32 @@ class TestPluginArtifactLifecycleLogging:
         assert isinstance(logs[0]["actor_pid"], int)
         assert all(entry["event"] == "plugin_artifact_lifecycle" for entry in logs)
         assert lease.close_calls == 1
+
+    def test_interactive_baseline_hides_success_shows_failure(self) -> None:
+        from autoskillit.core.logging import (
+            configure_logging,
+            get_logger,
+            log_plugin_artifact_lifecycle,
+        )
+
+        buf = io.StringIO()
+        try:
+            configure_logging(level=logging.WARNING, json_output=False, stream=buf)
+            _flush_logger_proxy_caches()
+            logger = get_logger("autoskillit.test.lifecycle")
+            for outcome in ("succeeded", "deferred_contended"):
+                log_plugin_artifact_lifecycle(
+                    logger,
+                    action="acquire",
+                    outcome=outcome,
+                    artifact_kind="projection",
+                    semantic_key="semantic",
+                    incarnation="incarnation",
+                )
+        finally:
+            structlog.reset_defaults()
+            _flush_logger_proxy_caches()
+
+        rendered = buf.getvalue().splitlines()
+        assert len(rendered) == 1
+        assert "deferred_contended" in rendered[0]

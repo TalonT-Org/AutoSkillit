@@ -10,6 +10,7 @@ from autoskillit.hooks._classification._source_map import SourceMapBuilder, Sour
 from autoskillit.hooks._classification._tokenizer import (
     _lex_command,
     _lex_tokens,
+    _strip_heredoc_bodies_mapped,
     _tokenize_command_segments_with_redirects,
 )
 from autoskillit.hooks._runtime._command_classification import (
@@ -50,6 +51,17 @@ def test_dropped_text_remains_inside_combined_source_span():
     source = builder.build()
     assert source.text == "ab"
     assert source.source_span(0, 2) == (0, 4)
+
+
+def test_stripped_heredoc_body_preserves_original_boundary_span():
+    command = "cat <<EOF\nbody\nEOF\nnext"
+    mapped = _strip_heredoc_bodies_mapped(command)
+    assert mapped.text == "cat <<EOF\nEOF\nnext"
+    boundary = mapped.text.index("\nEOF")
+    assert mapped.source_span(boundary, boundary + 2) == (
+        command.index("\nbody"),
+        command.index("\nEOF") + 2,
+    )
 
 
 @pytest.mark.parametrize("start,end", [(1, 1), (0, 99), (-1, 1)])

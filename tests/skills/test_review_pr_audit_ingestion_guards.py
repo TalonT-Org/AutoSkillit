@@ -31,7 +31,9 @@ def test_review_audit_plan_collect_and_finalize_are_the_only_ingestion_path() ->
     step3 = _section(text, "### Step 3", "### Step 4")
     step4 = _section(text, "### Step 4", "### Step 4.5")
     step8 = _section(text, "### Step 8")
-    step3_normalized = " ".join(step3.split())
+    step3_normalized = " ".join(
+        word for line in step3.splitlines() for word in line.removeprefix("> ").split()
+    )
     step4_normalized = " ".join(step4.split())
     step8_normalized = " ".join(step8.split())
 

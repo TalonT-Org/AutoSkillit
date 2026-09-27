@@ -96,7 +96,7 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 - Transcribe, merge, summarize, repair, or re-type any auditor output. Auditor results reach
   validation only through `collect_review_audit` and `finalize_review_audit`, which read each
   child's own transcript.
-- Compute, assume, hard-code, or assert the gate state, audit state, candidate or disposition
+- Compute, assume, or hard-code the gate state, audit state, candidate or disposition
   identity, or verdict. Use the values `plan_review_audit` and `finalize_review_audit` return.
 
 **ALWAYS:**
@@ -705,20 +705,20 @@ only validated findings. The experimental candidate keys are exactly `file`, `li
 - `dimension` is exactly `overengineering_reachability` or
   `overengineering_abstraction_surface`; `severity` is `critical`, `warning`, or `info`;
   `requires_decision` is an exact boolean.
-- `file`, `message`, and `simpler_behavior` are non-empty after trimming. Primary,
+- `file`, `message`, and `simpler_behavior` are non-empty strings after trimming. Primary,
   evidence, and trace lines are positive integers excluding booleans, and the primary
   `(file, line)` must occur in exact `VALID_DIFF_LINES`, never only a hunk range.
 - Evidence items have exactly `{path,line,role,claim}`, include at least two distinct
   repository-relative `path:line` locations, and use only `anchor`, `caller`, `consumer`,
-  `registration`, `invariant`, or `counterevidence_checked`; each path, role, and claim is
-  non-empty after trimming.
-- Trace items have exactly `{path,line,relation}` and form a non-empty ordered chain; each
-  path and relation is non-empty after trimming.
+  `registration`, `invariant`, or `counterevidence_checked`; every `path`, `role`, and `claim`
+  is a non-empty string after trimming.
+- Trace items have exactly `{path,line,relation}` and form a non-empty ordered chain; every
+  `path` and `relation` is a non-empty string after trimming.
 - Boundary checks contain exactly one `{boundary,status,claim}` row for each
   `reflection_decorators`, `dependency_injection`, `plugin_registry`, `cli_entrypoint`,
   `serialization`, `generated_code`, and `public_api`. Status is
-  `checked_absent`, `checked_no_reachable_path`, or `not_applicable`; every claim is
-  non-empty after trimming.
+  `checked_absent`, `checked_no_reachable_path`, or `not_applicable`; every boundary `claim`
+  is a non-empty string after trimming.
 - Paths are relative, contain no `..`, and canonically remain under `{checkout_root}`.
   `confidence` is exactly an integer or float, never boolean, finite, and in `[0,1]`.
   `simpler_behavior` covers return values, exceptions, ordering, persistence, concurrency,
@@ -760,7 +760,8 @@ The suppression pass runs before deduplication and removes findings matching
 candidates, create a linked immutable aggregation record with reason `suppressed_prior_thread`;
 do not mutate the candidate or disposition. Deduplicate diff-anchored findings by `(file, line)`
 using severity, `requires_decision=false`, source rank, and original array index, then record
-every `dedup_group_id`, member, winner, and rationale. Duplicate losers receive
+every `dedup_group_id`, member, winner, and rationale; retain every member in the linked records.
+Duplicate losers receive
 `duplicate_candidate` records. Only exact anchors admitted by
 `anchor_authority_path` may become inline comments. Unpostable findings retain their admission
 reasons and appear in the review body's "Outside Diff Range" section. Unavailable or empty

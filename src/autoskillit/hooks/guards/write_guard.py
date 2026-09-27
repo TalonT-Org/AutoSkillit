@@ -117,7 +117,12 @@ def _bash_validation_error(
     command: str, execution_cwd: str, norm_prefixes: list[str], display_prefix: str
 ) -> str | None:
     scan = _extract_bash_write_targets(command, execution_cwd)
-    if scan.unresolved or not scan.parseable:
+    if not scan.parseable:
+        return (
+            f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} "
+            "(unparseable Bash command). Correct the shell syntax and retry."
+        )
+    if scan.unresolved:
         return (
             f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} "
             "(unresolved write target). " + UNRESOLVED_WRITE_TARGET_REMEDIATION

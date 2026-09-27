@@ -1885,7 +1885,7 @@ class TestNormalizePrefixesSurface:
 
 
 class TestUnparseableBashUnderActiveScope:
-    """A Bash command the shared tokenizer cannot parse is an unresolved write target."""
+    """Unparseable Bash commands deny with syntax-specific remediation."""
 
     COMMAND = 'echo "unterminated > src/x.py'
 
@@ -1897,12 +1897,13 @@ class TestUnparseableBashUnderActiveScope:
             "tool_input": {"command": self.COMMAND},
         }
 
-    def _assert_unresolved_deny(self, result: str) -> None:
+    def _assert_unparseable_deny(self, result: str) -> None:
         parsed = json.loads(result)
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
-        assert (
-            "unresolved write target" in parsed["hookSpecificOutput"]["permissionDecisionReason"]
-        )
+        reason = parsed["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "unparseable Bash command" in reason
+        assert "Correct the shell syntax and retry." in reason
+        assert UNRESOLVED_WRITE_TARGET_REMEDIATION not in reason
 
     def test_interactive_bounded_scope_denies(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path
@@ -1911,14 +1912,14 @@ class TestUnparseableBashUnderActiveScope:
         _bind_interactive(
             monkeypatch, tmp_path, {"review-pr": manifest_entry(_REVIEW_PR_SCOPE)}, ("review-pr",)
         )
-        self._assert_unresolved_deny(_run_hook(self._bash_event(tmp_path)))
+        self._assert_unparseable_deny(_run_hook(self._bash_event(tmp_path)))
 
     def test_headless_prefix_scope_denies(self, monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
         _set_headless(monkeypatch, headless=True)
         monkeypatch.setenv(
             "AUTOSKILLIT_ALLOWED_WRITE_PREFIXES", str(tmp_path / ".autoskillit" / "temp" / "x")
         )
-        self._assert_unresolved_deny(_run_hook(self._bash_event(tmp_path)))
+        self._assert_unparseable_deny(_run_hook(self._bash_event(tmp_path)))
 
 
 class TestEmptyPolicyDenialHint:

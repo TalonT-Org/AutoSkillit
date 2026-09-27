@@ -36,10 +36,14 @@ implementation) for details.
 
 ### Frontmatter fields
 
-All frontmatter fields are optional; coverage is uneven across the
-catalog (see issue #3773 F-C1-11 for the known gaps, currently
-out-of-scope for this plan):
+`write_paths:` is required; the other fields below are optional, and their
+coverage is uneven across the catalog (see issue #3773 F-C1-11 for the known
+gaps, currently out-of-scope for this plan):
 
+- `write_paths:` — the skill's write scope, decoded by `hooks/_write_scope.py`:
+  a non-empty list of `{{AUTOSKILLIT_TEMP}}/<dir>/` directories (BOUNDED),
+  `unrestricted` (writes outside temp), or `inherit` (no writes of its own).
+  Loaded skills compose into the session `write_scope` by union.
 - `categories:` — discovery grouping; one or more of the canonical
   categories above. Recommended for slash-command-invocable skills
   (i.e. everything except `reload-session`, which is invoked via its MCP

@@ -96,8 +96,8 @@ INVARIANT_REGISTRY: Final[dict[str, InvariantDef]] = {
     "write-path-prefix": InvariantDef(
         id="write-path-prefix",
         prohibition=(
-            "Headless launcher prefixes and interactive skill write_paths bound writes "
-            "in write-scoped sessions"
+            "Headless launcher prefixes and the union of loaded skills' declared "
+            "write_paths scopes bound writes in write-scoped sessions"
         ),
         source_doc="SKILL.md",
         gate_target="guards/write_guard.py",

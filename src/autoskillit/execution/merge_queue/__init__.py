@@ -68,8 +68,6 @@ class DefaultMergeQueueWatcher:
     Never raises; all errors are returned as structured dicts.
     """
 
-    _UNRESOLVED = object()
-
     def __init__(
         self,
         *,
@@ -78,17 +76,19 @@ class DefaultMergeQueueWatcher:
     ) -> None:
         self._token_factory: Callable[[], str | None] | None
         self._tracker = tracker
+        self._token_resolved = not callable(token)
         if callable(token):
             self._token_factory = token
-            self._token: str | None = self._UNRESOLVED  # type: ignore[assignment]
+            self._token: str | None = None
         else:
             self._token_factory = None
             self._token = token
         self._client: httpx.AsyncClient | None = None
 
     def _resolve_token(self) -> str | None:
-        if self._token is self._UNRESOLVED:
+        if not self._token_resolved:
             self._token = self._token_factory() if self._token_factory is not None else None
+            self._token_resolved = True
         return self._token
 
     def _headers(self) -> dict[str, str]:

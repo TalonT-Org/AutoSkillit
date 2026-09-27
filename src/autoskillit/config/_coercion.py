@@ -19,7 +19,7 @@ from __future__ import annotations
 import dataclasses
 import types
 from collections.abc import Callable
-from typing import Any, TypeVar, Union, get_args, get_origin, get_type_hints
+from typing import TYPE_CHECKING, Any, TypeVar, Union, get_args, get_origin, get_type_hints
 
 from autoskillit.config._config_loader import (
     _build_packs_config,
@@ -29,7 +29,10 @@ from autoskillit.config._config_loader import (
 from autoskillit.config._dataclasses_errors import ConfigSchemaError
 from autoskillit.config._dataclasses_test_gating import _COMMAND_UNSET
 
-_T = TypeVar("_T")
+if TYPE_CHECKING:
+    from _typeshed import DataclassInstance
+
+_T = TypeVar("_T", bound="DataclassInstance")
 
 
 def _field_defaults(cls: type) -> dict[str, Any]:
@@ -240,7 +243,7 @@ def _build_subconfig(cls: type[_T], section: dict[str, Any], section_name: str) 
     hints = get_type_hints(cls)
     kwargs: dict[str, Any] = {}
 
-    for f in dataclasses.fields(cls):  # type: ignore[arg-type]
+    for f in dataclasses.fields(cls):
         override_key = (section_name, f.name)
         if override_key in _FIELD_OVERRIDES:
             kwargs[f.name] = _FIELD_OVERRIDES[override_key](section, defaults)

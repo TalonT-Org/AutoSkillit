@@ -208,7 +208,7 @@ _LEGACY_TO_CANONICAL: dict[str, str] = {
 }
 
 
-def _normalize_keys(d: dict[str, Any]) -> dict[str, Any]:
+def _normalize_keys(d: Mapping[str, Any]) -> dict[str, Any]:
     """Normalize legacy cache field names to canonical. Drop after #2474 lands."""
     out = dict(d)
     for old, new in _LEGACY_TO_CANONICAL.items():
@@ -544,14 +544,14 @@ class TelemetryFormatter:
             return ""
         h = TelemetryFormatter._humanize
         fmt_dur = TelemetryFormatter._fmt_duration
-        model_totals = [_normalize_keys(m) for m in model_totals]  # type: ignore[misc, arg-type]
+        normalized = [_normalize_keys(m) for m in model_totals]
         lines = [
             "## Model Usage Breakdown",
             "",
             _MODEL_MD_HEADER,
             _MODEL_MD_SEP,
         ]
-        for m in model_totals:
+        for m in normalized:
             model = m.get("model", "")
             source = _source_label(m)
             if source:
@@ -572,9 +572,9 @@ class TelemetryFormatter:
             return ""
         h = TelemetryFormatter._humanize
         fmt_dur = TelemetryFormatter._fmt_duration
-        model_totals = [_normalize_keys(m) for m in model_totals]  # type: ignore[misc, arg-type]
+        normalized = [_normalize_keys(m) for m in model_totals]
         rows: list[tuple[str, str, str, str, str, str, str]] = []
-        for m in model_totals:
+        for m in normalized:
             rows.append(
                 (
                     m.get("model", ""),

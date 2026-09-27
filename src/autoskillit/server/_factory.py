@@ -158,24 +158,24 @@ class _LazyTokenFactory:
     resolve at construction time.  First call resolves and caches the
     result; subsequent calls return the cached value.
 
-    Thread-safe for single-writer scenarios (GIL-safe sentinel + assignment
-    pattern; the MCP server is single-threaded asyncio).
+    Thread-safe for single-writer scenarios (GIL-safe value-then-flag
+    assignment; the MCP server is single-threaded asyncio).
     """
-
-    _UNRESOLVED = object()
 
     def __init__(self, resolver: Callable[[], str | None]) -> None:
         self._resolver = resolver
-        self._resolved: str | None = self._UNRESOLVED  # type: ignore[assignment]
+        self._resolved_token: str | None = None
+        self._token_resolved = False
 
     def __call__(self) -> str | None:
-        if self._resolved is self._UNRESOLVED:
-            self._resolved = self._resolver()
-        return self._resolved
+        if not self._token_resolved:
+            self._resolved_token = self._resolver()
+            self._token_resolved = True
+        return self._resolved_token
 
     @property
     def is_resolved(self) -> bool:
-        return self._resolved is not self._UNRESOLVED
+        return self._token_resolved
 
 
 def _gh_cli_token() -> str | None:

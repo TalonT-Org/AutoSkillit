@@ -588,9 +588,11 @@ def _bind_dispatch_projection(state: _RunSkillDispatchState) -> None:
 def _check_dispatch_preconditions(state: _RunSkillDispatchState) -> str | None:
     # Auto-enrich order_id from the fleet dispatcher's env variable when the
     # caller did not pass an explicit value. AUTOSKILLIT_DISPATCH_ID is injected
-    # by fleet/_api.py into every L2 food truck session environment and inherited by all
-    # sub-sessions, ensuring token log entries carry the correct order_id without
-    # requiring recipe authors to thread it through every run_skill call.
+    # by fleet/dispatch/_execution.py into the L2 food truck session environment
+    # and reaches that L2's MCP server (Codex via CODEX_MCP_ENV_FORWARD_VARS);
+    # build_agent_env scrubs it from L1 launches and nothing re-injects it. Reading
+    # it here lets token log entries carry the correct order_id without requiring
+    # recipe authors to thread it through every run_skill call.
     state.effective_order_id = state.order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
 
     if (

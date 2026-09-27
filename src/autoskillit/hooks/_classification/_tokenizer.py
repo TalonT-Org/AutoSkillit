@@ -574,8 +574,9 @@ def _lex_command(command: str) -> _LexedCommand | None:
     )
 
 
-def _is_structural_token(lexed: _LexedCommand, token: str) -> bool:
-    return (
+def _is_structural_token(lexed: _LexedCommand, index: int) -> bool:
+    token = lexed.tokens[index]
+    return lexed.raw_spans[index] == token and (
         token in lexed.groups
         or _HEREDOC_PLACEHOLDER_RE.fullmatch(token) is not None
         or token in lexed.redirects
@@ -591,9 +592,7 @@ def _herestring_at(lexed: _LexedCommand, index: int) -> tuple[StdinLiteral | Non
         return None
     fused = raw != "<<<"
     word = index if fused else index + 1
-    if word >= len(lexed.tokens) or (
-        not fused and _is_structural_token(lexed, lexed.tokens[word])
-    ):
+    if word >= len(lexed.tokens) or (not fused and _is_structural_token(lexed, word)):
         return None, index + 1
     offset = 3 if fused else 0
     start, end = lexed.bounds[word]

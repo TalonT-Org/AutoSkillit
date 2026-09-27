@@ -49,7 +49,8 @@ python scripts/docker/verification/codex_shell_baseline.py
 
 The tool runs the matrix's native Codex cases once with no hooks and once with
 only the generated shell-capture hook. It requires Codex authentication in the
-container, creates throwaway Codex homes, and keeps bounded JSONL and stderr logs
+container. Host-lifetime cases end Codex after the command leader starts. The tool
+creates throwaway Codex homes and keeps bounded JSONL and stderr logs
 under `.autoskillit/temp/codex_shell_baseline/`. The `CODEX_VERSION` pin is part
 of the expected baseline: rerun this comparison whenever that Dockerfile value
 changes, then update the matrix only after reviewing the recorded results.

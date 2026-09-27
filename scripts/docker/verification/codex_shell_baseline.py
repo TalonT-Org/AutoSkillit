@@ -32,6 +32,7 @@ from tests.hooks._shell_conformance_matrix import (  # noqa: E402
     CONFORMANCE_INVARIANTS,
     ConformanceBaseline,
     ConformanceCaseDef,
+    ConformanceDriver,
     ConformanceExpectation,
     ConformanceMode,
 )
@@ -71,6 +72,62 @@ def _kill_host(process: subprocess.Popen[bytes]) -> None:
         pass
 
 
+def _request_session_end(
+    process: subprocess.Popen[bytes], leader_file: Path, signum: signal.Signals
+) -> bool:
+    try:
+        leader_pid = int(leader_file.read_text().strip())
+        if leader_pid <= 1 or _proc_gone_or_zombie(leader_pid):
+            return False
+        process.send_signal(signum)
+    except (OSError, ValueError):
+        return False
+    return True
+
+
+def _collect_codex_logs(
+    process: subprocess.Popen[bytes],
+    stdout_path: Path,
+    stderr_path: Path,
+    session_end_file: Path | None,
+    session_end_signal: signal.Signals,
+) -> tuple[bool, bool, bool]:
+    selector = selectors.DefaultSelector()
+    assert process.stdout is not None and process.stderr is not None
+    for stream in (process.stdout, process.stderr):
+        selector.register(stream.fileno(), selectors.EVENT_READ)
+
+    started = time.monotonic()
+    output_bytes = 0
+    exceeded_limit = False
+    interrupted = False
+    timed_out = False
+    with stdout_path.open("wb") as stdout_log, stderr_path.open("wb") as stderr_log:
+        destinations = {process.stdout.fileno(): stdout_log, process.stderr.fileno(): stderr_log}
+        while selector.get_map():
+            if not interrupted and session_end_file is not None:
+                interrupted = _request_session_end(process, session_end_file, session_end_signal)
+            if time.monotonic() - started > _CODEX_TIMEOUT_SECONDS and not timed_out:
+                timed_out = True
+                _kill_host(process)
+            for key, _mask in selector.select(timeout=0.1):
+                descriptor = key.fd
+                chunk = os.read(descriptor, 64 * 1024)
+                if not chunk:
+                    selector.unregister(descriptor)
+                    continue
+                if output_bytes + len(chunk) > _MAX_LOG_BYTES:
+                    exceeded_limit = True
+                    _kill_host(process)
+                    continue
+                destinations[descriptor].write(chunk)
+                output_bytes += len(chunk)
+    selector.close()
+    process.stdout.close()
+    process.stderr.close()
+    return timed_out, exceeded_limit, interrupted
+
+
 def _run_codex(
     *,
     home: Path,
@@ -79,7 +136,9 @@ def _run_codex(
     stdout_path: Path,
     stderr_path: Path,
     hook_trust_bypass: bool,
-) -> int:
+    session_end_file: Path | None = None,
+    session_end_signal: signal.Signals = signal.SIGKILL,
+) -> tuple[int, bool]:
     args = ["codex", "exec", "--json", "--dangerously-bypass-approvals-and-sandbox"]
     if hook_trust_bypass:
         args.append("--dangerously-bypass-hook-trust")
@@ -99,36 +158,14 @@ def _run_codex(
         stderr=subprocess.PIPE,
         bufsize=0,
     )
-    selector = selectors.DefaultSelector()
-    assert process.stdout is not None and process.stderr is not None
-    for stream in (process.stdout, process.stderr):
-        selector.register(stream.fileno(), selectors.EVENT_READ)
-
-    started = time.monotonic()
-    output_bytes = 0
-    exceeded_limit = False
-    timed_out = False
-    with stdout_path.open("wb") as stdout_log, stderr_path.open("wb") as stderr_log:
-        destinations = {process.stdout.fileno(): stdout_log, process.stderr.fileno(): stderr_log}
-        while selector.get_map():
-            if time.monotonic() - started > _CODEX_TIMEOUT_SECONDS and not timed_out:
-                timed_out = True
-                _kill_host(process)
-            for key, _mask in selector.select(timeout=0.1):
-                descriptor = key.fd
-                chunk = os.read(descriptor, 64 * 1024)
-                if not chunk:
-                    selector.unregister(descriptor)
-                    continue
-                if output_bytes + len(chunk) > _MAX_LOG_BYTES:
-                    exceeded_limit = True
-                    _kill_host(process)
-                    continue
-                destinations[descriptor].write(chunk)
-                output_bytes += len(chunk)
-    selector.close()
-    process.stdout.close()
-    process.stderr.close()
+    try:
+        timed_out, exceeded_limit, interrupted = _collect_codex_logs(
+            process, stdout_path, stderr_path, session_end_file, session_end_signal
+        )
+    except BaseException:
+        _kill_host(process)
+        process.wait(timeout=5)
+        raise
     try:
         return_code = process.wait(timeout=5)
     except subprocess.TimeoutExpired:
@@ -139,7 +176,9 @@ def _run_codex(
             f"codex exec exceeded its time/output bound: timed_out={timed_out}, "
             f"log_limit={exceeded_limit}; output: {stdout_path}; stderr: {stderr_path}"
         )
-    return return_code
+    if session_end_file is not None and not interrupted:
+        raise RuntimeError(f"command was not live at session end; evidence: {stdout_path}")
+    return return_code, interrupted
 
 
 def _command_result(
@@ -236,25 +275,17 @@ def _matches_command(reported: str, command: str) -> bool:
     return len(argv) >= 3 and argv[-2] in {"-c", "-lc"} and argv[-1] == command
 
 
-def _prompt(command: str, *, session_end: bool) -> str:
-    lifetime_instruction = (
-        " Use exec_command with yield_time_ms=1 and end the turn immediately after it returns; "
-        "do not poll or wait for the process."
-        if session_end
-        else ""
-    )
+def _prompt(command: str) -> str:
     return (
-        "Run exactly one Bash command, once, in the current directory. Do not edit files, "
-        "add commands, or change the command text. Return no prose."
-        + lifetime_instruction
-        + "\n\n"
-        + command
+        "Run exactly one Bash command, once, in the current directory. "
+        "Perform no additional actions or commands and do not change the command text. "
+        "Return no prose.\n\n" + command
     )
 
 
-def _summary(output: bytes, exit_code: int | None, *, marker: bool | None = None) -> str:
-    if marker is not None:
-        return f"group-settled,marker={'yes' if marker else 'no'}"
+def _summary(output: bytes, exit_code: int | None, *, settled: bool | None = None) -> str:
+    if settled is not None:
+        return f"settled={settled}"
     preview = repr(output[:80]) + ("..." if len(output) > 80 else "")
     return f"exit={exit_code},output={preview}"
 
@@ -267,19 +298,23 @@ def _observe_case(
     session_end = expectation is ConformanceExpectation.USER_GROUP_SETTLED
     output_path = project.parent / f"{project.name}.jsonl"
     stderr_path = project.parent / f"{project.name}.stderr"
-    return_code = _run_codex(
+    return_code, interrupted = _run_codex(
         home=home,
         project=project,
-        prompt=_prompt(case.command, session_end=session_end),
+        prompt=_prompt(case.command),
         stdout_path=output_path,
         stderr_path=stderr_path,
         hook_trust_bypass=hooked,
+        session_end_file=project / "leader.pid" if session_end else None,
+        session_end_signal=(
+            signal.SIGTERM if case.driver is ConformanceDriver.HOST_SIGTERM else signal.SIGKILL
+        ),
     )
-    if return_code != 0:
+    if return_code != 0 and not interrupted:
         raise RuntimeError(
             f"codex exec failed ({return_code}); output: {output_path}; stderr: {stderr_path}"
         )
-    output, command_exit = _command_result(output_path, case.command, interrupted=session_end)
+    output, command_exit = _command_result(output_path, case.command, interrupted=interrupted)
     marker_ok: bool | None = None
     if expectation is ConformanceExpectation.USER_GROUP_SETTLED:
         pid = int((project / "leader.pid").read_text().strip())
@@ -344,8 +379,8 @@ def main() -> int:
         else:
             raise RuntimeError(f"unsupported live Codex expectation: {expectation.value}")
 
-        native_text = _summary(native[0], native[1], marker=native[2])
-        hooked_text = _summary(hooked_result[0], hooked_result[1], marker=hooked_result[2])
+        native_text = _summary(native[0], native[1], settled=native[2])
+        hooked_text = _summary(hooked_result[0], hooked_result[1], settled=hooked_result[2])
         print(f"{case.id} | {native_text} | {hooked_text} | {expectation.value}")
         if not agreed:
             failures += 1

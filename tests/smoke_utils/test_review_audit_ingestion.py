@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import ChildTaskTranscript, DiffAnchorAuthority
+from autoskillit.core import ChildTaskTranscript, DiffAnchorAuthority, write_versioned_json
 from autoskillit.smoke_utils import (
     REVIEW_DISPOSITION_REASON_CODES,
     ReviewAuditInputError,
@@ -19,7 +19,10 @@ from autoskillit.smoke_utils import (
     load_review_audit_manifest,
     plan_review_audit,
 )
-from autoskillit.smoke_utils.review._audit_manifest import load_review_audit_anchor_authority
+from autoskillit.smoke_utils.review._audit_manifest import (
+    _content_digest,
+    load_review_audit_anchor_authority,
+)
 from tests.smoke_utils._experimental_helpers import _experimental_candidate, _finding
 
 pytestmark = [pytest.mark.medium]
@@ -166,6 +169,23 @@ def test_plan_derives_slots_and_manifest_integrity(tmp_path: Path) -> None:
     )
     assert next_plan["audit_run_id"] != planned["audit_run_id"]
     assert Path(str(next_plan["manifest_path"])).is_file()
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid_value"),
+    [("audit_run_id", None), ("gate_state", []), ("snapshot", [])],
+)
+def test_manifest_rejects_invalid_finalization_fields(
+    tmp_path: Path, field: str, invalid_value: object
+) -> None:
+    _, planned = _run(tmp_path)
+    manifest_path = str(planned["manifest_path"])
+    manifest = load_review_audit_manifest(manifest_path)
+    manifest[field] = invalid_value
+    manifest["content_sha256"] = _content_digest(manifest)
+    write_versioned_json(Path(manifest_path), manifest, schema_version=manifest["schema_version"])
+    with pytest.raises(ReviewAuditInputError, match=field):
+        load_review_audit_manifest(manifest_path)
 
 
 @pytest.mark.parametrize("anchor", [False, True])

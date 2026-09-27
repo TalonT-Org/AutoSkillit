@@ -356,6 +356,21 @@ def plan_review_audit(
     }
 
 
+def _validate_manifest_identity(value: Mapping[str, object]) -> None:
+    audit_run_id = value.get("audit_run_id")
+    if not isinstance(audit_run_id, str) or not audit_run_id:
+        raise ReviewAuditInputError("manifest audit_run_id must be a non-empty string")
+    gate_state = value.get("gate_state")
+    if not isinstance(gate_state, str) or gate_state not in {
+        "valid_true",
+        "valid_false",
+        "degraded",
+    }:
+        raise ReviewAuditInputError("manifest gate_state is invalid")
+    if not isinstance(value.get("snapshot"), Mapping):
+        raise ReviewAuditInputError("manifest snapshot must be an object")
+
+
 def load_review_audit_manifest(manifest_path: str) -> dict[str, object]:
     """Load a manifest only while each retained authority file is unchanged."""
     try:
@@ -371,6 +386,7 @@ def load_review_audit_manifest(manifest_path: str) -> dict[str, object]:
         raise ReviewAuditInputError("review-audit manifest schema is invalid")
     if value.get("content_sha256") != _content_digest(value):
         raise ReviewAuditInputError("review-audit manifest digest does not match")
+    _validate_manifest_identity(value)
     for path_key, digest_key in (
         ("authority_path", "authority_sha256"),
         ("anchor_authority_path", "anchor_authority_sha256"),

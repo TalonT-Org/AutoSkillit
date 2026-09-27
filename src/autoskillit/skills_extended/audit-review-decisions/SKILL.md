@@ -52,7 +52,7 @@ implemented. Identify review debt before it compounds.
 - `$1` — Time period (e.g. `14d`, `30d`, `7d`). Default: `14d`.
 - `$2` — Output path. Default:
   `{{AUTOSKILLIT_TEMP}}/audit-review-decisions/review_decisions_audit_{run_id}.md`
-- `{number}` — Locally captured literal PR number from each GraphQL result; use it in the
+- `{pr_number}` — Locally captured literal PR number from each GraphQL result; use it in the
   corresponding raw-data filename. It is not a positional input.
 - `{run_id}` — locally captured timestamp-and-UUID value from the read-only command
   below; use it in the default path. It is not a positional input.
@@ -174,7 +174,7 @@ python -c 'from datetime import datetime; from uuid import uuid4; print(datetime
      starting with `[AUDIT]` (already watermarked — skip entirely).
    - If the PR has zero remaining threads: skip saving.
    - Otherwise: save filtered data to
-     `{{AUTOSKILLIT_TEMP}}/audit-review-decisions/raw/pr_{number}.json`
+     `{{AUTOSKILLIT_TEMP}}/audit-review-decisions/raw/pr_{pr_number}.json`
 
 ---
 
@@ -201,7 +201,7 @@ Do not output any prose between subagent dispatches. Immediately proceed to the 
      - Review body `state: COMMENTED` with no corresponding thread (needs_human indicator)
    - Returns candidates as **response text only — no file writes**. Per-candidate format:
      ```
-     PR: {number}
+     PR: {pr_number}
      thread_index: {N}
      comment_id: {databaseId of first comment in thread}
      path: {file path or empty}
@@ -236,7 +236,7 @@ Do not output any prose between subagent dispatches. Immediately proceed to the 
      - `STALE` — code deleted/refactored; finding irrelevant
    - Returns findings as **response text only — no file writes**. Per-finding format:
      ```
-     PR: {number}
+     PR: {pr_number}
      comment_id: {databaseId}
      classification: VALID|RESOLVED|STALE
      path: {file:line or empty}
@@ -298,7 +298,7 @@ For each HIGH VALID finding, write a section:
 ```
 ### {suggested_title}
 
-**PR:** #{number} | **File:** {path}:{line} | **Severity:** {severity} | **Dimension:** {dimension}
+**PR:** #{pr_number} | **File:** {path}:{line} | **Severity:** {severity} | **Dimension:** {dimension}
 
 > {reviewer_quote}
 
@@ -387,4 +387,4 @@ For every finding processed in Steps 2–3 (all classifications — VALID, RESOL
    requires an individual POST. The 1s delay between calls is mandatory per GitHub API
    discipline.
 
-5. Log progress per finding: `[AUDIT] Posted marker on PR #{number} thread {comment_id}: {marker_body}`
+5. Log progress per finding: `[AUDIT] Posted marker on PR #{pr_number} thread {comment_id}: {marker_body}`

@@ -128,6 +128,40 @@ def test_skill_session_cmd_omits_owner_scope_without_ambient_env(
     assert OWNER_SCOPE_DIR_ENV_VAR not in spec.env
 
 
+@pytest.mark.parametrize(
+    "backend_factory",
+    [
+        pytest.param(ClaudeCodeBackend, id="claude"),
+        pytest.param(CodexBackend, id="codex"),
+    ],
+)
+def test_skill_session_cmd_omits_owner_scope_when_only_token_in_ambient_env(
+    backend_factory: type[ClaudeCodeBackend] | type[CodexBackend],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Half-set owner-scope env pair (token but no dir) must not leak to spawn.
+
+    Regression test for the fix that drops the "blank-dir fallback" -- the
+    funnel rejects a half-set pair as ``OwnerScopeMalformedEnvError`` deep
+    inside ``spawn_owned_process``, so forwarding the half-set pair would
+    surface as a confusing domain error there instead of being silently
+    dropped here.
+    """
+    monkeypatch.setenv(OWNER_SCOPE_ENV_VAR, "dispatch-parent-000000000000")
+    monkeypatch.delenv(OWNER_SCOPE_DIR_ENV_VAR, raising=False)
+    backend = backend_factory()
+
+    spec = backend.build_skill_session_cmd(
+        "/autoskillit:investigate",
+        "/clone",
+        completion_marker="DONE",
+        add_dirs=codex_skill_add_dirs("/clone"),
+    )
+
+    assert OWNER_SCOPE_ENV_VAR not in spec.env
+    assert OWNER_SCOPE_DIR_ENV_VAR not in spec.env
+
+
 # ---------------------------------------------------------------------------
 # L2 food-truck dispatch: executor's own scope wins over ambient inheritance
 # ---------------------------------------------------------------------------

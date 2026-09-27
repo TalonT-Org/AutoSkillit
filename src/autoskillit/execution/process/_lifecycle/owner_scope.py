@@ -193,7 +193,16 @@ def _final_disposition(record: TetherRecord) -> str:
 def _refresh_until_stable(
     path: Path, record: TetherRecord, evidence: _SettlementEvidence
 ) -> tuple[bool, TetherRecord]:
-    """Kill current targets then re-read the tether until its workload identity stabilises."""
+    """Kill current targets then re-read the tether until its workload identity stabilises.
+
+    Note: if ``_read_tether`` returns ``None`` mid-pass (the file was removed
+    concurrently), the pre-refresh ``record`` is returned so the caller can
+    fall through to its own disposition logic. This is conservative: the
+    caller treats the stale record as ``unsettled``/``dead_child`` and the
+    outer loop retries next pass rather than leaking the tether as silently
+    gone. Production writers of these files are settlement itself, so this
+    race is effectively unreachable.
+    """
     killed = False
     for _ in range(OWNER_SCOPE_SETTLE_MAX_REFRESHES):
         for result in _settle_tether_targets(record, _tether_target_statuses(record)):

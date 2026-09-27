@@ -164,14 +164,14 @@ class _LazyTokenFactory:
 
     def __init__(self, resolver: Callable[[], str | None]) -> None:
         self._resolver = resolver
-        self._resolved_token: str | None = None
+        self._token: str | None = None
         self._token_resolved = False
 
     def __call__(self) -> str | None:
         if not self._token_resolved:
-            self._resolved_token = self._resolver()
+            self._token = self._resolver()
             self._token_resolved = True
-        return self._resolved_token
+        return self._token
 
     @property
     def is_resolved(self) -> bool:

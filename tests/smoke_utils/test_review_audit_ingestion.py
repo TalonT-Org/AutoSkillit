@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -18,12 +19,15 @@ from autoskillit.smoke_utils import (
     load_review_audit_manifest,
     plan_review_audit,
 )
+from autoskillit.smoke_utils.review._audit_manifest import load_review_audit_anchor_authority
+from tests.smoke_utils._experimental_helpers import _experimental_candidate, _finding
 
 pytestmark = [pytest.mark.medium]
 
 HEAD_SHA = "a" * 40
 BASE_SHA = "b" * 40
 MERGE_SHA = "c" * 40
+_candidate = partial(_experimental_candidate, file="src/review.py", line=10)
 
 
 def _run(
@@ -127,52 +131,6 @@ def _transcripts(
     return handles, transcripts
 
 
-def _reader(transcripts: dict[str, ChildTaskTranscript]):
-    return lambda child_id: transcripts.get(child_id)
-
-
-def _finding(*, dimension: str = "arch", file: str = "src/review.py") -> dict[str, object]:
-    return {
-        "file": file,
-        "line": 10,
-        "dimension": dimension,
-        "severity": "warning",
-        "message": "A focused review finding.",
-        "requires_decision": False,
-    }
-
-
-def _candidate(dimension: str, *, line: int = 10) -> dict[str, object]:
-    boundaries = (
-        "reflection_decorators",
-        "dependency_injection",
-        "plugin_registry",
-        "cli_entrypoint",
-        "serialization",
-        "generated_code",
-        "public_api",
-    )
-    return {
-        "file": "src/review.py",
-        "line": line,
-        "dimension": dimension,
-        "severity": "warning",
-        "message": "A proof-only candidate.",
-        "requires_decision": False,
-        "evidence": [
-            {"path": "src/review.py", "line": 10, "role": "anchor", "claim": "primary"},
-            {"path": "src/review.py", "line": 11, "role": "caller", "claim": "caller"},
-        ],
-        "trace": [{"path": "src/review.py", "line": 10, "relation": "reaches"}],
-        "boundary_checks": [
-            {"boundary": boundary, "status": "checked_no_reachable_path", "claim": "checked"}
-            for boundary in boundaries
-        ],
-        "confidence": 0.9,
-        "simpler_behavior": "return exception ordering persistence concurrency compatibility",
-    }
-
-
 def test_plan_derives_slots_and_manifest_integrity(tmp_path: Path) -> None:
     review, planned = _run(
         tmp_path,
@@ -191,7 +149,9 @@ def test_plan_derives_slots_and_manifest_integrity(tmp_path: Path) -> None:
     assert all(re.fullmatch(r"rva[0-9a-f]{16}[0-9]{2}", token) for token in tokens)
     manifest = load_review_audit_manifest(str(planned["manifest_path"]))
     assert manifest["audit_run_id"] == planned["audit_run_id"]
-    assert Path(str(planned["manifest_path"])).is_file()
+    assert load_review_audit_anchor_authority(manifest) == DiffAnchorAuthority.unavailable(
+        repository="acme/repo", pr_number=7, head_sha=HEAD_SHA
+    )
     data = Path(str(planned["manifest_path"]))
     data.write_text(data.read_text().replace('"mode": "local"', '"mode": "Local"'))
     with pytest.raises(ReviewAuditInputError, match="digest"):
@@ -272,7 +232,7 @@ def test_incident_malformed_and_limited_children_never_approve(tmp_path: Path) -
     collect = collect_review_audit(
         manifest_path=str(planned["manifest_path"]),
         handles=handles,
-        read_child_task=_reader(transcripts),
+        read_child_task=transcripts.get,
     )
     assert collect["state"] == "relaunch_required"
     assert {row["slot_id"] for row in collect["relaunch"]} == {
@@ -290,7 +250,7 @@ def test_incident_malformed_and_limited_children_never_approve(tmp_path: Path) -
         dispositions=[],
         prior_resolved_findings=[],
         final_snapshot_state="fresh",
-        read_child_task=_reader(transcripts),
+        read_child_task=transcripts.get,
     )
     assert final["audit_state"] == "degraded"
     assert final["verdict"] == "needs_human"
@@ -329,7 +289,7 @@ def test_well_formed_empty_findings_remain_valid(tmp_path: Path) -> None:
     collect = collect_review_audit(
         manifest_path=str(planned["manifest_path"]),
         handles=handles,
-        read_child_task=_reader(transcripts),
+        read_child_task=transcripts.get,
     )
     assert collect["state"] == "complete"
     final = finalize_review_audit(
@@ -338,7 +298,7 @@ def test_well_formed_empty_findings_remain_valid(tmp_path: Path) -> None:
         dispositions=[],
         prior_resolved_findings=[],
         final_snapshot_state="fresh",
-        read_child_task=_reader(transcripts),
+        read_child_task=transcripts.get,
     )
     assert final["verdict"] == "approved"
 
@@ -351,11 +311,19 @@ def test_handle_binding_duplicate_and_unknown_key_checks(tmp_path: Path) -> None
     transcripts[arch_handle] = replace(
         transcripts[arch_handle], assignment_prompt="unbound prompt", assignment_label=""
     )
+    binding = collect_review_audit(
+        manifest_path=str(planned["manifest_path"]),
+        handles=handles,
+        read_child_task=transcripts.get,
+    )
+    unbound = next(row for row in binding["slots"] if row["slot_id"] == "arch")
+    assert unbound["status"] == "failed"
+    assert unbound["reason_code"] == "slot_binding_mismatch"
     handles["tests"] = arch_handle
     result = collect_review_audit(
         manifest_path=str(planned["manifest_path"]),
         handles=handles,
-        read_child_task=_reader(transcripts),
+        read_child_task=transcripts.get,
     )
     reasons = {row["slot_id"]: row["reason_code"] for row in result["slots"]}
     assert reasons["arch"] == reasons["tests"] == "duplicate_handle"
@@ -364,7 +332,7 @@ def test_handle_binding_duplicate_and_unknown_key_checks(tmp_path: Path) -> None
     invalid_result = evaluate_review_audit_slots(
         manifest=manifest,
         handles=duplicate_invalid,
-        read_child_task=_reader(transcripts),
+        read_child_task=transcripts.get,
     )
     invalid_reasons = {
         row["slot_id"]: row["reason_code"] for row in invalid_result["slot_records"]
@@ -375,7 +343,7 @@ def test_handle_binding_duplicate_and_unknown_key_checks(tmp_path: Path) -> None
     empty_result = evaluate_review_audit_slots(
         manifest=manifest,
         handles=empty_handles,
-        read_child_task=_reader(transcripts),
+        read_child_task=transcripts.get,
     )
     empty_reasons = {row["slot_id"]: row["reason_code"] for row in empty_result["slot_records"]}
     assert empty_reasons["tests"] == empty_reasons["cohesion"] == "missing_handle"
@@ -390,7 +358,7 @@ def test_handle_binding_duplicate_and_unknown_key_checks(tmp_path: Path) -> None
     codex_result = evaluate_review_audit_slots(
         manifest=manifest,
         handles=codex_handles,
-        read_child_task=_reader(codex_transcripts),
+        read_child_task=codex_transcripts.get,
     )
     assert (
         next(row for row in codex_result["slot_records"] if row["slot_id"] == "arch")["status"]
@@ -400,7 +368,7 @@ def test_handle_binding_duplicate_and_unknown_key_checks(tmp_path: Path) -> None
         collect_review_audit(
             manifest_path=str(planned["manifest_path"]),
             handles={**handles, "unknown": "child-z"},
-            read_child_task=_reader(transcripts),
+            read_child_task=transcripts.get,
         )
 
 
@@ -420,7 +388,7 @@ def test_standard_findings_are_validated_per_slot(
     result = collect_review_audit(
         manifest_path=str(planned["manifest_path"]),
         handles=handles,
-        read_child_task=_reader(transcripts),
+        read_child_task=transcripts.get,
     )
     assert (
         next(row["reason_code"] for row in result["slots"] if row["slot_id"] == slot_id) == reason
@@ -440,7 +408,7 @@ def test_deletion_findings_flow_through_aggregation(tmp_path: Path) -> None:
         dispositions=[],
         prior_resolved_findings=[],
         final_snapshot_state="fresh",
-        read_child_task=_reader(transcripts),
+        read_child_task=transcripts.get,
     )
     assert any(item["dimension"] == "deletion_regression" for item in result["survivors"])
     assert result["ledger_records"]["aggregation_records"] == []
@@ -459,7 +427,7 @@ def test_experimental_pair_relaunches_together_and_candidate_records_keep_digest
     collection = collect_review_audit(
         manifest_path=str(planned["manifest_path"]),
         handles=handles,
-        read_child_task=_reader(transcripts),
+        read_child_task=transcripts.get,
     )
     experiment_relaunch = [row for row in collection["relaunch"] if row["kind"] == "experimental"]
     assert len(experiment_relaunch) == 2
@@ -486,7 +454,7 @@ def test_experimental_pair_relaunches_together_and_candidate_records_keep_digest
     collected = collect_review_audit(
         manifest_path=str(planned["manifest_path"]),
         handles=good_handles,
-        read_child_task=_reader(good_transcripts),
+        read_child_task=good_transcripts.get,
     )
     candidates = collected["experimental_candidates"]
     dispositions = [
@@ -504,9 +472,24 @@ def test_experimental_pair_relaunches_together_and_candidate_records_keep_digest
         dispositions=dispositions,
         prior_resolved_findings=[],
         final_snapshot_state="fresh",
-        read_child_task=_reader(good_transcripts),
+        read_child_task=good_transcripts.get,
     )
     records = finalized["ledger_records"]["candidate_records"]
+    assert len(finalized["survivors"]) == 1
+    duplicates = [
+        row
+        for row in finalized["aggregation_records"]
+        if row["reason_code"] == "duplicate_candidate"
+    ]
+    assert len(duplicates) == 1
+    loser = next(
+        item for item in candidates if item["candidate_id"] == duplicates[0]["candidate_id"]
+    )
+    assert loser["candidate_id"] != finalized["survivors"][0]["candidate_id"]
+    assert {
+        "candidate_id": loser["candidate_id"],
+        "record_digest": loser["record_digest"],
+    } in records
     assert {item["candidate_id"] for item in records} == {
         item["candidate_id"] for item in candidates
     }
@@ -528,7 +511,7 @@ def test_experimental_schema_failure_is_attributed_to_its_producer(tmp_path: Pat
     result = collect_review_audit(
         manifest_path=str(planned["manifest_path"]),
         handles=handles,
-        read_child_task=_reader(transcripts),
+        read_child_task=transcripts.get,
     )
     reachability = next(
         row for row in result["slots"] if row["slot_id"] == "overengineering_reachability"
@@ -553,7 +536,7 @@ def test_experimental_pair_stays_closed_after_one_slot_is_exhausted(
         result = collect_review_audit(
             manifest_path=str(planned["manifest_path"]),
             handles=handles,
-            read_child_task=_reader(transcripts),
+            read_child_task=transcripts.get,
         )
     abstraction = next(
         row for row in result["slots"] if row["slot_id"] == "overengineering_abstraction_surface"
@@ -577,7 +560,7 @@ def test_experimental_pair_stays_closed_after_one_slot_is_exhausted(
     result = collect_review_audit(
         manifest_path=str(planned["manifest_path"]),
         handles=handles,
-        read_child_task=_reader(transcripts),
+        read_child_task=transcripts.get,
     )
     assert not any(row["kind"] == "experimental" for row in result["relaunch"])
     finalized = finalize_review_audit(
@@ -586,12 +569,26 @@ def test_experimental_pair_stays_closed_after_one_slot_is_exhausted(
         dispositions=[],
         prior_resolved_findings=[],
         final_snapshot_state="fresh",
-        read_child_task=_reader(transcripts),
+        read_child_task=transcripts.get,
     )
     assert finalized["experimental_audit_state"] == "degraded"
 
 
-def test_dispositions_are_validated_before_identity_is_minted(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("invalid_kind", "expected_error"),
+    [
+        ("malformed", "invalid reason_code"),
+        ("unknown_candidate", "unknown candidate"),
+        ("duplicate", "duplicate dispositions"),
+        ("missing", "no disposition"),
+        ("oversized", "at most 1 KiB"),
+    ],
+)
+def test_dispositions_are_validated_before_identity_is_minted(
+    tmp_path: Path,
+    invalid_kind: str,
+    expected_error: str,
+) -> None:
     _, planned = _run(tmp_path, anchor=True)
     manifest = load_review_audit_manifest(str(planned["manifest_path"]))
     outputs = {
@@ -604,10 +601,14 @@ def test_dispositions_are_validated_before_identity_is_minted(tmp_path: Path) ->
     collection = collect_review_audit(
         manifest_path=str(planned["manifest_path"]),
         handles=handles,
-        read_child_task=_reader(transcripts),
+        read_child_task=transcripts.get,
     )
     candidates = collection["experimental_candidates"]
     first = candidates[0]
+    valid = [
+        {"candidate_id": item["candidate_id"], "reason_code": "accepted", "explanation": "ok"}
+        for item in candidates
+    ]
     malformed = [
         {"candidate_id": first["candidate_id"], "reason_code": "unknown", "explanation": "x"},
         {"candidate_id": {"not": "hashable"}, "reason_code": [], "explanation": {}},
@@ -621,26 +622,29 @@ def test_dispositions_are_validated_before_identity_is_minted(tmp_path: Path) ->
     result = finalize_review_audit(
         manifest_path=str(planned["manifest_path"]),
         handles=handles,
-        dispositions=malformed,
+        dispositions={
+            "malformed": malformed,
+            "unknown_candidate": [{**valid[0], "candidate_id": "unknown-cand"}, valid[1]],
+            "duplicate": [valid[0], valid[0]],
+            "missing": valid[:-1],
+            "oversized": [{**valid[0], "explanation": "é" * 513}, valid[1]],
+        }[invalid_kind],
         prior_resolved_findings=[],
         final_snapshot_state="fresh",
-        read_child_task=_reader(transcripts),
+        read_child_task=transcripts.get,
     )
     assert result["disposition_errors"]
+    assert any(expected_error in error for error in result["disposition_errors"])
     assert result["audit_state"] == "degraded"
     assert result["verdict"] == "needs_human"
 
-    valid = [
-        {"candidate_id": item["candidate_id"], "reason_code": "accepted", "explanation": "ok"}
-        for item in candidates
-    ]
     accepted = finalize_review_audit(
         manifest_path=str(planned["manifest_path"]),
         handles=handles,
         dispositions=valid,
         prior_resolved_findings=[],
         final_snapshot_state="fresh",
-        read_child_task=_reader(transcripts),
+        read_child_task=transcripts.get,
     )
     records = accepted["ledger_records"]["disposition_records"]
     for record in records:
@@ -669,10 +673,6 @@ def test_anchor_identity_is_bound_to_manifest_and_stale_snapshot_is_reported(
     ).hexdigest()
     manifest_path.write_text(json.dumps(manifest))
     with pytest.raises(ReviewAuditInputError, match="identity"):
-        from autoskillit.smoke_utils.review._audit_manifest import (
-            load_review_audit_anchor_authority,
-        )
-
         load_review_audit_anchor_authority(load_review_audit_manifest(str(manifest_path)))
 
     manifest["repository"] = "acme/repo"
@@ -696,7 +696,7 @@ def test_anchor_identity_is_bound_to_manifest_and_stale_snapshot_is_reported(
         dispositions=[],
         prior_resolved_findings=[],
         final_snapshot_state="stale",
-        read_child_task=_reader(transcripts),
+        read_child_task=transcripts.get,
     )
     assert stale["verdict"] == "stale_snapshot"
 
@@ -709,7 +709,7 @@ def test_attempt_bound_counts_rounds_and_snapshot_states_fail_closed(tmp_path: P
         result = collect_review_audit(
             manifest_path=str(planned["manifest_path"]),
             handles=handles,
-            read_child_task=_reader(transcripts),
+            read_child_task=transcripts.get,
         )
     arch = next(row for row in result["slots"] if row["slot_id"] == "arch")
     assert arch["status"] == "exhausted"
@@ -722,7 +722,7 @@ def test_attempt_bound_counts_rounds_and_snapshot_states_fail_closed(tmp_path: P
         dispositions=[],
         prior_resolved_findings=[],
         final_snapshot_state="authority_degraded",
-        read_child_task=_reader(transcripts),
+        read_child_task=transcripts.get,
     )
     assert final["verdict"] == "needs_human"
     with pytest.raises(ReviewAuditInputError, match="final_snapshot_state"):
@@ -732,7 +732,7 @@ def test_attempt_bound_counts_rounds_and_snapshot_states_fail_closed(tmp_path: P
             dispositions=[],
             prior_resolved_findings=[],
             final_snapshot_state="bogus",
-            read_child_task=_reader(transcripts),
+            read_child_task=transcripts.get,
         )
 
 
@@ -757,7 +757,7 @@ def test_attempt_bound_counts_distinct_failed_handles(tmp_path: Path) -> None:
         result = collect_review_audit(
             manifest_path=str(planned["manifest_path"]),
             handles=handles,
-            read_child_task=_reader(transcripts),
+            read_child_task=transcripts.get,
         )
     arch = next(row for row in result["slots"] if row["slot_id"] == "arch")
     ledger = json.loads(Path(str(result["ledger_path"])).read_text())

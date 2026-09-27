@@ -1,4 +1,4 @@
-"""Shared builders for experimental-review tests."""
+"""Shared builders for review tests."""
 
 _EXPERIMENTAL_BOUNDARIES = (
     "reflection_decorators",
@@ -9,6 +9,17 @@ _EXPERIMENTAL_BOUNDARIES = (
     "generated_code",
     "public_api",
 )
+
+
+def _finding(*, dimension: str = "arch", file: str = "src/review.py") -> dict[str, object]:
+    return {
+        "file": file,
+        "line": 10,
+        "dimension": dimension,
+        "severity": "warning",
+        "message": "A focused review finding.",
+        "requires_decision": False,
+    }
 
 
 def _experimental_candidate(dimension: str, *, file: str = "src/app.py", line: int = 42) -> dict:

@@ -15,6 +15,7 @@ import autoskillit.cli._preview as _patch_cli__preview
 import autoskillit.cli.prompts as _patch_cli_prompts
 import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
 from tests.cli._interactive_process import InteractiveProcessStub
+from tests.cli._logging_helpers import stub_configure_logging
 
 if TYPE_CHECKING:
     from autoskillit.fleet import CampaignState
@@ -29,7 +30,7 @@ class DispatchDescriptor(NamedTuple):
 def _stub_guards(monkeypatch: pytest.MonkeyPatch) -> None:
     """Stub all fleet_run guard conditions to pass and keep terminal logging unconfigured."""
     monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/claude")
-    monkeypatch.setattr("autoskillit.core.configure_logging", lambda **_kwargs: None)
+    stub_configure_logging(monkeypatch)
 
 
 def _stub_campaign_resolution(

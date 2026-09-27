@@ -28,6 +28,7 @@ from autoskillit.core import (
     TerminationReason,
     ValidatedAddDir,
 )
+from tests.cli._logging_helpers import stub_configure_logging
 
 
 def cook_attempt_result(
@@ -292,7 +293,7 @@ def arrange_cook(
         "autoskillit.config.load_config",
         lambda: config or AutomationConfig(),
     )
-    monkeypatch.setattr("autoskillit.core.configure_logging", lambda **_kwargs: None)
+    stub_configure_logging(monkeypatch)
     monkeypatch.setattr(
         _patch_session__session_cook,
         "resolve_project_dir",

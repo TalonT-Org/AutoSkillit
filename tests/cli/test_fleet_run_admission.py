@@ -31,15 +31,10 @@ pytestmark = [
     pytest.mark.layer("cli"),
     pytest.mark.medium,
     pytest.mark.feature("fleet"),
+    pytest.mark.usefixtures("_stub_configure_logging"),
 ]
 
 _TEST_PROVENANCE = DispatchEffectProvenance(operation_id="fleet-admission-test")
-
-
-@pytest.fixture(autouse=True)
-def _stub_configure_logging(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep fleet_run's terminal logging policy from configuring real structlog."""
-    monkeypatch.setattr("autoskillit.core.configure_logging", lambda **_kwargs: None)
 
 
 def _make_success_result() -> DispatchResult:

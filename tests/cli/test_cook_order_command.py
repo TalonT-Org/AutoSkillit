@@ -33,6 +33,7 @@ pytestmark = [
 ]
 
 
+@pytest.mark.usefixtures("_stub_configure_logging")
 class TestCLIOrderCommand:
     @pytest.fixture(autouse=True)
     def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -58,11 +59,6 @@ class TestCLIOrderCommand:
             "autoskillit.cli.session._session_order"
         ) or importlib.import_module("autoskillit.cli.session._session_order")
         monkeypatch.setattr(_app_mod, "_get_ingredients_table", lambda *a, **kw: "| col | val |")
-
-    @pytest.fixture(autouse=True)
-    def _stub_configure_logging(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Keep order()'s terminal logging policy from configuring real structlog."""
-        monkeypatch.setattr("autoskillit.core.configure_logging", lambda **_kwargs: None)
 
     def test_order_blocked_inside_claude_session(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture

@@ -103,6 +103,7 @@ from autoskillit.execution.process._process_race import (
 )
 from autoskillit.execution.process._process_tether import (
     DEFAULT_TETHER_CEILING_SECONDS,
+    SEAL_MARKER_TTL_SECONDS,
     TETHER_LEASE_RENEW_SECONDS,
     TETHER_LEASE_SECONDS,
     TETHER_SWEEP_INTERVAL_SECONDS,
@@ -149,6 +150,7 @@ logger = get_logger(__name__)
 # internal sub-module paths.
 __all__ = [
     "DEFAULT_TETHER_CEILING_SECONDS",
+    "SEAL_MARKER_TTL_SECONDS",
     "TETHER_LEASE_RENEW_SECONDS",
     "TETHER_LEASE_SECONDS",
     "TETHER_SWEEP_INTERVAL_SECONDS",

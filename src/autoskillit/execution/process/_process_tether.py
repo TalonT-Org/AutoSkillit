@@ -52,6 +52,21 @@ DEFAULT_TETHER_CEILING_SECONDS: Final = 86400.0
 TETHER_SWEEP_INTERVAL_SECONDS: Final = 1800.0
 TETHER_LEASE_SECONDS: Final = 4 * TETHER_SWEEP_INTERVAL_SECONDS
 TETHER_LEASE_RENEW_SECONDS: Final = TETHER_LEASE_SECONDS / 4
+# Seal-marker sweep TTL. Two invariants must hold so a sealed marker cannot
+# be swept while its scope is still settling or has any tether within its
+# not_after window:
+#   1. outlive every possible tether ceiling -- enforced by ``TetherSpec``'s
+#      upper-bound check below, which caps ``ceiling_seconds`` at
+#      ``DEFAULT_TETHER_CEILING_SECONDS``.
+#   2. outlive the owner-scope settlement timeout
+#      (``OWNER_SCOPE_SETTLE_TIMEOUT_SECONDS = 30.0`` in
+#      ``_lifecycle/owner_scope.py``) so a seal written at settle start
+#      cannot be swept mid-settle.
+# Today ``DEFAULT_TETHER_CEILING_SECONDS`` (86400s) exceeds the settle
+# timeout by ~3 orders of magnitude, so pinning ``SEAL_MARKER_TTL_SECONDS``
+# to it satisfies both invariants. If either constant ever changes, recompute
+# this expression -- do not silently let them drift apart.
+SEAL_MARKER_TTL_SECONDS: Final = DEFAULT_TETHER_CEILING_SECONDS
 
 _TETHER_DIR_NAME: Final = "process-tethers"
 _SEALED_SCOPE_DIR_NAME: Final = "sealed-scopes"
@@ -112,6 +127,19 @@ class TetherSpec:
         if not math.isfinite(self.ceiling_seconds) or self.ceiling_seconds <= 0:
             raise ValueError(
                 f"ceiling_seconds must be a positive finite number, got {self.ceiling_seconds}"
+            )
+        if self.ceiling_seconds > DEFAULT_TETHER_CEILING_SECONDS:
+            # A ceiling above the seal-marker's TTL would let the sweep remove
+            # the seal while tethers for the scope are still within their
+            # not_after window, defeating the "no spawn can still target
+            # them" invariant. Reject the value up front so the funnel's
+            # contract is enforced rather than coincidentally satisfied.
+            raise ValueError(
+                f"ceiling_seconds ({self.ceiling_seconds}) exceeds the maximum permitted "
+                f"({DEFAULT_TETHER_CEILING_SECONDS}). Larger values would defeat the seal-marker "
+                "sweep's guarantee that a sealed marker outlives every tether for that scope; "
+                f"the sweep's TTL is pinned to SEAL_MARKER_TTL_SECONDS = "
+                f"{DEFAULT_TETHER_CEILING_SECONDS}."
             )
 
 
@@ -479,13 +507,20 @@ def sweep_orphaned_tethers(
 
 
 def _expire_seal_markers(tether_dir: Path, now: float) -> None:
-    """Drop seal markers older than any tether ceiling; no spawn can still target them."""
+    """Drop seal markers older than ``SEAL_MARKER_TTL_SECONDS``; no spawn can still target them.
+
+    The TTL bounds both invariants stated at ``SEAL_MARKER_TTL_SECONDS`` --
+    every possible tether ceiling (enforced by ``TetherSpec.__post_init__``)
+    and the owner-scope settle timeout -- so a sealed marker cannot be
+    swept while settlement is in progress or while any tether for that
+    scope is still within its not_after window.
+    """
     for marker in sorted(sealed_scope_dir(tether_dir).glob("*.sealed")):
         try:
             marker_age = now - marker.stat().st_mtime
         except OSError:
             continue
-        if marker_age >= DEFAULT_TETHER_CEILING_SECONDS:
+        if marker_age >= SEAL_MARKER_TTL_SECONDS:
             remove_tether(marker)
 
 

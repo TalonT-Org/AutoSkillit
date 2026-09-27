@@ -144,6 +144,7 @@ from autoskillit.execution.headless import (
 from autoskillit.execution.merge_queue import DefaultMergeQueueWatcher, fetch_repo_merge_state
 from autoskillit.execution.process import (
     DEFAULT_TETHER_CEILING_SECONDS,
+    SEAL_MARKER_TTL_SECONDS,
     TETHER_LEASE_RENEW_SECONDS,
     TETHER_LEASE_SECONDS,
     TETHER_SWEEP_INTERVAL_SECONDS,
@@ -282,6 +283,7 @@ __all__ = [
     "ClaudeHeadlessCmd",
     # process
     "DEFAULT_TETHER_CEILING_SECONDS",
+    "SEAL_MARKER_TTL_SECONDS",
     "TETHER_LEASE_RENEW_SECONDS",
     "TETHER_LEASE_SECONDS",
     "TETHER_SWEEP_INTERVAL_SECONDS",

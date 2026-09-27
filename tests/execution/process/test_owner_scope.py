@@ -50,7 +50,7 @@ from autoskillit.execution.process import (
 )
 from autoskillit.execution.process._lifecycle import owned_group
 from autoskillit.execution.process._process_tether import (
-    DEFAULT_TETHER_CEILING_SECONDS,
+    SEAL_MARKER_TTL_SECONDS,
     TetherRecord,
     sealed_scope_dir,
     update_tether_workload,
@@ -290,6 +290,38 @@ class TestNoScopeUsesTetherSpecDir:
             owner.settle_evidence()
 
 
+class TestMalformedScopeEnvRejectsAtFunnel:
+    def test_token_without_dir_raises_domain_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Half-set env pair must surface as a domain error, not a bare ValueError."""
+        from autoskillit.execution.process._lifecycle.owned_group import (
+            OwnerScopeMalformedEnvError,
+            _resolve_owner_scope,
+        )
+
+        env = {
+            OWNER_SCOPE_ENV_VAR: new_dispatch_owner_scope_token("half-set"),
+            OWNER_SCOPE_DIR_ENV_VAR: "",
+        }
+        with pytest.raises(OwnerScopeMalformedEnvError, match="set without"):
+            _resolve_owner_scope(env)
+
+    def test_token_without_dir_is_still_caught_as_valueerror(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Downstream callers that catch ``ValueError`` keep working since the
+        domain error is a subclass."""
+        from autoskillit.execution.process._lifecycle.owned_group import _resolve_owner_scope
+
+        env = {
+            OWNER_SCOPE_ENV_VAR: new_dispatch_owner_scope_token("half-set"),
+            OWNER_SCOPE_DIR_ENV_VAR: "",
+        }
+        with pytest.raises(ValueError):
+            _resolve_owner_scope(env)
+
+
 def _wait_for_escaping_identities(path: Path, timeout: float = 5.0) -> dict[int, float]:
     deadline = time.monotonic() + timeout
     while not path.is_file() and time.monotonic() < deadline:
@@ -514,7 +546,7 @@ class TestSweepExpiresSealMarkers:
         seal_owner_scope(tmp_path, old_token)
         seal_owner_scope(tmp_path, fresh_token)
         old_marker = sealed_scope_dir(tmp_path) / f"{old_token}.sealed"
-        old_time = time.time() - DEFAULT_TETHER_CEILING_SECONDS - 60.0
+        old_time = time.time() - SEAL_MARKER_TTL_SECONDS - 60.0
         os.utime(old_marker, (old_time, old_time))
 
         sweep_orphaned_tethers(tmp_path, min_age_seconds=0.0)

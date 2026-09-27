@@ -119,15 +119,36 @@ def _is_dispatch_heartbeating(
 def _settle_dispatch_owner_scopes(dispatch: DispatchRecord, *, dry_run: bool) -> None:
     """Seal and settle every owner scope the stale dispatch's runs left registered."""
     tether_dir = default_tether_dir()
-    for token in sorted(dispatch_scope_tokens(tether_dir, dispatch.dispatch_id)):
+    tokens = sorted(dispatch_scope_tokens(tether_dir, dispatch.dispatch_id))
+    if not tokens:
+        return
+    settled = 0
+    unexpected_errors = 0
+    for token in tokens:
         if dry_run:
             logger.info("reap: [WOULD SETTLE] %s  scope=%s", dispatch.name, token)
             continue
         try:
             settlement = settle_owner_scope(tether_dir, token, seal=True)
-        except Exception:
+        except (OSError, ValueError, KeyError) as expected:
+            # Expected failures (filesystem / scope validation / malformed state)
+            # are best-effort: log at warning and continue to the next scope.
             logger.warning(
-                "reap: owner scope settlement failed for %s scope=%s",
+                "reap: owner scope settlement failed for %s scope=%s: %s",
+                dispatch.name,
+                token,
+                expected,
+                exc_info=True,
+            )
+            continue
+        except Exception:
+            # A programming error (TypeError from a future dataclass field, an
+            # unrelated bug) must not be masked as data: escalate to ERROR so
+            # an operator sees it, and track the count so the caller is told
+            # that not every scope was settled this round.
+            unexpected_errors += 1
+            logger.error(
+                "reap: owner scope settlement raised unexpectedly for %s scope=%s",
                 dispatch.name,
                 token,
                 exc_info=True,
@@ -143,6 +164,17 @@ def _settle_dispatch_owner_scopes(dispatch: DispatchRecord, *, dry_run: bool) ->
             settlement.kill_survivor_pids,
             settlement.unresolved_pids,
             settlement.complete,
+        )
+        settled += 1
+    if unexpected_errors:
+        # Surface the partial-failure state so callers / dashboards see that
+        # this dispatch's reaper pass left scopes unsettled for a programming
+        # reason, not a best-effort filesystem one.
+        logger.error(
+            "reap: dispatch %s left %d/%d scopes unsettled due to unexpected errors",
+            dispatch.name,
+            unexpected_errors,
+            len(tokens),
         )
 
 

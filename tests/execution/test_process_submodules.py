@@ -20,6 +20,7 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 _EXPECTED_PROCESS_SYMBOLS: frozenset[str] = frozenset(
     {
         "DEFAULT_TETHER_CEILING_SECONDS",
+        "SEAL_MARKER_TTL_SECONDS",
         "TETHER_LEASE_RENEW_SECONDS",
         "TETHER_LEASE_SECONDS",
         "TETHER_SWEEP_INTERVAL_SECONDS",

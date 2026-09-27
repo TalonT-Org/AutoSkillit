@@ -40,6 +40,16 @@ from autoskillit.execution.process._process_tether import (
     write_tether,
 )
 
+
+class OwnerScopeMalformedEnvError(ValueError):
+    """Raised when the owner-scope env var pair is half-set at the spawn funnel.
+
+    Mirrors :class:`OwnerScopeSealedError` as a domain violation subclass so
+    callers can distinguish "malformed scope env" from arbitrary ``ValueError``
+    raised by mistake inside the spawn funnel.
+    """
+
+
 logger = get_logger(__name__)
 
 _POLL_SECONDS = 0.02
@@ -570,7 +580,12 @@ def _resolve_owner_scope(env: Mapping[str, str] | None) -> _OwnerScopeBinding | 
     if not token:
         return None
     if not scope_dir:
-        raise ValueError(f"{OWNER_SCOPE_ENV_VAR} is set without {OWNER_SCOPE_DIR_ENV_VAR}")
+        # Domain violation at the funnel boundary -- raise a dedicated subclass
+        # so callers can distinguish "malformed scope env" from arbitrary
+        # ``ValueError`` raised by mistake inside the spawn funnel.
+        raise OwnerScopeMalformedEnvError(
+            f"{OWNER_SCOPE_ENV_VAR} is set without {OWNER_SCOPE_DIR_ENV_VAR}"
+        )
     return _OwnerScopeBinding(token, Path(scope_dir))
 
 

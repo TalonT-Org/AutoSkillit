@@ -5,6 +5,7 @@ from __future__ import annotations
 import errno
 import logging
 import os
+import signal
 import subprocess
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING
@@ -228,14 +229,13 @@ def _finish_owned_spawn(
 
     pgid = anchor.pid
     identity_error: BaseException | None = None
+    anchor_group_verified = False
     try:
         anchor_exit = _capture_process._poll_leader_without_reaping(anchor, pgid)
-        valid_anchor = (
-            pgid > 1
-            and anchor_exit is None
-            and anchor.returncode is None
-            and os.getpgid(anchor.pid) == pgid
+        anchor_group_verified = (
+            pgid > 1 and anchor.returncode is None and os.getpgid(anchor.pid) == pgid
         )
+        valid_anchor = anchor_group_verified and anchor_exit is None
         valid_leader = process.returncode is None and os.getpgid(process.pid) == pgid
     except (OSError, _capture_process.OwnedProcessError) as exc:
         identity_error = exc
@@ -243,6 +243,16 @@ def _finish_owned_spawn(
         valid_leader = False
     if not valid_anchor or not valid_leader:
         error = _capture_process.OwnedProcessError("unsafe owned process group identity")
+        if anchor_group_verified:
+            try:
+                _capture_process._signal_process_group(pgid, signal.SIGKILL)
+            except BaseException as cleanup_error:
+                logger.error("owned_process_identity_group_kill_failed", exc_info=True)
+                _capture_process._add_cleanup_failure_note(
+                    error,
+                    "owned process identity cleanup group kill also failed",
+                    cleanup_error,
+                )
         try:
             process.kill()
         except BaseException as cleanup_error:

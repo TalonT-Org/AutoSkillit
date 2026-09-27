@@ -76,6 +76,10 @@ _EXPECTED_SIGNAL_SITES: dict[tuple[str, str, str], tuple[int, str]] = {
         1,
         "identity failure kills the leader before ownership is established",
     ),
+    ("hooks/_capture_spawn.py", "_finish_owned_spawn", "_signal_process_group"): (
+        1,
+        "an unreaped verified anchor retains group authority during failed adoption",
+    ),
     ("hooks/_capture_spawn.py", "_abandon_anchor", "kill"): (
         1,
         "failed pre-ownership lifeline cleanup kills its anchor",

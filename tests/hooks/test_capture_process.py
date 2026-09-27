@@ -1419,6 +1419,56 @@ def test_owned_spawn_identity_error_is_preserved(
         os.close(lifeline_fd)
 
 
+@pytest.mark.skipif(
+    os.name != "posix" or not Path("/proc/self/stat").exists(),
+    reason="anchor-death cleanup oracle requires procfs",
+)
+def test_anchor_death_before_adoption_kills_started_descendants(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    child_file = tmp_path / "descendant.pid"
+    real_popen = capture_spawn._popen_leader
+    leaders: list[subprocess.Popen[bytes]] = []
+    pgids: list[int] = []
+
+    def kill_anchor_after_spawn(*args: object, **kwargs: object) -> subprocess.Popen[bytes]:
+        process = real_popen(*args, **kwargs)
+        leaders.append(process)
+        pgid = cast(int, kwargs["pgid"])
+        pgids.append(pgid)
+        deadline = time.monotonic() + 5
+        while not child_file.exists():
+            assert time.monotonic() < deadline, "descendant did not start"
+            time.sleep(0.01)
+        os.kill(pgid, signal.SIGKILL)
+        os.waitid(os.P_PID, pgid, os.WEXITED | os.WNOWAIT)
+        return process
+
+    monkeypatch.setattr(capture_spawn, "_popen_leader", kill_anchor_after_spawn)
+    cwd_fd = os.open(tmp_path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        with pytest.raises(OwnedProcessError, match="unsafe"):
+            spawn_owned_process(
+                ["/bin/bash", "-c", "sleep 30 & echo $! > descendant.pid; wait"],
+                cwd_fd=cwd_fd,
+                env=os.environ,
+                capture_output=True,
+            )
+        assert capture_process._wait_for_remaining_group_settlement(pgids[0], 2) is True
+    finally:
+        for pgid in pgids:
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        for process in leaders:
+            process.wait(timeout=2)
+            if process.stdout is not None:
+                process.stdout.close()
+        os.close(cwd_fd)
+
+
 def test_owned_spawn_restore_error_preserves_settlement_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

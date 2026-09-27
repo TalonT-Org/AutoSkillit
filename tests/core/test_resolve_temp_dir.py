@@ -31,7 +31,7 @@ def test_resolve_temp_dir_empty_string_raises_value_error() -> None:
 
 
 def test_resolve_temp_dir_no_autoskillit_imports() -> None:
-    """core.io must not transitively import any non-core autoskillit module.
+    """core.io may import core and the stdlib-only measure authority, not higher layers.
 
     Runs in an isolated subprocess so the destructive ``sys.modules`` clear
     cannot leak into other xdist tests sharing the same worker process.
@@ -51,7 +51,7 @@ def test_resolve_temp_dir_no_autoskillit_imports() -> None:
             for m in sys.modules
             if m.startswith("autoskillit.")
             and not m.startswith("autoskillit.core")
-            and m != "autoskillit"
+            and m != "autoskillit._measure_aggregation"
         ]
         if leaked:
             print("LEAKED:" + ",".join(sorted(leaked)))
@@ -66,4 +66,7 @@ def test_resolve_temp_dir_no_autoskillit_imports() -> None:
         text=True,
         check=False,
     )
-    assert result.returncode == 0, f"core.io leaked imports outside core/: {result.stdout.strip()}"
+    assert result.returncode == 0, (
+        "core.io leaked imports outside core and its stdlib-only authority: "
+        f"{result.stdout.strip()}"
+    )

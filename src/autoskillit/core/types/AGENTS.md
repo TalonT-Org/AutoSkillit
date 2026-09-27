@@ -4,7 +4,9 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 
 ## Architecture Notes
 
-Internal dependency DAG: enums -> recipe_sections -> constants_registries -> constants_features; enums -> results -> protocols -> helpers; enums -> phoropter; enums + phoropter -> tradition_manifest; enums -> exceptions; exploration -> exceptions. `_type_intake_policy` is a DAG leaf — stdlib-only, zero sibling imports. `_type_recipe_sections.py` owns recipe-section registry and pagination-policy construction; `_type_constants_registries.py` imports its ten public names as a facade. All modules have zero `autoskillit` imports outside this sub-package (IL-0 hard constraint). Production code imports from `autoskillit.core`, not from this package directly.
+Internal dependency DAG: enums -> recipe_sections -> constants_registries -> constants_features; enums -> results -> protocols -> helpers; enums -> phoropter; enums + phoropter -> tradition_manifest; enums -> exceptions; exploration -> exceptions. `_type_intake_policy` is a DAG leaf — stdlib-only, zero sibling imports. `_type_recipe_sections.py` owns recipe-section registry and pagination-policy construction; `_type_constants_registries.py` imports its ten public names as a facade. Zero imports from any autoskillit sub-package outside core; the only permitted
+imports outside core are the stdlib-only hook-callable root authorities listed in
+`src/autoskillit/AGENTS.md`, which themselves import nothing from autoskillit. Production code imports from `autoskillit.core`, not from this package directly.
 
 ## Extension Bundle Pattern
 
@@ -84,7 +86,7 @@ Each direct Python file has one responsibility:
 - `_type_closure_report.py` — Closure-mode report schema for audit-impl (IL-0, stdlib-only).
 - `_type_dimensions.py` — Dimension-safe token, UTF-8 byte, and serialized-char limits.
 - `_type_dispatch_identity.py` — Dispatch identity value object — single source of truth for all sentinel strings.
-- `_type_enums.py` — Core StrEnum discriminators.
+- `_type_enums.py` — Core StrEnum discriminators; re-exports `TokenMeasureState` from `autoskillit._measure_aggregation`.
 - `_type_enums_context_admission.py` — Context-admission StrEnum discriminators.
 - `_type_exceptions.py` — Exception types for recipe loading failures.
 - `_type_execution_identity.py` — Cycle-free execution identity and backend-resolution types.
@@ -112,5 +114,5 @@ Each direct Python file has one responsibility:
 - `_type_skill_semantics.py` — Backend-neutral semantic requirements declared by portable skills.
 - `_type_session_invariant_admission.py` — Session-invariant admission classifier (single source of truth for the support / unsupported / launch-deferred verdict pattern).
 - `_type_subprocess.py` — Subprocess execution types and contracts.
-- `_type_token.py` — Canonical token usage type.
+- `_type_token.py` — Canonical token usage type; re-exports the measure primitives and aggregation API from `autoskillit._measure_aggregation`.
 - `_type_truth.py` — Closed truth-value dialect for values supplied to declared recipe guards.

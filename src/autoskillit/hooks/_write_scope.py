@@ -50,7 +50,7 @@ class WriteScopeError(ValueError):
     """Raised when a write-scope declaration violates the contract."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class WriteScope:
     """A decoded write-scope declaration; ``paths`` is non-empty iff BOUNDED."""
 

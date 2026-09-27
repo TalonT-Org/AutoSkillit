@@ -186,7 +186,14 @@ def _has_git_writes(
             text=True,
             timeout=10,
         )
-        return reachable.returncode == 0 and bool(reachable.stdout.strip())
+        if reachable.returncode != 0:
+            logger.debug(
+                "observe_session_git_writes_failed",
+                path=path,
+                returncode=reachable.returncode,
+            )
+            return False
+        return bool(reachable.stdout.strip())
     except (OSError, subprocess.SubprocessError):
         logger.debug("observe_session_git_writes_failed", path=path, exc_info=True)
         return False

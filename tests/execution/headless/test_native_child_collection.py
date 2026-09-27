@@ -27,6 +27,9 @@ class _FakeLocator:
             return self._paths_by_session_id.get(session_id)
         return self._path
 
+    def read_child_task(self, child_id):
+        return None
+
 
 class _FakeBackend:
     def __init__(self, *, name: str, transcript_path, paths_by_session_id=None):

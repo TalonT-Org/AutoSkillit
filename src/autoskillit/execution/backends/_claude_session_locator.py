@@ -14,12 +14,23 @@ from pathlib import Path
 
 from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
+    ChildTaskTranscript,
     SessionLocator,
     SessionSummary,
     claude_code_log_path,
     claude_code_project_dir,
+    get_logger,
+    is_valid_child_task_id,
     read_registry,
 )
+from autoskillit.execution.backends._claude.child_task import parse_claude_child_task
+
+logger = get_logger(__name__)
+
+
+def _claude_projects_root() -> Path:
+    return Path.home() / ".claude" / "projects"
+
 
 _ORDER_GREETING_PREFIXES = (
     "Today's special:",
@@ -37,7 +48,7 @@ class ClaudeSessionLocator(SessionLocator):
     def locate_session(self, session_id: str) -> Path | None:
         if not session_id or session_id.startswith(("no_session_", "crashed_")):
             return None
-        base = Path.home() / ".claude" / "projects"
+        base = _claude_projects_root()
         if not base.exists():
             return None
         for project_dir in base.iterdir():
@@ -53,6 +64,18 @@ class ClaudeSessionLocator(SessionLocator):
 
     def session_log_path(self, cwd: str, session_id: str) -> Path | None:
         return claude_code_log_path(cwd, session_id)
+
+    def read_child_task(self, child_id: str) -> ChildTaskTranscript | None:
+        if not is_valid_child_task_id(child_id):
+            return None
+        matches = sorted(_claude_projects_root().glob(f"*/*/subagents/agent-{child_id}.jsonl"))
+        if len(matches) != 1:
+            if len(matches) > 1:
+                logger.debug(
+                    "child_task_transcript_ambiguous", child_id=child_id, matches=len(matches)
+                )
+            return None
+        return parse_claude_child_task(matches[0], child_id)
 
     def list_sessions(self, cwd: str) -> tuple[SessionSummary, ...]:
         normalized_cwd = str(Path(cwd).expanduser().resolve(strict=False))

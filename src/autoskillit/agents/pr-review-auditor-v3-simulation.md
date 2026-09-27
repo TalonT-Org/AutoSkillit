@@ -38,14 +38,18 @@ config-driven values, opaque function calls):
 
 ## Output Format
 
-Return a JSON array of findings. Each finding must have:
+End your final message with exactly one fenced code block whose opening line is ```` ```json ````
+and whose closing line is ```` ``` ````, containing the complete JSON array of findings — use an
+empty array `[]` inside that block when there are no findings. Do not emit any other `json`
+block in the final message.
+Each finding must have:
   file, line, severity (critical/warning/info), dimension, message,
   requires_decision (boolean).
 
 Set requires_decision=true ONLY for genuinely ambiguous design decisions.
 Set requires_decision=false for bugs, style issues, or anything with a clear fix.
 
-Use `[LNNN]` markers for line numbers. If no issues found, return [].
+Use `[LNNN]` markers for line numbers.
 
 ### Verdict
 
@@ -61,5 +65,3 @@ Use `[LNNN]` markers for line numbers. If no issues found, return [].
   }
 ]
 ```
-
-Return `[]` (empty array) when no issues are found in the diff.

@@ -10,7 +10,12 @@ from __future__ import annotations
 from collections.abc import Mapping
 from types import MappingProxyType
 
-from ._tool_registry_builders import _run_skill, _tool, _verify_review_receipt
+from ._tool_registry_builders import (
+    _REVIEW_AUDIT_TOOL_DEFS,
+    _run_skill,
+    _tool,
+    _verify_review_receipt,
+)
 from .audit.closure_hashing import compute_canonical_hash
 from .types._type_constants_registries import HEADLESS_TOOLS
 from .types._type_recipe_binding import (
@@ -422,6 +427,7 @@ _TOOL_DEFS = (
             "dispositions": ToolWireType.ARRAY,
         },
     ),
+    *_REVIEW_AUDIT_TOOL_DEFS,
     _tool(
         "fetch_github_issue",
         ("issue_url", "include_comments"),

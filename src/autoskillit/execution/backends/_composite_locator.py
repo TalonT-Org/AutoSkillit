@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from autoskillit.core import SessionLocator, SessionSummary, get_logger
+from autoskillit.core import ChildTaskTranscript, SessionLocator, SessionSummary, get_logger
 
 logger = get_logger(__name__)
 
@@ -53,6 +54,36 @@ class CompositeSessionLocator:
 
     def session_log_path(self, cwd: str, session_id: str) -> Path | None:
         return self.locate_session(session_id)
+
+    def read_child_task(self, child_id: str) -> ChildTaskTranscript | None:
+        first_error: Exception | None = None
+        sources: Iterable[tuple[str | None, Callable[[], SessionLocator]]]
+        if self._locators:
+            sources = ((None, lambda: locator) for locator in self._locators)
+        else:
+            from autoskillit.execution.backends import BACKEND_REGISTRY
+
+            sources = (
+                (backend_name, lambda: cls().session_locator())
+                for backend_name, cls in BACKEND_REGISTRY.items()
+            )
+
+        for backend_name, locator_factory in sources:
+            try:
+                result = locator_factory().read_child_task(child_id)
+            except Exception as exc:
+                if backend_name is None:
+                    logger.debug("child_task_read_failed", exc_info=True)
+                else:
+                    logger.debug("child_task_read_failed", backend=backend_name, exc_info=True)
+                if first_error is None:
+                    first_error = exc
+                continue
+            if result is not None:
+                return result
+        if first_error is not None:
+            raise first_error
+        return None
 
     def list_sessions(self, cwd: str) -> tuple[SessionSummary, ...]:
         summaries: list[SessionSummary] = []

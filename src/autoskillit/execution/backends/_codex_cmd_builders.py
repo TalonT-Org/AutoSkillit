@@ -35,18 +35,21 @@ from autoskillit.core import (
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     LAUNCH_ID_ENV_VAR,
     MCP_CLIENT_BACKEND_ENV_VAR,
+    ChildTaskTranscript,
     HookTrustPolicy,
     ObserverStatus,
     SessionLocator,
     SessionSummary,
     default_log_dir,
     get_logger,
+    is_valid_child_task_id,
     resolve_dbus_session_bus_address,
 )
 from autoskillit.execution.backends._backend_cmd_builder_base import (
     SHARED_BASELINE_ENV,
     _filter_protected_native_shell_env,
 )
+from autoskillit.execution.backends._codex.child_task import parse_codex_child_task
 from autoskillit.execution.backends._codex_session_storage import CodexSessionStore
 
 logger = get_logger(__name__)
@@ -394,6 +397,12 @@ class CodexSessionLocator(SessionLocator):
         if not session_id or session_id.startswith(("no_session_", "crashed_")):
             return None
         return self.locate_session(session_id)
+
+    def read_child_task(self, child_id: str) -> ChildTaskTranscript | None:
+        if not is_valid_child_task_id(child_id):
+            return None
+        path = self.locate_session(child_id)
+        return parse_codex_child_task(path, child_id) if path is not None else None
 
     def list_sessions(self, cwd: str) -> tuple[SessionSummary, ...]:
         return self._store().read_index(cwd)

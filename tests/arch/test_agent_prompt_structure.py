@@ -204,3 +204,26 @@ def test_agent_definitions_output_format_mentions_empty_array() -> None:
                     f"{md_file.name}: JSON array output but does not document what [] means"
                 )
     assert not failures, "\n".join(failures)
+
+
+def test_pr_review_auditors_require_fenced_findings_block() -> None:
+    """Every review auditor ends with one fenced findings array, including an empty result."""
+    failures: list[str] = []
+    for md_file in sorted(_AGENTS_DIR.glob("pr-review-auditor-*.md")):
+        content = md_file.read_text()
+        parts = content.split("---", 2)
+        body = parts[2] if len(parts) >= 3 else content
+        has_contract = any(
+            "End your final message with exactly one fenced code block" in paragraph
+            and "```json" in paragraph
+            and (
+                "whose closing line is" in paragraph
+                or "closes with a line containing only" in paragraph
+            )
+            and "complete JSON array of findings" in paragraph
+            and "empty array [] in that block" in paragraph
+            for paragraph in body.split("\n\n")
+        )
+        if not has_contract:
+            failures.append(f"{md_file.name}: missing the final fenced JSON findings contract")
+    assert not failures, "\n".join(failures)

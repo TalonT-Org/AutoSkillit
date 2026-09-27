@@ -128,6 +128,9 @@ class TestToolRegistration:
             "complete_run_skill_result",
             "recover_run_skill_result",
             "write_audit_disposition_bundle",
+            "plan_review_audit",
+            "collect_review_audit",
+            "finalize_review_audit",
             "write_audit_semantic_result",
             "write_standalone_audit_evidence",
             # Behavioral evidence reader tool surface (#4585).

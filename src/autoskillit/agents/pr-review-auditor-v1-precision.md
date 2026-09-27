@@ -37,7 +37,11 @@ context outside the diff):
 
 ## Output Format
 
-Return a JSON array of findings. Each finding must have:
+End your final message with exactly one fenced code block whose opening line is ```` ```json ````
+and whose closing line is ```` ``` ````, containing the complete JSON array of findings — use an
+empty array `[]` inside that block when there are no findings. Do not emit any other `json`
+block in the final message.
+Each finding must have:
   file, line, severity (critical/warning/info), dimension, message,
   requires_decision (boolean).
 
@@ -47,8 +51,6 @@ Set requires_decision=false for ALL bugs, style issues, or anything with a clear
 
 Each line in the diff is prefixed with `[LNNN]` where NNN is the new-file line number.
 Use the `[LNNN]` number as the `line` value. Do not compute line numbers yourself.
-
-If no issues found, return an empty array [].
 
 ### Verdict
 
@@ -64,5 +66,3 @@ If no issues found, return an empty array [].
   }
 ]
 ```
-
-Return `[]` (empty array) when no issues are found in the diff.

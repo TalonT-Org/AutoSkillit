@@ -39,6 +39,9 @@ class _StubLocator:
     def session_log_path(self, cwd: str, session_id: str) -> Path | None:
         return self._locate
 
+    def read_child_task(self, child_id: str) -> None:
+        return None
+
     def list_sessions(self, cwd: str) -> tuple[SessionSummary, ...]:
         return self._summaries
 
@@ -92,6 +95,9 @@ class TestLocateSession:
                 return Path("/stub")
 
             def session_log_path(self, cwd, session_id):
+                return None
+
+            def read_child_task(self, child_id):
                 return None
 
         hit = Path("/found/session.jsonl")

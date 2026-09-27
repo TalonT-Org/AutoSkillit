@@ -191,6 +191,9 @@ tag abbreviations are defined in the glossary above.
 | `write_audit_semantic_result` | AS, K, HL, KC | `server/tools/tools_audit_artifacts.py` |
 | `write_standalone_audit_evidence` | AS, K, HL, KC | `server/tools/tools_audit_artifacts.py` |
 | `write_audit_disposition_bundle` | AS, K, HL, KC | `server/tools/tools_audit_artifacts.py` |
+| `plan_review_audit` | AS, K, HL, KC | `server/tools/tools_review_audit/_handlers.py` |
+| `collect_review_audit` | AS, K, HL, KC | `server/tools/tools_review_audit/_handlers.py` |
+| `finalize_review_audit` | AS, K, HL, KC | `server/tools/tools_review_audit/_handlers.py` |
 | `post_pr_review` | AS, HL, GH | `server/tools/tools_pr_ops.py` |
 | `delegate_evidence_reader` | AS, K, HL, KC | `server/tools/tools_evidence_reader.py` |
 

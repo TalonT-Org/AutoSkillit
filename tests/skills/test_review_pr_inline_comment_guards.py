@@ -72,21 +72,27 @@ def _publication_call_blocks(text: str) -> list[str]:
     ]
 
 
-def test_standard_findings_decode_degrades_on_parse_or_type_failure() -> None:
+def test_findings_and_verdict_come_from_finalize_result() -> None:
     text = _skill_text("review-pr")
-    assert "except json.JSONDecodeError:" in text
-    assert "standard findings are not valid JSON" in text
-    assert "isinstance(STANDARD_FINDINGS_DECODED, list)" in text
-    assert "standard findings must be a JSON array" in text
-    assert "if STANDARD_VALIDATION_ERRORS:" in text
-    assert '"validation_errors": STANDARD_VALIDATION_ERRORS' in text
+    step4 = text[text.index("### Step 4") : text.index("### Step 4.5")]
+    step5 = text[text.index("### Step 5") : text.index("### Step 6")]
+    finalized_steps = step4 + step5
+
+    assert "AUDIT_FINALIZATION = finalize_review_audit(" in step4
+    assert "FINAL_REVIEW_FINDINGS = FILTERED_FINDINGS = survivors" in finalized_steps
+    assert "UNPOSTABLE_FINDINGS = unpostable" in finalized_steps
+    assert "REVIEW_LEVEL_FINDINGS = review_level_findings" in finalized_steps
+    assert 'AUDIT_FINALIZATION["verdict"]' in finalized_steps
 
 
 def test_auditor_status_uses_one_authoritative_mapping() -> None:
     text = _skill_text("review-pr")
-    assert 'AUDITOR_STATUS_BY_NAME.update(VALIDATION_RESULT["status_by_name"])' in text
-    assert "EXPERIMENTAL_AUDITOR_STATUS =" not in text
-    assert "`AUDITOR_STATUS_BY_NAME` terminal-status authority" in text
+    step4 = text[text.index("### Step 4") : text.index("### Step 4.5")]
+    step8 = text[text.index("### Step 8") :]
+    assert "AUDITOR_RECORDS = auditor_records" in step4
+    assert "AUDIT_FINALIZATION" in step4
+    assert "finalize-issued `AUDITOR_RECORDS` terminal-status authority" in step8
+    assert "AUDITOR_STATUS_BY_NAME" not in text
 
 
 @pytest.mark.parametrize(("skill_name", "iteration_namespace"), _WRITERS)

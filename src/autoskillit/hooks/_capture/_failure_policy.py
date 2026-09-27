@@ -31,6 +31,7 @@ class CaptureFailureReason(StrEnum):
     FILESYSTEM_IO = "FILESYSTEM_IO"
     RECOVERY_CONTENDED = "RECOVERY_CONTENDED"
     SNAPSHOT_INTEGRITY = "SNAPSHOT_INTEGRITY"
+    RUNNER_SETTLEMENT = "RUNNER_SETTLEMENT"
     UNKNOWN_SETUP = "UNKNOWN_SETUP"
 
 
@@ -207,6 +208,14 @@ FAILURE_DISPOSITIONS: dict[CaptureFailureReason, CaptureFailureDispositionDef] =
         reason=CaptureFailureReason.SNAPSHOT_INTEGRITY,
         disposition=CaptureFailureDisposition.DISCARD_OUTPUT,
         rationale="output integrity failure — checksum mismatch or tamper detection",
+    ),
+    CaptureFailureReason.RUNNER_SETTLEMENT: CaptureFailureDispositionDef(
+        reason=CaptureFailureReason.RUNNER_SETTLEMENT,
+        disposition=CaptureFailureDisposition.DISCARD_OUTPUT,
+        rationale=(
+            "runner-originated signal preceded pipe EOF — "
+            "the managed stream is not proven complete"
+        ),
     ),
     CaptureFailureReason.UNKNOWN_SETUP: CaptureFailureDispositionDef(
         reason=CaptureFailureReason.UNKNOWN_SETUP,

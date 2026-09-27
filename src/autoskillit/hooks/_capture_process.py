@@ -1,22 +1,25 @@
 """Owned POSIX process groups for the isolated shell runner.
 
-The helper is intentionally stdlib-only.  It creates the child group
-atomically, forwards terminal signals, restores inherited terminal state, and
-does not return until the leader is reaped and the owned group is absent.
+The helper is intentionally stdlib-only. It creates the child group atomically
+beneath a runner-owned lifeline anchor, forwards host signals without treating
+them as runner settlement, restores inherited terminal state, and does not
+return until the leader and owned group are settled. Closing the runner's
+lifeline makes the anchor SIGKILL its whole group, including when the runner
+itself is killed.
 """
 
 from __future__ import annotations
 
 import logging
 import os
-import selectors
 import signal
 import stat
 import subprocess
 import sys
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import IO, TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -26,7 +29,6 @@ if TYPE_CHECKING:
         _UNTRUSTED_WRITE_BITS,
         CaptureSetupError,
     )
-    from autoskillit.hooks._capture._snapshot import CaptureMeasurement
 elif __package__:
     from ._capture import _replay as _capture_replay
     from ._capture._authority import (
@@ -34,7 +36,6 @@ elif __package__:
         _UNTRUSTED_WRITE_BITS,
         CaptureSetupError,
     )
-    from ._capture._snapshot import CaptureMeasurement
 else:
     from _capture import _replay as _capture_replay
     from _capture._authority import (
@@ -42,15 +43,12 @@ else:
         _UNTRUSTED_WRITE_BITS,
         CaptureSetupError,
     )
-    from _capture._snapshot import CaptureMeasurement
 
 _TERM_TIMEOUT_SECONDS = 2.0
 _KILL_TIMEOUT_SECONDS = 2.0
 _GROUP_POLL_SECONDS = 0.02
-_DRAIN_CHUNK_BYTES = 64 * 1024
 _POST_EXIT_TERM_SECONDS = 0.25
 _POST_EXIT_KILL_SECONDS = 0.5
-_DRAIN_POLL_SECONDS = 0.05
 _PROC_ROOT = "/proc"
 _PROC_STAT_READ_BYTES = 4096
 _PROC_READ_FLAGS = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
@@ -94,6 +92,11 @@ class OwnedProcessError(RuntimeError):
         self.stop_signal = stop_signal
 
 
+class SignalOrigin(StrEnum):
+    RUNNER = "runner"
+    FORWARDED = "forwarded"
+
+
 def _add_cleanup_failure_note(
     primary_error: BaseException,
     context: str,
@@ -103,25 +106,22 @@ def _add_cleanup_failure_note(
     primary_error.add_note(f"{context}: {type(cleanup_error).__name__}: {detail}")
 
 
-@dataclass(frozen=True, slots=True)
-class _DrainResult:
-    measurement: CaptureMeasurement
-    write_error: OSError | None
-    truncated: bool = False
-
-
 @dataclass(slots=True)
 class OwnedProcessGroup:
-    """One child leader and every descendant that remains in its process group."""
+    """One child leader and every descendant beneath its lifeline anchor."""
 
     process: subprocess.Popen[bytes]
     pgid: int
+    anchor: subprocess.Popen[bytes]
+    _lifeline_fd: int = -1
+    _lifeline_closed: bool = False
     _previous_handlers: dict[signal.Signals, Any] = field(default_factory=dict)
     _terminal_fd: int | None = None
     _previous_foreground_pgid: int | None = None
     _restored: bool = False
     _handlers_restored: bool = False
     _reaping_started: bool = False
+    _runner_signals: list[signal.Signals] = field(default_factory=list)
     _spawn_token: object | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
@@ -137,27 +137,37 @@ class OwnedProcessGroup:
         return self.process.pid
 
     @property
+    def anchor_pid(self) -> int:
+        return self.anchor.pid
+
+    @property
     def returncode(self) -> int | None:
         return self.process.returncode
+
+    @property
+    def runner_signalled(self) -> bool:
+        return bool(self._runner_signals)
 
     def poll(self) -> int | None:
         return _poll_leader_without_reaping(self.process, self.pgid)
 
     def terminate(self) -> None:
-        self.signal_group(signal.SIGTERM)
+        self.signal_group(signal.SIGTERM, origin=SignalOrigin.RUNNER)
 
     def kill(self) -> None:
-        self.signal_group(signal.SIGKILL)
+        self.signal_group(signal.SIGKILL, origin=SignalOrigin.RUNNER)
 
-    def signal_group(self, signum: signal.Signals) -> None:
-        if self._reaping_started or self.process.returncode is not None:
+    def signal_group(self, signum: signal.Signals, *, origin: SignalOrigin) -> None:
+        if self._reaping_started or self.anchor.returncode is not None:
             raise OwnedProcessError("owned process group authority ended before signal")
         try:
-            anchored = self.process.pid == self.pgid and os.getpgid(self.pid) == self.pgid
+            anchored = self.anchor.pid == self.pgid and os.getpgid(self.anchor.pid) == self.pgid
         except OSError as exc:
-            raise OwnedProcessError("owned process group leader cannot be verified") from exc
+            raise OwnedProcessError("owned process group anchor cannot be verified") from exc
         if not anchored:
-            raise OwnedProcessError("owned process group leader no longer anchors its PGID")
+            raise OwnedProcessError("owned process group anchor no longer anchors its PGID")
+        if origin is SignalOrigin.RUNNER:
+            self._runner_signals.append(signum)
         _signal_process_group(self.pgid, signum)
 
     def wait(self) -> int:
@@ -196,14 +206,14 @@ class OwnedProcessGroup:
                 _poll_leader_without_reaping(self.process, self.pgid, include_stopped=False)
                 is None
             ):
-                self.signal_group(signal.SIGTERM)
+                self.signal_group(signal.SIGTERM, origin=SignalOrigin.RUNNER)
                 if not _wait_for_leader_exit_without_reaping(
                     self.process,
                     self.pgid,
                     timeout_seconds=_TERM_TIMEOUT_SECONDS,
                     include_stopped=False,
                 ):
-                    self.signal_group(signal.SIGKILL)
+                    self.signal_group(signal.SIGKILL, origin=SignalOrigin.RUNNER)
                     if not _wait_for_leader_exit_without_reaping(
                         self.process,
                         self.pgid,
@@ -245,21 +255,32 @@ class OwnedProcessGroup:
     ) -> int | None:
         """Settle under the anchored PGID, then reap and verify absence."""
 
-        returncode = self.process.returncode
-        if returncode is None:
+        if self.anchor.returncode is None:
             try:
                 self._settle_remaining_group()
             except BaseException as exc:
                 logger.error("owned_process_group_cleanup_failed", exc_info=True)
                 failures.append(exc)
 
+        try:
+            self._restore_signal_handlers()
+        except BaseException as exc:
+            logger.error("owned_process_signal_restore_failed", exc_info=True)
+            failures.append(exc)
+
+        if self.anchor.returncode is None:
             try:
-                self._restore_signal_handlers()
-                self._reaping_started = True
+                self._release_lifeline()
+            except BaseException as exc:
+                logger.error("owned_process_lifeline_release_failed", exc_info=True)
+                failures.append(exc)
+
+        if self.process.returncode is None:
+            try:
                 if reap_timeout_seconds is None:
-                    returncode = self.process.wait()
+                    self.process.wait()
                 else:
-                    returncode = self.process.wait(timeout=reap_timeout_seconds)
+                    self.process.wait(timeout=reap_timeout_seconds)
             except subprocess.TimeoutExpired as exc:
                 logger.error("owned_process_leader_reap_timed_out", exc_info=True)
                 failures.append(
@@ -270,35 +291,74 @@ class OwnedProcessGroup:
                 logger.error("owned_process_leader_reap_failed", exc_info=True)
                 failures.append(exc)
 
-        return returncode
+        return self.process.returncode
 
     def _settle_remaining_group(self) -> None:
-        remaining = _process_group_has_live_members(self.pgid)
+        remaining = _process_group_has_live_members(self.pgid, ignore_pid=self.anchor.pid)
         if remaining is False:
             return
-        self.signal_group(signal.SIGTERM)
+        self.signal_group(signal.SIGTERM, origin=SignalOrigin.RUNNER)
         settled = _wait_for_remaining_group_settlement(
             self.pgid,
             _TERM_TIMEOUT_SECONDS,
+            ignore_pid=self.anchor.pid,
         )
-        if settled is True:
-            return
         if settled is None:
             time.sleep(_POST_EXIT_TERM_SECONDS)
-            if not _process_group_exists(self.pgid):
-                return
 
-        self.signal_group(signal.SIGKILL)
+    def _release_lifeline(self) -> None:
+        if not self._lifeline_closed:
+            self._lifeline_closed = True
+            lifeline_fd = self._lifeline_fd
+            try:
+                if lifeline_fd >= 0:
+                    os.close(lifeline_fd)
+            finally:
+                self._lifeline_fd = -1
+
+        if self.anchor.returncode is not None:
+            return
+
+        anchor_exited = _wait_for_leader_exit_without_reaping(
+            self.anchor,
+            self.pgid,
+            timeout_seconds=_KILL_TIMEOUT_SECONDS,
+            include_stopped=False,
+        )
+        if not anchor_exited:
+            self.signal_group(signal.SIGKILL, origin=SignalOrigin.RUNNER)
+            anchor_exited = _wait_for_leader_exit_without_reaping(
+                self.anchor,
+                self.pgid,
+                timeout_seconds=_KILL_TIMEOUT_SECONDS,
+                include_stopped=False,
+            )
+            if not anchor_exited:
+                raise OwnedProcessError(
+                    f"owned process group anchor {self.anchor.pid} did not exit"
+                )
+
         settled = _wait_for_remaining_group_settlement(
             self.pgid,
             _KILL_TIMEOUT_SECONDS,
         )
-        if settled is True:
-            return
         if settled is None:
             time.sleep(_POST_EXIT_KILL_SECONDS)
-            return
-        raise OwnedProcessError(f"owned process group {self.pgid} survived SIGKILL")
+        elif not settled:
+            self.signal_group(signal.SIGKILL, origin=SignalOrigin.RUNNER)
+            settled = _wait_for_remaining_group_settlement(
+                self.pgid,
+                _KILL_TIMEOUT_SECONDS,
+            )
+            if settled is False:
+                raise OwnedProcessError(
+                    f"owned process group {self.pgid} survived lifeline release"
+                )
+            if settled is None:
+                time.sleep(_POST_EXIT_KILL_SECONDS)
+
+        self._reaping_started = True
+        self.anchor.wait(timeout=_KILL_TIMEOUT_SECONDS)
 
     def _restore_parent_state(self) -> None:
         if self._restored:
@@ -351,116 +411,8 @@ else:
 _TRUSTED_BASH_CANDIDATES = _capture_spawn._TRUSTED_BASH_CANDIDATES
 spawn_owned_process = _capture_spawn.spawn_owned_process
 _finish_owned_spawn = _capture_spawn._finish_owned_spawn
-_wrap_user_command = _capture_spawn._wrap_user_command
 _scrubbed_user_environment = _capture_spawn._scrubbed_user_environment
 _spawn_bash = _capture_spawn._spawn_bash
-
-
-def _drain_capture(
-    process: subprocess.Popen[bytes] | OwnedProcessGroup,
-    artifact_writer_fd: int,
-    inline_bytes: int,
-    *,
-    digest_factory: Callable[[], Any],
-    write_all: Callable[[int, bytes], None],
-) -> _DrainResult:
-    """Read the combined subprocess pipe and persist bounded replay metadata."""
-
-    stream = process.stdout
-    if stream is None:
-        raise CaptureSetupError.filesystem_io("capture pipe unavailable")
-
-    head_limit = (2 * inline_bytes) // 3
-    tail_limit = inline_bytes - head_limit
-    total = 0
-    digest = digest_factory()
-    inline = bytearray()
-    head = bytearray()
-    tail = bytearray()
-    write_error: OSError | None = None
-
-    def consume(chunk: bytes) -> None:
-        nonlocal total, write_error
-        total += len(chunk)
-        digest.update(chunk)
-        if write_error is None:
-            try:
-                write_all(artifact_writer_fd, chunk)
-            except OSError as exc:
-                write_error = exc
-        if len(inline) <= inline_bytes:
-            remaining = inline_bytes + 1 - len(inline)
-            inline.extend(chunk[:remaining])
-        if len(head) < head_limit:
-            head.extend(chunk[: head_limit - len(head)])
-        if tail_limit:
-            tail.extend(chunk)
-            if len(tail) > tail_limit:
-                del tail[:-tail_limit]
-
-    def result(*, truncated: bool) -> _DrainResult:
-        return _DrainResult(
-            measurement=CaptureMeasurement(
-                total_bytes=total,
-                sha256=digest.hexdigest(),
-                inline_bytes=inline_bytes,
-                inline=bytes(inline),
-                head=bytes(head),
-                tail=bytes(tail),
-            ),
-            write_error=write_error,
-            truncated=truncated,
-        )
-
-    if not isinstance(process, OwnedProcessGroup):
-        while True:
-            chunk = stream.read(_DRAIN_CHUNK_BYTES)
-            if not chunk:
-                return result(truncated=False)
-            consume(chunk)
-
-    return result(truncated=_drain_owned_pipe(process, stream.fileno(), consume))
-
-
-def _drain_owned_pipe(
-    owner: OwnedProcessGroup,
-    descriptor: int,
-    consume: Callable[[bytes], None],
-) -> bool:
-    os.set_blocking(descriptor, False)
-    selector_factory = selectors.DefaultSelector
-    selector = selector_factory()
-    selector.register(descriptor, selectors.EVENT_READ)
-    leader_exit_at: float | None = None
-    kill_sent_at: float | None = None
-    try:
-        while True:
-            for _key, _events in selector.select(_DRAIN_POLL_SECONDS):
-                while True:
-                    try:
-                        chunk = os.read(descriptor, _DRAIN_CHUNK_BYTES)
-                    except BlockingIOError:
-                        break
-                    if not chunk:
-                        selector.unregister(descriptor)
-                        return False
-                    consume(chunk)
-
-            if owner.poll() is None:
-                continue
-            now = time.monotonic()
-            if leader_exit_at is None:
-                leader_exit_at = now
-                owner.signal_group(signal.SIGTERM)
-                continue
-            if kill_sent_at is None and now - leader_exit_at >= _POST_EXIT_TERM_SECONDS:
-                kill_sent_at = now
-                owner.signal_group(signal.SIGKILL)
-                continue
-            if kill_sent_at is not None and now - kill_sent_at >= _POST_EXIT_KILL_SECONDS:
-                return True
-    finally:
-        selector.close()
 
 
 def _normalized_returncode(returncode: int) -> int:
@@ -524,7 +476,10 @@ def _install_signal_forwarding(
 
     def forward(signum: int, _frame: object) -> None:
         try:
-            owner.signal_group(signal.Signals(signum))
+            owner.signal_group(
+                signal.Signals(signum),
+                origin=SignalOrigin.FORWARDED,
+            )
         except (OSError, ValueError):
             return
 
@@ -658,12 +613,14 @@ def _wait_for_leader_exit_without_reaping(
 def _wait_for_remaining_group_settlement(
     pgid: int,
     timeout_seconds: float,
+    *,
+    ignore_pid: int | None = None,
 ) -> bool | None:
     """Wait until no live member remains besides settled zombies."""
 
     deadline = time.monotonic() + timeout_seconds
     while True:
-        remaining = _process_group_has_live_members(pgid)
+        remaining = _process_group_has_live_members(pgid, ignore_pid=ignore_pid)
         if remaining is not True:
             return None if remaining is None else True
         remaining_seconds = deadline - time.monotonic()
@@ -672,7 +629,11 @@ def _wait_for_remaining_group_settlement(
         time.sleep(min(_GROUP_POLL_SECONDS, remaining_seconds))
 
 
-def _process_group_has_live_members(pgid: int) -> bool | None:
+def _process_group_has_live_members(
+    pgid: int,
+    *,
+    ignore_pid: int | None = None,
+) -> bool | None:
     """Return live-member state, or None when the proc view is unavailable."""
 
     group_exists, liveness_visible = _probe_process_group(pgid)
@@ -686,7 +647,7 @@ def _process_group_has_live_members(pgid: int) -> bool | None:
     indeterminate = False
     with entries:
         for entry in entries:
-            if not entry.name.isdecimal():
+            if not entry.name.isdecimal() or entry.name == str(ignore_pid):
                 continue
             try:
                 descriptor = os.open(entry.path + "/stat", _PROC_READ_FLAGS)
@@ -767,6 +728,7 @@ def _signal_process_group(pgid: int, signum: signal.Signals) -> None:
 __all__ = [
     "OwnedProcessError",
     "OwnedProcessGroup",
+    "SignalOrigin",
     "spawn_owned_process",
 ]
 

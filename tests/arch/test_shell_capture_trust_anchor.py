@@ -151,7 +151,6 @@ assert capture_spawn._capture_process is capture_process
 for name in (
     "spawn_owned_process",
     "_finish_owned_spawn",
-    "_wrap_user_command",
     "_scrubbed_user_environment",
     "_spawn_bash",
     "_TRUSTED_BASH_CANDIDATES",
@@ -323,6 +322,7 @@ def test_shell_capture_code_has_no_pathname_harness_or_cleanup() -> None:
             "hooks/_capture_contract.py",
             "hooks/shell_capture_hook.py",
             "hooks/_capture/_runner.py",
+            "hooks/_capture/_drain.py",
             "hooks/_capture_process.py",
             "hooks/_capture_spawn.py",
         )

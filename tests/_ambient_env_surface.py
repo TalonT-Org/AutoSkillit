@@ -995,7 +995,7 @@ FORWARDING_SITES: dict[str, str] = {
         "install/publish subprocess env; intentional wholesale forward for a maintenance-style"
         "operation."
     ),
-    "cli/app.py:311": (
+    "cli/app.py:307": (
         "Bare os.environ passed as `child_env` to the maintenance installer, which itself applies"
         "an explicit allowlist (build_maintenance_env) before spawning; unfiltered by design here."
     ),
@@ -2258,6 +2258,15 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "of an unrelated lookup collection; never set as a real OS environment variable."
         ),
     ),
+    "CRITICAL": AmbientEnvDisposition(
+        var="CRITICAL",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "R4 predicate-(b) false positive: an all-uppercase enum/status/regex-name/label member"
+            "of an unrelated lookup collection; never set as a real OS environment variable."
+        ),
+    ),
     "CURL_CA_BUNDLE": AmbientEnvDisposition(
         var="CURL_CA_BUNDLE",
         disposition="preserve",
@@ -2286,6 +2295,15 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "host value when present, else 'disabled:' -- an *unset* var, not an unreachable "
             "one, is what triggers libdbus dbus-launch autolaunch, so a conditional-forward "
             "rule would be a no-op in exactly the headless environments that leak daemons."
+        ),
+    ),
+    "DEBUG": AmbientEnvDisposition(
+        var="DEBUG",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "R4 predicate-(b) false positive: an all-uppercase enum/status/regex-name/label member"
+            "of an unrelated lookup collection; never set as a real OS environment variable."
         ),
     ),
     "DELETE": AmbientEnvDisposition(
@@ -2340,6 +2358,15 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
         justification=(
             "IDE discovery/bridge variable in IDE_ENV_DENYLIST that lets a host IDE (VS"
             "Code/Cursor/Zed) attach across the trust boundary; scrubbed to prevent test leakage."
+        ),
+    ),
+    "ERROR": AmbientEnvDisposition(
+        var="ERROR",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "R4 predicate-(b) false positive: an all-uppercase enum/status/regex-name/label member"
+            "of an unrelated lookup collection; never set as a real OS environment variable."
         ),
     ),
     "EVIDENCE_READER_AUTHORITY_ENV_VAR": AmbientEnvDisposition(
@@ -2526,6 +2553,15 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
     ),
     "INCARNATION_RE": AmbientEnvDisposition(
         var="INCARNATION_RE",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "R4 predicate-(b) false positive: an all-uppercase enum/status/regex-name/label member"
+            "of an unrelated lookup collection; never set as a real OS environment variable."
+        ),
+    ),
+    "INFO": AmbientEnvDisposition(
+        var="INFO",
         disposition="scrub",
         owner="autoskillit",
         justification=(
@@ -3500,6 +3536,15 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
         justification=(
             "IDE discovery/bridge variable in IDE_ENV_DENYLIST that lets a host IDE (VS"
             "Code/Cursor/Zed) attach across the trust boundary; scrubbed to prevent test leakage."
+        ),
+    ),
+    "WARNING": AmbientEnvDisposition(
+        var="WARNING",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "R4 predicate-(b) false positive: an all-uppercase enum/status/regex-name/label member"
+            "of an unrelated lookup collection; never set as a real OS environment variable."
         ),
     ),
     "WINDIR": AmbientEnvDisposition(

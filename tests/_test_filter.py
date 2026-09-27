@@ -1489,7 +1489,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
     ),
     "_recipe_delivery_framing": frozenset({"server", "hooks", "infra"}),
     "_test_filter": frozenset({"arch", "infra", "contracts"}),
-    "smoke_utils": frozenset({"recipe", "smoke_utils"}),
+    "smoke_utils": frozenset({"recipe", "server", "smoke_utils"}),
     "version": frozenset({"test_version.py", "server", "cli"}),
     "_probe_canary": frozenset(
         {

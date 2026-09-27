@@ -158,6 +158,13 @@ async def test_steady_state_startup_emits_no_warning(steady_state_home: Path) ->
 
 @pytest.mark.anyio
 async def test_actionable_install_finding_still_warns(steady_state_home: Path) -> None:
+    """Negative control: the same steady-state home plus one actionable finding warns once.
+
+    The full steady-state fixture is deliberate — the only difference from the silent
+    startup above is the dangling registry entry, so the exact WARNING list also proves
+    the co-present routine state (migrated legacy evidence, stale marketplace surfaces)
+    stays quiet alongside an actionable finding.
+    """
     write_registry(steady_state_home, steady_state_home / "gone")
 
     _flush_structlog_proxy_caches()

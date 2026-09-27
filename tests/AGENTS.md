@@ -163,7 +163,7 @@ changed files. Controlled by env var + CLI flags:
    - **Aggressive mode override**: Uses `git diff HEAD --name-only` (working-tree-only) instead of merge-base diff. This prevents committed-but-old files from inflating the changed set.
 3. **Bucket A**: Root `tests/conftest.py` and other global-impact files -> full run. A package or nested conftest selects its literal directory subtree; `tests/arch/_helpers.py` and `_rules.py` select their known dependent test directories. Scoped support files are not direct test targets.
 4. **Classification**: src Python -> layer cascade, ordinary test Python -> direct, other Python -> manifest lookup, non-Python -> manifest lookup. Scoped directories add to other changed-file selections.
-5. **Always-run**: `arch/` + `contracts/` always included (+ `infra/` + `docs/` in conservative mode)
+5. **Always-run**: `arch/` + `contracts/` in every mode. Conservative mode with a non-empty changeset adds the named `_INFRA_UNCONDITIONAL_FILES` / `_HOOKS_UNCONDITIONAL_FILES`, the full `infra/` only when a hook/CI trigger file changed, and the full `docs/` when a docs trigger changed (otherwise only `docs/test_doc_counts.py`); an empty changeset fails open to full `arch/ contracts/ infra/ docs/`.
 6. **Coverage augmentation**: A valid map may only *add* test files to the structurally-selected scope, never remove a directory — a dynamic observation can prove a source/test relationship exists but never that one is absent. Map admission requires a repository `cwd` and checks that the stamped source commit is an ancestor of that checkout's `HEAD`.
 7. **Deselection**: `pytest_collection_modifyitems` deselects items outside scope paths
 
@@ -174,7 +174,7 @@ mapping does not follow imports through arbitrary intermediate test modules.
 
 | Mode | Cascade | Always-run | Use case |
 |------|---------|-----------|----------|
-| `conservative` | Wide (L0 core -> all layers) | arch, contracts, infra, docs | CI, merge gates |
+| `conservative` | Wide (L0 core -> all layers) | arch, contracts + tiered infra/docs (see step 5) | CI, merge gates |
 | `aggressive` | Narrow (each package -> itself) | arch, contracts | Local dev |
 | `none` | N/A | N/A | Full run (default) |
 

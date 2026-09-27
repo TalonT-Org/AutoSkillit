@@ -98,6 +98,9 @@ Key properties:
 - Dispatches L2 food trucks via `dispatch_food_truck`
 - Cannot call `run_skill`; doing so would skip the L2 boundary
 - Manages campaign state via the sidecar JSONL file
+- Owns its dispatch's process scope: nothing persists or returns until every
+  funnel-spawned descendant of the L2 is settled (owner scope, see
+  [ADR 0016](decisions/0016-owner-scope.md))
 
 ```
 L3 (interactive fleet)

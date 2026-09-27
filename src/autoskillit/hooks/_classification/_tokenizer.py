@@ -6,38 +6,45 @@ import io
 import re
 import shlex
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from autoskillit.hooks._classification._shell_structure import (
         _mark_grouping_delimiters,
+        _mark_unquoted_output_redirects,
         _mask_substitutions,
+        _normalize_newlines_for_tokenize,
         _render_replacements,
         _skip_shell_quote,
     )
+    from autoskillit.hooks._classification._source_map import SourceMappedText
 elif __package__:
+    from . import _source_map
     from ._shell_structure import (
         _mark_grouping_delimiters,
+        _mark_unquoted_output_redirects,
         _mask_substitutions,
-        _render_replacements,
-        _skip_shell_quote,
-    )
-else:
-    from _shell_structure import (
-        _mark_grouping_delimiters,
-        _mask_substitutions,
+        _normalize_newlines_for_tokenize,
         _render_replacements,
         _skip_shell_quote,
     )
 
+    SourceMappedText = _source_map.SourceMappedText
+else:
+    import _source_map
+    from _shell_structure import (
+        _mark_grouping_delimiters,
+        _mark_unquoted_output_redirects,
+        _mask_substitutions,
+        _normalize_newlines_for_tokenize,
+        _render_replacements,
+        _skip_shell_quote,
+    )
+
+    SourceMappedText = _source_map.SourceMappedText
+
 # Operators that terminate a shlex token and split command segments.
 _SHELL_OPERATORS: frozenset[str] = frozenset({"&&", "||", ";", "|", "&"})
-# Single-character shell operators that shlex.shlex(punctuation_chars=True)
-# leaves sitting inside the previous token's source range. Used as the
-# trailing-strip set for tokenizer span capture so a token followed
-# immediately by an operator (no separating whitespace) does not appear to
-# contain that operator in its raw_span.
-_SHELL_OPERATOR_CHARS: str = ";|&"
 _HEREDOC_PLACEHOLDER_RE = re.compile(r"__AUTOSKILLIT_HEREDOC_(\d+)__")
 
 
@@ -283,16 +290,20 @@ def _heredoc_occurrences(command: str) -> list[_HeredocOccurrence]:
     return occurrences
 
 
+def _strip_heredoc_bodies_mapped(command: str) -> SourceMappedText:
+    return _render_replacements(
+        SourceMappedText.identity(command),
+        [(*occurrence.body_deletion_span, "") for occurrence in _heredoc_occurrences(command)],
+    )
+
+
 def strip_heredoc_bodies(command: str) -> str:
     """Strip heredoc body content, preserving the opening line and terminator.
 
     The opening line (containing << and any real redirects) is kept intact.
     Only the body lines between the opening and terminator are removed.
     """
-    return _render_replacements(
-        command,
-        [(*occurrence.body_deletion_span, "") for occurrence in _heredoc_occurrences(command)],
-    )
+    return _strip_heredoc_bodies_mapped(command).text
 
 
 @dataclass(frozen=True, slots=True)
@@ -303,13 +314,14 @@ class StdinLiteral:
     the outer shell performs command/parameter substitution on the body
     before the consumer ever sees it -- true for an unquoted heredoc
     delimiter (`<<EOF`) or an unquoted/double-quoted herestring word, false
-    when any character of the delimiter/word is quoted (`<<'EOF'`,
-    `<<"EOF"`, `<<\\EOF`, a single-quoted herestring). This is independent
+    when any character of the delimiter is quoted (`<<'EOF'`,
+    `<<"EOF"`, `<<\\EOF`) or the entire herestring word is single-quoted. This is independent
     of whether the *consumer* (the command the literal is piped/redirected
     into) itself executes the body as code -- see `StdinConsumer` in
-    `_interpreters.py`. `source_span` is the literal's exact occurrence span
-    in the original command string; `None` only for a value constructed
-    directly by a test or caller rather than captured from source text.
+    `_interpreters.py`. `source_span` covers a heredoc's body (equal to `text`),
+    or a herestring's word as written, including quotes, whose dequoted value
+    is `text`. Coordinates refer to the original command; `None` only for
+    directly constructed values.
     `feeds_stdin` identifies the redirect that supplies the segment's stdin;
     earlier redirects remain available for outer-expansion analysis. It defaults
     to True so directly constructed literals retain the historical behavior.
@@ -320,35 +332,6 @@ class StdinLiteral:
     outer_expansion: bool
     source_span: tuple[int, int] | None = None
     feeds_stdin: bool = True
-
-
-def _normalize_newlines_for_tokenize(command: str) -> str:
-    """Make bare newlines command boundaries while preserving quoted newlines."""
-    result: list[str] = []
-    in_single = False
-    in_double = False
-    i = 0
-    while i < len(command):
-        c = command[i]
-        if c == "\\" and not in_single and i + 1 < len(command):
-            if command[i + 1] == "\n":
-                i += 2
-                continue
-            result.append(c)
-            result.append(command[i + 1])
-            i += 2
-            continue
-        if c == "'" and not in_double:
-            in_single = not in_single
-        elif c == '"' and not in_single:
-            in_double = not in_double
-        elif c == "\n" and not in_single and not in_double:
-            result.append(" ; \n")
-            i += 1
-            continue
-        result.append(c)
-        i += 1
-    return "".join(result)
 
 
 @dataclass(frozen=True, slots=True)
@@ -363,7 +346,8 @@ class ArgvToken:
     callers that slice `.text` (e.g. an `=`-form or bundled-short flag
     value) inherit provenance unchanged rather than re-deriving it.
 
-    `raw_span` is the token's own rstripped source span in the shell command
+    `raw_span` is the exact source span of the token in the tokenizer's marked text
+    (substitution markers restored)
     (e.g. `"'value'"` for a single-quoted token) -- kept alongside the
     coarser whole-token `fully_single_quoted` so a caller splitting `.text`
     on a *bareword* boundary it independently knows about (e.g. gh's
@@ -437,7 +421,7 @@ class EvaluatedSegment:
                 )
 
 
-def _capture_heredocs(command: str) -> tuple[str, list[StdinLiteral]]:
+def _capture_heredocs(command: str) -> tuple[SourceMappedText, list[StdinLiteral]]:
     """Replace each `<<EOF` heredoc with a placeholder; return the bound literals."""
     occurrences = _heredoc_occurrences(command)
     literals = [
@@ -456,7 +440,8 @@ def _capture_heredocs(command: str) -> tuple[str, list[StdinLiteral]]:
     replacements.extend(
         (*span, "") for span in {occurrence.capture_tail_span for occurrence in occurrences}
     )
-    return (_render_replacements(command, replacements), literals)
+    mapped = _render_replacements(SourceMappedText.identity(command), replacements)
+    return mapped, literals
 
 
 def _finalize_stdin_literals(literals: list[StdinLiteral]) -> tuple[StdinLiteral, ...]:
@@ -466,86 +451,93 @@ def _finalize_stdin_literals(literals: list[StdinLiteral]) -> tuple[StdinLiteral
     )
 
 
-def _output_redirect_end(command: str, start: int) -> int | None:
-    i = start
-    char = command[i]
-    if char.isdecimal() and (i == 0 or command[i - 1].isspace() or command[i - 1] in ";&|("):
-        while i < len(command) and command[i].isdecimal():
-            i += 1
-        if i >= len(command) or command[i] != ">":
-            return None
-    elif char != ">":
-        return None
+class _LexStream:
+    """Marked text for shlex that records discarded comments and reads of EOF."""
 
-    operator_end = i + 1
-    if operator_end < len(command) and command[operator_end] == ">":
-        operator_end += 1
-    if operator_end < len(command) and command[operator_end] == "(":
-        return None
-    if (
-        operator_end < len(command)
-        and command[operator_end] == "&"
-        and (not command[start:i] or command[start:i].isdecimal())
-    ):
-        fd_end = operator_end + 1
-        while fd_end < len(command) and command[fd_end].isdecimal():
-            fd_end += 1
-        if fd_end == operator_end + 1:
-            return None
-        operator_end = fd_end
-    return operator_end
+    def __init__(self, text: str) -> None:
+        self._buffer = io.StringIO(text)
+        self.comment_starts: list[int] = []
+        self.hit_eof = False
+
+    def read(self, size: int, /) -> str:
+        chunk = self._buffer.read(size)
+        if not chunk:
+            self.hit_eof = True
+        return chunk
+
+    def readline(self) -> str:
+        self.comment_starts.append(self._buffer.tell() - 1)
+        return self._buffer.readline()
+
+    def close(self) -> None:
+        self._buffer.close()
+
+    def tell(self) -> int:
+        return self._buffer.tell()
 
 
-def _mark_unquoted_output_redirects(command: str) -> tuple[str, dict[str, str]]:
-    """Replace recognized redirect operators with shlex-stable placeholders."""
-    rendered: list[str] = []
-    redirects: dict[str, str] = {}
-    in_single = False
-    in_double = False
-    i = 0
-    while i < len(command):
-        char = command[i]
-        if char == "\\" and not in_single and i + 1 < len(command):
-            rendered.extend((char, command[i + 1]))
-            i += 2
-            continue
-        if char == "'" and not in_double:
-            in_single = not in_single
-            rendered.append(char)
-            i += 1
-            continue
-        if char == '"' and not in_single:
-            in_double = not in_double
-            rendered.append(char)
-            i += 1
-            continue
-        if in_single or in_double:
-            rendered.append(char)
-            i += 1
-            continue
-
-        operator_end = _output_redirect_end(command, i)
-        if operator_end is None:
-            rendered.append(char)
-            i += 1
-            continue
-
-        marker = f"__AUTOSKILLIT_REDIRECT_{len(redirects)}__"
-        redirects[marker] = command[i:operator_end]
-        rendered.extend((" ", marker, " "))
-        i = operator_end
-    return ("".join(rendered), redirects)
+def _skip_lexer_trivia(marked: str, start: int, lexer: shlex.shlex) -> int:
+    while start < len(marked):
+        if marked[start] in lexer.whitespace:
+            start += 1
+        elif marked[start] in lexer.commenters:
+            newline = marked.find("\n", start)
+            start = len(marked) if newline < 0 else newline + 1
+        else:
+            break
+    return start
 
 
-_LexedCommand = tuple[
-    list[str],
-    list[bool],
-    list[str],
-    list[StdinLiteral],
-    dict[str, str],
-    dict[str, str],
-    dict[str, tuple[str, int]],
-]
+def _token_end(
+    marked: str, stream: _LexStream, seen: int, start: int, lexer: shlex.shlex
+) -> tuple[int, int]:
+    for comment in stream.comment_starts[seen:]:
+        if comment >= start:
+            return comment, 0
+    consumed = stream.tell()
+    if stream.hit_eof:
+        return consumed, 0
+    if marked[consumed - 1] in lexer.whitespace:
+        return consumed - 1, 0
+    return consumed - 1, 1
+
+
+def _lex_tokens(marked: str) -> list[tuple[str, int, int]]:
+    """Observe shlex stream events to bound tokens without its private state."""
+    stream = _LexStream(marked)
+    lexer = shlex.shlex(stream, posix=True, punctuation_chars=";&|")
+    lexer.whitespace_split = True
+    tokens: list[tuple[str, int, int]] = []
+    pushed_back = 0
+    while True:
+        begin = stream.tell() - pushed_back
+        seen = len(stream.comment_starts)
+        stream.hit_eof = False
+        token = lexer.get_token()
+        if token is None:
+            break
+        start = _skip_lexer_trivia(marked, begin, lexer)
+        end, pushed_back = _token_end(marked, stream, seen, start, lexer)
+        tokens.append((token, start, end))
+    return tokens
+
+
+@dataclass(frozen=True, slots=True)
+class _LexedCommand:
+    """Exact marked-text bounds; raw_spans[i] equals marked.text[slice(*bounds[i])].
+
+    marked.source_span maps each bound pair to original-command coordinates.
+    """
+
+    tokens: list[str]
+    bounds: list[tuple[int, int]]
+    raw_spans: list[str]
+    fully_single_quoted: list[bool]
+    marked: SourceMappedText
+    literals: list[StdinLiteral]
+    redirects: dict[str, str]
+    substitutions: dict[str, str]
+    groups: dict[str, tuple[str, int]]
 
 
 def _lex_command(command: str) -> _LexedCommand | None:
@@ -562,72 +554,60 @@ def _lex_command(command: str) -> _LexedCommand | None:
         if grouped is None:
             return None
         marked, groups = grouped
-        lexer = shlex.shlex(
-            marked,
-            posix=True,
-            punctuation_chars=";&|",
-        )
-        lexer.whitespace_split = True
-        # Drive the lexer token-by-token (rather than `list(lexer)`) so each
-        # token's own source span in *marked* can be read via instream.tell().
-        # The span must be exactly the characters this lexer itself consumed
-        # to produce the token, so comparing it against `'<token>'` tells us
-        # whether the token was one unbroken single-quote run with nothing
-        # else contributing, independent of shlex's own dequoting.
-        #
-        # With punctuation_chars=True, shlex does not consume operator
-        # characters (`;|&`) as their own tokens until the next call -- it
-        # leaves them sitting in the previous token's source range, so a
-        # naive `marked[start:end]` slice captures e.g. `'foo'` followed by
-        # an unseparated `;` as the single-quote token's span. Strip the
-        # trailing operator chars to recover the real span; this is the
-        # only place that knows about punctuation_chars' bundling quirk,
-        # so it lives here rather than at every consumer. shlex.shlex(str)
-        # always wraps a str instream in io.StringIO; the stub's Protocol
-        # just doesn't declare .tell().
-        instream = cast(io.StringIO, lexer.instream)
-        tokens: list[str] = []
-        fully_single_quoted: list[bool] = []
-        raw_spans: list[str] = []
-        while True:
-            start = instream.tell()
-            token = lexer.get_token()
-            if token is None:
-                break
-            span = marked[start : instream.tell()].rstrip(_SHELL_OPERATOR_CHARS)
-            tokens.append(token)
-            fully_single_quoted.append(span == f"'{token}'")
-            raw_spans.append(span)
+        token_spans = _lex_tokens(marked.text)
+        tokens = [token for token, _, _ in token_spans]
+        bounds = [(start, end) for _, start, end in token_spans]
+        raw_spans = [marked.text[start:end] for start, end in bounds]
+        fully_single_quoted = [raw == f"'{t}'" for t, raw in zip(tokens, raw_spans)]
     except (ValueError, TypeError):
         return None
+    return _LexedCommand(
+        tokens,
+        bounds,
+        raw_spans,
+        fully_single_quoted,
+        marked,
+        literals,
+        redirects,
+        substitutions,
+        groups,
+    )
 
-    return tokens, fully_single_quoted, raw_spans, literals, redirects, substitutions, groups
+
+def _is_structural_token(lexed: _LexedCommand, index: int) -> bool:
+    token = lexed.tokens[index]
+    return lexed.raw_spans[index] == token and (
+        token in lexed.groups
+        or _HEREDOC_PLACEHOLDER_RE.fullmatch(token) is not None
+        or token in lexed.redirects
+        or token in _SHELL_OPERATORS
+        or _is_case_terminator(token)
+    )
 
 
-def _herestring_at(
-    tokens: list[str], quoted: list[bool], raw_spans: list[str], index: int
-) -> tuple[StdinLiteral | None, int] | None:
-    """Match a herestring operator at *index*.
-
-    Returns ``None`` when the token at *index* is not a herestring. When it
-    is, returns ``(literal, next_index)``: ``literal`` is ``None`` if the
-    operator was the trailing ``<<<`` with no body, otherwise it is the
-    captured body. ``next_index`` is the index of the first token after the
-    herestring.
-    """
-    token = tokens[index]
-    if token == "<<<":
-        if index + 1 < len(tokens):
-            return (
-                StdinLiteral(tokens[index + 1], "herestring", not quoted[index + 1]),
-                index + 2,
-            )
+def _herestring_at(lexed: _LexedCommand, index: int) -> tuple[StdinLiteral | None, int] | None:
+    """Capture an unquoted herestring operator and its exact source word."""
+    raw = lexed.raw_spans[index]
+    if not raw.startswith("<<<"):
+        return None
+    fused = raw != "<<<"
+    word = index if fused else index + 1
+    if word >= len(lexed.tokens) or (not fused and _is_structural_token(lexed, word)):
         return None, index + 1
-    if len(token) > 3 and token.startswith("<<<"):
-        body = token[3:]
-        value_raw_span = raw_spans[index][3:].rstrip()
-        return StdinLiteral(body, "herestring", value_raw_span != f"'{body}'"), index + 1
-    return None
+    offset = 3 if fused else 0
+    start, end = lexed.bounds[word]
+    raw_word = lexed.marked.text[start + offset : end]
+    dequoted = lexed.tokens[word][offset:]
+    text, _, _ = _restore_substitutions(dequoted, raw_word, False, lexed.substitutions)
+    return (
+        StdinLiteral(
+            text,
+            "herestring",
+            raw_word != f"'{dequoted}'",
+            lexed.marked.source_span(start + offset, end),
+        ),
+        word + 1,
+    )
 
 
 def _restore_substitutions(
@@ -667,7 +647,13 @@ def _tokenize_command_segments_with_redirects(command: str) -> list[_CommandSegm
     lexed = _lex_command(command)
     if lexed is None:
         return None
-    tokens, fully_single_quoted, raw_spans, literals, redirects, substitutions, groups = lexed
+    tokens = lexed.tokens
+    fully_single_quoted = lexed.fully_single_quoted
+    raw_spans = lexed.raw_spans
+    literals = lexed.literals
+    redirects = lexed.redirects
+    substitutions = lexed.substitutions
+    groups = lexed.groups
 
     segments: list[_CommandSegment] = []
     current_tokens: list[str] = []
@@ -734,7 +720,7 @@ def _tokenize_command_segments_with_redirects(command: str) -> list[_CommandSegm
             index += 1
             continue
 
-        herestring = _herestring_at(tokens, fully_single_quoted, raw_spans, index)
+        herestring = _herestring_at(lexed, index)
         if herestring is not None:
             literal, index = herestring
             if literal is not None:

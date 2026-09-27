@@ -5,6 +5,8 @@ from __future__ import annotations
 from enum import StrEnum, unique
 from typing import assert_never
 
+from autoskillit._measure_aggregation import TokenMeasureState
+
 from ._type_enums_context_admission import *  # noqa: F403
 
 __all__ = [
@@ -50,15 +52,6 @@ __all__ = [
     "SynthesisStrategy",
     "TokenMeasureState",
 ]
-
-
-@unique
-class TokenMeasureState(StrEnum):
-    MEASURED = "measured"
-    MEASURED_ZERO = "measured_zero"
-    UNAVAILABLE = "unavailable"
-    UNKNOWN = "unknown"
-    NOT_APPLICABLE = "not_applicable"
 
 
 class RetryReason(StrEnum):

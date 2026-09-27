@@ -116,6 +116,8 @@ EVALUATION_SHAPE_MATRIX: tuple[EvaluationShape, ...] = (
     ),
     EvaluationShape("bash-herestring-double", True, "shell", lambda inner: f'bash <<< "{inner}"'),
     EvaluationShape("bash-herestring-single", True, "shell", lambda inner: f"bash <<< '{inner}'"),
+    EvaluationShape("cat-herestring-single", False, "inert", lambda inner: f"cat <<< '{inner}'"),
+    EvaluationShape("cat-herestring-double", False, "inert", lambda inner: f'cat <<< "{inner}"'),
     EvaluationShape(
         "cat-heredoc-pipe-bash",
         True,

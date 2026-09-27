@@ -1630,6 +1630,26 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "between sibling or nested sessions."
         ),
     ),
+    "AUTOSKILLIT_OWNER_SCOPE": AmbientEnvDisposition(
+        var="AUTOSKILLIT_OWNER_SCOPE",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "Dispatch owner-scope token: authored only by the food-truck executor's owner "
+            "scope and re-injected into L1 launches by the shared env builder; an ambient "
+            "copy must never scope an unrelated session's funnel spawns."
+        ),
+    ),
+    "AUTOSKILLIT_OWNER_SCOPE_DIR": AmbientEnvDisposition(
+        var="AUTOSKILLIT_OWNER_SCOPE_DIR",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "Owner's tether directory travelling with the owner-scope token so scoped "
+            "tethers land where the owner settles them; scrubbed from ambient and "
+            "re-injected alongside the token."
+        ),
+    ),
     "AUTOSKILLIT_PRIVATE_ENV_VARS": AmbientEnvDisposition(
         var="AUTOSKILLIT_PRIVATE_ENV_VARS",
         disposition="scrub",
@@ -2928,6 +2948,24 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
     ),
     "OUTPUT_DISCIPLINE_DIGEST": AmbientEnvDisposition(
         var="OUTPUT_DISCIPLINE_DIGEST",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "R4 predicate-(b) false positive: an all-uppercase enum/status/regex-name/label member"
+            "of an unrelated lookup collection; never set as a real OS environment variable."
+        ),
+    ),
+    "OWNER_SCOPE_DIR_ENV_VAR": AmbientEnvDisposition(
+        var="OWNER_SCOPE_DIR_ENV_VAR",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "R4 predicate-(b) false positive: an all-uppercase enum/status/regex-name/label member"
+            "of an unrelated lookup collection; never set as a real OS environment variable."
+        ),
+    ),
+    "OWNER_SCOPE_ENV_VAR": AmbientEnvDisposition(
+        var="OWNER_SCOPE_ENV_VAR",
         disposition="scrub",
         owner="autoskillit",
         justification=(

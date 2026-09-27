@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from autoskillit.hooks._classification._substitution_scanning import (
         _iter_shell_payload_segment_groups as _scan_shell_payload_segment_groups,
     )
+    from autoskillit.hooks._classification._tokenizer import _strip_heredoc_bodies_mapped
     from autoskillit.hooks._runtime._command_classification import (
         _INTERPRETER_RE,
         _LITERAL_OPEN_PATH_RE,
@@ -36,7 +37,6 @@ if TYPE_CHECKING:
         _CommandSegment,
         _tokenize_command_segments_with_redirects,
         command_verb_and_args,
-        strip_heredoc_bodies,
         tokenize_command_segments,
     )
 
@@ -58,12 +58,15 @@ else:
             _flag_arity_classification,
             _python_program_analysis,
             _substitution_scanning,
+            _tokenizer,
         )
     else:
         import _flag_arity_classification
         import _python_program_analysis
         import _substitution_scanning
+        import _tokenizer
 
+    _strip_heredoc_bodies_mapped = _tokenizer._strip_heredoc_bodies_mapped
     _FlagArity = _flag_arity_classification._FlagArity
     _InterpreterCommandSpec = _python_program_analysis._InterpreterCommandSpec
     _python_c_program = _python_program_analysis._python_c_program
@@ -295,7 +298,8 @@ class EvaluatedPayload:
     `source_span` is the payload's exact occurrence span in the original
     command string; `None` for a payload synthesized from another segment's
     tokens (a `-c`/`eval` argument, a resolved pipe payload) rather than
-    read directly from a source span.
+    read directly from a source span. A herestring span covers its word as
+    written, including quotes.
     """
 
     text: str
@@ -417,6 +421,51 @@ def _upstream_pipe_text(segments: Sequence[_CommandSegment], index: int) -> str 
     return None
 
 
+def _stdin_literal_payloads(
+    command: str, literal: StdinLiteral, consumer: StdinConsumer, index: int
+) -> list[EvaluatedPayload]:
+    """Evaluate literal text or its outer expansions from the original source slice."""
+    payloads: list[EvaluatedPayload] = []
+    if literal.feeds_stdin and consumer != StdinConsumer.INERT:
+        payloads.append(
+            EvaluatedPayload(literal.text, consumer, index, literal.kind, literal.source_span)
+        )
+    if literal.outer_expansion and (not literal.feeds_stdin or consumer != StdinConsumer.SHELL):
+        span = literal.source_span
+        raw = command[slice(*span)] if span is not None else literal.text
+        for rel, sub in _iter_substitution_occurrences(raw):
+            abs_span = (span[0] + rel, span[0] + rel + len(sub)) if span is not None else None
+            payloads.append(
+                EvaluatedPayload(sub, StdinConsumer.SHELL, index, "substitution", abs_span)
+            )
+    return payloads
+
+
+def _outer_substitution_payloads(
+    command: str, segments: Sequence[_CommandSegment]
+) -> list[EvaluatedPayload]:
+    """Give substitutions outside stdin literals their outer-command owner."""
+    literal_spans = [
+        literal.source_span
+        for segment in segments
+        for literal in segment.stdin_literals
+        if literal.source_span is not None
+    ]
+    stripped = _strip_heredoc_bodies_mapped(command)
+    payloads: list[EvaluatedPayload] = []
+    # Heredoc bodies are stripped; herestring words remain in the projection.
+    # Skip mapped occurrences inside either kind of literal, whose expansions
+    # are owned by the per-literal scan or its executing shell consumer.
+    for start, sub in _iter_substitution_occurrences(stripped.text):
+        if start < len(stripped.starts) and any(
+            s <= stripped.starts[start] < e for s, e in literal_spans
+        ):
+            continue
+        owner = _occurrence_owner_index(stripped.text, start, len(segments))
+        payloads.append(EvaluatedPayload(sub, StdinConsumer.SHELL, owner, "substitution", None))
+    return payloads
+
+
 def evaluated_payloads(command: str) -> list[EvaluatedPayload]:
     """Return every text payload that will actually be evaluated, and by whom.
 
@@ -447,44 +496,14 @@ def evaluated_payloads(command: str) -> list[EvaluatedPayload]:
 
         consumer = stdin_consumer(segment.tokens)
         for literal in segment.stdin_literals:
-            if literal.feeds_stdin and consumer != StdinConsumer.INERT:
-                origin = "heredoc" if literal.kind == "heredoc" else "herestring"
-                payloads.append(
-                    EvaluatedPayload(literal.text, consumer, index, origin, literal.source_span)
-                )
-            if literal.outer_expansion and (
-                not literal.feeds_stdin or consumer != StdinConsumer.SHELL
-            ):
-                for rel_start, sub in _iter_substitution_occurrences(literal.text):
-                    abs_span = (
-                        (
-                            literal.source_span[0] + rel_start,
-                            literal.source_span[0] + rel_start + len(sub),
-                        )
-                        if literal.source_span is not None
-                        else None
-                    )
-                    payloads.append(
-                        EvaluatedPayload(sub, StdinConsumer.SHELL, index, "substitution", abs_span)
-                    )
+            payloads.extend(_stdin_literal_payloads(command, literal, consumer, index))
 
         if segment.piped_from_previous and consumer != StdinConsumer.INERT and index > 0:
             upstream_text = _upstream_pipe_text(segments, index - 1)
             if upstream_text is not None:
                 payloads.append(EvaluatedPayload(upstream_text, consumer, index, "pipe", None))
 
-    # Scan the inert-body-aware projection, not the raw command: a heredoc
-    # or herestring body is erased by strip_heredoc_bodies before this scan
-    # ever runs, so prose inside an inert `cat`/`tee` body (a `$(...)` in a
-    # fenced code block, an inline backtick example) can no longer be
-    # mistaken for a live substitution. A substitution that sits outside
-    # every heredoc body is untouched by stripping and is still found here.
-    # Per-literal substitutions inside a body are covered separately above
-    # via `literal.outer_expansion`, which is independent of this scan.
-    stripped_command = strip_heredoc_bodies(command)
-    for start, sub in _iter_substitution_occurrences(stripped_command):
-        owner = _occurrence_owner_index(stripped_command, start, len(segments))
-        payloads.append(EvaluatedPayload(sub, StdinConsumer.SHELL, owner, "substitution", None))
+    payloads.extend(_outer_substitution_payloads(command, segments))
 
     return payloads
 
@@ -639,23 +658,11 @@ def all_evaluated_segments(
 def live_command_text(command: str) -> str:
     """Return an occurrence-aware live-text projection of *command*.
 
-    A heredoc occurrence is blanked at its original position; one whose
-    consumer executes it (per `stdin_consumer`) is appended once, in source
-    order, so a regex-based scanner sees its content exactly once without
-    ever re-deriving liveness from the raw string. An inert heredoc's body is
-    blanked and never appended, so it cannot trigger a raw-text match. A
-    `-c`/`eval`/`python -c` payload is already present verbatim in the base
+    Every heredoc and herestring is blanked at its source span. A literal
+    whose consumer executes it is appended once, as are outer-expanded
+    substitutions inside literals. Inert literal text is never appended.
+    A `-c`/`eval`/`python -c` payload is already present verbatim in the base
     text at its natural position and is never duplicated by re-appending it.
-
-    A herestring occurrence is never blanked: the tokenizer does not track
-    its `source_span` (only a heredoc's placeholder-substitution pass does),
-    so it is left exactly once at its natural position in `base`, live or
-    inert, and is excluded below rather than re-appended. This differs from
-    heredoc's inert-body blanking -- a `#4983` follow-up tracks closing that
-    gap -- but it is not a false positive/negative for any current caller: a
-    herestring's raw source text already reads identically to its evaluated
-    payload text, so a scanner matching against `base` alone sees the same
-    content a second, appended copy would have added.
     """
     segments = _tokenize_command_segments_with_redirects(command) or []
     payloads = evaluated_payloads(command)
@@ -673,7 +680,7 @@ def live_command_text(command: str) -> str:
     appended = [
         payload.text
         for payload in payloads
-        if payload.origin not in ("-c", "eval", "python-c", "herestring") and payload.text
+        if payload.origin not in ("-c", "eval", "python-c") and payload.text
     ]
     return " ".join([base, *appended]) if appended else base
 
@@ -779,7 +786,6 @@ if not TYPE_CHECKING:
     _WRITE_CALL_SITE_RE = _classification._WRITE_CALL_SITE_RE
     EvaluatedSegment = _classification.EvaluatedSegment
     StdinLiteral = _classification.StdinLiteral
-    strip_heredoc_bodies = _classification.strip_heredoc_bodies
     _command_position_candidate_spans = _classification._command_position_candidate_spans
     _CommandSegment = _classification._CommandSegment
     _tokenize_command_segments_with_redirects = (

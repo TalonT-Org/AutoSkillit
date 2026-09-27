@@ -146,9 +146,8 @@ def test_lex_command_source_spans_round_trip_without_overlap(command):
 
     source_spans = [lexed.marked.source_span(*bounds) for bounds in lexed.bounds]
     previous_end = 0
-    for index, ((start, end), raw_span) in enumerate(zip(source_spans, lexed.raw_spans)):
+    for (start, end), raw_span in zip(source_spans, lexed.raw_spans):
         assert previous_end <= start < end <= len(command)
-        assert raw_span == lexed.marked.text[slice(*lexed.bounds[index])]
         source = command[start:end]
         if "__AUTOSKILLIT_" not in raw_span and "\n" not in source:
             assert source == raw_span

@@ -22,7 +22,13 @@ from autoskillit.hooks._join_ledger import (
 )
 from autoskillit.hooks._runtime._hook_constants import MANAGED_JOIN_PARENT_ID_ENV_VAR
 from autoskillit.hooks._runtime._hook_settings import is_authenticated_top_level_cook
-from autoskillit.hooks._session_binding import read_binding, resolve_binding_path, write_binding
+from autoskillit.hooks._session_binding import (
+    merge_binding,
+    read_binding,
+    resolve_binding_path,
+    unresolved_loaded_skill,
+    write_binding,
+)
 from autoskillit.server.tools.tools_kitchen import _declare_join_batch as declare_module
 from tests._helpers import _EnvVarReadCollector
 from tests.conftest import production_interpreter_env
@@ -919,7 +925,17 @@ def test_stop_guard_blocks_an_invalid_managed_scope(tmp_path: Path) -> None:
     binding_path = resolve_binding_path(str(worktree), session_id)
     binding = read_binding(binding_path)
     assert binding is not None
-    write_binding(binding_path, binding._replace(binding_valid=False))
+    write_binding(
+        binding_path,
+        merge_binding(
+            binding,
+            session_id=session_id,
+            new_entry=unresolved_loaded_skill(
+                "autoskillit:ghost", "2026-09-26T00:00:00+00:00", "unresolved skill"
+            ),
+            artifact_digest=binding.artifact_digest,
+        ),
+    )
 
     completed = _run_hook(
         tmp_path,

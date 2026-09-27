@@ -12,7 +12,10 @@ pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
 
 def _project_skill_document(name: str, body: str) -> str:
-    return f"---\nname: {name}\ndescription: Project-local {name} fixture.\n---\n{body}\n"
+    return (
+        f"---\nname: {name}\ndescription: Project-local {name} fixture.\n"
+        f"write_paths: inherit\n---\n{body}\n"
+    )
 
 
 def _materialize_project(

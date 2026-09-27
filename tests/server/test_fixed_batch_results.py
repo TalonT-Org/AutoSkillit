@@ -7,7 +7,7 @@ from dataclasses import replace
 import pytest
 
 from autoskillit.core import SkillContractError
-from autoskillit.hooks._session_binding import LoadedSkillEntry
+from autoskillit.hooks._session_binding import LoadedSkillEntry, LoadedSkillOrigin
 from autoskillit.server.tools.tools_execution._fixed_batch_handlers import _page_payload
 from autoskillit.server.tools.tools_execution._managed_fixed_batch import (
     ManagedFixedBatchResultStore,
@@ -31,6 +31,7 @@ def _launch() -> ManagedLaunchBinding:
         source_artifact_incarnation_id="incarnation-1",
         binding_valid=True,
         binding_error=None,
+        origin=LoadedSkillOrigin.AUTOSKILLIT,
     )
     return ManagedLaunchBinding(
         request_session_id="request-session",

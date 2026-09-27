@@ -374,6 +374,7 @@ async def test_issue_launchers_deliver_winning_override_identity_and_projection(
         "description: Winning direct-launch override.\n"
         "uses_capabilities: [github_api_write]\n"
         "execution_role: session\n"
+        "write_paths: inherit\n"
         "---\n"
         f"winning {skill_name} override body\n"
         "gh issue edit 42 --body-file report.md\n"

@@ -75,7 +75,7 @@ __all__ = [
 
 #: Reserved grace window for lease-aware retirement.
 _PROJECTION_GRACE_HOURS = 6
-PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION = 2
+PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION = 3
 _PROJECTION_ARTIFACT_MANIFEST_FIELDS = frozenset(
     {
         "schema_version",

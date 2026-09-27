@@ -112,6 +112,7 @@ def _child_spawn_skill(tmp_path: Path) -> SkillInfo:
         "  child_spawns:\n"
         "    - role: worker\n"
         "      count: 1\n"
+        "write_paths: inherit\n"
         "---\n"
         "Delegate to the worker.\n",
         encoding="utf-8",
@@ -238,6 +239,7 @@ def test_agent_skill_projector_preserves_public_document_and_stable_digest(
         "execution_role: session\n"
         "metadata:\n"
         "  public-key: public-value\n"
+        "write_paths: inherit\n"
         "---\n"
         "# Public body\n\n"
         "Keep this body byte-for-byte.\n"
@@ -272,6 +274,7 @@ def test_session_manager_materializes_exact_catalog(tmp_path: Path) -> None:
         "name: exact-skill\n"
         "description: Exact catalog member.\n"
         "execution_role: session\n"
+        "write_paths: inherit\n"
         "---\n"
         "# Exact skill\n"
     )

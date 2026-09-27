@@ -350,6 +350,7 @@ class TestNonMachineLocalWritersAreRelocatable:
     def test_projection_repair_outputs_are_relocatable(self, tmp_path: Path) -> None:
         from autoskillit.core import managed_home_for
         from autoskillit.workspace._installed._projection_cache import (
+            PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
             projected_artifact_manifest_path,
             projected_plugin_artifact_digest,
         )
@@ -389,7 +390,7 @@ class TestNonMachineLocalWritersAreRelocatable:
         manifest_path.write_text(
             json.dumps(
                 {
-                    "schema_version": 2,
+                    "schema_version": PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
                     "artifact_kind": "projection",
                     "projection_version": 2,
                     "semantic_key": projection.name,

@@ -1,21 +1,21 @@
 """Session-skill provider, ephemeral-root resolution, and closure write dirs.
 
 Single owner of ``SkillsDirectoryProvider``, the ephemeral-root candidate
-list, ``default_skill_resolver``, ``resolve_ephemeral_root``,
-``resolve_closure_write_dirs``, and the provider-owned ``_parse_write_paths``
-helper. Catalog vs invocation projection-context binding is preserved by
-constructing the stable ``skill_projection.SkillProjectionContext`` whose
-``__post_init__`` enforces exclusivity.
+list, ``default_skill_resolver``, ``resolve_ephemeral_root``, and
+``resolve_closure_write_dirs``. Catalog vs invocation projection-context
+binding is preserved by constructing the stable
+``skill_projection.SkillProjectionContext`` whose ``__post_init__`` enforces
+exclusivity.
 
-Closure write-dir resolution preserves source order, ``existing`` exclusion,
-first-occurrence deduplication, and placeholder substitution; traversal and
-prefix containment remain the upstream frontmatter validator's
-responsibility.
+Closure write-dir resolution composes the closure's write scopes through the
+shared ``autoskillit.hooks._write_scope`` fold (the same union the interactive
+write guard applies), checks each declared directory against the session temp
+root there, and preserves source order, ``existing`` exclusion, and
+first-occurrence deduplication.
 """
 
 from __future__ import annotations
 
-import os
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -24,11 +24,13 @@ from autoskillit.core import (
     ManagedCodexRoute,
     RepositoryProfileId,
     SemanticAdaptationContext,
+    SkillContractError,
     SkillExecutionRole,
     SkillResolver,
     destination_location,
     pkg_root,
 )
+from autoskillit.hooks._write_scope import fold_session_write_scopes, temp_root_escape
 from autoskillit.workspace.session_skills._projection import (
     SkillProjectionContext,
     project_agent_skill_document,
@@ -44,8 +46,8 @@ if TYPE_CHECKING:
     from autoskillit.core import (
         CodingAgentBackend,
         ResolvedSkillAuthority,
-        SkillFrontmatterAuthority,
     )
+    from autoskillit.hooks._write_scope import WriteScope
 
 # Candidate ephemeral roots, tried in order.
 # resolve_ephemeral_root() appends tempfile.gettempdir() as the final fallback.
@@ -76,41 +78,36 @@ def resolve_ephemeral_root() -> Path:
     raise RuntimeError("No writable ephemeral root found for session skill dirs")
 
 
-def _parse_write_paths(parsed: SkillFrontmatterAuthority) -> list[str]:
-    """Expose the typed write-boundary contract to closure callers."""
-    return list(parsed.write_paths or ())
-
-
 def resolve_closure_write_dirs(
     closure: tuple[ResolvedSkillAuthority, ...],
     cwd: str,
     existing: list[Path] | None = None,
 ) -> list[Path]:
-    """Resolve write_paths from an exact effective closure into absolute Paths.
+    """Resolve an exact effective closure's BOUNDED write scopes into absolute Paths.
 
-    Substitutes ``{{AUTOSKILLIT_TEMP}}`` with ``cwd/.autoskillit/temp`` and
-    returns deduplicated resolved Paths ready to extend ``write_watch_dirs``.
-    Paths already present in ``existing`` are excluded from the result.
+    UNRESTRICTED and INHERIT members contribute nothing. Raises
+    ``SkillContractError`` when a member lacks a valid write scope or declares a
+    directory that resolves outside ``cwd``'s temp root. Paths already present in
+    ``existing`` are excluded from the result.
     """
-    raw_paths = tuple(
-        write_path
-        for info in closure
-        if info.frontmatter is not None
-        for write_path in _parse_write_paths(info.frontmatter)
-    )
-    if not raw_paths:
-        return []
-    temp_prefix = os.path.join(cwd, ".autoskillit", "temp")
+    scopes: list[tuple[str, WriteScope]] = []
+    for info in closure:
+        if info.write_scope is None:
+            raise SkillContractError(f"closure member {info.name} lacks a valid write scope")
+        scopes.append((info.name, info.write_scope))
     seen: set[Path] = {destination_location(path) for path in existing or ()}
     result: list[Path] = []
-    for rwp in raw_paths:
-        resolved = Path(rwp.replace("{{AUTOSKILLIT_TEMP}}", temp_prefix))
-        if not resolved.is_absolute():
-            resolved = Path(cwd) / resolved
-        resolved = destination_location(resolved)
-        if resolved not in seen:
-            seen.add(resolved)
-            result.append(resolved)
+    for name, prefixes in fold_session_write_scopes(scopes, cwd).contributors:
+        for prefix in prefixes:
+            escape = temp_root_escape(prefix, cwd)
+            if escape is not None:
+                raise SkillContractError(
+                    f"declared write scope for closure member {name} {escape}"
+                )
+            resolved = destination_location(Path(prefix))
+            if resolved not in seen:
+                seen.add(resolved)
+                result.append(resolved)
     return result
 
 

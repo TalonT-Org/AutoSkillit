@@ -40,7 +40,6 @@ from ._projection import (
 )
 from ._provider import (
     SkillsDirectoryProvider,
-    _parse_write_paths,
     default_skill_resolver,
     resolve_closure_write_dirs,
     resolve_ephemeral_root,
@@ -67,5 +66,4 @@ __all__ = [
     "resolve_persistent_session_root",
     "resolve_persistent_session_roots",
     "write_skill_unavailability_metadata",
-    "_parse_write_paths",
 ]

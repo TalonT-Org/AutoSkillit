@@ -6,6 +6,9 @@ import json
 import shutil
 from pathlib import Path
 
+from autoskillit.hooks._session_binding import PROJECTION_MANIFEST_SCHEMA_VERSION
+from autoskillit.hooks._write_scope import WriteScope, WriteScopeKind, encode_write_scope
+
 _HOOKS_SOURCE = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "hooks"
 _RUNTIME_SOURCE = _HOOKS_SOURCE / "_runtime"
 
@@ -14,6 +17,7 @@ _RUNTIME_SOURCE = _HOOKS_SOURCE / "_runtime"
 _PROJECTED_HOOK_FILES_FLAT = (
     "skill_load_post_hook.py",
     "_session_binding.py",
+    "_write_scope.py",
 )
 _PROJECTED_HOOK_FILES_RUNTIME = (
     "_guard_decision_diagnostics.py",
@@ -55,13 +59,14 @@ def write_projection_manifest(
     *,
     skill_name: str = "join-bearing",
     join_required: bool = True,
-    schema_version: int = 2,
+    schema_version: int = PROJECTION_MANIFEST_SCHEMA_VERSION,
     artifact_digest: str = "artdigest-1",
     semantic_digest: str = "sem-1",
     adaptation_digest: str = "adapt-1",
     projected_digest: str = "proj-1",
     canonical_digest: str = "canon-1",
     child_spawn_cardinality: dict[str, object] | None = None,
+    write_scope: WriteScope = WriteScope(WriteScopeKind.INHERIT),
 ) -> Path:
     """Write a schema-versioned projection sidecar beside a projected hook root."""
     manifest_path = projection_root.parent / (
@@ -88,7 +93,7 @@ def write_projection_manifest(
                         "adaptation_digest": adaptation_digest,
                         "projected_digest": projected_digest,
                         "canonical_digest": canonical_digest,
-                        "write_paths": None,
+                        "write_scope": encode_write_scope(write_scope),
                     }
                 },
             }

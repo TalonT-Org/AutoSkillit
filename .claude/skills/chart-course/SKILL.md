@@ -1,5 +1,7 @@
 ---
 name: chart-course
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/chart-course/'
 uses_capabilities: []
 description: Interactive strategic compass builder. Guides the user through mapping all possible project directions with progressive codebase analysis, web research, and architectural diagrams at every step. Produces a machine-readable compass document for downstream alignment tracking.
 hooks:

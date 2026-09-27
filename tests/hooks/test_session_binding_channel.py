@@ -205,7 +205,9 @@ def test_orphaned_schema_1_sidecar_is_not_selected_over_the_hook_bound_live_mani
 def test_binding_envelope_round_trips_through_one_shared_type() -> None:
     """The authority owns versioned serialization and legacy unresolved state."""
     from autoskillit.hooks._session_binding import (
+        SESSION_BINDING_SCHEMA_VERSION,
         LoadedSkillEntry,
+        LoadedSkillOrigin,
         SessionBinding,
         SessionBindingError,
     )
@@ -223,9 +225,10 @@ def test_binding_envelope_round_trips_through_one_shared_type() -> None:
         source_artifact_incarnation_id="incarnation",
         binding_valid=True,
         binding_error=None,
+        origin=LoadedSkillOrigin.AUTOSKILLIT,
     )
     binding = SessionBinding(
-        schema_version=3,
+        schema_version=SESSION_BINDING_SCHEMA_VERSION,
         session_id="session-1",
         join_required=True,
         binding_valid=True,
@@ -283,6 +286,7 @@ def test_loaded_skill_rejects_non_string_schema_fields(field: str) -> None:
         "source_artifact_incarnation_id": "incarnation",
         "binding_valid": True,
         "binding_error": None,
+        "origin": "autoskillit",
     }
     payload[field] = 1
 
@@ -301,6 +305,7 @@ def test_loaded_skill_rejects_boolean_cardinality() -> None:
         LoadedSkillEntry.from_json(
             {
                 "child_spawn_cardinality": {"explicit_slots": True},
+                "origin": "autoskillit",
             }
         )
 
@@ -349,7 +354,7 @@ def test_write_binding_closes_descriptor_when_fdopen_fails(
 
     monkeypatch.setattr(binding_module.os, "fdopen", fail_fdopen)
     binding = binding_module.SessionBinding(
-        schema_version=3,
+        schema_version=binding_module.SESSION_BINDING_SCHEMA_VERSION,
         session_id="session-1",
         join_required=False,
         binding_valid=True,

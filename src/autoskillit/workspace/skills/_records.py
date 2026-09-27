@@ -14,7 +14,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
     PACK_REGISTRY,
@@ -36,6 +36,9 @@ from ._format import (
     SkillFrontmatterParseResult,
     parse_frontmatter_content,
 )
+
+if TYPE_CHECKING:
+    from autoskillit.hooks._write_scope import WriteScope
 
 logger = get_logger(__name__)
 
@@ -82,7 +85,7 @@ class SkillInfo:
     canonical_content: str = ""
     canonical_digest: str = ""
     frontmatter: SkillFrontmatterParseResult | None = None
-    write_paths: tuple[str, ...] | None = None
+    write_scope: WriteScope | None = None
     invalidities: tuple[SkillInvalidity, ...] = ()
 
     def __post_init__(self) -> None:
@@ -136,6 +139,8 @@ class SkillInfo:
                 "frontmatter",
                 parse_frontmatter_content(self.canonical_content),
             )
+        if self.write_scope is None and self.frontmatter is not None:
+            object.__setattr__(self, "write_scope", self.frontmatter.write_scope)
         if (
             self.frontmatter is not None
             and not self.frontmatter.is_valid
@@ -182,7 +187,7 @@ class SkillCatalogEntry:
     canonical_content: str
     canonical_digest: str
     frontmatter: SkillFrontmatterParseResult
-    write_paths: tuple[str, ...] | None = None
+    write_scope: WriteScope
     invalidities: tuple[SkillInvalidity, ...] = ()
 
     @classmethod
@@ -199,6 +204,12 @@ class SkillCatalogEntry:
             raise SkillContractError(f"skill {skill.name!r} has no effective source identity")
         if skill.frontmatter is None:
             raise SkillContractError(f"skill {skill.name!r} has no parsed frontmatter")
+        if skill.write_scope is None:
+            raise SkillContractError(f"skill {skill.name!r} has no valid write scope")
+        if skill.write_scope != skill.frontmatter.write_scope:
+            raise SkillContractError(
+                f"skill {skill.name!r} write scope disagrees with its parsed frontmatter"
+            )
         return cls(
             name=skill.name,
             source=skill.source,
@@ -215,7 +226,7 @@ class SkillCatalogEntry:
             canonical_content=skill.canonical_content,
             canonical_digest=skill.canonical_digest,
             frontmatter=skill.frontmatter,
-            write_paths=skill.write_paths,
+            write_scope=skill.write_scope,
         )
 
 

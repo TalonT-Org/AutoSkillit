@@ -145,6 +145,7 @@ def test_resource_body_is_delivered_verbatim_after_skill_transforms(
             "---\n"
             "name: verbatim-resource-consumer\n"
             "description: Fixture.\n"
+            "write_paths: inherit\n"
             "---\n"
             "Authored {{AUTOSKILLIT_TEMP}} text is transformed.\n"
         ),
@@ -210,6 +211,7 @@ def test_editing_resource_bytes_changes_the_projected_digest(
         "name: digest-resource-consumer\n"
         "description: Fixture.\n"
         "requires_resources: [digest-fixture]\n"
+        "write_paths: inherit\n"
         "---\n"
         "consumer body\n",
         encoding="utf-8",
@@ -247,6 +249,7 @@ def test_unknown_resource_is_an_admission_invalidity_before_session_creation(
         "name: unknown-resource\n"
         "description: Fixture.\n"
         "requires_resources: [not-registered]\n"
+        "write_paths: inherit\n"
         "---\n"
         "consumer body\n",
         encoding="utf-8",
@@ -324,6 +327,7 @@ def test_resource_digest_order_has_one_sorted_projection_cache_identity(
         "name: resource-cache\n"
         "description: Fixture.\n"
         "execution_role: session\n"
+        "write_paths: inherit\n"
         "---\n"
         "cache fixture\n"
     )

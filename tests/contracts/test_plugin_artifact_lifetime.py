@@ -65,6 +65,7 @@ def _semantic_catalog(
             "semantic_version: 1\n"
             "semantic_requirements:\n"
             f"{semantic_requirements}"
+            "write_paths: inherit\n"
             "---\n"
             f"Perform {name}.\n",
             encoding="utf-8",
@@ -131,6 +132,7 @@ def test_projected_plugin_propagates_malformed_adapter_result(
         "semantic_requirements:\n"
         "  git_metadata_writes:\n"
         "  - purpose: create one commit\n"
+        "write_paths: inherit\n"
         "---\n"
         "Perform the projected operation.\n",
         encoding="utf-8",
@@ -486,6 +488,10 @@ def test_binding_owns_exact_v2_incarnation_and_stable_sidecar(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    from autoskillit.workspace._installed._projection_cache import (
+        PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
+    )
+
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     authority = _authority(tmp_path)
     backend = ClaudeCodeBackend()
@@ -503,7 +509,9 @@ def test_binding_owns_exact_v2_incarnation_and_stable_sidecar(
         assert first.plugin_dir == first.identity.managed_path
         assert second.plugin_dir == second.identity.managed_path
         assert first.inherited_fds != second.inherited_fds
-        assert first.identity.manifest_schema_version == 2
+        assert (
+            first.identity.manifest_schema_version == PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION
+        )
         manifest = json.loads(first.identity.manifest_path.read_text(encoding="utf-8"))
         assert manifest["semantic_key"] == first.identity.semantic_key
         assert manifest["incarnation_id"] == first.identity.incarnation_id

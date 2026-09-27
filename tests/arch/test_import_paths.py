@@ -125,6 +125,15 @@ def test_req_imp_002_no_core_submodule_imports() -> None:
 _REQ_IMP_001_EXEMPTIONS: frozenset[tuple[str, str]] = frozenset(
     {
         ("execution/child_outcomes.py", "autoskillit.hooks._child_outcome_snapshot"),
+        # The stdlib-only write-scope authority is shared with hook subprocesses;
+        # re-exporting it through hooks/__init__ would initialize the hook registry.
+        # Twin of the _CROSS_PACKAGE_SUBMODULE_EXEMPTIONS entries in test_layer_enforcement.
+        ("workspace/skills/_format.py", "autoskillit.hooks._write_scope"),
+        ("workspace/_projected_artifact/_publication.py", "autoskillit.hooks._write_scope"),
+        ("workspace/_projected_artifact/_validation.py", "autoskillit.hooks._write_scope"),
+        ("workspace/session_skills/_provider.py", "autoskillit.hooks._write_scope"),
+        ("recipe/rules/rules_skill_write_path_alignment.py", "autoskillit.hooks._write_scope"),
+        ("migration/adapters_skill.py", "autoskillit.hooks._write_scope"),
     }
 )
 

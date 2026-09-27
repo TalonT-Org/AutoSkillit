@@ -1,5 +1,6 @@
 ---
 name: make-campaign
+write_paths: unrestricted
 description: Interactively author a campaign recipe YAML through a 6-phase guided workflow. Use when user says "make campaign", "create campaign", "author campaign", "new campaign recipe", or wants to decompose a campaign goal into dispatches.
 categories:
   - orchestration-family

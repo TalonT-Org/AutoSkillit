@@ -1,5 +1,6 @@
 ---
 name: update-architecture
+write_paths: unrestricted
 description: Update architecture markdown files. Use when user says "update architecture", "update arch docs", "sync architecture", or mentions updating architecture documentation.
 hooks:
   PreToolUse:

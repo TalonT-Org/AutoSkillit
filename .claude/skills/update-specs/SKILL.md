@@ -1,5 +1,6 @@
 ---
 name: update-specs
+write_paths: unrestricted
 description: Add or update functional specification documents. Use when user says "update specs", "update specifications", "sync specs", or wants to maintain specification documents that describe what the software must do.
 hooks:
   PreToolUse:

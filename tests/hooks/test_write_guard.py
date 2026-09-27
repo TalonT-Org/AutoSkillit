@@ -13,8 +13,18 @@ import pytest
 
 from autoskillit.hook_registry import PROTECTION_WAIVERS
 from autoskillit.hooks._runtime import UNRESOLVED_WRITE_TARGET_REMEDIATION
+from autoskillit.hooks._session_binding import (
+    PROJECTION_MANIFEST_SCHEMA_VERSION,
+    SessionBinding,
+    classify_invoked_skill,
+    merge_binding,
+    resolve_binding_path,
+    write_binding,
+)
+from autoskillit.hooks._write_scope import WriteScope, WriteScopeKind
 from autoskillit.hooks.guards import write_guard
 from tests._evaluation_shape_matrix import EVALUATION_SHAPE_MATRIX
+from tests.hooks._interactive_guard_harness import manifest_entry
 
 from .conftest import make_hook_event
 
@@ -69,47 +79,83 @@ def _set_headless(monkeypatch: pytest.MonkeyPatch, *, headless: bool) -> None:
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
 
 
+_INTERACTIVE_SESSION = "interactive-test"
+
+
+def _record_reasons(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    reasons: list[str] = []
+    monkeypatch.setattr(
+        write_guard, "record_guard_decision", lambda _data, **kw: reasons.append(kw["reason"])
+    )
+    return reasons
+
+
+def _bind_interactive(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    entries: dict[str, dict],
+    names: tuple[str, ...],
+) -> None:
+    """Bind ``names`` through the production classifier against a real manifest file."""
+    manifest = {
+        "schema_version": PROJECTION_MANIFEST_SCHEMA_VERSION,
+        "artifact_digest": "artifact",
+        "incarnation_id": "incarnation",
+        "skills": entries,
+    }
+    manifest_path = tmp_path / "projection.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    monkeypatch.setattr(write_guard, "resolve_projection_manifest_path", lambda _p: manifest_path)
+    (tmp_path / ".autoskillit").mkdir(exist_ok=True)
+    binding: SessionBinding | None = None
+    for name in names:
+        binding = merge_binding(
+            binding,
+            session_id=_INTERACTIVE_SESSION,
+            new_entry=classify_invoked_skill(manifest, name, "2026-09-26T00:00:00+00:00"),
+            artifact_digest="artifact",
+        )
+    assert binding is not None
+    write_binding(resolve_binding_path(str(tmp_path), _INTERACTIVE_SESSION), binding)
+
+
+def _interactive_event(tmp_path, file_path: str) -> dict:
+    return {
+        "tool_name": "Write",
+        "cwd": str(tmp_path),
+        "session_id": _INTERACTIVE_SESSION,
+        "tool_input": {"file_path": file_path},
+    }
+
+
+_REVIEW_PR_SCOPE = WriteScope(WriteScopeKind.BOUNDED, ("{{AUTOSKILLIT_TEMP}}/review-pr/",))
+
+
 class TestWriteGuardNoHeadless:
     def test_no_loaded_boundary_allows_interactive_write(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path
     ):
         _set_headless(monkeypatch, headless=False)
         monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "/clone/.autoskillit/temp/")
+        reasons = _record_reasons(monkeypatch)
         result = _run_hook(_build_event("Write", "/clone/src/foo.py"))
         assert result == ""
+        assert reasons == ["no_scope"]
         _assert_installation_floor_denies(tmp_path)
 
     def test_loaded_skill_boundary_applies_interactively(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path
     ) -> None:
-        from autoskillit.hooks.guards import write_guard
-
         _set_headless(monkeypatch, headless=False)
-        monkeypatch.setattr(
-            write_guard,
-            "read_session_binding",
-            lambda _cwd, _session_id: {"loaded_skills": [{"skill_name": "review-pr"}]},
+        _bind_interactive(
+            monkeypatch, tmp_path, {"review-pr": manifest_entry(_REVIEW_PR_SCOPE)}, ("review-pr",)
         )
-        monkeypatch.setattr(
-            write_guard, "resolve_projection_manifest_path", lambda _path: tmp_path
-        )
-        monkeypatch.setattr(
-            write_guard,
-            "read_manifest",
-            lambda _path: {
-                "skills": {"review-pr": {"write_paths": ["{{AUTOSKILLIT_TEMP}}/review-pr/"]}}
-            },
-        )
-        event = {
-            "tool_name": "Write",
-            "cwd": str(tmp_path),
-            "session_id": "interactive-test",
-            "tool_input": {"file_path": str(tmp_path / "outside.py")},
-        }
+        reasons = _record_reasons(monkeypatch)
 
-        result = _run_hook(event)
+        result = _run_hook(_interactive_event(tmp_path, str(tmp_path / "outside.py")))
 
         assert json.loads(result)["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert reasons == ["scope_violation"]
 
 
 class TestWriteGuardCodexBackendEarlyExit:
@@ -1838,6 +1884,43 @@ class TestNormalizePrefixesSurface:
         assert expected_type_name in msg
 
 
+class TestUnparseableBashUnderActiveScope:
+    """A Bash command the shared tokenizer cannot parse is an unresolved write target."""
+
+    COMMAND = 'echo "unterminated > src/x.py'
+
+    def _bash_event(self, tmp_path) -> dict:
+        return {
+            "tool_name": "Bash",
+            "cwd": str(tmp_path),
+            "session_id": _INTERACTIVE_SESSION,
+            "tool_input": {"command": self.COMMAND},
+        }
+
+    def _assert_unresolved_deny(self, result: str) -> None:
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert (
+            "unresolved write target" in parsed["hookSpecificOutput"]["permissionDecisionReason"]
+        )
+
+    def test_interactive_bounded_scope_denies(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ) -> None:
+        _set_headless(monkeypatch, headless=False)
+        _bind_interactive(
+            monkeypatch, tmp_path, {"review-pr": manifest_entry(_REVIEW_PR_SCOPE)}, ("review-pr",)
+        )
+        self._assert_unresolved_deny(_run_hook(self._bash_event(tmp_path)))
+
+    def test_headless_prefix_scope_denies(self, monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+        _set_headless(monkeypatch, headless=True)
+        monkeypatch.setenv(
+            "AUTOSKILLIT_ALLOWED_WRITE_PREFIXES", str(tmp_path / ".autoskillit" / "temp" / "x")
+        )
+        self._assert_unresolved_deny(_run_hook(self._bash_event(tmp_path)))
+
+
 class TestEmptyPolicyDenialHint:
     """Empty-boundary denials should name the configuration source that produced
     the empty set so operators can self-diagnose without reading log files."""
@@ -1849,41 +1932,103 @@ class TestEmptyPolicyDenialHint:
     def test_interactive_empty_policy_reason_includes_configuration_hint(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path
     ) -> None:
-        """Interactive skill_binding empty policy names session_binding/write_paths."""
+        """Interactive realpath failure names session_binding/write_paths."""
         _set_headless(monkeypatch, headless=False)
-        monkeypatch.setattr(
-            write_guard,
-            "read_session_binding",
-            lambda _cwd, _session_id: {
-                "loaded_skills": [{"skill_name": "review-pr", "binding_valid": True}]
-            },
+        _bind_interactive(
+            monkeypatch, tmp_path, {"review-pr": manifest_entry(_REVIEW_PR_SCOPE)}, ("review-pr",)
         )
-        monkeypatch.setattr(
-            write_guard, "resolve_projection_manifest_path", lambda _path: tmp_path
-        )
-        monkeypatch.setattr(
-            write_guard,
-            "read_manifest",
-            lambda _path: {"skills": {"review-pr": {"write_paths": ["/this/does/not/exist"]}}},
-        )
+        reasons = _record_reasons(monkeypatch)
 
-        def _raise_realpath(_p: str) -> str:
-            raise OSError("permission denied")
+        real_realpath = write_guard.os.path.realpath
 
-        monkeypatch.setattr(write_guard.os.path, "realpath", _raise_realpath)
+        def _raise_realpath_for_declared_scope(path, *args, **kwargs):
+            if "review-pr" in str(path):
+                raise OSError("permission denied")
+            return real_realpath(path, *args, **kwargs)
 
-        event = {
-            "tool_name": "Write",
-            "cwd": str(tmp_path),
-            "session_id": "interactive-test",
-            "tool_input": {"file_path": str(tmp_path / "outside.py")},
-        }
-        result = _run_hook(event)
+        monkeypatch.setattr(write_guard.os.path, "realpath", _raise_realpath_for_declared_scope)
+
+        result = _run_hook(_interactive_event(tmp_path, str(tmp_path / "outside.py")))
         parsed = json.loads(result)
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
         reason = parsed["hookSpecificOutput"]["permissionDecisionReason"]
         assert "session_binding" in reason
         assert "write_path" in reason
+        assert reasons == ["empty"]
+
+    def test_unresolved_causes_are_distinct(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ) -> None:
+        """Each unresolved interactive boundary names its own cause, never the empty hint."""
+        _set_headless(monkeypatch, headless=False)
+        review = {"review-pr": manifest_entry(_REVIEW_PR_SCOPE)}
+
+        def _deny_reason(case_dir) -> str:
+            parsed = json.loads(_run_hook(_interactive_event(case_dir, str(case_dir / "x.py"))))
+            assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+            return parsed["hookSpecificOutput"]["permissionDecisionReason"]
+
+        causes: dict[str, str] = {}
+
+        invalid = tmp_path / "invalid"
+        invalid.mkdir()
+        _bind_interactive(monkeypatch, invalid, review, ("autoskillit:ghost",))
+        causes["invalid binding"] = _deny_reason(invalid)
+
+        missing = tmp_path / "missing"
+        missing.mkdir()
+        _bind_interactive(monkeypatch, missing, review, ("review-pr",))
+        monkeypatch.setattr(write_guard, "resolve_projection_manifest_path", lambda _p: None)
+        causes["manifest missing"] = _deny_reason(missing)
+
+        absent = tmp_path / "absent"
+        absent.mkdir()
+        _bind_interactive(monkeypatch, absent, review, ("review-pr",))
+        (absent / "projection.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": PROJECTION_MANIFEST_SCHEMA_VERSION,
+                    "artifact_digest": "artifact",
+                    "incarnation_id": "incarnation",
+                    "skills": {},
+                }
+            ),
+            encoding="utf-8",
+        )
+        causes["entry missing"] = _deny_reason(absent)
+
+        malformed = tmp_path / "malformed"
+        malformed.mkdir()
+        _bind_interactive(monkeypatch, malformed, review, ("review-pr",))
+        (malformed / "projection.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": PROJECTION_MANIFEST_SCHEMA_VERSION,
+                    "artifact_digest": "artifact",
+                    "incarnation_id": "incarnation",
+                    "skills": {"review-pr": manifest_entry([])},
+                }
+            ),
+            encoding="utf-8",
+        )
+        causes["entry malformed"] = _deny_reason(malformed)
+
+        escaped = tmp_path / "escaped"
+        (escaped / ".autoskillit" / "temp").mkdir(parents=True)
+        (escaped / ".autoskillit" / "temp" / "review-pr").symlink_to(
+            tmp_path, target_is_directory=True
+        )
+        _bind_interactive(monkeypatch, escaped, review, ("review-pr",))
+        causes["prefix escape"] = _deny_reason(escaped)
+
+        assert "ghost" in causes["invalid binding"]
+        assert "projection manifest not found" in causes["manifest missing"]
+        assert "no entry for loaded skill 'review-pr'" in causes["entry missing"]
+        assert "invalid write_scope" in causes["entry malformed"]
+        assert "resolves to" in causes["prefix escape"]
+        hint = write_guard._EMPTY_BOUNDARY_HINT_BY_ACTIVATION["skill_binding"]
+        assert all(hint not in cause for cause in causes.values())
+        assert len(set(causes.values())) == len(causes)
 
     def test_headless_empty_policy_reason_includes_env_var_hint(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1896,7 +2041,9 @@ class TestEmptyPolicyDenialHint:
         """
         _set_headless(monkeypatch, headless=True)
         monkeypatch.setattr(
-            write_guard, "_write_prefix_policy", lambda _data, _headless: ([], "", "empty")
+            write_guard,
+            "_write_prefix_policy",
+            lambda _data, _headless: write_guard._resolution("empty"),
         )
 
         event = {

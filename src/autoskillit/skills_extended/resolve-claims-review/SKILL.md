@@ -1,5 +1,6 @@
 ---
 name: resolve-claims-review
+write_paths: unrestricted
 categories:
 - research
 uses_capabilities:

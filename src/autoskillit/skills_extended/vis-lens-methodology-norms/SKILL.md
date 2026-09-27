@@ -2,6 +2,7 @@
 name: vis-lens-methodology-norms
 write_paths:
 - '{{AUTOSKILLIT_TEMP}}/vis-lens-methodology-norms/'
+- '{{AUTOSKILLIT_TEMP}}/synthesize-vis-plan/'
 categories:
 - vis-lens
 uses_capabilities: []

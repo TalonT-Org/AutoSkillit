@@ -47,10 +47,17 @@ def _make_recipe_yaml(skill_name: str, output_dir: str) -> str:
 def _make_skill_md(skill_name: str, never_path: str, use_dynamic: bool = False) -> str:
     if use_dynamic:
         write_line = "Write to `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX}/output.json`"
+        declaration = "write_paths: unrestricted"
     else:
         write_line = f"Write to `{{{{AUTOSKILLIT_TEMP}}}}/{never_path}/output.json`"
+        declaration = f"write_paths: ['{{{{AUTOSKILLIT_TEMP}}}}/{never_path}/']"
     return textwrap.dedent(
         f"""\
+        ---
+        name: {skill_name}
+        description: Synthetic alignment fixture.
+        {declaration}
+        ---
         # {skill_name}
 
         ## Critical Constraints
@@ -93,6 +100,7 @@ def test_rule_fires_when_skill_md_path_outside_output_dir(tmp_path: Path) -> Non
     assert len(rule_findings) == 1
     assert rule_findings[0].severity == Severity.ERROR
     assert rule_findings[0].step_name == "run_step"
+    assert "NEVER block declares write scope 'review-pr/'" in rule_findings[0].message
 
 
 def test_rule_silent_when_paths_aligned(tmp_path: Path) -> None:
@@ -183,6 +191,11 @@ def test_rule_fires_on_synthetic_pre_fix_divergence(tmp_path: Path) -> None:
     skill_dir.mkdir()
     skill_md_content = textwrap.dedent(
         """\
+        ---
+        name: synthetic-review-pr
+        description: Synthetic divergence fixture.
+        write_paths: ['{{AUTOSKILLIT_TEMP}}/review-pr/']
+        ---
         # synthetic-review-pr
 
         ## Critical Constraints
@@ -217,6 +230,45 @@ def test_rule_fires_on_synthetic_pre_fix_divergence(tmp_path: Path) -> None:
     rule_findings = [f for f in findings if f.rule == _RULE_NAME]
     assert len(rule_findings) == 1, f"Expected 1 finding, got: {rule_findings}"
     assert rule_findings[0].severity == Severity.ERROR
+    assert "NEVER block declares write scope 'review-pr/'" in rule_findings[0].message
+
+
+def _alignment_findings(tmp_path: Path, frontmatter: str, output_dir: str) -> list[str]:
+    skill_dir = tmp_path / "scoped"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        f"---\nname: scoped\ndescription: Scope fixture.\n{frontmatter}---\n# scoped\n",
+        encoding="utf-8",
+    )
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_yaml("scoped", output_dir), encoding="utf-8")
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(load_recipe(recipe_path))
+    return [finding.message for finding in findings if finding.rule == _RULE_NAME]
+
+
+@pytest.mark.parametrize("frontmatter", ["", "write_paths: []\n", "write_paths: bad\n"])
+def test_rule_cannot_verify_output_dir_without_a_valid_scope(
+    tmp_path: Path, frontmatter: str
+) -> None:
+    messages = _alignment_findings(tmp_path, frontmatter, "{{AUTOSKILLIT_TEMP}}/anywhere/")
+
+    assert len(messages) == 1
+    assert "cannot verify output_dir: skill lacks a valid write_paths declaration" in messages[0]
+
+
+@pytest.mark.parametrize("frontmatter", ["write_paths: unrestricted\n", "write_paths: inherit\n"])
+def test_unbounded_scopes_do_not_narrow_output_dir(tmp_path: Path, frontmatter: str) -> None:
+    assert _alignment_findings(tmp_path, frontmatter, "{{AUTOSKILLIT_TEMP}}/anywhere/") == []
+
+
+def test_bounded_scope_violation_names_the_declared_write_scope(tmp_path: Path) -> None:
+    messages = _alignment_findings(
+        tmp_path, "write_paths: ['{{AUTOSKILLIT_TEMP}}/scoped/']\n", "{{AUTOSKILLIT_TEMP}}/other/"
+    )
+
+    assert len(messages) == 1
+    assert "is outside the skill's declared write scope" in messages[0]
 
 
 def _bundled_recipe_paths() -> list[Path]:

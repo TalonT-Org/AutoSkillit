@@ -45,7 +45,8 @@ def _install_invocation(
         canonical_content=(
             "---\nname: candidate-probe\ndescription: Candidate probe.\n"
             f"uses_capabilities: {sorted(capabilities)!r}\n"
-            f"execution_role: session\n{semantic_frontmatter}---\n# Candidate probe\n"
+            f"execution_role: session\nwrite_paths: inherit\n"
+            f"{semantic_frontmatter}---\n# Candidate probe\n"
         ),
         semantic_plan=semantic_plan,
     )

@@ -469,7 +469,7 @@ class TestSkillExecutionRoleParsing:
         from autoskillit.workspace.skills import _skill_info_from_frontmatter
 
         skill_md = tmp_path / "SKILL.md"
-        skill_md.write_text("---\nname: test\n---\n# body")
+        skill_md.write_text("---\nname: test\nwrite_paths: inherit\n---\n# body")
         info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
         assert info.execution_role is SkillExecutionRole.SESSION
         assert not info.invalidities
@@ -488,7 +488,9 @@ class TestSkillExecutionRoleParsing:
         from autoskillit.workspace.skills import _skill_info_from_frontmatter
 
         skill_md = tmp_path / "SKILL.md"
-        skill_md.write_text(f"---\nname: test\nexecution_role: {role}\n---\n# body")
+        skill_md.write_text(
+            f"---\nname: test\nexecution_role: {role}\nwrite_paths: inherit\n---\n# body"
+        )
         info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
         assert info.execution_role is expected
         assert not info.invalidities
@@ -532,7 +534,7 @@ class TestSkillExecutionRoleParsing:
         skill_md = tmp_path / "SKILL.md"
         skill_md.write_text(
             "---\nname: test\nexecution_role: orchestrator\n"
-            'uses_capabilities: [run_skill]\n---\nCall run_skill("child").'
+            'uses_capabilities: [run_skill]\nwrite_paths: inherit\n---\nCall run_skill("child").'
         )
         info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
         assert info.execution_role is SkillExecutionRole.ORCHESTRATOR
@@ -558,6 +560,7 @@ class TestSkillInfoSchemaExhaustiveness:
             "invalidities",
             "resource_digests",
             "semantic_plan",
+            "write_scope",
         }
         parseable_fields = dc_fields - constructor_only - derived_fields
         frontmatter_keys = {"required_resources": "requires_resources"}

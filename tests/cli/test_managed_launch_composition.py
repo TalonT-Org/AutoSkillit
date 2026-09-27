@@ -88,7 +88,8 @@ def managed_launch_case(
     skill_path = project / "skills" / "launch-skill" / "SKILL.md"
     skill_path.parent.mkdir(parents=True)
     skill_content = (
-        "---\nname: launch-skill\ndescription: Test managed launch.\n---\nRun directly.\n"
+        "---\nname: launch-skill\ndescription: Test managed launch.\n"
+        "write_paths: inherit\n---\nRun directly.\n"
     )
     skill_path.write_text(skill_content, encoding="utf-8")
     catalog = EffectiveSkillCatalog(

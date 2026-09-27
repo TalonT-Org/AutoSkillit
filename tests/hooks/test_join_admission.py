@@ -5,8 +5,10 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.hooks._session_binding import (
+    SESSION_BINDING_SCHEMA_VERSION,
     JoinAdmissionOutcome,
     LoadedSkillEntry,
+    LoadedSkillOrigin,
     SessionBinding,
     admit_join,
     write_binding,
@@ -27,7 +29,7 @@ def test_wrong_session_is_not_enforced(tmp_path) -> None:
     write_binding(
         path,
         SessionBinding(
-            schema_version=3,
+            schema_version=SESSION_BINDING_SCHEMA_VERSION,
             session_id="other",
             join_required=True,
             binding_valid=True,
@@ -58,7 +60,7 @@ def test_valid_binding_admits_requesting_skill(tmp_path) -> None:
     write_binding(
         path,
         SessionBinding(
-            schema_version=3,
+            schema_version=SESSION_BINDING_SCHEMA_VERSION,
             session_id="session",
             join_required=True,
             binding_valid=True,
@@ -77,6 +79,7 @@ def test_valid_binding_admits_requesting_skill(tmp_path) -> None:
                     source_artifact_incarnation_id="",
                     binding_valid=True,
                     binding_error=None,
+                    origin=LoadedSkillOrigin.AUTOSKILLIT,
                 ),
             ),
         ),

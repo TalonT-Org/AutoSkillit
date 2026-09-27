@@ -1,5 +1,6 @@
 ---
 name: file-audit-issues
+write_paths: unrestricted
 categories: [audit-pipeline]
 uses_capabilities: [github_api_write]
 description: >-

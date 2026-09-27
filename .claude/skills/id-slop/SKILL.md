@@ -1,6 +1,8 @@
 ---
 name: id-slop
-description: Identify AI-generated code slop in the codebase - useless comments, backward compatibility hacks, deprecation notices, dead code, and other technical debt left by AI assistants. Use when user says "id slop", "identify slop", "find slop", or "code cleanup scan". Generates a removal plan in temp/ and validates it with dry walkthrough.
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/id-slop/'
+description: Identify AI-generated code slop in the codebase - useless comments, backward compatibility hacks, deprecation notices, dead code, and other technical debt left by AI assistants. Use when user says "id slop", "identify slop", "find slop", or "code cleanup scan". Generates a removal plan in {{AUTOSKILLIT_TEMP}}/id-slop/ and validates it with dry walkthrough.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -31,7 +33,7 @@ Identify and catalog AI-generated code slop in the codebase. Slop is useless cod
 
 **ALWAYS:**
 - Use subagents for parallel exploration
-- Write the slop removal plan to `temp/id-slop/` directory
+- Write the slop removal plan to `{{AUTOSKILLIT_TEMP}}/id-slop/` directory
 - Provide file paths and line numbers for each finding
 - Run dry walkthrough on the generated plan
 - Categorize slop by type for prioritized removal
@@ -222,7 +224,7 @@ After subagents complete, organize findings by:
 
 ### Step 3: Generate Removal Plan
 
-Write a structured removal plan to: `temp/id-slop/slop_removal_plan_{YYYY-MM-DD_HHMMSS}.md`
+Write a structured removal plan to: `{{AUTOSKILLIT_TEMP}}/id-slop/slop_removal_plan_{YYYY-MM-DD_HHMMSS}.md`
 
 The plan should follow this format:
 
@@ -301,7 +303,7 @@ Output to terminal:
 ```
 ## Slop Identification Complete
 
-**Plan:** temp/id-slop/slop_removal_plan_{YYYY-MM-DD_HHMMSS}.md
+**Plan:** {{AUTOSKILLIT_TEMP}}/id-slop/slop_removal_plan_{YYYY-MM-DD_HHMMSS}.md
 **Total Findings:** {count}
 
 ### By Priority
@@ -319,7 +321,7 @@ Output to terminal:
 7. Dead Code: {count}
 
 ### Next Steps
-1. Review the plan at temp/id-slop/slop_removal_plan_{YYYY-MM-DD_HHMMSS}.md
+1. Review the plan at {{AUTOSKILLIT_TEMP}}/id-slop/slop_removal_plan_{YYYY-MM-DD_HHMMSS}.md
 2. Dry walkthrough has been run - check for any issues
 3. Implement the plan phase by phase
 ```

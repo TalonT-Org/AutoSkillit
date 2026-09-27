@@ -1,5 +1,6 @@
 ---
 name: update-reqs
+write_paths: unrestricted
 description: Add or update functional requirement documents in docs/requirements/
 hooks:
   PreToolUse:

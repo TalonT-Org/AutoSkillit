@@ -169,7 +169,7 @@ class TestExplicitOverrideProviderPrecedence:
             path=tmp_path / "investigate" / "SKILL.md",
             canonical_content=(
                 "---\nname: investigate\ndescription: Test skill.\n"
-                "execution_role: session\n---\n# Investigate\n"
+                "execution_role: session\nwrite_paths: inherit\n---\n# Investigate\n"
             ),
         )
         invocation = EffectiveSkillInvocation(

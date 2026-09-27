@@ -246,6 +246,7 @@ class TestStandingBackendPinsFeasibility:
             "semantic_requirements:\n"
             "  join:\n"
             "    required: true\n"
+            "write_paths: inherit\n"
             "---\n"
             "Resolve the supplied test failures.\n"
         )

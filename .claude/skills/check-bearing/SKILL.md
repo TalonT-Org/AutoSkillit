@@ -1,5 +1,7 @@
 ---
 name: check-bearing
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/check-bearing/'
 uses_capabilities: []
 description: Assess a branch or PR's alignment with the strategic compass. Evaluates whether changes advance, drift from, or close off strategic directions. Produces an alignment dashboard with per-direction impact analysis and a verdict.
 hooks:

@@ -1,5 +1,7 @@
 ---
 name: prepare-research-pr
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/prepare-research-pr/'
 categories:
 - research
 description: 'Reads a research report and experiment plan, synthesizes a recommendation, selects 1-2 exp-lens lenses, writes

@@ -1,5 +1,7 @@
 ---
 name: select-directions
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/select-directions/'
 uses_capabilities: []
 categories: [research]
 description: >

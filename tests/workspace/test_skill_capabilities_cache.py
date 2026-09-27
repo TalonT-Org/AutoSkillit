@@ -142,7 +142,7 @@ def test_cold_and_warm_mixed_corpus_preserves_complete_evidence(
             "self",
             "outbound",
             "executable",
-            (6, 6),
+            (7, 7),
             "Call test_check().",
         ),
         (
@@ -150,7 +150,7 @@ def test_cold_and_warm_mixed_corpus_preserves_complete_evidence(
             "external",
             "inbound",
             "artifact",
-            (8, 8),
+            (9, 9),
             'gh issue edit 42 --body-file "artifact.md"',
         ),
     )

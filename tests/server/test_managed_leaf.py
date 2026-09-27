@@ -27,6 +27,7 @@ from autoskillit.core import (
 from autoskillit.execution.backends import CodexBackend
 from autoskillit.hooks._session_binding import (
     LoadedSkillEntry,
+    LoadedSkillOrigin,
     read_binding,
     resolve_binding_path,
 )
@@ -106,6 +107,7 @@ def test_managed_leaf_planner_and_projection_bind_only_leaf_authority() -> None:
         source_artifact_incarnation_id="incarnation-1",
         binding_valid=True,
         binding_error=None,
+        origin=LoadedSkillOrigin.AUTOSKILLIT,
     )
 
     binding = bind_managed_leaf(
@@ -287,6 +289,7 @@ async def test_leaf_env_carries_join_identity_equal_to_binding_key(tmp_path: Pat
         source_artifact_incarnation_id="incarnation-1",
         binding_valid=True,
         binding_error=None,
+        origin=LoadedSkillOrigin.AUTOSKILLIT,
     )
     projection = ManagedLeafProjection(
         binding=ManagedLeafBinding(

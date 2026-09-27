@@ -1,17 +1,20 @@
 """Semantic rule: SKILL.md declared write scope must align with recipe output_dir.
 
-The skill's declared write_paths bound a recipe output_dir. An iteration-scoped
-output_dir also requires the skill's prose write instructions to use the dynamic
-write prefix so the agent can target the narrowed directory.
+A BOUNDED write scope bounds a recipe output_dir; UNRESTRICTED and INHERIT scopes
+do not narrow it, and a skill without a valid declaration cannot be verified. An
+iteration-scoped output_dir also requires the skill's prose write instructions to
+use the dynamic write prefix so the agent can target the narrowed directory.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import assert_never
 
 import regex as re
 
-from autoskillit.core import Severity, destination_location, get_logger
+from autoskillit.core import Severity, get_logger
+from autoskillit.hooks._write_scope import WriteScopeKind, bounded_scope_contains
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._skill_helpers import _resolve_skill_md
 from autoskillit.recipe._skill_placeholder_parser import (
@@ -76,25 +79,21 @@ def _first_misaligned_write_path(content: str, output_dir: str) -> str | None:
 
 
 def _declared_boundary_error(content: str, output_dir: str, project_dir: Path) -> str | None:
-    parsed = parse_frontmatter_content(content)
-    if not parsed.is_valid or parsed.write_paths is None:
-        return None
     static_base = _static_base_prefix(output_dir)
     if not static_base or "${{" in static_base:
         return None
-    temp_root = project_dir / ".autoskillit" / "temp"
-
-    def location(path: str) -> Path:
-        expanded = path.replace("{{AUTOSKILLIT_TEMP}}", str(temp_root))
-        candidate = Path(expanded)
-        return destination_location(
-            candidate if candidate.is_absolute() else project_dir / candidate
-        )
-
-    output_location = location(static_base)
-    if any(output_location.is_relative_to(location(path)) for path in parsed.write_paths):
-        return None
-    return f"recipe output_dir {output_dir!r} is outside the skill's declared write_paths"
+    write_scope = parse_frontmatter_content(content).write_scope
+    if write_scope is None:
+        return "cannot verify output_dir: skill lacks a valid write_paths declaration"
+    match write_scope.kind:
+        case WriteScopeKind.BOUNDED:
+            if bounded_scope_contains(write_scope, static_base, str(project_dir)):
+                return None
+            return f"recipe output_dir {output_dir!r} is outside the skill's declared write scope"
+        case WriteScopeKind.UNRESTRICTED | WriteScopeKind.INHERIT:
+            return None
+        case _ as unreachable:
+            assert_never(unreachable)
 
 
 def _eligible_skill_path(ctx: ValidationContext, step: RecipeStep) -> tuple[str, str, Path] | None:
@@ -126,8 +125,9 @@ def _eligible_skill_path(ctx: ValidationContext, step: RecipeStep) -> tuple[str,
     name="skill-write-path-recipe-alignment",
     description=(
         "A SKILL.md's declared write scope does not match the recipe step's output_dir. "
-        "The output_dir must remain inside write_paths, and prose write instructions "
-        "must respect an iteration-scoped output_dir."
+        "The output_dir must remain inside a BOUNDED write scope (UNRESTRICTED and "
+        "INHERIT scopes do not narrow it), and prose write instructions must respect "
+        "an iteration-scoped output_dir."
     ),
     severity=Severity.ERROR,
 )

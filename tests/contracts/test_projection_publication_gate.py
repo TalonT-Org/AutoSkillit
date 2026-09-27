@@ -424,6 +424,7 @@ class TestProjectionRepair:
         and no obligation is pending."""
         from autoskillit.server.lifecycle._lifespan import run_startup_hook_health_check
         from autoskillit.workspace._installed._projection_cache import (
+            PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
             projected_artifact_lease_path,
             projected_artifact_manifest_path,
             projected_plugin_artifact_digest,
@@ -457,7 +458,7 @@ class TestProjectionRepair:
         manifest_path.write_text(
             json.dumps(
                 {
-                    "schema_version": 2,
+                    "schema_version": PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
                     "artifact_kind": "projection",
                     "projection_version": 2,
                     "semantic_key": "independence-test",

@@ -56,7 +56,20 @@ _SKILL_CONTRACT_REMEDIATION_DEFS = (
         kind=SkillInvalidityKind.WRITE_BOUNDARY_INVALID,
         introduced_in="0.10.1193",
         action=RemediationAction.ADVISORY,
-        hint="declare write_paths as a list of allowed AutoSkillit temp directories",
+        hint=(
+            "declare write_paths as a non-empty list of AutoSkillit temp directories, "
+            "`unrestricted` (writes outside temp), or `inherit` (no writes of its own)"
+        ),
+    ),
+    SkillContractRemediationDef(
+        kind=SkillInvalidityKind.WRITE_BOUNDARY_UNDECLARED,
+        introduced_in="0.10.1238",
+        action=RemediationAction.DETERMINISTIC,
+        hint=(
+            "declare write_paths: a non-empty list of AutoSkillit temp directories, "
+            "`unrestricted` (writes outside temp), or `inherit` (no writes of its own); "
+            "migration inserts `inherit`, which preserves pre-contract behavior"
+        ),
     ),
     SkillContractRemediationDef(
         kind=SkillInvalidityKind.FIELD_SHAPE,

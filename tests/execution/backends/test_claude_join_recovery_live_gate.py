@@ -35,6 +35,9 @@ from autoskillit.workspace import (
     write_generated_hooks_json,
 )
 from autoskillit.workspace._projected_artifact import projected_plugin_artifact_digest
+from autoskillit.workspace._projected_artifact._publication import (
+    SANITIZED_PLUGIN_MANIFEST_SCHEMA_VERSION,
+)
 from tests.conftest import production_interpreter_env
 
 pytestmark = [
@@ -143,7 +146,9 @@ def _build_projected_plugin(plugin: Path, project: Path) -> Path:
             "incarnation_id": f"live-{uuid4().hex}",
         }
     )
-    write_versioned_json(manifest_path, manifest, schema_version=2)
+    write_versioned_json(
+        manifest_path, manifest, schema_version=SANITIZED_PLUGIN_MANIFEST_SCHEMA_VERSION
+    )
     hooks_json = plugin / "hooks" / "hooks.json"
     assert hooks_json.read_text(encoding="utf-8") == render_hooks_json_text()
     assert (plugin / "skills" / "dry-walkthrough" / "SKILL.md").is_file()

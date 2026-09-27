@@ -1,5 +1,7 @@
 ---
 name: collapse-issues
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/collapse-issues/'
 categories: [github]
 uses_capabilities: [github_api_write]
 description: >

@@ -58,7 +58,7 @@ def _resolver_with_visibility_skills(tmp_path: Path):
         skill_dir = skills_dir / name
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text(
-            f"---\nname: {name}\ncategories: [{category}]\n---\n# {name}\n",
+            f"---\nname: {name}\ncategories: [{category}]\nwrite_paths: inherit\n---\n# {name}\n",
             encoding="utf-8",
         )
     resolver = DefaultSkillResolver()
@@ -228,7 +228,7 @@ def test_projection_reuses_the_single_frontmatter_parse(tmp_path: Path, monkeypa
 
     skill_md = tmp_path / "SKILL.md"
     skill_md.write_text(
-        "---\nname: parsed-once\ndescription: Parsed once.\n---\nbody\n",
+        "---\nname: parsed-once\ndescription: Parsed once.\nwrite_paths: inherit\n---\nbody\n",
         encoding="utf-8",
     )
     info = _skill_info_from_frontmatter("parsed-once", SkillSource.PROJECT_LOCAL, skill_md)
@@ -278,6 +278,7 @@ def test_projection_binding_excludes_refused_dependency_with_structured_detail(
         "description: Supported root.\n"
         "execution_role: session\n"
         "activate_deps: [dependency]\n"
+        "write_paths: inherit\n"
         "---\n"
         "Run the root.\n",
         encoding="utf-8",
@@ -291,6 +292,7 @@ def test_projection_binding_excludes_refused_dependency_with_structured_detail(
         "semantic_requirements:\n"
         "  join:\n"
         "    required: true\n"
+        "write_paths: inherit\n"
         "---\n"
         "Run the dependency.\n",
         encoding="utf-8",
@@ -452,6 +454,7 @@ def test_direct_install_projection_cache_identity_and_reuse(
         "description: Immutable projection fixture.\n"
         "execution_role: session\n"
         "uses_capabilities: []\n"
+        "write_paths: inherit\n"
         "---\n"
         "base branch: {{DEFAULT_BASE_BRANCH}}\n"
         "external skill: /autoskillit:external\n",
@@ -463,6 +466,7 @@ def test_direct_install_projection_cache_identity_and_reuse(
         "description: Supported projection fixture.\n"
         "execution_role: session\n"
         "uses_capabilities: []\n"
+        "write_paths: inherit\n"
         "---\n"
         "alpha body\n",
     )
@@ -476,6 +480,7 @@ def test_direct_install_projection_cache_identity_and_reuse(
         "semantic_requirements:\n"
         "  join:\n"
         "    required: true\n"
+        "write_paths: inherit\n"
         "---\n"
         "unavailable body\n",
     )
@@ -631,6 +636,7 @@ def test_projection_strips_all_machine_authority_and_preserves_private_deps(
         "uses_capabilities: []\n"
         "execution_role: session\n"
         "activate_deps: [dependency]\n"
+        "write_paths: inherit\n"
         "---\n"
         "public body\n",
         encoding="utf-8",
@@ -686,7 +692,7 @@ def test_projection_namespace_is_exhaustive_for_every_source(
         skill_md = tmp_path / origin.value / name / "SKILL.md"
         skill_md.parent.mkdir(parents=True, exist_ok=True)
         skill_md.write_text(
-            f"---\nname: {name}\ndescription: Fixture.\n---\n{body}\n",
+            f"---\nname: {name}\ndescription: Fixture.\nwrite_paths: inherit\n---\n{body}\n",
             encoding="utf-8",
         )
         return SkillCatalogEntry.from_skill_info(
@@ -738,6 +744,7 @@ def test_projection_never_mutates_external_canonical_sources(
         "description: External source.\n"
         "uses_capabilities: []\n"
         "execution_role: session\n"
+        "write_paths: inherit\n"
         "---\n"
         "external body\n",
         encoding="utf-8",

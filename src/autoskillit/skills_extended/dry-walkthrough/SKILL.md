@@ -1,5 +1,6 @@
 ---
 name: dry-walkthrough
+write_paths: unrestricted
 uses_capabilities: []
 requires_resources:
 - arch-constraint-catalog

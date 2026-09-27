@@ -16,7 +16,7 @@ from autoskillit.core import (
     write_versioned_json,
 )
 from autoskillit.hooks._join_ledger import active_batch, aggregate_batch, can_release_stop
-from autoskillit.hooks._session_binding import LoadedSkillEntry
+from autoskillit.hooks._session_binding import LoadedSkillEntry, LoadedSkillOrigin
 from autoskillit.pipeline import DefaultBackgroundSupervisor
 from autoskillit.server.tools.tools_execution._managed_fixed_batch import (
     DefaultManagedFixedBatchSupervisor,
@@ -62,6 +62,7 @@ def _binding(tmp_path, launch_leaf):
         source_artifact_incarnation_id="incarnation-1",
         binding_valid=True,
         binding_error=None,
+        origin=LoadedSkillOrigin.AUTOSKILLIT,
     )
     document = AgentSkillDocument(
         content="Source contract.\n",

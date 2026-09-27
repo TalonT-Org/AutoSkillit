@@ -91,7 +91,8 @@ class TestSkillMigrationAdapter:
         valid_dir.mkdir(parents=True)
         valid_path = valid_dir / "SKILL.md"
         valid_path.write_text(
-            "---\nname: valid-skill\ndescription: a clean skill\n---\nbody\n",
+            "---\nname: valid-skill\ndescription: a clean skill\n"
+            "write_paths: inherit\n---\nbody\n",
             encoding="utf-8",
         )
 
@@ -155,7 +156,8 @@ class TestSkillMigrationAdapter:
         skill_dir.mkdir(parents=True)
         skill_path = skill_dir / "SKILL.md"
         skill_path.write_text(
-            "---\nname: valid-skill\ndescription: a clean skill\n---\nbody\n",
+            "---\nname: valid-skill\ndescription: a clean skill\n"
+            "write_paths: inherit\n---\nbody\n",
             encoding="utf-8",
         )
 

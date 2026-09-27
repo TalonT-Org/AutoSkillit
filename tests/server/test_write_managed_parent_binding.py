@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from autoskillit.execution.backends import CodexBackend
+from autoskillit.hooks._session_binding import PROJECTION_MANIFEST_SCHEMA_VERSION
 from tests.server._managed_join_fixtures import isolated_state_dir, sample_attestation_only
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -46,14 +47,14 @@ def _seed_projection(home: Path, skill_name: str) -> None:
     manifest_path.write_text(
         json.dumps(
             {
-                "schema_version": 2,
+                "schema_version": PROJECTION_MANIFEST_SCHEMA_VERSION,
                 "artifact_digest": "d" * 64,
                 "incarnation_id": "test-incarnation",
                 "skills": {
                     skill_name: {
                         "join_required": True,
                         "source_artifact_digest": "d" * 64,
-                        "write_paths": None,
+                        "write_scope": "inherit",
                     }
                 },
             }
@@ -286,7 +287,7 @@ def test_write_managed_parent_binding_rejects_skill_not_projected(
     manifest_path.write_text(
         json.dumps(
             {
-                "schema_version": 2,
+                "schema_version": PROJECTION_MANIFEST_SCHEMA_VERSION,
                 "artifact_digest": "d" * 64,
                 "incarnation_id": "test-incarnation",
                 "skills": {},

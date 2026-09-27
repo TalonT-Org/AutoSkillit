@@ -143,7 +143,6 @@ _SESSION_SKILL_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
         (
             "SkillsDirectoryProvider",
             "_CANDIDATE_ROOTS",
-            "_parse_write_paths",
             "default_skill_resolver",
             "resolve_closure_write_dirs",
             "resolve_ephemeral_root",
@@ -470,17 +469,6 @@ def test_compute_skill_closure_remains_external_reexport() -> None:
     assert session_skills.compute_skill_closure is skills.compute_skill_closure, (
         "session_skills.compute_skill_closure must remain an identity-preserving "
         "re-export of workspace.skills.compute_skill_closure"
-    )
-
-
-def test_parse_write_paths_remains_provider_owned_direct_module_alias() -> None:
-    """_parse_write_paths stays directly available from session_skills and provider shard."""
-    session_skills = import_module("autoskillit.workspace.session_skills")
-    session_skill_provider = import_module("autoskillit.workspace.session_skills._provider")
-
-    assert session_skills._parse_write_paths is session_skill_provider._parse_write_paths, (
-        "session_skills._parse_write_paths must be identity-equal to provider shard's "
-        "definition; the facade must not introduce a wrapper"
     )
 
 

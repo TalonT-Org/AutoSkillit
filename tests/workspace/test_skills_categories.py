@@ -371,6 +371,7 @@ def test_stale_precontract_copy_of_bundled_tier_skill_does_not_crash_composition
         "---\n"
         "name: audit-bugs\n"
         "description: Stale pre-contract-era copy.\n"
+        "write_paths: inherit\n"
         "---\n"
         "# audit-bugs\n\n"
         'LOG_DIR="$HOME/.claude/projects/${PWD//\\//-}"\n',
@@ -452,7 +453,8 @@ def test_multi_dir_fallthrough_preserves_recipe_loader_semantics(tmp_path: Path)
     valid_dir.mkdir(parents=True)
     valid_path = valid_dir / "SKILL.md"
     valid_path.write_text(
-        "---\nname: x\ndescription: Valid lower-precedence copy.\n---\n# x\n",
+        "---\nname: x\ndescription: Valid lower-precedence copy.\n"
+        "write_paths: inherit\n---\n# x\n",
         encoding="utf-8",
     )
 

@@ -1,5 +1,6 @@
 ---
 name: smoke-task
+write_paths: unrestricted
 description: Execute an arbitrary prose task as a headless Claude session. For smoke-test pipeline use only.
 hooks:
   PreToolUse:

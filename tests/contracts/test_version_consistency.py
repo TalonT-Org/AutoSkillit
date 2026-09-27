@@ -163,6 +163,9 @@ def test_validate_sanitized_plugin_artifact_appends_finding_string_on_race(
     contract completely, with no surrounding try/except of their own."""
     from autoskillit.core.io import write_versioned_json
     from autoskillit.workspace import validate_sanitized_plugin_artifact
+    from autoskillit.workspace._projected_artifact._publication import (
+        SANITIZED_PLUGIN_MANIFEST_SCHEMA_VERSION,
+    )
 
     public_root = tmp_path / "public"
     (public_root / "skills").mkdir(parents=True)
@@ -174,7 +177,7 @@ def test_validate_sanitized_plugin_artifact_appends_finding_string_on_race(
     write_versioned_json(
         manifest_path,
         {"projection_version": 1, "skills": {}},
-        schema_version=1,
+        schema_version=SANITIZED_PLUGIN_MANIFEST_SCHEMA_VERSION,
     )
 
     inject_vanishing_subtree_on_descent(monkeypatch, vanishing)
@@ -196,6 +199,9 @@ def test_validate_sanitized_plugin_artifact_appends_finding_string_on_oserror(
     import autoskillit.core.io as io_module
     from autoskillit.core.io import write_versioned_json
     from autoskillit.workspace import validate_sanitized_plugin_artifact
+    from autoskillit.workspace._projected_artifact._publication import (
+        SANITIZED_PLUGIN_MANIFEST_SCHEMA_VERSION,
+    )
 
     public_root = tmp_path / "public"
     (public_root / "skills").mkdir(parents=True)
@@ -203,7 +209,7 @@ def test_validate_sanitized_plugin_artifact_appends_finding_string_on_oserror(
     write_versioned_json(
         manifest_path,
         {"projection_version": 1, "skills": {}},
-        schema_version=1,
+        schema_version=SANITIZED_PLUGIN_MANIFEST_SCHEMA_VERSION,
     )
 
     original_scandir = os.scandir

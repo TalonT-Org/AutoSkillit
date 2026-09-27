@@ -142,15 +142,14 @@ def _skill_info_from_frontmatter(
 
     data = parsed.data
     invalidities: list[SkillInvalidity] = []
-    absent_write_paths = object()
-    if (
-        data.get("write_paths", absent_write_paths) is not absent_write_paths
-        and parsed.write_paths is None
-    ):
+    if parsed.write_scope_issue is not None:
+        issue_kind, issue_detail = parsed.write_scope_issue
         invalidities.append(
             SkillInvalidity(
-                SkillInvalidityKind.WRITE_BOUNDARY_INVALID,
-                "write_paths must be an allowed list of write directories",
+                SkillInvalidityKind.WRITE_BOUNDARY_UNDECLARED
+                if issue_kind == "undeclared"
+                else SkillInvalidityKind.WRITE_BOUNDARY_INVALID,
+                issue_detail,
             )
         )
     categories_raw = data.get("categories", [])
@@ -259,7 +258,7 @@ def _skill_info_from_frontmatter(
         canonical_content=parsed.content,
         canonical_digest=canonical_digest,
         frontmatter=parsed,
-        write_paths=parsed.write_paths,
+        write_scope=parsed.write_scope,
         invalidities=tuple(invalidities),
     )
     # deferred import to break the cycle with _frontmatter → skill_capabilities

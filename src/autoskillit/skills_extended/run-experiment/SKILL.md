@@ -1,5 +1,6 @@
 ---
 name: run-experiment
+write_paths: unrestricted
 categories:
 - research
 uses_capabilities: []

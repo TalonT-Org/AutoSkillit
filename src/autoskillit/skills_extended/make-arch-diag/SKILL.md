@@ -1,5 +1,7 @@
 ---
 name: make-arch-diag
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/make-arch-diag/'
 categories:
 - arch-lens
 uses_capabilities: []

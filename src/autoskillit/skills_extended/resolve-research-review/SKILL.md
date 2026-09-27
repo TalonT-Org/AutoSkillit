@@ -1,5 +1,6 @@
 ---
 name: resolve-research-review
+write_paths: unrestricted
 categories:
 - research
 uses_capabilities:

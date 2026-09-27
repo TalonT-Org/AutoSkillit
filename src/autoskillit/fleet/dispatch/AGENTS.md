@@ -33,7 +33,8 @@ is now threaded via three records:
 * `SpawnContext` (mutable, owned by orchestrator, populated by Phase C
   callbacks, read by Phase D and Phase E).
 * `ExecutionResult` (returned by `run_execution`).
-* `LineagePreparationResult` (returned by `run_lineage_preparation`).
+* `LineagePreparationResult` (returned by `run_lineage_preparation`), the
+  `PriorSuccessLineageResult | ReadyLineageResult` union tagged by `outcome`.
 * `ClassificationResult` (returned by `run_outcome_classification`).
 
 `complete_failure_with_state` is a free function in `_errors.py`,

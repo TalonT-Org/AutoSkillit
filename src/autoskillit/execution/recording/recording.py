@@ -100,6 +100,8 @@ class RecordingSubprocessRunner(SubprocessRunner):
     each class wraps — the asymmetry is intentional.
     """
 
+    _mcp_middleware_registered: bool = False
+
     def __init__(
         self,
         recorder: ScenarioRecorder,
@@ -493,6 +495,7 @@ class ReplayingSubprocessRunner(SubprocessRunner):
     """
 
     _tmp_replay_dir: tempfile.TemporaryDirectory[str] | None
+    _mcp_middleware_registered: bool = False
 
     def __init__(
         self,

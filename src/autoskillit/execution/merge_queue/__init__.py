@@ -350,10 +350,8 @@ class DefaultMergeQueueWatcher:
                 return _make_result(False, classification.terminal, classification.reason)
 
             else:
-                # Unreachable: _classify_pr_state never returns TIMEOUT or ERROR.
-                # The assert_never call provides static exhaustiveness for future
-                # additions to PRState (pyright/mypy will flag any new unhandled member).
-                assert_never(classification.terminal)  # type: ignore[arg-type]
+                # mypy proves every ClassifierTerminalState member is handled above.
+                assert_never(classification.terminal)
 
         return _make_result(
             False,

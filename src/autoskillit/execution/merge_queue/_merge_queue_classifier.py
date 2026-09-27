@@ -4,11 +4,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 from autoskillit.core import PRState, get_logger
 
 logger = get_logger(__name__)
+
+ClassifierTerminalState = (
+    Literal[PRState.MERGED, PRState.EJECTED, PRState.EJECTED_CI_FAILURE, PRState.STALLED]
+    | Literal[PRState.DROPPED_HEALTHY, PRState.DROPPED_MERGE_GROUP_CI, PRState.NOT_ENROLLED]
+)
 
 # https://docs.github.com/en/graphql/reference/enums#mergestatestatus
 KNOWN_MQ_MERGE_STATE_STATUSES: frozenset[str] = frozenset(
@@ -69,7 +74,7 @@ if set(_QUERY_FIELD_MAP) != _ALL_FETCH_STATE_KEYS:
 class ClassificationResult:
     """Positive-signal classification outcome from _classify_pr_state."""
 
-    terminal: PRState
+    terminal: ClassifierTerminalState
     reason: str
 
 

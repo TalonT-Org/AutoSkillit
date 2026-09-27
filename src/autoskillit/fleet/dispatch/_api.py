@@ -445,16 +445,9 @@ async def _run_dispatch(
     if isinstance(lineage_result, DispatchResult):
         return lineage_result
     if lineage_result.outcome == "prior_success_short_circuit":
-        return lineage_result.prior_success_dispatch_result  # type: ignore[return-value]
+        return lineage_result.prior_success_dispatch_result
 
     ready = lineage_result.ready
-    if ready is None:
-        # Defensive: outcome == "prior_success_short_circuit" already returned above;
-        # any other outcome should produce a non-None ``ready``.
-        raise RuntimeError(
-            f"LineagePreparationResult.outcome={lineage_result.outcome!r} "
-            "produced a None ready record"
-        )
 
     # --- Orchestrator: tracker-lease retention ---
     # Access via the public facade (not the local top-level import) so that

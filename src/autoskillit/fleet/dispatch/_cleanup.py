@@ -46,7 +46,7 @@ async def handle_cancellation(
     spawn_ctx: SpawnContext,
     tool_ctx: ToolContext,
     effective_name: str,
-    managed_lineage_ref: ManagedHeadlessSessionLineageRef | None,
+    managed_lineage_ref: ManagedHeadlessSessionLineageRef,
     provenance: DispatchProvenanceTracker,
     marker_dir: Path | None,
     state_path: Path,
@@ -62,7 +62,7 @@ async def handle_cancellation(
         with anyio.CancelScope(shield=True):
             set_lineage_terminal_state(
                 tool_ctx,
-                managed_lineage_ref,  # type: ignore[arg-type]
+                managed_lineage_ref,
                 ManagedHeadlessSessionTerminalState.CANCELLED,
             )
     except Exception:
@@ -141,7 +141,7 @@ async def handle_cancellation(
 async def handle_generic_exception(
     *,
     tool_ctx: ToolContext,
-    managed_lineage_ref: ManagedHeadlessSessionLineageRef | None,
+    managed_lineage_ref: ManagedHeadlessSessionLineageRef,
 ) -> NoReturn:
     """Generic ``except Exception`` handler — UNSHIELDED lineage close to FAILED.
 
@@ -151,7 +151,7 @@ async def handle_generic_exception(
     try:
         set_lineage_terminal_state(
             tool_ctx,
-            managed_lineage_ref,  # type: ignore[arg-type]
+            managed_lineage_ref,
             ManagedHeadlessSessionTerminalState.FAILED,
         )
     except Exception:

@@ -233,6 +233,7 @@ def test_cat_herestring_with_review_command_is_allowed(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    """rectify #4941: a quoted `cat` herestring body is inert review text."""
     command = f"cat <<< 'gh api --method POST {_REVIEW_ROUTE}'"
     assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) is None
 

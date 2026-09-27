@@ -107,13 +107,13 @@ class TestTieredAlwaysRun:
         assert "infra" in dir_names
 
     def test_unconditional_files_constants_have_correct_counts(self) -> None:
-        """_INFRA_UNCONDITIONAL_FILES has 11 entries; hooks has 3 entries.
+        """_INFRA_UNCONDITIONAL_FILES has 12 entries; hooks has 3 entries.
 
         Pin the unconditional-files contract: a silent mutation to these
         frozensets changes the always-run behavior, so any new entry must be
         reflected here as well.
         """
-        assert len(_INFRA_UNCONDITIONAL_FILES) == 11
+        assert len(_INFRA_UNCONDITIONAL_FILES) == 12
         assert len(_HOOKS_UNCONDITIONAL_FILES) == 3
 
     def test_lint_gate_selection_contract_is_unconditional(self) -> None:

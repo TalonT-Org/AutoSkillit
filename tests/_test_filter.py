@@ -135,7 +135,11 @@ ALWAYS_RUN_AGGRESSIVE: frozenset[str] = frozenset(
 # Structural infra files that run unconditionally regardless of trigger conditions.
 # These enforce cross-cutting registration, executability, and schema contracts, plus
 # tracked-layout invariants (gate-selector coverage) whose verdict changes with file
-# moves outside the infra trigger set.
+# moves outside the infra trigger set. Gate-contract tests pinned here (e.g.
+# test_typecheck_gate.py) read tracked files like .python-version and
+# scripts/docker/verification/Dockerfile that are NOT covered by the infra trigger
+# prefixes/files, so a Dockerfile-only or .python-version-only change would otherwise
+# skip the test and let a drift pass silently.
 _INFRA_UNCONDITIONAL_FILES: frozenset[str] = frozenset(
     {
         "test_manifest_completeness.py",
@@ -149,6 +153,7 @@ _INFRA_UNCONDITIONAL_FILES: frozenset[str] = frozenset(
         "test_adr_runtime_guard_coverage.py",
         "test_plugin_source_ratchets.py",
         "test_lint_gate_selection.py",
+        "test_typecheck_gate.py",
     }
 )
 

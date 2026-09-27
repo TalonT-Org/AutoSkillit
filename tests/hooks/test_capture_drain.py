@@ -3,17 +3,16 @@
 from __future__ import annotations
 
 import hashlib
-import importlib
 import os
 import select
 import signal
 import time
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 
 import autoskillit.hooks._capture_process as capture_process
+from autoskillit.hooks._capture import _drain as drain
 from autoskillit.hooks._capture._authority import CaptureSetupError
 from autoskillit.hooks._capture._failure_policy import CaptureFailureReason
 from autoskillit.hooks._capture._runner import _write_all
@@ -25,12 +24,6 @@ from autoskillit.hooks._capture_process import (
 )
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
-
-
-def _drain_module() -> ModuleType:
-    """Load the module here so pending implementation work does not break collection."""
-
-    return importlib.import_module("autoskillit.hooks._capture._drain")
 
 
 def _spawn_shell(tmp_path: Path, command: str) -> tuple[OwnedProcessGroup, int]:
@@ -70,7 +63,6 @@ def test_same_group_pipe_holder_after_leader_exit_is_drained_to_eof_without_sign
     started = time.monotonic()
     try:
         with os.fdopen(_open_writer(tmp_path), "wb") as artifact:
-            drain = _drain_module()
             evidence = drain.drain_capture(
                 owner,
                 artifact.fileno(),
@@ -98,7 +90,7 @@ def test_runner_signal_before_eof_refuses_eof_evidence(tmp_path: Path) -> None:
             owner.signal_group(signal.SIGTERM, origin=signal_origin.RUNNER)
 
             with pytest.raises(CaptureSetupError) as raised:
-                _drain_module().drain_capture(
+                drain.drain_capture(
                     owner,
                     artifact.fileno(),
                     12_000,
@@ -122,7 +114,6 @@ def test_forwarded_signal_before_eof_still_yields_evidence(tmp_path: Path) -> No
             signal_origin = capture_process.SignalOrigin
             owner.signal_group(signal.SIGTERM, origin=signal_origin.FORWARDED)
 
-            drain = _drain_module()
             evidence = drain.drain_capture(
                 owner,
                 artifact.fileno(),
@@ -140,7 +131,7 @@ def test_forwarded_signal_before_eof_still_yields_evidence(tmp_path: Path) -> No
 
 def test_pipe_eof_evidence_is_drain_minted_only() -> None:
     with pytest.raises(TypeError):
-        _drain_module().PipeEofEvidence(
+        drain.PipeEofEvidence(
             measurement=CaptureMeasurement.from_bytes(b"complete", inline_bytes=12_000),
             write_error=None,
         )
@@ -152,7 +143,6 @@ def test_stopped_leader_during_drain_raises(tmp_path: Path) -> None:
     assert owner.stdout is not None
     try:
         with os.fdopen(_open_writer(tmp_path), "wb") as artifact:
-            drain = _drain_module()
             with pytest.raises(OwnedProcessError) as raised:
                 drain.drain_capture(
                     owner,

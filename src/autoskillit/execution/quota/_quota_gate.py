@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -280,6 +281,46 @@ def invalidate_cache(cache_path: str) -> None:
         logger.warning("quota cache invalidation failed", path=cache_path, error=str(exc))
 
 
+def _parse_quota_windows(
+    data: Mapping[str, Any],
+) -> tuple[dict[str, QuotaWindowEntry], tuple[str, ...]]:
+    """Split a usage payload into quota windows and the names of dormant windows.
+
+    Dormancy is decided by data shape, never by name: a window whose name is not in
+    ``KNOWN_QUOTA_WINDOW_NAMES`` and that reports zero utilization with no reset time
+    carries no gating signal, so it is returned in ``dormant`` instead of as a window.
+    Dormant names are therefore never added to ``KNOWN_QUOTA_WINDOW_NAMES``, which stays
+    the list of windows with known gating semantics; a dormant window becomes an ordinary
+    window once the API reports utilization or a reset time for it. The rule is limited
+    to zero utilization because an exhausted window without a reset time must still block
+    through the binding fallback. No long/short semantics are assigned to dormant windows.
+    """
+    windows: dict[str, QuotaWindowEntry] = {}
+    dormant: list[str] = []
+    for name, w in data.items():
+        if not isinstance(w, dict) or w.get("utilization") is None:
+            continue
+        try:
+            utilization = float(w["utilization"])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"quota window {name!r} has non-numeric utilization {w['utilization']!r}"
+            ) from exc
+        entry = QuotaWindowEntry(
+            utilization=utilization,
+            resets_at=_parse_resets_at(w.get("resets_at")),
+        )
+        if (
+            name not in KNOWN_QUOTA_WINDOW_NAMES
+            and entry.utilization == 0.0
+            and entry.resets_at is None
+        ):
+            dormant.append(name)
+            continue
+        windows[name] = entry
+    return windows, tuple(dormant)
+
+
 async def _fetch_quota(
     credentials_path: str,
     *,
@@ -302,17 +343,9 @@ async def _fetch_quota(
             },
         )
     resp.raise_for_status()
-    data = resp.json()
-    windows: dict[str, QuotaWindowEntry] = {}
-    for name, w in data.items():
-        if isinstance(w, dict) and "utilization" in w:
-            raw_util = w["utilization"]
-            if raw_util is None:
-                continue
-            windows[name] = QuotaWindowEntry(
-                utilization=float(raw_util),
-                resets_at=_parse_resets_at(w.get("resets_at")),
-            )
+    windows, dormant = _parse_quota_windows(resp.json())
+    if dormant:
+        logger.debug("quota_dormant_windows_ignored", dormant_windows=sorted(dormant))
     novel = {name for name in windows if name not in KNOWN_QUOTA_WINDOW_NAMES}
     if novel:
         logger.warning(

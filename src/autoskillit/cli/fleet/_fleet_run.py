@@ -286,6 +286,7 @@ def fleet_run(
     Dispatches a single recipe run non-interactively. Prints the dispatch
     result envelope as JSON on stdout. Exit 0 on SUCCESS, nonzero otherwise.
     """
+    from autoskillit.cli.ui._terminal_logging import TerminalLogPolicy, apply_terminal_logging
     from autoskillit.core import (
         NativeShellCaptureReason,
         pop_native_shell_capture_decision,
@@ -301,6 +302,7 @@ def fleet_run(
         )
 
     cfg, ingredients = _fleet_run_preflight(ingredient, backend)
+    apply_terminal_logging(cfg.logging, TerminalLogPolicy.HEADLESS)
 
     # --- Run dispatch ---
     import asyncio

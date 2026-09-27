@@ -50,13 +50,16 @@ writes `review_approach_assessment.json` to the planner directory. Does NOT invo
 - **$1** — Absolute path to `refined_wps.json` (PlanDocument with `task`, `work_packages[]`)
 - **$2** — Absolute path to the planner output directory (for `analysis.json` and output)
 
+Use the literal absolute directory supplied as `$2` as `{output_dir}` in every
+path below. Substitute that directory before making any tool call.
+
 ## Critical Constraints
 
 **NEVER:**
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
 - Invoke `review-approach` — this skill performs assessment only
-- Write output outside `$2/`
+- Write output outside `{output_dir}/`
 - Modify input files
 - Detach child delegations instead of joining them (joining every child is required)
 - Start independent child delegations sequentially
@@ -66,8 +69,8 @@ writes `review_approach_assessment.json` to the planner directory. Does NOT invo
 **ALWAYS:**
 - Consult the provided **Review-Approach Benefit Criteria** before assessing
 - Read `$1` to get `task` and `work_packages[]`
-- Read `$2/analysis.json` for codebase technology context
-- Write `$2/review_approach_assessment.json`
+- Read `{output_dir}/analysis.json` for codebase technology context
+- Write `{output_dir}/review_approach_assessment.json`
 - Emit: `review_approach_assessment_path = <absolute path to review_approach_assessment.json>`
 - Start all independent child delegations before awaiting any result to maximize concurrency
 
@@ -80,7 +83,7 @@ for when review-approach provides value, while applying judgment to the concrete
 
 ### Step 2: Read inputs
 
-Read `$1` to extract the `task` field and `work_packages[]` list. Read `$2/analysis.json`
+Read `$1` to extract the `task` field and `work_packages[]` list. Read `{output_dir}/analysis.json`
 for codebase technology context: available libraries, architectural patterns in use, and
 established conventions. This context informs whether a WP is "following established patterns"
 (no-benefit) versus "introducing something new" (benefit signal).
@@ -102,7 +105,7 @@ Per WP, produce: `review_approach_recommended` (bool) and `review_approach_reaso
 
 ### Step 4: Write output
 
-Write `$2/review_approach_assessment.json`:
+Write `{output_dir}/review_approach_assessment.json`:
 
 ```json
 {
@@ -122,16 +125,16 @@ Example path: `{{AUTOSKILLIT_TEMP}}/planner/run-20260502-120000/review_approach_
 ### Step 5: Emit output token
 
 ```
-review_approach_assessment_path = $2/review_approach_assessment.json
+review_approach_assessment_path = {output_dir}/review_approach_assessment.json
 ```
 
 ## Context Limit Behavior
 
-This skill writes `$2/review_approach_assessment.json` before emitting structured output
+This skill writes `{output_dir}/review_approach_assessment.json` before emitting structured output
 tokens. If context is exhausted mid-execution:
 
 1. Before emitting any structured output tokens, verify that `review_approach_assessment.json`
-   exists in `$2/`.
+   exists in `{output_dir}/`.
 2. If the file exists, emit the structured token and exit normally.
 3. If context exhaustion interrupts before the file is written, the caller's
    `on_context_limit` routing handles escalation — do not attempt partial output.

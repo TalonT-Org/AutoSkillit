@@ -93,6 +93,7 @@ def _install_order_harness(
     backend = _RoutingBackend(backend_name, events)
     real_config = _config.load_config(tmp_path)
     config = MagicMock(wraps=real_config)
+    config.logging = real_config.logging
     config.subsets = SimpleNamespace(disabled=["github"])
     config.packs = SimpleNamespace(enabled=["kitchen-core"])
 

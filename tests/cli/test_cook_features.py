@@ -11,6 +11,7 @@ import pytest
 import autoskillit.cli._preview as _patch_cli__preview
 import autoskillit.cli.ui._ansi as _patch_ui__ansi
 from autoskillit import cli
+from autoskillit.config import LoggingConfig
 from tests.cli._interactive_process import configure_popen
 from tests.cli.conftest import _GITHUB_RECIPE_YAML
 
@@ -43,6 +44,7 @@ class TestOrderSubsetGate:
         mock_cfg = MagicMock()
         mock_cfg.subsets.disabled = disabled
         mock_cfg.agent_backend.backend = "claude-code"
+        mock_cfg.logging = LoggingConfig()
         return mock_cfg
 
     @patch("autoskillit.cli.subprocess.Popen")

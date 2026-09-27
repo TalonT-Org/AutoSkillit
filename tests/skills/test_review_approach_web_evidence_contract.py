@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import pytest
@@ -87,4 +86,4 @@ def test_completion_outcomes_are_explicit(
 def test_every_exit_preserves_report_and_output_token(skill_text: str) -> None:
     assert "Every completion branch, including retryable failure" in skill_text
     assert "writes the review report" in skill_text
-    assert re.search(r"review_path\s*=\s*\{absolute_path_to_review_file\}", skill_text)
+    assert "review_path = {output_dir}/review_approach_{topic}_{run_id}.md" in skill_text

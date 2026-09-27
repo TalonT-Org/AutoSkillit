@@ -8,3 +8,5 @@ The package initializer remains import-free. Every CLI `input()` must go through
 ## Architecture Notes
 
 `_timed_input.py` is the lowest-level primitive; `_menu.py` depends on it. `_terminal.py` is independent. The `timed_prompt()` contract is enforced by `test_input_tty_contracts.py`.
+
+`_terminal_logging.py` is independent (imports `config` and `core`); it is the sole terminal log-level policy, guarded by `tests/arch/test_launch_terminal_logging.py`.

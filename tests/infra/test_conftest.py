@@ -245,7 +245,8 @@ def test_reset_structlog_autouse_removed():
     """_reset_structlog must not exist as a module-level fixture in conftest.
 
     It was vestigial — TestConfigureLogging in test_logging.py already owns
-    its class-scoped structlog reset. Other tests never call configure_logging().
+    its class-scoped structlog reset. configure_logging() is exercised by
+    TestConfigureLogging and by launch-command tests that patch it.
     """
     import tests.conftest as conftest_module
 

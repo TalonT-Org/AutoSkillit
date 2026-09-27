@@ -121,7 +121,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # (co-owned with Claude plugin system). The shared lease-held hook transaction at line 324
     # rewrites hooks.json for both cache and projection artifacts. Manifest refresh stays
     # versioned separately.
-    ("src/autoskillit/workspace/_projected_artifact/_hook_repair.py", 324),
+    ("src/autoskillit/workspace/_projected_artifact/_hook_repair.py", 359),
     # tools_kitchen/_hook_config.py — hook config, quota guard, and git_ops_policy
     ("src/autoskillit/server/tools/tools_kitchen/_hook_config.py", 101),
     ("src/autoskillit/server/tools/tools_kitchen/_hook_config.py", 120),

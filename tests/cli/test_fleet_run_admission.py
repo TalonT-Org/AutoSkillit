@@ -18,6 +18,7 @@ import pytest
 
 import autoskillit.cli.fleet._fleet_run as _patch_fleet__fleet_run
 import autoskillit.cli.session._session_launch as _patch_session__session_launch
+from autoskillit.config import LoggingConfig
 from autoskillit.fleet import (
     DispatchCompleted,
     DispatchEffectProvenance,
@@ -30,6 +31,7 @@ pytestmark = [
     pytest.mark.layer("cli"),
     pytest.mark.medium,
     pytest.mark.feature("fleet"),
+    pytest.mark.usefixtures("_stub_configure_logging"),
 ]
 
 _TEST_PROVENANCE = DispatchEffectProvenance(operation_id="fleet-admission-test")
@@ -286,6 +288,7 @@ class TestFleetRunCliAdmission:
                 {
                     "features": {"fleet": True, "fleet_headless_run": True},
                     "experimental_enabled": True,
+                    "logging": LoggingConfig(),
                 },
             )(),
         )

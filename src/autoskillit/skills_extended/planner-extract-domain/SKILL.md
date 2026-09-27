@@ -46,6 +46,8 @@ Extract domain knowledge, naming conventions, and structural patterns specific t
 
 - **$1** — Absolute path to `analysis.json` produced by `planner-analyze`
 - **$2** — Absolute path to a file containing the task description. When provided and non-empty, focus domain extraction on areas relevant to the stated task. When empty, perform a full-codebase survey.
+- **{input_dir}** — Locally bound literal directory containing the input file passed as
+  `$1`; not an additional positional argument.
 
 ## Critical Constraints
 
@@ -127,4 +129,4 @@ Merge all agent outputs into a coherent `domain_knowledge.md` Markdown document 
 
 ### Step 4: Write output (non-fatal)
 
-Write to `$(dirname $1)/domain_knowledge.md`. If any step fails, log a warning to stdout and exit with code 0 — do not propagate the error to the recipe.
+Write to `{input_dir}/domain_knowledge.md`. If any step fails, log a warning to stdout and exit with code 0 — do not propagate the error to the recipe.

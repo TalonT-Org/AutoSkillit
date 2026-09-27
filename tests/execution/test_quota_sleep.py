@@ -12,6 +12,7 @@ import pytest
 
 import autoskillit.execution.quota._quota_gate as _patch_quota__quota_gate
 from tests._helpers import make_quota_guard_config
+from tests.fixtures.startup_steady_state import DORMANT_QUOTA_WINDOW, fake_quota_http_client
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -551,31 +552,6 @@ class TestFetchQuotaNovelWindowWarning:
     KNOWN_QUOTA_WINDOW_NAMES. This surfaces Anthropic API vocabulary drift in
     operator logs without disrupting the pipeline."""
 
-    @staticmethod
-    def _make_fake_httpx_client(api_response: dict):
-        """Return a fake httpx.AsyncClient instance that serves api_response for GET requests."""
-
-        class FakeResponse:
-            status_code = 200
-
-            def json(self):
-                return api_response
-
-            def raise_for_status(self):
-                pass
-
-        class FakeClient:
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *a):
-                pass
-
-            async def get(self, *a, **kw):
-                return FakeResponse()
-
-        return FakeClient()
-
     @pytest.mark.anyio
     async def test_novel_window_name_logs_warning(self, monkeypatch):
         """An unknown window name in the API response must produce a warning log entry."""
@@ -591,9 +567,7 @@ class TestFetchQuotaNovelWindowWarning:
         }
         cfg = QuotaGuardConfig()
 
-        monkeypatch.setattr(
-            "httpx.AsyncClient", lambda **kw: self._make_fake_httpx_client(api_response)
-        )
+        monkeypatch.setattr("httpx.AsyncClient", lambda **kw: fake_quota_http_client(api_response))
         monkeypatch.setattr(
             _patch_quota__quota_gate,
             "_read_credentials",
@@ -635,9 +609,7 @@ class TestFetchQuotaNovelWindowWarning:
         }
         cfg = QuotaGuardConfig()
 
-        monkeypatch.setattr(
-            "httpx.AsyncClient", lambda **kw: self._make_fake_httpx_client(api_response)
-        )
+        monkeypatch.setattr("httpx.AsyncClient", lambda **kw: fake_quota_http_client(api_response))
         monkeypatch.setattr(
             _patch_quota__quota_gate,
             "_read_credentials",
@@ -660,6 +632,118 @@ class TestFetchQuotaNovelWindowWarning:
         assert not novel_warnings, (
             f"Unexpected novel-window warnings for known windows: {novel_warnings}"
         )
+
+
+async def _fetch_quota_capturing(monkeypatch, api_response: dict) -> tuple[list, object]:
+    import structlog.testing
+
+    from autoskillit.config.settings import QuotaGuardConfig
+    from autoskillit.execution.quota import _fetch_quota
+
+    cfg = QuotaGuardConfig()
+    monkeypatch.setattr("httpx.AsyncClient", lambda **kw: fake_quota_http_client(api_response))
+    monkeypatch.setattr(_patch_quota__quota_gate, "_read_credentials", lambda path: "fake-token")
+    with structlog.testing.capture_logs() as cap:
+        result = await _fetch_quota(
+            cfg.credentials_path,
+            short_threshold=cfg.short_window_threshold,
+            long_threshold=cfg.long_window_threshold,
+            long_patterns=cfg.long_window_patterns,
+            short_enabled=cfg.short_window_enabled,
+            long_enabled=cfg.long_window_enabled,
+        )
+    return cap, result
+
+
+class TestQuotaWindowDormancy:
+    """An unknown window with zero utilization and no reset time carries no gating signal."""
+
+    @pytest.mark.parametrize(
+        ("name", "entry", "is_window", "is_dormant"),
+        [
+            pytest.param(
+                "nimbus_quill", DORMANT_QUOTA_WINDOW, False, True, id="unknown-float-zero-null"
+            ),
+            pytest.param(
+                "nimbus_quill",
+                {"utilization": 0, "resets_at": None},
+                False,
+                True,
+                id="unknown-int-zero-null",
+            ),
+            pytest.param(
+                "nimbus_quill",
+                {"utilization": 0.0, "resets_at": "2030-01-01T00:00:00Z"},
+                True,
+                False,
+                id="unknown-zero-with-reset",
+            ),
+            pytest.param(
+                "nimbus_quill",
+                {"utilization": 0.5, "resets_at": None},
+                True,
+                False,
+                id="unknown-used-null-reset",
+            ),
+            pytest.param("five_hour", DORMANT_QUOTA_WINDOW, True, False, id="known-zero-null"),
+            pytest.param(
+                "nimbus_quill", {"utilization": None}, False, False, id="null-utilization"
+            ),
+            pytest.param("nimbus_quill", "not-a-window", False, False, id="non-dict"),
+            pytest.param(
+                "nimbus_quill", {"resets_at": None}, False, False, id="missing-utilization"
+            ),
+        ],
+    )
+    def test_windows_are_classified_by_data_shape(
+        self, name: str, entry: object, is_window: bool, is_dormant: bool
+    ) -> None:
+        windows, dormant = _patch_quota__quota_gate._parse_quota_windows({name: entry})
+
+        assert (name in windows) is is_window
+        assert (name in dormant) is is_dormant
+
+    @pytest.mark.parametrize("utilization", ["high", [0.5]], ids=["value-error", "type-error"])
+    def test_non_numeric_utilization_names_the_window(self, utilization: object) -> None:
+        with pytest.raises(ValueError, match="quota window 'five_hour'") as excinfo:
+            _patch_quota__quota_gate._parse_quota_windows(
+                {"five_hour": {"utilization": utilization, "resets_at": None}}
+            )
+
+        assert isinstance(excinfo.value.__cause__, (TypeError, ValueError))
+
+    @pytest.mark.anyio
+    async def test_dormant_unknown_window_is_silent_and_non_binding(self, monkeypatch):
+        cap, result = await _fetch_quota_capturing(
+            monkeypatch,
+            {
+                "nimbus_quill": DORMANT_QUOTA_WINDOW,
+                "five_hour": DORMANT_QUOTA_WINDOW,
+                "seven_day": DORMANT_QUOTA_WINDOW,
+            },
+        )
+
+        assert not [rec for rec in cap if "novel_windows" in rec]
+        assert [
+            (rec["log_level"], rec["dormant_windows"])
+            for rec in cap
+            if rec.get("event") == "quota_dormant_windows_ignored"
+        ] == [("debug", ["nimbus_quill"])]
+        assert "nimbus_quill" not in result.windows
+        assert result.binding.window_name != "nimbus_quill"
+
+    @pytest.mark.anyio
+    async def test_unknown_null_reset_window_with_utilization_still_warns(self, monkeypatch):
+        cap, result = await _fetch_quota_capturing(
+            monkeypatch, {"mystery": {"utilization": 0.4, "resets_at": None}}
+        )
+
+        assert [
+            rec["novel_windows"]
+            for rec in cap
+            if rec.get("log_level") == "warning" and "novel_windows" in rec
+        ] == [["mystery"]]
+        assert "mystery" in result.windows
 
 
 class TestProviderBypass:

@@ -19,7 +19,7 @@ import autoskillit.cli.session._session_launch as _patch_session__session_launch
 import autoskillit.cli.session._session_order as _patch_session__session_order
 import autoskillit.cli.session._session_process as _patch_session__session_process
 from autoskillit import cli
-from autoskillit.config import ProcessTetherConfig
+from autoskillit.config import LoggingConfig, ProcessTetherConfig
 from autoskillit.core import ClaudeFlags, InteractiveInvocationValidation, PreLaunchReadiness
 from tests.cli._cook_launch_helpers import cook_attempt_result
 from tests.cli._interactive_process import InteractiveProcessStub, configure_popen
@@ -33,6 +33,7 @@ pytestmark = [
 ]
 
 
+@pytest.mark.usefixtures("_stub_configure_logging")
 class TestCLIOrderCommand:
     @pytest.fixture(autouse=True)
     def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -583,6 +584,7 @@ class TestCLIOrderCommand:
         mock_config.model.default_model = "fixture-default-model"
         mock_config.branching.default_base_branch = "develop"
         mock_config.workspace.temp_dir = ".autoskillit/temp"
+        mock_config.logging = LoggingConfig()
         monkeypatch.setattr("autoskillit.config.load_config", lambda *_a, **_kw: mock_config)
         monkeypatch.setattr(
             _patch_session__session_backend,

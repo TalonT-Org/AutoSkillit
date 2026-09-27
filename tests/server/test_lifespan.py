@@ -310,6 +310,86 @@ def test_startup_logs_quarantined_hook_payloads_only_on_first_pass(
     } & {entry.get("event") for entry in second_logs}
 
 
+_HOOK_REPAIR_OUTCOME_POLICY = {
+    "repaired": ("info", "hooks_repaired_at_startup"),
+    "contended": ("debug", "hooks_repair_contended_at_startup"),
+    "quarantined": ("warning", "hooks_quarantined_at_startup"),
+    "failed": ("error", "hooks_repair_failed_at_startup"),
+}
+
+
+@pytest.mark.parametrize("scope", ["plugin_cache", "projection"])
+@pytest.mark.parametrize("status", sorted(_HOOK_REPAIR_OUTCOME_POLICY))
+def test_hook_repair_outcome_levels_are_declared(status: str, scope: str) -> None:
+    from autoskillit.server.lifecycle._lifespan._startup_checks import _log_hook_repair_outcome
+    from autoskillit.workspace import PluginHookRepairOutcome, PluginHookRepairStatus
+    from tests._helpers import _flush_structlog_proxy_caches
+
+    assert set(_HOOK_REPAIR_OUTCOME_POLICY) == set(PluginHookRepairStatus)
+    level, event_suffix = _HOOK_REPAIR_OUTCOME_POLICY[status]
+    outcome = PluginHookRepairOutcome(
+        incarnation_dir=Path("/x"),
+        status=PluginHookRepairStatus(status),
+        detail="d",
+    )
+
+    _flush_structlog_proxy_caches()
+    try:
+        with structlog.testing.capture_logs() as logs:
+            _log_hook_repair_outcome(outcome, scope)
+    finally:
+        _flush_structlog_proxy_caches()
+
+    assert [(entry["event"], entry["log_level"]) for entry in logs] == [
+        (f"{scope}_{event_suffix}", level)
+    ]
+
+
+def test_startup_install_state_levels_follow_severity(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Only actionable findings warn at startup; each message carries its own remediation."""
+    import autoskillit.server.lifecycle._lifespan._startup_checks as startup_checks
+    from autoskillit.core import Severity
+    from autoskillit.workspace import InstallStateFinding
+    from tests._helpers import _flush_structlog_proxy_caches
+
+    findings = (
+        InstallStateFinding(Severity.ERROR, "actionable", "Run `autoskillit install`."),
+        InstallStateFinding(Severity.WARNING, "retained_evidence", "Retained for diagnosis."),
+        InstallStateFinding(Severity.INFO, "informational", "Nothing to do."),
+    )
+    monkeypatch.setattr(startup_checks, "verify_install_state", lambda: findings)
+
+    _flush_structlog_proxy_caches()
+    try:
+        with structlog.testing.capture_logs() as logs:
+            checks = startup_checks.run_startup_install_state_check()
+    finally:
+        _flush_structlog_proxy_caches()
+
+    assert checks == ["actionable", "retained_evidence", "informational"]
+    assert [
+        (entry["event"], entry["log_level"], entry["check"], entry["severity"], entry["message"])
+        for entry in logs
+    ] == [
+        (
+            "install_state_inconsistent",
+            "warning",
+            "actionable",
+            Severity.ERROR,
+            findings[0].message,
+        ),
+        (
+            "install_state_diagnostic",
+            "info",
+            "retained_evidence",
+            Severity.WARNING,
+            findings[1].message,
+        ),
+        ("install_state_diagnostic", "info", "informational", Severity.INFO, findings[2].message),
+    ]
+    assert not [entry for entry in logs if "remediation" in entry]
+
+
 def test_serve_startup_regenerates_on_hash_mismatch(tmp_path: Path, monkeypatch) -> None:
     """run_startup_drift_check() regenerates hooks.json when hash is mismatched."""
     import json as _json

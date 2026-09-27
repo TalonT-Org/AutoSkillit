@@ -314,6 +314,34 @@ class TestConfigureLogging:
         logger.info("should_appear")
         assert "should_appear" in buf.getvalue()
 
+    def test_pre_configure_emission_does_not_freeze_proxy(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A record emitted before configure_logging() must not pin the proxy."""
+        import autoskillit.core.logging as logging_mod
+
+        pre_buf = io.StringIO()
+        monkeypatch.setattr(sys, "stderr", pre_buf)
+        structlog.reset_defaults()
+        logging_mod = importlib.reload(logging_mod)
+        assert structlog.get_config()["cache_logger_on_first_use"] is False
+
+        lg = logging_mod.get_logger("autoskillit.test.cache_trap")
+        lg.info("pre_configure_probe")
+
+        post_buf = io.StringIO()
+        logging_mod.configure_logging(level=logging.WARNING, json_output=False, stream=post_buf)
+        assert structlog.get_config()["cache_logger_on_first_use"] is True
+        lg.info("post_info_probe")
+        lg.warning("post_warning_probe")
+
+        assert "pre_configure_probe" in pre_buf.getvalue()
+        assert "post_info_probe" not in pre_buf.getvalue()
+        assert "post_info_probe" not in post_buf.getvalue()
+        assert "post_warning_probe" in post_buf.getvalue()
+        assert "post_warning_probe" not in pre_buf.getvalue()
+
     def test_pre_boot_configure_has_wrapper_class(self):
         """Module-level structlog.configure() must include wrapper_class for defense-in-depth."""
         import importlib
@@ -355,6 +383,17 @@ class TestContextVarBinding:
             structlog.get_logger().info("after_clear")
         assert logs, "Expected at least one log record"
         assert "tool" not in logs[0]
+
+
+_EXPECTED_PLUGIN_ARTIFACT_OUTCOME_LEVELS = {
+    "succeeded": "info",
+    "already_queued": "debug",
+    "deferred_contended": "debug",
+    "deferred_io_error": "warning",
+    "deferred_unreadable_queue": "warning",
+    "rejected_identity": "warning",
+    "failed_validation": "warning",
+}
 
 
 class TestPluginArtifactLifecycleLogging:
@@ -401,7 +440,7 @@ class TestPluginArtifactLifecycleLogging:
             owner.close()
 
         assert [entry["action"] for entry in logs] == ["retire", "release"]
-        assert logs[0]["log_level"] == "warning"
+        assert logs[0]["log_level"] == "debug"
         assert logs[1]["log_level"] == "info"
         assert logs[0]["not_before"] == deadline.isoformat()
         assert logs[0]["contention_detail"] == "reader active"
@@ -409,3 +448,73 @@ class TestPluginArtifactLifecycleLogging:
         assert isinstance(logs[0]["actor_pid"], int)
         assert all(entry["event"] == "plugin_artifact_lifecycle" for entry in logs)
         assert lease.close_calls == 1
+
+    def test_interactive_baseline_hides_success_shows_failure(self) -> None:
+        from autoskillit.core.logging import (
+            configure_logging,
+            get_logger,
+            log_plugin_artifact_lifecycle,
+        )
+
+        buf = io.StringIO()
+        try:
+            configure_logging(level=logging.WARNING, json_output=False, stream=buf)
+            _flush_logger_proxy_caches()
+            logger = get_logger("autoskillit.test.lifecycle")
+            for outcome in (
+                "succeeded",
+                "already_queued",
+                "deferred_contended",
+                "deferred_io_error",
+            ):
+                log_plugin_artifact_lifecycle(
+                    logger,
+                    action="acquire",
+                    outcome=outcome,
+                    artifact_kind="projection",
+                    semantic_key="semantic",
+                    incarnation="incarnation",
+                )
+        finally:
+            structlog.reset_defaults()
+            _flush_logger_proxy_caches()
+
+        rendered = buf.getvalue().splitlines()
+        assert len(rendered) == 1
+        assert "deferred_io_error" in rendered[0]
+
+    def test_outcome_level_table_is_the_declared_policy(self) -> None:
+        from autoskillit.core.logging import _PLUGIN_ARTIFACT_OUTCOME_LEVELS
+
+        assert dict(_PLUGIN_ARTIFACT_OUTCOME_LEVELS) == _EXPECTED_PLUGIN_ARTIFACT_OUTCOME_LEVELS
+
+    @pytest.mark.parametrize(
+        ("outcome", "level"), sorted(_EXPECTED_PLUGIN_ARTIFACT_OUTCOME_LEVELS.items())
+    )
+    def test_each_outcome_emits_at_its_declared_level(self, outcome: str, level: str) -> None:
+        from autoskillit.core.logging import get_logger, log_plugin_artifact_lifecycle
+
+        with structlog.testing.capture_logs() as logs:
+            log_plugin_artifact_lifecycle(
+                get_logger("autoskillit.plugin-test"),
+                action="reclaim",
+                outcome=outcome,
+                artifact_kind="projection",
+                semantic_key="semantic",
+                incarnation="incarnation",
+            )
+
+        assert [(entry["outcome"], entry["log_level"]) for entry in logs] == [(outcome, level)]
+
+    def test_unknown_outcome_is_rejected(self) -> None:
+        from autoskillit.core.logging import get_logger, log_plugin_artifact_lifecycle
+
+        with pytest.raises(ValueError, match="unsupported plugin artifact lifecycle outcome"):
+            log_plugin_artifact_lifecycle(
+                get_logger("autoskillit.plugin-test"),
+                action="reclaim",
+                outcome="vanished",
+                artifact_kind="projection",
+                semantic_key="semantic",
+                incarnation="incarnation",
+            )

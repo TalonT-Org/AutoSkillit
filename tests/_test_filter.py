@@ -1159,6 +1159,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_orchestrator_guidance_admission.py",
             "server/test_server_init_gate.py",
             "server/test_consumer_tool_callability.py",
+            "server/test_lifespan.py",
             # live gate copies the production --plugin-dir projection
             "server/test_claude_explorer_live_gate.py",
             "smoke_utils",

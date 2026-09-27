@@ -11,8 +11,8 @@ Two public entry points:
 
 ``verify_install_state()``
     Pure inspection. Returns one structured finding per violated invariant.
-    Wired into ``doctor``, MCP server startup, and post-install verification, so
-    it cannot rot into a function nobody calls.
+    Wired into ``doctor`` and MCP server startup, so it cannot rot into a
+    function nobody calls.
 
 ``reconcile_install_artifacts()``
     Repair. Consumes ``RETIRED_INSTALL_ARTIFACT_SHAPES`` and removes artifacts
@@ -30,7 +30,6 @@ the stdlib reader that exists precisely so any layer can ask this question.
 from __future__ import annotations
 
 import importlib.metadata
-import json
 import shutil
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -71,7 +70,6 @@ from ._artifact import (
 
 __all__ = [
     "InstallStateFinding",
-    "marketplace_plugin_root",
     "reconcile_install_artifacts",
     "verify_install_state",
 ]
@@ -81,31 +79,6 @@ logger = get_logger(__name__)
 
 def _home() -> Path:
     return Path.home()
-
-
-def marketplace_plugin_root() -> Path:
-    """Return the public marketplace plugin root we materialize at install time."""
-    return _home() / ".autoskillit" / "marketplace" / "plugins" / "autoskillit"
-
-
-def _marketplace_manifest() -> Path:
-    return _home() / ".autoskillit" / "marketplace" / ".claude-plugin" / "marketplace.json"
-
-
-def _read_json_version(path: Path, *, key: str) -> str | None:
-    """Return a version string from a JSON file, or None when unavailable."""
-    try:
-        data = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError):
-        return None
-    if key == "plugins":
-        plugins = data.get("plugins") if isinstance(data, dict) else None
-        if isinstance(plugins, list) and plugins and isinstance(plugins[0], dict):
-            version = plugins[0].get("version")
-            return version if isinstance(version, str) else None
-        return None
-    version = data.get(key) if isinstance(data, dict) else None
-    return version if isinstance(version, str) else None
 
 
 def _current_install_state_spec() -> InstallStateSpec:
@@ -226,9 +199,6 @@ def verify_install_state() -> tuple[InstallStateFinding, ...]:
     #    the same incarnation.
     findings.extend(_retirement_cache_findings(home))
 
-    # 4. Version agreement, one finding per derived file (see module docstring).
-    findings.extend(_derived_version_findings(importlib.metadata.version("autoskillit")))
-
     return tuple(findings)
 
 
@@ -348,33 +318,6 @@ def _has_retired_shape(artifact: Path, shape: str) -> bool:
                 f"unknown retired artifact shape {shape!r} for {artifact} — "
                 "RETIRED_INSTALL_ARTIFACT_SHAPES and this reconciler must stay in step"
             )
-
-
-def _derived_version_findings(package_version: str) -> list[InstallStateFinding]:
-    """Report each derived version file that disagrees with the package version."""
-    derived: tuple[tuple[str, Path, str], ...] = (
-        ("marketplace_manifest_version", _marketplace_manifest(), "plugins"),
-        (
-            "marketplace_plugin_version",
-            marketplace_plugin_root() / ".claude-plugin" / "plugin.json",
-            "version",
-        ),
-    )
-    findings: list[InstallStateFinding] = []
-    for check, path, key in derived:
-        if not path.is_file():
-            continue
-        observed = _read_json_version(path, key=key)
-        if observed is not None and observed != package_version:
-            findings.append(
-                InstallStateFinding(
-                    Severity.ERROR,
-                    check,
-                    f"{path} reports version {observed} but the running package is "
-                    f"{package_version}. Run `autoskillit install` to refresh it.",
-                )
-            )
-    return findings
 
 
 def _enqueue_legacy_installed_plugin_versions(

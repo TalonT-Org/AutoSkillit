@@ -558,7 +558,7 @@ class TestLoggingConfig:
     def test_logging_config_defaults(self, tmp_path):
         """LOG_C1: LoggingConfig has correct defaults from defaults.yaml."""
         cfg = load_config(tmp_path)
-        assert cfg.logging.level == "INFO"
+        assert cfg.logging.level is None
         assert cfg.logging.json_output is None
 
     def test_logging_config_from_yaml(self, tmp_path):
@@ -600,13 +600,13 @@ class TestLoggingConfig:
 
         (config_dir / "config.yaml").write_text(yaml.dump(config_data))
         cfg = load_config(tmp_path)
-        assert cfg.logging.level == "INFO"
+        assert cfg.logging.level is None
         assert cfg.logging.json_output is None
 
     def test_automation_config_has_logging_field(self):
         """LOG_C7: AutomationConfig has logging sub-config."""
         cfg = AutomationConfig()
-        assert cfg.logging.level == "INFO"
+        assert cfg.logging.level is None
         assert cfg.logging.json_output is None
 
     def test_logging_config_fields(self):
@@ -617,6 +617,44 @@ class TestLoggingConfig:
 
         names = {f.name for f in dc_fields(LoggingConfig)}
         assert names == {"level", "json_output"}
+
+    def test_logging_config_explicit_null_is_unset(self, tmp_path):
+        """LOG_C9: An explicit null level is the per-command-baseline sentinel."""
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text("logging:\n  level: null\n")
+        cfg = load_config(tmp_path)
+        assert cfg.logging.level is None
+
+    @pytest.mark.parametrize("raw_level", ["verbose", "30", "0", "TRACE", "NOTSET"])
+    def test_logging_config_rejects_unknown_level(self, tmp_path, raw_level):
+        """LOG_C10: Unknown level names fail config load instead of falling back."""
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text(f"logging:\n  level: {raw_level}\n")
+        with pytest.raises(ConfigSchemaError, match="logging.level"):
+            load_config(tmp_path)
+
+    def test_logging_config_direct_construction_validates(self):
+        """LOG_C11: Direct construction validates the level name."""
+        from autoskillit.config.settings import LoggingConfig
+
+        with pytest.raises(ConfigSchemaError, match="logging.level"):
+            LoggingConfig(level="TRACE")
+
+    def test_logging_config_accepts_critical(self, tmp_path):
+        """LOG_C12: CRITICAL remains a valid level name."""
+        config_dir = tmp_path / ".autoskillit"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text("logging:\n  level: critical\n")
+        cfg = load_config(tmp_path)
+        assert cfg.logging.level == "CRITICAL"
+
+    def test_logging_config_empty_env_is_unset(self, monkeypatch, tmp_path):
+        """LOG_C13: An empty AUTOSKILLIT_LOGGING__LEVEL means unset, like null."""
+        monkeypatch.setenv("AUTOSKILLIT_LOGGING__LEVEL", "")
+        cfg = load_config(tmp_path)
+        assert cfg.logging.level is None
 
 
 class TestDynaconfIntegration:

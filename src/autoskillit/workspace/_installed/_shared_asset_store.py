@@ -17,9 +17,9 @@ Two hard requirements on placement, both load-bearing:
   real ``$HOME`` in production; a `--basetemp`-scoped isolated home in tests, one the
   store must survive being materialized under two *different* isolated homes across a
   run). Resolved from ``tempfile.gettempdir()``, not a ``$HOME``-relative literal, with
-  an explicit ``st_dev`` equality check: a mismatch is logged loudly and treated as "no
-  store available" (callers fall back to `copy2` wholesale) rather than attempting and
-  catching `EXDEV` once per file.
+  an explicit ``st_dev`` equality check: a mismatch is an expected layout outcome, logged
+  at DEBUG and treated as "no store available" (callers fall back to `copy2` wholesale)
+  rather than attempting and catching `EXDEV` once per file.
 """
 
 from __future__ import annotations
@@ -81,7 +81,7 @@ def resolve_shared_asset_store_root(projections_root: Path) -> Path | None:
         return None
 
     if candidate_device != projections_device:
-        logger.warning(
+        logger.debug(
             "shared_asset_store_device_mismatch",
             candidate=str(candidate),
             candidate_device=candidate_device,

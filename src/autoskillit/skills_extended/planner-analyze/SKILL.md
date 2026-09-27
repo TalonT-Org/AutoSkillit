@@ -46,13 +46,16 @@ Detect language, framework, test infrastructure, project structure, and existing
 
 - **$1** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`). Created by the `init` step.
 
+Use the literal absolute directory supplied as `$1` as `{output_dir}` in every
+path below. Substitute that directory before making any tool call.
+
 ## Critical Constraints
 
 **NEVER:**
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
 - Modify any target project files
-- Write analysis.json outside `$1/`
+- Write analysis.json outside `{output_dir}/`
 - Detach child delegations instead of joining them (joining every child is required)
 - Run exploration leaves in the background
 - Start independent child delegations sequentially
@@ -102,7 +105,7 @@ Merge all exploration agent outputs into a single `analysis.json` document match
 
 ### Step 3: Write output
 
-Write to `$1/analysis.json`. The directory was created by the `init` step.
+Write to `{output_dir}/analysis.json`. The directory was created by the `init` step.
 
 ## Output Schema
 

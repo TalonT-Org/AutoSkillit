@@ -273,3 +273,37 @@ def test_generate_report_steps_pass_issue_url(recipe):
     for step_name in ("generate_report", "generate_report_inconclusive", "re_generate_report"):
         step = recipe.steps[step_name]
         assert step.with_args["skill_inputs"]["issue_url"] == "${{ inputs.issue_url }}"
+
+
+@pytest.mark.parametrize(
+    ("recipe_name", "research_dir_binding", "expected_step_names"),
+    [
+        (
+            "research.yaml",
+            "${{ context.research_dir }}",
+            ("generate_report", "generate_report_inconclusive", "re_generate_report"),
+        ),
+        (
+            "research-implement.yaml",
+            "${{ inputs.research_dir }}",
+            ("generate_report", "generate_report_inconclusive"),
+        ),
+        ("research-review.yaml", "${{ inputs.research_dir }}", ("re_generate_report",)),
+    ],
+)
+def test_all_generate_report_steps_bind_research_dir(
+    recipe_name, research_dir_binding, expected_step_names
+):
+    """Every generate-report call receives the research directory from its workflow."""
+    bound_recipe = load_recipe(builtin_recipes_dir() / recipe_name)
+    report_steps = [
+        (name, step)
+        for name, step in bound_recipe.steps.items()
+        if (step.with_args or {}).get("skill_command") == "/autoskillit:generate-report"
+    ]
+
+    assert {name for name, _ in report_steps} == set(expected_step_names)
+    for step_name, step in report_steps:
+        assert step.with_args["skill_inputs"].get("research_dir") == research_dir_binding, (
+            f"{recipe_name}:{step_name} must bind research_dir to {research_dir_binding}"
+        )

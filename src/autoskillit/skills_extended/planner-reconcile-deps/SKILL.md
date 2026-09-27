@@ -33,6 +33,9 @@ spawning parallel sessions.
 
 - **$1** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`)
 
+Use the literal absolute directory supplied as `$1` as `{output_dir}` in every
+path below. Substitute that directory before making any tool call.
+
 ## Critical Constraints
 
 **NEVER:**
@@ -40,7 +43,7 @@ spawning parallel sessions.
 
 - Load full WP result files — only `wp_index.json` (the compact array)
 - Spawn additional sessions — this skill must run as a single session for holistic reasoning
-- Write output outside `{$1}/`
+- Write output outside `{output_dir}/`
 - Add transitive deps without a concrete API or file relationship as evidence
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
@@ -54,7 +57,7 @@ spawning parallel sessions.
 
 ### Step 1: Load wp_index.json
 
-Read `{$1}/work_packages/wp_index.json`. This JSON array contains compact entries for
+Read `{output_dir}/work_packages/wp_index.json`. This JSON array contains compact entries for
 all WPs (~200 bytes each).
 
 Each entry has: `id`, `name`, `summary`, `phase`, `assignment`, `files_touched`,
@@ -102,7 +105,7 @@ If no implicit deps are detected, write `added_backward_deps: {}`.
 
 ### Step 4: Write dep_graph.json
 
-Write to `{$1}/dep_graph.json`.
+Write to `{output_dir}/dep_graph.json`.
 
 ### Step 5: Emit output tokens
 

@@ -19,13 +19,16 @@ Register AutoSkillit as a Claude Code plugin.
 **Flags:**
 - `--scope` (default: `user`) — Where to install: `user` (global), `project` (per-project), `local`
 
-**What it does:**
-1. Creates local marketplace at `~/.autoskillit/marketplace/`
-2. Registers marketplace with Claude Code
-3. Installs the plugin
-4. Syncs hooks to `settings.json`
+**What it does** (under an install lock):
+1. Materializes the plugin tree, including its generated `hooks/hooks.json`, under
+   `~/.autoskillit/marketplace/`
+2. Publishes it as a generation under `~/.autoskillit/plugin-generations/`
+3. Evicts a stale direct MCP entry from `~/.claude.json` and stale AutoSkillit hook
+   entries from `settings.json`
+4. Invalidates the update-check fetch cache
 
-Syncs hooks and plugin cache. Called automatically by `autoskillit update`.
+Does not write hooks into `settings.json` (`autoskillit init` does). Called automatically
+by `autoskillit update`.
 
 ---
 

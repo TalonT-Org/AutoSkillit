@@ -1921,6 +1921,9 @@ skills:
     - name: results_path
       type: file_path
       required: true
+    - name: research_dir
+      type: directory_path
+      required: true
     - name: inconclusive
       type: boolean
       required: false

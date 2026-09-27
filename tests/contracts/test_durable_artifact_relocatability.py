@@ -296,7 +296,11 @@ class TestNonMachineLocalWritersAreRelocatable:
         _assert_relocatable((hooks_dir / "hooks.json").read_text())
 
     def test_plugin_cache_repair_output_is_relocatable(self, tmp_path: Path) -> None:
-        from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY, installed_plugin_semantic_key
+        from autoskillit.core import (
+            _AUTOSKILLIT_PLUGIN_KEY,
+            installed_plugin_semantic_key,
+            managed_home_for,
+        )
         from autoskillit.workspace._installed._artifact import (
             write_installed_plugin_artifact_manifest_locked,
         )
@@ -338,12 +342,13 @@ class TestNonMachineLocalWritersAreRelocatable:
             action="repair",
         )
 
-        outcomes = repair_broken_plugin_cache_hooks(cache_dir)
+        outcomes = repair_broken_plugin_cache_hooks(cache_dir, home=managed_home_for(tmp_path))
 
         assert outcomes[0].status is PluginHookRepairStatus.REPAIRED
         _assert_relocatable((hooks_dir / "hooks.json").read_text())
 
     def test_projection_repair_outputs_are_relocatable(self, tmp_path: Path) -> None:
+        from autoskillit.core import managed_home_for
         from autoskillit.workspace._installed._projection_cache import (
             projected_artifact_manifest_path,
             projected_plugin_artifact_digest,
@@ -395,7 +400,9 @@ class TestNonMachineLocalWritersAreRelocatable:
             )
         )
 
-        outcomes = repair_broken_projection_hooks(projections_root)
+        outcomes = repair_broken_projection_hooks(
+            projections_root, home=managed_home_for(tmp_path)
+        )
 
         assert outcomes[0].status is PluginHookRepairStatus.REPAIRED
         _assert_relocatable((hooks_dir / "hooks.json").read_text())

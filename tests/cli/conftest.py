@@ -15,6 +15,12 @@ from pathlib import Path
 import pytest
 
 import autoskillit.cli._init_helpers as _patch_cli__init_helpers
+from tests.cli._logging_helpers import stub_configure_logging
+
+
+@pytest.fixture
+def _stub_configure_logging(monkeypatch: pytest.MonkeyPatch) -> None:
+    stub_configure_logging(monkeypatch)
 
 
 @pytest.fixture

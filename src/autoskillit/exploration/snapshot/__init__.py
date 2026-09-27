@@ -16,11 +16,11 @@ from ._artifact import (
     stable_artifact_matches,
 )
 from ._capture import (  # noqa: F401
-    _capture_once,  # noqa: F401
-    activate_repository_profiles,  # noqa: F401
+    _capture_once,
+    activate_repository_profiles,
     capture_repository_snapshot,
-    observe_path_mode,  # noqa: F401
-    resolve_repository_identity,  # noqa: F401  production uses _snapshot_facade lookup
+    observe_path_mode,
+    resolve_repository_identity,
     resolve_repository_path,
 )
 from ._records import (

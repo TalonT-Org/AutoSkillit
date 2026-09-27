@@ -175,8 +175,9 @@ def _skill_info_from_frontmatter(
         caps_raw = []
     uses_capabilities = frozenset(str(c) for c in caps_raw)
 
+    # deferred import to break the cycle with _frontmatter → skill_capabilities
     from autoskillit.workspace.skill_capabilities import (
-        parse_skill_semantic_plan,  # noqa: PLC0415  # deferred import to break the cycle with _frontmatter → skill_capabilities
+        parse_skill_semantic_plan,
     )
 
     semantic_plan, semantic_diagnostics = parse_skill_semantic_plan(
@@ -261,7 +262,8 @@ def _skill_info_from_frontmatter(
         write_paths=parsed.write_paths,
         invalidities=tuple(invalidities),
     )
-    from autoskillit.workspace.skill_capabilities import (  # noqa: PLC0415  # deferred import to break the cycle with _frontmatter → skill_capabilities
+    # deferred import to break the cycle with _frontmatter → skill_capabilities
+    from autoskillit.workspace.skill_capabilities import (
         validate_skill_capability_authenticity,
     )
 

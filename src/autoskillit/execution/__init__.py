@@ -160,7 +160,7 @@ from autoskillit.execution.process import (
     TetherSpec,
     TetherSweepOutcome,
     TetherSweepReport,
-    _active_liveness_signals,  # noqa: F401 — shared liveness probe for cook lifetime decisions
+    _active_liveness_signals,
     _has_active_execution_marker,  # noqa: F401 — re-exported for cli/app.py signal guard
     async_kill_process_tree,
     default_tether_dir,

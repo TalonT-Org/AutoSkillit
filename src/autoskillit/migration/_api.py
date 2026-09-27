@@ -39,8 +39,8 @@ async def check_and_migrate(
         {"error": str, "name": name}            — failure or LLM needed
         {"error": str}                          — recipe not found
     """
-    from autoskillit.recipe import find_recipe_by_name  # noqa: PLC0415
-    from autoskillit.recipe import load_recipe as _parse  # noqa: PLC0415
+    from autoskillit.recipe import find_recipe_by_name
+    from autoskillit.recipe import load_recipe as _parse
 
     _pdir = project_dir if isinstance(project_dir, Path) else Path(project_dir)
     match = find_recipe_by_name(name, _pdir)

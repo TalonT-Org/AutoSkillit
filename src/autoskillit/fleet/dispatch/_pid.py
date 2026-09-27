@@ -57,7 +57,7 @@ def _write_pid(
         None on success; the formatted error message string on failure (also
         recorded via the side-effect of having killed the child).
     """
-    from autoskillit.execution import kill_process_tree  # noqa: PLC0415
+    from autoskillit.execution import kill_process_tree
     from autoskillit.fleet import mark_dispatch_running
 
     try:

@@ -45,7 +45,7 @@ def _apply_stale_dispatch(
     m: CampaignStateMutator,
     reaper_dispatch_id: str = "",
 ) -> None:
-    from autoskillit.fleet import resolve_stale_running  # noqa: PLC0415
+    from autoskillit.fleet import resolve_stale_running
 
     resolve_stale_running(dispatch, m, reason=reason)
     dispatch.ended_at = time.time()
@@ -339,7 +339,7 @@ def reap_stale_dispatches(
     - Process alive + ticks match -> kill + reaped_orphan
     - Process alive + ticks mismatch -> reaped_pid_recycled (no kill)
     """
-    from autoskillit.fleet import (  # noqa: PLC0415
+    from autoskillit.fleet import (
         CampaignStateMutator,
         DispatchStatus,
     )
@@ -395,7 +395,7 @@ async def reap_stale_dispatches_async(
     reaper_dispatch_id: str = "",
     heartbeat_grace_seconds: float = 90.0,
 ) -> None:
-    import functools  # noqa: PLC0415
+    import functools
 
     loop = asyncio.get_running_loop()
     for sp in state_paths:

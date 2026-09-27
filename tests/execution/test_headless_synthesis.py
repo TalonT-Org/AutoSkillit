@@ -1011,7 +1011,7 @@ class TestBuildSkillResultChannelBPatternRecovery:
                 "id": "t1",
                 "name": "Write",
                 "input": {
-                    "file_path": "/cwd/.autoskillit/temp/make-plan/task_plan_draft_2026-01-01.md"  # noqa: E501
+                    "file_path": "/cwd/.autoskillit/temp/make-plan/task_plan_draft_2026-01-01.md"
                 },
             }
         )
@@ -1045,7 +1045,7 @@ class TestBuildSkillResultChannelBPatternRecovery:
                 "id": "t1",
                 "name": "Write",
                 "input": {
-                    "file_path": "/cwd/.autoskillit/temp/make-plan/task_plan_draft_2026-01-01.md"  # noqa: E501
+                    "file_path": "/cwd/.autoskillit/temp/make-plan/task_plan_draft_2026-01-01.md"
                 },
             }
         )

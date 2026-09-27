@@ -14,7 +14,7 @@ from autoskillit.core import DISPATCH_ID_ENV_VAR, PR_TELEMETRY_SECTIONS, get_log
 if TYPE_CHECKING:
     from autoskillit.core import TokenLog
 
-assert len(PR_TELEMETRY_SECTIONS) == 3, (  # noqa: S101
+assert len(PR_TELEMETRY_SECTIONS) == 3, (
     f"_PR_SECTION_RE assumes exactly 3 sections; got {len(PR_TELEMETRY_SECTIONS)}"
 )
 _PR_SECTION_RE = _regex.compile(
@@ -39,13 +39,13 @@ def patch_pr_token_summary(
     kitchen_id: str = "",
     expected_steps: Sequence[str] | None = None,
 ) -> dict[str, str]:
-    import os  # noqa: PLC0415
-    import subprocess  # noqa: PLC0415
-    import time  # noqa: PLC0415
+    import os
+    import subprocess
+    import time
 
-    from autoskillit.core import read_kitchen_id_from_marker  # noqa: PLC0415
-    from autoskillit.execution import resolve_log_dir  # noqa: PLC0415
-    from autoskillit.pipeline import DefaultTokenLog, TelemetryFormatter  # noqa: PLC0415
+    from autoskillit.core import read_kitchen_id_from_marker
+    from autoskillit.execution import resolve_log_dir
+    from autoskillit.pipeline import DefaultTokenLog, TelemetryFormatter
 
     m = _regex.match(r"https://github\.com/([^/]+)/([^/]+)/pull/(\d+)", pr_url)
     if not m:

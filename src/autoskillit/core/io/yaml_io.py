@@ -8,15 +8,18 @@ sub-package re-uses the public surface here without re-importing pyyaml.
 from __future__ import annotations
 
 import os
-from typing import Any, TypeGuard
+from typing import TYPE_CHECKING, Any, TypeGuard
 
 import yaml
 from yaml import YAMLError as YAMLError  # explicit re-export for callers and type checkers
 
-try:
-    from yaml import CSafeLoader as _Loader
-except ImportError:
-    _Loader = yaml.SafeLoader  # type: ignore[misc,assignment]
+if TYPE_CHECKING:
+    _Loader = yaml.SafeLoader
+else:
+    try:
+        from yaml import CSafeLoader as _Loader
+    except ImportError:
+        _Loader = yaml.SafeLoader
 
 
 class _UniqueKeyLoader(_Loader):
@@ -57,10 +60,13 @@ _UniqueKeyLoader.add_constructor(
     _construct_unique_mapping,
 )
 
-try:
-    from yaml import CDumper as _Dumper
-except ImportError:
-    from yaml import Dumper as _Dumper  # type: ignore[misc,assignment]
+if TYPE_CHECKING:
+    from yaml import Dumper as _Dumper
+else:
+    try:
+        from yaml import CDumper as _Dumper
+    except ImportError:
+        from yaml import Dumper as _Dumper
 
 
 def load_yaml(source: os.PathLike[str] | str) -> Any:

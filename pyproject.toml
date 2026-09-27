@@ -54,6 +54,8 @@ dev = [
     "pytest-cov>=7.0",
     "pytest-timeout>=2.3",
     "ruff>=0.15.0",
+    "mypy>=2.3.1",
+    "types-PyYAML>=6.0.12.20260906",
     "import-linter>=2.1",
     "packaging>=25.0",
     "pytest-testmon>=2.2.0",
@@ -129,19 +131,13 @@ line-length = 99
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "TID251", "W"]
+extend-select = ["RUF100"]
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/check_file_lengths.py" = ["E402"]
 "tests/conftest.py" = ["E402"]
-"tests/execution/test_session_classification_e2e.py" = ["E402"]
-"tests/execution/test_process_channel_b.py" = ["E501"]
 "tests/test_test_filter_cascade.py" = ["E501"]
-"tests/execution/test_quota_io.py" = ["E501"]
-"tests/execution/test_merge_queue_ejection.py" = ["E501"]
-"tests/execution/test_quota_binding.py" = ["E501"]
 "tests/arch/test_layer_enforcement.py" = ["E501"]
-"tests/execution/test_quota_sleep.py" = ["E501"]
-"tests/execution/test_merge_queue_classifier.py" = ["E501"]
 "tests/skills/test_vis_lens_methodology_norms.py" = ["E501"]
 "tests/planner/test_manifests_builders.py" = ["E501"]
 "tests/planner/test_merge_files.py" = ["E501"]
@@ -160,6 +156,27 @@ select = ["E", "F", "I", "UP", "TID251", "W"]
 "signal.signal" = {msg = "Use anyio.open_signal_receiver instead of signal.signal — see serve_with_signal_guard in cli/_serve_guard.py."}
 "yaml.safe_load" = {msg = "Use load_yaml() from autoskillit.core.io instead — CSafeLoader is 9-11x faster."}
 "yaml.safe_dump" = {msg = "Use dump_yaml_str() from autoskillit.core.io instead — CDumper is faster."}
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src", "scripts", "tests/_test_filter.py", "tests/fakes.py", "tests/contracts/test_fakes_conformance.py"]
+ignore_missing_imports = true
+warn_unused_ignores = true
+enable_error_code = ["exhaustive-match", "ignore-without-code"]
+
+[[tool.mypy.overrides]]
+module = ["autoskillit", "autoskillit.*"]
+ignore_missing_imports = false
+
+[tool.pyright]
+pythonVersion = "3.11"
+venvPath = "."
+venv = ".venv"
+# Stdlib-only hook scripts import siblings by bare name after bootstrapping sys.path;
+# like mypy, treat those as an opaque runtime boundary rather than unresolved imports.
+executionEnvironments = [
+    { root = "src/autoskillit/hooks", reportMissingImports = "none" },
+]
 
 [tool.importlinter]
 root_packages = ["autoskillit"]

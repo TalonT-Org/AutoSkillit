@@ -450,9 +450,9 @@ def _make_codex_parse_stdout() -> object:
 
     def _patched(
         result: SubprocessResult,
-        backend: object,  # noqa: ARG001
-        backend_resume_session_id: str = "",  # noqa: ARG001
-        provider_used: str | None = None,  # noqa: ARG001
+        backend: object,
+        backend_resume_session_id: str = "",
+        provider_used: str | None = None,
     ) -> ClaudeSessionResult:
         agent_result = CodexBackend().result_parser().parse_stdout(result.stdout)
         return _adapt_codex_result(agent_result)

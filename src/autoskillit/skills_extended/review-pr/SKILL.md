@@ -553,7 +553,10 @@ and run with cwd `{checkout_root}`.
    Check for: tests that assert nothing meaningful, broad mock patches, non-isolated state.
 
 3. **defense** — Typed boundaries, error context preservation, validation at construction.
-   Check for: missing type annotations at public boundaries, swallowed exceptions, late validation.
+   Check for: missing type annotations at public boundaries, swallowed exceptions, late validation;
+   diff adds `# type: ignore`, `# pyright: ignore`, `# noqa`, or a `cast()` that replaces a removed
+   suppression, or raises a registered policy-surface value
+   (`tests/arch/_acceptance_policy_surfaces.py`).
 
 4. **bugs** — Diff checked against known recurring root causes.
    Check for: off-by-one errors, missing await, unhandled None, incorrect dict access.

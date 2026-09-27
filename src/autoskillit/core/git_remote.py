@@ -1,6 +1,6 @@
 """Backward-compat shim for git_remote — see core.git.git_remote."""
 
-import subprocess  # noqa: F401 — re-exported for monkeypatch.setattr targets in tests
+import subprocess
 
 from autoskillit.core.git.git_remote import (
     REMOTE_PRECEDENCE,

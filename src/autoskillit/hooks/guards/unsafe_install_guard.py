@@ -20,14 +20,14 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
-from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
+from _command_classification import (  # noqa: E402
     _PIP_GLOBAL_FLAG_SPEC,
     _consume_str_flag,
     all_evaluated_segments,
     command_verb_and_args,
     extract_interpreter_command_payloads,
 )
-from _hook_payload import parse_hook_command  # type: ignore[import-not-found]  # noqa: E402
+from _hook_payload import parse_hook_command  # noqa: E402
 
 UNSAFE_INSTALL_DENY_TRIGGER: str = "Blocked: editable install without --python .venv"
 

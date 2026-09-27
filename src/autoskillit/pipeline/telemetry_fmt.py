@@ -208,7 +208,7 @@ _LEGACY_TO_CANONICAL: dict[str, str] = {
 }
 
 
-def _normalize_keys(d: dict[str, Any]) -> dict[str, Any]:
+def _normalize_keys(d: Mapping[str, Any]) -> dict[str, Any]:
     """Normalize legacy cache field names to canonical. Drop after #2474 lands."""
     out = dict(d)
     for old, new in _LEGACY_TO_CANONICAL.items():
@@ -544,14 +544,14 @@ class TelemetryFormatter:
             return ""
         h = TelemetryFormatter._humanize
         fmt_dur = TelemetryFormatter._fmt_duration
-        model_totals = [_normalize_keys(m) for m in model_totals]  # type: ignore[misc, arg-type]
+        normalized = [_normalize_keys(m) for m in model_totals]
         lines = [
             "## Model Usage Breakdown",
             "",
             _MODEL_MD_HEADER,
             _MODEL_MD_SEP,
         ]
-        for m in model_totals:
+        for m in normalized:
             model = m.get("model", "")
             source = _source_label(m)
             if source:
@@ -559,8 +559,8 @@ class TelemetryFormatter:
             lines.append(
                 f"| {model} | {m.get('step_count', 0)}"
                 f" | {h(m.get('input_tokens', 0))} | {h(m.get('output_tokens', 0))}"
-                f" | {h(m.get('cache_read_tokens'))}"  # type: ignore[arg-type]
-                f" | {h(m.get('cache_write_tokens'))}"  # type: ignore[arg-type]
+                f" | {h(m.get('cache_read_tokens'))}"
+                f" | {h(m.get('cache_write_tokens'))}"
                 f" | {fmt_dur(m.get('elapsed_seconds', 0.0))} |"
             )
         return "\n".join(lines)
@@ -572,17 +572,17 @@ class TelemetryFormatter:
             return ""
         h = TelemetryFormatter._humanize
         fmt_dur = TelemetryFormatter._fmt_duration
-        model_totals = [_normalize_keys(m) for m in model_totals]  # type: ignore[misc, arg-type]
+        normalized = [_normalize_keys(m) for m in model_totals]
         rows: list[tuple[str, str, str, str, str, str, str]] = []
-        for m in model_totals:
+        for m in normalized:
             rows.append(
                 (
                     m.get("model", ""),
                     str(m.get("step_count", 0)),
                     h(m.get("input_tokens", 0)),
                     h(m.get("output_tokens", 0)),
-                    h(m.get("cache_read_tokens")),  # type: ignore[arg-type]
-                    h(m.get("cache_write_tokens")),  # type: ignore[arg-type]
+                    h(m.get("cache_read_tokens")),
+                    h(m.get("cache_write_tokens")),
                     fmt_dur(m.get("elapsed_seconds", 0.0)),
                 )
             )

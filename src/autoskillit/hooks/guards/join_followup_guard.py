@@ -29,22 +29,22 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
-from _hook_constants import (  # type: ignore[import-not-found]  # noqa: E402
+from _hook_constants import (  # noqa: E402
     _RECOVERY_DECLARE_TOOL_PARTS,
     MANAGED_PARENT_ALLOWED_TOOL_SET,
 )
-from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+from _hook_payload import (  # noqa: E402
     normalize_payload_cwd,
     resolve_state_root,
 )
-from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+from _hook_settings import (  # noqa: E402
     hook_join_applicability,
     resolve_binding_session_id,
     session_managed_codex_route,
     session_managed_scope,
     write_join_diagnostic,
 )
-from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
+from _join_ledger import (  # noqa: E402
     active_batch,
     is_terminal_non_success_batch,
     resolve_flag_dir,

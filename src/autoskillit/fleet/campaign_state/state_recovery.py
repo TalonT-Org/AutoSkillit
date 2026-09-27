@@ -164,7 +164,7 @@ def _prepare_matched_resume(
                     f"{dispatch.status.value!r} and continue_on_failure is false"
                 ),
             )
-        from autoskillit.fleet.campaign_state.state import (  # noqa: PLC0415
+        from autoskillit.fleet.campaign_state.state import (
             reset_blocking_dispatch,
         )
 
@@ -279,7 +279,7 @@ def has_failed_dispatch(state_path: Path) -> bool:
 
     Returns False when the file is missing or corrupted (fail-open).
     """
-    from autoskillit.fleet.campaign_state.state import read_state  # noqa: PLC0415
+    from autoskillit.fleet.campaign_state.state import read_state
 
     if not state_path.exists():
         return False
@@ -300,7 +300,7 @@ def has_blocking_dispatch(state_path: Path) -> bool:
 
     Returns False when the file is missing or corrupted (fail-open).
     """
-    from autoskillit.fleet.campaign_state.state import read_state  # noqa: PLC0415
+    from autoskillit.fleet.campaign_state.state import read_state
 
     if not state_path.exists():
         return False
@@ -331,7 +331,7 @@ def find_completed_dispatch(state_path: Path, dispatch_name: str) -> DispatchRec
     Returns None when the file is missing, corrupted, or no matching SUCCESS
     record exists (fail-open).
     """
-    from autoskillit.fleet.campaign_state.state import read_state  # noqa: PLC0415
+    from autoskillit.fleet.campaign_state.state import read_state
 
     if not state_path.exists():
         return None
@@ -367,7 +367,7 @@ def classify_stale_dispatch(
 
     Returns (new_status, sidecar_path_or_empty).
     """
-    from autoskillit.fleet.sidecar import (  # noqa: PLC0415
+    from autoskillit.fleet.sidecar import (
         SidecarReadStatus,
         read_sidecar_from_path,
     )
@@ -444,8 +444,8 @@ def _run_locked_recovery_reset_pass(
     reset_on_retry: bool,
 ) -> _RecoveryResetResult:
     """Recover stale dispatches and apply campaign-level reset policy under one lock."""
-    from autoskillit.fleet.campaign_state.state import CampaignStateMutator  # noqa: PLC0415
-    from autoskillit.fleet.campaign_state.state_records import (  # noqa: PLC0415
+    from autoskillit.fleet.campaign_state.state import CampaignStateMutator
+    from autoskillit.fleet.campaign_state.state_records import (
         _clear_dispatch_for_retry,
     )
 
@@ -495,7 +495,7 @@ def _escalate_capped_resumable_dispatch(state_path: Path, dispatch: DispatchReco
     ):
         return False
 
-    from autoskillit.fleet.campaign_state.state import CampaignStateMutator  # noqa: PLC0415
+    from autoskillit.fleet.campaign_state.state import CampaignStateMutator
 
     with CampaignStateMutator(state_path) as mutator:
         if mutator.state is not None:
@@ -555,7 +555,7 @@ def resume_campaign_from_state(
         return reset_result.halted
 
     # Re-open state via read_state for the composition pass; return None on fail-open.
-    from autoskillit.fleet.campaign_state.state import read_state  # noqa: PLC0415
+    from autoskillit.fleet.campaign_state.state import read_state
 
     state = read_state(state_path)
     if state is None:
@@ -630,7 +630,7 @@ def resume_campaign_from_state(
 
 def _read_campaign_state_for_issue(state_path: Path) -> CampaignState | None:
     """Read one campaign state while retaining lookup's fail-open diagnostics."""
-    from autoskillit.fleet.campaign_state.state import read_state  # noqa: PLC0415
+    from autoskillit.fleet.campaign_state.state import read_state
 
     try:
         return read_state(state_path)
@@ -646,7 +646,7 @@ def _eligible_dispatch_matches_issue(dispatch: DispatchRecord, issue_url: str) -
     if dispatch.sidecar_path is None:
         return False
 
-    from autoskillit.fleet.sidecar import read_sidecar_from_path  # noqa: PLC0415
+    from autoskillit.fleet.sidecar import read_sidecar_from_path
 
     entries = read_sidecar_from_path(Path(dispatch.sidecar_path)).entries
     return any(entry.issue_url == issue_url for entry in entries)

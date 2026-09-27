@@ -323,13 +323,13 @@ def _launch_fleet_session(
     recipe_table: str | None = None,
 ) -> None:
     """Build the L3 orchestrator prompt and launch an interactive fleet session."""
-    from autoskillit.cli import launched_session_mcp_prefix  # noqa: PLC0415
-    from autoskillit.cli.session._session_backend import (  # noqa: PLC0415
+    from autoskillit.cli import launched_session_mcp_prefix
+    from autoskillit.cli.session._session_backend import (
         resolve_global_backend,
     )
     from autoskillit.cli.session._session_launch import render_skill_unavailability
-    from autoskillit.config import load_config  # noqa: PLC0415
-    from autoskillit.workspace import (  # noqa: PLC0415
+    from autoskillit.config import load_config
+    from autoskillit.workspace import (
         compile_session_skill_catalog,
         default_skill_resolver,
     )

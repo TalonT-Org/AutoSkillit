@@ -22,7 +22,7 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
-from _hook_constants import (  # noqa: E402  # type: ignore[import-not-found]
+from _hook_constants import (  # noqa: E402
     MANAGED_PARENT_ALLOWED_TOOL_SET,
 )
 from _hook_payload import normalize_payload_cwd  # noqa: E402

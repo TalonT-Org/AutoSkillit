@@ -22,9 +22,9 @@ from __future__ import annotations
 from hashlib import sha256
 from typing import NamedTuple
 
-from ._type_constants_durable_writers import *  # noqa: F401, F403
-from ._type_constants_retirements import *  # noqa: F401, F403
-from ._type_constants_skill_contract import *  # noqa: F401, F403
+from ._type_constants_durable_writers import *  # noqa: F403
+from ._type_constants_retirements import *  # noqa: F403
+from ._type_constants_skill_contract import *  # noqa: F403
 
 __all__ = [
     "OUTPUT_DISCIPLINE_POLICY_VERSION",

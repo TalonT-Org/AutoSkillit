@@ -18,7 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 
-def PY(inner: str) -> str:  # noqa: N802 - matches the plan's PY(inner) notation
+def PY(inner: str) -> str:
     """Render a Python program that runs *inner* via a literal-argv subprocess call."""
     argv = shlex.split(inner)
     return f"import subprocess; subprocess.run({argv!r})"

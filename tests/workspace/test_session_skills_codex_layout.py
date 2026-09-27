@@ -1003,7 +1003,7 @@ def test_restore_snapshot_session_refuses_snapshot_symlinks(
     ):
         manager.restore_snapshot_session(f"refuse-{symlink_shape}", snapshot, context)
 
-    assert f"refuse-{symlink_shape}" not in manager._session_roots  # noqa: SLF001
+    assert f"refuse-{symlink_shape}" not in manager._session_roots
     assert not (tmp_path / "codex-root" / f"refuse-{symlink_shape}").exists()
 
 

@@ -254,7 +254,7 @@ class TestCodexInteractiveCmdSystemPrompt:
         ) as codex_home:
             env = dict(os.environ)
             env["CODEX_HOME"] = codex_home
-            result = subprocess.run(  # noqa: S603
+            result = subprocess.run(
                 [binary, *config_pairs, "doctor", "--json"],
                 cwd=tmp_path,
                 env=env,

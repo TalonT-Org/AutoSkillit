@@ -25,7 +25,7 @@ elif __package__ == "_capture":
     import _capture_contract
     import _capture_lifecycle
     import _capture_process
-    from _runtime import _hook_settings, _policy_event  # noqa: I001 — bare-name post-move; cyclic broken by sys.modules register in _capture_artifacts.py
+    from _runtime import _hook_settings, _policy_event
     from _capture._module_identity import register_module_aliases
 else:
     from . import _artifact_setup, _authority, _delivery, _failure_policy  # noqa: I001
@@ -496,7 +496,7 @@ def run_capture(
                 )
             )
     finally:
-        global _BYTE_PRESSURE_OBSERVED  # noqa: PLW0603
+        global _BYTE_PRESSURE_OBSERVED
         if lifecycle is not None and lifecycle.byte_pressure_observed:
             _BYTE_PRESSURE_OBSERVED = True
         if process is not None and process.stdout is not None:
@@ -588,7 +588,7 @@ def _emit_runner_tail_crash_diagnostic() -> None:
 
 
 def _sweep_after_runner(requested_cwd: str) -> None:
-    global _BYTE_PRESSURE_OBSERVED  # noqa: PLW0603
+    global _BYTE_PRESSURE_OBSERVED
     byte_pressure_observed = _BYTE_PRESSURE_OBSERVED
     _BYTE_PRESSURE_OBSERVED = False
     try:

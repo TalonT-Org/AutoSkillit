@@ -126,7 +126,7 @@ def write_join_diagnostic(record: dict, *, caller: str = "") -> None:
     """
     # Function-local import keeps the load-time cycle one-directional:
     # _hook_settings imports this module, not the other way around.
-    import _hook_settings  # type: ignore[import-not-found]  # noqa: PLC0415
+    import _hook_settings
 
     bounded = {key: value for key, value in record.items() if key in DIAGNOSTIC_KEYS}
     bounded.setdefault("ts", datetime.now(UTC).isoformat())
@@ -152,7 +152,7 @@ def write_dispatch_diagnostic(
 ) -> None:
     """Append one bounded dispatcher-degradation record without masking the hook."""
     # Function-local import keeps the load-time cycle one-directional.
-    import _hook_settings  # type: ignore[import-not-found]  # noqa: PLC0415
+    import _hook_settings
 
     record = {
         "ts": datetime.now(UTC).isoformat(),

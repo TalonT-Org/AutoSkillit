@@ -11,17 +11,17 @@ import json
 import time
 from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-if __package__:
+if TYPE_CHECKING or __package__:
     from ._session_binding import resolve_channel_dir as _resolve_channel_dir
 else:
-    from _session_binding import (  # type: ignore[import-not-found,no-redef]
+    from _session_binding import (
         resolve_channel_dir as _resolve_channel_dir,
     )
 
-if __package__:
-    from ._join import (  # noqa: F401
+if TYPE_CHECKING or __package__:
+    from ._join import (
         _NON_SUCCESS_WAVE_OUTCOMES,
         JOIN_LEDGER_SCHEMA_VERSION,
         LEDGER_FILENAME,
@@ -66,7 +66,7 @@ if __package__:
         write_join_ledger,
     )
 else:
-    from _join import (  # type: ignore[import-not-found,no-redef]  # noqa: F401
+    from _join import (  # noqa: F401
         _NON_SUCCESS_WAVE_OUTCOMES,
         JOIN_LEDGER_SCHEMA_VERSION,
         LEDGER_FILENAME,

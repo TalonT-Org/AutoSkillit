@@ -194,7 +194,6 @@ class _RunSkillDispatchState:
     _slot_intent_digest: str | None = None
     _bound_input_map: dict[str, BoundScalar] | None = None
     _prior_input_field: str | None = None
-    _prior_path: str | None = None
     _recipe_execution_key: RecipeExecutionId | None = None
     _audited_plan_refs: tuple[ArtifactRef, ...] | None = None
     _cycle_id: str | None = None
@@ -277,7 +276,6 @@ class _RunSkillDispatchState:
 
     # --- Finalize-writable (single helper site mutates these) ---
     _audit_outcome_to_finalize: AuditOutcome | None = None
-    _semantic_path: Path | None = None
     _materialized: AuditMaterializationResult | None = None
     _materialized_status: AuditOutcomeStatus | None = None
     _timeout_exc: Exception | None = None

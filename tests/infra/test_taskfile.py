@@ -177,6 +177,14 @@ class TestTaskfile:
         assert "task test-check" not in commands
         assert re.search(r"\$PYTEST_CMD[^\n]*\$\{PYTEST_IGNORE_PATHS:-\}", test_all_commands)
         assert "lint-imports" in test_all_commands
+        assert (
+            test_all_commands.index("lint-imports")
+            < test_all_commands.index("task typecheck")
+            < test_all_commands.index("$PYTEST_CMD ")
+        ), "the local gate reaches the typecheck gate through test-all, before pytest"
+        assert "task typecheck" not in "\n".join(tasks["test-check"]["cmds"]), (
+            "test-check stays pytest-only; CI runs the typecheck gate in a dedicated step"
+        )
 
         wrapper_sequence = (
             "task test-all",

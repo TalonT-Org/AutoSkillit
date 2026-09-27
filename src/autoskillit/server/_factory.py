@@ -158,24 +158,24 @@ class _LazyTokenFactory:
     resolve at construction time.  First call resolves and caches the
     result; subsequent calls return the cached value.
 
-    Thread-safe for single-writer scenarios (GIL-safe sentinel + assignment
-    pattern; the MCP server is single-threaded asyncio).
+    Thread-safe for single-writer scenarios (GIL-safe value-then-flag
+    assignment; the MCP server is single-threaded asyncio).
     """
-
-    _UNRESOLVED = object()
 
     def __init__(self, resolver: Callable[[], str | None]) -> None:
         self._resolver = resolver
-        self._resolved: str | None = self._UNRESOLVED  # type: ignore[assignment]
+        self._token: str | None = None
+        self._token_resolved = False
 
     def __call__(self) -> str | None:
-        if self._resolved is self._UNRESOLVED:
-            self._resolved = self._resolver()
-        return self._resolved
+        if not self._token_resolved:
+            self._token = self._resolver()
+            self._token_resolved = True
+        return self._token
 
     @property
     def is_resolved(self) -> bool:
-        return self._resolved is not self._UNRESOLVED
+        return self._token_resolved
 
 
 def _gh_cli_token() -> str | None:
@@ -309,7 +309,7 @@ def make_context(
                             "RECORD_SCENARIO is set but 'api_simulator' is not installed "
                             "— skipping recording"
                         )
-                        make_scenario_recorder = None  # type: ignore[assignment]
+                        make_scenario_recorder = None
 
                     if make_scenario_recorder is not None:
                         recorder = make_scenario_recorder(
@@ -374,7 +374,7 @@ def make_context(
     # load mode.
     resolved_plugin_authority: PluginArtifactAuthority
     if plugin_authority is not _UNSET:
-        resolved_plugin_authority = plugin_authority  # type: ignore[assignment]
+        resolved_plugin_authority = plugin_authority
     elif plugin_dir is not _UNSET and isinstance(plugin_dir, (str, Path)):
         resolved_plugin_authority = project_direct_install_authority(
             DirectInstall(plugin_dir=Path(plugin_dir)),
@@ -490,7 +490,8 @@ def make_context(
         quota_refresh_task=None,
         session_serve_overrides=None,
     )
-    from autoskillit.server.tools.tools_execution._managed_fixed_batch import (  # noqa: PLC0415  # circular-break: compose after ToolContext exists
+    # circular-break: compose after ToolContext exists.
+    from autoskillit.server.tools.tools_execution._managed_fixed_batch import (  # circular-break
         DefaultManagedFixedBatchSupervisor,
     )
 

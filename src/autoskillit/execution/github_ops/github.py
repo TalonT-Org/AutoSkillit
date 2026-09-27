@@ -193,8 +193,6 @@ class DefaultGitHubFetcher:
     Never raises — errors are returned as {"success": False, "error": "..."}.
     """
 
-    _UNRESOLVED = object()
-
     def __init__(
         self,
         *,
@@ -203,9 +201,10 @@ class DefaultGitHubFetcher:
         base_url: str = "https://api.github.com",
     ) -> None:
         self._token_factory: Callable[[], str | None] | None
+        self._token_resolved = not callable(token)
         if callable(token):
             self._token_factory = token
-            self._token: str | None = self._UNRESOLVED  # type: ignore[assignment]
+            self._token: str | None = None
         else:
             self._token_factory = None
             self._token = token
@@ -216,8 +215,9 @@ class DefaultGitHubFetcher:
         self._label_cache: set[tuple[str, str, str]] = set()
 
     def _resolve_token(self) -> str | None:
-        if self._token is self._UNRESOLVED:
+        if not self._token_resolved:
             self._token = self._token_factory() if self._token_factory is not None else None
+            self._token_resolved = True
         return self._token
 
     @property

@@ -5,13 +5,17 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
 
-try:
-    from yaml import CSafeLoader as Loader
-except ImportError:
-    Loader = yaml.SafeLoader  # type: ignore[misc,assignment]
+if TYPE_CHECKING:
+    Loader = yaml.SafeLoader
+else:
+    try:
+        from yaml import CSafeLoader as Loader
+    except ImportError:
+        Loader = yaml.SafeLoader
 
 RECIPES_DIR = Path(__file__).resolve().parent.parent / "src" / "autoskillit" / "recipes"
 

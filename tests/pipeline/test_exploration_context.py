@@ -31,7 +31,7 @@ from autoskillit.pipeline.exploration_context import (
     OwnerBoundExplorationContextStore,
     resolve_exploration_store_failure_code,
 )
-from autoskillit.pipeline.exploration_context import (  # noqa: PLC0415
+from autoskillit.pipeline.exploration_context import (
     _launch_adapter as _launch_adapter_module,
 )
 from autoskillit.pipeline.exploration_context_durable import DurableBindFailed

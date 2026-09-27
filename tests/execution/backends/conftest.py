@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-import autoskillit.hooks  # noqa: F401,I001  (side effect: populates HOOK_REGISTRY)
+import autoskillit.hooks  # noqa: F401  (side effect: populates HOOK_REGISTRY)
 
 # Force HOOK_REGISTRY population before computing the EXPECTED_* constants
 # below. The hook_registry package (PR #4853) defers list construction to
@@ -24,7 +24,7 @@ import autoskillit.hooks  # noqa: F401,I001  (side effect: populates HOOK_REGIST
 # ``autoskillit.hooks`` here at conftest load triggers that post-import
 # population so the cached invariants match the test-time list. The import
 # is a side-effect-only dependency (no symbol from the module is referenced).
-from autoskillit.hook_registry import HOOK_REGISTRY, PROTECTION_WAIVERS, HookDef  # noqa: I001
+from autoskillit.hook_registry import HOOK_REGISTRY, PROTECTION_WAIVERS, HookDef
 
 
 @pytest.fixture

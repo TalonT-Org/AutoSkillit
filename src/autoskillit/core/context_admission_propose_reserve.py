@@ -1,6 +1,6 @@
 """Backward-compat shim. See core.context_admission.context_admission_propose_reserve."""
 
-from autoskillit.core.context_admission.context_admission_propose_reserve import (  # noqa: F401
+from autoskillit.core.context_admission.context_admission_propose_reserve import (
     _open_epoch,
     _preflight,
     _propose,

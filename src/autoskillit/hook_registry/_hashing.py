@@ -26,32 +26,25 @@ def _canonical_registry_payload(
         from ._registry_data import PROTECTION_WAIVERS
 
         waivers = PROTECTION_WAIVERS
-    registry_rows = sorted(
-        [
-            {
-                "codex_status": h.codex_status,
-                "enforcement_strength": dict(sorted(h.enforcement_strength.items())),
-                "event_type": h.event_type,
-                "exempt_session_types": sorted(h.exempt_session_types),
-                "exempt_skills": sorted(h.exempt_skills),
-                "matcher": h.matcher,
-                "mechanism": h.mechanism,
-                "produces_resources": sorted(h.produces_resources),
-                "reclaims_resources": sorted(h.reclaims_resources),
-                "runtime_only": h.runtime_only,
-                "scripts": list(h.scripts),
-                "self_reclaims_resources": sorted(h.self_reclaims_resources),
-                "session_scope": h.session_scope,
-                "timeout_seconds": h.timeout_seconds,
-            }
-            for h in registry
-        ],
-        key=lambda row: (
-            row["event_type"],
-            row["matcher"],
-            tuple(row["scripts"]),  # type: ignore[arg-type]
-        ),
-    )
+    registry_rows = [
+        {
+            "codex_status": h.codex_status,
+            "enforcement_strength": dict(sorted(h.enforcement_strength.items())),
+            "event_type": h.event_type,
+            "exempt_session_types": sorted(h.exempt_session_types),
+            "exempt_skills": sorted(h.exempt_skills),
+            "matcher": h.matcher,
+            "mechanism": h.mechanism,
+            "produces_resources": sorted(h.produces_resources),
+            "reclaims_resources": sorted(h.reclaims_resources),
+            "runtime_only": h.runtime_only,
+            "scripts": list(h.scripts),
+            "self_reclaims_resources": sorted(h.self_reclaims_resources),
+            "session_scope": h.session_scope,
+            "timeout_seconds": h.timeout_seconds,
+        }
+        for h in sorted(registry, key=lambda h: (h.event_type, h.matcher, tuple(h.scripts)))
+    ]
     lifecycle_rows = sorted(
         [
             {

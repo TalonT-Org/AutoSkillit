@@ -525,7 +525,7 @@ def _check_local_recipe_validity(project_dir: Path | None = None) -> list[Doctor
 
         try:
             findings = run_semantic_rules(recipe)
-        except Exception as exc:  # noqa: BLE001 - doctor must never crash
+        except Exception as exc:
             logger.warning("local_recipe_validation_error", path=str(yaml_path), error=str(exc))
             results.append(
                 DoctorResult(

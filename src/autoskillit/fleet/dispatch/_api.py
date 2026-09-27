@@ -325,7 +325,7 @@ async def execute_dispatch(
         # Call ``_run_dispatch`` through the public facade so that
         # ``monkeypatch.setattr("autoskillit.fleet._api._run_dispatch", ...)``
         # patches reach this call site (Tier-1 test patch preservation).
-        from autoskillit.fleet import _api as _facade  # noqa: PLC0415
+        from autoskillit.fleet import _api as _facade
 
         return await _facade._run_dispatch(
             tool_ctx=tool_ctx,
@@ -420,7 +420,7 @@ async def _run_dispatch(
     lineage_result = await run_lineage_preparation(
         tool_ctx=tool_ctx,
         recipe=recipe,
-        recipe_obj=recipe_ctx.recipe_obj,  # type: ignore[arg-type]
+        recipe_obj=recipe_ctx.recipe_obj,
         task=task,
         effective_ingredients=recipe_ctx.effective_ingredients,
         effective_name=recipe_ctx.effective_name,
@@ -445,22 +445,15 @@ async def _run_dispatch(
     if isinstance(lineage_result, DispatchResult):
         return lineage_result
     if lineage_result.outcome == "prior_success_short_circuit":
-        return lineage_result.prior_success_dispatch_result  # type: ignore[return-value]
+        return lineage_result.prior_success_dispatch_result
 
     ready = lineage_result.ready
-    if ready is None:
-        # Defensive: outcome == "prior_success_short_circuit" already returned above;
-        # any other outcome should produce a non-None ``ready``.
-        raise RuntimeError(
-            f"LineagePreparationResult.outcome={lineage_result.outcome!r} "
-            "produced a None ready record"
-        )
 
     # --- Orchestrator: tracker-lease retention ---
     # Access via the public facade (not the local top-level import) so that
     # ``monkeypatch.setattr("autoskillit.fleet._api.retain_dispatch_tracker_authority", ...)``
     # patches observed by tests reach this call site.
-    from autoskillit.fleet import _api as _facade  # noqa: PLC0415
+    from autoskillit.fleet import _api as _facade
 
     tracker_key, tracker_lease = _facade.retain_dispatch_tracker_authority(
         tool_ctx, ready.dispatch_id
@@ -474,14 +467,14 @@ async def _run_dispatch(
     # targeting ``prepare_resume``. This call is a no-op when the state file
     # is missing/corrupt (returns ``None``) and preserves the chokepoint
     # semantics from the legacy implementation.
-    from autoskillit.fleet.campaign_state.state_recovery import (  # noqa: PLC0415
+    from autoskillit.fleet.campaign_state.state_recovery import (
         prepare_resume,
     )
 
     prepare_resume(ready.state_path, recipe_ctx.effective_name)
 
     # --- Spawn context: closure-scoped state threaded across phases ---
-    from autoskillit.fleet._issue_url_helpers import extract_issue_urls  # noqa: PLC0415
+    from autoskillit.fleet._issue_url_helpers import extract_issue_urls
 
     spawn_ctx = SpawnContext(
         issue_urls_raw=extract_issue_urls(recipe_ctx.effective_ingredients),

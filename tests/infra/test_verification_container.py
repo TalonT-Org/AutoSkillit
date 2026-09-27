@@ -53,8 +53,9 @@ def test_image_is_archive_buildable_locked_and_non_root() -> None:
     assert "PATH=/workspace/.venv/bin:" in dockerfile
     assert "FROM node:22-bookworm AS node" in dockerfile
     assert "uv venv /opt/pre-commit" in dockerfile
-    assert "ARG MYPY_VERSION=1.19.1" in dockerfile
-    assert "ARG TYPES_PYYAML_VERSION=6.0.12.20250915" in dockerfile
+    assert "MYPY_VERSION" not in dockerfile, "mypy comes from the locked dev extra in .venv"
+    assert "TYPES_PYYAML_VERSION" not in dockerfile
+    assert "/usr/local/bin/mypy" not in dockerfile, "PATH resolves mypy from /workspace/.venv"
     assert _docker_arg(dockerfile, "RIPGREP_VERSION") == "15.2.0"
     assert _docker_arg(dockerfile, "JQ_VERSION") == "1.8.2"
     assert "https://github.com/BurntSushi/ripgrep/releases/download/" in dockerfile

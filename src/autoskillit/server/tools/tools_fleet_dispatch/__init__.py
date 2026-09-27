@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from autoskillit.core import find_caller_session_id  # noqa: F401  (mock.patch reachability)
+from autoskillit.core import find_caller_session_id
 from autoskillit.fleet import execute_dispatch
 from autoskillit.server._progress_heartbeat import progress_heartbeat
 from autoskillit.server.tools.tools_fleet_dispatch._campaign_state import (

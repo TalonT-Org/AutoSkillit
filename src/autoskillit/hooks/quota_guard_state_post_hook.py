@@ -30,7 +30,7 @@ if _RUNTIME_DIR not in sys.path:
 from _hook_settings import (  # noqa: E402
     clear_quota_disable_marker,
     write_quota_disable_marker,
-)  # type: ignore[import-not-found]
+)
 
 _HANDLED_TOOLS = frozenset({"disable_quota_guard", "close_kitchen"})
 

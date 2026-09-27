@@ -82,6 +82,10 @@ class TestIssueSidecarEntryFromDict:
         with pytest.raises(TypeError, match="status must be str"):
             IssueSidecarEntry.from_dict({"issue_url": URL1, "status": 42, "ts": TS})
 
+    def test_from_dict_unknown_status_raises(self) -> None:
+        with pytest.raises(ValueError, match="status must be 'completed' or 'failed'"):
+            IssueSidecarEntry.from_dict({"issue_url": "u", "status": "cancelled"})
+
 
 class TestAppendSidecarEntry:
     def test_creates_file_on_first_append(self, tmp_path: Path) -> None:
@@ -149,6 +153,15 @@ class TestReadSidecar:
         good = json.dumps({"issue_url": URL1, "status": "completed", "ts": TS})
         p.write_text(f"{good}\n\n\n")
         assert len(read_sidecar("d8", tmp_path)) == 1
+
+    def test_unknown_status_line_skipped(self, tmp_path: Path) -> None:
+        p = sidecar_path("d8b", tmp_path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        good = json.dumps({"issue_url": URL1, "status": "completed", "ts": TS})
+        bad = json.dumps({"issue_url": URL2, "status": "cancelled", "ts": TS})
+        p.write_text(f"{bad}\n{good}\n")
+        entries = read_sidecar("d8b", tmp_path)
+        assert [e.issue_url for e in entries] == [URL1]
 
     def test_round_trip_fidelity(self, tmp_path: Path) -> None:
         entry = IssueSidecarEntry(
@@ -245,6 +258,19 @@ class TestReadSidecarFromPath:
         assert all(isinstance(e, IssueSidecarEntry) for e in result.entries)
         assert result.entries[0].issue_url == URL1
         assert result.entries[1].issue_url == URL2
+
+    def test_unknown_status_line_skipped(self, tmp_path: Path) -> None:
+        p = tmp_path / "issues.jsonl"
+        lines = [
+            json.dumps({"issue_url": URL1, "status": "cancelled", "ts": TS}),
+            json.dumps({"issue_url": URL2, "status": "failed", "ts": TS}),
+        ]
+        p.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        result = read_sidecar_from_path(p)
+
+        assert result.source == SidecarReadStatus.FOUND
+        assert [e.issue_url for e in result.entries] == [URL2]
 
 
 class TestMergeSidecarChain:

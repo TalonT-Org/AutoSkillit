@@ -23,15 +23,15 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
-from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
+from _command_classification import (  # noqa: E402
     all_evaluated_segments,
     command_verb_and_args,
 )
-from _hook_constants import (  # type: ignore[import-not-found]  # noqa: E402
+from _hook_constants import (  # noqa: E402
     DENY_TRIGGER_BY_GUARD,
     EXEMPT_SKILLS_BY_GUARD,
 )
-from _hook_payload import parse_hook_command  # type: ignore[import-not-found]  # noqa: E402
+from _hook_payload import parse_hook_command  # noqa: E402
 from _session_scope_authority import enforce_script_session_scope  # noqa: E402
 
 TEST_RUNNER_DENY_TRIGGER: str = DENY_TRIGGER_BY_GUARD["test_runner_guard"]

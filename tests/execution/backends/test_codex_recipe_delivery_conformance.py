@@ -438,7 +438,7 @@ def _run_live_probe(tmp_path: Path) -> tuple[_RecipeProbeObservation, str]:
         _probe_prompt(workspace),
     ]
     timeout = int(os.environ.get("CODEX_RECIPE_SMOKE_TIMEOUT", "900"))
-    result = subprocess.run(  # noqa: S603
+    result = subprocess.run(
         command,
         cwd=workspace,
         env=env,

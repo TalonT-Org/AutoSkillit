@@ -358,7 +358,7 @@ def _collect_recipes_from_candidates(
                         )
                     continue
 
-                from autoskillit.recipe.contracts.staleness_cache import (  # noqa: PLC0415
+                from autoskillit.recipe.contracts.staleness_cache import (
                     compute_recipe_hash as _crh,
                 )
 

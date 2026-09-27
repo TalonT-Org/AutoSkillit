@@ -697,7 +697,7 @@ def _run_codex_selection_case(
         assert (managed.generated_home / "skills" / "investigate" / "SKILL.md").is_file()
         env["CODEX_HOME"] = str(managed.generated_home)
         env["CODEX_SQLITE_HOME"] = str(managed.generated_home)
-        result = subprocess.run(  # noqa: S603
+        result = subprocess.run(
             [
                 "codex",
                 "exec",
@@ -750,7 +750,7 @@ def _completed_mcp_tool_names(output: _CodexSelectionProbeOutput) -> list[str]:
 
 def _cli_version(binary: str, env: dict[str, str]) -> str:
     try:
-        result = subprocess.run(  # noqa: S603
+        result = subprocess.run(
             [binary, "--version"],
             capture_output=True,
             text=True,
@@ -780,7 +780,7 @@ def _start_generated_child_network_probe(
     network_hits: list[str] = []
 
     class _NetworkProbeHandler(http.server.BaseHTTPRequestHandler):
-        def do_GET(self) -> None:  # noqa: N802
+        def do_GET(self) -> None:
             network_hits.append(self.path)
             self.send_response(204)
             self.end_headers()
@@ -1111,7 +1111,7 @@ def _execute_generated_child_parent(
     prompt: str,
 ) -> tuple[subprocess.CompletedProcess[str], str]:
     timeout = int(os.environ.get("GENERATED_CHILD_SMOKE_TIMEOUT", "900"))
-    model_catalog = subprocess.run(  # noqa: S603
+    model_catalog = subprocess.run(
         ["codex", "debug", "models", "--bundled"],
         env=env,
         capture_output=True,
@@ -2398,7 +2398,7 @@ def _run_shell_capture_probe(backend: str, tmp_path: Path) -> _DenyRoundTripOutp
         env["AUTOSKILLIT_AGENT_BACKEND"] = "codex"
         config_path = codex_home / "config.toml"
         sync_hooks_to_codex_config(config_path=config_path)
-        init_result = subprocess.run(  # noqa: S603
+        init_result = subprocess.run(
             ["git", "init", "-q"],
             cwd=workspace,
             env=env,
@@ -2420,7 +2420,7 @@ def _run_shell_capture_probe(backend: str, tmp_path: Path) -> _DenyRoundTripOutp
         raise ValueError(f"unsupported probe backend: {backend}")
 
     timeout = int(os.environ.get("OUTPUT_BUDGET_HOOK_SMOKE_TIMEOUT", "120"))
-    result = subprocess.run(  # noqa: S603
+    result = subprocess.run(
         command,
         cwd=workspace,
         env=env,
@@ -2733,7 +2733,7 @@ def test_codex_shell_capture_preserves_divergent_execution_workdir(
     env, codex_home, _claude_config = _isolated_cli_env(probe_root, workspace)
     env["AUTOSKILLIT_AGENT_BACKEND"] = "codex"
     sync_hooks_to_codex_config(config_path=codex_home / "config.toml")
-    init_result = subprocess.run(  # noqa: S603
+    init_result = subprocess.run(
         ["git", "init", "-q"],
         cwd=workspace,
         env=env,
@@ -2757,7 +2757,7 @@ def test_codex_shell_capture_preserves_divergent_execution_workdir(
         "completes, stop without running any other tool."
     )
     timeout = int(os.environ.get("OUTPUT_BUDGET_HOOK_SMOKE_TIMEOUT", "120"))
-    result = subprocess.run(  # noqa: S603
+    result = subprocess.run(
         ["codex", "exec", "--json", "--sandbox", "workspace-write", prompt],
         cwd=workspace,
         env=env,
@@ -2981,7 +2981,7 @@ def _run_large_output_probe(backend: str, tmp_path: Path) -> _LargeOutputProbe:
         raise ValueError(f"unsupported probe backend: {backend}")
 
     timeout = int(os.environ.get("OUTPUT_BUDGET_LARGE_SMOKE_TIMEOUT", "900"))
-    result = subprocess.run(  # noqa: S603
+    result = subprocess.run(
         command,
         cwd=workspace,
         env=env,

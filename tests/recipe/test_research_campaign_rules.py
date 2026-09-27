@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-import autoskillit.recipe  # noqa: F401 -- pyright: ignore[reportUnusedImport] -- triggers rule registration
+import autoskillit.recipe  # noqa: F401 -- triggers rule registration
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe

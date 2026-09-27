@@ -507,7 +507,7 @@ def _register_backend_integrations(
 ) -> tuple[bool | None, str]:
     """Register the resolved backend's hooks, plugin, and MCP integrations."""
     if backend.capabilities.mcp_config_capable:
-        from autoskillit.execution import (  # noqa: PLC0415
+        from autoskillit.execution import (
             ensure_codex_mcp_registered,
             sync_hooks_to_codex_config,
         )
@@ -540,7 +540,7 @@ def _register_backend_integrations(
     else:
         evict_direct_mcp_entry(_user_claude_json_path())
 
-    from autoskillit.execution import ensure_codex_mcp_registered  # noqa: PLC0415
+    from autoskillit.execution import ensure_codex_mcp_registered
 
     try:
         codex_registered = ensure_codex_mcp_registered()

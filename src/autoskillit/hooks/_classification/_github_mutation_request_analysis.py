@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     )
 else:
     if __package__ == "autoskillit.hooks._classification":
-        from .._runtime._command_classification import (  # noqa: E402
+        from .._runtime._command_classification import (
             ArgvToken,
             _argv_token_value_after_key,
             _consume_argv_flag,
@@ -34,7 +34,7 @@ else:
             command_verb_and_args,
         )
     else:
-        from _command_classification import (  # noqa: E402
+        from _command_classification import (
             ArgvToken,
             _argv_token_value_after_key,
             _consume_argv_flag,

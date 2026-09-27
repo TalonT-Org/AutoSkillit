@@ -89,11 +89,11 @@ def load_recipe(path: Path, temp_dir_relpath: str = ".autoskillit/temp") -> Reci
         temp_dir_relpath=temp_dir_relpath,
     )
     recipe = _parse_recipe(data, declared_data=declared_data)
-    from autoskillit.recipe.contracts.staleness_cache import compute_recipe_hash  # noqa: PLC0415
+    from autoskillit.recipe.contracts.staleness_cache import compute_recipe_hash
 
     recipe.content_hash = compute_recipe_hash(path)
     # Deferred import breaks the circular dependency with _analysis.py.
-    from autoskillit.recipe.analysis._analysis import (  # noqa: PLC0415
+    from autoskillit.recipe.analysis._analysis import (
         _build_step_graph,
         extract_blocks,
     )
@@ -443,7 +443,7 @@ def _parse_campaign_dispatches(dispatches_raw: Any) -> list[CampaignDispatch]:
                 DispatchGateType(raw_gate) if raw_gate else None
             )
         except ValueError:
-            dispatch_gate = raw_gate  # type: ignore[assignment]  # Invalid; caught by validate_recipe_structure
+            dispatch_gate = raw_gate  # Invalid; caught by validate_recipe_structure
         dispatch_recipe = dispatch_raw.get("recipe", "")
         if not dispatch_name:
             raise ValueError(

@@ -7,6 +7,7 @@ import math
 import os
 import random
 import stat
+import sys
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -21,10 +22,10 @@ from ..types import (
     PluginLoadMode,
 )
 
-try:
+if sys.platform == "win32":
+    fcntl = None  # pragma: no cover - exercised through the platform guard
+else:
     import fcntl
-except ImportError:  # pragma: no cover - exercised through the platform guard
-    fcntl = None  # type: ignore[assignment]
 
 __all__ = [
     "ARTIFACT_LEASE_TIMEOUT_SECONDS",

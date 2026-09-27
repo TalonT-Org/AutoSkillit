@@ -19,7 +19,7 @@ from autoskillit.core import (
 from autoskillit.recipe.analysis._analysis_bfs import bfs_reachable
 from autoskillit.recipe.analysis._analysis_graph import RouteEdge, _extract_routing_edges
 from autoskillit.recipe.contracts._contracts_types import INPUT_REF_RE
-from autoskillit.recipe.ingredients._recipe_merge import _merge_sub_recipe  # noqa: F401
+from autoskillit.recipe.ingredients._recipe_merge import _merge_sub_recipe
 from autoskillit.recipe.io import _parse_recipe, find_sub_recipe_by_name
 from autoskillit.recipe.io import load_recipe as _load_recipe_from_path
 from autoskillit.recipe.schema import (
@@ -27,7 +27,7 @@ from autoskillit.recipe.schema import (
     RecipeStep,
     StepResultCondition,
     StepResultRoute,
-)  # noqa: F401
+)
 
 
 class _DeferredGuardState(NamedTuple):

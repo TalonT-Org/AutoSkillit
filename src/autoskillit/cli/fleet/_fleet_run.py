@@ -123,7 +123,7 @@ async def _execute_fleet_run(
         else:
             managed_join_parent_id = None
 
-    from autoskillit.server import _compute_effective_backend_map  # noqa: PLC0415
+    from autoskillit.server import _compute_effective_backend_map
 
     _recipe_info = ctx.recipes.find(recipe, ctx.project_dir) if ctx.recipes else None
     _raw_steps = (

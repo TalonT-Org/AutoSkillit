@@ -230,7 +230,7 @@ _PRE_SPLIT_TEST_TYPE_CONSTANTS_NAMES: frozenset[str] = frozenset(
     }
 )
 
-_SPLIT_TARGETS: dict[str, str] = {  # noqa: E501 — table-style mapping, one test name per line
+_SPLIT_TARGETS: dict[str, str] = {
     # test_types.py → 4 files
     "test_claude_content_block_type_from_api": "tests.core.test_types_enums",
     "test_retry_reason_values": "tests.core.test_types_enums",

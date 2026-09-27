@@ -84,7 +84,7 @@ class TestKitchenVisibility:
 
     @pytest.mark.anyio
     async def test_tool_list_changes_after_enable_within_session(self) -> None:
-        """Tool list visible to a client changes when kitchen tags are enabled mid-session."""  # noqa: E501
+        """Tool list visible to a client changes when kitchen tags are enabled mid-session."""
         from fastmcp.client import Client
 
         from autoskillit.pipeline.gate import GATED_TOOLS

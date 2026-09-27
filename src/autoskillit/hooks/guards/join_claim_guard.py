@@ -36,17 +36,17 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
-from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+from _hook_payload import (  # noqa: E402
     normalize_payload_cwd,
     resolve_state_root,
 )
-from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+from _hook_settings import (  # noqa: E402
     hook_join_applicability,
     resolve_binding_session_id,
     session_managed_scope,
     write_join_diagnostic,
 )
-from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
+from _join_ledger import (  # noqa: E402
     JoinLedgerError,
     claim_assignment,
     resolve_flag_dir,

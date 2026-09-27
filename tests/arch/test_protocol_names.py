@@ -13,7 +13,7 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 def test_renamed_protocols_importable() -> None:
     """New protocol names (AuditLog etc.) must be importable from autoskillit.core."""
-    from autoskillit.core import (  # noqa: F401
+    from autoskillit.core import (
         AuditLog,
         GateState,
         McpResponseLog,

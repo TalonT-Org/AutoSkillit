@@ -8,12 +8,13 @@ and construction-time validation.
 
 from __future__ import annotations
 
-import os
-import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
+
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
@@ -57,10 +58,6 @@ def test_mypy_rejects_cross_unit_assignment(tmp_path: Path) -> None:
     directly rather than as deferred strings) and asserts it rejects both
     directions of the mismatch.
     """
-    mypy_path = shutil.which("mypy")
-    if mypy_path is None:
-        pytest.skip("mypy not on PATH")
-
     snippet = """
 from autoskillit.core.types._type_dimensions import SerializedChars, Utf8ByteLimit
 
@@ -82,10 +79,12 @@ take_chars(Utf8ByteLimit(100))  # should be rejected: Utf8ByteLimit is not Seria
     # MYPYPATH points at src/ so the snippet resolves against source directly,
     # with no dependency on an editable/wheel install of autoskillit.
     src_dir = Path(__file__).resolve().parents[2] / "src"
-    env = {**os.environ, "MYPYPATH": str(src_dir)}
+    env = {**production_interpreter_env(), "MYPYPATH": str(src_dir)}
     result = subprocess.run(
         [
-            mypy_path,
+            sys.executable,
+            "-m",
+            "mypy",
             "--ignore-missing-imports",
             # The assertions below match plain substrings. Without this, mypy
             # honours FORCE_COLOR/COLORTERM from the inherited environment and

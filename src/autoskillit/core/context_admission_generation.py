@@ -1,6 +1,6 @@
 """Backward-compat shim. See core.context_admission.context_admission_generation."""
 
-from autoskillit.core.context_admission.context_admission_generation import (  # noqa: F401
+from autoskillit.core.context_admission.context_admission_generation import (
     _mark_generation_indeterminate,
     _reconcile_closed_generation,
     _reconcile_generation,

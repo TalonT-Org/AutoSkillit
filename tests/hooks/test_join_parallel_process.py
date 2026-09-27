@@ -60,7 +60,7 @@ def test_join_ledger_lock_contention_stops_at_its_fake_deadline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A contended join-ledger acquisition does not spin or block past its deadline."""
-    from autoskillit.hooks._join import storage as ledger_storage  # noqa: PLC0415
+    from autoskillit.hooks._join import storage as ledger_storage
 
     timestamps = iter((0.0, 1.0, 2.0))
     sleeps: list[float] = []

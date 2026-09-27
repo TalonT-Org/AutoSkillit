@@ -7,16 +7,17 @@ import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-if __package__:
+if TYPE_CHECKING or __package__:
     from .._session_binding import atomic_write, binding_lock
     from ._hook_payload import normalize_payload_cwd, resolve_state_root
 else:
-    from _hook_payload import (  # type: ignore[import-not-found,no-redef]
+    from _hook_payload import (
         normalize_payload_cwd,
         resolve_state_root,
     )
-    from _session_binding import (  # type: ignore[import-not-found,no-redef]
+    from _session_binding import (
         atomic_write,
         binding_lock,
     )

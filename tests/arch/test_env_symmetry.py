@@ -155,7 +155,7 @@ def test_dynaconf_backend_env_var_in_skill_session() -> None:
 
 
 def test_dynaconf_backend_env_var_in_food_truck_cmd() -> None:
-    """Nested AUTOSKILLIT_AGENT_BACKEND__BACKEND in build_food_truck_cmd env for every backend."""  # noqa: E501
+    """Nested AUTOSKILLIT_AGENT_BACKEND__BACKEND in build_food_truck_cmd env for every backend."""
     from autoskillit.execution.backends import BACKEND_REGISTRY
 
     assert BACKEND_REGISTRY, "BACKEND_REGISTRY is empty — test provides no coverage"

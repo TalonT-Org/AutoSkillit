@@ -35,7 +35,7 @@ def _compute_exit_code(state: CampaignState) -> int:
 
     0 = all success/skipped, 1 = any failure, 2 = unresolved or in-progress.
     """
-    from autoskillit.fleet import DispatchStatus  # noqa: PLC0415
+    from autoskillit.fleet import DispatchStatus
 
     _failure = frozenset(
         {
@@ -61,7 +61,7 @@ def _compute_exit_code(state: CampaignState) -> int:
 
 def _fmt_elapsed(dispatch: DispatchRecord) -> str:
     """Format dispatch elapsed time as human-readable string."""
-    from autoskillit.fleet import DispatchStatus  # noqa: PLC0415
+    from autoskillit.fleet import DispatchStatus
 
     if dispatch.started_at <= 0:
         return "-"
@@ -246,7 +246,7 @@ def _watch_loop(state_path: Path) -> int:
     import termios
     import tty
 
-    from autoskillit.fleet import DispatchStatus, read_state  # noqa: PLC0415
+    from autoskillit.fleet import DispatchStatus, read_state
 
     _in_progress = frozenset({DispatchStatus.RUNNING, DispatchStatus.PENDING})
 

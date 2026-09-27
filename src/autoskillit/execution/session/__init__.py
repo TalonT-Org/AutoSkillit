@@ -7,8 +7,8 @@ from __future__ import annotations
 
 from autoskillit.core import CliSubtype, SkillResult, get_logger, truncate_text
 from autoskillit.execution.session._exit_classification import (
-    classify_infra_exit,  # noqa: F401 — re-export for callers
-    has_rate_limit_signal,  # noqa: F401 — re-export for callers
+    classify_infra_exit,
+    has_rate_limit_signal,
 )
 from autoskillit.execution.session._managed_headless_session_lineage import (
     DefaultManagedHeadlessSessionLineageStore,
@@ -38,11 +38,11 @@ from autoskillit.execution.session._session_outcome import (
     _compute_success,  # noqa: F401 — re-export for callers
 )
 from autoskillit.execution.session._session_state import (
-    SessionState,  # noqa: F401 — re-export for callers
-    SessionStateLock,  # noqa: F401 — re-export for callers
-    clear_session_state,  # noqa: F401 — re-export for callers
-    persist_session_state,  # noqa: F401 — re-export for callers
-    read_session_state,  # noqa: F401 — re-export for callers
+    SessionState,
+    SessionStateLock,
+    clear_session_state,
+    persist_session_state,
+    read_session_state,
 )
 from autoskillit.execution.session._skill_session_contract_store import (
     DefaultSkillSessionContractStore,

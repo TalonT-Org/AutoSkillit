@@ -22,22 +22,22 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
-from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
+from _command_classification import (  # noqa: E402
     _command_position_candidate_spans,
     all_evaluated_segments,
     command_verb_and_args,
     interpreter_invokes,
 )
-from _hook_constants import (  # type: ignore[import-not-found]  # noqa: E402
+from _hook_constants import (  # noqa: E402
     DENY_REASON_BY_GUARD,
     DENY_TRIGGER_BY_GUARD,
     EXEMPT_SKILLS_BY_GUARD,
 )
-from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+from _hook_payload import (  # noqa: E402
     parse_hook_command,
     resolve_state_root,
 )
-from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+from _hook_settings import (  # noqa: E402
     enforce_session_scope,
     read_merged_hook_config,
 )

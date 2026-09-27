@@ -93,9 +93,9 @@ def _check_autoskillit_version_compatible(ctx: ValidationContext) -> list[RuleFi
     if not ctx.recipe.version:
         return []
     try:
-        from importlib.metadata import version  # noqa: PLC0415
+        from importlib.metadata import version
 
-        from packaging.version import Version  # noqa: PLC0415
+        from packaging.version import Version
 
         installed = Version(version("autoskillit"))
         required = Version(ctx.recipe.version)

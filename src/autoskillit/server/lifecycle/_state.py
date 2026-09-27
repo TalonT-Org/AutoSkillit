@@ -72,14 +72,15 @@ def _initialize(ctx: ToolContext) -> None:
     # if _initialize() is called more than once with the same runner instance.
     from autoskillit.server import mcp  # circular-break
 
-    if isinstance(ctx.runner, RecordingSubprocessRunner) and not getattr(
-        ctx.runner, "_mcp_middleware_registered", False
+    if (
+        isinstance(ctx.runner, RecordingSubprocessRunner)
+        and not ctx.runner._mcp_middleware_registered
     ):
         try:
-            from api_simulator.mcp import McpRecordingMiddleware  # noqa: PLC0415
+            from api_simulator.mcp import McpRecordingMiddleware
 
             mcp.add_middleware(McpRecordingMiddleware(ctx.runner.recorder))
-            ctx.runner._mcp_middleware_registered = True  # type: ignore[attr-defined]
+            ctx.runner._mcp_middleware_registered = True
             logger.info("mcp_recording_middleware_registered")
         except ImportError:
             logger.warning("mcp_scenario_middleware_unavailable", exc_info=True)
@@ -88,13 +89,13 @@ def _initialize(ctx: ToolContext) -> None:
     elif (
         isinstance(ctx.runner, ReplayingSubprocessRunner)
         and ctx.runner.player is not None
-        and not getattr(ctx.runner, "_mcp_middleware_registered", False)
+        and not ctx.runner._mcp_middleware_registered
     ):
         try:
-            from api_simulator.mcp import McpReplayMiddleware  # noqa: PLC0415
+            from api_simulator.mcp import McpReplayMiddleware
 
             mcp.add_middleware(McpReplayMiddleware(ctx.runner.player))
-            ctx.runner._mcp_middleware_registered = True  # type: ignore[attr-defined]
+            ctx.runner._mcp_middleware_registered = True
             logger.info("mcp_replay_middleware_registered")
         except ImportError:
             logger.warning("mcp_scenario_middleware_unavailable", exc_info=True)
@@ -170,7 +171,7 @@ async def deferred_initialize(ctx: ToolContext, *, ready_event: asyncio.Event) -
             logger.warning("recover_crashed_sessions at startup failed", exc_info=True)
 
         try:
-            from datetime import datetime, timedelta  # noqa: PLC0415
+            from datetime import datetime, timedelta
 
             cfg = ctx.config.linux_tracing
             log_root = resolve_log_dir(cfg.log_dir)

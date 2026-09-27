@@ -35,7 +35,7 @@ def _run_hook(
     skill_name: str = "",
     monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[str, int]:
-    from autoskillit.hooks.lint_after_edit_hook import main  # noqa: PLC0415
+    from autoskillit.hooks.lint_after_edit_hook import main
 
     if headless:
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")

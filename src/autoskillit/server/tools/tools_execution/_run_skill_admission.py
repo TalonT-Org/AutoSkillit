@@ -206,16 +206,11 @@ def _prepare_audit_reservation(
     )
     state._bound_input_map = dict(state._bound_recipe_inputs)
     state._prior_input_field = state._audit_publication.prior_input_field
-    # _bound_input_map values are BoundScalar (str | int | bool); the
-    # isinstance check below is the real type guard, matching the flat
-    # code's untyped-local behavior before this became a state field.
-    state._prior_path = state._bound_input_map.get(  # type: ignore[assignment]
-        state._prior_input_field
-    )
+    prior_path = state._bound_input_map.get(state._prior_input_field)
     state._recipe_execution_key = RecipeExecutionId(state.recipe_execution_id)
-    if isinstance(state._prior_path, str) and state._prior_path:
+    if isinstance(prior_path, str) and prior_path:
         prior_authority = load_current_prior_authority(
-            state._prior_path,
+            prior_path,
             allowed_root=state._clone_allowed_root,
             ledger=state.tool_ctx.audit_admission_ledger,
             recipe_execution_id=state._recipe_execution_key,

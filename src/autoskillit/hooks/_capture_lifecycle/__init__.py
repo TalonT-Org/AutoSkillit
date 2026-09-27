@@ -49,7 +49,7 @@ _module_identity.register_module_aliases(__name__)
 if TYPE_CHECKING:
     from autoskillit.hooks._capture_lifecycle._admission import (
         MAX_ACTIVE_RECORDS as _MAX_ACTIVE_RECORDS,
-    )  # noqa: F401
+    )
     from autoskillit.hooks._capture_lifecycle._store import (
         _REFERENCE_LIFETIME_SECONDS,
         _RETENTION_SECONDS,
@@ -88,7 +88,7 @@ if TYPE_CHECKING:
         VerifiedCaptureSnapshot,
         _CarrierLeaseLive,
         _ObservedArtifact,
-    )  # noqa: F401
+    )
 elif __package__ == "_capture_lifecycle":
     from _capture_lifecycle._admission import MAX_ACTIVE_RECORDS as _MAX_ACTIVE_RECORDS
     from _capture_lifecycle._store import (
@@ -129,7 +129,7 @@ elif __package__ == "_capture_lifecycle":
         VerifiedCaptureSnapshot,
         _CarrierLeaseLive,
         _ObservedArtifact,
-    )  # noqa: F401
+    )
 else:
     from ._admission import MAX_ACTIVE_RECORDS as _MAX_ACTIVE_RECORDS
     from ._store import (
@@ -170,7 +170,7 @@ else:
         VerifiedCaptureSnapshot,
         _CarrierLeaseLive,
         _ObservedArtifact,
-    )  # noqa: F401
+    )
 
 # Re-bind under the original public-API name. The discriminator imports this
 # as ``_MAX_ACTIVE_RECORDS`` to avoid colliding with the same constant in
@@ -196,12 +196,12 @@ if TYPE_CHECKING:
         _capture_syntax,
         _capture_types,
         _record_from_dict,
-    )  # noqa: F401
+    )
     from autoskillit.hooks._capture_lifecycle._transactions import _record_to_dict
 elif __package__ == "_capture_lifecycle":
     import os as _os
 
-    from _capture_lifecycle._store import (  # type: ignore[no-redef]
+    from _capture_lifecycle._store import (
         _COMPACTION_THRESHOLD_BYTES,
         _STORE_FACTORY_TOKEN,
         _capture_capacity,
@@ -216,7 +216,7 @@ elif __package__ == "_capture_lifecycle":
         _capture_syntax,
         _capture_types,
         _record_from_dict,
-    )  # noqa: F401
+    )
     from _capture_lifecycle._transactions import _record_to_dict
 else:
     import os as _os
@@ -236,7 +236,7 @@ else:
         _capture_syntax,
         _capture_types,
         _record_from_dict,
-    )  # noqa: F401
+    )
     from ._transactions import _record_to_dict
 
 # ``os`` is referenced via ``capture_lifecycle.os`` by some test fixtures;

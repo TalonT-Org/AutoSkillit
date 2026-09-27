@@ -216,7 +216,7 @@ _FORMATTER_COVERAGE_REGISTRY: dict[str, FormatterCoverageDef] | None = None
 
 
 def _get_formatter_coverage_registry() -> dict[str, FormatterCoverageDef]:
-    global _FORMATTER_COVERAGE_REGISTRY  # noqa: PLW0603
+    global _FORMATTER_COVERAGE_REGISTRY
     if _FORMATTER_COVERAGE_REGISTRY is None:
         _FORMATTER_COVERAGE_REGISTRY = _build_registry()
     return _FORMATTER_COVERAGE_REGISTRY

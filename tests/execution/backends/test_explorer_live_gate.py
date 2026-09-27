@@ -481,7 +481,7 @@ def _write_artifact(data: dict[str, object]) -> None:
 
 def _commit_repository(project: Path) -> str:
     for command in (["git", "init", "-q", "-b", "main"], ["git", "add", "."]):
-        subprocess.run(  # noqa: S603
+        subprocess.run(
             command,
             cwd=project,
             capture_output=True,
@@ -489,7 +489,7 @@ def _commit_repository(project: Path) -> str:
             timeout=10,
             check=True,
         )
-    subprocess.run(  # noqa: S603
+    subprocess.run(
         [
             "git",
             "-c",
@@ -506,7 +506,7 @@ def _commit_repository(project: Path) -> str:
         timeout=10,
         check=True,
     )
-    return subprocess.run(  # noqa: S603
+    return subprocess.run(
         ["git", "rev-parse", "HEAD"],
         cwd=project,
         capture_output=True,
@@ -721,7 +721,7 @@ def test_live_production_explorer_mcp_gate_isolated_for_both_roles(
     hits: list[str] = []
 
     class NetworkCanary(http.server.BaseHTTPRequestHandler):
-        def do_GET(self) -> None:  # noqa: N802
+        def do_GET(self) -> None:
             hits.append(self.path)
             self.send_response(204)
             self.end_headers()
@@ -733,7 +733,7 @@ def test_live_production_explorer_mcp_gate_isolated_for_both_roles(
     network_thread = threading.Thread(target=network.serve_forever, daemon=True)
     sterile_parent_cwd = tmp_path / "sterile-parent-cwd"
     sterile_parent_cwd.mkdir()
-    initialized = subprocess.run(  # noqa: S603
+    initialized = subprocess.run(
         ["git", "init", "-q", "-b", "main"],
         cwd=sterile_parent_cwd,
         stdout=subprocess.DEVNULL,
@@ -910,7 +910,7 @@ def test_live_production_explorer_mcp_gate_isolated_for_both_roles(
     assert hits == []
     assert immutable.read_bytes() == immutable_bytes
     assert (
-        subprocess.run(  # noqa: S603
+        subprocess.run(
             ["git", "status", "--porcelain=v1"],
             cwd=project,
             capture_output=True,
@@ -921,7 +921,7 @@ def test_live_production_explorer_mcp_gate_isolated_for_both_roles(
         == ""
     )
     assert (
-        subprocess.run(  # noqa: S603
+        subprocess.run(
             ["git", "rev-parse", "HEAD"],
             cwd=project,
             capture_output=True,

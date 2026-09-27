@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import get_logger, pkg_root  # noqa: F401 — monkeypatch target
+from autoskillit.core import get_logger, pkg_root
 from autoskillit.recipe.api_orchestration._api_orchestration_assemble import (
     _assemble_load_result,
     _finalize_recipe_steps,
@@ -35,20 +35,20 @@ from autoskillit.recipe.api_orchestration._api_orchestration_validate import (
     _record_pipeline_error,
     _run_validation_pipeline,
 )
-from autoskillit.recipe.contracts.contracts import (  # noqa: F401 — monkeypatch targets
+from autoskillit.recipe.contracts.contracts import (
     check_contract_staleness,
     load_recipe_card,
     validate_recipe_cards,
 )
 from autoskillit.recipe.helpers._io_loading import (
-    load_recipe_dict_with_declarations,  # noqa: F401 — monkeypatch
+    load_recipe_dict_with_declarations,
 )
 from autoskillit.recipe.ingredients._recipe_ingredients import LoadRecipeResult
-from autoskillit.recipe.io import (  # noqa: F401 — monkeypatch targets
+from autoskillit.recipe.io import (
     _parse_recipe,
     list_recipes,
 )
-from autoskillit.recipe.validator import (  # noqa: F401 — monkeypatch targets
+from autoskillit.recipe.validator import (
     compute_recipe_validity,
     findings_to_dicts,
     run_semantic_rules,

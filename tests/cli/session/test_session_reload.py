@@ -167,7 +167,7 @@ def test_consume_reload_sentinel_serializes_concurrent_callers(tmp_path: Path) -
             try:
                 barrier.wait(timeout=10)
                 results[idx] = consume_reload_sentinel(tmp_path)
-            except BaseException as exc:  # noqa: BLE001 - captured for the assertion below
+            except BaseException as exc:
                 with errors_lock:
                     errors.append(exc)
 

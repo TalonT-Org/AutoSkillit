@@ -611,6 +611,8 @@ def _poll_leader_without_reaping(
     )
     if stopped_observation:
         wait_flags |= os.WSTOPPED
+    if sys.platform == "darwin" and sys.version_info < (3, 13):
+        raise OwnedProcessError("non-reaping process observation is unavailable")
     try:
         result = os.waitid(
             os.P_PID,

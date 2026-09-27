@@ -77,7 +77,9 @@ not an automated balancing rule or permanent timing SLA.
 ## Pre-commit Hooks
 
 Hooks run automatically on commit: ruff format, ruff check, mypy, uv lock check,
-and gitleaks secret scanning.
+and gitleaks secret scanning. The mypy hook runs `task typecheck`, the pinned mypy
+configured in `[tool.mypy]` for the linux and darwin platform targets; `task test-all`
+and CI run the same task.
 
     pre-commit run --all-files
 

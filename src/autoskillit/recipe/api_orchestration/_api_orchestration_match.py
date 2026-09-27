@@ -21,9 +21,9 @@ from autoskillit.recipe.io import (
     RecipeInfo,
     find_recipe_by_name,
     substitute_scripts_placeholder,  # noqa: F401
-    substitute_scripts_placeholder_yaml_safe,  # noqa: F401
+    substitute_scripts_placeholder_yaml_safe,
     substitute_temp_placeholder,  # noqa: F401
-    substitute_temp_placeholder_yaml_safe,  # noqa: F401
+    substitute_temp_placeholder_yaml_safe,
 )
 
 __all__ = ["_resolve_recipe_match"]

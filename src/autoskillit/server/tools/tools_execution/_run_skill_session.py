@@ -33,6 +33,7 @@ from autoskillit.core import current_step_name as _current_step_name
 from autoskillit.core import (
     resolve_skill_temp_dir as _resolve_skill_temp_dir,
 )
+from autoskillit.execution import ReplayingSubprocessRunner
 from autoskillit.pipeline import canonical_step_name as _canonical_step_name
 from autoskillit.pipeline import gate_error_result
 from autoskillit.server._explorer_projection import _build_requested_execution_identity
@@ -245,23 +246,21 @@ def _restore_or_replay_snapshot(state: _RunSkillDispatchState) -> str | None:
         state.skill_add_dirs.append(state._restored)
     elif (
         state.step_name
-        and state._runner is not None
-        and getattr(state._runner, "skill_snapshots", None)
-        and hasattr(state._runner, "restore_skill_snapshot")
+        and isinstance(state._runner, ReplayingSubprocessRunner)
+        and state._runner.skill_snapshots
         and state.tool_ctx.ephemeral_root is not None
     ):
         state._ephemeral_root = state.tool_ctx.ephemeral_root
         if state.invocation is None:
             raise SkillContractError("Fresh replay requires a validated effective invocation")
-        if hasattr(state._runner, "validate_skill_snapshot"):
-            state._runner.validate_skill_snapshot(  # type: ignore[attr-defined]
-                state.step_name,
-                invocation_member_names(state.invocation),
-            )
+        state._runner.validate_skill_snapshot(
+            state.step_name,
+            invocation_member_names(state.invocation),
+        )
         session_id = state._cleanup_session_id
         assert session_id is not None
         state._copied_snapshot_dir = state._ephemeral_root / session_id
-        state._restored = state._runner.restore_skill_snapshot(  # type: ignore[attr-defined]
+        state._restored = state._runner.restore_skill_snapshot(
             state.step_name, state._ephemeral_root, session_id
         )
         if state._restored is not None:

@@ -17,7 +17,7 @@ from autoskillit.core import Severity
 # Imported at module level for type annotations (no circular import: _analysis.py does
 # not import registry.py). The runtime isinstance() check in run_semantic_rules also
 # requires this to be available as a concrete class, not just a TYPE_CHECKING stub.
-from autoskillit.recipe.analysis._analysis import ValidationContext  # noqa: E402
+from autoskillit.recipe.analysis._analysis import ValidationContext
 from autoskillit.recipe.schema import DataFlowReport, Recipe, RecipeBlock
 
 
@@ -201,7 +201,7 @@ def compute_rule_registry_hash() -> str:
 
 def _finalize_registry() -> None:
     """Compute RULE_REGISTRY_HASH after all rule modules have been imported."""
-    global _REGISTRY_FINALIZED, RULE_REGISTRY_HASH  # noqa: PLW0603
+    global _REGISTRY_FINALIZED, RULE_REGISTRY_HASH
     RULE_REGISTRY_HASH = compute_rule_registry_hash()
     _REGISTRY_FINALIZED = True
 
@@ -256,7 +256,7 @@ def build_quality_dict(report: DataFlowReport) -> dict[str, object]:
 def compute_recipe_validity(
     errors: list[str],
     semantic_findings: list[RuleFinding],
-    contract_findings: list[dict],  # type: ignore[type-arg]
+    contract_findings: list[dict],
 ) -> bool:
     """Return True if no schema, semantic, or contract errors are present."""
     has_schema_errors = bool(errors)

@@ -71,7 +71,7 @@ class TestFleetErrorCodeEnum:
             assert snake_case.match(code.value), f"{code!r} is not snake_case"
 
     def test_fleet_error_code_enum_re_exported_from_core(self):
-        from autoskillit.core import FleetErrorCode  # noqa: F401
+        from autoskillit.core import FleetErrorCode
 
         assert FleetErrorCode is not None
 

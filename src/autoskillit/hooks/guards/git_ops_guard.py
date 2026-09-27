@@ -30,7 +30,7 @@ _GUARDS_DIR = str(Path(__file__).resolve().parent)  # hooks/guards/
 if _GUARDS_DIR not in sys.path:
     sys.path.insert(0, _GUARDS_DIR)
 
-from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
+from _command_classification import (  # noqa: E402
     _GIT_GLOBAL_FLAG_SPEC,
     StdinConsumer,
     _consume_str_flag,
@@ -42,7 +42,7 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
     scan_write_targets,
     tokenize_command_segments,
 )
-from _git_command_classification import (  # type: ignore[import-not-found]  # noqa: E402
+from _git_command_classification import (  # noqa: E402
     _classify_git_segment,
     _contains_blocked_git_op,
     _git_result,
@@ -52,22 +52,22 @@ from _git_command_classification import (  # type: ignore[import-not-found]  # n
     _resolve_git_common_dir,
     extract_git_subcommand_and_flags,
 )
-from _github_mutation_analysis import (  # type: ignore[import-not-found]  # noqa: E402
+from _github_mutation_analysis import (  # noqa: E402
     _DYNAMIC_SHELL_TOKEN_RE,
 )
-from _hook_constants import (  # type: ignore[import-not-found]  # noqa: E402
+from _hook_constants import (  # noqa: E402
     DENY_REASON_BY_GUARD,
     DENY_TRIGGER_BY_GUARD,
     EXEMPT_SKILLS_BY_GUARD,
 )
-from _hook_constants import (  # type: ignore[import-not-found]  # noqa: E402
+from _hook_constants import (  # noqa: E402
     RISKY_GIT_OPERATIONS as _BLOCKED_GIT_OPS,
 )
-from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+from _hook_payload import (  # noqa: E402
     parse_hook_command,
     resolve_state_root,
 )
-from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+from _hook_settings import (  # noqa: E402
     hook_session_shape,
     read_merged_hook_config,
 )

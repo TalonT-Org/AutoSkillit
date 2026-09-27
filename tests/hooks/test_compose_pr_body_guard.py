@@ -79,7 +79,7 @@ def _run_hook(
     skill_name: str = "compose-pr",
     headless: bool = True,
 ) -> str:
-    from autoskillit.hooks.guards.compose_pr_body_guard import main  # noqa: PLC0415
+    from autoskillit.hooks.guards.compose_pr_body_guard import main
 
     monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", skill_name)
     if headless:
@@ -96,7 +96,7 @@ def _run_hook(
 def _is_denied(output: str) -> bool:
     if not output:
         return False
-    from autoskillit.hooks.guards.compose_pr_body_guard import (  # noqa: PLC0415
+    from autoskillit.hooks.guards.compose_pr_body_guard import (
         COMPOSE_PR_BODY_DENY_TRIGGER,
     )
 
@@ -354,7 +354,7 @@ def test_echo_only_reference_is_not_a_create(monkeypatch, tmp_path):
 
 
 def test_malformed_hook_json_fails_open(monkeypatch):
-    from autoskillit.hooks.guards.compose_pr_body_guard import main  # noqa: PLC0415
+    from autoskillit.hooks.guards.compose_pr_body_guard import main
 
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
     monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")

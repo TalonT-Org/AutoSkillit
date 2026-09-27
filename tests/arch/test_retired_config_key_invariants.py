@@ -91,7 +91,7 @@ def test_retired_config_key_invariants(section: str, old_key: str, defn) -> None
     # (g) retired_in parses as a valid version; note is non-empty.
     try:
         Version(defn.retired_in)
-    except Exception as exc:  # noqa: BLE001 - re-raise as an assertion-style failure
+    except Exception as exc:
         pytest.fail(
             f"RETIRED_CONFIG_KEYS[{section!r}, {old_key!r}]: retired_in={defn.retired_in!r} "
             f"does not parse as a valid packaging.version.Version: {exc}"

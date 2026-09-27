@@ -46,7 +46,7 @@ async def handle_cancellation(
     spawn_ctx: SpawnContext,
     tool_ctx: ToolContext,
     effective_name: str,
-    managed_lineage_ref: ManagedHeadlessSessionLineageRef | None,
+    managed_lineage_ref: ManagedHeadlessSessionLineageRef,
     provenance: DispatchProvenanceTracker,
     marker_dir: Path | None,
     state_path: Path,
@@ -62,7 +62,7 @@ async def handle_cancellation(
         with anyio.CancelScope(shield=True):
             set_lineage_terminal_state(
                 tool_ctx,
-                managed_lineage_ref,  # type: ignore[arg-type]
+                managed_lineage_ref,
                 ManagedHeadlessSessionTerminalState.CANCELLED,
             )
     except Exception:
@@ -73,7 +73,7 @@ async def handle_cancellation(
         )
     if spawn_ctx.dispatched_pid:
         try:
-            from autoskillit.execution import kill_process_tree  # noqa: PLC0415
+            from autoskillit.execution import kill_process_tree
 
             provenance.start(
                 DispatchEffectName.LOCAL_PROCESS_CLEANUP,
@@ -110,7 +110,7 @@ async def handle_cancellation(
                 exc_info=True,
             )
         try:
-            from autoskillit.fleet.campaign_state.state import (  # noqa: PLC0415
+            from autoskillit.fleet.campaign_state.state import (
                 mark_dispatch_interrupted,
             )
 
@@ -141,7 +141,7 @@ async def handle_cancellation(
 async def handle_generic_exception(
     *,
     tool_ctx: ToolContext,
-    managed_lineage_ref: ManagedHeadlessSessionLineageRef | None,
+    managed_lineage_ref: ManagedHeadlessSessionLineageRef,
 ) -> NoReturn:
     """Generic ``except Exception`` handler — UNSHIELDED lineage close to FAILED.
 
@@ -151,7 +151,7 @@ async def handle_generic_exception(
     try:
         set_lineage_terminal_state(
             tool_ctx,
-            managed_lineage_ref,  # type: ignore[arg-type]
+            managed_lineage_ref,
             ManagedHeadlessSessionTerminalState.FAILED,
         )
     except Exception:
@@ -176,7 +176,7 @@ async def run_finally_label_cleanup(
     the dispatch did NOT complete normally, mirroring the original guard on
     ``if not _dispatch_completed_normally:``.
     """
-    from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels  # noqa: PLC0415
+    from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels
 
     with anyio.CancelScope(shield=True):
         provenance.start(

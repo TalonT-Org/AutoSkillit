@@ -53,7 +53,7 @@ from autoskillit.core.types import (
     ResolvedLaunchContract,
     RetryReason,
     SemanticAdaptationContext,
-    SessionCheckpoint,  # noqa: F401, TC001
+    SessionCheckpoint,
     SkillProjectionPreparation,
     SkillResult,
     SkillSemanticAdaptationResult,
@@ -589,7 +589,7 @@ class FakePluginArtifactAuthority:
         backend: CodingAgentBackend,
         load_mode: PluginLoadMode,
     ) -> PluginLaunchBinding:
-        from autoskillit.workspace import (  # noqa: PLC0415
+        from autoskillit.workspace import (
             assert_generator_process_fresh,
         )
 
@@ -1061,7 +1061,7 @@ class InMemoryRecipeRepository(RecipeRepository):
         self._full_recipes[path] = recipe
 
     def add_recipe(self, name: str, data: Any) -> None:
-        from autoskillit.recipe.schema import RecipeInfo  # noqa: PLC0415
+        from autoskillit.recipe.schema import RecipeInfo
 
         if not isinstance(data, RecipeInfo):
             raise TypeError(
@@ -1138,7 +1138,7 @@ class InMemoryRecipeRepository(RecipeRepository):
             }
         )
         if self._stale:
-            from autoskillit.core import SessionType, session_type  # noqa: PLC0415
+            from autoskillit.core import SessionType, session_type
 
             if session_type() is not SessionType.FLEET:
                 raise ProcessStaleError(
@@ -1666,7 +1666,7 @@ class InMemoryDatabaseReader(DatabaseReader):
         self,
         db_path: str,
         sql: str,
-        params: list | dict,  # type: ignore[type-arg]
+        params: list | dict,
         timeout_sec: int,
         max_rows: int,
     ) -> dict[str, Any]:
@@ -1780,7 +1780,7 @@ class MockSubprocessRunner(SubprocessRunner):
             termination=TerminationReason.NATURAL_EXIT,
             pid=99999,
         )
-        self.call_args_list: list[tuple] = []  # type: ignore[type-arg]
+        self.call_args_list: list[tuple] = []
         self.last_pty_mode: bool | None = None
 
     def push(self, result: SubprocessResult, *, expect: list[str] | None = None) -> None:

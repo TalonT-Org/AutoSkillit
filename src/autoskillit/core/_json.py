@@ -32,12 +32,12 @@ try:
 except ImportError:
     _USE_ORJSON: bool = False  # type: ignore[no-redef]
 
-    def fast_loads(s: str | bytes) -> Any:  # type: ignore[misc]
+    def fast_loads(s: str | bytes) -> Any:
         if isinstance(s, bytes):
             s = s.decode("utf-8")
         return json.loads(s)
 
-    def fast_dumps(  # type: ignore[misc]
+    def fast_dumps(
         obj: Any,
         *,
         sort_keys: bool = False,

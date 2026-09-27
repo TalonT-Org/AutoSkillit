@@ -284,7 +284,7 @@ def test_init_counter_with_numeric_value() -> None:
 
 def test_pre_iteration_cleanup_removes_files(tmp_path: Path) -> None:
     """pre_iteration_cleanup removes all files in output_dir, preserving patterns."""
-    from autoskillit.smoke_utils import pre_iteration_cleanup  # noqa: PLC0415
+    from autoskillit.smoke_utils import pre_iteration_cleanup
 
     out = tmp_path / "iter_0"
     out.mkdir()
@@ -305,7 +305,7 @@ def test_pre_iteration_cleanup_removes_files(tmp_path: Path) -> None:
 
 def test_pre_iteration_cleanup_noop_when_dir_missing(tmp_path: Path) -> None:
     """pre_iteration_cleanup is a no-op when output_dir does not exist."""
-    from autoskillit.smoke_utils import pre_iteration_cleanup  # noqa: PLC0415
+    from autoskillit.smoke_utils import pre_iteration_cleanup
 
     result = pre_iteration_cleanup(output_dir=str(tmp_path / "nonexistent"))
     assert result["cleaned"] == "false"
@@ -314,7 +314,7 @@ def test_pre_iteration_cleanup_noop_when_dir_missing(tmp_path: Path) -> None:
 
 def test_pre_iteration_cleanup_noop_when_dir_empty(tmp_path: Path) -> None:
     """pre_iteration_cleanup returns cleaned=true with removed_count=0 when dir is empty."""
-    from autoskillit.smoke_utils import pre_iteration_cleanup  # noqa: PLC0415
+    from autoskillit.smoke_utils import pre_iteration_cleanup
 
     out = tmp_path / "empty_iter"
     out.mkdir()

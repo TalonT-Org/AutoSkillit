@@ -507,6 +507,6 @@ def test_runtime_import_smoke_for_all_caller_modules(
         module = importlib.util.module_from_spec(spec)
         try:
             spec.loader.exec_module(module)  # type: ignore[union-attr]
-        except Exception as exc:  # noqa: BLE001 — import smoke test
+        except Exception as exc:
             failures.append((script_rel, repr(exc)))
     assert not failures, f"migrated caller modules failed to import: {failures}"

@@ -80,7 +80,7 @@ class ReadyLineage:
     dispatch_id: str
     state_path: Path
     capture_decision: Any
-    managed_lineage_ref: ManagedHeadlessSessionLineageRef | None
+    managed_lineage_ref: ManagedHeadlessSessionLineageRef
     managed_join_parent_id: str | None
     preflight: Any
     resume_session_id: str | None
@@ -100,12 +100,22 @@ class ReadyLineage:
 
 
 @dataclass
-class LineagePreparationResult:
-    """Phase B output envelope — consumed by Phase C."""
+class PriorSuccessLineageResult:
+    """Phase B outcome when the prior dispatch already succeeded and is mirrored."""
 
-    outcome: Literal["prior_success_short_circuit", "ready"]
-    prior_success_dispatch_result: DispatchResult | None
-    ready: ReadyLineage | None
+    outcome: Literal["prior_success_short_circuit"]
+    prior_success_dispatch_result: DispatchResult
+
+
+@dataclass
+class ReadyLineageResult:
+    """Phase B outcome carrying everything Phase C needs to spawn the executor."""
+
+    outcome: Literal["ready"]
+    ready: ReadyLineage
+
+
+LineagePreparationResult = PriorSuccessLineageResult | ReadyLineageResult
 
 
 def create_fresh_handle(
@@ -406,14 +416,13 @@ async def run_lineage_preparation(
                 ),
             },
         )
-        return LineagePreparationResult(
+        return PriorSuccessLineageResult(
             outcome="prior_success_short_circuit",
             prior_success_dispatch_result=_build_success_short_circuit(
                 identity_preparation.prior_success_record,
                 handle,
                 provenance.snapshot(),
             ),
-            ready=None,
         )
 
     identity = handle.identity
@@ -558,9 +567,8 @@ async def run_lineage_preparation(
     prior_session_chain = list(lineage_preparation.prior_session_chain)
     prior_dispatched_session_id = lineage_preparation.prior_dispatched_session_id
 
-    return LineagePreparationResult(
+    return ReadyLineageResult(
         outcome="ready",
-        prior_success_dispatch_result=None,
         ready=ReadyLineage(
             handle=handle,
             identity=identity,

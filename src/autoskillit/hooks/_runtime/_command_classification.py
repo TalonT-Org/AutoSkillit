@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    from autoskillit.hooks._classification._tokenizer import (  # noqa: F401
+    from autoskillit.hooks._classification._tokenizer import (
         ArgvToken,
         EvaluatedSegment,
         StdinLiteral,
@@ -560,8 +560,8 @@ def extract_git_subcommand_and_flags(segment: list[str]) -> GitInvocation | None
 
 
 if TYPE_CHECKING:
-    from autoskillit.hooks._classification import _interpreters  # noqa: F401
-    from autoskillit.hooks._classification._flags import (  # noqa: F401
+    from autoskillit.hooks._classification import _interpreters
+    from autoskillit.hooks._classification._flags import (
         _GIT_ADD_CONTENT_FLAGS,
         _GIT_DIFF_CONTENT_FLAGS,
         _GIT_DIFF_METADATA_FLAGS,
@@ -583,7 +583,7 @@ if TYPE_CHECKING:
         command_has_blocked_protected_path_read,
         is_allowed_protected_path_metadata_command,
     )
-    from autoskillit.hooks._classification._interpreters import (  # noqa: F401
+    from autoskillit.hooks._classification._interpreters import (
         _PYTHON_INVOCATION_FLAG_SPEC,
         _SHELL_INVOCATION_FLAG_SPEC,
         EvaluatedPayload,
@@ -612,7 +612,7 @@ if TYPE_CHECKING:
     from autoskillit.hooks._classification._interpreters import (
         live_command_text as _live_command_text_impl,
     )
-    from autoskillit.hooks._classification._output_redirect import (  # noqa: F401
+    from autoskillit.hooks._classification._output_redirect import (
         _FD_DUPLICATION_RE,
         _REDIRECT_OP_ONLY_RE,
         _REDIRECT_TOKEN_RE,

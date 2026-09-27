@@ -195,7 +195,7 @@ class DefaultMigrationService:
           at least one migration or regeneration actually ran.
         """
         from autoskillit.migration.store import FailureStore, default_store_path
-        from autoskillit.recipe import parse_recipe_metadata  # noqa: PLC0415
+        from autoskillit.recipe import parse_recipe_metadata
 
         meta = parse_recipe_metadata(recipe_path)
         name = meta.name

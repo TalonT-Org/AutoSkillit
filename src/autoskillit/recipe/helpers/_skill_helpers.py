@@ -25,7 +25,7 @@ def bound_skill_name(ctx: ValidationContext, step_name: str) -> str | None:
 def get_allowed_values_for_skill(skill_name: str) -> dict[str, list[str]]:
     """Return {output_name: [allowed_value, ...]} for a skill's outputs with allowed_values."""
     try:
-        from autoskillit.recipe.contracts.contracts import load_bundled_manifest  # noqa: PLC0415
+        from autoskillit.recipe.contracts.contracts import load_bundled_manifest
 
         manifest = load_bundled_manifest()
     except Exception:
@@ -65,14 +65,14 @@ def _resolve_skill_md(
                 return skill_md
         return None
     if resolver is None:
-        from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
+        from autoskillit.workspace import DefaultSkillResolver
 
         resolver = DefaultSkillResolver()
     skill_info = resolver.resolve_effective(skill_name, project_root)
     if skill_info is None:
         return None
     if skill_info.invalidities:
-        from autoskillit.workspace import (  # noqa: PLC0415
+        from autoskillit.workspace import (
             SkillInfo,
             invalidity_hints,
             render_skill_invalidities,
@@ -115,7 +115,7 @@ _SKILL_NAMES_CACHE: dict[tuple[int, int, int], frozenset[str]] = {}
 
 def _get_skill_category_map(lister: SkillLister | None = None) -> dict[str, frozenset[str]]:
     """Return {skill_name: categories} for all bundled skills."""
-    from autoskillit.recipe.api._api_cache import _path_mtime_ns  # noqa: PLC0415
+    from autoskillit.recipe.api._api_cache import _path_mtime_ns
 
     key = (
         id(lister),
@@ -125,7 +125,7 @@ def _get_skill_category_map(lister: SkillLister | None = None) -> dict[str, froz
     if key in _SKILL_CATEGORY_CACHE:
         return _SKILL_CATEGORY_CACHE[key]
     if lister is None:
-        from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
+        from autoskillit.workspace import DefaultSkillResolver
 
         lister = DefaultSkillResolver()
     result = {s.name: s.categories for s in lister.list_all()}
@@ -136,7 +136,7 @@ def _get_skill_category_map(lister: SkillLister | None = None) -> dict[str, froz
 
 def _get_bundled_skill_names(lister: SkillLister | None = None) -> frozenset[str]:
     """Return the set of all bundled skill names."""
-    from autoskillit.recipe.api._api_cache import _path_mtime_ns  # noqa: PLC0415
+    from autoskillit.recipe.api._api_cache import _path_mtime_ns
 
     key = (
         id(lister),
@@ -146,7 +146,7 @@ def _get_bundled_skill_names(lister: SkillLister | None = None) -> frozenset[str
     if key in _SKILL_NAMES_CACHE:
         return _SKILL_NAMES_CACHE[key]
     if lister is None:
-        from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
+        from autoskillit.workspace import DefaultSkillResolver
 
         lister = DefaultSkillResolver()
     result = frozenset(s.name for s in lister.list_all())

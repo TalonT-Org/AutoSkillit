@@ -81,6 +81,19 @@ async def test_merge_queue_watcher_includes_user_agent_with_token():
 def test_merge_queue_watcher_has_resolve_token_interface():
     """DefaultMergeQueueWatcher matches sibling token resolution pattern."""
     watcher = DefaultMergeQueueWatcher(token=None)
-    assert hasattr(watcher, "_resolve_token")
-    assert hasattr(watcher, "_UNRESOLVED")
-    assert watcher._resolve_token() is None  # type: ignore[attr-defined]
+    assert watcher._resolve_token() is None
+
+
+def test_merge_queue_watcher_resolves_token_factory_once_on_first_use():
+    """A token factory is not called at construction, then called exactly once."""
+    calls: list[str] = []
+
+    def _factory() -> str | None:
+        calls.append("called")
+        return "tok"
+
+    watcher = DefaultMergeQueueWatcher(token=_factory)
+    assert calls == []
+    assert watcher._resolve_token() == "tok"
+    assert watcher._resolve_token() == "tok"
+    assert calls == ["called"]

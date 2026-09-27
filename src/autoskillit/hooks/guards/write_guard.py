@@ -21,7 +21,7 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
-from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
+from _command_classification import (  # noqa: E402
     UNRESOLVED_WRITE_TARGET_REMEDIATION,
     WriteTargetScan,
     extract_interpreter_write_paths,
@@ -31,7 +31,7 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
 from _guard_decision_diagnostics import (  # noqa: E402
     record_guard_decision,
 )
-from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+from _hook_payload import (  # noqa: E402
     TEMP_RELATIVE_DIR,
     extract_apply_patch_text,
     parse_hook_command,
@@ -40,7 +40,7 @@ from _hook_settings import (  # noqa: E402
     enforce_session_scope,
     hook_session_shape,
 )
-from _session_binding import (  # type: ignore[import-not-found]  # noqa: E402
+from _session_binding import (  # noqa: E402
     SessionBindingError,
     read_manifest,
     read_session_binding,

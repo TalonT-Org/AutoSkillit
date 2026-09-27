@@ -104,7 +104,7 @@ def _managed_observer(tmp_path):
 def _make_queued_build_result(*results: SkillResult):
     q: deque[SkillResult] = deque(results)
 
-    def _build(*args, **kwargs):  # noqa: ARG001
+    def _build(*args, **kwargs):
         return q.popleft()
 
     return _build
@@ -113,7 +113,7 @@ def _make_queued_build_result(*results: SkillResult):
 def _runner_returning(pid: int, result, *, native_session_id: str | None = None):
     """Fake ``ctx.runner``: optionally confirms spawn/session-id, then returns ``result``."""
 
-    async def fake_runner(cmd, **kwargs):  # noqa: ARG001
+    async def fake_runner(cmd, **kwargs):
         on_pid_resolved = kwargs.get("on_pid_resolved")
         if callable(on_pid_resolved):
             on_pid_resolved(pid, 0)
@@ -129,7 +129,7 @@ def _runner_returning(pid: int, result, *, native_session_id: str | None = None)
 def _runner_cancelling_without_spawn():
     """Fake ``ctx.runner``: cancels before ever confirming a spawn."""
 
-    async def fake_runner(cmd, **kwargs):  # noqa: ARG001
+    async def fake_runner(cmd, **kwargs):
         raise anyio.get_cancelled_exc_class()()
 
     return fake_runner
@@ -159,17 +159,17 @@ def _patch_headless_internals(monkeypatch, tmp_path, ctx, build_result_fn):
     )
     monkeypatch.setattr(
         "autoskillit.execution.headless._headless_execute._compute_post_session_metrics",
-        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),  # noqa: ARG005
+        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
     )
     monkeypatch.setattr(
         "autoskillit.execution.headless._headless_execute._capture_git_head_sha",
-        lambda *a: "",  # noqa: ARG005
+        lambda *a: "",
     )
     monkeypatch.setattr(
         "autoskillit.execution.headless._headless_execute.collect_version_snapshot",
         lambda backend=None: {},
     )
-    monkeypatch.setattr(_sl_mod, "flush_session_log", lambda **kw: None)  # noqa: ARG005
+    monkeypatch.setattr(_sl_mod, "flush_session_log", lambda **kw: None)
 
     class DisabledSink:
         env: dict[str, str] = {}
@@ -243,7 +243,7 @@ async def test_post_start_stale_produces_one_terminal_row(
     minimal_ctx.runner = _runner_returning(12345, _sr())
     _, lineage_observer = _managed_observer(tmp_path)
 
-    def build_spec(binding, provider_extras, managed_attempt_id):  # noqa: ARG001
+    def build_spec(binding, provider_extras, managed_attempt_id):
         assert managed_attempt_id is not None
         return ClaudeHeadlessCmd(cmd=("echo", "test"), env=dict(provider_extras or {}))
 

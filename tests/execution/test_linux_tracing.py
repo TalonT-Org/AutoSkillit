@@ -539,7 +539,7 @@ def test_proc_snapshot_has_comm_field():
     )
     assert isinstance(snap.comm, str) and snap.comm, "ProcSnapshot.comm must be a non-empty string"
     # /proc/self/comm contains the process name (typically 'python' or 'pytest')
-    expected_comm = open(f"/proc/{os.getpid()}/comm").read().strip()  # noqa: SIM115
+    expected_comm = open(f"/proc/{os.getpid()}/comm").read().strip()
     assert snap.comm == expected_comm, (
         f"snap.comm {snap.comm!r} must match /proc/{os.getpid()}/comm {expected_comm!r}"
     )

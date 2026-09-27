@@ -96,13 +96,9 @@ def _merge_group(
         "apis_defined",
         "apis_consumed",
     ):
-        seen: set[str] = set()
-        merged[field] = [
-            x
-            for wp in sources_in_order
-            for x in wp.get(field, [])
-            if not (x in seen or seen.add(x))  # type: ignore[func-returns-value]
-        ]
+        merged[field] = list(
+            dict.fromkeys(x for wp in sources_in_order for x in wp.get(field, []))
+        )
 
     # Collect all external deps; intra-group removal done in rewrite pass
     all_source_ids = set(group.source_wp_ids)

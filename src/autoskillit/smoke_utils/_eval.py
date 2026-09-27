@@ -29,7 +29,7 @@ def parse_eval_manifests(
     """
     from datetime import datetime
 
-    from autoskillit.core import atomic_write  # noqa: PLC0415
+    from autoskillit.core import atomic_write
 
     if not Path(output_dir).is_absolute():
         raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
@@ -114,7 +114,7 @@ def parse_agent_eval_manifests(
     """Parse agent-eval manifests, resolve prompt vars, and create eval run directory structure."""
     from datetime import datetime
 
-    from autoskillit.core import atomic_write  # noqa: PLC0415
+    from autoskillit.core import atomic_write
 
     if not Path(output_dir).is_absolute():
         raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
@@ -265,7 +265,7 @@ def _build_eval_context_common(
     default_artifact_type: str,
 ) -> dict[str, str]:
     """Shared implementation for build_eval_context and build_agent_eval_context."""
-    from autoskillit.core import atomic_write  # noqa: PLC0415
+    from autoskillit.core import atomic_write
 
     reference_path_raw = resolved.get("reference_path")
     if not reference_path_raw:
@@ -417,7 +417,7 @@ def compile_eval_scorecard(
     counts PASS/FAIL verdicts, and writes both machine-readable and
     human-readable scorecard outputs.
     """
-    from autoskillit.core import atomic_write  # noqa: PLC0415
+    from autoskillit.core import atomic_write
 
     eval_run_path = Path(eval_run_dir)
 

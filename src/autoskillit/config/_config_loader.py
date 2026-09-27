@@ -125,7 +125,7 @@ def _make_dynaconf(project_dir: Path | None = None) -> Dynaconf:
 
     Deferred import keeps dynaconf off the module-level import chain.
     """
-    from dynaconf import Dynaconf  # noqa: PLC0415
+    from dynaconf import Dynaconf
 
     from autoskillit.config._config_dataclasses import ConfigSchemaError
     from autoskillit.config.settings import (

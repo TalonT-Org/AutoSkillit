@@ -344,23 +344,23 @@ def _patch_for_flush(monkeypatch, tmp_path, skill_result):
         pid=99,
     )
 
-    async def fake_runner(cmd, **kwargs):  # noqa: ARG001
+    async def fake_runner(cmd, **kwargs):
         return sub_result
 
     monkeypatch.setattr(
         headless_execute_module,
         "_build_skill_result",
-        lambda *a, **kw: skill_result,  # noqa: ARG005
+        lambda *a, **kw: skill_result,
     )
     monkeypatch.setattr(
         headless_execute_module,
         "_compute_post_session_metrics",
-        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),  # noqa: ARG005
+        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
     )
     monkeypatch.setattr(
         headless_execute_module,
         "_capture_git_head_sha",
-        lambda *a: "",  # noqa: ARG005
+        lambda *a: "",
     )
     monkeypatch.setattr(
         headless_execute_module,

@@ -417,7 +417,7 @@ async def _execute_claude_headless(
             assert spec is not None
             _elapsed = time.monotonic() - _start_mono
             _end_ts = (datetime.fromisoformat(_start_ts) + timedelta(seconds=_elapsed)).isoformat()
-            result = dataclasses.replace(  # type: ignore[arg-type]
+            result = dataclasses.replace(
                 _result, start_ts=_start_ts, end_ts=_end_ts, elapsed_seconds=_elapsed
             )
 

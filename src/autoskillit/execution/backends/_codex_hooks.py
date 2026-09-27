@@ -322,7 +322,7 @@ def generate_codex_hooks_config(
         # package to avoid an import cycle.  Direct generated-home setup is a
         # legitimate first consumer, so establish that existing runtime
         # registry before validating or rendering it.
-        import autoskillit.hooks  # noqa: PLC0415,F401
+        import autoskillit.hooks  # noqa: F401
 
     validate_lifecycle_contracts(
         registry,

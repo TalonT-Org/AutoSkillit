@@ -34,7 +34,7 @@ def _print_dispatch_preview() -> str:
     Returns the recipe table string (name + description) for system prompt injection.
     """
     from autoskillit.cli.ui._ansi import permissions_warning, supports_color
-    from autoskillit.core import load_yaml  # noqa: PLC0415
+    from autoskillit.core import load_yaml
     from autoskillit.recipe import RecipeKind, list_recipes
 
     color = supports_color()

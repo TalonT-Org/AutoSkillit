@@ -204,7 +204,7 @@ def test_orphaned_schema_1_sidecar_is_not_selected_over_the_hook_bound_live_mani
 
 def test_binding_envelope_round_trips_through_one_shared_type() -> None:
     """The authority owns versioned serialization and legacy unresolved state."""
-    from autoskillit.hooks._session_binding import (  # noqa: PLC0415
+    from autoskillit.hooks._session_binding import (
         LoadedSkillEntry,
         SessionBinding,
         SessionBindingError,
@@ -265,7 +265,7 @@ def test_binding_envelope_round_trips_through_one_shared_type() -> None:
 )
 def test_loaded_skill_rejects_non_string_schema_fields(field: str) -> None:
     """Persisted string fields are validated instead of silently coerced."""
-    from autoskillit.hooks._session_binding import (  # noqa: PLC0415
+    from autoskillit.hooks._session_binding import (
         LoadedSkillEntry,
         SessionBindingError,
     )
@@ -292,7 +292,7 @@ def test_loaded_skill_rejects_non_string_schema_fields(field: str) -> None:
 
 def test_loaded_skill_rejects_boolean_cardinality() -> None:
     """Boolean values are not admitted as integer cardinalities."""
-    from autoskillit.hooks._session_binding import (  # noqa: PLC0415
+    from autoskillit.hooks._session_binding import (
         LoadedSkillEntry,
         SessionBindingError,
     )
@@ -307,7 +307,7 @@ def test_loaded_skill_rejects_boolean_cardinality() -> None:
 
 def test_binding_path_rejects_an_empty_session_id(tmp_path: Path) -> None:
     """The authority never constructs the ambiguous skill_guard_.flag path."""
-    from autoskillit.hooks._session_binding import (  # noqa: PLC0415
+    from autoskillit.hooks._session_binding import (
         SessionBindingError,
         resolve_binding_path,
     )
@@ -320,7 +320,7 @@ def test_binding_path_ignores_a_relative_payload_cwd(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Relative payload paths cannot become process-CWD-relative channel anchors."""
-    from autoskillit.hooks._session_binding import resolve_binding_path  # noqa: PLC0415
+    from autoskillit.hooks._session_binding import resolve_binding_path
 
     process_cwd = tmp_path / "process-cwd"
     process_cwd.mkdir()
@@ -335,7 +335,7 @@ def test_write_binding_closes_descriptor_when_fdopen_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The atomic writer retains no descriptor when ownership transfer fails."""
-    from autoskillit.hooks import _session_binding as binding_module  # noqa: PLC0415
+    from autoskillit.hooks import _session_binding as binding_module
 
     fd, temporary_path = binding_module.tempfile.mkstemp(dir=tmp_path)
     monkeypatch.setattr(
@@ -368,8 +368,8 @@ def test_writer_and_every_hook_side_reader_resolve_the_same_channel_dir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The writer and every hook-side reader share one channel directory."""
-    from autoskillit.hooks._join_ledger import resolve_flag_dir  # noqa: PLC0415
-    from autoskillit.hooks._session_binding import (  # noqa: PLC0415
+    from autoskillit.hooks._join_ledger import resolve_flag_dir
+    from autoskillit.hooks._session_binding import (
         resolve_binding_path,
         resolve_channel_dir,
     )
@@ -411,7 +411,7 @@ def test_channel_dir_converges_from_every_anchor_including_a_subdirectory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A nested payload CWD normalizes to the same state-root channel directory."""
-    from autoskillit.hooks._session_binding import (  # noqa: PLC0415
+    from autoskillit.hooks._session_binding import (
         resolve_binding_path,
         resolve_channel_dir,
     )

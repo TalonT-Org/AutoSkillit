@@ -77,7 +77,7 @@ _SUCCESS_RESULT = SkillResult(
 def _make_queued_build_result(*results: SkillResult):
     q: deque[SkillResult] = deque(results)
 
-    def _build(*args, **kwargs):  # noqa: ARG001
+    def _build(*args, **kwargs):
         return q.popleft()
 
     return _build
@@ -159,7 +159,7 @@ class TestPostStartProviderSafety:
         runner_envs: list[dict[str, str]] = []
         runner_pass_fds: list[tuple[int, ...]] = []
 
-        async def fake_runner(cmd, **kwargs):  # noqa: ARG001
+        async def fake_runner(cmd, **kwargs):
             call_count[0] += 1
             runner_envs.append(dict(kwargs["env"]))
             runner_pass_fds.append(kwargs["pass_fds"])
@@ -173,19 +173,19 @@ class TestPostStartProviderSafety:
         monkeypatch.setattr(
             _patch_headless__headless_execute,
             "_compute_post_session_metrics",
-            lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),  # noqa: ARG005
+            lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
         )
         monkeypatch.setattr(
             _patch_headless__headless_execute,
             "_capture_git_head_sha",
-            lambda *a: "",  # noqa: ARG005
+            lambda *a: "",
         )
         monkeypatch.setattr(
             _patch_headless__headless_execute,
             "collect_version_snapshot",
             lambda backend=None: {},
         )
-        monkeypatch.setattr(_sl_mod, "flush_session_log", lambda **kw: None)  # noqa: ARG005
+        monkeypatch.setattr(_sl_mod, "flush_session_log", lambda **kw: None)
 
         class DisabledSink:
             env: dict[str, str] = {}

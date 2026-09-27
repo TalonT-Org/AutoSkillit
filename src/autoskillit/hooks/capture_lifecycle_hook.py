@@ -17,14 +17,14 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
-from _capture._reconcile import (  # type: ignore[import-not-found]  # noqa: E402
+from _capture._reconcile import (  # noqa: E402
     DIAGNOSTIC_MAX_BYTES,
     SESSION_START_BUDGET,
     emit_bounded_diagnostic,
     emit_owner_diagnostic,
     reconcile_capture_store,
 )
-from _policy_event import (  # type: ignore[import-not-found]  # noqa: E402
+from _policy_event import (  # noqa: E402
     PolicyEvent,
     render_provenance_prefix,
 )

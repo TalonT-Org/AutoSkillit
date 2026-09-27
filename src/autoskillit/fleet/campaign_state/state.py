@@ -401,7 +401,7 @@ def mark_dispatch_running(
     so the existing campaign-level cap semantics are extended to the headless
     path without skipping the cap on a reset-rewriting-the-status path.
     """
-    from autoskillit.fleet.campaign_state.state_recovery import (  # noqa: PLC0415
+    from autoskillit.fleet.campaign_state.state_recovery import (
         MAX_CONSECUTIVE_RESUME_ATTEMPTS,
         _count_consecutive_resumable_timeouts,
     )

@@ -46,7 +46,7 @@ def _downstream_audit_impl_exists(ctx: ValidationContext, start: str) -> bool:
     ),
     severity=Severity.WARNING,
 )
-def _check_gitignored_deliverable_in_plan(ctx: ValidationContext) -> list[RuleFinding]:  # noqa: F401
+def _check_gitignored_deliverable_in_plan(ctx: ValidationContext) -> list[RuleFinding]:
     findings = []
     for step_name, step in ctx.recipe.steps.items():
         if not _step_writes_to_gitignored(step):

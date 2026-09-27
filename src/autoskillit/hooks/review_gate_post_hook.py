@@ -33,7 +33,7 @@ def _atomic_write(path: Path, content: str) -> None:
         raise
 
 
-def _extract_run_skill_result(tool_response: str | dict) -> str:  # type: ignore[return]
+def _extract_run_skill_result(tool_response: str | dict) -> str:
     """Unwrap double-wrapped run_skill JSON to get the inner result string."""
     try:
         outer = json.loads(tool_response) if isinstance(tool_response, str) else tool_response

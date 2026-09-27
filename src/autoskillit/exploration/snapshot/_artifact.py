@@ -34,7 +34,7 @@ from ..identity import resolve_repository_identity
 # `_git` and `_index_records` are imported here from ``_capture`` rather than
 # duplicated so the deadline envelope and NUL-record parsing stay single-sourced
 # across the snapshot package.
-from ._capture import _git, _index_records  # noqa: E402
+from ._capture import _git, _index_records
 from ._records import (
     _MAX_STABLE_ARTIFACT_ATTEMPTS,
     _MAX_STABLE_ARTIFACT_BYTES,

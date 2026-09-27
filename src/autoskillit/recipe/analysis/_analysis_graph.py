@@ -72,7 +72,7 @@ def build_recipe_graph(recipe: Recipe) -> nx.DiGraph:
     Returns:
         A directed ``nx.DiGraph`` with vertex and edge attributes as described.
     """
-    import networkx as nx  # noqa: PLC0415
+    import networkx as nx
 
     step_names = list(recipe.steps.keys())
     name_to_id: dict[str, int] = {name: i for i, name in enumerate(step_names)}

@@ -27,7 +27,7 @@ if TYPE_CHECKING:
         extract_blocks,
         iter_steps_with_context,
         make_validation_context,
-    )  # noqa: F401
+    )
     from ._analysis_bfs import (
         _INVALIDATING_TOOLS,
         _bfs_capped,
@@ -36,8 +36,8 @@ if TYPE_CHECKING:
         all_paths_cross,
         bfs_reachable_without_barrier,
         bfs_reachable_without_barrier_in_graph,
-    )  # noqa: F401
-    from ._analysis_blocks import (  # noqa: F401
+    )
+    from ._analysis_blocks import (
         Recipe,
         RecipeBlock,
         RecipeStep,
@@ -54,8 +54,8 @@ if TYPE_CHECKING:
         _context_refs_in_value,
         _detect_stale_captured_paths,
         _is_observability_capture,
-    )  # noqa: F401
-    from ._analysis_graph import RECIPE_TERMINAL_TARGETS  # noqa: F401
+    )
+    from ._analysis_graph import RECIPE_TERMINAL_TARGETS
 
 
 def __getattr__(name: str):

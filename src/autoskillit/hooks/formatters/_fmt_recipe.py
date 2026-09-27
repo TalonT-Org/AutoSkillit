@@ -7,13 +7,13 @@ import sys
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
-from _fmt_primitives import (  # type: ignore[import-not-found]
+from _fmt_primitives import (
     _CHECK_MARK,
     _CROSS_MARK,
     _RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     _WARN_MARK,
 )
-from _fmt_recipe_compact import (  # type: ignore[import-not-found]
+from _fmt_recipe_compact import (
     compact_orchestration_rules,
     compact_recipe_display,
 )

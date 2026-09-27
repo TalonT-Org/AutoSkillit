@@ -56,9 +56,9 @@ def annotate_pr_diff(
     mode: str | None = None,
 ) -> dict[str, str]:
     """Publish one snapshot-bound PR annotation bundle for review-pr."""
-    import subprocess  # noqa: PLC0415
+    import subprocess
 
-    from autoskillit.core import atomic_write, parse_github_repo  # noqa: PLC0415
+    from autoskillit.core import atomic_write, parse_github_repo
     from autoskillit.execution import (
         annotate_diff,
         build_anchor_authority,
@@ -66,7 +66,7 @@ def annotate_pr_diff(
         extract_valid_lines,
         parse_hunk_ranges,
         select_review_agents,
-    )  # noqa: PLC0415
+    )
 
     if mode not in (None, "local", "github"):
         raise ValueError(f"invalid review mode: {mode!r}")

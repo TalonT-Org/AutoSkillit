@@ -277,6 +277,10 @@ jobs:
         if: matrix.shard == 'execution'
         run: uv run lint-imports
 
+      - name: Type check
+        if: matrix.shard == 'execution'
+        run: task typecheck
+
       - name: Run tests
         env:
           AUTOSKILLIT_FILTER_STATS_FILE: ${{ github.workspace }}/.autoskillit/temp/filter-stats.json

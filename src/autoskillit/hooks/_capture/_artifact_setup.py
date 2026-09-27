@@ -31,7 +31,7 @@ elif __package__ == "_capture":
     from _capture._authority import CAPTURE_PATH_COMPONENTS
     import _capture_contract
     import _capture_lifecycle
-    from _runtime import _hook_settings  # noqa: I001 — bare-name post-move
+    from _runtime import _hook_settings
     from _capture._module_identity import register_module_aliases
 else:
     from . import _authority, _reader, _snapshot, _types  # noqa: I001

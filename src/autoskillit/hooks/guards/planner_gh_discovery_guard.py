@@ -24,13 +24,13 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
-from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
+from _command_classification import (  # noqa: E402
     _command_position_candidate_spans,
     all_evaluated_segments,
     command_verb_and_args,
     interpreter_invokes,
 )
-from _hook_payload import parse_hook_command  # type: ignore[import-not-found]  # noqa: E402
+from _hook_payload import parse_hook_command  # noqa: E402
 from _hook_settings import enforce_session_scope  # noqa: E402
 
 DISCOVERY_DENY_TRIGGER: str = "Planner skills cannot discover GitHub issues"

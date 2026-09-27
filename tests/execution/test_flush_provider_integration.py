@@ -41,23 +41,23 @@ def _patch_common(monkeypatch, tmp_path, skill_result, ctx):
 
     _sub_result = _sr()
 
-    async def fake_runner(cmd, **kwargs):  # noqa: ARG001
+    async def fake_runner(cmd, **kwargs):
         return _sub_result
 
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_build_skill_result",
-        lambda *a, **kw: skill_result,  # noqa: ARG005
+        lambda *a, **kw: skill_result,
     )
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_compute_post_session_metrics",
-        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),  # noqa: ARG005
+        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
     )
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_capture_git_head_sha",
-        lambda *a: "",  # noqa: ARG005
+        lambda *a: "",
     )
     monkeypatch.setattr(
         _patch_headless__headless_execute,
@@ -138,10 +138,10 @@ class TestProviderFieldsReachFlush:
 
         _sub_result = _sr()
 
-        async def fake_runner(cmd, **kwargs):  # noqa: ARG001
+        async def fake_runner(cmd, **kwargs):
             return _sub_result
 
-        def build_result(*a, **kw):  # noqa: ARG001
+        def build_result(*a, **kw):
             r = results[min(call_count[0], len(results) - 1)]
             call_count[0] += 1
             return r
@@ -150,12 +150,12 @@ class TestProviderFieldsReachFlush:
         monkeypatch.setattr(
             _patch_headless__headless_execute,
             "_compute_post_session_metrics",
-            lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),  # noqa: ARG005
+            lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
         )
         monkeypatch.setattr(
             _patch_headless__headless_execute,
             "_capture_git_head_sha",
-            lambda *a: "",  # noqa: ARG005
+            lambda *a: "",
         )
         monkeypatch.setattr(
             _patch_headless__headless_execute,
@@ -211,7 +211,7 @@ class TestProviderFieldsReachFlush:
 
         monkeypatch.setattr("autoskillit.execution.flush_session_log", capture_flush)
 
-        async def raising_runner(cmd, **kwargs):  # noqa: ARG001
+        async def raising_runner(cmd, **kwargs):
             raise RuntimeError("disk crash")
 
         minimal_ctx.runner = raising_runner  # type: ignore[assignment]
@@ -260,7 +260,7 @@ class TestProviderFieldsReachFlush:
 
         monkeypatch.setattr("autoskillit.execution.flush_session_log", capture_flush)
 
-        async def cancelling_runner(cmd, **kwargs):  # noqa: ARG001
+        async def cancelling_runner(cmd, **kwargs):
             raise anyio.get_cancelled_exc_class()()
 
         minimal_ctx.runner = cancelling_runner  # type: ignore[assignment]
@@ -337,18 +337,18 @@ class TestProviderFieldsReachFlush:
             )
         )
 
-        async def fake_runner(cmd, **kwargs):  # noqa: ARG001
+        async def fake_runner(cmd, **kwargs):
             return raw_result
 
         monkeypatch.setattr(
             _patch_headless__headless_execute,
             "_compute_post_session_metrics",
-            lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),  # noqa: ARG005
+            lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
         )
         monkeypatch.setattr(
             _patch_headless__headless_execute,
             "_capture_git_head_sha",
-            lambda *a: "",  # noqa: ARG005
+            lambda *a: "",
         )
         monkeypatch.setattr(
             _patch_headless__headless_execute,

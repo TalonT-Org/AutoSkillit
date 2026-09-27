@@ -31,7 +31,7 @@ class DiagramMigrationAdapter(AdvisoryMigrationAdapter):
         ]
 
     def needs_migration(self, file: MigrationFile) -> bool:
-        from autoskillit.recipe import check_diagram_staleness  # noqa: PLC0415
+        from autoskillit.recipe import check_diagram_staleness
 
         if not file.path.exists():
             return False
@@ -42,7 +42,7 @@ class DiagramMigrationAdapter(AdvisoryMigrationAdapter):
         return check_diagram_staleness(file.name, recipes_dir, recipe_path)
 
     def check_staleness(self, file: MigrationFile) -> AdvisoryResult:
-        from autoskillit.recipe import diagram_stale_to_suggestions  # noqa: PLC0415
+        from autoskillit.recipe import diagram_stale_to_suggestions
 
         suggestions = diagram_stale_to_suggestions(file.name)
         if not suggestions:

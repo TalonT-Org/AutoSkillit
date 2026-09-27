@@ -884,7 +884,7 @@ def _make_tester() -> InMemoryTestRunner:
 def _push_full_success_sequence(
     runner: "MockSubprocessRunner",
     *,
-    worktree_path: "Path",  # noqa: F821
+    worktree_path: "Path",
     base_branch: str = "dev",
 ) -> None:
     """Push the git subprocess sequence for a successful merge onto runner.

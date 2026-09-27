@@ -393,7 +393,7 @@ def _check_claude_mcp_timeouts(
     *,
     backend: CodingAgentBackend | None = None,
     run_skill: RunSkillConfig | None = None,
-    fleet: FleetConfig | None = None,  # noqa: ARG001 - kept for call-site parity with Codex
+    fleet: FleetConfig | None = None,
 ) -> DoctorResult:
     """Check that ~/.claude.json's autoskillit entry has a correct timeout value.
 

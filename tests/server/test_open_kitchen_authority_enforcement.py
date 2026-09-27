@@ -126,7 +126,7 @@ async def test_open_kitchen_still_accepts_non_authoritative_overrides(tmp_path, 
         steps={"do": MagicMock()}, ingredients={"audit": MagicMock(spec=["type"], type=None)}
     )
     # Provide enough mocking for the success path past the gate.
-    mock_ctx.recipes.load_and_validate.side_effect = lambda *_args, **_kwargs: {  # noqa: ARG005
+    mock_ctx.recipes.load_and_validate.side_effect = lambda *_args, **_kwargs: {
         "content": "name: demo\n",
         "valid": True,
         "suggestions": [],

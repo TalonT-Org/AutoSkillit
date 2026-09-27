@@ -339,6 +339,16 @@ Automated sessions respond to a line-limit violation by decomposing the file fir
 decomposition is genuinely infeasible, they stop and give a human the path, measured count, and
 justification; only a human may use the existing exemption-plus-approval path.
 
+A `# type: ignore` is valid only if `task typecheck` (pinned mypy, both platform targets) needs
+it. An unused one fails the gate, one written after another comment fails
+`test_type_ignore_comments_are_mypy_visible`, and none may sit on an `assert_never`. One needed
+on only one platform or Python version is replaced by a `sys.platform` / `sys.version_info`
+guard; `unused-ignore` is never an allowed code. Automated sessions answer a
+`TYPE_IGNORE_BUDGET` failure by fixing the type error. If that is infeasible, they stop and give
+a human the file, line and mypy message. Pyright/LSP diagnostics are advisory, and in worktrees
+they come from the main checkout's root (#4467); never suppress one the gate does not report.
+Replacing a suppression with `cast()` is a suppression.
+
 `scripts/check_policy_relaxation.py` enforces this as a pre-commit hook (staged vs `HEAD`), as
 `test_no_registered_surface_relaxed_against_base`, and in CI from the base revision's own copy
 of the script. Here "base" means the merge-base revision's policy values that the candidate is

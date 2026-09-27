@@ -834,15 +834,19 @@ def test_forwarded_signals_do_not_disarm_lifeline(tmp_path: Path) -> None:
     finally:
         if owner.returncode is None:
             owner.settle()
+        os.close(cwd_fd)
 
-    second_cwd_fd = os.open(tmp_path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process groups required")
+def test_user_group_signals_do_not_disarm_lifeline(tmp_path: Path) -> None:
+    cwd_fd = os.open(tmp_path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
     self_signalling = spawn_owned_process(
         [
             "/bin/bash",
             "-c",
             "trap '' USR1 USR2 ALRM; kill -USR1 0; kill -USR2 0; kill -ALRM 0; sleep 30",
         ],
-        cwd_fd=second_cwd_fd,
+        cwd_fd=cwd_fd,
         env=os.environ,
         capture_output=True,
     )
@@ -853,7 +857,6 @@ def test_forwarded_signals_do_not_disarm_lifeline(tmp_path: Path) -> None:
     finally:
         if self_signalling.returncode is None:
             self_signalling.settle()
-        os.close(second_cwd_fd)
         os.close(cwd_fd)
 
 

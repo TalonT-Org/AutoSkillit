@@ -411,7 +411,8 @@ def test_four_backtick_fence_masks_nested_examples_and_preserves_line_numbers() 
         "Write to `${OUT_DIR}/visible.md`"
     )
 
+    expected_visible_line = 7
     findings = _find_nonliteral_write_targets(prose)
     assert [(cue_line, target_line, target) for cue_line, target_line, _, target in findings] == [
-        (7, 7, "${OUT_DIR}/visible.md")
+        (expected_visible_line, expected_visible_line, "${OUT_DIR}/visible.md")
     ]

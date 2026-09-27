@@ -47,13 +47,18 @@ The install script runs five steps:
 
 ## What `autoskillit install` Does
 
-1. Creates a local plugin marketplace at `~/.autoskillit/marketplace/`
-2. Symlinks the installed package into the marketplace
-3. Registers the marketplace with Claude Code: `claude plugin marketplace add`
-4. Installs the plugin: `claude plugin install autoskillit@autoskillit-local`
-5. Syncs hook scripts into Claude Code's `settings.json`
+Under an install lock:
 
-After this, AutoSkillit loads automatically in every Claude Code session.
+1. Materializes the plugin tree, including its generated `hooks/hooks.json`, from the
+   installed package under `~/.autoskillit/marketplace/`
+2. Publishes that tree as a generation under `~/.autoskillit/plugin-generations/`
+3. Evicts stale registrations: a direct `autoskillit` MCP entry in `~/.claude.json` and
+   any AutoSkillit hook entries in Claude Code's `settings.json`
+4. Invalidates the update-check fetch cache
+
+It does not write hooks into `settings.json`; `autoskillit init` does. Sessions load the
+plugin per launch: `autoskillit cook` projects it and passes it to Claude Code with
+`--plugin-dir`.
 
 ## Project Setup
 

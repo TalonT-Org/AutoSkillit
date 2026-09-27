@@ -26,7 +26,7 @@ AMBIENT_HOME_MODULES: Mapping[str, frozenset[str]] = {
     "workspace/_projected_artifact/authority.py": frozenset(),
     "workspace/_projected_artifact/_generation_publication.py": frozenset(),
     "workspace/_projected_artifact/_generation_prune.py": frozenset(),
-    "workspace/_projected_artifact/_hook_repair.py": frozenset({"repair_broken_projection_hooks"}),
+    "workspace/_projected_artifact/_hook_repair.py": frozenset(),
 }
 
 

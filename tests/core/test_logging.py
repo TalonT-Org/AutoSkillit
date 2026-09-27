@@ -357,6 +357,17 @@ class TestContextVarBinding:
         assert "tool" not in logs[0]
 
 
+_EXPECTED_PLUGIN_ARTIFACT_OUTCOME_LEVELS = {
+    "succeeded": "info",
+    "already_queued": "debug",
+    "deferred_contended": "debug",
+    "deferred_io_error": "warning",
+    "deferred_unreadable_queue": "warning",
+    "rejected_identity": "warning",
+    "failed_validation": "warning",
+}
+
+
 class TestPluginArtifactLifecycleLogging:
     def test_schema_level_and_release_are_exact_and_idempotent(self) -> None:
         from datetime import UTC, datetime
@@ -401,7 +412,7 @@ class TestPluginArtifactLifecycleLogging:
             owner.close()
 
         assert [entry["action"] for entry in logs] == ["retire", "release"]
-        assert logs[0]["log_level"] == "warning"
+        assert logs[0]["log_level"] == "debug"
         assert logs[1]["log_level"] == "info"
         assert logs[0]["not_before"] == deadline.isoformat()
         assert logs[0]["contention_detail"] == "reader active"
@@ -409,3 +420,39 @@ class TestPluginArtifactLifecycleLogging:
         assert isinstance(logs[0]["actor_pid"], int)
         assert all(entry["event"] == "plugin_artifact_lifecycle" for entry in logs)
         assert lease.close_calls == 1
+
+    def test_outcome_level_table_is_the_declared_policy(self) -> None:
+        from autoskillit.core.logging import _PLUGIN_ARTIFACT_OUTCOME_LEVELS
+
+        assert dict(_PLUGIN_ARTIFACT_OUTCOME_LEVELS) == _EXPECTED_PLUGIN_ARTIFACT_OUTCOME_LEVELS
+
+    @pytest.mark.parametrize(
+        ("outcome", "level"), sorted(_EXPECTED_PLUGIN_ARTIFACT_OUTCOME_LEVELS.items())
+    )
+    def test_each_outcome_emits_at_its_declared_level(self, outcome: str, level: str) -> None:
+        from autoskillit.core.logging import get_logger, log_plugin_artifact_lifecycle
+
+        with structlog.testing.capture_logs() as logs:
+            log_plugin_artifact_lifecycle(
+                get_logger("autoskillit.plugin-test"),
+                action="reclaim",
+                outcome=outcome,
+                artifact_kind="projection",
+                semantic_key="semantic",
+                incarnation="incarnation",
+            )
+
+        assert [(entry["outcome"], entry["log_level"]) for entry in logs] == [(outcome, level)]
+
+    def test_unknown_outcome_is_rejected(self) -> None:
+        from autoskillit.core.logging import get_logger, log_plugin_artifact_lifecycle
+
+        with pytest.raises(ValueError, match="unsupported plugin artifact lifecycle outcome"):
+            log_plugin_artifact_lifecycle(
+                get_logger("autoskillit.plugin-test"),
+                action="reclaim",
+                outcome="vanished",
+                artifact_kind="projection",
+                semantic_key="semantic",
+                incarnation="incarnation",
+            )

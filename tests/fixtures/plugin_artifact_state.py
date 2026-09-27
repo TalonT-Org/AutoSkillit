@@ -160,29 +160,35 @@ def _spec(
     )
 
 
-def _write_registry(spec: InstallStateSpec, install_path: Path) -> Path:
-    registry = spec.home / ".claude" / "plugins" / "installed_plugins.json"
+def write_registry(
+    home: Path,
+    install_path: Path,
+    *,
+    plugin_ref: str = DEFAULT_PLUGIN_REF,
+    version: str | None = None,
+) -> Path:
+    """Register ``install_path`` as ``plugin_ref`` in ``installed_plugins.json``."""
+    entry = {"installPath": str(install_path)}
+    if version is not None:
+        entry["version"] = version
+    registry = home / ".claude" / "plugins" / "installed_plugins.json"
     registry.parent.mkdir(parents=True, exist_ok=True)
     registry.write_text(
-        json.dumps(
-            {
-                "version": 2,
-                "plugins": {
-                    spec.plugin_ref: {
-                        "installPath": str(install_path),
-                        "version": spec.expected_version,
-                    }
-                },
-            }
-        ),
+        json.dumps({"version": 2, "plugins": {plugin_ref: entry}}),
         encoding="utf-8",
     )
     return registry
 
 
-def _write_marketplace_surfaces(spec: InstallStateSpec) -> tuple[Path, Path]:
+def write_marketplace_surfaces(
+    home: Path,
+    version: str,
+    *,
+    plugin_name: str = "autoskillit",
+) -> tuple[Path, Path]:
+    """Write the install-time marketplace manifest and plugin metadata at ``version``."""
     marketplace_manifest = (
-        spec.home / ".autoskillit" / "marketplace" / ".claude-plugin" / "marketplace.json"
+        home / ".autoskillit" / "marketplace" / ".claude-plugin" / "marketplace.json"
     )
     marketplace_manifest.parent.mkdir(parents=True, exist_ok=True)
     marketplace_manifest.write_text(
@@ -191,24 +197,22 @@ def _write_marketplace_surfaces(spec: InstallStateSpec) -> tuple[Path, Path]:
                 "name": "autoskillit-local",
                 "plugins": [
                     {
-                        "name": spec.plugin_ref.partition("@")[0],
-                        "version": spec.expected_version,
+                        "name": plugin_name,
+                        "version": version,
                     }
                 ],
             }
         ),
         encoding="utf-8",
     )
-    marketplace_plugin_root = (
-        spec.home / ".autoskillit" / "marketplace" / "plugins" / "autoskillit"
-    )
+    marketplace_plugin_root = home / ".autoskillit" / "marketplace" / "plugins" / "autoskillit"
     plugin_json = marketplace_plugin_root / ".claude-plugin" / "plugin.json"
     plugin_json.parent.mkdir(parents=True, exist_ok=True)
     plugin_json.write_text(
         json.dumps(
             {
-                "name": spec.plugin_ref.partition("@")[0],
-                "version": spec.expected_version,
+                "name": plugin_name,
+                "version": version,
             }
         ),
         encoding="utf-8",
@@ -290,7 +294,11 @@ def build_plugin_artifact_state(
     older_root: Path | None = None
 
     if selected is not PluginArtifactStateKind.NO_INSTALLATION:
-        marketplace_manifest, marketplace_plugin_root = _write_marketplace_surfaces(spec)
+        marketplace_manifest, marketplace_plugin_root = write_marketplace_surfaces(
+            spec.home,
+            spec.expected_version,
+            plugin_name=spec.plugin_ref.partition("@")[0],
+        )
 
     if selected is PluginArtifactStateKind.OLDER_ONLY:
         older_version = f"{version}-older"
@@ -302,9 +310,19 @@ def build_plugin_artifact_state(
         )
         _publish_exact(older_spec)
         older_root = older_spec.managed_root
-        _write_registry(older_spec, older_root)
+        write_registry(
+            older_spec.home,
+            older_root,
+            plugin_ref=older_spec.plugin_ref,
+            version=older_spec.expected_version,
+        )
     elif selected is PluginArtifactStateKind.DANGLING_REGISTRY:
-        _write_registry(spec, spec.managed_root.parent / "missing")
+        write_registry(
+            spec.home,
+            spec.managed_root.parent / "missing",
+            plugin_ref=spec.plugin_ref,
+            version=spec.expected_version,
+        )
     elif selected is PluginArtifactStateKind.DANGLING_MANAGED_ROOT:
         identity = _publish_exact(spec)
         shutil.rmtree(spec.managed_root)
@@ -324,7 +342,12 @@ def build_plugin_artifact_state(
         spec.lease_path.unlink()
         spec.lease_path.symlink_to(spec.lease_path.parent / "missing-lease")
     elif selected is not PluginArtifactStateKind.NO_INSTALLATION:
-        _write_registry(spec, spec.managed_root)
+        write_registry(
+            spec.home,
+            spec.managed_root,
+            plugin_ref=spec.plugin_ref,
+            version=spec.expected_version,
+        )
         if selected is PluginArtifactStateKind.MISSING_IDENTITY:
             metadata = spec.managed_root / ".claude-plugin" / "plugin.json"
             metadata.parent.mkdir(parents=True, exist_ok=True)

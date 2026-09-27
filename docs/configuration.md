@@ -265,9 +265,9 @@ Default: `command: null` (disabled), `preserve_dirs: []`.
 quota_guard:
   enabled: true
   short_window_threshold: 85.0   # block at this % for short windows (e.g. five_hour)
-  long_window_threshold: 95.0    # block at this % for long windows (weekly, sonnet, opus)
+  long_window_threshold: 95.0    # block at this % for long windows (seven_day, sonnet, opus)
   long_window_patterns:          # substrings (case-insensitive) that classify a
-    - weekly                     # window name as long-window
+    - seven_day                  # window name as long-window
     - sonnet
     - opus
   buffer_seconds: 60             # extra buffer after quota reset before resuming

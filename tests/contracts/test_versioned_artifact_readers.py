@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import managed_home_for
 from autoskillit.hooks import _join_ledger
 from autoskillit.workspace._projected_artifact import _hook_repair
 
@@ -78,7 +79,9 @@ def test_projection_hook_repair_refuses_an_unsupported_manifest_schema(
     monkeypatch.setattr(_hook_repair, "find_broken_hook_scripts", broken_hooks)
     monkeypatch.setattr(_hook_repair, "_relocate_existing_hooks", lambda _data: {"hooks": {}})
 
-    outcomes = _hook_repair.repair_broken_projection_hooks(tmp_path)
+    outcomes = _hook_repair.repair_broken_projection_hooks(
+        tmp_path, home=managed_home_for(tmp_path)
+    )
 
     assert len(outcomes) == 1
     assert outcomes[0].status is _hook_repair.PluginHookRepairStatus.FAILED

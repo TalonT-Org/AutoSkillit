@@ -120,11 +120,11 @@ class PluginArtifactRetirementEngine:
         log_plugin_artifact_lifecycle(
             self._logger,
             action="retire",
-            outcome="succeeded",
+            outcome="succeeded" if result.created else "already_queued",
             artifact_kind=self.artifact_kind.value,
             semantic_key=identity.semantic_key,
             incarnation=identity.incarnation_id,
-            not_before=not_before,
+            not_before=not_before if result.created else None,
         )
         return result
 

@@ -30,7 +30,7 @@ def _stop(runtime: GuardRuntime, tmp_path: Path) -> str:
         ),
     )
     assert result.returncode == (2 if result.stderr.strip() else 0), result.stdout
-    return result.stderr
+    return result.stderr.strip()
 
 
 def test_foreign_only_binding_releases_stop(tmp_path: Path) -> None:

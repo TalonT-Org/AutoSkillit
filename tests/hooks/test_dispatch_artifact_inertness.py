@@ -64,6 +64,10 @@ def _build_hooks_tree(dest_root: Path) -> Path:
     (runtime_dir / "_hook_settings.py").write_text(_HOOK_SETTINGS_SCRIPT.read_text())
     (runtime_dir / "_hook_log_dispatch.py").write_text(_HOOK_LOG_DISPATCH_SCRIPT.read_text())
     (guards_dir / "quota_guard.py").write_text(_QUOTA_GUARD_SCRIPT.read_text())
+    # Synthetic tree for bytecode-inertness only: quota_constraints.py is copied by
+    # hand so quota_guard can exit 0. This does NOT validate projection membership —
+    # tests/arch/test_hooks_are_stdlib_only.py and T-A6 in
+    # tests/contracts/test_projection_hook_relocatability.py own that.
     (dest_root / "quota_constraints.py").write_text(_QUOTA_CONSTRAINTS_SCRIPT.read_text())
 
     return hooks_dir

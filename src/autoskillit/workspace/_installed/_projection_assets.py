@@ -27,6 +27,7 @@ _PUBLIC_PLUGIN_ASSET_NAMES = frozenset(
         "assets",
         "commands",
         "hooks",
+        "quota_constraints.py",
         "recipes",
         "scripts",
         "settings.json",

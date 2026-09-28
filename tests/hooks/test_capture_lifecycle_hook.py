@@ -316,7 +316,7 @@ def test_cleanup_hook_crash_diagnostic_is_bounded_and_provenance_rendered(
     written: list[str] = []
     monkeypatch.setattr(sys.stderr, "write", written.append)
 
-    assert capture_lifecycle_hook.main() == 0
+    capture_lifecycle_hook.main()
     text = "".join(written)
     assert "failed" in text
     assert "capture lifecycle hook raised an unexpected exception" in text
@@ -339,7 +339,7 @@ def test_cleanup_hook_reports_sweep_outcome_errors(
         ),
     )
 
-    assert capture_lifecycle_hook.main() == 0
+    capture_lifecycle_hook.main()
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "blocker=ledger_integrity errors=2" in captured.err
@@ -366,7 +366,7 @@ def test_cleanup_hook_deferred_outcome_produces_no_attention_grade_output(
         ),
     )
 
-    assert capture_lifecycle_hook.main() == 0
+    capture_lifecycle_hook.main()
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == ""

@@ -40,7 +40,7 @@ def _assert_completed_context(payload: dict, emission) -> str:
     event = {"hook_event_name": "PreToolUse", **payload}
     for verdict_fn in (codex_verdict, claude_verdict):
         verdict = verdict_fn(
-            event,
+            event["hook_event_name"],
             exit_code=emission.exit_code,
             stdout=emission.stdout,
             stderr=emission.stderr,

@@ -14,7 +14,7 @@ from __future__ import annotations
 import importlib
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, Literal, NoReturn
+from typing import TYPE_CHECKING, Final, Literal
 
 # Canonical session-scope value set for the hook runtime + hook_registry layer.
 # T17 (tests/hooks/test_hook_scope_authority.py) pins this value set equal to
@@ -30,28 +30,6 @@ SESSION_SCOPE_VALUES: Final[frozenset[str]] = frozenset(
 # to keep the canonical value set in lock-step across annotation sites
 # (_hooks_defs.HookDef.session_scope and LifecycleContractDef.session_scope).
 SessionScopeLiteral = Literal["any", "headless_only", "interactive_only"]
-
-
-def _deny_scope_authority_unavailable(script_identity: str) -> NoReturn:
-    if TYPE_CHECKING:
-        from ._hook_output import deny_tool_use
-        from ._policy_event import PolicyEvent, render_provenance_prefix
-    else:
-        from _hook_output import deny_tool_use
-        from _policy_event import PolicyEvent, render_provenance_prefix
-
-    deny_tool_use(
-        render_provenance_prefix(
-            PolicyEvent(
-                hook_id="session-scope-authority",
-                hook_version=1,
-                event="PreToolUse",
-                decision="deny",
-                reason_code="scope_authority_unavailable",
-                source=script_identity,
-            )
-        )
-    )
 
 
 def enforce_script_session_scope(script_identity: str) -> bool:
@@ -94,8 +72,25 @@ def enforce_script_session_scope(script_identity: str) -> bool:
             f"hook_scope_authority_unavailable: script={script_identity!r} error={exc!r}",
             file=sys.stderr,
         )
-        _deny_scope_authority_unavailable(script_identity)
-        return False
+        if TYPE_CHECKING:
+            from ._hook_output import deny_tool_use
+            from ._policy_event import PolicyEvent, render_provenance_prefix
+        else:
+            from _hook_output import deny_tool_use
+            from _policy_event import PolicyEvent, render_provenance_prefix
+
+        deny_tool_use(
+            render_provenance_prefix(
+                PolicyEvent(
+                    hook_id="session-scope-authority",
+                    hook_version=1,
+                    event="PreToolUse",
+                    decision="deny",
+                    reason_code="scope_authority_unavailable",
+                    source=script_identity,
+                )
+            )
+        )
 
     from _hook_settings import hook_session_shape
 

@@ -72,7 +72,9 @@ def _assert_both_protocols_complete(
     event: dict, stdout: str, exit_code: int, context: str
 ) -> None:
     for verdict_fn in (codex_verdict, claude_verdict):
-        verdict = verdict_fn(event, exit_code=exit_code, stdout=stdout, stderr="")
+        verdict = verdict_fn(
+            event["hook_event_name"], exit_code=exit_code, stdout=stdout, stderr=""
+        )
         assert verdict.status == STATUS_COMPLETED
         assert len(verdict.contexts) == 1
         assert verdict.contexts[0] == context

@@ -113,7 +113,7 @@ def _assert_verdict(
 ) -> None:
     verdict_fn: Callable = codex_verdict if backend == "codex" else claude_verdict
     verdict = verdict_fn(
-        event,
+        str(event["hook_event_name"]),
         exit_code=emission.exit_code,
         stdout=emission.stdout,
         stderr=emission.stderr,

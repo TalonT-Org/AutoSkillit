@@ -123,7 +123,7 @@ def test_scopes_to_headless_pr_skills(monkeypatch, tmp_path):
     body = _body_file(tmp_path, "Summary without provenance metadata")
     command = f"gh pr create --body-file {body}"
 
-    assert _is_denied(_run_hook(_event(command), monkeypatch))
+    assert _is_denied(_run_hook(_event(command), monkeypatch, headless=True))
     assert _run_hook(_event(command), monkeypatch, skill_name="implement-worktree") == ""
     assert _run_hook(_event(command), monkeypatch, headless=False) == ""
     assert _run_hook(_event("git status"), monkeypatch) == ""

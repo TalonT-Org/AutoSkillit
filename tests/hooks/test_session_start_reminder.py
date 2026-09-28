@@ -107,7 +107,7 @@ def test_session_start_source_and_marker_matrix(
 
     for verdict_fn in (codex_verdict, claude_verdict):
         verdict = verdict_fn(
-            payload,
+            payload["hook_event_name"],
             exit_code=emission.exit_code,
             stdout=emission.stdout,
             stderr=emission.stderr,

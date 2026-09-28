@@ -11,14 +11,6 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple
 
-if TYPE_CHECKING:
-    from ._command_classification import extract_patch_paths
-else:
-    try:
-        from ._command_classification import extract_patch_paths
-    except ImportError:
-        from _command_classification import extract_patch_paths
-
 _RUN_CMD_SUFFIX = "__run_cmd"
 TEMP_RELATIVE_DIR = Path(".autoskillit") / "temp"
 
@@ -175,6 +167,14 @@ def edit_target_paths(data: dict[str, Any]) -> tuple[str, ...]:
 
     if tool_name != "apply_patch":
         return ()
+
+    if TYPE_CHECKING:
+        from ._command_classification import extract_patch_paths
+    else:
+        try:
+            from ._command_classification import extract_patch_paths
+        except ImportError:
+            from _command_classification import extract_patch_paths
 
     command = extract_apply_patch_text(data) or ""
     payload_cwd = normalize_payload_cwd(data.get("cwd"))

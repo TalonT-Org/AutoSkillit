@@ -97,6 +97,7 @@ class TestBackendRegistry:
             "_serialize_toml",
             "_write_codex_config",
             "all_backends",
+            "codex_emitted_hook_defs",
             "codex_recipe_delivery_calling_contract",
             "ensure_codex_mcp_registered",
             "extract_codex_execution_identity",

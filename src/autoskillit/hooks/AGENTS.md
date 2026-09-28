@@ -33,9 +33,11 @@ Two-form path contract, enforced by `hook_registry._build_hook_command`:
   containing it is always stale/foreign and is swept by `_evict_stale_autoskillit_hooks`.
 
 Codex's `config.toml` hooks are a separate consumer (`execution/backends/_codex_hooks.py`)
-with no expansion-token equivalent; its commands always bake a real absolute path via
-`execution.backends._codex_hooks._resolve_codex_hooks_dir()` (retained plugin-cache incarnation when installed,
-else the dev-source checkout).
+with no expansion-token equivalent, so its commands always bake a real absolute path. The
+global `~/.codex/config.toml` (written by `autoskillit init`) bakes the version-independent
+generation selector (`generation_plugin_selector_path`). Every per-session home bakes its
+launch's leased projection, canonicalized (`SessionHookRoot.plugin_dir`); the per-session
+writers require it and refuse to render hooks without one.
 
 `_classification/_tokenizer.py` is the sole general parsing authority for command text
 (rectify #4941 Parts A-B): it is the only module that reads a raw command string to derive

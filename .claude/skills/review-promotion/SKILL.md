@@ -1,5 +1,7 @@
 ---
 name: review-promotion
+write_paths:
+- '.autoskillit/temp/review-promotion/'
 categories: [github]
 uses_capabilities: []
 description: >

@@ -1,5 +1,6 @@
 ---
 name: sous-chef
+write_paths: inherit
 uses_capabilities:
 - github_api_write
 - open_kitchen

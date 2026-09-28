@@ -1,5 +1,7 @@
 ---
 name: audit-review-decisions
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/audit-review-decisions/'
 categories:
 - audit
 uses_capabilities:

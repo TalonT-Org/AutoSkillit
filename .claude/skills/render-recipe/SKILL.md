@@ -1,11 +1,12 @@
 ---
 name: render-recipe
+write_paths: unrestricted
 description: Render a recipe YAML as a compact visual overview with ASCII flow diagram and input table. Only invoke when the user explicitly says "render recipe" or "/render-recipe".
 ---
 
 # Render Recipe
 
-Produce a compact, structured overview of an AutoSkillit recipe. Reads the recipe YAML (provided in the prompt or loaded via `load_recipe`), analyzes the step graph, and writes a formatted Markdown file to `temp/render-recipe/`.
+Produce a compact, structured overview of an AutoSkillit recipe. Reads the recipe YAML (provided in the prompt or loaded via `load_recipe`), analyzes the step graph, and writes a formatted Markdown file to `{{AUTOSKILLIT_TEMP}}/render-recipe/`.
 
 ## When to Use
 
@@ -18,14 +19,14 @@ Produce a compact, structured overview of an AutoSkillit recipe. Reads the recip
 - Modify any source code or recipe files
 - Invent steps, ingredients, or routing not in the YAML
 - Add decorative flair, emoji, or unnecessary commentary
-- Create files outside `temp/render-recipe/` and `recipes/diagrams/`
+- Create files outside `{{AUTOSKILLIT_TEMP}}/render-recipe/` and `recipes/diagrams/`
 - Use Unicode characters, emoji, or non-ASCII symbols. ASCII only — use `*` for pass, `x` for fail, `?` for confirm, `|` for spine, `+` for joins. No box-drawing characters, no arrows like `→` or `↑`, no check marks, no crosses. Write `->` and `(up)` instead.
 - Include HTML comments, hash markers, format version markers, or any metadata in the output. No `<!-- ... -->` lines.
 - Include "Agent-managed" lines listing internal context variables. The user doesn't need to see plumbing state.
 
 **ALWAYS:**
 - Read the recipe YAML carefully and render exactly what exists
-- Write output to `temp/render-recipe/{recipe-name}_{YYYY-MM-DD_HHMMSS}.md`
+- Write output to `{{AUTOSKILLIT_TEMP}}/render-recipe/{recipe-name}_{YYYY-MM-DD_HHMMSS}.md`
 - Print the rendered content to terminal after writing the file
 
 ---
@@ -145,7 +146,7 @@ If any check fails, fix the diagram before proceeding. This is a mechanical chec
 ### Step 4: Assemble and Write
 
 Combine both sections and write to two locations:
-1. `temp/render-recipe/{recipe-name}_{YYYY-MM-DD_HHMMSS}.md` — timestamped history copy
+1. `{{AUTOSKILLIT_TEMP}}/render-recipe/{recipe-name}_{YYYY-MM-DD_HHMMSS}.md` — timestamped history copy
 2. The recipe's diagram file — for bundled recipes: `src/autoskillit/recipes/diagrams/{recipe-name}.md`; for project recipes: `.autoskillit/recipes/diagrams/{recipe-name}.md`. This is the file that `load_recipe` serves to Claude.
 
 Print the full content to terminal.
@@ -156,5 +157,5 @@ Print the full content to terminal.
 
 | Content | Destination |
 |---------|-------------|
-| Rendered recipe overview | `temp/render-recipe/` (history) + `recipes/diagrams/` (live) + terminal |
+| Rendered recipe overview | `{{AUTOSKILLIT_TEMP}}/render-recipe/` (history) + `recipes/diagrams/` (live) + terminal |
 | Validation warnings (if any) | Terminal only |

@@ -1,5 +1,6 @@
 ---
 name: resolve-failures
+write_paths: unrestricted
 uses_capabilities:
 - test_check
 description: Failure resolution executor. ALWAYS invoke this skill when instructed to fix test failures in a worktree. Do

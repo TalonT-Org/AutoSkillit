@@ -139,7 +139,7 @@ class TestWriteGuardWorktreeIntegration:
         target_dir = skills_dir / "target-skill"
         target_dir.mkdir(parents=True, exist_ok=True)
         (target_dir / "SKILL.md").write_text(
-            "---\nname: target-skill\ndescription: Target.\n"
+            "---\nname: target-skill\ndescription: Target.\nwrite_paths: inherit\n"
             "activate_deps: [dep-skill]\n---\nbody\n"
         )
 

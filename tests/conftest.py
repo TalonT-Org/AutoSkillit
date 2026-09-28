@@ -830,7 +830,8 @@ def make_tool_ctx(monkeypatch, tmp_path):
             skill_dir = test_skills_root / skill_name
             skill_dir.mkdir(parents=True, exist_ok=True)
             (skill_dir / "SKILL.md").write_text(
-                f"---\nname: {skill_name}\ndescription: Test fixture skill\n---\n"
+                f"---\nname: {skill_name}\ndescription: Test fixture skill\n"
+                "write_paths: inherit\n---\n"
                 "# Test fixture skill\n"
             )
         monkeypatch.setattr(_state, "_ctx", ctx)
@@ -917,7 +918,7 @@ def bind_test_skill_resume_contract(
     )
     from autoskillit.execution.headless._headless_launch import _HeadlessLaunchAdapter
 
-    text = f"---\nname: {skill_name}\n---\n# Test resume snapshot\n"
+    text = f"---\nname: {skill_name}\nwrite_paths: inherit\n---\n# Test resume snapshot\n"
     digest = hashlib.sha256(text.encode()).hexdigest()
     resolved_cwd = str(Path(cwd).resolve())
     launch_source = LaunchValueSource(

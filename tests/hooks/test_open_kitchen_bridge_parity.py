@@ -25,6 +25,7 @@ from autoskillit.hooks._runtime._session_registry_bridge import (
     is_authenticated_top_level_cook_session,
 )
 from autoskillit.hooks._session_binding import (
+    SESSION_BINDING_SCHEMA_VERSION,
     SessionBinding,
     resolve_binding_path,
     write_binding,
@@ -147,7 +148,7 @@ def test_authenticated_managed_codex_cook_requires_parent_binding(
     )
     binding_path = resolve_binding_path(str(tmp_path), launch_id)
     binding = SessionBinding(
-        schema_version=3,
+        schema_version=SESSION_BINDING_SCHEMA_VERSION,
         session_id=launch_id,
         join_required=True,
         binding_valid=True,
@@ -224,7 +225,7 @@ def test_payload_cook_predicate_is_session_predicate_plus_payload_identity(
         {launch_id: {"session_type": "cook", "claude_session_id": None}},
     )
     binding = SessionBinding(
-        schema_version=3,
+        schema_version=SESSION_BINDING_SCHEMA_VERSION,
         session_id=launch_id,
         join_required=True,
         binding_valid=True,

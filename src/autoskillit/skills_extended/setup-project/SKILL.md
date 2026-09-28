@@ -1,5 +1,6 @@
 ---
 name: setup-project
+write_paths: unrestricted
 uses_capabilities:
 - claude_dir
 activate_deps:

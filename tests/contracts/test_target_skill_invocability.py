@@ -65,6 +65,7 @@ class TestResolvedNamespaceMatchesSkillLocation:
             "name: open-kitchen\n"
             "description: Project-local target.\n"
             "execution_role: session\n"
+            "write_paths: inherit\n"
             "---\n"
             "override\n"
         )

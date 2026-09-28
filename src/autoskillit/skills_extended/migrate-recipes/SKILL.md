@@ -1,5 +1,7 @@
 ---
 name: migrate-recipes
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/migrations/'
 uses_capabilities: []
 activate_deps:
 - write-recipe

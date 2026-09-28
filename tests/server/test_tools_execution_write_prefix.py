@@ -317,3 +317,105 @@ async def test_investigate_contract_runs_writable_with_report_watch_dir(
     report_dir = tmp_path / ".autoskillit" / "temp" / "investigate"
     assert Path(report_dir) in call.write_watch_dirs
     assert call.allowed_write_prefix == str(report_dir) + "/"
+
+
+# ---------------------------------------------------------------------------
+# Closure write scope and output_dir narrowing through the typed write scope
+# ---------------------------------------------------------------------------
+
+
+def _scoped_skill(tmp_path: Path, name: str, declaration: str):
+    from autoskillit.core import SkillSource
+    from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+    path = tmp_path / "skills" / name / "SKILL.md"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        f"---\nname: {name}\ndescription: Scope fixture.\nwrite_paths: {declaration}\n---\n",
+        encoding="utf-8",
+    )
+    info = _skill_info_from_frontmatter(name, SkillSource.BUNDLED_EXTENDED, path)
+    assert not info.invalidities
+    return info
+
+
+def _scope_state(tmp_path: Path, root, *deps, output_dir: str = ""):
+    from types import SimpleNamespace
+
+    cwd = tmp_path / "project"
+    cwd.mkdir(exist_ok=True)
+    first = cwd / output_dir if output_dir else cwd / ".autoskillit" / "temp" / root.name
+    return SimpleNamespace(
+        write_watch_dirs=[first],
+        invocation=SimpleNamespace(root=root, closure=(root, *deps)),
+        cwd=str(cwd),
+        output_dir=output_dir,
+    )
+
+
+def _extend(state) -> dict | None:
+    import json
+
+    from autoskillit.server.tools.tools_execution._run_skill_session import (
+        _extend_closure_write_scope,
+    )
+
+    terminal = _extend_closure_write_scope(state)
+    return None if terminal is None else json.loads(terminal)
+
+
+def test_bounded_root_rejects_output_dir_outside_its_scope(tmp_path: Path) -> None:
+    root = _scoped_skill(tmp_path, "widget", "['{{AUTOSKILLIT_TEMP}}/widgets/']")
+
+    state = _scope_state(tmp_path, root, output_dir=".autoskillit/temp/other")
+    original_dirs = state.write_watch_dirs.copy()
+
+    failure = _extend(state)
+
+    assert state.write_watch_dirs == original_dirs
+
+    assert failure is not None
+    assert failure["error"] == "run_skill output_dir is outside the skill's declared write scope"
+    assert failure["stage"] == "validate_args:run_skill"
+
+
+def test_bounded_root_admits_output_dir_inside_its_scope(tmp_path: Path) -> None:
+    root = _scoped_skill(tmp_path, "widget", "['{{AUTOSKILLIT_TEMP}}/widgets/']")
+    state = _scope_state(tmp_path, root, output_dir=".autoskillit/temp/widgets/run-1")
+
+    assert _extend(state) is None
+    assert (Path(state.cwd) / ".autoskillit" / "temp" / "widgets").resolve() in (
+        state.write_watch_dirs
+    )
+
+
+def test_bounded_root_without_output_dir_does_not_check_the_default_floor(
+    tmp_path: Path,
+) -> None:
+    root = _scoped_skill(tmp_path, "widget", "['{{AUTOSKILLIT_TEMP}}/widgets/']")
+
+    assert _extend(_scope_state(tmp_path, root)) is None
+
+
+@pytest.mark.parametrize("declaration", ["unrestricted", "inherit"])
+def test_unbounded_root_skips_output_dir_containment(tmp_path: Path, declaration: str) -> None:
+    root = _scoped_skill(tmp_path, "free", declaration)
+
+    assert _extend(_scope_state(tmp_path, root, output_dir="elsewhere/out")) is None
+
+
+def test_closure_member_escaping_the_temp_root_fails_dispatch(tmp_path: Path) -> None:
+    root = _scoped_skill(tmp_path, "root", "inherit")
+    dependency = _scoped_skill(tmp_path, "escape", "['{{AUTOSKILLIT_TEMP}}/escape/']")
+    state = _scope_state(tmp_path, root, dependency)
+    temp = Path(state.cwd) / ".autoskillit" / "temp"
+    temp.mkdir(parents=True)
+    (temp / "escape").symlink_to(tmp_path, target_is_directory=True)
+    original_dirs = state.write_watch_dirs.copy()
+
+    failure = _extend(state)
+
+    assert state.write_watch_dirs == original_dirs
+    assert failure is not None
+    assert "declared write scope for closure member escape" in failure["error"]
+    assert failure["stage"] == "validate_args:run_skill"

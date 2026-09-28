@@ -327,6 +327,7 @@ async def test_report_bug_delivers_winning_override_identity_and_projection(
         "name: report-bug\n"
         "description: Winning report override.\n"
         "execution_role: session\n"
+        "write_paths: inherit\n"
         "semantic_version: 1\n"
         "semantic_requirements:\n"
         "  logical_roles:\n"

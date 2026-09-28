@@ -9,6 +9,7 @@ import pytest
 from autoskillit.hooks._session_binding import (
     SESSION_BINDING_SCHEMA_VERSION,
     LoadedSkillEntry,
+    LoadedSkillOrigin,
     SessionBinding,
 )
 from autoskillit.server.tools.tools_kitchen import _declare_join_batch as declare_module
@@ -42,6 +43,7 @@ def test_invalid_binding_cannot_open_batch_with_retained_digest(
                     source_artifact_incarnation_id="incarnation",
                     binding_valid=False,
                     binding_error="invalid test binding",
+                    origin=LoadedSkillOrigin.UNRESOLVED,
                 ),
             ),
         ).to_json(),

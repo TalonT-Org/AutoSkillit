@@ -268,6 +268,7 @@ def _write_session_binding(
 ) -> Path:
     """Write the binding at the authority path for the canonical payload identity."""
     from autoskillit.hooks._session_binding import (
+        SESSION_BINDING_SCHEMA_VERSION,
         SessionBinding,
         resolve_binding_path,
         write_binding,
@@ -282,7 +283,7 @@ def _write_session_binding(
         write_binding(
             binding_path,
             SessionBinding(
-                schema_version=3,
+                schema_version=SESSION_BINDING_SCHEMA_VERSION,
                 session_id="bind",
                 join_required=join_required,
                 binding_valid=binding_valid,

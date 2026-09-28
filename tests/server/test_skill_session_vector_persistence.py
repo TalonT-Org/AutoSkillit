@@ -164,6 +164,7 @@ def test_fresh_contract_and_resume_retain_only_admitted_invocation_members(
         "description: Supported root.\n"
         "execution_role: session\n"
         "activate_deps: [dependency]\n"
+        "write_paths: inherit\n"
         "---\n"
         "Run the root.\n",
         encoding="utf-8",
@@ -173,6 +174,7 @@ def test_fresh_contract_and_resume_retain_only_admitted_invocation_members(
         "name: dependency\n"
         "description: Refused dependency.\n"
         "execution_role: session\n"
+        "write_paths: inherit\n"
         "---\n"
         "Run the dependency.\n",
         encoding="utf-8",

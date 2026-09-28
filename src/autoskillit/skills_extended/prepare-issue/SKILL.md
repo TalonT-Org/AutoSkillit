@@ -1,5 +1,7 @@
 ---
 name: prepare-issue
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/prepare-issue/'
 categories: [github]
 uses_capabilities: [github_api_write]
 description: >

@@ -10,5 +10,5 @@
 - [0008-shell-capture-snapshot-authority.md](0008-shell-capture-snapshot-authority.md) — Make verified pipe-EOF snapshots, opaque V2 references, and checked delivery the sole Codex shell-capture authority
 - [0009-verified-output-delivery-disposition.md](0009-verified-output-delivery-disposition.md) — A checksum-verified capture is delivered or the failure explicitly says why not; a bookkeeping failure never discards it
 - [0010-systemd-scope-defense-in-depth.md](0010-systemd-scope-defense-in-depth.md) — systemd scope wrapping is a best-effort kernel backstop on top of the tether sweep, never the ceiling of record
-- [0015-write-containment.md](0015-write-containment.md) — bind interactive writes to declared skill boundaries
+- [0015-write-containment.md](0015-write-containment.md) — typed skill write scopes composed by union across interactive and headless sessions
 - [0016-owner-scope.md](0016-owner-scope.md) — a fleet dispatch settles every funnel-spawned descendant of its L2, selected by owner-scope registration, before it persists or returns

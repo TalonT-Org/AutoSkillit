@@ -32,6 +32,7 @@ _FRONTMATTER = """---
 name: vector-skill
 description: Exercises exploration vector authoring.
 execution_role: session
+write_paths: inherit
 ---
 """
 
@@ -124,7 +125,8 @@ def test_planner_extract_domain_deep_is_the_exact_closed_applicability_value(
 def test_projection_context_vectors_keep_every_bound_skill_key(tmp_path: Path) -> None:
     vector_info = _parse(tmp_path)
     empty_content = (
-        "---\nname: empty-skill\ndescription: No vectors.\nexecution_role: session\n---\n"
+        "---\nname: empty-skill\ndescription: No vectors.\nexecution_role: session\n"
+        "write_paths: inherit\n---\n"
     )
     empty_info = SkillInfo(
         name="empty-skill",

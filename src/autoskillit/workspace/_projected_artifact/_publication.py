@@ -34,6 +34,7 @@ from autoskillit.core import (
     write_versioned_json,
 )
 from autoskillit.hook_registry import render_hook_scope_table, render_hooks_json_text
+from autoskillit.hooks._write_scope import encode_write_scope
 from autoskillit.workspace._installed._projection_cache import is_projected_asset
 from autoskillit.workspace._installed._shared_asset_store import (
     link_or_copy_asset,
@@ -46,7 +47,7 @@ from autoskillit.workspace._projected_artifact._documents import (
     project_agent_skill_document,
 )
 
-SANITIZED_PLUGIN_MANIFEST_SCHEMA_VERSION = 1
+SANITIZED_PLUGIN_MANIFEST_SCHEMA_VERSION = 2
 
 
 def _skill_sequence(
@@ -193,6 +194,8 @@ def _manifest_skill_entry(
     skill: SkillContractRecord,
     document: AgentSkillDocument,
 ) -> dict[str, Any]:
+    if skill.write_scope is None:
+        raise SkillContractError(f"skill {skill.name!r} has no valid write scope to publish")
     role = skill.execution_role
     semantic_plan = skill.semantic_plan
     join_required = bool(
@@ -221,7 +224,7 @@ def _manifest_skill_entry(
         "child_spawn_cardinality": dict(sorted(child_cardinality.items())),
         "semantic_digest": document.semantic_digest,
         "adaptation_digest": document.adaptation_digest,
-        "write_paths": list(skill.write_paths) if skill.write_paths is not None else None,
+        "write_scope": encode_write_scope(skill.write_scope),
     }
     return entry
 

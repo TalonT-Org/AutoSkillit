@@ -33,7 +33,8 @@ def _install_skill_invocation(
         uses_capabilities=capabilities,
         canonical_content=(
             f"---\nname: {name}\ndescription: Test skill\n"
-            f"uses_capabilities: {sorted(capabilities)!r}\n---\n# Test skill\n"
+            f"uses_capabilities: {sorted(capabilities)!r}\n"
+            "write_paths: inherit\n---\n# Test skill\n"
         ),
     )
     invocation = EffectiveSkillInvocation(

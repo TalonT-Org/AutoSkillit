@@ -1,5 +1,6 @@
 ---
 name: open-kitchen
+write_paths: inherit
 uses_capabilities: [open_kitchen]
 description: Open the AutoSkillit kitchen — reveals all kitchen MCP tools for this session. Human-only entry point.
 disable-model-invocation: true

@@ -28,8 +28,10 @@ from autoskillit.hooks._runtime._hook_settings import (
 from autoskillit.hooks._session_binding import (
     SESSION_BINDING_SCHEMA_VERSION,
     LoadedSkillEntry,
+    LoadedSkillOrigin,
     SessionBinding,
     resolve_binding_path,
+    unresolved_loaded_skill,
     write_binding,
 )
 from autoskillit.server.tools.tools_kitchen import _declare_join_batch as declare_module
@@ -68,6 +70,7 @@ def _entry(
         source_artifact_incarnation_id="incarnation",
         binding_valid=True,
         binding_error=None,
+        origin=LoadedSkillOrigin.AUTOSKILLIT,
     )
 
 
@@ -328,7 +331,7 @@ def test_cook_bypass_preserves_admission_and_cardinality_refusals(
 @pytest.mark.parametrize(
     ("case", "expected_error"),
     [
-        ("invalid_binding", "requires a valid session binding"),
+        ("invalid_binding", "autoskillit skill 'ghost' absent from projection manifest"),
         ("selected_not_join_bearing", "is not join-bearing"),
         ("skill_not_loaded", "is not loaded in this session"),
         ("backend_not_capable", "does not attest fixed_set_join_capable"),
@@ -352,7 +355,18 @@ def test_each_refusal_names_a_distinct_cause(
     binding = _binding(requested_session_id)
 
     if case == "invalid_binding":
-        binding = _binding(requested_session_id, binding_valid=False)
+        binding = _binding(
+            requested_session_id,
+            entries=(
+                _entry(),
+                unresolved_loaded_skill(
+                    "ghost",
+                    "2026-08-26T00:00:00+00:00",
+                    "autoskillit skill 'ghost' absent from projection manifest",
+                ),
+            ),
+            binding_valid=False,
+        )
     elif case == "selected_not_join_bearing":
         binding = _binding(
             requested_session_id,

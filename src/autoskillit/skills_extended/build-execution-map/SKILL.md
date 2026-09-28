@@ -1,5 +1,6 @@
 ---
 name: build-execution-map
+write_paths: unrestricted
 categories:
 - github
 requires_resources:

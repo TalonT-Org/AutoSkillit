@@ -1,5 +1,6 @@
 ---
 name: validate-audit
+write_paths: unrestricted
 categories:
 - audit
 uses_capabilities: []

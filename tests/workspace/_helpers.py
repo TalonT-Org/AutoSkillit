@@ -17,8 +17,11 @@ from autoskillit.core import (
 )
 
 
-def _document(name: str, body: str) -> str:
-    return f"---\nname: {name}\ndescription: Cache fixture.\n---\n{body}\n"
+def _document(name: str, body: str, *, write_paths: str = "inherit") -> str:
+    return (
+        f"---\nname: {name}\ndescription: Cache fixture.\nwrite_paths: {write_paths}\n"
+        f"---\n{body}\n"
+    )
 
 
 def _write_project_skill_override(
@@ -39,6 +42,7 @@ def _write_effective_skill(
     capabilities: tuple[str, ...],
     execution_role: str,
     body: str,
+    write_paths: str = "inherit",
 ) -> Path:
     evidence = {
         "github_api_write": "Run `gh issue edit 1 --body-file issue.md`.",
@@ -63,6 +67,7 @@ def _write_effective_skill(
                 "description: Effective source fixture.",
                 f"uses_capabilities: [{', '.join(capabilities)}]",
                 f"execution_role: {execution_role}",
+                f"write_paths: {write_paths}",
                 "---",
                 body,
                 evidence_body,

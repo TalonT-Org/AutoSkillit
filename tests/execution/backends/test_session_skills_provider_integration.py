@@ -41,6 +41,7 @@ def _child_spawn_skill(tmp_path: Path) -> SkillInfo:
         "  child_spawns:\n"
         "    - role: worker\n"
         "      count: 1\n"
+        "write_paths: inherit\n"
         "---\n"
         "Delegate to the worker.\n",
         encoding="utf-8",

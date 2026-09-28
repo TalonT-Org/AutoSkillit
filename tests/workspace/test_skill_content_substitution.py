@@ -22,7 +22,7 @@ def _make_synth_skill_md(tmp_path: Path, name: str, body: str) -> Path:
     skill_dir.mkdir(parents=True)
     md = skill_dir / "SKILL.md"
     md.write_text(
-        f"---\nname: {name}\ndescription: synthetic\n---\n{body}\n",
+        f"---\nname: {name}\ndescription: synthetic\nwrite_paths: inherit\n---\n{body}\n",
         encoding="utf-8",
     )
     return md

@@ -1,5 +1,7 @@
 ---
 name: prepare-pr
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/prepare-pr/'
 categories:
 - github
 uses_capabilities: []

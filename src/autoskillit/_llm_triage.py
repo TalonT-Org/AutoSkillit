@@ -93,6 +93,7 @@ async def triage_staleness(
                     "---\n"
                     f"name: {skill_info.name}\n"
                     "description: Skill document used for contract staleness comparison.\n"
+                    "write_paths: inherit\n"
                     "---\n"
                     f"{skill_info.canonical_content}"
                 )

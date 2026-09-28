@@ -1,5 +1,6 @@
 ---
 name: merge-pr
+write_paths: unrestricted
 categories:
 - github
 uses_capabilities:

@@ -129,7 +129,8 @@ def test_variable_workflow_names_its_runtime_collection(skill_name: str) -> None
 def _write_skill(path: Path, *, declarations: str = _VALID_SEMANTICS, body: str = "Body.") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        f"---\nname: semantic-test\ndescription: semantic fixture\n{declarations}---\n{body}\n",
+        "---\nname: semantic-test\ndescription: semantic fixture\n"
+        f"{declarations}write_paths: inherit\n---\n{body}\n",
         encoding="utf-8",
     )
 

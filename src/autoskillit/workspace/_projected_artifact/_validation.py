@@ -19,6 +19,7 @@ from autoskillit.core import (
     VANISHED_ERRORS,
     AgentDefinitionError,
     EffectiveSkillCatalogAuthority,
+    SkillContractError,
     TreeVanishedError,
     YAMLError,
     load_agent_definition,
@@ -28,6 +29,7 @@ from autoskillit.core import (
     strict_walk,
     validate_agent_tool_short_name,
 )
+from autoskillit.hooks._write_scope import encode_write_scope
 from autoskillit.workspace._projected_artifact._documents import SkillContractRecord
 from autoskillit.workspace._projected_artifact._publication import (
     SANITIZED_PLUGIN_MANIFEST_SCHEMA_VERSION,
@@ -197,6 +199,8 @@ def _validate_public_skill_document(
 
 def _expected_manifest_entry(info: SkillContractRecord, content: str) -> dict[str, object]:
     """Reconstruct one expected manifest entry without using the producer builder."""
+    if info.write_scope is None:
+        raise SkillContractError(f"skill {info.name!r} has no valid write scope")
     canonical_digest = (
         info.canonical_digest or hashlib.sha256(info.canonical_content.encode()).hexdigest()
     )
@@ -210,7 +214,7 @@ def _expected_manifest_entry(info: SkillContractRecord, content: str) -> dict[st
         "uses_capabilities": sorted(info.uses_capabilities),
         "execution_role": (info.execution_role.value if info.execution_role is not None else None),
         "activate_deps": list(info.activate_deps),
-        "write_paths": list(info.write_paths) if info.write_paths is not None else None,
+        "write_scope": encode_write_scope(info.write_scope),
     }
     semantic_plan = info.semantic_plan
     expected_entry["join_required"] = bool(

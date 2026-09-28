@@ -1,5 +1,6 @@
 ---
 name: judge-eval
+write_paths: unrestricted
 categories: [eval]
 description: >
   Evaluate skill variant outputs against detection criteria for a single canary

@@ -145,8 +145,8 @@ def test_manifest_validator_reports_a_skill_tree_race_without_reenumerating(
 
 
 def test_sanitized_and_projection_manifest_schema_versions_are_distinct() -> None:
-    assert SANITIZED_PLUGIN_MANIFEST_SCHEMA_VERSION == 1
-    assert PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION == 2
+    assert SANITIZED_PLUGIN_MANIFEST_SCHEMA_VERSION == 2
+    assert PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION == 3
 
 
 def test_sanitized_manifest_schema_version_has_single_authority() -> None:

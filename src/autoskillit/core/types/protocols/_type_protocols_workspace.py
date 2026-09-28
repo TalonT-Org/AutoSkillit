@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from ..execution._type_backend import BackendConventions
 from ..foundation._type_enums import SkillExecutionRole, SkillInvalidityKind, SkillSource
@@ -40,6 +40,9 @@ from ..skill._type_skill_semantics import (
     SkillSemanticPlan,
 )
 from ._type_protocols_backend import CodingAgentBackend
+
+if TYPE_CHECKING:
+    from autoskillit.hooks._write_scope import WriteScope
 
 __all__ = [
     "WorkspaceManager",
@@ -129,7 +132,7 @@ class SkillFrontmatterAuthority(Protocol):
     def body(self) -> str: ...
 
     @property
-    def write_paths(self) -> tuple[str, ...] | None: ...
+    def write_scope(self) -> WriteScope | None: ...
 
 
 @runtime_checkable
@@ -216,7 +219,7 @@ class SkillAuthority(Protocol):
     def frontmatter(self) -> SkillFrontmatterAuthority | None: ...
 
     @property
-    def write_paths(self) -> tuple[str, ...] | None: ...
+    def write_scope(self) -> WriteScope | None: ...
 
     @property
     def invalidities(self) -> tuple[SkillInvalidityAuthority, ...]: ...

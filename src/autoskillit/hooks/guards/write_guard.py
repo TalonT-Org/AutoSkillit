@@ -1,8 +1,13 @@
 """PreToolUse write boundary for headless launcher and interactive skill sessions.
 
 Headless sessions use launcher supplied prefixes. Interactive Claude sessions use
-the intersection of loaded skills' projected write_paths. Codex relies on its
-workspace sandbox for this boundary; installation writes have a separate guard.
+the union of the loaded manifest skills' projected write scopes: a BOUNDED skill
+contributes its temp directories, an UNRESTRICTED skill lifts the boundary for the
+session (allowed with reason ``unrestricted_skill``), and an INHERIT or foreign
+skill abstains. An invalid or foreign-session binding, an unreadable manifest or
+manifest entry, and a declared directory that resolves outside the session temp
+root fail closed with the precise cause. Codex relies on its workspace sandbox for
+this boundary; installation writes have a separate guard.
 """
 
 from __future__ import annotations
@@ -12,6 +17,7 @@ import logging
 import os
 import sys
 from pathlib import Path
+from typing import Literal, NamedTuple, assert_never
 
 _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
@@ -32,7 +38,6 @@ from _guard_decision_diagnostics import (  # noqa: E402
     record_guard_decision,
 )
 from _hook_payload import (  # noqa: E402
-    TEMP_RELATIVE_DIR,
     extract_apply_patch_text,
     parse_hook_command,
 )
@@ -41,10 +46,21 @@ from _hook_settings import (  # noqa: E402
     hook_session_shape,
 )
 from _session_binding import (  # noqa: E402
+    BindingReadOutcome,
+    LoadedSkillEntry,
+    LoadedSkillOrigin,
     SessionBindingError,
+    manifest_skill_write_scope,
+    read_binding_outcome,
     read_manifest,
-    read_session_binding,
     resolve_projection_manifest_path,
+)
+from _write_scope import (  # noqa: E402
+    SessionScopeState,
+    SessionWriteBoundary,
+    WriteScope,
+    fold_session_write_scopes,
+    temp_root_escape,
 )
 
 WRITE_GUARD_DENY_TRIGGER = "read-only skill session"
@@ -61,6 +77,26 @@ _EMPTY_BOUNDARY_HINT_BY_ACTIVATION: dict[str, str] = {
     ),
     "skill_binding": ("every write_paths entry in session_binding failed realpath normalization"),
 }
+
+_PolicyState = Literal["none", "unrestricted", "active", "empty", "unresolved"]
+
+
+class _WritePolicy(NamedTuple):
+    """The resolved write boundary: normalized prefixes when active, else a cause."""
+
+    state: _PolicyState
+    prefixes: tuple[str, ...]
+    display: str
+    cause: str
+
+
+def _resolution(state: _PolicyState, cause: str = "") -> _WritePolicy:
+    return _WritePolicy(state, (), "", cause)
+
+
+class _InteractiveBinding(NamedTuple):
+    payload_cwd: str
+    loaded_skills: tuple[LoadedSkillEntry, ...]
 
 
 def _effective_execution_cwd(execution_cwd: str) -> str:
@@ -81,12 +117,17 @@ def _bash_validation_error(
     command: str, execution_cwd: str, norm_prefixes: list[str], display_prefix: str
 ) -> str | None:
     scan = _extract_bash_write_targets(command, execution_cwd)
+    if not scan.parseable:
+        return (
+            f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} "
+            "(unparseable Bash command). Correct the shell syntax and retry."
+        )
     if scan.unresolved:
         return (
             f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} "
             "(unresolved write target). " + UNRESOLVED_WRITE_TARGET_REMEDIATION
         )
-    if not scan.parseable or not scan.targets:
+    if not scan.targets:
         return None
     return _paths_validation_error(list(scan.targets), norm_prefixes, display_prefix)
 
@@ -151,98 +192,116 @@ def _normalize_prefixes(raw_prefixes: list[str], *, source_label: str) -> list[s
     return normalized
 
 
-def _narrow_compatible_prefixes(left: list[str], right: list[str]) -> list[str]:
-    result: list[str] = []
-    for left_prefix in left:
-        for right_prefix in right:
-            if left_prefix.startswith(right_prefix):
-                result.append(left_prefix)
-            elif right_prefix.startswith(left_prefix):
-                result.append(right_prefix)
-    return list(dict.fromkeys(result))
-
-
-def _load_interactive_policy_context(
-    data: dict[str, object],
-) -> tuple[tuple[str, list[object], dict[str, object]] | None, str]:
+def _load_interactive_binding(data: dict[str, object]) -> _InteractiveBinding | _WritePolicy:
     payload_cwd = data.get("cwd")
     session_id = data.get("session_id")
     if not isinstance(payload_cwd, str) or not os.path.isabs(payload_cwd):
-        return None, "none"
+        return _resolution("none", "payload cwd is missing or relative")
     if not isinstance(session_id, str) or not session_id:
-        return None, "none"
-    binding = read_session_binding(payload_cwd, session_id)
-    if binding is None:
-        return None, "none"
-    loaded_skills = binding.get("loaded_skills")
-    if not isinstance(loaded_skills, list):
-        return None, "unresolved"
+        return _resolution("none", "payload session_id is missing")
+    read = read_binding_outcome(payload_cwd, session_id)
+    match read.outcome:
+        case BindingReadOutcome.NO_BINDING:
+            return _resolution("none")
+        case BindingReadOutcome.WRONG_SESSION:
+            return _resolution(
+                "unresolved",
+                f"the session binding flag for {session_id!r} belongs to another session",
+            )
+        case BindingReadOutcome.INVALID:
+            return _resolution(
+                "unresolved",
+                f"session binding is invalid ({read.error}); start a new session after "
+                "repairing the installation (autoskillit doctor)",
+            )
+        case BindingReadOutcome.VALID:
+            binding = read.binding
+            assert binding is not None
+            return _InteractiveBinding(payload_cwd, binding.loaded_skills)
+        case _ as unreachable:
+            assert_never(unreachable)
+
+
+def _loaded_write_scopes(
+    skill_names: list[str],
+) -> list[tuple[str, WriteScope]] | _WritePolicy:
     manifest_path = resolve_projection_manifest_path(Path(__file__))
     if manifest_path is None:
-        return None, "unresolved"
+        return _resolution(
+            "unresolved", "projection manifest not found beside the installed hooks"
+        )
     try:
         manifest = read_manifest(manifest_path)
-    except SessionBindingError:
-        return None, "unresolved"
-    skills = manifest.get("skills")
-    if not isinstance(skills, dict):
-        return None, "unresolved"
-    return (payload_cwd, loaded_skills, skills), ""
+    except SessionBindingError as exc:
+        return _resolution("unresolved", f"projection manifest unreadable: {exc}")
+    try:
+        return [(name, manifest_skill_write_scope(manifest, name)) for name in skill_names]
+    except SessionBindingError as exc:
+        return _resolution("unresolved", str(exc))
 
 
-def _loaded_skill_prefixes(
-    loaded: object, skills: dict[str, object], payload_cwd: str
-) -> tuple[list[str] | None, bool]:
-    if not isinstance(loaded, dict) or not isinstance(loaded.get("skill_name"), str):
-        return None, True
-    if loaded.get("binding_valid") is not True:
-        return None, True
-    entry = skills.get(loaded["skill_name"])
-    if not isinstance(entry, dict) or "write_paths" not in entry:
-        return None, True
-    raw_paths = entry["write_paths"]
-    if raw_paths is None:
-        return None, False
-    if not isinstance(raw_paths, list) or any(not isinstance(path, str) for path in raw_paths):
-        return None, True
-    paths = [
-        (
-            os.path.join(payload_cwd, path)
-            if path.startswith(f"{TEMP_RELATIVE_DIR}/")
-            else path.replace("{{AUTOSKILLIT_TEMP}}", f"{payload_cwd}/{TEMP_RELATIVE_DIR}")
+def _temp_root_escape_cause(boundary: SessionWriteBoundary, payload_cwd: str) -> str | None:
+    for name, prefixes in boundary.contributors:
+        for prefix in prefixes:
+            try:
+                escape = temp_root_escape(prefix, payload_cwd)
+            except (OSError, ValueError):
+                # _normalize_prefixes drops (and warns about) a prefix whose realpath fails.
+                continue
+            if escape is not None:
+                return f"declared write scope for skill {name} {escape}"
+    return None
+
+
+def _boundary_policy(boundary: SessionWriteBoundary, payload_cwd: str) -> _WritePolicy:
+    match boundary.state:
+        case SessionScopeState.NONE:
+            return _resolution("none")
+        case SessionScopeState.UNRESTRICTED:
+            return _WritePolicy("unrestricted", (), ", ".join(boundary.unrestricted_by), "")
+        case SessionScopeState.BOUNDED:
+            pass
+        case _ as unreachable:
+            assert_never(unreachable)
+    escape = _temp_root_escape_cause(boundary, payload_cwd)
+    if escape is not None:
+        return _resolution("unresolved", escape)
+    normalized = _normalize_prefixes(list(boundary.prefixes), source_label="session_binding")
+    if not normalized:
+        return _resolution("empty")
+    display = (
+        "the union of loaded skills' write scopes ("
+        + "; ".join(
+            f"{name} → {', '.join(prefix.rstrip('/') for prefix in prefixes)}"
+            for name, prefixes in boundary.contributors
         )
-        for path in raw_paths
-    ]
-    return _normalize_prefixes(paths, source_label="session_binding"), False
+        + ")"
+    )
+    return _WritePolicy("active", tuple(normalized), display, "")
 
 
-def _interactive_prefix_policy(data: dict[str, object]) -> tuple[list[str], str, str]:
-    context, state = _load_interactive_policy_context(data)
-    if context is None:
-        return [], "", state
-    payload_cwd, loaded_skills, skills = context
-
-    effective: list[str] | None = None
-    for loaded in loaded_skills:
-        prefixes, unresolved = _loaded_skill_prefixes(loaded, skills, payload_cwd)
-        if unresolved:
-            return [], "", "unresolved"
-        if prefixes is None:
-            continue
-        effective = (
-            prefixes if effective is None else _narrow_compatible_prefixes(effective, prefixes)
+def _interactive_prefix_policy(data: dict[str, object]) -> _WritePolicy:
+    context = _load_interactive_binding(data)
+    if isinstance(context, _WritePolicy):
+        return context
+    skill_names = list(
+        dict.fromkeys(
+            entry.skill_name
+            for entry in context.loaded_skills
+            if entry.origin is LoadedSkillOrigin.AUTOSKILLIT
         )
-
-    if effective is None:
-        return [], "", "none"
-    return (
-        effective,
-        ", ".join(prefix.rstrip("/") for prefix in effective),
-        ("active" if effective else "empty"),
+    )
+    if not skill_names:
+        return _resolution("none")
+    scopes = _loaded_write_scopes(skill_names)
+    if isinstance(scopes, _WritePolicy):
+        return scopes
+    return _boundary_policy(
+        fold_session_write_scopes(scopes, context.payload_cwd), context.payload_cwd
     )
 
 
-def _write_prefix_policy(data: dict[str, object], headless: bool) -> tuple[list[str], str, str]:
+def _write_prefix_policy(data: dict[str, object], headless: bool) -> _WritePolicy:
     if not headless:
         return _interactive_prefix_policy(data)
     prefixes_str = os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES", "")
@@ -260,7 +319,9 @@ def _write_prefix_policy(data: dict[str, object], headless: bool) -> tuple[list[
             else "AUTOSKILLIT_ALLOWED_WRITE_PREFIX"
         ),
     )
-    return norm_prefixes, ", ".join(raw_prefixes), ("active" if norm_prefixes else "none")
+    if not norm_prefixes:
+        return _resolution("none")
+    return _WritePolicy("active", tuple(norm_prefixes), ", ".join(raw_prefixes), "")
 
 
 def _paths_validation_error(
@@ -348,6 +409,47 @@ def _tool_validation_error(
     return _direct_path_validation_error(file_path, norm_prefixes, display_prefix)
 
 
+def _settle_inactive_policy(
+    data: dict[str, object], policy: _WritePolicy, activation: str
+) -> bool:
+    """Record and settle every policy state except ``active``; return whether it settled."""
+    match policy.state:
+        case "none":
+            _record(data, activation=activation, scope="none", decision="allow", reason="no_scope")
+            sys.exit(0)
+        case "unrestricted":
+            _record(
+                data,
+                activation=activation,
+                scope="none",
+                decision="allow",
+                reason="unrestricted_skill",
+            )
+            sys.exit(0)
+        case "empty":
+            _deny(
+                data,
+                f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} "
+                f"(empty boundary: {_EMPTY_BOUNDARY_HINT_BY_ACTIVATION[activation]}).",
+                reason_code="empty",
+                activation=activation,
+            )
+            return True
+        case "unresolved":
+            _deny(
+                data,
+                f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} "
+                f"(unresolved boundary: {policy.cause}).",
+                reason_code="unresolved",
+                activation=activation,
+            )
+            return True
+        case "active":
+            return False
+        case _ as unreachable:
+            assert_never(unreachable)
+
+
 def main() -> None:
     enforce_session_scope("any")
     try:
@@ -379,25 +481,12 @@ def main() -> None:
         )
         return
 
-    norm_prefixes, display_prefix, policy_state = _write_prefix_policy(data, headless)
+    policy = _write_prefix_policy(data, headless)
     activation = "headless" if headless else "skill_binding"
-    if policy_state == "none":
-        _record(data, activation=activation, scope="none", decision="allow", reason="no_scope")
-        sys.exit(0)
-    if policy_state in {"empty", "unresolved"}:
-        hint = _EMPTY_BOUNDARY_HINT_BY_ACTIVATION.get(activation)
-        suffix = (
-            f"empty boundary: {hint}"
-            if hint is not None
-            else f"{policy_state} boundary (activation={activation})"
-        )
-        _deny(
-            data,
-            (f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} ({suffix})."),
-            reason_code=policy_state,
-            activation=activation,
-        )
+    if _settle_inactive_policy(data, policy, activation):
         return
+    norm_prefixes = list(policy.prefixes)
+    display_prefix = policy.display
 
     tool_name = data.get("tool_name", "")
 

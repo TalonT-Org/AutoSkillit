@@ -2,6 +2,7 @@
 name: analyze-prs
 write_paths:
 - '{{AUTOSKILLIT_TEMP}}/analyze-prs/'
+- '{{AUTOSKILLIT_TEMP}}/merge-prs/'
 categories:
 - github
 uses_capabilities: []

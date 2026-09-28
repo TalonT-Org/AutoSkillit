@@ -1182,6 +1182,36 @@ _CROSS_PACKAGE_SUBMODULE_EXEMPTIONS: frozenset[tuple[str, str]] = frozenset(
             "server/_managed_join_attestation.py",
             "autoskillit.hooks._session_binding",
         ),
+        # stdlib-only write-scope authority shared with hook subprocesses; re-exporting
+        # through hooks/__init__ would initialize the hook registry.
+        (
+            "workspace/skills/_format.py",
+            "autoskillit.hooks._write_scope",
+        ),
+        (
+            "workspace/_projected_artifact/_publication.py",
+            "autoskillit.hooks._write_scope",
+        ),
+        (
+            "workspace/_projected_artifact/_validation.py",
+            "autoskillit.hooks._write_scope",
+        ),
+        (
+            "workspace/session_skills/_provider.py",
+            "autoskillit.hooks._write_scope",
+        ),
+        (
+            "server/tools/tools_execution/_run_skill_session.py",
+            "autoskillit.hooks._write_scope",
+        ),
+        (
+            "recipe/rules/rules_skill_write_path_alignment.py",
+            "autoskillit.hooks._write_scope",
+        ),
+        (
+            "migration/adapters_skill.py",
+            "autoskillit.hooks._write_scope",
+        ),
         # The four CLI launch boundaries defer managed-join issuance until the
         # selected backend is known. Importing the server prelaunch helper at
         # module scope breaks CLI import isolation. The prelaunch module is now
@@ -1981,6 +2011,11 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/execution/test_process_tether.py": frozenset({"autoskillit.config"}),
     # workspace tests
     "tests/workspace/test_clone_ci_contract.py": frozenset({"autoskillit.execution"}),
+    # the frontmatter write scope round-trips through the stdlib-only write-scope
+    # authority and the hook-side manifest decoder it feeds
+    "tests/workspace/test_skill_write_boundary_contract.py": frozenset({"autoskillit.hooks"}),
+    # interactive-fold vs headless-closure parity runs the hook-side fold directly
+    "tests/workspace/test_write_scope_parity.py": frozenset({"autoskillit.hooks"}),
     # real Git worktree lifecycle coverage uses the production subprocess runner
     "tests/workspace/test_worktree_allocator.py": frozenset({"autoskillit.execution"}),
     # skills split — categories tests call load_config() to validate tier assignments

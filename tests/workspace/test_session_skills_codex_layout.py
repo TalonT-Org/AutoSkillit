@@ -47,7 +47,9 @@ def _write_profile_skill(
     skill_path = source_skills / name / "SKILL.md"
     skill_path.parent.mkdir(parents=True, exist_ok=True)
     skill_path.write_text(
-        f"---\nname: {name}\ndescription: Profile fixture.\n{frontmatter}---\n{body}",
+        f"---\nname: {name}\ndescription: Profile fixture.\n{frontmatter}"
+        "write_paths: inherit\n---\n"
+        f"{body}",
         encoding="utf-8",
     )
     return skill_path
@@ -755,6 +757,7 @@ def test_invocation_only_roles_are_forwarded_and_reachability_checked(
         "  child_spawns:\n"
         "  - role: autoskillit:session-log-reader\n"
         "    count: 1\n"
+        "write_paths: inherit\n"
         "---\n"
         "Delegate the bounded log inspection.\n",
         encoding="utf-8",
@@ -1500,6 +1503,7 @@ def test_manager_filters_child_spawn_skill_by_finalized_ambient_role(
         "  child_spawns:\n"
         "  - role: helper\n"
         "    count: 1\n"
+        "write_paths: inherit\n"
         "---\n"
         "Delegate the work.\n",
         encoding="utf-8",
@@ -1517,6 +1521,7 @@ def test_manager_filters_child_spawn_skill_by_finalized_ambient_role(
             "---\n"
             "name: unrelated-skill\n"
             "description: Supported without child delegation.\n"
+            "write_paths: inherit\n"
             "---\n"
             "Run directly.\n"
         ),

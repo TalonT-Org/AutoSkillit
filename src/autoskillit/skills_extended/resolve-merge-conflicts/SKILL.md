@@ -1,5 +1,6 @@
 ---
 name: resolve-merge-conflicts
+write_paths: unrestricted
 categories:
 - github
 uses_capabilities: []

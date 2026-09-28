@@ -36,11 +36,13 @@ from _hook_settings import (  # noqa: E402
 )
 from _session_binding import (  # noqa: E402
     SESSION_BINDING_SCHEMA_VERSION,
+    UNREADABLE_PRIOR_BINDING_ENTRY,
     LoadedSkillEntry,
+    LoadedSkillOrigin,
     SessionBinding,
     SessionBindingError,
     binding_lock,
-    loaded_skill_from_manifest,
+    classify_invoked_skill,
     merge_binding,
     normalize_skill_name,
     read_binding,
@@ -53,20 +55,19 @@ from _session_binding import (  # noqa: E402
 
 
 def _write_skill_binding(
-    flag_path: Path, *, skill_name: str, session_id: str, ts: str
+    flag_path: Path, *, raw_skill_name: str, session_id: str, ts: str
 ) -> tuple[LoadedSkillEntry, str | None, bool]:
     artifact_digest = ""
-    binding_error: str | None = None
     try:
         manifest_path = resolve_projection_manifest_path(Path(__file__))
         if manifest_path is None:
             raise SessionBindingError("projection manifest not found")
         manifest = read_manifest(manifest_path)
-        new_entry = loaded_skill_from_manifest(manifest, skill_name, ts)
+        new_entry = classify_invoked_skill(manifest, raw_skill_name, ts)
         artifact_digest = str(manifest["artifact_digest"])
     except SessionBindingError as exc:
-        binding_error = str(exc)
-        new_entry = unresolved_loaded_skill(skill_name, ts, binding_error)
+        new_entry = unresolved_loaded_skill(normalize_skill_name(raw_skill_name), ts, str(exc))
+    binding_error = new_entry.binding_error
 
     binding_written = False
     try:
@@ -83,7 +84,13 @@ def _write_skill_binding(
                     join_required=True,
                     binding_valid=False,
                     artifact_digest="",
-                    loaded_skills=(),
+                    loaded_skills=(
+                        unresolved_loaded_skill(
+                            UNREADABLE_PRIOR_BINDING_ENTRY,
+                            ts,
+                            f"existing session binding unreadable: {exc}",
+                        ),
+                    ),
                 )
             write_binding(
                 flag_path,
@@ -118,7 +125,7 @@ def _invocation_skill(data: dict[str, object]) -> tuple[str, object] | None:
 def _join_context_parts(
     data: dict[str, object], payload_cwd: str, session_id: str, entry: LoadedSkillEntry
 ) -> list[str]:
-    if not entry.join_required:
+    if entry.origin is not LoadedSkillOrigin.AUTOSKILLIT or not entry.join_required:
         return []
     parts = [
         "JOIN DECLARATION AUTHORITY: Call declare_join_batch with the normalized bare "
@@ -164,9 +171,8 @@ def main() -> None:
     if data.get("agent_id") or invocation is None or not session_id:
         sys.exit(0)
     event_name, skill_name_value = invocation
-    skill_name: str = (
-        normalize_skill_name(skill_name_value) if isinstance(skill_name_value, str) else ""
-    )
+    raw_skill_name = skill_name_value if isinstance(skill_name_value, str) else ""
+    skill_name = normalize_skill_name(raw_skill_name)
     payload_cwd = normalize_payload_cwd(data.get("cwd"))
     try:
         bridge_session_registry(session_id, payload_cwd)
@@ -176,7 +182,7 @@ def main() -> None:
 
     ts = datetime.now(UTC).isoformat()
     new_entry, binding_error, binding_written = _write_skill_binding(
-        flag_path, skill_name=skill_name, session_id=session_id, ts=ts
+        flag_path, raw_skill_name=raw_skill_name, session_id=session_id, ts=ts
     )
 
     if not binding_written:

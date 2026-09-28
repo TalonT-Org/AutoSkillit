@@ -1,5 +1,7 @@
 ---
 name: issue-splitter
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/issue-splitter/'
 categories: [github]
 uses_capabilities: [github_api_write]
 description: >

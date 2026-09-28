@@ -1,5 +1,6 @@
 ---
 name: generate-report
+write_paths: unrestricted
 categories:
 - research
 uses_capabilities: []

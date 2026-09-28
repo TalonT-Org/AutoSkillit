@@ -1,5 +1,7 @@
 ---
 name: make-scenarios
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/make-scenarios/'
 description: Analyze a plan or codebase to generate scenarios in "Actor wants to..." format from a stated perspective. Use when user says "make scenarios", "generate scenarios", "jeopardy requirements", or wants to identify extension points and use cases.
 hooks:
   PreToolUse:
@@ -34,7 +36,7 @@ These scenarios become input for requirements generation via `/make-req` in a se
 
 **NEVER:**
 - Modify any source code files
-- Create files outside `temp/make-scenarios/` directory
+- Create files outside `{{AUTOSKILLIT_TEMP}}/make-scenarios/` directory
 - Prescribe solutions or approaches in scenarios
 - Invent scenarios that have no basis in the analyzed material
 - Mix perspectives in a single scenario (each scenario has one actor type)
@@ -43,7 +45,7 @@ These scenarios become input for requirements generation via `/make-req` in a se
 - Require the user to state the perspective/lens before proceeding
 - Use subagents for parallel exploration
 - Ground every scenario in evidence from the codebase or plan
-- Write output to `temp/make-scenarios/` directory
+- Write output to `{{AUTOSKILLIT_TEMP}}/make-scenarios/` directory
 
 ## Workflow
 
@@ -110,7 +112,7 @@ Discard scenarios where the system already fully supports the capability (nothin
 
 ### Step 4: Write the Scenarios Document
 
-Save to: `temp/make-scenarios/scenarios_{perspective}_{topic}_{YYYY-MM-DD_HHMMSS}.md`
+Save to: `{{AUTOSKILLIT_TEMP}}/make-scenarios/scenarios_{perspective}_{topic}_{YYYY-MM-DD_HHMMSS}.md`
 
 ```markdown
 # Scenarios: {Topic}
@@ -154,7 +156,7 @@ Save to: `temp/make-scenarios/scenarios_{perspective}_{topic}_{YYYY-MM-DD_HHMMSS
 After writing the file, output to terminal:
 
 ```
-Scenarios written to: temp/make-scenarios/scenarios_{perspective}_{topic}_{timestamp}.md
+Scenarios written to: {{AUTOSKILLIT_TEMP}}/make-scenarios/scenarios_{perspective}_{topic}_{timestamp}.md
 
 Review and edit the scenarios file — remove any you don't want requirements for.
 Then in a new session, run /make-req with the scenarios file as input.

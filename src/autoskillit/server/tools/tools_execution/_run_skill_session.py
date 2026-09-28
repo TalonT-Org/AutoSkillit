@@ -13,7 +13,7 @@ import os
 from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, assert_never
 from uuid import uuid4
 
 from autoskillit.core import (
@@ -24,7 +24,6 @@ from autoskillit.core import (
     SkillExecutionRole,
     SkillResult,
     WriteBehaviorSpec,
-    destination_location,
     extract_skill_name,
     get_logger,
 )
@@ -34,6 +33,7 @@ from autoskillit.core import (
     resolve_skill_temp_dir as _resolve_skill_temp_dir,
 )
 from autoskillit.execution import ReplayingSubprocessRunner
+from autoskillit.hooks._write_scope import WriteScopeKind, bounded_scope_contains
 from autoskillit.pipeline import canonical_step_name as _canonical_step_name
 from autoskillit.pipeline import gate_error_result
 from autoskillit.server._explorer_projection import _build_requested_execution_identity
@@ -578,34 +578,47 @@ def _prepare_owned_session_contract(state: _RunSkillDispatchState) -> None:
         )
 
 
+def _write_scope_failure(error: str) -> str:
+    return json.dumps(
+        ToolFailureEnvelope(
+            success=False,
+            error=error,
+            stage="validate_args:run_skill",
+            retriable=False,
+        )
+    )
+
+
 def _extend_closure_write_scope(state: _RunSkillDispatchState) -> str | None:
     assert state.write_watch_dirs is not None
     # Both fresh and rehydrated invocations extend scope from their
     # validated closure, independent of whether a snapshot was replayed.
-    if state.invocation is not None:
-        state.write_watch_dirs.extend(
-            _te_pkg.resolve_closure_write_dirs(
-                state.invocation.closure,
-                state.cwd,
-                state.write_watch_dirs,
-            )
+    if state.invocation is None:
+        return None
+    try:
+        closure_dirs = _te_pkg.resolve_closure_write_dirs(
+            state.invocation.closure,
+            state.cwd,
+            state.write_watch_dirs,
         )
-        root_boundary = state.invocation.root.write_paths
-        if state.output_dir and root_boundary is not None:
-            declared_dirs = _te_pkg.resolve_closure_write_dirs((state.invocation.root,), state.cwd)
+    except SkillContractError as exc:
+        return _write_scope_failure(str(exc))
+    root_scope = state.invocation.root.write_scope
+    assert root_scope is not None
+    match root_scope.kind:
+        case WriteScopeKind.BOUNDED:
             # `_resolve_dispatch_paths` populates write_watch_dirs from state.output_dir
-            # before this branch runs, and the only intervening mutation is `extend`,
-            # so [0] is safe here. Reaching this branch implies state.output_dir is
-            # truthy, which guarantees at least one entry.
-            requested = destination_location(state.write_watch_dirs[0])
-            if not any(requested.is_relative_to(directory) for directory in declared_dirs):
-                return json.dumps(
-                    ToolFailureEnvelope(
-                        success=False,
-                        error="run_skill output_dir is outside the skill's declared write_paths",
-                        stage="validate_args:run_skill",
-                        retriable=False,
-                    )
+            # before this runs, so [0] is the requested output_dir when supplied,
+            # or the default temp floor otherwise. The default floor is not narrowed.
+            if state.output_dir and not bounded_scope_contains(
+                root_scope, str(state.write_watch_dirs[0]), state.cwd
+            ):
+                return _write_scope_failure(
+                    "run_skill output_dir is outside the skill's declared write scope"
                 )
-
+        case WriteScopeKind.UNRESTRICTED | WriteScopeKind.INHERIT:
+            pass
+        case _ as unreachable:
+            assert_never(unreachable)
+    state.write_watch_dirs.extend(closure_dirs)
     return None

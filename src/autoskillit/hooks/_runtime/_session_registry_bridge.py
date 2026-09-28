@@ -8,15 +8,16 @@ import os
 import tempfile
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, assert_never
 
 if TYPE_CHECKING or __package__:
-    from .._session_binding import read_session_binding
+    from .._session_binding import BindingReadOutcome, read_binding_outcome
     from ._hook_payload import resolve_state_root
 else:
     from _hook_payload import resolve_state_root
     from _session_binding import (
-        read_session_binding,
+        BindingReadOutcome,
+        read_binding_outcome,
     )
 
 _REGISTRY_LOCK_TIMEOUT_SECONDS = 2.0
@@ -216,13 +217,24 @@ def is_authenticated_top_level_cook_session(
         row = registry.get(managed_parent_id)
         if not isinstance(row, dict) or row.get("session_type") != "cook":
             return False
-        binding = read_session_binding(payload_cwd, binding_session_id)
-        return bool(
-            binding is not None
-            and binding.get("managed_parent_id") == managed_parent_id
-            and binding.get("managed_route") in {"parent", "interactive-parent"}
-            and binding.get("managed_leaf_id") == ""
-        )
+        read = read_binding_outcome(payload_cwd, binding_session_id)
+        match read.outcome:
+            case (
+                BindingReadOutcome.NO_BINDING
+                | BindingReadOutcome.WRONG_SESSION
+                | BindingReadOutcome.INVALID
+            ):
+                return False
+            case BindingReadOutcome.VALID:
+                binding = read.binding
+                assert binding is not None
+                return (
+                    binding.managed_parent_id == managed_parent_id
+                    and binding.managed_route in {"parent", "interactive-parent"}
+                    and binding.managed_leaf_id == ""
+                )
+            case _ as unreachable:
+                assert_never(unreachable)
 
     if not launch_id:
         return False

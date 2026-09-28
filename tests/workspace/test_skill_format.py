@@ -18,7 +18,7 @@ pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 class TestValidateSkillFrontmatter:
     def test_valid_frontmatter_returns_no_errors(self) -> None:
         result = validate_skill_frontmatter(
-            {"name": "my-skill", "description": "A skill"}, "my-skill"
+            {"name": "my-skill", "description": "A skill", "write_paths": "inherit"}, "my-skill"
         )
         assert result == []
 
@@ -30,9 +30,10 @@ class TestValidateSkillFrontmatter:
         result = validate_skill_frontmatter({"name": "my-skill"}, "my-skill")
         assert any("description" in err for err in result)
 
-    def test_empty_frontmatter_returns_two_errors(self) -> None:
+    def test_empty_frontmatter_reports_required_errors(self) -> None:
         result = validate_skill_frontmatter({}, "my-skill")
-        assert len(result) >= 2
+        for field in ("name", "description", "write_paths"):
+            assert any(field in error for error in result)
 
     def test_name_uppercase_rejected(self) -> None:
         result = validate_skill_frontmatter(
@@ -78,7 +79,7 @@ class TestValidateSkillFrontmatter:
 
     def test_extra_fields_allowed(self) -> None:
         result = validate_skill_frontmatter(
-            {"name": "x", "description": "y", "categories": ["foo"]}, "x"
+            {"name": "x", "description": "y", "write_paths": "inherit", "categories": ["foo"]}, "x"
         )
         assert result == []
 
@@ -162,10 +163,20 @@ class TestWritePathsValidation:
         }
         assert validate_skill_frontmatter(fm, "skill-a") == []
 
-    def test_write_paths_not_list(self) -> None:
+    def test_write_paths_unknown_string_rejected(self) -> None:
         fm = {"name": "skill-a", "description": "A skill.", "write_paths": "bad"}
         errors = validate_skill_frontmatter(fm, "skill-a")
-        assert any("list" in e for e in errors)
+        assert any("'unrestricted' or 'inherit'" in e for e in errors)
+
+    @pytest.mark.parametrize("value", ["unrestricted", "inherit"])
+    def test_write_paths_kind_literals_accepted(self, value: str) -> None:
+        fm = {"name": "skill-a", "description": "A skill.", "write_paths": value}
+        assert validate_skill_frontmatter(fm, "skill-a") == []
+
+    def test_write_paths_empty_list_rejected(self) -> None:
+        fm = {"name": "skill-a", "description": "A skill.", "write_paths": []}
+        errors = validate_skill_frontmatter(fm, "skill-a")
+        assert any("use `inherit`" in e for e in errors)
 
     def test_write_paths_traversal_rejected(self) -> None:
         fm = {
@@ -185,9 +196,11 @@ class TestWritePathsValidation:
         errors = validate_skill_frontmatter(fm, "skill-a")
         assert any("AUTOSKILLIT_TEMP" in e for e in errors)
 
-    def test_write_paths_absent_is_valid(self) -> None:
+    def test_write_paths_absent_is_reported_as_undeclared(self) -> None:
         fm = {"name": "skill-a", "description": "A skill."}
-        assert validate_skill_frontmatter(fm, "skill-a") == []
+        errors = validate_skill_frontmatter(fm, "skill-a")
+        assert len(errors) == 1
+        assert "write_paths is required" in errors[0]
 
     def test_write_paths_resolved_prefix_accepted(self) -> None:
         fm = {

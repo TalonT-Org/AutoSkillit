@@ -1,5 +1,6 @@
 ---
 name: setup-environment
+write_paths: unrestricted
 categories:
 - research
 uses_capabilities: []

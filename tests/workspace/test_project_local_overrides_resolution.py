@@ -292,7 +292,7 @@ def test_project_local_rewrite_reclassifies_with_process_cache(
         second.name,
     )
     assert second_evidence[0].source == "Call `test_check()` for the second sentinel."
-    assert second_evidence[0].source_span == (7, 7)
+    assert second_evidence[0].source_span == (8, 8)
     assert not second.invalidities
     local_scan_calls = [
         call

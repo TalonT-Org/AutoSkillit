@@ -740,6 +740,7 @@ async def test_invalid_orchestrator_root_rejects_before_all_downstream_work(
         "description: Invalid L1 root.\n"
         "uses_capabilities: [run_skill]\n"
         "execution_role: orchestrator\n"
+        "write_paths: inherit\n"
         "---\n"
         'Call run_skill("/test child").\n'
     )

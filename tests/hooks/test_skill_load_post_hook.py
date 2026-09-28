@@ -14,6 +14,10 @@ from unittest.mock import patch
 
 import pytest
 
+from autoskillit.hooks._session_binding import (
+    SESSION_BINDING_SCHEMA_VERSION,
+    UNREADABLE_PRIOR_BINDING_ENTRY,
+)
 from tests.conftest import production_interpreter_env
 from tests.hooks._session_binding_helpers import (
     copy_projected_hook,
@@ -221,7 +225,12 @@ def test_reports_existing_binding_read_error(
     assert "failed to read existing flag" in capsys.readouterr().err
     rewritten = json.loads(flag.read_text(encoding="utf-8"))
     assert rewritten["binding_valid"] is False
-    assert rewritten["loaded_skills"][0]["binding_valid"] is True
+    quarantine, loaded = rewritten["loaded_skills"]
+    assert quarantine["origin"] == "unresolved"
+    assert quarantine["skill_name"] == UNREADABLE_PRIOR_BINDING_ENTRY
+    assert "existing session binding unreadable: invalid JSON" in quarantine["binding_error"]
+    assert loaded["origin"] == "autoskillit"
+    assert loaded["binding_valid"] is True
 
 
 def test_reports_write_failure_traceback(
@@ -552,7 +561,7 @@ def test_join_bearing_skill_load_writes_complete_json_envelope(tmp_path: Path) -
 
     # Atomic JSON envelope — parse cleanly without manual coercion.
     payload = json.loads(flag.read_text())
-    assert payload["schema_version"] == 3
+    assert payload["schema_version"] == SESSION_BINDING_SCHEMA_VERSION
     assert payload["session_id"] == "abc123"
     assert payload["join_required"] is True
     assert payload["binding_valid"] is True

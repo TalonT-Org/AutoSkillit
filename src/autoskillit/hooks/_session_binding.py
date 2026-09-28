@@ -18,7 +18,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from enum import StrEnum, unique
 from pathlib import Path
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple, assert_never
 
 _FLOCK_TIMEOUT_S = 5.0
 _FLOCK_POLL_INTERVAL_S = 0.05
@@ -29,12 +29,15 @@ _FLOCK_POLL_INTERVAL_S = 0.05
 # import there — a relative ImportFrom node has no "autoskillit"-prefixed module name
 # and so does not trip the stdlib-only AST guard (test_hooks_are_stdlib_only).
 if TYPE_CHECKING or __package__:
+    from . import _write_scope
     from ._runtime import _hook_payload as _hook_payload_module
 else:
     import _hook_payload as _hook_payload_module
+    import _write_scope
 
-SESSION_BINDING_SCHEMA_VERSION: int = 3
-PROJECTION_MANIFEST_SCHEMA_VERSION: int = 2
+SESSION_BINDING_SCHEMA_VERSION: int = 4
+PROJECTION_MANIFEST_SCHEMA_VERSION: int = 3
+UNREADABLE_PRIOR_BINDING_ENTRY = "<unreadable-prior-binding>"
 
 _BINDING_CANDIDATE_LIMIT = 20
 _CANONICAL_SKILL_PREFIX = "autoskillit:"
@@ -101,6 +104,15 @@ def _managed_route(value: object) -> str:
     return str(value)
 
 
+@unique
+class LoadedSkillOrigin(StrEnum):
+    """Whether a bound skill is a projection-manifest skill, foreign, or unresolved."""
+
+    AUTOSKILLIT = "autoskillit"
+    FOREIGN = "foreign"
+    UNRESOLVED = "unresolved"
+
+
 class LoadedSkillEntry(NamedTuple):
     skill_name: str
     ts: str
@@ -114,6 +126,7 @@ class LoadedSkillEntry(NamedTuple):
     source_artifact_incarnation_id: str
     binding_valid: bool
     binding_error: str | None
+    origin: LoadedSkillOrigin
 
     def _as_json_object(self) -> dict[str, object]:
         return {
@@ -129,6 +142,7 @@ class LoadedSkillEntry(NamedTuple):
             "source_artifact_incarnation_id": self.source_artifact_incarnation_id,
             "binding_valid": self.binding_valid,
             "binding_error": self.binding_error,
+            "origin": self.origin.value,
         }
 
     def to_json(self) -> str:
@@ -146,6 +160,12 @@ def _loaded_skill_from_mapping(value: dict[str, object]) -> LoadedSkillEntry:
     error = value.get("binding_error")
     if error is not None and not isinstance(error, str):
         raise SessionBindingError("binding_error must be a string or null")
+    try:
+        origin = LoadedSkillOrigin(_string_field(value, "origin"))
+    except ValueError as exc:
+        raise SessionBindingError(
+            f"loaded skill origin must be one of {[o.value for o in LoadedSkillOrigin]}"
+        ) from exc
     return LoadedSkillEntry(
         skill_name=normalize_skill_name(_string_field(value, "skill_name")),
         ts=_string_field(value, "ts"),
@@ -159,6 +179,7 @@ def _loaded_skill_from_mapping(value: dict[str, object]) -> LoadedSkillEntry:
         source_artifact_incarnation_id=_string_field(value, "source_artifact_incarnation_id"),
         binding_valid=bool(value.get("binding_valid", False)),
         binding_error=error,
+        origin=origin,
     )
 
 
@@ -208,11 +229,18 @@ class SessionBinding(NamedTuple):
 
         if schema_version == SESSION_BINDING_SCHEMA_VERSION:
             loaded = tuple(_loaded_skill_from_mapping(entry) for entry in loaded_raw)
+            binding_valid = bool(parsed.get("binding_valid", False))
+            if binding_valid != all(
+                entry.origin is not LoadedSkillOrigin.UNRESOLVED for entry in loaded
+            ):
+                raise SessionBindingError(
+                    "binding_valid must be true exactly when no loaded skill is unresolved"
+                )
             return cls(
                 schema_version=SESSION_BINDING_SCHEMA_VERSION,
                 session_id=str(parsed.get("session_id", "")),
                 join_required=bool(parsed.get("join_required", False)),
-                binding_valid=bool(parsed.get("binding_valid", False)),
+                binding_valid=binding_valid,
                 artifact_digest=str(parsed.get("artifact_digest", "")),
                 loaded_skills=loaded,
                 managed_parent_id=_string_field(parsed, "managed_parent_id"),
@@ -250,6 +278,22 @@ class JoinAdmission(NamedTuple):
         return None if self.binding is None else json.loads(self.binding.to_json())
 
 
+@unique
+class BindingReadOutcome(StrEnum):
+    NO_BINDING = "no_binding"
+    WRONG_SESSION = "wrong_session"
+    INVALID = "invalid"
+    VALID = "valid"
+
+
+class BindingRead(NamedTuple):
+    """One typed read of a session binding; ``binding`` is always present when VALID."""
+
+    outcome: BindingReadOutcome
+    binding: SessionBinding | None
+    error: str | None
+
+
 def resolve_channel_dir(anchor: Path) -> Path:
     """Return the normalized directory shared by bindings and the join ledger."""
     resolved = anchor.resolve()
@@ -260,29 +304,9 @@ def resolve_channel_dir(anchor: Path) -> Path:
     return resolved / ".autoskillit" / "temp"
 
 
-def read_session_binding(payload_cwd: str, session_id: str) -> dict[str, object] | None:
-    """Return the binding's serialized dict for ``session_id`` or ``None``.
-
-    Reads through ``read_binding`` (rather than ``admit_join``) so a valid
-    binding with any loaded skills returns its dict regardless of which
-    skill the caller intends to project. ``admit_join`` asserts the
-    requested skill is loaded and would always deny here.
-
-    Returns ``None`` for missing / unreadable / mismatched / invalid
-    bindings so callers can treat absence as a non-decision.
-    """
-    binding_path = resolve_binding_path(payload_cwd, session_id)
-    try:
-        binding = read_binding(binding_path)
-    except SessionBindingError:
-        return None
-    if binding is None:
-        return None
-    if binding.session_id != session_id:
-        return None
-    if not binding.binding_valid:
-        return None
-    return json.loads(binding.to_json())
+def read_binding_outcome(payload_cwd: str, session_id: str) -> BindingRead:
+    """Classify the session's binding without collapsing invalid into absent."""
+    return _read_binding_at(resolve_binding_path(payload_cwd, session_id), session_id)
 
 
 def resolve_binding_path(payload_cwd: str, session_id: str) -> Path:
@@ -383,29 +407,29 @@ def read_manifest(path: Path) -> dict[str, object]:
         raise SessionBindingError("projection manifest artifact_digest must be a string")
     if not isinstance(parsed.get("incarnation_id"), str):
         raise SessionBindingError("projection manifest incarnation_id must be a string")
-    skills = parsed.get("skills")
-    if not isinstance(skills, dict):
+    if not isinstance(parsed.get("skills"), dict):
         raise SessionBindingError("projection manifest skills must be an object")
-    for name, entry in skills.items():
-        if not isinstance(entry, dict) or "write_paths" not in entry:
-            raise SessionBindingError(f"projection manifest skill {name!r} lacks write_paths")
-        paths = entry["write_paths"]
-        if paths is not None and (
-            not isinstance(paths, list)
-            or any(
-                not isinstance(path, str)
-                or not path
-                or ".." in Path(path).parts
-                or not path.startswith(
-                    ("{{AUTOSKILLIT_TEMP}}/", f"{_hook_payload_module.TEMP_RELATIVE_DIR}/")
-                )
-                for path in paths
-            )
-        ):
-            raise SessionBindingError(
-                f"projection manifest skill {name!r} has invalid write_paths"
-            )
     return parsed
+
+
+def manifest_skill_write_scope(
+    manifest: dict[str, object], skill_name: str
+) -> _write_scope.WriteScope:
+    """Decode one loaded skill's manifest write scope; other entries are never consulted."""
+    skills = manifest.get("skills")
+    entry = skills.get(skill_name) if isinstance(skills, dict) else None
+    if not isinstance(entry, dict):
+        raise SessionBindingError(
+            f"projection manifest has no entry for loaded skill {skill_name!r}"
+        )
+    if "write_scope" not in entry:
+        raise SessionBindingError(f"projection manifest entry {skill_name!r} lacks write_scope")
+    try:
+        return _write_scope.decode_write_scope(entry["write_scope"])
+    except _write_scope.WriteScopeError as exc:
+        raise SessionBindingError(
+            f"projection manifest entry {skill_name!r} has invalid write_scope: {exc}"
+        ) from exc
 
 
 def loaded_skill_from_manifest(
@@ -431,6 +455,7 @@ def loaded_skill_from_manifest(
         source_artifact_incarnation_id=str(manifest["incarnation_id"]),
         binding_valid=True,
         binding_error=None,
+        origin=LoadedSkillOrigin.AUTOSKILLIT,
     )
 
 
@@ -453,7 +478,53 @@ def unresolved_loaded_skill(
         source_artifact_incarnation_id="",
         binding_valid=False,
         binding_error=error,
+        origin=LoadedSkillOrigin.UNRESOLVED,
     )
+
+
+def _foreign_loaded_skill(skill_name: str, ts: str) -> LoadedSkillEntry:
+    return LoadedSkillEntry(
+        skill_name=skill_name,
+        ts=ts,
+        join_required=False,
+        child_spawn_cardinality={},
+        semantic_digest="",
+        adaptation_digest="",
+        projected_digest="",
+        canonical_digest="",
+        source_artifact_digest="",
+        source_artifact_incarnation_id="",
+        binding_valid=True,
+        binding_error=None,
+        origin=LoadedSkillOrigin.FOREIGN,
+    )
+
+
+def classify_invoked_skill(
+    manifest: dict[str, object], raw_name: str, ts: str
+) -> LoadedSkillEntry:
+    """Bind one invoked skill by origin, before normalization discards its namespace.
+
+    An ``autoskillit:`` name absent from the manifest is unresolved; any other
+    namespace, or a bare name the manifest does not know, is foreign and abstains
+    from both joins and write containment.
+    """
+    skills = manifest.get("skills")
+    known = skills if isinstance(skills, dict) else {}
+    if not raw_name:
+        return unresolved_loaded_skill(raw_name, ts, "invoked skill name is empty")
+    if raw_name.startswith(_CANONICAL_SKILL_PREFIX):
+        bare_name = normalize_skill_name(raw_name)
+        if bare_name in known:
+            return loaded_skill_from_manifest(manifest, bare_name, ts)
+        return unresolved_loaded_skill(
+            bare_name,
+            ts,
+            f"autoskillit skill {bare_name!r} absent from projection manifest",
+        )
+    if ":" in raw_name or raw_name not in known:
+        return _foreign_loaded_skill(raw_name, ts)
+    return loaded_skill_from_manifest(manifest, raw_name, ts)
 
 
 def merge_binding(
@@ -476,7 +547,7 @@ def merge_binding(
         binding_valid=(existing.binding_valid if existing else True) and new_entry.binding_valid,
         artifact_digest=(
             artifact_digest
-            if new_entry.binding_valid
+            if new_entry.origin is LoadedSkillOrigin.AUTOSKILLIT
             else (existing.artifact_digest if existing else "")
         ),
         loaded_skills=loaded,
@@ -508,34 +579,47 @@ def read_binding(path: Path) -> SessionBinding | None:
     return SessionBinding.from_json(raw)
 
 
-def admit_join(path: Path, *, session_id: str, skill_name: str) -> JoinAdmission:
-    """Read a binding once and decide whether this exact skill may declare a join."""
+def _read_binding_at(path: Path, session_id: str) -> BindingRead:
     try:
         binding = read_binding(path)
     except SessionBindingError as exc:
-        return JoinAdmission(
-            JoinAdmissionOutcome.INVALID_BINDING,
-            True,
-            None,
-            None,
-            str(exc),
-        )
+        return BindingRead(BindingReadOutcome.INVALID, None, str(exc))
     if binding is None:
-        return JoinAdmission(JoinAdmissionOutcome.NO_BINDING, False, None, None, None)
+        return BindingRead(BindingReadOutcome.NO_BINDING, None, None)
     if binding.session_id != session_id:
-        return JoinAdmission(JoinAdmissionOutcome.WRONG_SESSION, False, binding, None, None)
+        return BindingRead(BindingReadOutcome.WRONG_SESSION, binding, None)
     if not binding.binding_valid:
         error = next(
             (entry.binding_error for entry in binding.loaded_skills if entry.binding_error),
             None,
         )
-        return JoinAdmission(
-            JoinAdmissionOutcome.INVALID_BINDING,
-            True,
-            binding,
-            None,
-            error,
-        )
+        return BindingRead(BindingReadOutcome.INVALID, binding, error)
+    return BindingRead(BindingReadOutcome.VALID, binding, None)
+
+
+def admit_join(path: Path, *, session_id: str, skill_name: str) -> JoinAdmission:
+    """Read a binding once and decide whether this exact skill may declare a join."""
+    read = _read_binding_at(path, session_id)
+    match read.outcome:
+        case BindingReadOutcome.INVALID:
+            return JoinAdmission(
+                JoinAdmissionOutcome.INVALID_BINDING,
+                True,
+                read.binding,
+                None,
+                read.error,
+            )
+        case BindingReadOutcome.NO_BINDING:
+            return JoinAdmission(JoinAdmissionOutcome.NO_BINDING, False, None, None, None)
+        case BindingReadOutcome.WRONG_SESSION:
+            return JoinAdmission(
+                JoinAdmissionOutcome.WRONG_SESSION, False, read.binding, None, None
+            )
+        case BindingReadOutcome.VALID:
+            binding = read.binding
+            assert binding is not None
+        case _ as unreachable:
+            assert_never(unreachable)
     entry = next(
         (entry for entry in reversed(binding.loaded_skills) if entry.skill_name == skill_name),
         None,

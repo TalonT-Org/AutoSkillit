@@ -1,5 +1,7 @@
 ---
 name: classify-experiment-type
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/classify-experiment-type/'
 categories:
 - research
 uses_capabilities: []

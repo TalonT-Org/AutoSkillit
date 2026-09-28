@@ -1,5 +1,6 @@
 ---
 name: implement-worktree
+write_paths: unrestricted
 uses_capabilities:
 - test_check
 activate_deps:

@@ -1,5 +1,6 @@
 ---
 name: resolve-review
+write_paths: unrestricted
 categories:
 - github
 requires_resources:

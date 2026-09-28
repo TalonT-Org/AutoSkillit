@@ -4,11 +4,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 
 import regex as re
 
-from autoskillit.core import SkillExecutionRole, YAMLError, get_logger, load_yaml
+from autoskillit.core import (
+    SkillExecutionRole,
+    SkillInvalidityKind,
+    YAMLError,
+    get_logger,
+    load_yaml,
+)
+from autoskillit.hooks._write_scope import WriteScope, WriteScopeError, decode_write_scope
 
 logger = get_logger(__name__)
 
@@ -40,13 +47,25 @@ SkillFrontmatterParseError = Literal[
 ]
 
 
+class _WriteScopeIssue(NamedTuple):
+    kind: SkillInvalidityKind
+    detail: str
+
+
+_UNDECLARED_WRITE_SCOPE_DETAIL = (
+    "write_paths is required: declare a non-empty list of AutoSkillit temp directories, "
+    "`unrestricted`, or `inherit`"
+)
+
+
 @dataclass(frozen=True, slots=True)
 class SkillFrontmatterParseResult:
     """Lossless result of parsing one SKILL.md machine contract."""
 
     content: str
     data: dict[str, Any] | None
-    write_paths: tuple[str, ...] | None = None
+    write_scope: WriteScope | None = None
+    write_scope_issue: _WriteScopeIssue | None = None
     execution_role: SkillExecutionRole | None = None
     frontmatter_text: str = ""
     body: str = ""
@@ -120,21 +139,29 @@ def parse_frontmatter_content(content: str) -> SkillFrontmatterParseResult:
             frontmatter_text=yaml_block,
             body=body,
         )
-    raw_write_paths = loaded.get("write_paths")
-    if isinstance(raw_write_paths, list) and not _validate_frontmatter_write_paths(
-        raw_write_paths
-    ):
-        write_paths: tuple[str, ...] | None = tuple(raw_write_paths)
-    else:
-        write_paths = None
+    write_scope, write_scope_issue = _decode_frontmatter_write_scope(loaded)
     return SkillFrontmatterParseResult(
         content=content,
         data=loaded,
-        write_paths=write_paths,
+        write_scope=write_scope,
+        write_scope_issue=write_scope_issue,
         execution_role=execution_role,
         frontmatter_text=yaml_block,
         body=body,
     )
+
+
+def _decode_frontmatter_write_scope(
+    frontmatter: dict[str, Any],
+) -> tuple[WriteScope | None, _WriteScopeIssue | None]:
+    if "write_paths" not in frontmatter:
+        return None, _WriteScopeIssue(
+            SkillInvalidityKind.WRITE_BOUNDARY_UNDECLARED, _UNDECLARED_WRITE_SCOPE_DETAIL
+        )
+    try:
+        return decode_write_scope(frontmatter["write_paths"]), None
+    except WriteScopeError as exc:
+        return None, _WriteScopeIssue(SkillInvalidityKind.WRITE_BOUNDARY_INVALID, str(exc))
 
 
 def read_skill_frontmatter(path: Path) -> SkillFrontmatterParseResult:
@@ -178,28 +205,6 @@ def _validate_frontmatter_description(description: object) -> list[str]:
     return errors
 
 
-def _validate_frontmatter_write_paths(write_paths: object) -> list[str]:
-    errors: list[str] = []
-    if write_paths is not None:
-        if not isinstance(write_paths, list):
-            errors.append("'write_paths' must be a list of strings")
-        else:
-            for i, wp in enumerate(write_paths):
-                if not isinstance(wp, str) or not wp:
-                    errors.append(f"'write_paths[{i}]' must be a non-empty string")
-                elif ".." in wp:
-                    errors.append(f"'write_paths[{i}]' must not contain '..' (path traversal)")
-                elif not (
-                    wp.startswith("{{AUTOSKILLIT_TEMP}}/") or wp.startswith(".autoskillit/temp/")
-                ):
-                    errors.append(
-                        f"'write_paths[{i}]' must start with "
-                        "'{{AUTOSKILLIT_TEMP}}/' "
-                        f"(got {wp!r})"
-                    )
-    return errors
-
-
 def validate_skill_frontmatter(frontmatter: dict[str, Any], skill_name: str) -> list[str]:
     """Validate a parsed SKILL.md frontmatter dict against agentskills.io spec.
 
@@ -208,6 +213,8 @@ def validate_skill_frontmatter(frontmatter: dict[str, Any], skill_name: str) -> 
     errors: list[str] = []
     errors.extend(_validate_frontmatter_name(frontmatter.get("name"), skill_name))
     errors.extend(_validate_frontmatter_description(frontmatter.get("description")))
-    errors.extend(_validate_frontmatter_write_paths(frontmatter.get("write_paths")))
+    _, write_scope_issue = _decode_frontmatter_write_scope(frontmatter)
+    if write_scope_issue is not None:
+        errors.append(write_scope_issue.detail)
 
     return errors

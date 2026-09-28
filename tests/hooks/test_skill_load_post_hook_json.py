@@ -20,6 +20,8 @@ from unittest.mock import patch
 
 import pytest
 
+from autoskillit.hooks._session_binding import SESSION_BINDING_SCHEMA_VERSION
+
 pytestmark = [pytest.mark.medium]
 
 
@@ -137,5 +139,5 @@ def test_existing_flag_is_json_envelope(tmp_path: Path) -> None:
     raw = flag_path.read_text(encoding="utf-8")
     parsed = json.loads(raw)  # Raises if the hook wrote a non-JSON literal
     assert parsed["session_id"] == "abc123"
-    assert parsed["schema_version"] == 3
+    assert parsed["schema_version"] == SESSION_BINDING_SCHEMA_VERSION
     assert "loaded_skills" in parsed

@@ -131,9 +131,11 @@ from autoskillit.hooks._join_ledger import WAVE_CANCELLED, can_release_stop
 from autoskillit.hooks._session_binding import (
     PROJECTION_MANIFEST_SCHEMA_VERSION,
     LoadedSkillEntry,
+    LoadedSkillOrigin,
     read_binding,
     resolve_binding_path,
 )
+from autoskillit.hooks._write_scope import WRITE_SCOPE_INHERIT
 from autoskillit.pipeline import DefaultBackgroundSupervisor
 from autoskillit.server._managed_join_attestation import (
     DefaultManagedJoinAttestationAuthority,
@@ -1864,6 +1866,7 @@ def _load_managed_fixed_batch_smoke_skill(
         source_artifact_incarnation_id=f"smoke-{invocation.root.name}",
         binding_valid=True,
         binding_error=None,
+        origin=LoadedSkillOrigin.AUTOSKILLIT,
     )
     return source, document, adaptation, plan
 
@@ -2053,7 +2056,7 @@ def test_codex_managed_fixed_batch_smoke_conformance(
                             "adaptation_digest": static_source.adaptation_digest,
                             "projected_digest": static_source.projected_digest,
                             "canonical_digest": static_source.canonical_digest,
-                            "write_paths": None,
+                            "write_scope": WRITE_SCOPE_INHERIT,
                         }
                     },
                 },

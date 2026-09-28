@@ -1,5 +1,7 @@
 ---
 name: eval-agent
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/eval-agent/'
 categories: [eval]
 uses_capabilities: []
 description: >

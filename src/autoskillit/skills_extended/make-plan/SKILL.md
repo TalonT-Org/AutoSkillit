@@ -1,5 +1,7 @@
 ---
 name: make-plan
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/make-plan/'
 uses_capabilities:
 - write_audit_disposition_bundle
 activate_deps:

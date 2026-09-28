@@ -125,6 +125,32 @@ def _repair_retired_capability_frontmatter(
     return None
 
 
+def _apply_deterministic_remediation(
+    kind: SkillInvalidityKind,
+    data: dict[str, Any],
+    declared_caps: set[str],
+    info: SkillInfo,
+) -> str | None:
+    """Rewrite ``data`` for one DETERMINISTIC invalidity kind; return an error or ``None``."""
+    if kind is SkillInvalidityKind.UNDECLARED_CAPABILITY:
+        return _insert_missing_capabilities(data, declared_caps, info)
+    if kind is SkillInvalidityKind.SEMANTIC_MISSING_VERSION:
+        data["semantic_version"] = SKILL_SEMANTIC_SCHEMA_VERSION
+        return None
+    if kind is SkillInvalidityKind.SEMANTIC_UNDECLARED_TOKENS:
+        return _repair_retired_capability_frontmatter(data, declared_caps)
+    if kind is SkillInvalidityKind.SEMANTIC_CHILD_CARDINALITY_INVALID:
+        return _normalize_legacy_child_spawn_cardinality(data)
+    if kind is SkillInvalidityKind.WRITE_BOUNDARY_UNDECLARED:
+        from autoskillit.hooks._write_scope import WRITE_SCOPE_INHERIT
+
+        data["write_paths"] = WRITE_SCOPE_INHERIT
+        return None
+    raise SkillContractError(
+        f"SkillMigrationAdapter has no migration for invalidity kind {kind.value!r}"
+    )
+
+
 class SkillMigrationAdapter(DeterministicMigrationAdapter):
     """Deterministic adapter for repairing skill frontmatter in stale skills."""
 
@@ -204,20 +230,7 @@ class SkillMigrationAdapter(DeterministicMigrationAdapter):
         declared_caps = {str(capability) for capability in declared_caps_raw}
 
         for kind in applicable_kinds:
-            migration_error: str | None = None
-            if kind is SkillInvalidityKind.UNDECLARED_CAPABILITY:
-                migration_error = _insert_missing_capabilities(data, declared_caps, info)
-            elif kind is SkillInvalidityKind.SEMANTIC_MISSING_VERSION:
-                data["semantic_version"] = SKILL_SEMANTIC_SCHEMA_VERSION
-            elif kind is SkillInvalidityKind.SEMANTIC_UNDECLARED_TOKENS:
-                migration_error = _repair_retired_capability_frontmatter(data, declared_caps)
-            elif kind is SkillInvalidityKind.SEMANTIC_CHILD_CARDINALITY_INVALID:
-                migration_error = _normalize_legacy_child_spawn_cardinality(data)
-            else:
-                raise SkillContractError(
-                    f"SkillMigrationAdapter has no migration for invalidity kind {kind.value!r}"
-                )
-
+            migration_error = _apply_deterministic_remediation(kind, data, declared_caps, info)
             if migration_error is not None:
                 return MigrationResult(
                     success=False,

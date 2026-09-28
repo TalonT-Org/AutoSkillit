@@ -1,5 +1,6 @@
 ---
 name: reload-session
+write_paths: inherit
 description: Reload the current AutoSkillit session — signals the parent process to re-launch with the full wrapper environment and resume the conversation.
 disable-model-invocation: true
 ---

@@ -24,6 +24,7 @@ from autoskillit.core import (
     SkillSource,
     SkillSourceRef,
 )
+from autoskillit.hooks._write_scope import WriteScopeKind
 from autoskillit.migration.adapters_skill import SkillMigrationAdapter
 from autoskillit.migration.engine import MigrationFile
 from autoskillit.workspace import (
@@ -110,6 +111,7 @@ def test_migration_adapter_covers_every_deterministic_remediation() -> None:
         SkillInvalidityKind.SEMANTIC_CHILD_CARDINALITY_INVALID,
         SkillInvalidityKind.SEMANTIC_MISSING_VERSION,
         SkillInvalidityKind.SEMANTIC_UNDECLARED_TOKENS,
+        SkillInvalidityKind.WRITE_BOUNDARY_UNDECLARED,
     }
     assert deterministic_kinds, "expected at least one DETERMINISTIC remediation kind"
     unhandled = deterministic_kinds - handled
@@ -181,6 +183,7 @@ _CORPUS_FIXTURES = (
     "legacy_spawner.md",
     "legacy_child_spawn_cardinality.md",
     "resource_contract_invalid.md",
+    "undeclared_write_scope.md",
 )
 # Filename -> the `name:` value declared in that fixture's own frontmatter.
 _CORPUS_SKILL_NAMES = {
@@ -189,6 +192,7 @@ _CORPUS_SKILL_NAMES = {
     "legacy_spawner.md": "legacy-spawner",
     "legacy_child_spawn_cardinality.md": "legacy-child-spawn-cardinality",
     "resource_contract_invalid.md": "resource-contract-invalid",
+    "undeclared_write_scope.md": "undeclared-write-scope",
 }
 
 
@@ -226,13 +230,15 @@ async def test_corpus_is_valid_advisory_or_deterministically_migratable(
     info = _current_info()
     if not info.invalidities:
         return  # validates cleanly today — nothing more to prove
-    actions = {
-        SKILL_CONTRACT_REMEDIATIONS[invalidity.kind].action for invalidity in info.invalidities
+    assert all(
+        SKILL_CONTRACT_REMEDIATIONS[invalidity.kind].hint for invalidity in info.invalidities
+    )
+    advisory_kinds = {
+        invalidity.kind
+        for invalidity in info.invalidities
+        if SKILL_CONTRACT_REMEDIATIONS[invalidity.kind].action is RemediationAction.ADVISORY
     }
-    if actions == {RemediationAction.ADVISORY}:
-        assert all(
-            SKILL_CONTRACT_REMEDIATIONS[invalidity.kind].hint for invalidity in info.invalidities
-        )
+    if advisory_kinds == {invalidity.kind for invalidity in info.invalidities}:
         return
 
     file = MigrationFile(name=skill_name, path=skill_path, file_type="skill", current_version=None)
@@ -243,11 +249,20 @@ async def test_corpus_is_valid_advisory_or_deterministically_migratable(
     skill_path.write_text(result.migrated_content, encoding="utf-8")
 
     revalidated = _current_info()
-    assert not revalidated.invalidities, (
-        f"{fixture_name}: still invalid after migration: "
-        f"{render_skill_invalidities(revalidated.invalidities)}"
+    if fixture_name == "undeclared_write_scope.md":
+        assert revalidated.write_scope is not None
+        assert revalidated.write_scope.kind is WriteScopeKind.INHERIT
+    residual_kinds = {invalidity.kind for invalidity in revalidated.invalidities}
+    assert residual_kinds <= advisory_kinds, (
+        f"{fixture_name}: migration must resolve every DETERMINISTIC kind and introduce "
+        f"none; residual: {render_skill_invalidities(revalidated.invalidities)}"
     )
-    assert revalidated.execution_role is SkillExecutionRole.SESSION
+    assert all(
+        SKILL_CONTRACT_REMEDIATIONS[invalidity.kind].hint
+        for invalidity in revalidated.invalidities
+    )
+    if not advisory_kinds:
+        assert revalidated.execution_role is SkillExecutionRole.SESSION
 
 
 @pytest.mark.anyio

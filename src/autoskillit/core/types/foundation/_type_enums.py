@@ -190,6 +190,7 @@ class SkillInvalidityKind(StrEnum):
 
     FRONTMATTER_PARSE = "frontmatter_parse"
     WRITE_BOUNDARY_INVALID = "write_boundary_invalid"
+    WRITE_BOUNDARY_UNDECLARED = "write_boundary_undeclared"
     FIELD_SHAPE = "field_shape"
     EXPLORATION_CONTRACT_INVALID = "exploration_contract_invalid"
     RESOURCE_CONTRACT_INVALID = "resource_contract_invalid"

@@ -149,6 +149,7 @@ TEST_HELPER_CASCADE: dict[str, frozenset[str]] = {
     "tests/arch/_helpers.py": _ARCH_HELPER_TEST_TARGETS,
     "tests/arch/_rules.py": _ARCH_HELPER_TEST_TARGETS,
     "tests/fleet/_reaper_test_support.py": frozenset({"fleet"}),
+    "tests/hooks/_interactive_guard_harness.py": frozenset({"hooks", "skills"}),
     "tests/_git_topology.py": frozenset({"core", "execution", "server", "integration"}),
     "tests/fleet/_codex_mcp_env.py": frozenset({"fleet", "integration"}),
     "tests/fleet/_descendant_worker.py": frozenset({"fleet"}),
@@ -979,7 +980,7 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
     "_skill_placeholder_parser": frozenset(
         {
             "recipe",
-            "arch/test_write_restriction_coverage.py",
+            "contracts/test_skill_write_scope_declarations.py",
             "skills/test_graphql_invocation_completeness.py",
             "skills/test_make_campaign_compliance.py",
             "skills/test_review_pr_prior_thread_awareness.py",
@@ -1222,6 +1223,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_lifespan.py",
             # live gate copies the production --plugin-dir projection
             "server/test_claude_explorer_live_gate.py",
+            # run_skill write-scope narrowing builds skills through the workspace loader
+            "server/test_tools_execution_write_prefix.py",
             "smoke_utils",
             # recipe direct-import entries (import autoskillit.workspace at AST level):
             "recipe/test_contracts.py",
@@ -1491,6 +1494,11 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # hook_registry imports from autoskillit.hooks at module scope
             # (HOOK_REGISTRY, generate_hooks_json) for the registry init wiring.
             "hook_registry",
+            # the stdlib-only write-scope authority (hooks/_write_scope.py) is the
+            # decoder for skill frontmatter, projection manifests, and migration.
+            "core",
+            "migration",
+            "workspace",
         }
     ),
     "hook_registry": frozenset(

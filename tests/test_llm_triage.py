@@ -105,6 +105,7 @@ async def test_triage_staleness_projects_the_project_effective_override(
         "---\n"
         "name: implement-worktree\n"
         "description: Project-effective triage override.\n"
+        "write_paths: inherit\n"
         "---\n"
         "PROJECT-EFFECTIVE-TRIAGE-CONTENT\n"
     )
@@ -868,7 +869,8 @@ async def test_triage_staleness_non_claude_backend_returns_all_meaningful(
     skill_dir = tmp_path / ".claude" / "skills" / "my-skill"
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text(
-        "---\nname: my-skill\ndescription: Triage fixture.\nuses_capabilities: []\n---\n"
+        "---\nname: my-skill\ndescription: Triage fixture.\nuses_capabilities: []\n"
+        "write_paths: inherit\n---\n"
         "# dummy\nContent."
     )
 

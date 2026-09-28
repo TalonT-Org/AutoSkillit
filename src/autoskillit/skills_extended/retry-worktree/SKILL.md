@@ -1,5 +1,6 @@
 ---
 name: retry-worktree
+write_paths: unrestricted
 uses_capabilities:
 - test_check
 description: Worktree retry executor. ALWAYS invoke this skill when instructed to continue or retry an implementation in an

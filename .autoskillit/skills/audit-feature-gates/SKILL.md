@@ -1,5 +1,7 @@
 ---
 name: audit-feature-gates
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/audit-feature-gates/'
 categories: [audit]
 uses_capabilities: []
 description: >

@@ -6,19 +6,13 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import SkillContractError
 from autoskillit.workspace.session_skills import (
     SkillsDirectoryProvider,
+    resolve_closure_write_dirs,
 )
-from autoskillit.workspace.session_skills import (
-    _parse_write_paths as _parse_structured_write_paths,
-)
-from autoskillit.workspace.skills._format import parse_frontmatter_content
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
-
-
-def _write_paths(content: str) -> list[str]:
-    return _parse_structured_write_paths(parse_frontmatter_content(content))
 
 
 def _make_synthetic_provider(
@@ -45,10 +39,12 @@ def _make_synthetic_provider(
             fm_lines.append(f"categories: [{', '.join(categories)}]")
         if deps:
             fm_lines.append(f"activate_deps: [{', '.join(deps)}]")
-        write_paths = spec.get("write_paths", [])
-        if write_paths:
+        write_paths = spec.get("write_paths", "inherit")
+        if isinstance(write_paths, list):
             quoted = ", ".join(f'"{wp}"' for wp in write_paths)
             fm_lines.append(f"write_paths: [{quoted}]")
+        else:
+            fm_lines.append(f"write_paths: {write_paths}")
         content = "---\n" + "\n".join(fm_lines) + "\n---\nbody\n"
         (skill_dir / "SKILL.md").write_text(content)
         skill_infos.append(
@@ -153,6 +149,7 @@ def _write_invocation_skill(
         f"name: {name}",
         f"description: Synthetic {name} invocation contract.",
         f"execution_role: {execution_role}",
+        "write_paths: inherit",
     ]
     if capabilities:
         frontmatter.append(f"uses_capabilities: [{', '.join(capabilities)}]")
@@ -317,47 +314,46 @@ class TestEffectiveInvocationClosurePolicy:
             resolver.resolve_invocation("root", project_root, SkillExecutionRole.SESSION)
 
 
-class TestParseWritePaths:
-    """Unit tests for _parse_write_paths frontmatter parser."""
+class TestResolveClosureWriteDirs:
+    """Closure write dirs compose through the shared write-scope fold."""
 
-    def test_no_write_paths_returns_empty(self) -> None:
-        content = "---\nname: skill-a\ndescription: A.\n---\nbody"
-        assert _write_paths(content) == []
-
-    def test_single_path(self) -> None:
-        content = (
-            '---\nname: a\ndescription: A.\nwrite_paths: ["{{AUTOSKILLIT_TEMP}}/a/"]\n---\nbody'
+    def test_only_bounded_members_contribute(self, tmp_path: Path) -> None:
+        provider = _make_synthetic_provider(
+            tmp_path / "skills",
+            {
+                "a": {"write_paths": ["{{AUTOSKILLIT_TEMP}}/a/"]},
+                "open": {"write_paths": "unrestricted"},
+                "quiet": {"write_paths": "inherit"},
+                "b": {"write_paths": [".autoskillit/temp/b/"]},
+            },
         )
-        assert _write_paths(content) == ["{{AUTOSKILLIT_TEMP}}/a/"]
+        closure = tuple(provider.list_skills())
+        cwd = tmp_path / "project"
+        cwd.mkdir()
 
-    def test_multiple_paths(self) -> None:
-        content = (
-            "---\nname: a\ndescription: A.\n"
-            'write_paths: ["{{AUTOSKILLIT_TEMP}}/a/", "{{AUTOSKILLIT_TEMP}}/b/"]\n---\nbody'
+        dirs = resolve_closure_write_dirs(closure, str(cwd))
+
+        temp = (cwd / ".autoskillit" / "temp").resolve()
+        assert dirs == [temp / "a", temp / "b"]
+        assert resolve_closure_write_dirs(closure, str(cwd), [temp / "a"]) == [temp / "b"]
+
+    def test_member_without_valid_scope_is_a_contract_error(self, tmp_path: Path) -> None:
+        provider = _make_synthetic_provider(
+            tmp_path / "skills", {"broken": {"write_paths": "all"}}
         )
-        assert _write_paths(content) == [
-            "{{AUTOSKILLIT_TEMP}}/a/",
-            "{{AUTOSKILLIT_TEMP}}/b/",
-        ]
 
-    def test_no_frontmatter(self) -> None:
-        assert _write_paths("no frontmatter here") == []
+        with pytest.raises(SkillContractError, match="broken lacks a valid write scope"):
+            resolve_closure_write_dirs(tuple(provider.list_skills()), str(tmp_path))
 
-    def test_empty_list(self) -> None:
-        content = "---\nname: a\ndescription: A.\nwrite_paths: []\n---\nbody"
-        assert _write_paths(content) == []
-
-    def test_multiline_yaml_list(self) -> None:
-        content = (
-            "---\nname: a\ndescription: A.\nwrite_paths:\n"
-            '  - "{{AUTOSKILLIT_TEMP}}/a/"\n'
-            '  - "{{AUTOSKILLIT_TEMP}}/b/"\n---\nbody'
+    def test_declared_directory_escaping_the_temp_root_is_a_contract_error(
+        self, tmp_path: Path
+    ) -> None:
+        provider = _make_synthetic_provider(
+            tmp_path / "skills", {"escape": {"write_paths": ["{{AUTOSKILLIT_TEMP}}/escape/"]}}
         )
-        assert _write_paths(content) == [
-            "{{AUTOSKILLIT_TEMP}}/a/",
-            "{{AUTOSKILLIT_TEMP}}/b/",
-        ]
+        cwd = tmp_path / "project"
+        (cwd / ".autoskillit" / "temp").mkdir(parents=True)
+        (cwd / ".autoskillit" / "temp" / "escape").symlink_to(tmp_path, target_is_directory=True)
 
-    def test_non_list_returns_empty(self) -> None:
-        content = '---\nname: a\ndescription: A.\nwrite_paths: "bad"\n---\nbody'
-        assert _write_paths(content) == []
+        with pytest.raises(SkillContractError, match="escape"):
+            resolve_closure_write_dirs(tuple(provider.list_skills()), str(cwd))

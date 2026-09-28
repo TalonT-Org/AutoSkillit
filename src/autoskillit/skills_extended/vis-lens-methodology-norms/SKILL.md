@@ -2,6 +2,7 @@
 name: vis-lens-methodology-norms
 write_paths:
 - '{{AUTOSKILLIT_TEMP}}/vis-lens-methodology-norms/'
+- '{{AUTOSKILLIT_TEMP}}/synthesize-vis-plan/'
 categories:
 - vis-lens
 uses_capabilities: []
@@ -227,7 +228,7 @@ when a tradition is loaded (either via `tradition_slug` or via `classify_methodo
 
 - Modify any source code files
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
-- Create files outside `{{AUTOSKILLIT_TEMP}}/vis-lens-methodology-norms/`
+- Create files outside `{{AUTOSKILLIT_TEMP}}/vis-lens-methodology-norms/`, except the advisory handoff at `{{AUTOSKILLIT_TEMP}}/synthesize-vis-plan/visualization-plan-trace.md`
 - Declare a figure "present" if it exists only in code but is not yet generated — coverage requires the actual output file or a concrete plan entry
 - Import or execute target code, tests, experiments, models, plotting pipelines, or benchmarks
 - Let a migrated exploration vector select a methodology tradition, assign coverage status, recommend figures, or create the diagram

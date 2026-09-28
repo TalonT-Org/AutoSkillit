@@ -105,6 +105,29 @@ def test_session_binding_dual_import_contract() -> None:
     )
 
 
+def test_write_scope_dual_import_contract() -> None:
+    """REQ-HOOKS-005: ``_write_scope`` must resolve under both identities.
+
+    The write guard imports the write-scope authority by bare name while the
+    skill loader, projection, and run_skill import it absolutely; both must be
+    the same stateless module object.
+    """
+    absolute, bare = _fresh_dual_import(
+        "autoskillit.hooks._write_scope",
+        "_write_scope",
+    )
+
+    assert bare is absolute, (
+        "bare-name import `_write_scope` must resolve to the same module "
+        "object as the absolute import `autoskillit.hooks._write_scope`"
+    )
+    mutable = _module_level_mutable_state(bare)
+    assert not mutable, (
+        f"_write_scope must remain stateless at module level — found mutable "
+        f"module-level attribute(s) {sorted(mutable)}."
+    )
+
+
 def test_join_ledger_dual_import_contract() -> None:
     """REQ-HOOKS-005: ``_join_ledger`` must resolve under both identities.
 

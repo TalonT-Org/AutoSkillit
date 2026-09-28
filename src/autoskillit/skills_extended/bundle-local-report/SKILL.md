@@ -1,5 +1,6 @@
 ---
 name: bundle-local-report
+write_paths: unrestricted
 description: Convert a research markdown report into a self-contained report.html with inlined mermaid diagrams and inserted plot images.
 categories: [rendering]
 ---

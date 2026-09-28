@@ -1,5 +1,7 @@
 ---
 name: compose-research-pr
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/compose-research-pr/'
 categories:
 - research
 uses_capabilities:

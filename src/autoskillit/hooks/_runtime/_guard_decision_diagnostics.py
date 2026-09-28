@@ -44,6 +44,7 @@ _ALLOWED_REASONS = frozenset(
         "binding_write_failed",
         "empty",
         "unresolved",
+        "unrestricted_skill",
     }
 )
 

@@ -420,6 +420,44 @@ def _build_codex_hook_command(hooks_dir: Path, script: str, timeout_seconds: int
     return cmd
 
 
+def _ensure_registry_populated(registry: Sequence[HookDef]) -> None:
+    if registry is HOOK_REGISTRY and not HOOK_REGISTRY:
+        # ``hook_registry`` intentionally defers population to the hooks
+        # package to avoid an import cycle.  Direct generated-home setup is a
+        # legitimate first consumer, so establish that existing runtime
+        # registry before validating or rendering it.
+        import autoskillit.hooks  # noqa: F401
+
+
+def codex_emitted_hook_defs(
+    *,
+    registry: Sequence[HookDef] = HOOK_REGISTRY,
+    managed_route: ManagedCodexRoute | None = None,
+    include_runtime_only: bool = False,
+) -> tuple[HookDef, ...]:
+    """Return every HookDef a Codex config for this route will run.
+
+    Managed-route injections are included.
+    """
+    _ensure_registry_populated(registry)
+    session_scope: Literal["interactive", "headless"] = (
+        "interactive" if managed_route == "interactive-parent" else "headless"
+    )
+    applicable = tuple(
+        hook_def
+        for hook_def in registry
+        if hook_applies_to_backend(
+            hook_def,
+            backend="codex",
+            session_scope=session_scope,
+        )
+        and (include_runtime_only or not hook_def.runtime_only)
+    )
+    if managed_route is not None:
+        applicable += _managed_route_hook_defs(managed_route)
+    return applicable
+
+
 def generate_codex_hooks_config(
     hook_config_format: str = "",
     *,
@@ -431,17 +469,13 @@ def generate_codex_hooks_config(
 ) -> dict[str, list[dict]]:
     """Generate Codex config.toml hooks entries from HOOK_REGISTRY.
 
-    Skips interactive_only, runtime-only, and codex fix-required/not-applicable hooks
-    unless ``include_runtime_only`` is requested for a wrapper-owned home.
+    Admits ``interactive_only`` hooks only for the ``interactive-parent`` managed
+    route and ``headless_only`` hooks otherwise; skips runtime-only hooks unless
+    ``include_runtime_only`` is requested for a wrapper-owned home.
+    Appends the route's managed guard hooks.
     Returns dict keyed by event type for [[hooks.<EventType>]] TOML format.
     """
-    if registry is HOOK_REGISTRY and not HOOK_REGISTRY:
-        # ``hook_registry`` intentionally defers population to the hooks
-        # package to avoid an import cycle.  Direct generated-home setup is a
-        # legitimate first consumer, so establish that existing runtime
-        # registry before validating or rendering it.
-        import autoskillit.hooks  # noqa: F401
-
+    _ensure_registry_populated(registry)
     validate_lifecycle_contracts(
         registry,
         lifecycle_contracts,
@@ -449,21 +483,13 @@ def generate_codex_hooks_config(
     )
     hooks_dir = _resolve_codex_hooks_dir(plugin_dir)
     groups: dict[str, dict[tuple[str, str], dict]] = {}
-    session_scope: Literal["interactive", "headless"] = (
-        "interactive" if managed_route == "interactive-parent" else "headless"
-    )
-    applicable = [
-        hook_def
-        for hook_def in registry
-        if hook_applies_to_backend(
-            hook_def,
-            backend="codex",
-            session_scope=session_scope,
+    applicable = list(
+        codex_emitted_hook_defs(
+            registry=registry,
+            managed_route=managed_route,
+            include_runtime_only=include_runtime_only,
         )
-        and (include_runtime_only or not hook_def.runtime_only)
-    ]
-    if managed_route is not None:
-        applicable.extend(_managed_route_hook_defs(managed_route))
+    )
     validate_protection_coverage(applicable, PROTECTION_WAIVERS, backend="codex")
     for hook_def in applicable:
         event = hook_def.event_type

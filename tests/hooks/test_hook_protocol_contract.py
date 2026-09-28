@@ -283,14 +283,14 @@ def test_codex_emission_inventory_is_pinned() -> None:
 
 
 def test_known_unsupported_channels_are_declared() -> None:
-    emitted_scripts: dict[str, set[str]] = {"codex": set(), "claude": set()}
-    for backend, _route, hook_def in _emitted_hooks():
-        emitted_scripts[backend].update(hook_def.scripts)
-
     violations = []
-    for backend, channel, event in _KNOWN_UNSUPPORTED:
-        for script in emitted_scripts[backend]:
-            if event in scan_script_channels(script).get(channel, frozenset()):
-                violations.append((backend, channel, event, script))
+    for backend, _route, hook_def in _emitted_hooks():
+        for script in hook_def.scripts:
+            for channel, events in scan_script_channels(script).items():
+                event = hook_def.event_type
+                if (backend, channel, event) in _KNOWN_UNSUPPORTED and (
+                    None in events or event in events
+                ):
+                    violations.append((backend, channel, event, script))
 
     assert not violations, f"unsupported hook channels are still emitted: {sorted(violations)}"

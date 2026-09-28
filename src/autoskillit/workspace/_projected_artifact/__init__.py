@@ -16,6 +16,11 @@ from .._installed._projection_cache import (
     public_plugin_asset_digest,
     read_projected_plugin_identity,
 )
+from .._installed._projection_referrers import (
+    live_projected_artifact_referrers,
+    projected_artifact_referrer_dir,
+    record_projected_artifact_referrer,
+)
 from ._hook_repair import (
     PluginHookRepairOutcome,
     PluginHookRepairStatus,
@@ -57,12 +62,15 @@ __all__ = [
     "project_agent_skill_document",
     "project_default_plugin_authority",
     "project_direct_install_authority",
+    "live_projected_artifact_referrers",
     "projected_artifact_lease_path",
     "projected_artifact_manifest_path",
+    "projected_artifact_referrer_dir",
     "projected_plugin_artifact_digest",
     "prune_stale_projections",
     "public_plugin_asset_digest",
     "read_projected_plugin_identity",
+    "record_projected_artifact_referrer",
     "repair_broken_plugin_cache_hooks",
     "repair_broken_projection_hooks",
     "ProjectedArtifactHooksInvalid",

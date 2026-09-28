@@ -37,6 +37,7 @@ def test_execution_helpers_decomposition_has_expected_siblings() -> None:
         "_dispatch_metadata",
         "_run_cmd_spill",
         "_run_python_coercion",
+        "_session_hook_root",
     }
 
 

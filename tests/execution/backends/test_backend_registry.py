@@ -107,6 +107,8 @@ class TestBackendRegistry:
             "read_rollout_thread_id",
             "resolve_unique_codex_host_correlation",
             "find_broken_codex_hook_commands",
+            "codex_session_hook_root_errors",
+            "iter_codex_hook_commands",
             "sync_hooks_to_codex_config",
         }
         assert set(all_exports) == expected

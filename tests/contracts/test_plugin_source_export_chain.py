@@ -48,6 +48,7 @@ ADDED = (
     "PluginLaunchBinding",
     "PluginLoadMode",
     "ManagedHome",
+    "SessionHookRoot",
     "PluginRetirementCoordinator",
     "PERSISTED_FORMAT_LEDGER",
     "PersistedEnumDef",

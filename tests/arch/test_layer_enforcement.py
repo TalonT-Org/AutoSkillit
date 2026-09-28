@@ -1964,6 +1964,9 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/core/test_child_env_bus_address.py": frozenset(
         {"autoskillit.execution", "autoskillit.hooks"}
     ),
+    # SessionHookRoot is constructible only from a lease that a real projected
+    # authority issues for a concrete backend.
+    "tests/core/test_session_hook_root.py": frozenset({"autoskillit.execution"}),
     # execution tests — clone_guard/headless/commands use sibling layers
     "tests/execution/test_clone_guard.py": frozenset({"autoskillit.pipeline"}),
     "tests/execution/test_commands.py": frozenset({"autoskillit.cli"}),

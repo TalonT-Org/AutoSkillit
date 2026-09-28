@@ -15,36 +15,47 @@ pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 
 class TestFindBrokenCodexHookCommands:
-    """Detection: broken Codex hook commands are reported."""
+    """Detection: broken Codex hook commands are reported.
+
+    Fixtures are round trips through the production writers — the shape they
+    emit (``dict[event, list[{matcher?, hooks: [{command}]}]]``) is not the
+    legacy top-level ``[[hooks]]`` list no writer produces.
+    """
 
     def test_broken_dispatcher_reported(self, tmp_path: Path) -> None:
         from autoskillit.execution.backends._codex_hooks import (
             find_broken_codex_hook_commands,
+            sync_managed_codex_hooks_to_config,
         )
+        from tests.fixtures.hook_topology import projection_shaped_hook_root
 
+        home = tmp_path / "home"
+        home.mkdir()
+        root = projection_shaped_hook_root(home)
         config_path = tmp_path / "config.toml"
-        config_path.write_text(
-            "[[hooks]]\n"
-            'event = "PreToolUse"\n'
-            'command = "python3 -B /nonexistent/hooks/_dispatch.py foo"\n'
-            'type = "command"\n'
-        )
+        sync_managed_codex_hooks_to_config(config_path, route="leaf", plugin_dir=root.plugin_dir)
+
+        dispatcher = root.hooks_dir / "_dispatch.py"
+        dispatcher.unlink()
+
         broken = find_broken_codex_hook_commands(config_path)
-        assert len(broken) == 1
-        assert "/nonexistent/" in broken[0]
+        assert broken
+        assert all(str(dispatcher) in command for command in broken)
 
     def test_healthy_config_reports_nothing(self, tmp_path: Path) -> None:
         from autoskillit.execution.backends._codex_hooks import (
             find_broken_codex_hook_commands,
+            sync_managed_codex_hooks_to_config,
         )
+        from tests.fixtures.hook_topology import projection_shaped_hook_root
 
-        # A config with no autoskillit hooks
+        home = tmp_path / "home"
+        home.mkdir()
+        root = projection_shaped_hook_root(home)
         config_path = tmp_path / "config.toml"
-        config_path.write_text(
-            '[[hooks]]\nevent = "PreToolUse"\ncommand = "echo hello"\ntype = "command"\n'
-        )
-        broken = find_broken_codex_hook_commands(config_path)
-        assert broken == []
+        sync_managed_codex_hooks_to_config(config_path, route="leaf", plugin_dir=root.plugin_dir)
+
+        assert find_broken_codex_hook_commands(config_path) == []
 
     def test_missing_config_reports_nothing(self, tmp_path: Path) -> None:
         from autoskillit.execution.backends._codex_hooks import (
@@ -53,6 +64,30 @@ class TestFindBrokenCodexHookCommands:
 
         broken = find_broken_codex_hook_commands(tmp_path / "nonexistent.toml")
         assert broken == []
+
+    def test_corrupt_config_with_autoskillit_blocks_and_missing_dispatcher_is_reported(
+        self, tmp_path: Path
+    ) -> None:
+        from autoskillit.execution.backends._codex_hooks import (
+            _upsert_hooks_text,
+            find_broken_codex_hook_commands,
+            generate_codex_hooks_config,
+        )
+        from tests.fixtures.hook_topology import projection_shaped_hook_root
+
+        home = tmp_path / "home"
+        home.mkdir()
+        root = projection_shaped_hook_root(home)
+        config_path = tmp_path / "config.toml"
+        fresh_hooks = generate_codex_hooks_config(plugin_dir=root.plugin_dir)
+        _upsert_hooks_text(config_path, b"not = [valid toml\n", fresh_hooks)
+
+        dispatcher = root.hooks_dir / "_dispatch.py"
+        dispatcher.unlink()
+
+        broken = find_broken_codex_hook_commands(config_path)
+        assert broken
+        assert all(str(dispatcher) in command for command in broken)
 
 
 class TestCodexSyncGuard:

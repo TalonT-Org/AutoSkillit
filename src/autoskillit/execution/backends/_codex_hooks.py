@@ -8,9 +8,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Sequence
+import os
+import shlex
+import tomllib
+from collections.abc import Iterator, Sequence
 from pathlib import Path
-from typing import Literal
+from typing import Literal, NamedTuple
 
 from autoskillit.core import (
     _AUTOSKILLIT_PLUGIN_KEY,
@@ -174,50 +177,167 @@ def _hook_script_path(parts: Sequence[str]) -> Path | None:
     return None
 
 
-def find_broken_codex_hook_commands(config_path: Path | None = None) -> list[str]:
-    """Detect broken autoskillit hook commands in ``~/.codex/config.toml``.
+class CodexHookCommand(NamedTuple):
+    """One command of a rendered Codex hook table."""
 
-    Returns a list of broken command strings (empty if all healthy or no
-    autoskillit hooks are present).  Does not modify the config.
+    event: str
+    matcher: str | None
+    command: str
+    dispatcher: Path | None
+    logical_name: str | None
+
+
+def is_autoskillit_hook_command(command: str) -> bool:
+    """Return whether a Codex hook command was rendered by AutoSkillit.
+
+    The dispatcher root varies by install state, so ownership cannot pin one
+    literal directory; the ``_dispatch.py`` suffix covers every rendered command.
+    """
+    return "/autoskillit/" in command or "_dispatch.py" in command
+
+
+def _codex_hook_command(event: str, matcher: str | None, command: str) -> CodexHookCommand:
+    try:
+        parts = shlex.split(command)
+    except ValueError:
+        return CodexHookCommand(event, matcher, command, None, None)
+    logical_name = parts[-1] if len(parts) >= 2 and parts[-2].endswith("_dispatch.py") else None
+    return CodexHookCommand(event, matcher, command, _hook_script_path(parts), logical_name)
+
+
+def iter_codex_hook_commands(hooks_table: object) -> Iterator[CodexHookCommand]:
+    """Yield every command of a ``hooks`` table in the shape the writers produce.
+
+    Foreign commands are yielded too; consumers filter on
+    :func:`is_autoskillit_hook_command`.
+    """
+    if not isinstance(hooks_table, dict):
+        return
+    for event, entries in hooks_table.items():
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            matcher = entry.get("matcher")
+            hooks = entry.get("hooks")
+            if not isinstance(hooks, list):
+                continue
+            for hook in hooks:
+                if not isinstance(hook, dict):
+                    continue
+                command = hook.get("command")
+                if isinstance(command, str) and command:
+                    yield _codex_hook_command(
+                        str(event), matcher if isinstance(matcher, str) else None, command
+                    )
+
+
+def _owned_hook_blocks(lines: Sequence[str]) -> list[tuple[int, int]]:
+    """Return the ``[start, end)`` line ranges of AutoSkillit-owned hook blocks."""
+    owned_ranges: list[tuple[int, int]] = []
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+        if stripped == "[[hooks]]" or (
+            stripped.startswith("[[hooks.") and stripped.endswith("]]")
+        ):
+            block_start = i
+            i += 1
+            while i < len(lines) and not lines[i].strip().startswith("["):
+                i += 1
+            if is_autoskillit_hook_command("".join(lines[block_start:i])):
+                owned_ranges.append((block_start, i))
+        else:
+            i += 1
+    return owned_ranges
+
+
+def _owned_block_commands(raw_bytes: bytes) -> list[str]:
+    """Extract the command strings of owned hook blocks from unparseable config text."""
+    lines = raw_bytes.decode("utf-8", errors="replace").splitlines(keepends=True)
+    commands: list[str] = []
+    for start, end in _owned_hook_blocks(lines):
+        for line in lines[start:end]:
+            if not line.lstrip().startswith("command"):
+                continue
+            try:
+                value = tomllib.loads(line).get("command")
+            except tomllib.TOMLDecodeError:
+                value = None
+            commands.append(value if isinstance(value, str) else line.strip())
+    return commands
+
+
+def _has_live_dispatcher(hook: CodexHookCommand) -> bool:
+    return hook.dispatcher is not None and hook.dispatcher.is_file()
+
+
+def find_broken_codex_hook_commands(config_path: Path | None = None) -> list[str]:
+    """Detect AutoSkillit hook commands whose dispatcher is missing.
+
+    Defaults to ``~/.codex/config.toml``. A config that no longer parses is
+    scanned through the same owned-block boundaries the corrupt-config writer
+    uses. Returns the broken command strings; does not modify the config.
     """
     if config_path is None:
         config_path = Path.home() / ".codex" / "config.toml"
     if not config_path.is_file():
         return []
     result = _read_codex_config(config_path)
-    broken: list[str] = []
-    hooks = result.data.get("hooks", [])
-    if not isinstance(hooks, list):
-        return []
-    for entry in hooks:
-        if not isinstance(entry, dict):
-            continue
-        cmd = entry.get("command", "")
-        if not isinstance(cmd, str) or not cmd:
-            continue
-        if "/autoskillit/" not in cmd and "_dispatch.py" not in cmd:
-            continue
-        import shlex
+    if result.is_corrupt:
+        hooks = [
+            _codex_hook_command("", None, command)
+            for command in _owned_block_commands(result.raw_bytes or b"")
+        ]
+    else:
+        hooks = [
+            hook
+            for hook in iter_codex_hook_commands(result.data.get("hooks"))
+            if is_autoskillit_hook_command(hook.command)
+        ]
+    return [hook.command for hook in hooks if not _has_live_dispatcher(hook)]
 
-        try:
-            parts = shlex.split(cmd)
-        except ValueError:
-            broken.append(cmd)
+
+def codex_session_hook_root_errors(config_path: Path) -> list[str]:
+    """Report per-session hook commands that do not run from one live canonical root.
+
+    A per-session home bakes its launch's leased projection, canonicalized: every
+    AutoSkillit dispatcher must exist, be symlink-free (a re-pointable selector
+    such as the plugin-level ``current`` is rejected), and share one root.
+    """
+    result = _read_codex_config(config_path)
+    if result.is_corrupt:
+        return [f"Codex hook config is unreadable: {config_path}"]
+    errors: dict[str, None] = {}
+    roots: set[Path] = set()
+    for hook in iter_codex_hook_commands(result.data.get("hooks")):
+        if not is_autoskillit_hook_command(hook.command):
             continue
-        script_path = _hook_script_path(parts)
-        if script_path is not None and not script_path.is_file():
-            broken.append(cmd)
-    return broken
+        if hook.dispatcher is None or not hook.dispatcher.is_file():
+            errors[f"Codex hook dispatcher is missing: {hook.command}"] = None
+            continue
+        if os.path.realpath(hook.dispatcher) != str(hook.dispatcher):
+            errors[f"Codex hook dispatcher is not a canonical path: {hook.dispatcher}"] = None
+        roots.add(hook.dispatcher.parent)
+    if len(roots) > 1:
+        errors[
+            "Codex hook commands span more than one dispatcher root: "
+            + ", ".join(sorted(str(root) for root in roots))
+        ] = None
+    return list(errors)
 
 
 def _resolve_codex_hooks_dir(plugin_dir: Path | None = None) -> Path:
     """Select an absolute dispatcher root for Codex configuration.
 
-    When ``plugin_dir`` is supplied (a session's validated generation path),
-    the hooks tree inside that directory is used directly.  When ``None``
-    (bindingless callers such as MCP server startup and ``init``), a
-    short-lived resolve→validate of the current generation selector is
-    performed through the same generation-store authority as launch binding.
+    Every per-session home passes ``plugin_dir``, its launch's leased
+    projection (canonicalized by ``SessionHookRoot``), and the hooks tree
+    inside it is used directly. ``None`` serves only the global
+    ``~/.codex/config.toml`` written by ``sync_hooks_to_codex_config`` from
+    ``autoskillit init``: a short-lived resolve→validate of the current
+    generation selector through the same generation-store authority as launch
+    binding.
 
     The bindingless path prefers the *version-independent* selector. Codex
     bakes this absolute path into ``~/.codex/config.toml`` and re-reads it at
@@ -283,8 +403,6 @@ def _resolve_codex_hooks_dir(plugin_dir: Path | None = None) -> Path:
 
 def _build_codex_hook_command(hooks_dir: Path, script: str, timeout_seconds: int | None) -> dict:
     """Build a single Codex hook command dict with trusted_hash."""
-    import shlex
-
     logical_name = script.removesuffix(".py")
     dispatch_path = hooks_dir / "_dispatch.py"
     script_hash = hashlib.sha256(dispatch_path.read_bytes()).hexdigest()
@@ -367,16 +485,18 @@ def generate_codex_hooks_config(
 def _is_autoskillit_hook_entry(entry: dict) -> bool:
     """Check if a Codex hooks config entry belongs to autoskillit.
 
-    ``_resolve_codex_hooks_dir()`` varies by install state (dev checkout vs.
-    retained plugin-cache incarnation), so detection cannot pin one literal
-    directory string — the ``_dispatch.py`` suffix match already covers every
-    autoskillit-generated command regardless of which root produced it.
+    Two roots produce these commands: the global ``~/.codex/config.toml``
+    bakes the version-independent generation selector, and every per-session
+    home bakes its launch's leased projection. Ownership is therefore decided
+    by :func:`is_autoskillit_hook_command`, not by one literal directory.
     """
-    for hook in entry.get("hooks", []):
-        cmd = hook.get("command", "")
-        if "/autoskillit/" in cmd or "_dispatch.py" in cmd:
-            return True
-    return False
+    hooks = entry.get("hooks")
+    return isinstance(hooks, list) and any(
+        isinstance(hook, dict)
+        and isinstance(command := hook.get("command"), str)
+        and is_autoskillit_hook_command(command)
+        for hook in hooks
+    )
 
 
 def _upsert_hooks_text(
@@ -389,25 +509,7 @@ def _upsert_hooks_text(
         raise RuntimeError(f"config file contains non-UTF-8 bytes: {exc}") from exc
     lines = text.splitlines(keepends=True)
 
-    owned_ranges: list[tuple[int, int]] = []
-    i = 0
-    while i < len(lines):
-        stripped = lines[i].strip()
-        if stripped == "[[hooks]]" or (
-            stripped.startswith("[[hooks.") and stripped.endswith("]]")
-        ):
-            block_start = i
-            i += 1
-            while i < len(lines) and not lines[i].strip().startswith("["):
-                i += 1
-            block_end = i
-            block_text = "".join(lines[block_start:block_end])
-            if "/autoskillit/" in block_text or "_dispatch.py" in block_text:
-                owned_ranges.append((block_start, block_end))
-        else:
-            i += 1
-
-    for start, end in reversed(owned_ranges):
+    for start, end in reversed(_owned_hook_blocks(lines)):
         del lines[start:end]
 
     fresh_text = _serialize_toml({"hooks": fresh_hooks})
@@ -491,15 +593,19 @@ def sync_managed_codex_hooks_to_config(
     config_path: Path,
     *,
     route: ManagedCodexRoute,
-    plugin_dir: Path | None = None,
-    include_runtime_only: bool = False,
+    plugin_dir: Path,
 ) -> bool:
-    """Install route-specific hooks in one generated Codex home."""
+    """Install route-specific hooks in one generated Codex home.
+
+    Renders with the same parameters as the prelaunch writer (the leased
+    ``plugin_dir`` and wrapper-owned runtime-only hooks), differing only by
+    route, so the second writer never drops a hook the first installed.
+    """
     resolved_config_path = Path(config_path).expanduser().resolve(strict=False)
     with CodexConfigLock(resolved_config_path):
         return _sync_hooks_to_codex_config_unlocked(
             config_path=resolved_config_path,
             plugin_dir=plugin_dir,
             managed_route=route,
-            include_runtime_only=include_runtime_only,
+            include_runtime_only=True,
         )

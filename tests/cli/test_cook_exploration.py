@@ -23,6 +23,8 @@ def _mock_backend(*, session_scoped: bool = False, terminal: bool = False) -> Ma
 def _mock_binding() -> MagicMock:
     binding = MagicMock()
     binding.identity.managed_path = Path("/fake/managed")
+    binding.identity.semantic_key = "test-plugin"
+    binding.closed = False
     return binding
 
 
@@ -149,3 +151,33 @@ class TestCookExplorationEligibility:
             None,
         )
         assert result is base_context
+
+    def test_passes_session_hook_root_derived_from_binding(self) -> None:
+        """The projection context carries a root sourced from the leased binding."""
+        import os
+
+        from autoskillit.cli.session._session_cook import _build_cook_projection_context
+        from autoskillit.core import SessionHookRoot
+
+        base_context = MagicMock()
+        provider = _mock_skills_provider(base_context)
+        binding = _mock_binding()
+        catalog = MagicMock()
+
+        _build_cook_projection_context(
+            provider,
+            catalog,
+            Path("/fake/project"),
+            _mock_backend(),
+            binding,
+            None,
+        )
+
+        session_hook_root = provider.catalog_projection_context.call_args.kwargs[
+            "session_hook_root"
+        ]
+        assert session_hook_root == SessionHookRoot.from_binding(binding)
+        assert session_hook_root.artifact_path == binding.identity.managed_path
+        assert session_hook_root.plugin_dir == Path(
+            os.path.realpath(binding.identity.managed_path)
+        )

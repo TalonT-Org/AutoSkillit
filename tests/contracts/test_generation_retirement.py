@@ -760,3 +760,35 @@ def test_codex_hooks_resolve_through_the_plugin_selector(
 
     assert resolved == generation_plugin_selector_path(home, _PLUGIN_REF) / "hooks"
     assert (resolved / "_dispatch.py").is_file()
+
+
+def test_codex_selector_rooted_command_executes(home: Path, tmp_path: Path) -> None:
+    """A guard reached through the selector admits its own identity and runs its policy."""
+    from autoskillit.execution.backends._codex_hooks import (
+        generate_codex_hooks_config,
+        iter_codex_hook_commands,
+    )
+    from tests.fixtures.hook_topology import (
+        build_generation_selector_topology,
+        hook_run_failures,
+        run_codex_hook,
+    )
+
+    selector = build_generation_selector_topology(home)
+    hook = next(
+        hook
+        for hook in iter_codex_hook_commands(generate_codex_hooks_config())
+        if hook.logical_name == "guards/test_runner_guard"
+    )
+    assert hook.dispatcher == selector / "hooks" / "_dispatch.py"
+
+    run = run_codex_hook(
+        hook.command,
+        {"tool_name": "Bash", "tool_input": {"command": "echo hi"}},
+        cwd=tmp_path,
+        log_dir=tmp_path / "logs",
+        env={"AUTOSKILLIT_HEADLESS": "1"},
+    )
+
+    assert not hook_run_failures(run)
+    assert run.completed.stdout.strip() == ""

@@ -19,6 +19,7 @@ from ..install._type_plugin_source import (
     RetirementOutcome,
     RetiringAppendResult,
     RetiringArtifactRecord,
+    SessionHookRoot,
 )
 from ..launch._type_skill_contract import (
     ExplorationVectorApplicabilityId,
@@ -349,6 +350,9 @@ class SkillProjectionContextAuthority(Protocol):
 
     @property
     def projection_version(self) -> int: ...
+
+    @property
+    def session_hook_root(self) -> SessionHookRoot | None: ...
 
     @property
     def skills(self) -> tuple[SkillAuthority, ...]: ...

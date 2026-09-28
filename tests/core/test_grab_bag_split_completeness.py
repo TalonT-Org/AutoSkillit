@@ -541,6 +541,7 @@ def test_no_unintended_new_test_files_under_tests_core() -> None:
             "test_resolve_temp_dir.py",
             "test_session_checkpoint.py",
             "test_session_env_specs.py",
+            "test_session_hook_root.py",
             "test_session_index_schema.py",
             "test_session_index_schema_version_lock.py",
             "test_session_liveness.py",

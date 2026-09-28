@@ -35,6 +35,9 @@ from autoskillit.core import (
     managed_skill_relative_path,
     observe_path_mode,
 )
+from autoskillit.workspace._installed._projection_referrers import (
+    record_projected_artifact_referrer,
+)
 from autoskillit.workspace.session_skills._catalog import (
     CompiledSessionSkillCatalog,
     _canonical_skill_unavailability_payload,
@@ -101,6 +104,7 @@ def _materialize_profile_skill_infos(
         managed_codex_route=projection_context.managed_codex_route,
         provisioning_disposition=projection_context.provisioning_disposition,
         projection_version=projection_context.projection_version,
+        session_hook_root=projection_context.session_hook_root,
     )
     staging = catalog_dir.parent / f".profile-projection-{uuid4().hex}"
     try:
@@ -301,12 +305,16 @@ def _configure_managed_session_route(
     projection = managed_home_projection(projection_context, backend)
     if projection is None:
         return None
+    hook_root = projection_context.session_hook_root
+    if hook_root is None:
+        raise SkillContractError("managed Codex route requires a leased session hook root")
     adaptation_context = projection_context.adaptation_context
     assert adaptation_context is not None
     managed.configure_managed_session_dir(
         generated_home,
         adaptation_context=adaptation_context,
         route=projection.route,
+        plugin_dir=hook_root.plugin_dir,
     )
     return projection
 
@@ -367,7 +375,13 @@ def _setup_generated_session(
     explorer_binding_env_factory: _ExplorerBindingEnvFactory | None,
 ) -> tuple[frozenset[str] | None, _ExplorerBindingEnv | None, ManagedHomeProjection | None]:
     if backend is not None and backend.capabilities.mcp_config_capable:
-        readiness = backend.ensure_pre_launch(session_dir=generated_home)
+        hook_root = projection_context.session_hook_root
+        if hook_root is not None:
+            record_projected_artifact_referrer(hook_root.artifact_path, generated_home)
+        readiness = backend.ensure_pre_launch(
+            session_dir=generated_home,
+            plugin_dir=hook_root.plugin_dir if hook_root is not None else None,
+        )
         if readiness.errors:
             raise RuntimeError(f"Pre-launch check failed: {'; '.join(readiness.errors)}")
     if explorer_binding_env_factory is not None:
@@ -426,6 +440,7 @@ def _publish_session_skill_tree(
             explorer_binding_env is not None or projection_context.provisioning_disposition
         ),
         projection_version=projection_context.projection_version,
+        session_hook_root=projection_context.session_hook_root,
     )
     session_records = records
     if backend is not None and execution_role is SkillExecutionRole.SESSION:
@@ -635,7 +650,13 @@ def _restore_session(
     skill_entries = _freeze_skill_entries(catalog_dir)
 
     if backend is not None and backend.capabilities.mcp_config_capable:
-        readiness = backend.ensure_pre_launch(session_dir=generated_home)
+        hook_root = projection_context.session_hook_root
+        if hook_root is not None:
+            record_projected_artifact_referrer(hook_root.artifact_path, generated_home)
+        readiness = backend.ensure_pre_launch(
+            session_dir=generated_home,
+            plugin_dir=hook_root.plugin_dir if hook_root is not None else None,
+        )
         if readiness.errors:
             raise RuntimeError(f"Pre-launch check failed: {'; '.join(readiness.errors)}")
     if backend is not None:

@@ -24,6 +24,7 @@ from autoskillit.core import (
     ManagedCodexRoute,
     RepositoryProfileId,
     SemanticAdaptationContext,
+    SessionHookRoot,
     SkillContractError,
     SkillExecutionRole,
     SkillResolver,
@@ -199,6 +200,7 @@ class SkillsDirectoryProvider:
         resolved_exploration_profile: RepositoryProfileId | None = None,
         adaptation_context: SemanticAdaptationContext | None = None,
         managed_codex_route: ManagedCodexRoute | None = None,
+        session_hook_root: SessionHookRoot | None = None,
     ) -> SkillProjectionContext:
         """Build one projection context bound to a resolved path-free catalog.
 
@@ -206,10 +208,13 @@ class SkillsDirectoryProvider:
         ``{{AUTOSKILLIT_SCRIPTS}}`` placeholder resolves against — it must
         never have a shorter lifetime than the session consuming the
         projected document. Required — no implicit default.  Callers that hold
-        a retained plugin-cache incarnation (durable across a mid-session
-        ``autoskillit update`` via retire-don't-delete) must pass the binding's
+        a leased plugin launch binding must pass the binding's
         ``identity.managed_path``; callers operating from the dev checkout pass
         ``pkg_root()`` explicitly.
+
+        ``session_hook_root`` is the leased tree a per-session backend home
+        bakes its hook commands from; a backend that bakes per-session hooks
+        refuses to materialize a home without one.
         """
         scripts_root = durable_scripts_root
         return SkillProjectionContext(
@@ -220,6 +225,7 @@ class SkillsDirectoryProvider:
             resolved_exploration_profile=resolved_exploration_profile,
             adaptation_context=adaptation_context,
             managed_codex_route=managed_codex_route,
+            session_hook_root=session_hook_root,
             substitutions={
                 "{{AUTOSKILLIT_TEMP}}": self._temp_dir_relpath,
                 "{{AUTOSKILLIT_SCRIPTS}}": str(scripts_root / "recipes" / "scripts"),

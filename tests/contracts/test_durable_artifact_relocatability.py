@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -408,3 +409,126 @@ class TestNonMachineLocalWritersAreRelocatable:
         assert outcomes[0].status is PluginHookRepairStatus.REPAIRED
         _assert_relocatable((hooks_dir / "hooks.json").read_text())
         _assert_relocatable(manifest_path.read_text())
+
+
+def _proof_codex_hooks(tmp_path: Path) -> None:
+    from autoskillit.execution.backends._codex_hooks import (
+        find_broken_codex_hook_commands,
+        sync_managed_codex_hooks_to_config,
+    )
+    from tests.fixtures.hook_topology import projection_shaped_hook_root
+
+    home = tmp_path / "codex-hooks-proof-home"
+    home.mkdir()
+    root = projection_shaped_hook_root(home)
+    config_path = tmp_path / "codex-hooks-proof-config.toml"
+    sync_managed_codex_hooks_to_config(config_path, route="leaf", plugin_dir=root.plugin_dir)
+
+    dispatcher = root.hooks_dir / "_dispatch.py"
+    dispatcher.unlink()
+
+    broken = find_broken_codex_hook_commands(config_path)
+    assert broken
+    assert all(str(dispatcher) in command for command in broken)
+
+
+def _proof_claude_hooks(tmp_path: Path) -> None:
+    import shutil
+
+    import autoskillit.cli._hooks as _hooks_mod
+    import autoskillit.cli._init_helpers as init_helpers
+    from autoskillit.core import pkg_root
+    from autoskillit.hook_registry import find_broken_hook_scripts
+
+    copied_root = tmp_path / "claude-hooks-proof-pkg"
+    shutil.copytree(
+        pkg_root(),
+        copied_root,
+        symlinks=False,
+        ignore=shutil.ignore_patterns("__pycache__", "*.py[co]"),
+    )
+    settings_path = tmp_path / "claude-hooks-proof-settings.json"
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(_hooks_mod, "pkg_root", lambda: copied_root)
+        mp.setattr(init_helpers, "_is_plugin_installed", lambda **kwargs: False)
+        _hooks_mod.sync_hooks_to_settings(settings_path)
+
+    (copied_root / "hooks" / "_dispatch.py").unlink()
+
+    assert find_broken_hook_scripts(settings_path)
+
+
+def _proof_session_archive(tmp_path: Path) -> None:
+    from autoskillit.execution.session_log import session_log as _session_log_mod
+    from autoskillit.execution.session_log.session_index import (
+        find_stale_session_archive_references,
+    )
+
+    archive_root = tmp_path / "session-archive-proof"
+    archive_root.mkdir()
+    referenced = archive_root / "vanished-cwd"
+    referenced.mkdir()
+    archive_path = archive_root / "sessions-archive.jsonl"
+
+    _session_log_mod._append_session_archive_rows(archive_path, [{"cwd": str(referenced)}])
+    referenced.rmdir()
+
+    assert find_stale_session_archive_references(archive_root) == [str(referenced)]
+
+
+def _proof_workspace_outcomes(tmp_path: Path) -> None:
+    from autoskillit.core import WorkspaceOutcomeKind, WorkspaceOutcomeRecord
+    from autoskillit.pipeline.workspace_outcomes._ledger import (
+        DefaultWorkspaceOutcomeLedger,
+        find_stale_workspace_outcome_shards,
+    )
+
+    workspace = tmp_path / "workspace-outcome-proof"
+    workspace.mkdir()
+    ledger = DefaultWorkspaceOutcomeLedger(tmp_path / "workspace-outcome-ledger")
+    ledger.record(
+        WorkspaceOutcomeRecord(
+            workspace=str(workspace),
+            recorded_at="2026-09-16T10:00:00+00:00",
+            kind=WorkspaceOutcomeKind.TEST_RUN,
+            succeeded=True,
+        )
+    )
+    _, shard_path, _ = ledger._paths(str(workspace))
+
+    workspace.rmdir()
+
+    assert find_stale_workspace_outcome_shards(ledger.root) == (shard_path,)
+
+
+_DETECTION_PROOFS: dict[str, Callable[[Path], None]] = {
+    "autoskillit.execution.backends._codex_hooks:find_broken_codex_hook_commands": (
+        _proof_codex_hooks
+    ),
+    "autoskillit.hook_registry:find_broken_hook_scripts": _proof_claude_hooks,
+    "autoskillit.execution.session_log.session_index:find_stale_session_archive_references": (
+        _proof_session_archive
+    ),
+    "autoskillit.pipeline.workspace_outcomes._ledger:find_stale_workspace_outcome_shards": (
+        _proof_workspace_outcomes
+    ),
+}
+
+
+def test_every_declared_detection_detects_its_writers_breakage(tmp_path: Path) -> None:
+    """Every distinct non-None detection actually detects its writers' breakage.
+
+    ``test_every_machine_local_writer_has_resolvable_detection`` above only
+    asserts import-time resolvability; this proves each detection functions.
+    """
+    declared_detections = {
+        entry.detection for entry in DURABLE_ARTIFACT_WRITERS if entry.detection is not None
+    }
+    assert declared_detections == set(_DETECTION_PROOFS), (
+        "every distinct non-None DurableArtifactWriterDef.detection needs a proof "
+        "in _DETECTION_PROOFS"
+    )
+    for detection, proof in _DETECTION_PROOFS.items():
+        assert _resolve(detection) is not None
+        proof(tmp_path)

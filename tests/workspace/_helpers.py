@@ -148,6 +148,7 @@ def _catalog_context(
     backend=None,
     names: frozenset[str] | None = None,
     role: SkillExecutionRole = SkillExecutionRole.SESSION,
+    session_hook_root=None,
 ):
     from autoskillit.workspace import DefaultSkillResolver, EffectiveSkillCatalog
 
@@ -177,6 +178,7 @@ def _catalog_context(
         backend=backend,
         durable_scripts_root=pkg_root(),
         resolved_exploration_profile=resolved_exploration_profile,
+        session_hook_root=session_hook_root,
     )
     return catalog, context
 
@@ -187,8 +189,11 @@ def _materialize(
     *,
     backend=None,
     names: frozenset[str] | None = None,
+    session_hook_root=None,
 ) -> ValidatedAddDir:
-    catalog, context = _catalog_context(manager, backend=backend, names=names)
+    catalog, context = _catalog_context(
+        manager, backend=backend, names=names, session_hook_root=session_hook_root
+    )
     return manager.init_session(session_id, catalog, context)
 
 
@@ -199,9 +204,12 @@ def _managed(
     backend,
     names: frozenset[str] | None = None,
     role: SkillExecutionRole = SkillExecutionRole.SESSION,
+    session_hook_root=None,
 ):
     from autoskillit.workspace import compile_session_skill_catalog
 
-    catalog, context = _catalog_context(manager, backend=backend, names=names, role=role)
+    catalog, context = _catalog_context(
+        manager, backend=backend, names=names, role=role, session_hook_root=session_hook_root
+    )
     compilation = compile_session_skill_catalog(catalog, backend)
     return manager.managed_session(session_id, compilation, context)

@@ -22,6 +22,7 @@ from tests.execution.backends._codex_fixtures import (
     use_bundled_catalog,
     with_migration_offer,
 )
+from tests.fixtures.hook_topology import projection_shaped_hook_root
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -61,11 +62,15 @@ def test_launch_readiness_probe_preserves_generated_home(
             launch_context="interactive",
         )
         assert isinstance(context, SemanticAdaptationContext)
-        assert not backend.ensure_pre_launch(session_dir=home).errors
+        hook_root = projection_shaped_hook_root(tmp_path)
+        assert not backend.ensure_pre_launch(
+            session_dir=home, plugin_dir=hook_root.plugin_dir
+        ).errors
         backend.configure_managed_session_dir(
             home,
             adaptation_context=context,
             route="interactive-parent",
+            plugin_dir=hook_root.plugin_dir,
         )
         monkeypatch.setattr(
             "autoskillit.execution.backends._codex_probes._validate_mcp_probe",

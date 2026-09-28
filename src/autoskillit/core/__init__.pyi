@@ -1338,6 +1338,7 @@ from .types import ServeOverridesSnapshot as ServeOverridesSnapshot
 from .types import SessionAttemptHandle as SessionAttemptHandle
 from .types import SessionCheckpoint as SessionCheckpoint
 from .types import SessionEvent as SessionEvent
+from .types import SessionHookRoot as SessionHookRoot
 from .types import SessionInvariantAdaptationRefusal as SessionInvariantAdaptationRefusal
 from .types import SessionInvariantVerdict as SessionInvariantVerdict
 from .types import SessionLocator as SessionLocator

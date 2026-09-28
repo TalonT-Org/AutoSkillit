@@ -49,6 +49,7 @@ from tests.execution.backends._codex_fixtures import (
     use_bundled_catalog,
     with_migration_offer,
 )
+from tests.fixtures.hook_topology import projection_shaped_hook_root
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -111,6 +112,7 @@ def managed_launch_case(
         project,
         backend=backend,
         durable_scripts_root=pkg_root(),
+        session_hook_root=projection_shaped_hook_root(tmp_path),
     )
     projection_context = replace(
         projection_context,

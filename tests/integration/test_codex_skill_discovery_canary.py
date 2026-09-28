@@ -49,6 +49,7 @@ from autoskillit.workspace import (
     project_default_plugin_authority,
 )
 from tests.execution.backends._live_codex_parent import CODEX_LIVE_PROCESS_ENV_ALLOWLIST
+from tests.fixtures.hook_topology import projection_shaped_hook_root
 from tests.integration._codex_canary_helpers import SelectedCodex as _SelectedCodex
 from tests.integration._codex_canary_helpers import select_canary_codex
 
@@ -120,6 +121,7 @@ def _managed_catalog(
         project,
         backend=backend,
         durable_scripts_root=pkg_root(),
+        session_hook_root=projection_shaped_hook_root(tmp_path),
     )
     compilation = compile_session_skill_catalog(admitted_catalog, backend)
     return project, backend, manager.managed_session(session_id, compilation, context)

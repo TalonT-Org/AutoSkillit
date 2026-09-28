@@ -38,7 +38,9 @@ pytestmark = [
 class _ReloadBinding:
     def __init__(self, plugin_dir: Path) -> None:
         self.plugin_dir = plugin_dir
-        self.identity = SimpleNamespace(managed_path=plugin_dir)
+        self.identity = SimpleNamespace(
+            managed_path=plugin_dir, semantic_key="test-plugin@test:1.0.0"
+        )
         self.inherited_fds: tuple[int, ...] = ()
         self.closed = False
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
@@ -140,8 +141,11 @@ def test_fleet_managed_session_threads_process_tether_identity(
         capabilities=SimpleNamespace(session_dir_persistent=True),
     )
     binding = SimpleNamespace(
-        identity=SimpleNamespace(managed_path=tmp_path / "plugin"),
+        identity=SimpleNamespace(
+            managed_path=tmp_path / "plugin", semantic_key="test-plugin@test:1.0.0"
+        ),
         inherited_fds=(),
+        closed=False,
     )
     manager = SimpleNamespace(cleanup_stale=lambda: 0)
 
@@ -170,9 +174,13 @@ def test_fleet_managed_session_threads_process_tether_identity(
         def close(self, **_kwargs: object) -> None:
             pass
 
-    provider = SimpleNamespace(
-        catalog_projection_context=lambda *args, **_kwargs: SimpleNamespace(catalog=args[0])
-    )
+    projection_calls: list[dict[str, object]] = []
+
+    def catalog_projection_context(*args: object, **kwargs: object) -> SimpleNamespace:
+        projection_calls.append(kwargs)
+        return SimpleNamespace(catalog=args[0], session_hook_root=kwargs.get("session_hook_root"))
+
+    provider = SimpleNamespace(catalog_projection_context=catalog_projection_context)
     monkeypatch.setattr(
         _patch_session_launch,
         "_run_interactive_session",
@@ -218,6 +226,11 @@ def test_fleet_managed_session_threads_process_tether_identity(
         launch_session(FreshLaunch(system_prompt="prompt"), {})
 
     assert captured["process_tether"] is policy
+    assert len(projection_calls) == 1
+    session_hook_root = projection_calls[0]["session_hook_root"]
+    assert session_hook_root is not None
+    assert session_hook_root.artifact_path == binding.identity.managed_path
+    assert session_hook_root.plugin_dir == Path(os.path.realpath(binding.identity.managed_path))
 
 
 def test_launch_fleet_session_forwards_config_process_tether(

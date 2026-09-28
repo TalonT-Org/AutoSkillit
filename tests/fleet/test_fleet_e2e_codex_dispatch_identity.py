@@ -468,7 +468,13 @@ class TestCodexMcpDispatchIdentityE2E:
     ) -> None:
         assert "AUTOSKILLIT_DISPATCH_ID" not in os.environ
         generated_home = tmp_path / "generated-codex-home"
-        codex_mcp_runtime["tool_ctx"].backend.ensure_pre_launch(session_dir=generated_home)
+        plugin_dir = tmp_path / "session-hook-root"
+        (plugin_dir / "hooks").mkdir(parents=True)
+        (plugin_dir / "hooks" / "_dispatch.py").write_text("# stub dispatcher\n", encoding="utf-8")
+        codex_mcp_runtime["tool_ctx"].backend.ensure_pre_launch(
+            session_dir=generated_home,
+            plugin_dir=plugin_dir,
+        )
         server_env = _server_env_from_generated_home(generated_home)
 
         probe = subprocess.run(

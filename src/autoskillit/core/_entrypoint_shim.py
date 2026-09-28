@@ -31,6 +31,12 @@ from pathlib import Path
 
 from .io import atomic_write
 
+__all__ = [
+    "ENTRYPOINT_SHIM_SOURCE",
+    "entrypoint_shim_path",
+    "write_entrypoint_shim",
+]
+
 ENTRYPOINT_SHIM_SOURCE = '''#!/usr/bin/env python3
 """AutoSkillit entrypoint shim - resolves once, execs, never re-consulted.
 

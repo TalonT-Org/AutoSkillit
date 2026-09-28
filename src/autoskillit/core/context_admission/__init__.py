@@ -11,12 +11,9 @@ preserve old import paths after the core/context_admission/ decomposition.
 
 from __future__ import annotations
 
-from ..types.foundation._type_enums import ProducerSurface
 from .context_admission import (
     CONTEXT_ADMISSION_REDUCER_REGISTRY,
     ContextAdmissionReducerDef,
-    ContextAdmissionValidationError,
-    UnsupportedContextAdmissionProtocolError,
     context_admission_reducer_for_protocol,
     reduce_context_admission,
     replay_context_admission,
@@ -26,9 +23,6 @@ from .context_admission import (
 __all__ = [
     "CONTEXT_ADMISSION_REDUCER_REGISTRY",
     "ContextAdmissionReducerDef",
-    "ContextAdmissionValidationError",
-    "ProducerSurface",
-    "UnsupportedContextAdmissionProtocolError",
     "context_admission_reducer_for_protocol",
     "reduce_context_admission",
     "replay_context_admission",

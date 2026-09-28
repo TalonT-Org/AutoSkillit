@@ -9,6 +9,15 @@ from typing import assert_never
 
 from packaging.version import InvalidVersion, Version
 
+__all__ = [
+    "AdvanceVerdict",
+    "ReleaseChannel",
+    "ReleaseIdentity",
+    "advance_verdict",
+    "update_available",
+    "version_advanced",
+]
+
 
 class ReleaseChannel(StrEnum):
     """Authority used to decide whether one release is newer than another."""

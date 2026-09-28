@@ -26,6 +26,18 @@ from ..logging import get_logger
 from ..types import ManagedHome, managed_home
 from ._retiring_cache import _open_lock, _parse_utc
 
+__all__ = [
+    "ActiveKitchensReadResult",
+    "ActiveKitchensState",
+    "KitchenProcessIdentity",
+    "any_kitchen_open",
+    "kitchen_entry_alive",
+    "read_active_kitchens_registry",
+    "register_active_kitchen",
+    "sample_kitchen_process_identity",
+    "unregister_active_kitchen",
+]
+
 logger = get_logger(__name__)
 
 _ACTIVE_KITCHENS_SCHEMA_VERSION = 2

@@ -39,6 +39,10 @@ from ._retiring_cache import (
     remove_retiring_records,
 )
 
+__all__ = [
+    "PluginArtifactRetirementEngine",
+]
+
 
 class PluginArtifactRetirementEngine:
     """Shared exact-identity retirement algorithm parameterized by artifact hooks."""

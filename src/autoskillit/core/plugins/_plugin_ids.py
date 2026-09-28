@@ -17,6 +17,23 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..types import BackendCapabilities
 
+__all__ = [
+    "DIRECT_INSTALL_CACHE_SUBDIR",
+    "DIRECT_PREFIX",
+    "PLUGIN_PREFIX",
+    "claude_plugin_tool_prefix",
+    "find_qualified_autoskillit_tool_names",
+    "installed_plugin_semantic_key",
+    "is_marketplace_plugin_registered",
+    "launched_session_mcp_prefix",
+    "parse_installed_plugin_semantic_key",
+    "project_agent_tool_name",
+    "read_claude_plugin_tool_prefix",
+    "registered_install_paths",
+    "validate_agent_tool_canonical",
+    "validate_agent_tool_short_name",
+]
+
 # The key written to installed_plugins.json by `autoskillit install`
 _AUTOSKILLIT_PLUGIN_KEY = "autoskillit@autoskillit-local"
 

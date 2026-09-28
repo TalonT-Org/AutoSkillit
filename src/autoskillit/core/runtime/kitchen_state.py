@@ -17,6 +17,20 @@ from uuid import uuid4
 
 from autoskillit.core.fs_observation import safe_mtime
 
+__all__ = [
+    "KitchenMarker",
+    "OVERLAY_MAPPING_DOMAINS",
+    "find_caller_session_id",
+    "get_state_dir",
+    "is_marker_fresh",
+    "marker_path",
+    "read_kitchen_id_from_marker",
+    "read_marker",
+    "resolve_kitchen_id",
+    "sweep_stale_markers",
+    "write_marker",
+]
+
 OVERLAY_MAPPING_DOMAINS: frozenset[str] = frozenset(
     {
         "order",

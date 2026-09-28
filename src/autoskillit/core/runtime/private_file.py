@@ -8,6 +8,18 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+__all__ = [
+    "PrivateFileIdentity",
+    "PrivateSidecarIssue",
+    "fsync_directory",
+    "fsync_file",
+    "private_file_identity",
+    "private_sidecar_issue",
+    "publish_private_file",
+    "reconcile_initialization_links",
+    "unlink_sqlite_initialization_artifacts",
+]
+
 PrivateFileIdentity = tuple[int, int]
 PrivateFileIdentityValidator = Callable[..., PrivateFileIdentity | None]
 

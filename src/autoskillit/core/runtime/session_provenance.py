@@ -11,6 +11,13 @@ from .._json import fast_dumps as _fast_dumps
 from ..logging import get_logger
 from ._reclamation import append_and_trim_jsonl
 
+__all__ = [
+    "ProvenanceRecord",
+    "provenance_path",
+    "read_provenance_for_session",
+    "write_provenance_record",
+]
+
 logger = get_logger(__name__)
 
 #: Oldest-first line bound applied on every write -- this store previously grew without

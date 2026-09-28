@@ -434,6 +434,22 @@ RULES: tuple[RuleDescriptor, ...] = (
         defense_standard="DS-014",
     ),
     RuleDescriptor(
+        rule_id="ARCH-013",
+        name="hook-protocol-output-authority",
+        lens="operational",
+        description=(
+            "Hook scripts must send protocol output and non-zero exits through the shared emitter."
+        ),
+        rationale=(
+            "Hand-written stdout and exit paths can silently produce shapes that one hook "
+            "backend ignores or rejects. A single emitter owns those channels, and the hook "
+            "AST guard keeps new output paths within that contract."
+        ),
+        exemptions=frozenset(),
+        severity="error",
+        defense_standard="DS-003",
+    ),
+    RuleDescriptor(
         rule_id="REQ-CNST-003",
         name="subpackage-file-count",
         lens="development",

@@ -31,6 +31,16 @@ from __future__ import annotations
 import json
 import re
 import sys
+from pathlib import Path
+
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+_RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
+if _RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, _RUNTIME_DIR)
+
+from _hook_output import deny_tool_use  # noqa: E402
 
 # Skills that take a file path as their first positional argument.
 # When these skills receive extra descriptive text before the path, the
@@ -79,20 +89,6 @@ _SKILL_RE = re.compile(r"^/?(?:autoskillit:)?(\S+)")
 def is_path_like_token(token: str) -> bool:
     """Return True if token begins with a recognised filesystem path prefix."""
     return any(token.startswith(p) for p in _PATH_PREFIXES)
-
-
-def _deny(reason: str) -> None:
-    print(
-        json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": reason,
-                }
-            }
-        )
-    )
 
 
 def _branch_arg_denial_reason(skill_name: str, args_str: str) -> str | None:
@@ -177,7 +173,7 @@ def main() -> None:
     else:
         reason = _path_arg_denial_reason(skill_name, args_str)
     if reason is not None:
-        _deny(reason)
+        deny_tool_use(reason)
     sys.exit(0)
 
 

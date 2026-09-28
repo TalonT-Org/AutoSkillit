@@ -25,6 +25,7 @@ from _command_classification import (  # noqa: E402
     PROTECTED_SOURCE_PATH_PATTERNS,
     command_has_blocked_protected_path_read,
 )
+from _hook_output import deny_tool_use  # noqa: E402
 from _hook_payload import parse_hook_command  # noqa: E402
 from _hook_settings import enforce_session_scope  # noqa: E402
 
@@ -50,7 +51,7 @@ def main() -> None:
     if tool == "run_cmd" or tool_name == "Bash":
         cmd: str = parse_hook_command(data).command or ""
         if command_has_blocked_protected_path_read(cmd, PROTECTED_SOURCE_PATH_PATTERNS):
-            _deny(
+            deny_tool_use(
                 f"run_cmd/Bash {RECIPE_READ_DENY_TRIGGER}. "
                 "Use load_recipe to recall step definitions or the Skill tool "
                 "for skill instructions."
@@ -59,25 +60,11 @@ def main() -> None:
     if tool == "run_python":
         callable_name: str = tool_input.get("callable", "")
         if _CALLABLE_PATTERN.search(callable_name):
-            _deny(
+            deny_tool_use(
                 f"run_python {RECIPE_READ_DENY_TRIGGER}. "
                 "Use load_recipe to recall step definitions."
             )
 
-    sys.exit(0)
-
-
-def _deny(reason: str) -> None:
-    payload = json.dumps(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": reason,
-            }
-        }
-    )
-    sys.stdout.write(payload + "\n")
     sys.exit(0)
 
 

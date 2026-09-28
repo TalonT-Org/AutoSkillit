@@ -28,6 +28,7 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
+from _hook_output import add_context  # noqa: E402
 from _session_scope_authority import enforce_script_session_scope  # noqa: E402
 
 
@@ -111,21 +112,13 @@ def main() -> None:
             sys.exit(0)  # Server is alive — no disconnect
 
     # All matching PIDs are dead — server disconnected
-    payload = json.dumps(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "message": (
-                    "AutoSkillit MCP server appears disconnected — all registered "
-                    "server PIDs for this project are dead. Kitchen state has been "
-                    "lost. Ask the user to run /MCP to reconnect, then re-open "
-                    "the kitchen with open_kitchen."
-                ),
-            }
-        }
+    add_context(
+        "PreToolUse",
+        "AutoSkillit MCP server appears disconnected — all registered "
+        "server PIDs for this project are dead. Kitchen state has been "
+        "lost. Ask the user to run /MCP to reconnect, then re-open "
+        "the kitchen with open_kitchen.",
     )
-    sys.stdout.write(payload + "\n")
-    sys.exit(0)
 
 
 if __name__ == "__main__":

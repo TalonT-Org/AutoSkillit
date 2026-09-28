@@ -14,6 +14,7 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
+from _hook_output import deny_tool_use  # noqa: E402
 from _hook_payload import (  # noqa: E402
     parse_hook_command,
     resolve_state_root,
@@ -62,18 +63,7 @@ def main() -> None:
     if state.get("check_review_loop_called"):
         sys.exit(0)
 
-    print(
-        json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": _DENY_REASON,
-                }
-            }
-        )
-    )
-    sys.exit(0)
+    deny_tool_use(_DENY_REASON)
 
 
 if __name__ == "__main__":

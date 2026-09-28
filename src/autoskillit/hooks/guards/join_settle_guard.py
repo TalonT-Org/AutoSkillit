@@ -26,6 +26,7 @@ import importlib
 import json
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
@@ -35,6 +36,10 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
+if TYPE_CHECKING:
+    from .._runtime._hook_output import block
+else:
+    from _hook_output import block
 from _hook_payload import (  # noqa: E402
     normalize_payload_cwd,
     resolve_state_root,
@@ -133,7 +138,10 @@ def main() -> None:
             },
             caller="join_settle_guard",
         )
-        sys.exit(2)
+        block(
+            "join_settle_guard: required-join binding has no valid managed scope; "
+            "settlement refused."
+        )
 
     tool_name = data.get("tool_name")
     if tool_name != "Agent":
@@ -173,12 +181,11 @@ def main() -> None:
             },
             caller="join_settle_guard",
         )
-        sys.stderr.write(f"join_settle_guard: settlement refused: {last_exc}\n")
         # Fail closed: the ledger write failed. PostToolUse
         # exit 2 does NOT replay (per Claude Code hooks contract), so the
         # wave remains pending. The diagnostic record makes the failure
         # observable to operators via join_diagnostics.jsonl.
-        sys.exit(2)
+        block(f"join_settle_guard: settlement refused: {last_exc}")
 
     write_join_diagnostic(
         {

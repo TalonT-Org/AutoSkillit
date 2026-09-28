@@ -4,30 +4,29 @@ from __future__ import annotations
 
 import io
 import json
+from importlib import import_module
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
+from tests._hook_channel_scan import all_registered_hook_defs, scan_script_channels
+
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 
-def _run_hook_script(script_name: str, stdin_data: dict) -> tuple[str, int]:
-    """Run a hook script with given stdin data and return (stdout, exit_code)."""
-    import importlib
-
-    module_path = f"autoskillit.hooks.{script_name}"
-    mod = importlib.import_module(module_path)
-
-    stdin_text = json.dumps(stdin_data)
-    buf = io.StringIO()
-    exit_code = 0
-    with patch("sys.stdin", io.StringIO(stdin_text)), patch("sys.stdout", buf):
-        try:
-            mod.main()
-        except SystemExit as exc:
-            exit_code = int(exc.code) if exc.code is not None else 0
-    return buf.getvalue(), exit_code
+def _posttooluse_hooks_with_output() -> list[tuple[str, str]]:
+    output: set[tuple[str, str]] = set()
+    for hook_def in all_registered_hook_defs():
+        if hook_def.event_type != "PostToolUse":
+            continue
+        for script in hook_def.scripts:
+            channels = scan_script_channels(script)
+            if "context" in channels:
+                output.add((script, "additionalContext"))
+            if "rewrite_mcp_output" in channels:
+                output.add((script, "updatedMCPToolOutput"))
+    return sorted(output)
 
 
 def _build_posttooluse_event(
@@ -44,60 +43,59 @@ def _build_posttooluse_event(
     }
 
 
-# PostToolUse hooks that emit hookSpecificOutput with tool result replacement.
-# Each tuple: (module_name, output_field)
-_POSTTOOLUSE_HOOKS_WITH_OUTPUT = [
-    ("lint_after_edit_hook", "updatedToolResult"),
-    ("quota_post_hook", "updatedMCPToolOutput"),
-]
+# Each tuple is derived from registered PostToolUse scripts and their scanned channels.
+_POSTTOOLUSE_HOOKS_WITH_OUTPUT = _posttooluse_hooks_with_output()
 
 
-@pytest.mark.parametrize(
-    ("script_name", "output_field"),
-    _POSTTOOLUSE_HOOKS_WITH_OUTPUT,
-    ids=[h[0] for h in _POSTTOOLUSE_HOOKS_WITH_OUTPUT],
-)
-def test_hook_output_excludes_tool_response(
-    script_name: str,
-    output_field: str,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_hook_output_excludes_tool_response(tmp_path: Path) -> None:
     """No PostToolUse hook may emit raw tool_response content in its output.
 
     A marker string placed in tool_response must not appear in any output field.
     This catches accidental forwarding of raw input data.
     """
+    assert _POSTTOOLUSE_HOOKS_WITH_OUTPUT, (
+        "No registered PostToolUse script was found through the output channel scanner."
+    )
+    from tests._hook_protocol_oracle import run_hook
+
     canary = "CANARY_ORIGINAL_FILE_CONTENT_ZZZ123"
     marker_tool_response = f"The file was edited. {canary}"
+    outputs_checked = 0
+    for script_rel, output_field in _POSTTOOLUSE_HOOKS_WITH_OUTPUT:
+        script_name = Path(script_rel).stem
+        if script_name == "lint_after_edit_hook":
+            f = tmp_path / "bad_fmt.py"
+            f.write_text("x=1\n")
+            event = _build_posttooluse_event(file_path=str(f), tool_response=marker_tool_response)
+        else:
+            event = _build_posttooluse_event(tool_response=marker_tool_response)
 
-    if script_name == "lint_after_edit_hook":
-        f = tmp_path / "bad_fmt.py"
-        f.write_text("x=1\n")
-        event = _build_posttooluse_event(file_path=str(f), tool_response=marker_tool_response)
-    else:
-        event = _build_posttooluse_event(tool_response=marker_tool_response)
+        emission = run_hook(
+            script_rel,
+            event,
+            env={"AUTOSKILLIT_HEADLESS": "1", "AUTOSKILLIT_SKILL_NAME": "implement-worktree"},
+        )
+        stdout = emission.stdout
+        if not stdout.strip():
+            continue
 
-    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "implement-worktree")
+        parsed = json.loads(stdout)
+        hook_output = parsed.get("hookSpecificOutput", {})
+        output_value = hook_output.get(output_field, "")
+        outputs_checked += 1
 
-    stdout, _ = _run_hook_script(script_name, event)
+        assert canary not in output_value, (
+            f"{script_name} forwarded raw tool_response content into {output_field}. "
+            "Hook output must contain only the hook's own generated content, "
+            "never raw input data."
+        )
+        assert canary not in stdout, (
+            f"{script_name} emitted the canary marker anywhere in stdout. "
+            "No part of tool_response may appear in hook output."
+        )
 
-    if not stdout.strip():
-        pytest.skip(f"{script_name} produced no output (conditional output hook)")
-
-    parsed = json.loads(stdout)
-    hook_output = parsed.get("hookSpecificOutput", {})
-    output_value = hook_output.get(output_field, "")
-
-    assert canary not in output_value, (
-        f"{script_name} forwarded raw tool_response content into {output_field}. "
-        "Hook output must contain only the hook's own generated content, "
-        "never raw input data."
-    )
-    assert canary not in stdout, (
-        f"{script_name} emitted the canary marker anywhere in stdout. "
-        f"No part of tool_response may appear in hook output."
+    assert outputs_checked, (
+        "No registered PostToolUse emitter produced output for the canary event."
     )
 
 
@@ -110,9 +108,7 @@ def test_quota_guard_state_post_hook_failure_rewrite_excludes_raw_response(
     The rewrite must contain only the hook's diagnostic, never the raw
     ``tool_response`` payload (success envelope / outer wrapper / content field).
     """
-    import importlib
-
-    hook_mod = importlib.import_module("autoskillit.hooks.quota_guard_state_post_hook")
+    hook_mod = import_module("autoskillit.hooks.quota_guard_state_post_hook")
 
     monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
 
@@ -144,10 +140,10 @@ def test_quota_guard_state_post_hook_failure_rewrite_excludes_raw_response(
         pytest.skip("quota_guard_state_post_hook produced no output (atomic write did not fail)")
 
     parsed = json.loads(stdout)
-    rewrite = parsed["hookSpecificOutput"]["updatedMCPToolOutput"]
-    assert canary not in rewrite, (
+    context = parsed["hookSpecificOutput"]["additionalContext"]
+    assert canary not in context, (
         "quota_guard_state_post_hook must not echo the raw tool_response "
-        "content into its failure rewrite."
+        "content into its failure context."
     )
-    assert '"result"' not in rewrite
-    assert '"content"' not in rewrite
+    assert '"result"' not in context
+    assert '"content"' not in context

@@ -12,6 +12,15 @@ Matched tools:
 import json
 import os
 import sys
+from pathlib import Path
+
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+_RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
+for _search_dir in (_HOOKS_DIR, _RUNTIME_DIR):
+    if _search_dir not in sys.path:
+        sys.path.insert(0, _search_dir)
+
+from _hook_output import deny_tool_use  # noqa: E402
 
 BRANCH_PROTECTION_DENY_TRIGGER: str = "Branch '"
 
@@ -45,16 +54,7 @@ def main() -> None:
     protected = [b.strip() for b in env_val.split(",") if b.strip()]
 
     if branch in protected:
-        result = {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": (
-                    f"Branch '{branch}' is protected. Protected branches: {protected}"
-                ),
-            }
-        }
-        print(json.dumps(result))
+        deny_tool_use(f"Branch '{branch}' is protected. Protected branches: {protected}")
 
 
 if __name__ == "__main__":

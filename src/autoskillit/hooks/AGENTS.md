@@ -16,6 +16,8 @@ hooks directory alone is supplied on `sys.path`.
 `${CLAUDE_PLUGIN_ROOT}/hooks/_dispatch.py` path, a contract published in the plugin
 artifact. All hook scripts are stdlib-only standalone executables; they do not import from
 `autoskillit.*` except via `_dispatch.py`'s path-resolution logic.
+Hook protocol output must go through `_runtime/_hook_output.py` channel functions.
+`block` writes its reason to stderr and exits 2; deny and context emit exit-0 JSON.
 Renaming any hook script requires updating `HOOK_REGISTRY` in `hook_registry.py` AND
 adding the old basename to `RETIRED_SCRIPT_BASENAMES` in the same commit.
 

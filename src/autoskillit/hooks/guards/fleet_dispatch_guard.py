@@ -20,6 +20,7 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
+from _hook_output import deny_tool_use  # noqa: E402
 from _hook_settings import (  # noqa: E402
     enforce_session_scope,
     hook_session_shape,
@@ -43,39 +44,17 @@ def main() -> None:
 
     _headless, tier = hook_session_shape()
     if tier and tier != "fleet":
-        payload = json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": (
-                        f"dispatch_food_truck requires fleet session (current: {tier})"
-                    ),
-                }
-            }
-        )
-        sys.stdout.write(payload + "\n")
-        sys.exit(0)
+        deny_tool_use(f"dispatch_food_truck requires fleet session (current: {tier})")
 
     # Headless: check if this is dispatch_food_truck
     tool_name: str = data.get("tool_name", "")
     tool = tool_name.split("__")[-1]
     if tool == "dispatch_food_truck":
-        payload = json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": (
-                        "dispatch_food_truck cannot be called from headless sessions. "
-                        "This tool is only available to interactive callers (cook). "
-                        "Headless dispatch would create recursive L2 (food truck) sessions."
-                    ),
-                }
-            }
+        deny_tool_use(
+            "dispatch_food_truck cannot be called from headless sessions. "
+            "This tool is only available to interactive callers (cook). "
+            "Headless dispatch would create recursive L2 (food truck) sessions."
         )
-        sys.stdout.write(payload + "\n")
-        sys.exit(0)
 
     sys.exit(0)
 

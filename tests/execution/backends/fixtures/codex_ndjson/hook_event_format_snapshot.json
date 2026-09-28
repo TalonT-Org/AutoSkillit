@@ -1,17 +1,7 @@
 {
-  "_registry_hash": "6a01cf7c28e31a5bae862ff1814d7e1fd496c5fc7ac04e27d89b3f4aff87c70c",
+  "_registry_hash": "10ac81e11414abf31fe96804f89369c2eeb1bf0ba91d2baf1852ad1013013925",
   "hooks": {
     "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py formatters/pretty_output_hook",
-            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
-            "type": "command"
-          }
-        ],
-        "matcher": "mcp__.*autoskillit.*"
-      },
       {
         "hooks": [
           {
@@ -72,18 +62,6 @@
         ],
         "matcher": "Write|Edit"
       },
-      {
-        "hooks": [
-          {
-            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py lifecycle/child_outcome_hook",
-            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
-            "type": "command"
-          }
-        ],
-        "matcher": "Agent|Task|spawn_agent"
-      }
-    ],
-    "PostToolUseFailure": [
       {
         "hooks": [
           {

@@ -28,6 +28,9 @@ _REQUIRED_INDEX_FIELDS = {
     "skill_command",
     "session_type",
     "subagent_model_outcomes",
+    "evidence_worktree_path",
+    "evidence_worktree_source",
+    "evidence_worktree_detail",
 }
 
 

@@ -2,10 +2,29 @@
 
 from __future__ import annotations
 
-from autoskillit.core import SKILL_TOOLS, Severity
+from autoskillit.core import SKILL_TOOLS, WORKTREE_SKILLS, Severity
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe.contracts import _CONTEXT_REF_RE
+from autoskillit.recipe.contracts import _CONTEXT_REF_RE, resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
+
+
+def _clone_root_context_refs(value: object, captures: dict[str, str]) -> list[str]:
+    """Return context references captured from the clone root."""
+    if not isinstance(value, str):
+        return []
+    return [
+        var_name
+        for var_name in _CONTEXT_REF_RE.findall(value)
+        if "result.clone_path" in captures.get(var_name, "")
+    ]
+
+
+def _clone_root_finding(step_name: str, message: str) -> RuleFinding:
+    return make_finding(
+        rule_name="clone-root-as-worktree",
+        step_name=step_name,
+        message=message,
+    )
 
 
 @semantic_rule(
@@ -170,15 +189,19 @@ def _check_rate_limit_route_missing(ctx: ValidationContext) -> list[RuleFinding]
 
 @semantic_rule(
     name="clone-root-as-worktree",
-    description="worktree_path must not trace back to result.clone_path (the clone root)",
+    description=(
+        "worktree_path and worktree-skill cwd must not trace back to "
+        "result.clone_path (the clone root)"
+    ),
     severity=Severity.ERROR,
 )
 def _check_clone_root_as_worktree(ctx: ValidationContext) -> list[RuleFinding]:
-    """Error when worktree_path for test_check/merge_worktree originates from clone_path.
+    """Error when worktree_path or a worktree skill's cwd originates from clone_path.
 
     Builds a capture map by iterating recipe steps in declaration order.
     For each test_check or merge_worktree step, resolves the context variable
-    used for worktree_path and checks whether it was captured from result.clone_path.
+    used for worktree_path. For worktree-skill steps, checks the cwd context
+    variables. Each must not be captured from result.clone_path.
     """
     wf = ctx.recipe
     captures: dict[str, str] = {}  # var_name -> capture expression
@@ -187,22 +210,36 @@ def _check_clone_root_as_worktree(ctx: ValidationContext) -> list[RuleFinding]:
     for step_name, step in wf.steps.items():
         if step.tool in ("test_check", "merge_worktree"):
             worktree_arg = step.with_args.get("worktree_path", "")
-            if isinstance(worktree_arg, str):
-                for var_name in _CONTEXT_REF_RE.findall(worktree_arg):
-                    cap_expr = captures.get(var_name, "")
-                    if "result.clone_path" in cap_expr:
-                        findings.append(
-                            make_finding(
-                                rule_name="clone-root-as-worktree",
-                                step_name=step_name,
-                                message=f"Step '{step_name}' passes worktree_path via "
-                                f"'context.{var_name}', which was captured from "
-                                f"result.clone_path. clone_path is the root of the "
-                                f"cloned repository, not a git worktree. "
-                                f"Capture worktree_path from result.worktree_path "
-                                f"(e.g., from an implement-worktree step's capture block).",
-                            )
-                        )
+            for var_name in _clone_root_context_refs(worktree_arg, captures):
+                findings.append(
+                    _clone_root_finding(
+                        step_name,
+                        f"Step '{step_name}' passes worktree_path via "
+                        f"'context.{var_name}', which was captured from "
+                        f"result.clone_path. clone_path is the root of the "
+                        f"cloned repository, not a git worktree. "
+                        f"Capture worktree_path from result.worktree_path "
+                        f"(e.g., from an implement-worktree step's capture block).",
+                    )
+                )
+
+        if (
+            step.tool in SKILL_TOOLS
+            and resolve_skill_name(step.with_args.get("skill_command", "")) in WORKTREE_SKILLS
+        ):
+            cwd = step.with_args.get("cwd", "")
+            for var_name in _clone_root_context_refs(cwd, captures):
+                findings.append(
+                    _clone_root_finding(
+                        step_name,
+                        f"Step '{step_name}' passes cwd via "
+                        f"'context.{var_name}', which was captured from "
+                        f"result.clone_path. Create the worktree in an "
+                        f"orchestrator run_cmd step (create_impl_worktree.sh) "
+                        f"and launch the skill with the captured worktree_path "
+                        f"(#3880, #4247).",
+                    )
+                )
 
         # Update capture map AFTER the tool check so captures only affect later steps
         for cap_key, cap_val in step.capture.items():

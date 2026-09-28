@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, Final, Generic, Literal, TypedDict, TypeGuard, TypeVar
 
@@ -40,6 +41,8 @@ __all__ = [
     "SkillUnavailabilityPayload",
     "SkillUnavailabilityRecord",
     "TestResult",
+    "EvidenceWorktree",
+    "EvidenceWorktreeSource",
     "ValidatedAddDir",
     "ValidatedWorktreePath",
     "TokenUsageFileEntry",
@@ -48,7 +51,7 @@ __all__ = [
 
 T = TypeVar("T")
 
-SESSION_INDEX_SCHEMA_VERSION: Final[int] = 14
+SESSION_INDEX_SCHEMA_VERSION: Final[int] = 15
 TOKEN_USAGE_SCHEMA_VERSION: Final[int] = 4
 TURN_USAGE_SCHEMA_VERSION: Final[int] = 2
 
@@ -365,6 +368,9 @@ class SessionIndexEntry(TypedDict):
     dir_name: str
     timestamp: str
     cwd: str
+    evidence_worktree_path: str
+    evidence_worktree_source: str
+    evidence_worktree_detail: str
     kitchen_id: str
     order_id: str
     campaign_id: str
@@ -571,3 +577,22 @@ class ValidatedWorktreePath:
 
     def is_dir(self) -> bool:
         return Path(self.path).is_dir()
+
+
+class EvidenceWorktreeSource(StrEnum):
+    LAUNCH_WORKTREE = "launch_worktree"
+    LAUNCH_CHECKOUT = "launch_checkout"
+    TOKEN_SELECTED = "token_selected"
+    GIT_DIFF_RECOVERED = "git_diff_recovered"
+    UNRESOLVED = "unresolved"
+    NON_GIT = "non_git"
+    NOT_OBSERVED = "not_observed"
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceWorktree:
+    """Constructed only by `_observe_session_git_evidence`."""
+
+    path: str
+    source: EvidenceWorktreeSource
+    detail: str = ""

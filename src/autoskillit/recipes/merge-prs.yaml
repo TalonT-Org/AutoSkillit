@@ -1,6 +1,6 @@
 name: merge-prs
 description: Merge open PRs into an integration branch
-summary: 'clone > setup_remote > analyze_prs > create_batch_branch > [loop per PR: merge_pr or (plan > verify > implement
+summary: 'clone > setup_remote > analyze_prs > create_batch_branch > [loop per PR: merge_pr or (plan > verify > create_conflict_worktree > implement
   > test > push_worktree_branch > create_conflict_pr > wait_for_conflict_ci > merge_conflict_pr)] > push_batch_branch > collect_artifacts
   > check_impl_plans > (audit_impl?) > open_integration_pr > wait_for_review_pr_mergeability > check_mergeability > (resolve_integration_conflicts
   > force_push_after_rebase)? > review_pr_integration > (resolve_review_integration > re_push_review_integration)? > ci_watch_pr
@@ -70,7 +70,7 @@ kitchen_rules:
 - Route to on_failure when a step fails — do not investigate or fix directly.
 - 'SEQUENTIAL LOOP: Process one PR at a time through the full merge cycle before advancing to the next PR. Never batch-assess
   all PRs before starting merges.'
-- 'SEQUENTIAL EXECUTION: complete full cycle (verify → implement → test → push_worktree_branch → create_conflict_pr → wait_for_conflict_ci
+- 'SEQUENTIAL EXECUTION: complete full cycle (verify → create_conflict_worktree → implement → test → push_worktree_branch → create_conflict_pr → wait_for_conflict_ci
   → merge_conflict_pr) per plan part before advancing to the next part or PR.'
 - 'INTEGRATION BRANCH: Two distinct branches exist. inputs.base_branch is the target branch that PRs point to (e.g. main,
   develop). context.batch_branch is the per-run batch branch (e.g. pr-batch/pr-merge-{ts}) created from base_branch for this
@@ -985,7 +985,7 @@ steps:
       cwd: ${{ context.work_dir }}
       step_name: verify
       output_dir: '{{AUTOSKILLIT_TEMP}}'
-    on_success: implement
+    on_success: create_conflict_worktree
     on_failure: register_clone_failure
     retries: 5
     on_exhausted: register_clone_failure
@@ -994,10 +994,22 @@ steps:
     optional_context_refs:
     - audit_cycle_path
     - plan_disposition_path
-    note: 'SEQUENTIAL: For each plan_part, run the full cycle (verify → implement → test → push_worktree_branch → create_conflict_pr
+    note: 'SEQUENTIAL: For each plan_part, run the full cycle (verify → create_conflict_worktree → implement → test → push_worktree_branch → create_conflict_pr
       → wait_for_conflict_ci → merge_conflict_pr) before advancing.
 
       '
+  create_conflict_worktree:
+    tool: run_cmd
+    with:
+      cmd: bash {{AUTOSKILLIT_SCRIPTS}}/create_impl_worktree.sh "conflict-impl-$(date +%Y%m%d-%H%M%S)" "{{AUTOSKILLIT_TEMP}}"
+      cwd: ${{ context.work_dir }}
+      step_name: create_conflict_worktree
+    capture:
+      worktree_path: ${{ result.worktree_path }}
+      worktree_branch_name: ${{ result.branch_name }}
+    on_success: implement
+    on_failure: register_clone_failure
+    note: Creates the conflict-resolution worktree at orchestrator level (unsandboxed) so .git/ metadata writes succeed regardless of backend sandbox constraints (#3880, #4247).
   implement:
     tool: run_skill
     model: ''
@@ -1007,7 +1019,7 @@ steps:
       skill_inputs:
         plan_path: ${{ context.pr_plan_path }}
         plan_set_authority_path: ${{ context.plan_set_authority_path }}
-      cwd: ${{ context.work_dir }}
+      cwd: ${{ context.worktree_path }}
       step_name: implement
       output_dir: .
     capture:

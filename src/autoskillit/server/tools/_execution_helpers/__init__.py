@@ -16,6 +16,7 @@ from autoskillit.recipe import (
 )
 from autoskillit.server.tools._execution_helpers._dispatch_metadata import (
     AuditOutputMode,
+    GitCheckoutRequiredError,
     aggregate_sandbox_overrides,
     bind_projection_backend,
     build_fresh_projection_context,
@@ -24,6 +25,7 @@ from autoskillit.server.tools._execution_helpers._dispatch_metadata import (
     compute_write_prefixes,
     derive_run_cmd_write_prefixes,
     invocation_member_names,
+    invocation_requires_git_checkout,
     resolve_skill_dispatch_metadata,
     resolve_step_name_from_recipe,
     scope_covers_cwd,
@@ -63,6 +65,7 @@ logger = _get_logger(__name__)
 
 __all__ = [
     "AuditOutputMode",
+    "GitCheckoutRequiredError",
     "SkillContract",
     "SkillInput",
     "SkillOutput",
@@ -84,6 +87,7 @@ __all__ = [
     "derive_run_cmd_write_prefixes",
     "deserialize_skill_contract",
     "invocation_member_names",
+    "invocation_requires_git_checkout",
     "logger",
     "make_project_skill_resolver",
     "maybe_promote_work_dir",

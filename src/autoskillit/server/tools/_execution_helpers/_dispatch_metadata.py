@@ -24,6 +24,8 @@ from autoskillit.core import (
     WriteBehaviorSpec,
     extract_skill_name,
     is_git_worktree,
+    is_in_git_repo,
+    main_checkout_root,
 )
 from autoskillit.execution import SkillSessionContract
 from autoskillit.pipeline import canonical_step_name
@@ -92,12 +94,11 @@ def compute_write_prefixes(
                 (str(resolved_cwd) + "/", str(resolved_cwd.parent) + "/")
             )
         else:
-            nested_wt = resolved_cwd / "worktrees"
-            sibling_wt = resolved_cwd.parent / "worktrees"
-            if nested_wt.is_dir():
-                worktree_write_prefixes.append(str(nested_wt) + "/")
-            if sibling_wt.is_dir() or not nested_wt.is_dir():
-                worktree_write_prefixes.append(str(sibling_wt) + "/")
+            main = main_checkout_root(resolved_cwd)
+            if main is not None:
+                wt_dir = (main.parent / "worktrees").resolve()
+                if wt_dir != main and wt_dir not in main.parents and main not in wt_dir.parents:
+                    worktree_write_prefixes.append(str(wt_dir) + "/")
     base_prefixes = [str(d.resolve()) + "/" for d in write_watch_dirs]
     return (
         base_prefixes[0] if base_prefixes else "",
@@ -120,6 +121,17 @@ def invocation_member_names(
     return frozenset(member.name for member in invocation.closure)
 
 
+class GitCheckoutRequiredError(SkillContractError):
+    """Raised when a git-writing invocation is bound to a non-git cwd."""
+
+
+def invocation_requires_git_checkout(
+    invocation: EffectiveSkillInvocationAuthority,
+) -> bool:
+    """Return whether any member of the invocation declares git metadata writes."""
+    return any(plan.git_metadata_writes for plan in invocation.semantic_plans)
+
+
 def build_fresh_projection_context(
     cwd: str,
     invocation: EffectiveSkillInvocationAuthority,
@@ -128,6 +140,12 @@ def build_fresh_projection_context(
 ) -> SkillProjectionContext:
     """Bind a fresh invocation to normalized backend-neutral projection authority."""
     normalized_cwd = Path(cwd).resolve()
+    if invocation_requires_git_checkout(invocation) and not is_in_git_repo(normalized_cwd):
+        raise GitCheckoutRequiredError(
+            f"skill {invocation.root.name!r} declares git-metadata writes and must be "
+            "launched from a git checkout or linked worktree; "
+            f"cwd={str(normalized_cwd)!r}"
+        )
     return SkillProjectionContext(
         cwd=normalized_cwd,
         invocation=invocation,

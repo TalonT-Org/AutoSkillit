@@ -149,6 +149,7 @@ TEST_HELPER_CASCADE: dict[str, frozenset[str]] = {
     "tests/arch/_helpers.py": _ARCH_HELPER_TEST_TARGETS,
     "tests/arch/_rules.py": _ARCH_HELPER_TEST_TARGETS,
     "tests/fleet/_reaper_test_support.py": frozenset({"fleet"}),
+    "tests/_git_topology.py": frozenset({"core", "execution", "server", "integration"}),
     "tests/fleet/_codex_mcp_env.py": frozenset({"fleet", "integration"}),
     "tests/fleet/_descendant_worker.py": frozenset({"fleet"}),
 }
@@ -1179,7 +1180,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "execution/test_headless_result_write_reconciliation.py",
             "execution/test_planner_write_isolation.py",
             "execution/test_session_log_flush.py",
-            # execution/ — fixture-mediated pipeline dependents (20 files):
+            # execution/ — fixture-mediated pipeline dependents:
             # These use minimal_ctx or tool_ctx fixtures which import
             # autoskillit.pipeline at call time. Validated by REQ-GUARD-007.
             "execution/test_backend_dispatch.py",
@@ -1199,6 +1200,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "execution/test_idle_output_env.py",
             "execution/test_managed_headless_attempt.py",
             "execution/test_model_backend_launch_contract.py",
+            "execution/test_session_git_evidence_topology.py",
             "execution/test_write_evidence.py",
             "execution/test_zero_write_detection.py",
             "execution/test_session_log_fields.py",

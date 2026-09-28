@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -15,7 +16,7 @@ from autoskillit.server.tools.tools_execution import run_skill
 from tests.conftest import _make_result
 from tests.server.conftest import _SUCCESS_JSON, assert_no_timing, assert_step_timed
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 
 class TestRunSkillStepName:
@@ -169,23 +170,48 @@ class TestResponseFieldsAreTypeSafe:
     """Every discriminator field in MCP tool responses uses enum values."""
 
     @pytest.mark.anyio
-    async def test_retry_reason_is_enum_value(self, tool_ctx):
+    async def test_retry_reason_is_enum_value(self, tool_ctx_kitchen_open, git_linked_worktree):
+        plan_path = git_linked_worktree / "plan.md"
+        plan_path.write_text("# Plan\n")
+        skill_inputs = {
+            "plan_path": str(plan_path),
+            "worktree_path": str(git_linked_worktree),
+        }
         stdout = json.dumps(
             {
                 "type": "result",
                 "subtype": "error_max_turns",
                 "is_error": False,
+                "result": "queued error-max-turns result",
                 "session_id": "s1",
                 "num_turns": 200,
                 "errors": [],
             }
         )
-        tool_ctx.runner.push(_make_result(1, stdout, ""))
-        result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
+        tool_ctx_kitchen_open.runner.push(_make_result(1, stdout, ""))
+        result = json.loads(
+            await run_skill(
+                "/autoskillit:retry-worktree",
+                str(git_linked_worktree),
+                skill_inputs=skill_inputs,
+            )
+        )
         assert result["retry_reason"] in {e.value for e in RetryReason}
+        assert Path(tool_ctx_kitchen_open.runner.call_args_list[0][0][0]).name in {
+            "claude",
+            "codex",
+        }
 
     @pytest.mark.anyio
-    async def test_retry_reason_none_is_enum_value(self, tool_ctx):
+    async def test_retry_reason_none_is_enum_value(
+        self, tool_ctx_kitchen_open, git_linked_worktree
+    ):
+        plan_path = git_linked_worktree / "plan.md"
+        plan_path.write_text("# Plan\n")
+        skill_inputs = {
+            "plan_path": str(plan_path),
+            "worktree_path": str(git_linked_worktree),
+        }
         stdout = json.dumps(
             {
                 "type": "result",
@@ -196,9 +222,20 @@ class TestResponseFieldsAreTypeSafe:
                 "num_turns": 50,
             }
         )
-        tool_ctx.runner.push(_make_result(0, stdout, ""))
-        result = json.loads(await run_skill("/retry-worktree plan.md", "/tmp"))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, stdout, ""))
+        result = json.loads(
+            await run_skill(
+                "/autoskillit:retry-worktree",
+                str(git_linked_worktree),
+                skill_inputs=skill_inputs,
+            )
+        )
         assert result["retry_reason"] in {e.value for e in RetryReason}
+        assert result["result"] == "Done."
+        assert Path(tool_ctx_kitchen_open.runner.call_args_list[0][0][0]).name in {
+            "claude",
+            "codex",
+        }
 
 
 class TestRunSkillTiming:

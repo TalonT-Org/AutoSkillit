@@ -11,18 +11,21 @@ run's result (exit classification, outcome, retry FSM).
 - **`session_log.py`** — `flush_session_log`, `resolve_log_dir`, `session_index_lock_path`,
   `write_execution_candidate_manifest`. XDG base dir spec; log directory names use hyphens
   (never underscores).
+- **`_session_log_evidence.py`** — Channel-B log reading and process-snapshot evidence analysis.
 - **`_session_log_recovery.py`** — `recover_crashed_sessions` only.
 - **`_session_log_retention.py`** — `read_telemetry_clear_marker`, `write_telemetry_clear_marker`,
   `apply_session_retention`.
 - **`session_index.py`** — `read_session_index_rows`, `find_stale_session_archive_references`,
   `read_tolerant_session_index_rows`.
 
-Inter-peer coupling (absolute imports): `session_log.py` → `_session_log_retention`,
-`session_index`; `_session_log_recovery.py` → `_session_log_retention`, `session_log`.
+Inter-peer coupling (absolute imports): `session_log.py` → `_session_log_evidence`,
+`_session_log_retention`, `session_index`; `_session_log_recovery.py` →
+`_session_log_retention`, `session_log`.
 
 Cross-package edges:
 
-- `session_log.py` → `evidence.anomaly_detection`, `session._session_model`, `session.turn_usage`
+- `session_log.py` → `session._session_model`, `session.turn_usage`
+- `_session_log_evidence.py` → `evidence.anomaly_detection`
 - `_session_log_recovery.py` → `evidence.linux_tracing`; lazily imports `execution.child_outcomes`
   inside `recover_crashed_sessions` because `child_outcomes` imports `resolve_log_dir` from here
   at module level

@@ -77,6 +77,7 @@ async def test_output_dir_equals_cwd_no_crash_and_guard_suppressed(tmp_path):
         runner,
         None,
         policy=policy,
+        new_worktrees=(),
         exclude_prefix=".autoskillit/",
     )
     assert not reverted

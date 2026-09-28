@@ -39,25 +39,26 @@ from autoskillit.core import (
     get_logger,
     is_git_main_checkout,
     is_git_worktree,
-    is_in_git_repo,
     new_managed_attempt_id,
 )
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
 from autoskillit.execution.child_outcomes import collect_and_project_child_outcomes
 from autoskillit.execution.evidence.otlp_sink import LocalOtlpSink
+from autoskillit.execution.headless._headless_adjudication import _parse_stdout
 from autoskillit.execution.headless._headless_evidence import (
     _build_error_path_telemetry,
     _build_session_telemetry,
 )
 from autoskillit.execution.headless._headless_git import (
-    _capture_git_head_sha,
-    _detect_session_git_writes,
+    SessionGitEvidence,
+    _capture_pre_session_git_state,
+    _observe_session_git_evidence,
 )
 from autoskillit.execution.headless._headless_helpers import (
     _capture_native_session_ids,
     _compute_post_session_metrics,
     _detect_fs_writes,
-    _stat_snapshot,
+    _snapshot_watch_dirs,
 )
 from autoskillit.execution.headless._headless_launch import (
     _attempt_contract_nudge,
@@ -246,19 +247,9 @@ async def _execute_claude_headless(
         if _default:
             _watch_dirs.append(_default)
 
-    _temp_snapshots_pre: dict[Path, dict[str, tuple[int, int]] | None] = {}
-    for _wd in _watch_dirs:
-        if _wd.is_dir():
-            try:
-                _temp_snapshots_pre[_wd] = _stat_snapshot(_wd)
-            except OSError:
-                logger.warning("watch_dir_pre_scan_failed", watch_dir=str(_wd), exc_info=True)
-                _temp_snapshots_pre[_wd] = None
-        else:
-            # {} means missing at pre-scan; unlike None (OSError), compare it after the run.
-            _temp_snapshots_pre[_wd] = {}
-
-    _pre_session_sha = _capture_git_head_sha(cwd)
+    _temp_snapshots_pre = _snapshot_watch_dirs(_watch_dirs)
+    _pre_git_state = _capture_pre_session_git_state(cwd)
+    _git_evidence: SessionGitEvidence | None = None
     _result: SubprocessResult | None = None
     result: SubprocessResult | None = None
     skill_result: SkillResult | None = None
@@ -422,10 +413,15 @@ async def _execute_claude_headless(
             )
 
             _fs_writes_detected = _detect_fs_writes(_watch_dirs, _temp_snapshots_pre)
-
-            _git_writes_detected = False
-            if is_in_git_repo(Path(cwd)):
-                _git_writes_detected = _detect_session_git_writes(cwd, _pre_session_sha)
+            _session = _parse_stdout(
+                result,
+                backend=_step_backend,
+                backend_resume_session_id=backend_resume_session_id,
+                provider_used=current_provider_name or None,
+            )
+            _git_evidence = _observe_session_git_evidence(
+                _pre_git_state, _session.assistant_messages
+            )
 
             audit_count_before = len(ctx.audit.get_report())
             _supports_fmt = _step_backend.capabilities.supports_claude_format_stdout
@@ -438,13 +434,14 @@ async def _execute_claude_headless(
                 cwd=cwd,
                 write_behavior=write_behavior,
                 fs_writes_detected=_fs_writes_detected,
-                git_writes_detected=_git_writes_detected,
+                git_writes_detected=_git_evidence.git_writes_detected,
                 prior_completion_markers=prior_completion_markers,
                 completion_required=completion_required,
                 write_watch_dirs=write_watch_dirs,
                 provider_used=current_provider_name,
                 supports_claude_format_stdout=_supports_fmt,
                 backend=_step_backend,
+                parsed_session=_session,
                 readonly_skill=_readonly_skill,
                 closure_spec=closure_spec,
                 closure_report_root=closure_report_root,
@@ -544,6 +541,7 @@ async def _execute_claude_headless(
                         ctx.audit,
                         skill_command=skill_command,
                         policy=_clone_guard_policy,
+                        new_worktrees=_git_evidence.new_worktrees,
                         exclude_prefix=_exclude_prefix,
                     )
                 except InfrastructureFaultError:
@@ -606,7 +604,8 @@ async def _execute_claude_headless(
         )
         if result is not None:
             assert spec is not None
-            _metrics = _compute_post_session_metrics(cwd, _pre_session_sha, skill_result)
+            assert _git_evidence is not None
+            _metrics = _compute_post_session_metrics(_git_evidence)
             new_audit_records = ctx.audit.get_report_as_dicts()[audit_count_before:]
             audit_record = new_audit_records[0] if new_audit_records else None
             from autoskillit.execution.session_log.session_log import _resolve_session_label
@@ -717,6 +716,7 @@ async def _execute_claude_headless(
                 ),
                 native_shell_capture=terminal_capture_diagnostic,
                 session_type=lineage_callbacks.session_type,
+                evidence_worktree=(_git_evidence.worktree if _git_evidence is not None else None),
                 execution_selection=terminal_selection,
                 clone_contamination_reverted=_clone_reverted,
                 is_resume=spec.is_resume if spec is not None else False,

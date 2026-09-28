@@ -15,6 +15,8 @@ import pytest
 from autoskillit.core import (
     SESSION_INDEX_SCHEMA_VERSION,
     ChildExecutionIdentity,
+    EvidenceWorktree,
+    EvidenceWorktreeSource,
     ExecutionIdentity,
     SessionType,
 )
@@ -2055,3 +2057,49 @@ class TestNdjsonDriftFields:
         detail = drift_entries[0]["detail"]
         assert detail["ndjson_unknown_event_count"] == 2
         assert detail["ndjson_unknown_item_count"] == 5
+
+
+@pytest.mark.parametrize(
+    "source",
+    list(EvidenceWorktreeSource),
+    ids=lambda source: source.value,
+)
+def test_evidence_worktree_fields_reach_summary_and_index(tmp_path, source):
+    path = "" if source is EvidenceWorktreeSource.NOT_OBSERVED else "/evidence/worktree"
+    detail = "" if source is EvidenceWorktreeSource.NOT_OBSERVED else "resolved"
+    evidence = EvidenceWorktree(path=path, source=source, detail=detail)
+    _flush(
+        tmp_path,
+        cwd="/launch/checkout",
+        session_id="evidence-fields",
+        evidence_worktree=evidence,
+        proc_snapshots=None,
+    )
+
+    summary = json.loads((tmp_path / "sessions" / "evidence-fields" / "summary.json").read_text())
+    index = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
+    for row in (summary, index):
+        assert row["cwd"] == "/launch/checkout"
+        assert row["evidence_worktree_path"] == path
+        assert row["evidence_worktree_source"] == source.value
+        assert row["evidence_worktree_detail"] == detail
+
+
+def test_missing_evidence_worktree_persists_not_observed_defaults(tmp_path):
+    _flush(
+        tmp_path,
+        cwd="/launch/checkout",
+        session_id="no-evidence-worktree",
+        evidence_worktree=None,
+        proc_snapshots=None,
+    )
+
+    summary = json.loads(
+        (tmp_path / "sessions" / "no-evidence-worktree" / "summary.json").read_text()
+    )
+    index = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
+    for row in (summary, index):
+        assert row["cwd"] == "/launch/checkout"
+        assert row["evidence_worktree_path"] == ""
+        assert row["evidence_worktree_source"] == "not_observed"
+        assert row["evidence_worktree_detail"] == ""

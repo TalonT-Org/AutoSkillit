@@ -118,6 +118,7 @@ async def test_planner_session_source_write_detected_and_reverted(git_repo: Path
             is_clone_commit=False,
             is_worktree=False,
         ),
+        new_worktrees=(),
         exclude_prefix=".autoskillit/",
     )
 
@@ -192,6 +193,7 @@ async def test_planner_session_excluded_writes_not_reverted(git_repo: Path) -> N
             is_worktree=False,
             writes_under_exclude=True,
         ),
+        new_worktrees=(),
         exclude_prefix=".autoskillit/",
     )
 

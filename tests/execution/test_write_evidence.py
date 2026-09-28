@@ -509,7 +509,7 @@ class TestSentinelDisambiguation:
         proj = tmp_path / "proj"
         proj.mkdir()
 
-        with patch("autoskillit.execution.headless._headless_execute._stat_snapshot", _mock_snap):
+        with patch("autoskillit.execution.headless._headless_helpers._stat_snapshot", _mock_snap):
             result = await run_headless_core(
                 "/autoskillit:test-skill",
                 str(proj),

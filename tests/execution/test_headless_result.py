@@ -734,18 +734,12 @@ class TestBackendDelegatedWriteToolNames:
         assert skill_result.turn_usage == turn_usage
 
     def test_build_skill_result_stale_threads_backend_to_parse_stdout(self, monkeypatch):
-        """_build_skill_result passes backend to _parse_stdout on stale branch.
+        """The stale branch uses the single parse selected before recovery."""
 
-        The stale branch's recovery attempt (parse + evidence + recovery check)
-        is delegated to _attempt_stall_recovery in _headless_adjudication, which
-        calls its own module-level _parse_stdout binding -- so the spy is set
-        there, not on _headless_result.
-        """
-
-        from autoskillit.execution.headless import _headless_adjudication
+        from autoskillit.execution.headless import _headless_result
 
         captured: dict = {}
-        original_parse = _headless_adjudication._parse_stdout
+        original_parse = _headless_result._parse_stdout
         turn_usage = [_turn_usage_entry()]
 
         def spy(result, backend, backend_resume_session_id="", **kwargs):
@@ -760,7 +754,7 @@ class TestBackendDelegatedWriteToolNames:
                 turn_usage=turn_usage,
             )
 
-        monkeypatch.setattr(_headless_adjudication, "_parse_stdout", spy)
+        monkeypatch.setattr(_headless_result, "_parse_stdout", spy)
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
@@ -776,17 +770,12 @@ class TestBackendDelegatedWriteToolNames:
         assert skill_result.turn_usage == turn_usage
 
     def test_build_skill_result_idle_stall_threads_backend_to_parse_stdout(self, monkeypatch):
-        """_build_skill_result passes backend to _parse_stdout on idle_stall branch.
+        """The idle-stall branch reuses the single parse selected before recovery."""
 
-        See test_build_skill_result_stale_threads_backend_to_parse_stdout: the
-        idle_stall branch's recovery attempt is likewise delegated to
-        _attempt_stall_recovery in _headless_adjudication.
-        """
-
-        from autoskillit.execution.headless import _headless_adjudication
+        from autoskillit.execution.headless import _headless_result
 
         captured: dict = {}
-        original_parse = _headless_adjudication._parse_stdout
+        original_parse = _headless_result._parse_stdout
         turn_usage = [_turn_usage_entry()]
 
         def spy(result, backend, backend_resume_session_id="", **kwargs):
@@ -801,7 +790,7 @@ class TestBackendDelegatedWriteToolNames:
                 turn_usage=turn_usage,
             )
 
-        monkeypatch.setattr(_headless_adjudication, "_parse_stdout", spy)
+        monkeypatch.setattr(_headless_result, "_parse_stdout", spy)
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE

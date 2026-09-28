@@ -159,11 +159,7 @@ def _patch_headless_internals(monkeypatch, tmp_path, ctx, build_result_fn):
     )
     monkeypatch.setattr(
         "autoskillit.execution.headless._headless_execute._compute_post_session_metrics",
-        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
-    )
-    monkeypatch.setattr(
-        "autoskillit.execution.headless._headless_execute._capture_git_head_sha",
-        lambda *a: "",
+        lambda *a, **kw: PostSessionMetrics(0, 0),
     )
     monkeypatch.setattr(
         "autoskillit.execution.headless._headless_execute.collect_version_snapshot",

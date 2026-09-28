@@ -35,6 +35,8 @@ ROOT_PUBLIC_NAMES = (
     "SkillUnavailabilityPayload",
     "SkillUnavailabilityRecord",
     "TestResult",
+    "EvidenceWorktree",
+    "EvidenceWorktreeSource",
     "ValidatedAddDir",
     "ValidatedWorktreePath",
 )

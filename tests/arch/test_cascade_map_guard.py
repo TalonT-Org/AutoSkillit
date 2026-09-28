@@ -775,6 +775,27 @@ class TestFileLevelCascadeDriftGuard:
         )
 
 
+_PIPELINE_FIXTURES = frozenset(
+    {
+        "minimal_ctx",
+        "tool_ctx",
+        "tool_ctx_kitchen_open",
+    }
+)
+
+
+def _pipeline_fixture_parameter(source: str) -> str | None:
+    """Return a known pipeline fixture requested by a test function, if any."""
+    return next(
+        (
+            fixture
+            for fixture in _PIPELINE_FIXTURES
+            if re.search(rf"\bdef\s+test_\w+\([^)]*\b{fixture}\b", source)
+        ),
+        None,
+    )
+
+
 _FIXTURE_MEDIATED_ENTRIES: dict[str, frozenset[str]] = {
     "pipeline": frozenset(
         {
@@ -803,12 +824,10 @@ _FIXTURE_MEDIATED_ENTRIES: dict[str, frozenset[str]] = {
 
 
 class TestFileLevelCascadeImportGuard:
-    """REQ-GUARD-006: File-level entries must actually import their cascade package."""
+    """REQ-GUARD-006: File-level entries must depend on their cascade package."""
 
     def test_file_level_entries_import_their_cascade_package(self) -> None:
-        """Every dir/file.py entry in a cascade frozenset must import autoskillit.{pkg},
-        unless listed in _IMPORT_GUARD_TRANSITIVE_OVERRIDES (transitive dependencies
-        through deferred imports in recipe source modules)."""
+        """File entries need a direct import, known pipeline fixture, or transitive override."""
         tests_dir = Path(__file__).parent.parent
         violations: list[str] = []
 
@@ -824,12 +843,16 @@ class TestFileLevelCascadeImportGuard:
                 test_file = tests_dir / entry
                 if not test_file.exists():
                     continue
+                source = test_file.read_text(encoding="utf-8")
                 try:
-                    tree = ast.parse(test_file.read_text(encoding="utf-8"))
+                    tree = ast.parse(source)
                 except SyntaxError:
                     continue
                 imported_pkgs = _imported_autoskillit_packages(tree)
-                if pkg not in imported_pkgs:
+                fixture_import = (
+                    pkg == "pipeline" and _pipeline_fixture_parameter(source) is not None
+                )
+                if pkg not in imported_pkgs and not fixture_import:
                     violations.append(f"{pkg!r} -> {entry}")
 
         assert not violations, (
@@ -852,15 +875,6 @@ class TestFileLevelCascadeImportGuard:
             "_IMPORT_GUARD_TRANSITIVE_OVERRIDES entries must exist and be in their cascade:\n"
             + "\n".join(f"  {v}" for v in violations)
         )
-
-
-_PIPELINE_FIXTURES = frozenset(
-    {
-        "minimal_ctx",
-        "tool_ctx",
-        "tool_ctx_kitchen_open",
-    }
-)
 
 
 class TestFixtureCascadeDriftGuard:
@@ -888,11 +902,9 @@ class TestFixtureCascadeDriftGuard:
         missing: list[str] = []
         for test_file in sorted(execution_dir.glob("test_*.py")):
             source = test_file.read_text(encoding="utf-8")
-            for fixture in _PIPELINE_FIXTURES:
-                if re.search(rf"\bdef\s+test_\w+\([^)]*\b{fixture}\b", source):
-                    if test_file.name not in declared_files:
-                        missing.append(f"execution/{test_file.name} (uses {fixture})")
-                    break
+            fixture = _pipeline_fixture_parameter(source)
+            if fixture is not None and test_file.name not in declared_files:
+                missing.append(f"execution/{test_file.name} (uses {fixture})")
 
         assert not missing, (
             "Execution test files use fixtures that import autoskillit.pipeline "

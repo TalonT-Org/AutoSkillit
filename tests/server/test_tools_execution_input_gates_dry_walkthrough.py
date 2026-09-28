@@ -15,7 +15,7 @@ from autoskillit.server.lifecycle._guards import (
 from autoskillit.server.lifecycle._state import _get_config
 from autoskillit.server.tools.tools_execution import run_skill
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 
 class TestCheckDryWalkthrough:
@@ -192,10 +192,10 @@ class TestDryWalkthroughGateWithPrefix:
     """Dry-walkthrough gate still receives raw command before prefix is applied."""
 
     @pytest.mark.anyio
-    async def test_gate_still_fires_for_implement_skill(self, tool_ctx_kitchen_open, tmp_path):
-        plan = tmp_path / "plan.md"
+    async def test_gate_still_fires_for_implement_skill(self, tool_ctx_kitchen_open, git_checkout):
+        plan = git_checkout / "plan.md"
         plan.write_text("# No marker plan")
-        result = json.loads(await run_skill(f"/implement-worktree {plan}", str(tmp_path)))
+        result = json.loads(await run_skill(f"/implement-worktree {plan}", str(git_checkout)))
         assert result["success"] is False
         assert result["is_error"] is True
         assert "dry-walked" in result["result"].lower()

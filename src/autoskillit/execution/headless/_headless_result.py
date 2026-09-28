@@ -40,6 +40,7 @@ from autoskillit.execution.headless._headless_adjudication import (
     _make_terminated_result,
     _parse_stdout,
     _resolve_skill_session_id,
+    _select_parsed_session,
     _should_flag_cleanup_incomplete,
     _StallOutcomeSpec,
 )
@@ -168,6 +169,7 @@ def _build_stall_result(
     result: SubprocessResult,
     context: _SkillResultContext,
     *,
+    session: ClaudeSessionResult,
     stall_spec: _StallOutcomeSpec,
     subtype: str,
     initial_retry_reason: RetryReason,
@@ -179,6 +181,7 @@ def _build_stall_result(
         result,
         context.backend,
         stall_spec,
+        session=session,
         completion_marker=context.completion_marker,
         skill_command=context.skill_command,
         expected_output_patterns=context.expected_output_patterns,
@@ -314,6 +317,7 @@ def _build_skill_result(
     skill_contract: SkillContract | None = None,
     backend_resume_session_id: str = "",
     outcome_ledger: WorkspaceOutcomeLedger | None = None,
+    parsed_session: ClaudeSessionResult | None = None,
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
     file_changes = _extract_file_changes(result.stdout, backend)
@@ -358,9 +362,11 @@ def _build_skill_result(
             obligation_pending = tuple(sorted(set(obligation_pending) | set(defensive_pending)))
             obligation_wakeup = obligation_wakeup or defensive_wakeup
 
-    session = _parse_stdout(
+    session = _select_parsed_session(
         result,
         backend=backend,
+        parsed_session=parsed_session,
+        parse_stdout=_parse_stdout,
         backend_resume_session_id=backend_resume_session_id,
         provider_used=provider_used or None,
     )
@@ -454,6 +460,7 @@ def _build_skill_result(
         return _build_stall_result(
             result,
             context,
+            session=session,
             stall_spec=_STALE_SPEC,
             subtype="stale",
             initial_retry_reason=RetryReason.STALE,
@@ -468,6 +475,7 @@ def _build_skill_result(
         return _build_stall_result(
             result,
             context,
+            session=session,
             stall_spec=_IDLE_STALL_SPEC,
             subtype="idle_stall",
             initial_retry_reason=RetryReason.IDLE_STALL,

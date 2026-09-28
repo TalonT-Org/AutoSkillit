@@ -8,15 +8,15 @@ from typing import Protocol, runtime_checkable
 from ..io.io import decode_versioned_json_bytes
 from ..io.path_containment import ContainmentError, read_stable_contained_bytes
 from ..logging import get_logger
-from ..types._type_audit_artifact_ref import ArtifactRef
-from ..types._type_audit_cycle_authority import (
+from ..types.audit._type_audit_artifact_ref import ArtifactRef
+from ..types.audit._type_audit_cycle_authority import (
     AUDIT_CYCLE_SCHEMA_VERSION,
     AuditAssessmentRow,
     AuditCycleAuthority,
     AuditCycleHead,
     AuditVerdict,
 )
-from ..types._type_audit_cycle_disposition import (
+from ..types.audit._type_audit_cycle_disposition import (
     AdmissionReason,
     AuditFindingWaiver,
     InventoryAdmissionDecision,

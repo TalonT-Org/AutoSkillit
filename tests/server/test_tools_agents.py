@@ -11,7 +11,7 @@ from fastmcp.exceptions import ResourceError
 import autoskillit.server._misc as misc
 import autoskillit.server.lifecycle._lifespan as lifespan
 import autoskillit.server.tools.tools_kitchen as tools_kitchen
-from autoskillit.core.types._type_constants_registries import AGENT_PACK_REGISTRY
+from autoskillit.core.types.constants._type_constants_registries import AGENT_PACK_REGISTRY
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -309,7 +309,7 @@ def test_packless_overengineering_agents_are_not_plan_resources(name: str) -> No
 # T13: RETIRED_AGENT_NAMES contains all 5 replaced agent names
 def test_retired_agent_names_contains_old_agents():
     """RETIRED_AGENT_NAMES must contain all 5 replaced agent names."""
-    from autoskillit.core.types._type_constants import RETIRED_AGENT_NAMES
+    from autoskillit.core.types.constants._type_constants import RETIRED_AGENT_NAMES
 
     expected = {
         "pipeline-health-scanner",
@@ -325,7 +325,7 @@ def test_retired_agent_names_contains_old_agents():
 def test_no_retired_agent_name_has_a_live_file():
     """No .md file in agents/ should have a stem matching a retired agent name."""
     from autoskillit.core import pkg_root
-    from autoskillit.core.types._type_constants import RETIRED_AGENT_NAMES
+    from autoskillit.core.types.constants._type_constants import RETIRED_AGENT_NAMES
 
     agents_dir = pkg_root() / "agents"
     for md_file in agents_dir.glob("*.md"):
@@ -371,7 +371,7 @@ async def test_plan_review_pre_revealed_for_non_notification_backend(tmp_path, m
 # T15: RETIRED_AGENT_NAMES entries are lowercase
 def test_retired_agent_names_lowercase():
     """All entries in RETIRED_AGENT_NAMES must be lowercase."""
-    from autoskillit.core.types._type_constants import RETIRED_AGENT_NAMES
+    from autoskillit.core.types.constants._type_constants import RETIRED_AGENT_NAMES
 
     for name in RETIRED_AGENT_NAMES:
         assert name == name.lower(), f"RETIRED_AGENT_NAMES entry '{name}' is not lowercase"
@@ -438,7 +438,7 @@ def test_audit_impl_subagent_type_refs_resolve():
 def test_audit_impl_slice_auditor_is_packless():
     """audit-impl-slice-auditor is subagent_type-only — not in any agent pack."""
     from autoskillit.core import pkg_root
-    from autoskillit.core.types._type_constants_registries import AGENT_PACK_REGISTRY
+    from autoskillit.core.types.constants._type_constants_registries import AGENT_PACK_REGISTRY
 
     agent_path = pkg_root() / "agents" / "audit-impl-slice-auditor.md"
     assert agent_path.exists(), "audit-impl-slice-auditor.md must exist"
@@ -470,7 +470,7 @@ def test_wp_elaborator_schema_covers_all_wp_fields():
 def test_wp_elaborator_is_packless():
     """wp-elaborator is subagent_type-only — must not be registered in any agent pack."""
     from autoskillit.core import pkg_root
-    from autoskillit.core.types._type_constants_registries import AGENT_PACK_REGISTRY
+    from autoskillit.core.types.constants._type_constants_registries import AGENT_PACK_REGISTRY
 
     agent_path = pkg_root() / "agents" / "wp-elaborator.md"
     assert agent_path.exists(), "wp-elaborator.md must exist"

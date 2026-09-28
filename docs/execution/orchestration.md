@@ -52,7 +52,7 @@ tool result. The routing rules per tool:
 
 ## The 20 `retry_reason` values
 
-`RetryReason` is a `StrEnum` in `src/autoskillit/core/types/_type_enums.py` with
+`RetryReason` is a `StrEnum` in `src/autoskillit/core/types/foundation/_type_enums.py` with
 20 distinct values. Each value triggers a different recovery route:
 
 | Value | When the orchestrator sets it | Recovery |

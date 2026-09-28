@@ -20,14 +20,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ..install.install_detect import parse_direct_url
-from ..types._type_constants_env import (
+from ..types.constants._type_constants_env import (
     AGENT_BACKEND_CLAUDE_CODE,
     AGENT_BACKEND_CODEX,
     AGENT_BACKEND_ENV_VAR,
 )
 
 if TYPE_CHECKING:
-    from ..types._type_protocols_backend import CodingAgentBackend
+    from ..types.protocols._type_protocols_backend import CodingAgentBackend
 
 logger = logging.getLogger(__name__)  # noqa: TID251 — IL-0 module, no autoskillit imports allowed
 

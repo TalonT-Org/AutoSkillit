@@ -73,16 +73,19 @@ def _build_types_submodule_symbol_map() -> dict[str, str]:
     directly to map exported symbol names to their submodule stem.
 
     Returns {symbol_name: submodule_stem} for all stems in MODULE_CASCADE_CORE that
-    start with "_type_" and have a corresponding core/types/{stem}.py file.
+    start with "_type_" and have one corresponding file under core/types/.
     """
     secondary: dict[str, str] = {}
     types_dir = _SRC_ROOT / "core" / "types"
     for stem in MODULE_CASCADE_CORE:
         if not stem.startswith("_type_"):
             continue
-        submodule_path = types_dir / f"{stem}.py"
-        if not submodule_path.exists():
-            continue
+        matches = sorted(types_dir.rglob(f"{stem}.py"))
+        assert len(matches) == 1, (
+            f"Expected exactly one core/types/{stem}.py module, found "
+            f"{[str(path.relative_to(types_dir)) for path in matches]}"
+        )
+        submodule_path = matches[0]
         try:
             tree = ast.parse(submodule_path.read_text(encoding="utf-8"))
         except SyntaxError as exc:

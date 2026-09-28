@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "autoskillit"
-version = "0.10.1242"
+version = "0.10.1244"
 description = "MCP server for orchestrating automated skill-driven workflows with Claude Code"
 readme = "README.md"
 license = {text = "MIT"}
@@ -456,6 +456,25 @@ name = "IL-3 server does not import CLI"
 type = "forbidden"
 source_modules = ["autoskillit.server"]
 forbidden_modules = ["autoskillit.cli"]
+
+# IL-013 | Lens: module-dependency | DS-001
+# Rationale: core.types group packages form an acyclic layering. Each group __init__
+# eagerly re-exports its members, so an upward cross-group import would reintroduce a
+# partially-initialized-module hazard; TYPE_CHECKING imports are excluded globally.
+[[tool.importlinter.contracts]]
+name = "IL-013 core.types group packages are layered"
+type = "layers"
+containers = ["autoskillit.core.types"]
+layers = [
+    "protocols | context_admission",
+    "launch",
+    "execution",
+    "results",
+    "constants",
+    "recipe",
+    "skill | audit",
+    "foundation | install | github",
+]
 
 [tool.uv.sources]
 api-simulator = { git = "https://github.com/TalonT-Org/api-simulator", rev = "8f711f958d4d93a8e53a3c3b51279fb420870f3a", subdirectory = "crates/api-simulator-py" }

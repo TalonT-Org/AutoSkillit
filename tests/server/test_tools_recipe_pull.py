@@ -14,7 +14,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import autoskillit.core.types._type_recipe_delivery as recipe_delivery_types
+import autoskillit.core.types.recipe._type_recipe_delivery as recipe_delivery_types
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
     CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,

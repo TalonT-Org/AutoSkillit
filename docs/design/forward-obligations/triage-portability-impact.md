@@ -62,4 +62,4 @@ touch `BackendCapabilities` layout or the sub-protocol set. The `triage_capable`
 - `_llm_triage.py:33` — `triage_staleness()` entry point
 - `_llm_triage.py:80` — `_triage_batch()` with command construction
 - `_llm_triage.py:107` — `triage_capable` guard
-- `core/types/_type_backend.py:86` — `triage_capable` field definition
+- `core/types/execution/_type_backend.py:86` — `triage_capable` field definition

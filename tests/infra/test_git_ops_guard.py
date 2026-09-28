@@ -552,6 +552,23 @@ class TestStdinLiteralConsumers:
         )
         assert out.strip() == ""
 
+    @pytest.mark.parametrize("include_execution_cwd", [True, False])
+    def test_allows_inert_herestring_git_push(self, tmp_path, include_execution_cwd: bool) -> None:
+        """A `cat` herestring containing an inert git push must not deny."""
+        _git(tmp_path, "init", "-b", "develop")
+        _git(tmp_path, "config", "user.name", "Guard Test")
+        _git(tmp_path, "config", "user.email", "guard@example.invalid")
+        (tmp_path / "f.txt").write_text("x\n", encoding="utf-8")
+        _git(tmp_path, "add", "f.txt")
+        _git(tmp_path, "commit", "-m", "initial")
+        out = _run_guard(
+            "cat > f.md <<< 'git push --force origin main'",
+            kitchen_open=True,
+            tmpdir=tmp_path,
+            include_execution_cwd=include_execution_cwd,
+        )
+        assert out.strip() == ""
+
     def test_allows_inert_fenced_heredoc_gh_api(self, tmp_path) -> None:
         """cat-redirect-heredoc-fenced: an inert `cat` body containing a fenced
         `gh api ...` example must not deny (git_ops_guard only cares about git,

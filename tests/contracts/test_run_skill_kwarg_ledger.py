@@ -75,7 +75,7 @@ def test_no_silent_param_additions() -> None:
     assert not missing, (
         f"run_skill has params not present in RUN_SKILL_PARAM_ROLE_LEDGER: {missing}. "
         "Add a (name -> role) entry for each — see ToolParamRole in "
-        "core/types/_type_recipe_binding.py for what each role means."
+        "core/types/recipe/_type_recipe_binding.py for what each role means."
     )
 
 

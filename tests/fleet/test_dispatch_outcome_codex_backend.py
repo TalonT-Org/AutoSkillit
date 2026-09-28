@@ -149,12 +149,12 @@ class _PartialCaptureRunner:
         pass_fds: tuple[int, ...] = (),
         **kwargs: Any,
     ) -> Any:
-        from autoskillit.core.types._type_enums import (
+        from autoskillit.core import (
             ChannelConfirmation,
             KillReason,
+            SubprocessResult,
             TerminationReason,
         )
-        from autoskillit.core.types._type_subprocess import SubprocessResult
         from autoskillit.execution import kill_process_tree
 
         proc = subprocess.Popen(

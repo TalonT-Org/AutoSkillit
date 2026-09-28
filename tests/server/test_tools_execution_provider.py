@@ -623,7 +623,7 @@ async def test_run_skill_backend_override_none_no_anthropic_base_url(
 ) -> None:
     from unittest.mock import MagicMock
 
-    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.core.types.protocols._type_protocols_backend import CodingAgentBackend
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
@@ -662,7 +662,7 @@ async def test_run_skill_backend_override_none_claude_code_backend(
 ) -> None:
     from unittest.mock import MagicMock
 
-    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.core.types.protocols._type_protocols_backend import CodingAgentBackend
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
@@ -704,7 +704,7 @@ async def test_run_skill_backend_override_none_providers_disabled(
 ) -> None:
     from unittest.mock import MagicMock
 
-    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.core.types.protocols._type_protocols_backend import CodingAgentBackend
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()

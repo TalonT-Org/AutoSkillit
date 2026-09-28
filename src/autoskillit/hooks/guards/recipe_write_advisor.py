@@ -5,7 +5,7 @@ Non-blocking advisory: emits hookSpecificOutput.message, never permissionDecisio
 Skips headless sessions (AUTOSKILLIT_HEADLESS=1) to avoid noise in automated runs.
 
 Stdlib-only — runs under any Python interpreter without the autoskillit package.
-Patterns are inlined from SKILL_FILE_ADVISORY_MAP in core._type_constants; the
+Patterns are inlined from SKILL_FILE_ADVISORY_MAP in core.types.constants._type_constants; the
 contract test test_hook_patterns_match_type_constants asserts they stay in sync.
 """
 
@@ -28,7 +28,7 @@ if _RUNTIME_DIR not in sys.path:
 from _hook_settings import enforce_session_scope  # noqa: E402
 
 # Inlined subset of SKILL_FILE_ADVISORY_MAP (recipe-related entries only).
-# Must stay in sync with core._type_constants.SKILL_FILE_ADVISORY_MAP.
+# Must stay in sync with core.types.constants._type_constants.SKILL_FILE_ADVISORY_MAP.
 # test_hook_patterns_match_type_constants enforces this.
 _ADVISORY_PATTERNS: list[tuple[str, str]] = [
     (r"(?:\.autoskillit|src/autoskillit)/recipes/campaigns/.*\.ya?ml$", "make-campaign"),

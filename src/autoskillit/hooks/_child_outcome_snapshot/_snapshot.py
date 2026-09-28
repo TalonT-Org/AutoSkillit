@@ -12,7 +12,7 @@ existing ``sessions/``, ``sessions.jsonl``, ``codex-sessions/`` and
 ``.locks/`` entries. The snapshot is the canonical record; parent
 summary/index projections are read-only copies of it (see
 ``execution/child_outcomes.py`` for the execution-side reader/collector and
-``core/types/_type_execution_identity.py``'s ``ChildOutcomeDict`` for the
+``core/types/foundation/_type_execution_identity.py``'s ``ChildOutcomeDict`` for the
 typed persistence shape this module's wire schema is kept consistent with).
 
 Canonical ``terminal_reason`` values are ``completed``, ``context_exhausted``,
@@ -97,10 +97,10 @@ CANONICAL_TERMINAL_REASONS: frozenset[str] = frozenset(
     }
 )
 
-#: Duplicated from ``core.types._type_enums.InfraExitCategory.CONTEXT_EXHAUSTED.value``.
+#: Duplicated from ``core.types.foundation._type_enums.InfraExitCategory.CONTEXT_EXHAUSTED.value``.
 #: This module cannot import ``core`` (see module docstring); a contract test pins equality.
 _INFRA_EXIT_CONTEXT_EXHAUSTED = "context_exhausted"
-#: Duplicated from ``core.types._type_enums.CliSubtype.ERROR_MAX_TURNS.value``.
+#: Duplicated from ``core.types.foundation._type_enums.CliSubtype.ERROR_MAX_TURNS.value``.
 _CLI_SUBTYPE_ERROR_MAX_TURNS = "error_max_turns"
 #: Provider/execution terminal-error evidence value, matched on
 #: ``ApiFailureOutcome.terminal_reason`` regardless of subtype.
@@ -110,7 +110,7 @@ _API_TERMINAL_REASON_ERROR = "api_error"
 #: (v2.1.199+) and pinned in Step 1 investigation notes. Matched by exact
 #: substring equality only — never by loose keyword search.
 HARNESS_API_ERROR_LITERAL = "Agent terminated early due to an API error"
-#: Duplicated from ``core.types._type_exploration.HARNESS_ZERO_TOOLS_REFUSAL_MARKER``;
+#: Duplicated from ``core.types.foundation._type_exploration.HARNESS_ZERO_TOOLS_REFUSAL_MARKER``;
 #: this module cannot import ``core``; a contract test pins equality.
 HARNESS_SPAWN_REFUSAL_LITERAL = "would be spawned with zero tools"
 #: Structured context-window terminal evidence code (distinct from the
@@ -124,7 +124,8 @@ _TERMINAL_REASON_MAX_TURNS = "max_turns"
 class ChildOutcomeWireDict(TypedDict):
     """The persisted, projectable shape of one child's outcome record.
 
-    Field-for-field identical to ``core.types._type_execution_identity.ChildOutcomeDict``
+    Field-for-field identical to
+    ``core.types.foundation._type_execution_identity.ChildOutcomeDict``
     (the stable persistence/projection type); a contract test in
     ``tests/hooks/test_child_outcomes.py`` pins that parity.
     """

@@ -14,7 +14,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 def test_collect_fleet_tool_tags_is_fleet_feature_surface() -> None:
     """_collect_fleet_tool_tags() excludes unrelated feature tags."""
-    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
+    from autoskillit.core.types.constants._type_constants_features import FEATURE_REGISTRY
     from autoskillit.server.lifecycle._session_type import _collect_fleet_tool_tags
 
     expected = FEATURE_REGISTRY["fleet"].tool_tags

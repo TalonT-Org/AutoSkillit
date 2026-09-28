@@ -71,7 +71,7 @@ def test_rules_pass_ctx_skill_resolver_to_resolve_skill_md(tmp_path: Path) -> No
     recipe = load_recipe(recipe_yaml)
 
     # Track whether _resolve_skill_md received a non-None resolver
-    from autoskillit.core.types._type_protocols_workspace import SkillResolver
+    from autoskillit.core.types.protocols._type_protocols_workspace import SkillResolver
 
     received_resolvers: list[SkillResolver | None] = []
     original_fn = _rsc._resolve_skill_md

@@ -78,7 +78,7 @@ _FORWARD_DECLARED: dict[str, TrackedDeferral] = {
 def _collect_attribute_reads(src_root: Path, field_names: frozenset[str]) -> dict[str, list[str]]:
     """Scan src/ for .field_name attribute access, excluding definition file."""
     reads: dict[str, list[str]] = {name: [] for name in field_names}
-    definition_file = src_root / "core" / "types" / "_type_backend.py"
+    definition_file = src_root / "core" / "types" / "execution" / "_type_backend.py"
     for py_file in src_root.rglob("*.py"):
         if py_file == definition_file:
             continue

@@ -445,7 +445,7 @@ class TestBuildTestScopeCoreCascade:
         ("changed_file", "included", "excluded"),
         [
             (
-                "src/autoskillit/core/types/_type_recipe_sections.py",
+                "src/autoskillit/core/types/recipe/_type_recipe_sections.py",
                 {
                     "cli",
                     "config",
@@ -559,7 +559,9 @@ class TestBuildTestScopeCoreCascade:
     ) -> None:
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/types/_type_context_admission_persistence.py"},
+            changed_files={
+                "src/autoskillit/core/types/context_admission/_type_context_admission_persistence.py"
+            },
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -571,14 +573,14 @@ class TestBuildTestScopeCoreCascade:
     @pytest.mark.parametrize(
         "source_path",
         (
-            "src/autoskillit/core/types/_type_context_admission.py",
-            "src/autoskillit/core/types/_type_context_admission_base.py",
-            "src/autoskillit/core/types/_type_context_admission_identities.py",
-            "src/autoskillit/core/types/_type_context_admission_records.py",
-            "src/autoskillit/core/types/_type_context_admission_events.py",
-            "src/autoskillit/core/types/_type_context_admission_effects.py",
-            "src/autoskillit/core/types/_type_context_admission_states.py",
-            "src/autoskillit/core/types/_type_context_admission_coverage.py",
+            "src/autoskillit/core/types/context_admission/_type_context_admission.py",
+            "src/autoskillit/core/types/context_admission/_type_context_admission_base.py",
+            "src/autoskillit/core/types/context_admission/_type_context_admission_identities.py",
+            "src/autoskillit/core/types/context_admission/_type_context_admission_records.py",
+            "src/autoskillit/core/types/context_admission/_type_context_admission_events.py",
+            "src/autoskillit/core/types/context_admission/_type_context_admission_effects.py",
+            "src/autoskillit/core/types/context_admission/_type_context_admission_states.py",
+            "src/autoskillit/core/types/context_admission/_type_context_admission_coverage.py",
         ),
     )
     def test_context_admission_split_selects_ledger_and_composition(
@@ -698,7 +700,7 @@ class TestBuildTestScopeCoreCascade:
     def test_type_launch_intent_routing(self, tmp_path: Path) -> None:
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/types/_type_launch_intent.py"},
+            changed_files={"src/autoskillit/core/types/launch/_type_launch_intent.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -727,7 +729,7 @@ class TestBuildTestScopeCoreCascade:
     def test_type_helpers_narrow_routing(self, tmp_path: Path) -> None:
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/types/_type_helpers.py"},
+            changed_files={"src/autoskillit/core/types/launch/_type_helpers.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -743,7 +745,7 @@ class TestBuildTestScopeCoreCascade:
     def test_type_protocols_workspace_narrow_routing(self, tmp_path: Path) -> None:
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/types/_type_protocols_workspace.py"},
+            changed_files={"src/autoskillit/core/types/protocols/_type_protocols_workspace.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -759,7 +761,7 @@ class TestBuildTestScopeCoreCascade:
     def test_type_checkpoint_narrow_routing(self, tmp_path: Path) -> None:
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/types/_type_checkpoint.py"},
+            changed_files={"src/autoskillit/core/types/execution/_type_checkpoint.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -775,8 +777,8 @@ class TestBuildTestScopeCoreCascade:
     @pytest.mark.parametrize(
         "source_path",
         [
-            "src/autoskillit/core/types/_type_results.py",
-            "src/autoskillit/core/types/_type_results_records.py",
+            "src/autoskillit/core/types/results/_type_results.py",
+            "src/autoskillit/core/types/results/_type_results_records.py",
         ],
     )
     def test_type_results_narrow_routing(self, tmp_path: Path, source_path: str) -> None:
@@ -799,7 +801,7 @@ class TestBuildTestScopeCoreCascade:
         """_type_backend routes every direct package consumer, including config."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/types/_type_backend.py"},
+            changed_files={"src/autoskillit/core/types/execution/_type_backend.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -817,7 +819,7 @@ class TestBuildTestScopeCoreCascade:
         """_type_capture → narrow cascade of {"core", "fleet", "recipe", "cli"}."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/types/_type_capture.py"},
+            changed_files={"src/autoskillit/core/types/recipe/_type_capture.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -832,7 +834,7 @@ class TestBuildTestScopeCoreCascade:
         """_type_dispatch_identity → narrow cascade of {"core", "fleet", "execution"}."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/types/_type_dispatch_identity.py"},
+            changed_files={"src/autoskillit/core/types/launch/_type_dispatch_identity.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -847,7 +849,7 @@ class TestBuildTestScopeCoreCascade:
         """_type_figure_spec → narrow cascade of {"core", "report"}."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/types/_type_figure_spec.py"},
+            changed_files={"src/autoskillit/core/types/results/_type_figure_spec.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -862,7 +864,7 @@ class TestBuildTestScopeCoreCascade:
         """_type_session_shape → narrow cascade of {"core", "cli"}."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/types/_type_session_shape.py"},
+            changed_files={"src/autoskillit/core/types/launch/_type_session_shape.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -877,7 +879,7 @@ class TestBuildTestScopeCoreCascade:
         """_type_token also cascades to its pipeline consumer."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/types/_type_token.py"},
+            changed_files={"src/autoskillit/core/types/results/_type_token.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -893,7 +895,7 @@ class TestBuildTestScopeCoreCascade:
         {"core", "execution", "fleet", "pipeline", "cli", "workspace", "server"} only."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/types/_type_protocols_backend.py"},
+            changed_files={"src/autoskillit/core/types/protocols/_type_protocols_backend.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -923,7 +925,7 @@ class TestBuildTestScopeCoreCascade:
         """_type_constants_env → narrow cascade including smoke-utils tests."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/types/_type_constants_env.py"},
+            changed_files={"src/autoskillit/core/types/constants/_type_constants_env.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -950,7 +952,7 @@ class TestBuildTestScopeCoreCascade:
         """_type_constants_features → narrow cascade of 7 dirs."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/types/_type_constants_features.py"},
+            changed_files={"src/autoskillit/core/types/constants/_type_constants_features.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -967,7 +969,7 @@ class TestBuildTestScopeCoreCascade:
         """_type_constants_registries → narrow cascade of 8 dirs."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/types/_type_constants_registries.py"},
+            changed_files={"src/autoskillit/core/types/constants/_type_constants_registries.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -993,7 +995,7 @@ class TestBuildTestScopeCoreCascade:
         """_type_exceptions → narrow cascade of 9 dirs."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/types/_type_exceptions.py"},
+            changed_files={"src/autoskillit/core/types/foundation/_type_exceptions.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )

@@ -38,7 +38,7 @@ def test_resolver_observes_every_project_local_search_dir(tmp_path, search_dir):
 
 def test_override_search_dirs_is_canonical_constant():
     """Override search-dir constant must equal its canonical source by identity."""
-    from autoskillit.core.types._type_backend import ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
+    from autoskillit.core.types.execution._type_backend import ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
     from autoskillit.workspace.skills._overrides import _OVERRIDE_SEARCH_DIRS
 
     assert _OVERRIDE_SEARCH_DIRS is ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS, (

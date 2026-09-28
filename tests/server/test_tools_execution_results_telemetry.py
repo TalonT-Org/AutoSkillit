@@ -392,7 +392,7 @@ class TestRunHeadlessCoreFlushTelemetry:
         self, tool_ctx_kitchen_open, captured_flush_calls
     ):
         """headless.py passes a SessionTelemetry bundle covering all telemetry fields."""
-        from autoskillit.core.types._type_results_execution import SessionTelemetry
+        from autoskillit.core.types.results._type_results_execution import SessionTelemetry
 
         tool_ctx_kitchen_open.runner.push(
             _make_result(returncode=0, stdout=self._make_ndjson_with_usage())

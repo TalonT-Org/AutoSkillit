@@ -61,7 +61,7 @@ RUNTIME_TYPE_NAMES = tuple(
 
 
 def test_record_shard_owns_exact_public_surface() -> None:
-    from autoskillit.core.types import _type_results_records as records
+    from autoskillit.core.types.results import _type_results_records as records
 
     assert tuple(records.__all__) == MOVED_NAMES
     assert len(records.__all__) == len(set(records.__all__))
@@ -70,8 +70,8 @@ def test_record_shard_owns_exact_public_surface() -> None:
 @pytest.mark.parametrize("name", MOVED_NAMES)
 def test_legacy_facade_and_types_hub_preserve_identity(name: str) -> None:
     import autoskillit.core.types as types_hub
-    from autoskillit.core.types import _type_results as facade
-    from autoskillit.core.types import _type_results_records as records
+    from autoskillit.core.types.results import _type_results as facade
+    from autoskillit.core.types.results import _type_results_records as records
 
     canonical = getattr(records, name)
     assert getattr(facade, name) is canonical
@@ -82,13 +82,15 @@ def test_legacy_facade_and_types_hub_preserve_identity(name: str) -> None:
 
 @pytest.mark.parametrize("name", RUNTIME_TYPE_NAMES)
 def test_runtime_types_are_defined_by_record_shard(name: str) -> None:
-    from autoskillit.core.types import _type_results_records as records
+    from autoskillit.core.types.results import _type_results_records as records
 
-    assert getattr(records, name).__module__ == "autoskillit.core.types._type_results_records"
+    assert (
+        getattr(records, name).__module__ == "autoskillit.core.types.results._type_results_records"
+    )
 
 
 def test_clone_result_is_composed_from_shard_owned_types() -> None:
-    from autoskillit.core.types import _type_results_records as records
+    from autoskillit.core.types.results import _type_results_records as records
 
     assert get_args(records.CloneResult) == (
         records.CloneSuccessResult,
@@ -108,7 +110,7 @@ def test_root_public_and_internal_index_names_partition_moved_names() -> None:
 @pytest.mark.parametrize("name", ROOT_PUBLIC_NAMES)
 def test_existing_root_exports_preserve_identity(name: str) -> None:
     import autoskillit.core as core
-    from autoskillit.core.types import _type_results_records as records
+    from autoskillit.core.types.results import _type_results_records as records
 
     assert getattr(core, name) is getattr(records, name)
 

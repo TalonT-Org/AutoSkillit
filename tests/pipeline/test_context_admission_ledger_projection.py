@@ -11,7 +11,6 @@ from pathlib import Path
 
 import pytest
 
-import autoskillit.core.types._type_context_admission_persistence_envelope as envelope_types
 import autoskillit.pipeline._context_admission_ledger._apply as _apply_module
 import autoskillit.pipeline._context_admission_ledger._inspection as _inspection_module
 import autoskillit.pipeline._context_admission_ledger._recover as _recover_module
@@ -24,6 +23,9 @@ from autoskillit.core import (
     ContextAdmissionStorageFailureReason,
     ContextAdmissionStorageHealthStatus,
     MeasurementKind,
+)
+from autoskillit.core.types.context_admission import (
+    _type_context_admission_persistence_envelope as envelope_types,
 )
 from autoskillit.pipeline.context_admission_ledger import (
     DefaultContextAdmissionLedger,

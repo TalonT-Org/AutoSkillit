@@ -159,7 +159,7 @@ required.
 
 ### retry_reason
 
-The `RetryReason` StrEnum (`core/_type_enums.py`) carrying values
+The `RetryReason` StrEnum (`core/types/foundation/_type_enums.py`) carrying values
 that direct the orchestrator's retry routing. Underscore required, never a
 space.
 

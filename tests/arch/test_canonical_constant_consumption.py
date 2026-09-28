@@ -163,7 +163,7 @@ def test_env_forward_constants_have_production_consumer(
     from autoskillit.core import paths
 
     src_root = paths.pkg_root()
-    constants_file = src_root / "core" / "types" / "_type_constants_env.py"
+    constants_file = src_root / "core" / "types" / "constants" / "_type_constants_env.py"
     constants = _find_env_set_constants(constants_file)
     assert constants, "No env-var-set constants found — test premise broken"
 
@@ -234,9 +234,9 @@ def test_registry_constants_have_production_consumer(
 
     src_root = paths.pkg_root()
     constants_files = [
-        src_root / "core" / "types" / "_type_constants_registries.py",
-        src_root / "core" / "types" / "_type_recipe_sections.py",
-        src_root / "core" / "types" / "_type_constants.py",
+        src_root / "core" / "types" / "constants" / "_type_constants_registries.py",
+        src_root / "core" / "types" / "recipe" / "_type_recipe_sections.py",
+        src_root / "core" / "types" / "constants" / "_type_constants.py",
     ]
 
     all_constants: list[tuple[str, Path]] = []
@@ -257,9 +257,13 @@ def test_registry_constants_have_production_consumer(
         # module name starts with ``_type_constants_`` and exclude it.
         excluded_files: frozenset[Path] = frozenset()
         if def_file.name == "_type_recipe_sections.py":
-            facade_candidate = def_file.parent / "_type_constants_registries.py"
-            if facade_candidate.exists():
-                excluded_files = frozenset({facade_candidate})
+            facade_candidate = (
+                def_file.parent.parent / "constants" / "_type_constants_registries.py"
+            )
+            assert facade_candidate.is_file(), (
+                f"Expected constants registry facade at {facade_candidate}"
+            )
+            excluded_files = frozenset({facade_candidate})
         if not _has_production_import(
             production_importers,
             name,
@@ -288,9 +292,9 @@ def test_exemptions_reference_real_constants() -> None:
 
     src_root = paths.pkg_root()
     constants_files = [
-        src_root / "core" / "types" / "_type_constants_registries.py",
-        src_root / "core" / "types" / "_type_recipe_sections.py",
-        src_root / "core" / "types" / "_type_constants.py",
+        src_root / "core" / "types" / "constants" / "_type_constants_registries.py",
+        src_root / "core" / "types" / "recipe" / "_type_recipe_sections.py",
+        src_root / "core" / "types" / "constants" / "_type_constants.py",
     ]
     all_names: set[str] = set()
     for cf in constants_files:

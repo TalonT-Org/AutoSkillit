@@ -477,6 +477,14 @@ class TestBashWordBoundaries:
     def test_unclosed_substitution_is_a_parse_failure(self, command: str) -> None:
         assert command_classification._tokenize_command_segments_with_redirects(command) is None
 
+    def test_unclosed_substitution_at_stripped_eof_has_no_source_span(self) -> None:
+        command = "cat <<'$('\nbody\n$("
+        payloads = evaluated_payloads(command)
+        substitutions = [payload for payload in payloads if payload.origin == "substitution"]
+        assert len(substitutions) == 1
+        assert substitutions[0].text == ""
+        assert substitutions[0].source_span is None
+
     def test_substitution_words_remain_evaluated_payloads(self) -> None:
         payloads = evaluated_payloads("cp a $(echo b c)/d")
         assert [(payload.origin, payload.text) for payload in payloads] == [
@@ -703,15 +711,17 @@ class TestStdinLiteralBinding:
         ]
 
     @pytest.mark.parametrize(
-        ("command", "expected_body", "expected_outer_expansion"),
+        ("command", "expected_body", "expected_outer_expansion", "expected_raw_word"),
         [
-            ('bash <<< "git push"', "git push", True),
-            ("bash <<<'git push'", "git push", False),
-            ("bash <<< 'git push'", "git push", False),
+            ('bash <<< "git push"', "git push", True, '"git push"'),
+            ("bash <<<'git push'", "git push", False, "'git push'"),
+            ("bash <<< 'git push'", "git push", False, "'git push'"),
         ],
         ids=["double-quoted", "fused-single-quoted", "spaced-single-quoted"],
     )
-    def test_herestring_quoting_forms(self, command, expected_body, expected_outer_expansion):
+    def test_herestring_quoting_forms(
+        self, command, expected_body, expected_outer_expansion, expected_raw_word
+    ):
         segments = self._segments(command)
         assert len(segments) == 1
         assert segments[0].tokens == ["bash"]
@@ -719,6 +729,8 @@ class TestStdinLiteralBinding:
         assert literal.kind == "herestring"
         assert literal.text == expected_body
         assert literal.outer_expansion is expected_outer_expansion
+        assert literal.source_span is not None
+        assert command[slice(*literal.source_span)] == expected_raw_word
 
     def test_heredoc_placeholder_precedes_opener_remainder(self):
         segments = self._segments("cat > audit.log <<'EOF' | bash\nx\nEOF\n")
@@ -2448,8 +2460,16 @@ class TestCommandHasBlockedProtectedPathRead:
         cmd = "cat > out.md <<'EOF'\nsee src/autoskillit/recipes/foo.yaml\nEOF"
         assert command_has_blocked_protected_path_read(cmd, self._PATTERNS) is False
 
+    def test_inert_herestring_body_mention_is_allowed(self) -> None:
+        cmd = "cat <<< 'src/autoskillit/recipes/foo.yaml'"
+        assert command_has_blocked_protected_path_read(cmd, self._PATTERNS) is False
+
     def test_bash_heredoc_stdin_read_is_blocked(self) -> None:
         cmd = "bash <<'EOF'\ncat src/autoskillit/recipes/foo.yaml\nEOF"
+        assert command_has_blocked_protected_path_read(cmd, self._PATTERNS) is True
+
+    def test_live_herestring_read_is_blocked(self) -> None:
+        cmd = "bash <<< 'cat src/autoskillit/recipes/foo.yaml'"
         assert command_has_blocked_protected_path_read(cmd, self._PATTERNS) is True
 
     def test_direct_cat_read_is_blocked(self) -> None:
@@ -4046,14 +4066,10 @@ class TestAnalyzeGitHubMutations:
     def test_single_quoted_graphql_followed_by_unseparated_shell_operator_resolves(
         self, suffix: str
     ) -> None:
-        """Regression pin for _SHELL_OPERATOR_CHARS strip introduced for the
+        """A GraphQL token's exact source span ends at its closing quote.
 
-        AC2/AC3 fix above: a fully single-quoted GraphQL document immediately
-        followed by an unseparated shell operator (`, |`, `&`) must still
-        resolve. shlex.shlex(punctuation_chars=True) leaves the operator in
-        the previous token's source range; without the operator-chars strip
-        `fully_single_quoted` would mismatch `'<token>'` and the legitimate
-        mutation would be wrongly denied as dynamic_target.
+        An immediately following shell operator must not change its
+        `fully_single_quoted` provenance, so the legitimate mutation resolves.
         """
         command = (
             "gh api graphql -f query='mutation($id: ID!) "

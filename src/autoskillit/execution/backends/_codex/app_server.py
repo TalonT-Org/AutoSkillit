@@ -1,7 +1,7 @@
 """JSON-RPC line driver for managed Codex `app-server` skill sessions.
 
 ``CodexAppServerDriver`` implements ``LineDriver`` (see
-``core.types._type_subprocess``) as a strict five-request state machine over
+``core.types.execution._type_subprocess``) as a strict five-request state machine over
 ``codex app-server --listen stdio://``'s newline-delimited JSON-RPC wire
 format. The transport uses JSON-RPC 2.0 request/response/notification
 semantics but omits the ``"jsonrpc":"2.0"`` member on every emitted line —

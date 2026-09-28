@@ -1,0 +1,290 @@
+"""Subprocess execution types and contracts.
+
+Zero autoskillit imports outside this sub-package. Provides SubprocessResult,
+SubprocessRunner, and the termination contract sentinel.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Protocol, runtime_checkable
+
+from ..foundation._type_enums import ChannelConfirmation, KillReason, TerminationReason
+from ._type_inspector import InspectorCallback, InspectorVerdict
+
+__all__ = [
+    "LineDriver",
+    "ProcessCleanupResult",
+    "SubprocessResult",
+    "SubprocessRunner",
+]
+
+#: Semantic contract for SubprocessResult fields per TerminationReason.
+#: These invariants are enforced by tests/test_process_lifecycle.py
+#: TestAdjudicationCoverageMatrix.
+#:
+#: NATURAL_EXIT:
+#:   channel_confirmation=UNMONITORED (typical: process exited before channels fired)
+#:   channel_confirmation=CHANNEL_A (simultaneous: process exit + heartbeat in same tick)
+#:   channel_confirmation=CHANNEL_B (simultaneous: process exit + session monitor completion)
+#:   returncode=process's actual exit code (0 = voluntary, nonzero = crash)
+#:   stdout=whatever was flushed to the temp file before exit
+#:   Kill-anomaly possible when returncode==0, UNMONITORED, and stdout is success+empty,
+#:   empty_output, or unparseable → _is_kill_anomaly returns True.
+#:   When CHANNEL_A or CHANNEL_B: no kill anomaly; session completed.
+#:
+#: COMPLETED (Channel A):
+#:   channel_confirmation=CHANNEL_A (heartbeat confirmed type=result in stdout)
+#:   returncode=nonzero (SIGTERM/SIGKILL from async_kill_process_tree)
+#:   stdout=contains a complete type=result NDJSON record
+#:
+#: COMPLETED (Channel B, drain expired OR no heartbeat configured):
+#:   channel_confirmation=CHANNEL_B (session JSONL is sole authority)
+#:   returncode=nonzero (SIGTERM/SIGKILL)
+#:   stdout=may be empty (CLI not yet flushed type=result before kill)
+#:   _compute_success provenance bypass applies: return True immediately.
+#:
+#: STALE:
+#:   channel_confirmation=UNMONITORED (typical: stale monitor fired alone)
+#:   channel_confirmation=CHANNEL_A (simultaneous: stale monitor + heartbeat in same tick)
+#:   returncode=nonzero (SIGTERM/SIGKILL)
+#:   _build_skill_result intercepts before _compute_success: attempts
+#:   stdout recovery; if successful returns subtype="recovered_from_stale".
+#:   STALE+CHANNEL_B is structurally impossible: session_monitor returns either
+#:   "stale" or "completion", never both; stale path sets UNMONITORED.
+#:
+#: TIMED_OUT:
+#:   channel_confirmation=UNMONITORED (never modified)
+#:   returncode=-1 (hardcoded in _build_skill_result, not from process)
+#:   _build_skill_result constructs synthetic ClaudeSessionResult(subtype="timeout").
+#:   Always returns success=False, needs_retry=False.
+#:
+#: session_id (resolved identity):
+#:   Populated by process.py using _resolve_session_id(signals.stdout_session_id,
+#:   signals.channel_b_session_id). Preferred over channel_b_session_id for all
+#:   downstream consumers. When both sources are empty (crash/pre-start): "".
+#:   channel_b_session_id is retained alongside for diagnostic provenance.
+_TERMINATION_CONTRACT = None  # Marker — contract is documented above in comments.
+
+
+@dataclass(frozen=True, slots=True)
+class ProcessCleanupResult:
+    """Bounded observation evidence for one local process cleanup.
+
+    ``process_identities`` contains only positively identified cleanup targets.
+    ``terminated_pids`` means those identities were absent after cleanup; it
+    does not claim that AutoSkillit caused their disappearance.  Survivors are
+    verified targets still present.  Access-denied PIDs identify required
+    operations that could not be performed, not process-group membership.
+    ``observation_complete`` is true only when the requested bounded scope was
+    fully examined without an unresolved observation or signal denial.
+    ``identity_refused`` records failure to revalidate a caller-supplied root
+    identity before observation or signaling begins. ``escalated`` records
+    whether cleanup sent any SIGKILL.
+    """
+
+    root_pid: int
+    process_identities: tuple[tuple[int, float], ...] = ()
+    terminated_pids: tuple[int, ...] = ()
+    survivor_pids: tuple[int, ...] = ()
+    access_denied_pids: tuple[int, ...] = ()
+    observation_complete: bool = False
+    identity_refused: bool = False
+    escalated: bool = False
+
+    @property
+    def complete(self) -> bool:
+        """Whether bounded observation completed and every verified target is absent."""
+        return (
+            self.observation_complete
+            and not self.identity_refused
+            and not self.survivor_pids
+            and not self.access_denied_pids
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the stable JSON-compatible cleanup evidence."""
+        return {
+            "root_pid": self.root_pid,
+            "process_identities": [
+                {"pid": pid, "create_time": create_time}
+                for pid, create_time in self.process_identities
+            ],
+            "terminated_pids": list(self.terminated_pids),
+            "survivor_pids": list(self.survivor_pids),
+            "access_denied_pids": list(self.access_denied_pids),
+            "observation_complete": self.observation_complete,
+            "identity_refused": self.identity_refused,
+            "escalated": self.escalated,
+            "complete": self.complete,
+        }
+
+
+@dataclass
+class SubprocessResult:
+    """Result from a managed subprocess execution."""
+
+    returncode: int
+    """Final process return code (-1 may indicate either SIGHUP-killed or
+    unconfirmed leader — see ``cleanup_evidence`` for teardown status)."""
+    stdout: str
+    stderr: str
+    termination: TerminationReason
+    pid: int
+    channel_confirmation: ChannelConfirmation = ChannelConfirmation.UNMONITORED
+    """How completion was confirmed by the two-channel detection system.
+
+    CHANNEL_A: heartbeat confirmed type=result in stdout; data availability guaranteed.
+    CHANNEL_B: session JSONL marker fired; drain expired or no heartbeat configured.
+               stdout may be empty — callers must trust JSONL signal, not stdout content.
+    UNMONITORED: no channel monitoring active (NATURAL_EXIT, STALE, TIMED_OUT, sync path).
+    """
+    proc_snapshots: list[dict[str, object]] | None = None
+    channel_b_session_id: str = ""
+    lifecycle_observation_enabled: bool = False
+    lifecycle_observation_complete: bool = False
+    pending_task_ids: tuple[str, ...] = ()
+    schedule_wakeup_violation: bool = False
+    completion_ceiling_expired: bool = False
+    process_group_id: int = 0
+    session_id: str = ""
+    """Canonically resolved session identity — merge of stdout_session_id and
+    channel_b_session_id computed at SubprocessResult construction time in process.py.
+
+    Preferred field for downstream consumers (SkillResult, flush_session_log).
+    channel_b_session_id is retained as a diagnostic field indicating the specific
+    discovery channel.
+    """
+    start_ts: str = ""
+    end_ts: str = ""
+    elapsed_seconds: float = 0.0
+    """Pre-computed monotonic elapsed time in seconds (always >= 0).
+
+    Set by headless.py using time.monotonic() brackets around the subprocess run.
+    Consumers (session_log, tokens) must use this float directly — never re-derive
+    duration from start_ts/end_ts ISO strings.
+    """
+    kill_reason: KillReason = KillReason.NATURAL_EXIT
+    """Why the subprocess was (or was not) killed after the race loop.
+
+    Set by run_managed_async via execute_termination_action. Surfaces to SkillResult
+    so the formatter can annotate exit_code with the kill cause.
+    """
+    tracked_comm: str | None = None
+    """Process identity comm of the observed workload, or None when tracing disabled.
+
+    Populated from TraceTarget.comm after resolve_trace_target() resolves the workload
+    PID from the spawn PID. Propagated to flush_session_log and anomaly detection so
+    that downstream telemetry (sessions.jsonl, summary.json, GitHub issue bodies) can
+    self-identify which process was actually observed. (Issue #806)
+    """
+    orphaned_tool_result: bool = False
+    """True when Channel B fired STALE and the last JSONL record was type=user.
+    Diagnostic only — does not affect termination behavior.
+    Always False for non-STALE outcomes.
+    """
+    inspector_verdict: InspectorVerdict | None = None
+    """Verdict from the Health Inspector callback, or None if inspector did not run.
+
+    Populated by headless execution when an ``inspector_callback`` is provided to
+    ``SubprocessRunner.__call__`` and the callback completes before process exit.
+    Consumed downstream to annotate termination provenance.
+    """
+    stdout_path: Path | None = None
+    stderr_path: Path | None = None
+    cleanup_evidence: ProcessCleanupResult | None = None
+    """Owned-process-group teardown evidence (set by run_managed_async/run_managed_sync
+    via execute_termination_action's settle_evidence() call). Diagnostic only; see
+    ``_should_flag_cleanup_incomplete`` in execution.headless._headless_result for
+    the canonical contract."""
+
+
+@runtime_checkable
+class LineDriver(Protocol):
+    """Protocol for a stateful line-oriented request/response driver.
+
+    A ``LineDriver`` owns a request/response state machine layered over a
+    child process's piped stdin/stdout — e.g. the Codex app-server JSON-RPC
+    handshake. ``initial_lines()`` is emitted once, before the first stdout
+    line arrives; each subsequent stdout line (decoded, newline stripped) is
+    fed to ``on_line`` and any lines it returns are written back to the
+    child's stdin. ``finished`` becomes ``True`` on normal completion;
+    ``failure`` is set to a diagnostic string the moment the driver can no
+    longer make progress (an unsupported server request, a malformed frame,
+    a version/attestation mismatch). The runner treats a set ``failure`` as
+    a terminal condition regardless of ``finished``.
+    """
+
+    def initial_lines(self) -> tuple[str, ...]: ...
+
+    def on_line(self, line: str) -> tuple[str, ...]: ...
+
+    finished: bool
+    failure: str | None
+
+
+@runtime_checkable
+class SubprocessRunner(Protocol):
+    """Protocol for async subprocess execution. Matches run_managed_async signature.
+
+    Parameters
+    ----------
+    marker_dir : Path | None
+        Directory containing ``*-in-progress-{session_id}-*.marker`` files.
+        When non-None, the session log monitor checks for active execution markers
+        before issuing stale-kill signals, suppressing kills while a fleet dispatch
+        or run_skill call is in progress. Default ``None`` (no suppression).
+    session_id : str | None
+        Caller's session identity, used to scope execution-marker glob patterns to
+        the originating session. Threaded from fleet dispatch / run_skill through
+        headless execution to ``_session_log_monitor``'s ``caller_session_id`` parameter.
+        Default ``None`` (match any marker).
+    max_combined_output_bytes : int | None
+        Combined stdout/stderr byte ceiling. When set, managed capture terminates
+        the owned process as soon as the aggregate output exceeds this value.
+    """
+
+    def __call__(
+        self,
+        cmd: list[str],
+        *,
+        cwd: Path,
+        timeout: float,
+        env: Mapping[str, str] | None = None,
+        pass_fds: tuple[int, ...] = (),
+        stale_threshold: float = 1200,
+        completion_marker: str = "",
+        session_log_dir: Path | None = None,
+        pty_mode: bool = False,
+        input_data: str | None = None,
+        completion_drain_timeout: float = 5.0,
+        natural_exit_grace_seconds: float = 3.0,
+        linux_tracing_config: Any | None = None,
+        idle_output_timeout: float | None = None,
+        max_suppression_seconds: float | None = None,
+        on_process_spawned: Callable[[int, int], None] | None = None,
+        on_process_reaped: Callable[[int, int], None] | None = None,
+        on_pid_resolved: Callable[[int, int], None] | None = None,
+        enable_deadline_extension: bool = False,
+        max_extension_seconds: float = 7200,
+        marker_dir: Path | None = None,
+        session_id: str | None = None,
+        stream_parser: Any | None = None,
+        completion_record_types: frozenset[str] = frozenset({"result"}),
+        session_record_types: frozenset[str] = frozenset({"assistant"}),
+        inspector_callback: InspectorCallback | None = None,
+        workload_basenames: frozenset[str] | None = None,
+        on_session_id_resolved: Callable[[str], None] | None = None,
+        child_deferral_ceiling: float = 0.0,
+        capture_dir: Path | None = None,
+        max_combined_output_bytes: int | None = None,
+        backend_resume_session_id: str = "",
+        line_driver: LineDriver | None = None,
+        lifecycle_observation_enabled: bool = False,
+        # Literal default, not an import of execution.process.DEFAULT_TETHER_CEILING_SECONDS —
+        # core (IL-0) cannot import execution (IL-1). Kept equal by a parity test.
+        ceiling_seconds: float = 86400.0,
+        systemd_scope_enabled: bool = False,
+    ) -> Awaitable[SubprocessResult]: ...

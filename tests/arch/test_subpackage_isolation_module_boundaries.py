@@ -42,18 +42,18 @@ def _top_level_assign_targets(tree: ast.Module) -> set[str]:
 
 
 def test_severity_defined_in_types():
-    """Severity must be a top-level class in core/types/_type_enums.py (the enums sub-module)."""
-    tree = _get_module_ast("core/types/_type_enums.py")
+    """Severity must be a top-level class in core/types/foundation/_type_enums.py."""
+    tree = _get_module_ast("core/types/foundation/_type_enums.py")
     assert "Severity" in _top_level_class_names(tree), (
-        "Severity not found in core/types/_type_enums.py; it must be defined there"
+        "Severity not found in core/types/foundation/_type_enums.py; it must be defined there"
     )
 
 
 def test_skill_tools_defined_in_types():
     """SKILL_TOOLS must be a top-level assignment in _type_constants_registries.py."""
-    tree = _get_module_ast("core/types/_type_constants_registries.py")
+    tree = _get_module_ast("core/types/constants/_type_constants_registries.py")
     assert "SKILL_TOOLS" in _top_level_assign_targets(tree), (
-        "SKILL_TOOLS not found in core/types/_type_constants_registries.py;"
+        "SKILL_TOOLS not found in core/types/constants/_type_constants_registries.py;"
         " it must be defined there"
     )
 

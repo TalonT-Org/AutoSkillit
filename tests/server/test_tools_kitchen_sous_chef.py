@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import autoskillit.server.tools.tools_kitchen as _patch_tools_tools_kitchen
-from autoskillit.core.types._type_constants import SOUS_CHEF_MANDATORY_SECTIONS
+from autoskillit.core.types.constants._type_constants import SOUS_CHEF_MANDATORY_SECTIONS
 from tests.server._helpers import (
     _configure_admitted_recipe,
     _make_finalized_projection,

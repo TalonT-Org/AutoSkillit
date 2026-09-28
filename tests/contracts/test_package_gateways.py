@@ -468,7 +468,8 @@ def test_measure_aggregation_reexports_share_one_identity() -> None:
 
     import autoskillit.core as core
     from autoskillit import _measure_aggregation
-    from autoskillit.core.types import _type_enums, _type_token
+    from autoskillit.core.types.foundation import _type_enums
+    from autoskillit.core.types.results import _type_token
 
     for name in _measure_aggregation.__all__:
         assert getattr(core, name) is getattr(_measure_aggregation, name)

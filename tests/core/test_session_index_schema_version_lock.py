@@ -8,7 +8,7 @@ import json
 import pytest
 
 from autoskillit.core import SESSION_INDEX_SCHEMA_VERSION
-from autoskillit.core.types._type_results import SessionIndexEntry
+from autoskillit.core.types.results._type_results import SessionIndexEntry
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 

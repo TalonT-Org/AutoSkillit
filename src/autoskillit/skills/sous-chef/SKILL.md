@@ -163,7 +163,7 @@ worktree (`git worktree remove --force <path>`) to prevent orphaned worktrees.
 
 ## STOP-STEP EVIDENCE — MANDATORY
 
-<!-- Programmatic mirror: STOP_STEP_EVIDENCE_DOCTRINE_BULLETS in src/autoskillit/core/types/_type_constants.py.
+<!-- Programmatic mirror: STOP_STEP_EVIDENCE_DOCTRINE_BULLETS in src/autoskillit/core/types/constants/_type_constants.py.
      Tests in tests/cli/test_sous_chef_content.py, tests/cli/test_orchestrator_prompt_contract.py,
      and tests/recipe/test_api.py enforce substring parity between this human-readable rendering
      and the programmatic mirror. -->

@@ -75,7 +75,7 @@ def test_turn_limit_input_value_matches_cli_subtype_enum() -> None:
 def test_wire_dict_fields_match_core_child_outcome_dict() -> None:
     """``ChildOutcomeWireDict`` (stdlib-only) and ``core``'s ``ChildOutcomeDict`` must stay
     field-for-field identical — this module cannot import ``core`` to share the type."""
-    from autoskillit.core.types._type_execution_identity import ChildOutcomeDict
+    from autoskillit.core.types.foundation._type_execution_identity import ChildOutcomeDict
 
     assert set(snap.ChildOutcomeWireDict.__annotations__) == set(ChildOutcomeDict.__annotations__)
 

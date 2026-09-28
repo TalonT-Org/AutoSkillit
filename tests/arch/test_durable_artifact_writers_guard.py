@@ -31,7 +31,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core.types._type_constants import DURABLE_ARTIFACT_WRITERS
+from autoskillit.core.types.constants._type_constants import DURABLE_ARTIFACT_WRITERS
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 

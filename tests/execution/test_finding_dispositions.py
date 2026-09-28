@@ -19,7 +19,7 @@ from autoskillit.core import (
     WriteBehaviorSpec,
     WriteEvidence,
 )
-from autoskillit.core.types._type_results import ApiRetryOutcome, SkillResult
+from autoskillit.core.types.results._type_results import ApiRetryOutcome, SkillResult
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.headless import _build_skill_result
 from autoskillit.execution.headless._headless_adjudication import (

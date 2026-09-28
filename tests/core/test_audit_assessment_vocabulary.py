@@ -13,7 +13,7 @@ from autoskillit.core import (
     compute_canonical_hash,
 )
 from autoskillit.core.closure_hashing import compute_report_hash, compute_row_hash
-from autoskillit.core.types._type_closure_report import (
+from autoskillit.core.types.audit._type_closure_report import (
     CLOSURE_ROW_ALLOWED_ASSESSMENTS,
     CLOSURE_ROW_BLOCKING_ASSESSMENTS,
 )

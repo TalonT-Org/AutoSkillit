@@ -14,7 +14,7 @@ from fastmcp.tools.function_tool import FunctionTool
 from mcp.types import CallToolRequestParams, TextContent
 
 from autoskillit.core.types import RetryReason
-from autoskillit.core.types._type_results import SkillResult
+from autoskillit.core.types.results._type_results import SkillResult
 from autoskillit.server import _notify
 from autoskillit.server.recipe._recipe_segment_delivery import PreparedRecipeSegmentDelivery
 from autoskillit.server.response._run_skill_completion import RunSkillCompletionMiddleware

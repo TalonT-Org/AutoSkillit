@@ -19,7 +19,11 @@ import pytest
 
 from autoskillit.core import RetryReason, WriteBehaviorSpec
 from autoskillit.core.types import KillReason
-from autoskillit.core.types._type_results import ApiRetryOutcome, SkillResult, WriteEvidence
+from autoskillit.core.types.results._type_results import (
+    ApiRetryOutcome,
+    SkillResult,
+    WriteEvidence,
+)
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.headless import _build_skill_result
 from autoskillit.execution.headless._headless_adjudication import (
@@ -247,7 +251,7 @@ class TestOutcomeInvariantRecoveryPaths:
     infra paths must demote identically to the normal-completion path."""
 
     def test_recovered_stale_demotes(self) -> None:
-        from autoskillit.core.types._type_enums import TerminationReason
+        from autoskillit.core.types.foundation._type_enums import TerminationReason
 
         stdout = _result_record(
             _e6_result_text(
@@ -280,7 +284,7 @@ class TestOutcomeInvariantRecoveryPaths:
         """Carries Edit-tool write evidence: verdict=real_fix triggers the
         write-expectation gate, which must be satisfied to reach outcome-invariant
         adjudication on the recovered-IDLE_STALL path."""
-        from autoskillit.core.types._type_enums import TerminationReason
+        from autoskillit.core.types.foundation._type_enums import TerminationReason
 
         stdout = _stdout_with_edit_evidence(
             _e6_result_text(verdict="real_fix", accept_count=3, fixes_applied=0, fix_failures=3)

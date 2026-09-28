@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from ..types._type_context_admission import (
+from ..types.context_admission._type_context_admission import (
     ActiveContextAdmissionState,
     AdmissionTransition,
     ContextAdmissionState,
@@ -19,7 +19,7 @@ from ..types._type_context_admission import (
     PrepareBatchEvent,
     StageHistoryEvent,
 )
-from ..types._type_enums import (
+from ..types.foundation._type_enums import (
     AdmissionState,
     MeasurementKind,
     WitnessKind,

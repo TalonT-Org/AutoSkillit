@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import regex as re
 
 from ..closure_hashing import compute_bytes_hash
-from ..types._type_plan_set_authority import InventoryMode, RequirementDef, RequirementKind
+from ..types.audit._type_plan_set_authority import InventoryMode, RequirementDef, RequirementKind
 
 __all__ = ["InventoryExtraction", "extract_requirement_inventory"]
 

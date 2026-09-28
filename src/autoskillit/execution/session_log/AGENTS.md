@@ -32,7 +32,7 @@ Cross-package edges:
 - `evidence.otlp_sink` → `session_log.resolve_log_dir` (the OTLP stream lives under the log root)
 
 Registered identities keyed on this package's paths: `DURABLE_ARTIFACT_WRITERS`
-(`core/types/_type_constants_durable_writers.py`), `WARM_MODULE_NAMES` (`fleet/_startup_warm.py`),
+(`core/types/constants/_type_constants_durable_writers.py`), `WARM_MODULE_NAMES` (`fleet/_startup_warm.py`),
 `tests/_retention_surface.py` (line-number keyed — edits above a registered function shift its key),
 `tests/arch/test_hook_flock_nonblocking.py`, `tests/infra/test_plugin_source_ratchets.py`,
 `tests/infra/test_schema_read_convention.py`.

@@ -62,7 +62,7 @@ class TestCheckpointFromSidecar:
         ]
         cp = checkpoint_from_sidecar(entries, **_PROVENANCE)
         d = cp.to_dict()
-        from autoskillit.core.types._type_checkpoint import SessionCheckpoint
+        from autoskillit.core.types.execution._type_checkpoint import SessionCheckpoint
 
         restored = SessionCheckpoint.from_dict(d)
         assert restored == cp
@@ -128,7 +128,7 @@ class TestCheckpointFromTracker:
         assert checkpoint.ts == "2026-06-01T00:02:00Z"
 
     def test_tracker_produces_valid_checkpoint(self) -> None:
-        from autoskillit.core.types._type_checkpoint import SessionCheckpoint
+        from autoskillit.core.types.execution._type_checkpoint import SessionCheckpoint
 
         tracker_data = {
             "pipeline_id": "dispatch-789",

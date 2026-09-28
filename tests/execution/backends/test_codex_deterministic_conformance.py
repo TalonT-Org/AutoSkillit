@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core.types._type_enums import CodexEventType, CodexItemType
+from autoskillit.core.types.foundation._type_enums import CodexEventType, CodexItemType
 from autoskillit.execution.backends._codex_config import (
     CODEX_MCP_REQUIRED_KEYS,
 )

@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from autoskillit.core.types._type_persisted_formats import PERSISTED_FORMAT_LEDGER
+from autoskillit.core.types.constants._type_persisted_formats import PERSISTED_FORMAT_LEDGER
 from scripts.check_persisted_enum_decoding import (
     PERSISTED_ENUM_DECODERS,
     discover_persisted_enum_references,

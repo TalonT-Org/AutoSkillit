@@ -11,7 +11,7 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _ROOT = Path(__file__).resolve().parents[2]
 _ALLOWED = {
-    "src/autoskillit/core/types/_type_skill_semantics.py",
+    "src/autoskillit/core/types/skill/_type_skill_semantics.py",
     "src/autoskillit/server/_managed_join_attestation.py",
     "src/autoskillit/server/managed_join_prelaunch.py",
     "tests/fakes.py",

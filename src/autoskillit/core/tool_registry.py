@@ -17,8 +17,8 @@ from ._tool_registry_builders import (
     _verify_review_receipt,
 )
 from .audit.closure_hashing import compute_canonical_hash
-from .types._type_constants_registries import HEADLESS_TOOLS
-from .types._type_recipe_binding import (
+from .types.constants._type_constants_registries import HEADLESS_TOOLS
+from .types.recipe._type_recipe_binding import (
     RUNTIME_ADMISSION_BY_ROLE,
     RuntimeAdmission,
     ToolDef,

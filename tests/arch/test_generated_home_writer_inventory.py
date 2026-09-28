@@ -13,7 +13,7 @@ from tests.contracts._ast_helpers import call_name
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
-_BACKEND_PROTOCOL = _SRC_ROOT / "core" / "types" / "_type_protocols_backend.py"
+_BACKEND_PROTOCOL = _SRC_ROOT / "core" / "types" / "protocols" / "_type_protocols_backend.py"
 _EXPECTED_CALLERS = Counter(
     {
         (

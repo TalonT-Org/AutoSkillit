@@ -97,7 +97,7 @@ def test_validate_from_path_annotations_are_consistent_across_implementations() 
 
 def test_core_gateway_exports_recipe_path_validation_contracts() -> None:
     import autoskillit.core as core
-    from autoskillit.core.types._type_results_records import (
+    from autoskillit.core.types.results._type_results_records import (
         RecipePathValidationErrorFinding,
         RecipePathValidationInputError,
         RecipePathValidationReport,

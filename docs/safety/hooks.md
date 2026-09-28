@@ -519,7 +519,7 @@ Codex's `Stop`)
 Purely observational (mechanism `side-effect`): records every observed L0
 child run's terminal reason in the durable child-outcome snapshot. Never
 denies. See `docs/developer/diagnostics.md` for the full taxonomy and
-`core/types/_type_execution_identity.py`'s `ChildOutcomeDict` for the
+`core/types/foundation/_type_execution_identity.py`'s `ChildOutcomeDict` for the
 persisted shape.
 
 ### `session_lifetime_notice_hook.py`

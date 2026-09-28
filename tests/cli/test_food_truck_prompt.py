@@ -126,7 +126,7 @@ class TestAdmiralDispatchBlock:
             assert f"## {title}" not in block, f"Unretained section present: {title}"
 
     def test_l3_sections_constant_matches_build_output(self) -> None:
-        from autoskillit.core.types._type_constants import (
+        from autoskillit.core.types.constants._type_constants import (
             ADMIRAL_DISPATCH_SECTIONS,
             SOUS_CHEF_MANDATORY_SECTIONS,
         )

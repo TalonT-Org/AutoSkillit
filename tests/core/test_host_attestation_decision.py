@@ -12,7 +12,7 @@ from autoskillit.core import (
     RecipeDeliveryMode,
     resolve_recipe_delivery_decision,
 )
-from autoskillit.core.types._type_recipe_delivery import (
+from autoskillit.core.types.recipe._type_recipe_delivery import (
     RecipeDeliveryBudgetDef,
 )
 

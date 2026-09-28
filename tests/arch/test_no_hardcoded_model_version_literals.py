@@ -80,7 +80,10 @@ def _get_test_model_translation_path() -> Path:
 
 
 def _get_alias_values() -> frozenset[str]:
-    from autoskillit.core.types._type_backend import CLAUDE_MODEL_ALIASES, CODEX_MODEL_ALIASES
+    from autoskillit.core.types.execution._type_backend import (
+        CLAUDE_MODEL_ALIASES,
+        CODEX_MODEL_ALIASES,
+    )
 
     registries = (CLAUDE_MODEL_ALIASES, CODEX_MODEL_ALIASES)
     return frozenset(

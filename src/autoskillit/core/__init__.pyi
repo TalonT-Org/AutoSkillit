@@ -1561,46 +1561,56 @@ from .types import validate_label_transition as validate_label_transition
 from .types import validate_managed_skill_entries as validate_managed_skill_entries
 from .types import validate_recipe_artifact_sections as validate_recipe_artifact_sections
 from .types import validate_skill_capability_roles as validate_skill_capability_roles
-from .types._type_exploration import (
+from .types.foundation._type_exploration import (
     EXPLORATION_FAILURE_CODE_RESPONSES as EXPLORATION_FAILURE_CODE_RESPONSES,
 )
-from .types._type_exploration import EXPLORATION_FALLBACK_CODES as EXPLORATION_FALLBACK_CODES
-from .types._type_exploration import (
+from .types.foundation._type_exploration import (
+    EXPLORATION_FALLBACK_CODES as EXPLORATION_FALLBACK_CODES,
+)
+from .types.foundation._type_exploration import (
     EXPLORER_SPAWN_REFUSAL_RESPONSE as EXPLORER_SPAWN_REFUSAL_RESPONSE,
 )
-from .types._type_exploration import (
+from .types.foundation._type_exploration import (
     HARNESS_ZERO_TOOLS_REFUSAL_MARKER as HARNESS_ZERO_TOOLS_REFUSAL_MARKER,
 )
-from .types._type_exploration import PLUGINLESS_EXPLORER_ROLE as PLUGINLESS_EXPLORER_ROLE
-from .types._type_exploration import BrokerAuthorityStatus as BrokerAuthorityStatus
-from .types._type_exploration import CapabilityResolution as CapabilityResolution
-from .types._type_exploration import CapabilityResolutionStatus as CapabilityResolutionStatus
-from .types._type_exploration import CollectorReport as CollectorReport
-from .types._type_exploration import CollectorStatus as CollectorStatus
-from .types._type_exploration import CompletenessReport as CompletenessReport
-from .types._type_exploration import ContinuationCursor as ContinuationCursor
-from .types._type_exploration import EvidencePage as EvidencePage
-from .types._type_exploration import EvidenceRecord as EvidenceRecord
-from .types._type_exploration import ExplorationApplicability as ExplorationApplicability
-from .types._type_exploration import (
+from .types.foundation._type_exploration import (
+    PLUGINLESS_EXPLORER_ROLE as PLUGINLESS_EXPLORER_ROLE,
+)
+from .types.foundation._type_exploration import BrokerAuthorityStatus as BrokerAuthorityStatus
+from .types.foundation._type_exploration import CapabilityResolution as CapabilityResolution
+from .types.foundation._type_exploration import (
+    CapabilityResolutionStatus as CapabilityResolutionStatus,
+)
+from .types.foundation._type_exploration import CollectorReport as CollectorReport
+from .types.foundation._type_exploration import CollectorStatus as CollectorStatus
+from .types.foundation._type_exploration import CompletenessReport as CompletenessReport
+from .types.foundation._type_exploration import ContinuationCursor as ContinuationCursor
+from .types.foundation._type_exploration import EvidencePage as EvidencePage
+from .types.foundation._type_exploration import EvidenceRecord as EvidenceRecord
+from .types.foundation._type_exploration import (
+    ExplorationApplicability as ExplorationApplicability,
+)
+from .types.foundation._type_exploration import (
     ExplorationContextStoreProtocol as ExplorationContextStoreProtocol,
 )
-from .types._type_exploration import ExplorationFailureResponse as ExplorationFailureResponse
-from .types._type_exploration import ExplorationQuerySpec as ExplorationQuerySpec
-from .types._type_exploration import ExplorationRouterPlan as ExplorationRouterPlan
-from .types._type_exploration import ExplorationTaskSpec as ExplorationTaskSpec
-from .types._type_exploration import FrontierItem as FrontierItem
-from .types._type_exploration import GraphEdge as GraphEdge
-from .types._type_exploration import GraphNode as GraphNode
-from .types._type_exploration import MethodProvenance as MethodProvenance
-from .types._type_exploration import NodeKey as NodeKey
-from .types._type_exploration import ProfileActivation as ProfileActivation
-from .types._type_exploration import RelationshipKind as RelationshipKind
-from .types._type_exploration import RepositoryIdentity as RepositoryIdentity
-from .types._type_exploration import RepositoryProfileId as RepositoryProfileId
-from .types._type_exploration import RepositorySnapshot as RepositorySnapshot
-from .types._type_exploration import SnapshotCaptureReason as SnapshotCaptureReason
-from .types._type_exploration import SnapshotCaptureStatus as SnapshotCaptureStatus
-from .types._type_exploration import (
+from .types.foundation._type_exploration import (
+    ExplorationFailureResponse as ExplorationFailureResponse,
+)
+from .types.foundation._type_exploration import ExplorationQuerySpec as ExplorationQuerySpec
+from .types.foundation._type_exploration import ExplorationRouterPlan as ExplorationRouterPlan
+from .types.foundation._type_exploration import ExplorationTaskSpec as ExplorationTaskSpec
+from .types.foundation._type_exploration import FrontierItem as FrontierItem
+from .types.foundation._type_exploration import GraphEdge as GraphEdge
+from .types.foundation._type_exploration import GraphNode as GraphNode
+from .types.foundation._type_exploration import MethodProvenance as MethodProvenance
+from .types.foundation._type_exploration import NodeKey as NodeKey
+from .types.foundation._type_exploration import ProfileActivation as ProfileActivation
+from .types.foundation._type_exploration import RelationshipKind as RelationshipKind
+from .types.foundation._type_exploration import RepositoryIdentity as RepositoryIdentity
+from .types.foundation._type_exploration import RepositoryProfileId as RepositoryProfileId
+from .types.foundation._type_exploration import RepositorySnapshot as RepositorySnapshot
+from .types.foundation._type_exploration import SnapshotCaptureReason as SnapshotCaptureReason
+from .types.foundation._type_exploration import SnapshotCaptureStatus as SnapshotCaptureStatus
+from .types.foundation._type_exploration import (
     render_exploration_failure_guidance as render_exploration_failure_guidance,
 )

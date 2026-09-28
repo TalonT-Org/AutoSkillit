@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.core.types._type_checkpoint import SessionCheckpoint
-from autoskillit.core.types._type_enums import OutputFormat
+from autoskillit.core.types.execution._type_checkpoint import SessionCheckpoint
+from autoskillit.core.types.foundation._type_enums import OutputFormat
 from autoskillit.execution.runtime.commands import _build_resume_context
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
 
 from autoskillit.hooks._capture._failure_policy import (
@@ -54,3 +57,43 @@ def test_failure_evidence_rejects_unknown_reason_wire_value() -> None:
             detail="failure detail",
             failure_reason="NOT_A_CAPTURE_FAILURE_REASON",
         )
+
+
+def test_runner_settlement_discards_output() -> None:
+    assert (
+        FAILURE_DISPOSITIONS[CaptureFailureReason.RUNNER_SETTLEMENT].disposition
+        is CaptureFailureDisposition.DISCARD_OUTPUT
+    )
+
+
+def test_adr_0009_table_lists_every_reason() -> None:
+    runner_settlement = CaptureFailureReason.RUNNER_SETTLEMENT
+    adr = (
+        Path(__file__).resolve().parents[2]
+        / "docs/decisions/0009-verified-output-delivery-disposition.md"
+    )
+    lines = adr.read_text(encoding="utf-8").splitlines()
+    header = "| Disposition | Reasons | Rationale |"
+    table_start = lines.index(header) + 1
+
+    listed: dict[CaptureFailureReason, CaptureFailureDisposition] = {}
+    listed_names: list[str] = []
+    for line in lines[table_start:]:
+        if not line.startswith("|"):
+            break
+        if line.startswith("|---"):
+            continue
+        disposition_name, reasons_cell, _rationale = (
+            cell.strip() for cell in line.strip("|").split("|", maxsplit=2)
+        )
+        disposition = CaptureFailureDisposition[disposition_name.strip("`")]
+        for reason_name in re.findall(r"`([A-Z][A-Z0-9_]*)`", reasons_cell):
+            reason = CaptureFailureReason[reason_name]
+            listed_names.append(reason_name)
+            listed[reason] = disposition
+
+    assert runner_settlement in listed
+    assert len(listed_names) == len(set(listed_names)), "ADR-0009 lists a reason more than once"
+    assert set(listed) == set(CaptureFailureReason)
+    for reason, disposition in listed.items():
+        assert FAILURE_DISPOSITIONS[reason].disposition is disposition

@@ -10,7 +10,7 @@ import pytest
 
 from tests.server._input_contract_test_helpers import _make_input_contract_resolver
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 
 class TestInputContractValidation:
@@ -176,7 +176,7 @@ class TestInputContractIntegration:
 
     @pytest.mark.anyio
     async def test_run_skill_rejects_nonexistent_path_via_input_contract(
-        self, tool_ctx_kitchen_open
+        self, tool_ctx_kitchen_open, git_checkout
     ):
         from autoskillit.server.tools.tools_execution import run_skill
 
@@ -184,7 +184,7 @@ class TestInputContractIntegration:
         result = json.loads(
             await run_skill(
                 "/resolve-failures /nonexistent/worktree /nonexistent/plan.md main",
-                "/tmp",
+                str(git_checkout),
             )
         )
         assert result["success"] is False

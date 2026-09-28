@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import subprocess
 import textwrap
 from collections.abc import Callable
 from pathlib import Path
@@ -193,16 +194,77 @@ def _resolved_launch_contract(
     return resolver.finalize(preparation, adapter)
 
 
-def _success_session_json(result_text: str) -> str:
-    return json.dumps(
-        {
-            "type": "result",
-            "subtype": "success",
-            "result": result_text,
-            "session_id": "test-session",
-            "is_error": False,
-        }
-    )
+def _success_session_json(
+    result_text: str,
+    *,
+    usage: dict[str, int] | None = None,
+) -> str:
+    payload: dict[str, object] = {
+        "type": "result",
+        "subtype": "success",
+        "result": result_text,
+        "session_id": "test-session",
+        "is_error": False,
+    }
+    if usage is not None:
+        payload["usage"] = usage
+    return json.dumps(payload)
+
+
+@pytest.fixture
+def scripted_session_runner():
+    """Build a runner that applies one real-Git session side effect then returns stdout."""
+
+    def make(side_effect: Callable[[], str], *, usage: dict[str, int] | None = None):
+        spawn_count = 0
+
+        async def runner(cmd, *, cwd, timeout, **kwargs):
+            nonlocal spawn_count
+            if cmd[0] == "git":
+                result = subprocess.run(
+                    cmd,
+                    cwd=cwd,
+                    timeout=timeout,
+                    capture_output=True,
+                    text=True,
+                )
+                return SubprocessResult(
+                    result.returncode,
+                    result.stdout,
+                    result.stderr,
+                    TerminationReason.NATURAL_EXIT,
+                    pid=0,
+                )
+
+            if spawn_count == 0:
+                text = side_effect()
+                stdout = "\n".join(
+                    (
+                        json.dumps(
+                            {
+                                "type": "assistant",
+                                "message": {
+                                    "content": [{"type": "text", "text": text}],
+                                },
+                            }
+                        ),
+                        _success_session_json("done", usage=usage),
+                    )
+                )
+            else:
+                stdout = _success_session_json("done", usage=usage)
+            spawn_count += 1
+            return SubprocessResult(
+                0,
+                stdout,
+                "",
+                TerminationReason.NATURAL_EXIT,
+                pid=12345,
+            )
+
+        return runner
+
+    return make
 
 
 def _sr(
@@ -472,6 +534,7 @@ def _flush(
     defaults: dict = {
         "log_dir": str(tmp_path),
         "cwd": "/home/test/project",
+        "evidence_worktree": None,
         "session_id": "test-session-001",
         "pid": 12345,
         "skill_command": "/autoskillit:investigate some error",

@@ -56,7 +56,7 @@ own failure is logged and does not block delivery.
 | Disposition | Reasons | Rationale |
 |---|---|---|
 | `PRESERVE_OUTPUT` | `ACTIVE_CAPACITY_EXHAUSTED`, `RETENTION_CAPACITY_EXHAUSTED`, `EVIDENCE_CAPACITY_EXHAUSTED`, `PROJECTED_COMPACTED_BYTES_EXHAUSTED`, `HARD_LEDGER_CAPACITY_EXHAUSTED`, `RECLAMATION_DEBT_ASSIST`, `RECLAMATION_DEBT_STALL`, `MIGRATION_BLOCKED`, `LEDGER_INTEGRITY`, `FILESYSTEM_AUTHORITY`, `PERMISSION_DENIED`, `FILESYSTEM_IO`, `RECOVERY_CONTENDED` | The fault is in ledger bookkeeping (capacity admission, bounded debt control, migration, ledger-file I/O or integrity, lock contention) — the verified output bytes are unaffected by it. |
-| `DISCARD_OUTPUT` | `SNAPSHOT_INTEGRITY`, `UNKNOWN_SETUP` | The fault is (or may be) in the output itself — a checksum mismatch, tamper detection, or an unclassified condition that cannot be trusted to be bookkeeping-only. |
+| `DISCARD_OUTPUT` | `SNAPSHOT_INTEGRITY`, `RUNNER_SETTLEMENT`, `UNKNOWN_SETUP` | The fault is (or may be) in the output itself — a checksum mismatch, tamper detection, an unclassified condition that cannot be trusted to be bookkeeping-only, or the runner itself signalled the group before pipe EOF, so the stream is not proven complete. |
 
 `PRESERVE_OUTPUT` is an eligibility classification only. It never manufactures
 output and is never, by itself, sufficient authority to deliver: the

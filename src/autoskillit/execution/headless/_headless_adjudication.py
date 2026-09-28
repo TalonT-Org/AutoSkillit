@@ -10,7 +10,7 @@ from __future__ import annotations
 import dataclasses
 import errno
 import stat
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -139,6 +139,25 @@ def _parse_stdout(
         raw={**agent_result.raw, "turn_usage": rows},
     )
     return _adapt_agent_result(agent_result)
+
+
+def _select_parsed_session(
+    result: SubprocessResult,
+    *,
+    backend: CodingAgentBackend,
+    parsed_session: ClaudeSessionResult | None,
+    parse_stdout: Callable[..., ClaudeSessionResult],
+    backend_resume_session_id: str = "",
+    provider_used: str | None = None,
+) -> ClaudeSessionResult:
+    if parsed_session is not None:
+        return parsed_session
+    return parse_stdout(
+        result,
+        backend=backend,
+        backend_resume_session_id=backend_resume_session_id,
+        provider_used=provider_used,
+    )
 
 
 def _build_api_retry_outcome(session: ClaudeSessionResult) -> ApiRetryOutcome:
@@ -441,6 +460,7 @@ def _attempt_stall_recovery(
     backend: CodingAgentBackend,
     spec: _StallOutcomeSpec,
     *,
+    session: ClaudeSessionResult,
     completion_marker: str,
     skill_command: str,
     expected_output_patterns: Sequence[str],
@@ -456,7 +476,7 @@ def _attempt_stall_recovery(
     backend_resume_session_id: str = "",
     outcome_ledger: WorkspaceOutcomeLedger | None = None,
 ) -> tuple[SkillResult | None, ClaudeSessionResult, WriteEvidence, ApiRetryOutcome]:
-    """Parse a STALE/IDLE_STALL session's stdout and attempt success-recovery.
+    """Use a parsed STALE/IDLE_STALL session and attempt success-recovery.
 
     Returns ``(recovered_sr, session, evidence, api_retry)``. When recovery
     succeeds, ``recovered_sr`` is the final adjudicated result and the caller
@@ -464,9 +484,11 @@ def _attempt_stall_recovery(
     caller proceeds to its own retry-policy dispatch and failure construction,
     using the returned ``session``/``evidence``/``api_retry``.
     """
-    session = _parse_stdout(
+    session = _select_parsed_session(
         result,
         backend=backend,
+        parsed_session=session,
+        parse_stdout=_parse_stdout,
         backend_resume_session_id=backend_resume_session_id,
         provider_used=provider_used,
     )

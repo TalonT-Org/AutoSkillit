@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from autoskillit.hooks._capture import _artifact_setup, _authority, _delivery  # noqa: I001
+    from autoskillit.hooks._capture import _drain
     from autoskillit.hooks._capture import _failure_policy, _publication
     from autoskillit.hooks._capture import _observation, _reader, _reconcile, _replay
     from autoskillit.hooks._capture import _snapshot, _types
@@ -20,6 +21,7 @@ if TYPE_CHECKING:
     from autoskillit.hooks._capture._module_identity import register_module_aliases
 elif __package__ == "_capture":
     from _capture import _artifact_setup, _authority, _delivery  # noqa: I001
+    from _capture import _drain
     from _capture import _failure_policy, _observation, _publication
     from _capture import _reader, _reconcile, _replay, _snapshot, _types
     import _capture_contract
@@ -29,6 +31,7 @@ elif __package__ == "_capture":
     from _capture._module_identity import register_module_aliases
 else:
     from . import _artifact_setup, _authority, _delivery, _failure_policy  # noqa: I001
+    from . import _drain
     from . import _observation, _publication, _reader
     from . import _reconcile, _replay, _snapshot, _types
     from .. import _capture_contract, _capture_lifecycle, _capture_process
@@ -86,11 +89,11 @@ CaptureLifecycleStore = _capture_lifecycle.CaptureLifecycleStore
 CaptureTransitionCommittedError = _capture_lifecycle.CaptureTransitionCommittedError
 _TRUSTED_BASH_CANDIDATES = _capture_process._TRUSTED_BASH_CANDIDATES
 OwnedProcessGroup = _capture_process.OwnedProcessGroup
-_DrainResult = _capture_process._DrainResult
+PipeEofEvidence = _drain.PipeEofEvidence
 _normalized_returncode = _capture_process._normalized_returncode
 _settle_failed_capture = _capture_process._settle_failed_capture
 _spawn_bash = _capture_process._spawn_bash
-_drain_owned_capture = _capture_process._drain_capture
+_drain_owned_capture = _drain.drain_capture
 _resolve_trusted_bash = _capture_process._resolve_bash
 HOOK_CONFIG_FILENAME = _hook_settings.HOOK_CONFIG_FILENAME
 HOOK_CONFIG_OVERLAY_FILENAME = _hook_settings.HOOK_CONFIG_OVERLAY_FILENAME
@@ -120,7 +123,7 @@ def _drain_capture(
     process: subprocess.Popen[bytes] | OwnedProcessGroup,
     artifact_writer_fd: int,
     inline_bytes: int,
-) -> _DrainResult:
+) -> PipeEofEvidence:
     return _drain_owned_capture(
         process,
         artifact_writer_fd,
@@ -273,32 +276,12 @@ def run_capture(
         try:
             process = _spawn_bash(bash_path, command, capture_output=True)
             failure_stage = "capture readback"
-            result = _drain_capture(process, artifact_writer_fd, policy.inline_bytes)
+            drained = _drain_capture(process, artifact_writer_fd, policy.inline_bytes)
             artifact.close_drain_writer()
             failure_stage = "capture process wait"
             command_outcome = CommandOutcome.from_wait_result(process.wait())
             command_returncode = command_outcome.shell_returncode
-            if result.truncated:
-                failure_stage = "capture truncated-state commit"
-                lifecycle.commit_capture_failure(
-                    artifact.authority,
-                    CaptureFailureEvidence(
-                        stage="artifact_read",
-                        detail="capture output drain truncated after process-group settlement",
-                    ),
-                    observed_size=max(0, os.fstat(artifact.fd).st_size),
-                )
-                terminal_committed = True
-                return _capture_replay.capture_failure_return(
-                    _capture_replay.failure_transport(
-                        reason=CaptureFailureReason.FILESYSTEM_IO,
-                        stage=failure_stage,
-                        detail=("capture output drain truncated after process-group settlement"),
-                        shell_returncode=command_returncode,
-                        settlement=None,
-                    )
-                )
-            if result.write_error is not None:
+            if drained.write_error is not None:
                 failure_stage = "capture failed-state commit"
                 lifecycle.commit_capture_failure(
                     artifact.authority,
@@ -331,7 +314,7 @@ def run_capture(
                 root_identity=(root.identity.device, root.identity.inode),
                 carrier_name=artifact.name,
                 carrier_identity=(artifact.identity.device, artifact.identity.inode),
-                measurement=result.measurement,
+                measurement=drained.measurement,
                 command_outcome=command_outcome,
                 expected_revision=artifact.authority.expected_revision,
                 finalized_at=finalized_at,
@@ -341,7 +324,7 @@ def run_capture(
             try:
                 finalized = lifecycle.commit_verified_snapshot(
                     verified,
-                    issue_reference=result.measurement.total_bytes > policy.inline_bytes,
+                    issue_reference=drained.measurement.total_bytes > policy.inline_bytes,
                 )
             except _CAPTURE_RUNTIME_ERRORS as finalization_exc:
                 finalization_reason = _capture_failure_policy.runtime_failure_reason(

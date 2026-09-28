@@ -24,7 +24,7 @@ from autoskillit.server.tools.tools_status import (
     get_token_summary,
 )
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 
 class TestNoSkillsDirectoryProvider:
@@ -652,7 +652,7 @@ class TestSafetyConfigWiring:
 
     @pytest.mark.anyio
     async def test_run_skill_2e_skips_dry_walkthrough_when_disabled(
-        self, tool_ctx_kitchen_open, tmp_path
+        self, tool_ctx_kitchen_open, git_linked_worktree
     ):
         """2e: require_dry_walkthrough=False bypasses dry-walkthrough gate (using run_skill)."""
         from autoskillit.server.tools.tools_execution import run_skill
@@ -663,14 +663,14 @@ class TestSafetyConfigWiring:
         )
         tool_ctx_kitchen_open.config.quota_guard.enabled = False
 
-        plan = tmp_path / "plan.md"
+        plan = git_linked_worktree / "plan.md"
         plan.write_text("# No marker plan")
 
         tool_ctx_kitchen_open.runner.push(_make_result(0, '{"result": "done"}', ""))
         result = json.loads(
             await run_skill(
                 f"/autoskillit:implement-worktree {plan}",
-                str(tmp_path),
+                str(git_linked_worktree),
                 output_dir=".",
             )
         )
@@ -679,15 +679,15 @@ class TestSafetyConfigWiring:
 
     @pytest.mark.anyio
     async def test_run_skill_enforces_dry_walkthrough_when_enabled(
-        self, tool_ctx_kitchen_open, tmp_path
+        self, tool_ctx_kitchen_open, git_checkout
     ):
         """2f: run_skill enforces dry-walkthrough gate when enabled (default)."""
         from autoskillit.server.tools.tools_execution import run_skill
 
-        plan = tmp_path / "plan.md"
+        plan = git_checkout / "plan.md"
         plan.write_text("# No marker plan")
 
-        result = json.loads(await run_skill(f"/implement-worktree {plan}", str(tmp_path)))
+        result = json.loads(await run_skill(f"/implement-worktree {plan}", str(git_checkout)))
         assert result["success"] is False
         assert result["is_error"] is True
         assert "dry-walked" in result["result"].lower()

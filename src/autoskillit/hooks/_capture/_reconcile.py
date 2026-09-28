@@ -84,6 +84,7 @@ _FAILURE_BLOCKERS = {
     CaptureFailureReason.MIGRATION_BLOCKED: CleanupBlocker.MIGRATION_BLOCKED,
     CaptureFailureReason.RECOVERY_CONTENDED: CleanupBlocker.RECOVERY_CONTENDED,
     CaptureFailureReason.SNAPSHOT_INTEGRITY: CleanupBlocker.LEDGER_INTEGRITY,
+    CaptureFailureReason.RUNNER_SETTLEMENT: CleanupBlocker.UNKNOWN_SETUP,
     CaptureFailureReason.UNKNOWN_SETUP: CleanupBlocker.UNKNOWN_SETUP,
 }
 if set(_FAILURE_BLOCKERS) != set(CaptureFailureReason):

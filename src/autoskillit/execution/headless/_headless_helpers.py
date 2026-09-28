@@ -18,10 +18,9 @@ from autoskillit.core import (
     ProviderBinding,
     RestoreSession,
     ResumeWithBriefing,
-    SkillResult,
     get_logger,
 )
-from autoskillit.execution.headless._headless_git import _compute_loc_changed
+from autoskillit.execution.headless._headless_git import SessionGitEvidence, _compute_loc_changed
 from autoskillit.execution.headless._headless_model import (
     resolve_model_identity,  # noqa: F401 - public helper compatibility export
     resolve_model_pin,  # noqa: F401 - public helper compatibility export
@@ -225,6 +224,23 @@ def _stat_snapshot(directory: Path) -> dict[str, tuple[int, int]]:
     return result
 
 
+def _snapshot_watch_dirs(
+    watch_dirs: Sequence[Path],
+) -> dict[Path, dict[str, tuple[int, int]] | None]:
+    snapshots: dict[Path, dict[str, tuple[int, int]] | None] = {}
+    for _wd in watch_dirs:
+        if _wd.is_dir():
+            try:
+                snapshots[_wd] = _stat_snapshot(_wd)
+            except OSError:
+                logger.warning("watch_dir_pre_scan_failed", watch_dir=str(_wd), exc_info=True)
+                snapshots[_wd] = None
+        else:
+            # {} means missing at pre-scan; unlike None (OSError), compare it after the run.
+            snapshots[_wd] = {}
+    return snapshots
+
+
 def _detect_fs_writes(
     watch_dirs: Sequence[Path],
     before: dict[Path, dict[str, tuple[int, int]] | None],
@@ -247,18 +263,8 @@ def _detect_fs_writes(
 class PostSessionMetrics:
     loc_insertions: int
     loc_deletions: int
-    effective_cwd: str
 
 
-def _compute_post_session_metrics(
-    cwd: str,
-    pre_session_sha: str,
-    skill_result: SkillResult,
-) -> PostSessionMetrics:
-    effective_cwd = skill_result.worktree_path or cwd
-    loc_ins, loc_del = _compute_loc_changed(effective_cwd, pre_session_sha)
-    return PostSessionMetrics(
-        loc_insertions=loc_ins,
-        loc_deletions=loc_del,
-        effective_cwd=effective_cwd,
-    )
+def _compute_post_session_metrics(evidence: SessionGitEvidence) -> PostSessionMetrics:
+    loc_ins, loc_del = _compute_loc_changed(evidence)
+    return PostSessionMetrics(loc_insertions=loc_ins, loc_deletions=loc_del)

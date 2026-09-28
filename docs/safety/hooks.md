@@ -150,6 +150,16 @@ descendant retains a writer. A descendant that closes or redirects every inherit
 writer does not delay capture. There is no capture-local deadline; an outer timeout
 produces failure evidence.
 
+The runner executes the command text verbatim as `bash -c <command>` and installs
+no shell trap or finalization wrapper. A lifeline anchor starts before the command
+leader, ignores catchable terminating and stopping signals, and holds the owned
+process group. Closing the runner's lifeline makes the anchor SIGKILL the group,
+including when the host kills the runner before it can forward a signal. After
+actual EOF and leader exit, the runner sends `SIGTERM`, waits through a bounded
+grace period, then releases the lifeline. `setsid()` leaves the owned group and is
+the only escape; detached work must close or redirect inherited writers if it
+should not delay EOF.
+
 The drain computes bytes, SHA-256, inline, head, and tail in one pass. After EOF the
 runner closes its drain writer, preserves the raw exited-or-signaled outcome, verifies
 the retained carrier descriptor, and syncs it before committing immutable FINAL.
@@ -222,7 +232,8 @@ Codex hook generation includes the cleanup-only SessionStart owner and excludes 
 separate interactive-only resume reminder. Runner-tail cleanup is the
 authoritative interactive/headless Bash owner; cleanup-only `SessionStart` is
 the supplemental startup owner. ADR-0008 resolves #4322 for Codex shell capture
-only. Trap isolation (#4323), a rendered ceiling (#4324), public bounded retrieval
+only. #4323 is resolved by runner-owned completion (ADR-0008 § Process lifetime
+ownership). A rendered ceiling (#4324), public bounded retrieval
 (#4325), broader private-publication policy (#4326), partial/quota accounting
 (#4327), upstream live visibility (#4329), and general producer adoption (#4335)
 remain downstream work.

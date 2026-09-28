@@ -144,6 +144,7 @@ def _finalize_crashed_trace(
         flush_session_log(
             log_dir=log_dir,
             cwd="",
+            evidence_worktree=None,
             session_id=f"crashed_{pid}_{mtime_ts.replace(':', '-')}",
             pid=pid,
             skill_command="",

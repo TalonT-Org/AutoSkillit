@@ -773,150 +773,6 @@ class TestTempDirSnapshot:
         assert post == pre
 
 
-class TestGitWritesClonePath:
-    """Unit tests: `_detect_branch_divergence` standalone (not the production call path)."""
-
-    def test_git_writes_detected_on_clone_path(self, tmp_path: Path) -> None:
-        """Clone path (main checkout) with commits ahead of origin returns True."""
-        import subprocess
-
-        from autoskillit.core.paths import is_git_worktree, is_in_git_repo
-        from autoskillit.execution.headless._headless_git import _detect_branch_divergence
-
-        repo = tmp_path / "repo"
-        bare = tmp_path / "bare.git"
-
-        subprocess.run(["git", "init", str(bare), "--bare"], check=True, capture_output=True)
-        subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
-        subprocess.run(
-            ["git", "-C", str(repo), "remote", "add", "origin", str(bare)],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "config", "user.email", "test@test.com"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "config", "user.name", "Test"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "init"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "push", "origin", "HEAD:main"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "branch", "--set-upstream-to=origin/main"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "ahead"],
-            check=True,
-            capture_output=True,
-        )
-
-        assert is_in_git_repo(repo) is True
-        assert is_git_worktree(repo) is False
-        result = _detect_branch_divergence(str(repo))
-        assert result is True
-
-
-class TestGitWritesStateMatrix:
-    """Parametrized matrix: all three workspace states × branch divergence."""
-
-    @pytest.mark.parametrize(
-        "state,commits_ahead,expected",
-        [
-            ("clone", True, True),
-            ("clone", False, False),
-            ("worktree", True, True),
-            ("worktree", False, False),
-            ("non_git", False, False),
-        ],
-    )
-    def test_git_writes_state_matrix(
-        self, tmp_path: Path, state: str, commits_ahead: bool, expected: bool
-    ) -> None:
-        import subprocess
-
-        from autoskillit.core.paths import is_in_git_repo
-        from autoskillit.execution.headless._headless_git import _detect_branch_divergence
-
-        if state == "non_git":
-            non_git = tmp_path / "non_git"
-            non_git.mkdir()
-            in_git = is_in_git_repo(non_git)
-            assert in_git is False
-            result = _detect_branch_divergence(str(non_git)) if in_git else False
-            assert result is expected
-            return
-
-        bare = tmp_path / "bare.git"
-        main_repo = tmp_path / "main"
-        subprocess.run(["git", "init", str(bare), "--bare"], check=True, capture_output=True)
-        subprocess.run(["git", "init", str(main_repo)], check=True, capture_output=True)
-        for cmd in [
-            ["git", "-C", str(main_repo), "config", "user.email", "test@test.com"],
-            ["git", "-C", str(main_repo), "config", "user.name", "Test"],
-            ["git", "-C", str(main_repo), "remote", "add", "origin", str(bare)],
-            ["git", "-C", str(main_repo), "commit", "--allow-empty", "-m", "init"],
-            ["git", "-C", str(main_repo), "push", "origin", "HEAD:main"],
-            ["git", "-C", str(main_repo), "branch", "--set-upstream-to=origin/main"],
-        ]:
-            subprocess.run(cmd, check=True, capture_output=True)
-
-        if state == "clone":
-            cwd = main_repo
-        else:
-            wt = tmp_path / "wt"
-            subprocess.run(
-                ["git", "-C", str(main_repo), "worktree", "add", str(wt), "-b", "feature/test"],
-                check=True,
-                capture_output=True,
-            )
-            cwd = wt
-            subprocess.run(
-                ["git", "-C", str(cwd), "config", "user.email", "test@test.com"],
-                check=True,
-                capture_output=True,
-            )
-            subprocess.run(
-                ["git", "-C", str(cwd), "config", "user.name", "Test"],
-                check=True,
-                capture_output=True,
-            )
-            subprocess.run(
-                ["git", "-C", str(main_repo), "push", "origin", "feature/test"],
-                check=True,
-                capture_output=True,
-            )
-            subprocess.run(
-                ["git", "-C", str(cwd), "branch", "--set-upstream-to=origin/feature/test"],
-                check=True,
-                capture_output=True,
-            )
-
-        if commits_ahead:
-            subprocess.run(
-                ["git", "-C", str(cwd), "commit", "--allow-empty", "-m", "ahead"],
-                check=True,
-                capture_output=True,
-            )
-
-        assert is_in_git_repo(cwd) is True
-        result = _detect_branch_divergence(str(cwd))
-        assert result is expected
-
-
 class TestGitWritesDetection:
     """Git-level write detection suppresses zero_writes false positives."""
 
@@ -979,8 +835,7 @@ class TestSessionScopedGitDetection:
     ) -> None:
         """Pre-diverged branch + zero-commit session must NOT set git_writes_detected=True.
 
-        T-ZW-GIT-FP: fails under _detect_branch_divergence (global state);
-        passes under _detect_session_git_writes (session-scoped delta).
+        T-ZW-GIT-FP: pre-existing divergence must not count as a session write.
         """
         import subprocess
 
@@ -1022,79 +877,48 @@ class TestSessionScopedGitDetection:
         )
 
 
-class TestDetectSessionGitWritesUnit:
-    """Unit tests for _detect_session_git_writes (T-ZW-GIT-SESSION-*)."""
+class TestObserveSessionGitEvidenceUnit:
+    """Focused unit tests for evidence-based session write observations."""
 
-    def test_empty_pre_sha_returns_false(self, tmp_path: Path) -> None:
-        """T-ZW-GIT-SESSION-1: empty baseline is safe default (non-git dir or capture error)."""
-        from autoskillit.execution.headless._headless_git import _detect_session_git_writes
-
-        result = _detect_session_git_writes(str(tmp_path), "")
-        assert result is False
-
-    def test_same_sha_returns_false(self, tmp_path: Path) -> None:
-        """T-ZW-GIT-SESSION-2: pre and post SHA identical → no session commits → False."""
-        import subprocess
-
+    def test_non_git_launch_returns_false(self, tmp_path: Path) -> None:
+        from autoskillit.core import EvidenceWorktreeSource
         from autoskillit.execution.headless._headless_git import (
-            _capture_git_head_sha,
-            _detect_session_git_writes,
+            _capture_pre_session_git_state,
+            _observe_session_git_evidence,
         )
 
-        repo = tmp_path / "repo"
-        subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
-        for cmd in [
-            ["git", "-C", str(repo), "config", "user.email", "test@test.com"],
-            ["git", "-C", str(repo), "config", "user.name", "Test"],
-            ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "init"],
-        ]:
-            subprocess.run(cmd, check=True, capture_output=True)
+        pre = _capture_pre_session_git_state(str(tmp_path))
+        evidence = _observe_session_git_evidence(pre, [])
 
-        pre_sha = _capture_git_head_sha(str(repo))
-        assert pre_sha, "should have captured a valid SHA"
+        assert evidence.worktree.source is EvidenceWorktreeSource.NON_GIT
+        assert evidence.git_writes_detected is False
 
-        result = _detect_session_git_writes(str(repo), pre_sha)
-        assert result is False
-
-    def test_different_sha_returns_true(self, tmp_path: Path) -> None:
-        """T-ZW-GIT-SESSION-3: SHA moved after a new commit → True."""
-        import subprocess
-
+    def test_unchanged_checkout_returns_false(self, tmp_path: Path) -> None:
         from autoskillit.execution.headless._headless_git import (
-            _capture_git_head_sha,
-            _detect_session_git_writes,
+            _capture_pre_session_git_state,
+            _observe_session_git_evidence,
         )
+        from tests._git_topology import init_checkout
 
-        repo = tmp_path / "repo"
-        subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
-        for cmd in [
-            ["git", "-C", str(repo), "config", "user.email", "test@test.com"],
-            ["git", "-C", str(repo), "config", "user.name", "Test"],
-            ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "init"],
-        ]:
-            subprocess.run(cmd, check=True, capture_output=True)
+        repo = init_checkout(tmp_path / "repo")
+        pre = _capture_pre_session_git_state(str(repo))
+        evidence = _observe_session_git_evidence(pre, [])
 
-        pre_sha = _capture_git_head_sha(str(repo))
-        assert pre_sha, "should have captured a valid SHA"
+        assert evidence.git_writes_detected is False
 
-        subprocess.run(
-            ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "session-commit"],
-            check=True,
-            capture_output=True,
+    def test_commit_after_pre_session_state_returns_true(self, tmp_path: Path) -> None:
+        from autoskillit.execution.headless._headless_git import (
+            _capture_pre_session_git_state,
+            _observe_session_git_evidence,
         )
+        from tests._git_topology import commit_file, init_checkout
 
-        result = _detect_session_git_writes(str(repo), pre_sha)
-        assert result is True
+        repo = init_checkout(tmp_path / "repo")
+        pre = _capture_pre_session_git_state(str(repo))
+        commit_file(repo, "after.py", "after = True\n", "after pre-session")
+        evidence = _observe_session_git_evidence(pre, [])
 
-    def test_post_capture_error_returns_false(self, tmp_path: Path) -> None:
-        """T-ZW-GIT-SESSION-4: valid pre_sha but post-capture fails (non-git cwd) → False."""
-        from autoskillit.execution.headless._headless_git import _detect_session_git_writes
-
-        non_git = tmp_path / "not_a_git_repo"
-        non_git.mkdir()
-
-        result = _detect_session_git_writes(str(non_git), "abc123def456deadbeef")
-        assert result is False
+        assert evidence.git_writes_detected is True
 
 
 class TestWriteExpectedWhenPatternSync:

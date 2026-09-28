@@ -12,7 +12,7 @@ from autoskillit.core import FinalizedRecipeStep
 from autoskillit.server.tools.tools_execution import run_skill
 from tests.server._helpers import _install_active_recipe_projection
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 _ACTIVE_DISPATCH = "dispatch-active"
 _STALE_LOCKED_STEPS: dict[str, dict[str, bool]] = {
@@ -456,7 +456,7 @@ class TestRunSkillResolvesStepNameFromRecipe:
 
     @pytest.mark.anyio
     async def test_run_skill_allows_empty_step_name_when_ambiguous_match(
-        self, tool_ctx_kitchen_open, tmp_path
+        self, tool_ctx_kitchen_open, tmp_path, git_checkout
     ):
         temp_dir = tmp_path / ".autoskillit" / "temp"
         temp_dir.mkdir(parents=True, exist_ok=True)
@@ -491,7 +491,7 @@ class TestRunSkillResolvesStepNameFromRecipe:
         result = json.loads(
             await run_skill(
                 "/autoskillit:resolve-failures target",
-                str(tmp_path),
+                str(git_checkout),
                 step_name="",
                 order_id="",
             )
@@ -500,7 +500,7 @@ class TestRunSkillResolvesStepNameFromRecipe:
 
     @pytest.mark.anyio
     async def test_run_skill_denies_unresolvable_step_name_when_locks_active(
-        self, tool_ctx_kitchen_open, tmp_path
+        self, tool_ctx_kitchen_open, tmp_path, git_checkout
     ):
         temp_dir = tmp_path / ".autoskillit" / "temp"
         temp_dir.mkdir(parents=True, exist_ok=True)
@@ -528,7 +528,7 @@ class TestRunSkillResolvesStepNameFromRecipe:
         result = json.loads(
             await run_skill(
                 "/autoskillit:resolve-failures target",
-                str(tmp_path),
+                str(git_checkout),
                 step_name="",
                 order_id="",
             )

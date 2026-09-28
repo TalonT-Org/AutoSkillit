@@ -62,7 +62,7 @@ def find_stale_session_archive_references(log_root: Path | None = None) -> list[
     stale: list[str] = []
     seen: set[str] = set()
     for row in read_tolerant_session_index_rows(root / "sessions-archive.jsonl"):
-        for field in ("cwd", "claude_code_log", "codex_log"):
+        for field in ("cwd", "claude_code_log", "codex_log", "evidence_worktree_path"):
             value = row.get(field)
             if isinstance(value, str):
                 path = Path(value)

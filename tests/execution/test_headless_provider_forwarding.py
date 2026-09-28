@@ -358,12 +358,7 @@ async def test_native_launch_without_profile_uses_anthropic_provider(
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_compute_post_session_metrics",
-        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
-    )
-    monkeypatch.setattr(
-        _patch_headless__headless_execute,
-        "_capture_git_head_sha",
-        lambda *a: "",
+        lambda *a, **kw: PostSessionMetrics(0, 0),
     )
 
     result = await _execute_claude_headless(
@@ -408,12 +403,7 @@ async def test_empty_skill_command_keeps_shared_fleet_lifecycle_observation_disa
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_compute_post_session_metrics",
-        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
-    )
-    monkeypatch.setattr(
-        _patch_headless__headless_execute,
-        "_capture_git_head_sha",
-        lambda *a: "",
+        lambda *a, **kw: PostSessionMetrics(0, 0),
     )
 
     await _execute_claude_headless(
@@ -477,12 +467,7 @@ async def test_terminal_launch_provider_stamps_selection_and_result(
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_compute_post_session_metrics",
-        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
-    )
-    monkeypatch.setattr(
-        _patch_headless__headless_execute,
-        "_capture_git_head_sha",
-        lambda *a: "",
+        lambda *a, **kw: PostSessionMetrics(0, 0),
     )
     monkeypatch.setattr(
         session_log,
@@ -554,12 +539,7 @@ async def test_manifest_write_failure_does_not_skip_terminal_flush(
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_compute_post_session_metrics",
-        lambda *args, **kwargs: PostSessionMetrics(0, 0, str(tmp_path)),
-    )
-    monkeypatch.setattr(
-        _patch_headless__headless_execute,
-        "_capture_git_head_sha",
-        lambda *args: "",
+        lambda *args, **kwargs: PostSessionMetrics(0, 0),
     )
     monkeypatch.setattr(session_log, "write_execution_candidate_manifest", fail_manifest_write)
     monkeypatch.setattr(session_log, "flush_session_log", lambda **kwargs: flushed.append(kwargs))
@@ -686,7 +666,6 @@ async def test_dispatch_food_truck_forwards_marker_dir_and_session_id(
         )
 
     monkeypatch.setattr(_patch_execution_headless, "_execute_claude_headless", fake_execute)
-    monkeypatch.setattr(_patch_headless__headless_execute, "_capture_git_head_sha", lambda *a: "")
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_compute_post_session_metrics",
@@ -746,12 +725,7 @@ async def test_execute_forwards_readonly_skill_to_build_result(
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_compute_post_session_metrics",
-        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
-    )
-    monkeypatch.setattr(
-        _patch_headless__headless_execute,
-        "_capture_git_head_sha",
-        lambda *a: "",
+        lambda *a, **kw: PostSessionMetrics(0, 0),
     )
 
     result_line = json.dumps(
@@ -818,7 +792,6 @@ async def test_dispatch_food_truck_derives_marker_dir_from_cwd(
         "_resolve_session_log_dir",
         lambda cwd, backend: Path("/derived/project"),
     )
-    monkeypatch.setattr(_patch_headless__headless_execute, "_capture_git_head_sha", lambda *a: "")
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_compute_post_session_metrics",
@@ -859,7 +832,6 @@ async def test_dispatch_food_truck_marker_dir_none_without_channel_b(
         )
 
     monkeypatch.setattr(_patch_execution_headless, "_execute_claude_headless", fake_execute)
-    monkeypatch.setattr(_patch_headless__headless_execute, "_capture_git_head_sha", lambda *a: "")
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_compute_post_session_metrics",
@@ -918,9 +890,8 @@ async def test_execute_claude_headless_forwards_marker_dir_to_runner(
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_compute_post_session_metrics",
-        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
+        lambda *a, **kw: PostSessionMetrics(0, 0),
     )
-    monkeypatch.setattr(_patch_headless__headless_execute, "_capture_git_head_sha", lambda *a: "")
 
     await _execute_claude_headless(
         lambda _binding, _extras: spec,
@@ -977,9 +948,8 @@ async def test_execute_claude_headless_pty_mode_from_backend(
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_compute_post_session_metrics",
-        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
+        lambda *a, **kw: PostSessionMetrics(0, 0),
     )
-    monkeypatch.setattr(_patch_headless__headless_execute, "_capture_git_head_sha", lambda *a: "")
 
     await _execute_claude_headless(
         lambda _binding, _extras: spec,
@@ -1031,9 +1001,8 @@ async def test_execute_claude_headless_session_log_dir_none_when_no_channel_b(
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_compute_post_session_metrics",
-        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
+        lambda *a, **kw: PostSessionMetrics(0, 0),
     )
-    monkeypatch.setattr(_patch_headless__headless_execute, "_capture_git_head_sha", lambda *a: "")
 
     await _execute_claude_headless(
         lambda _binding, _extras: spec,
@@ -1069,7 +1038,6 @@ async def test_dispatch_food_truck_marker_dir_none_when_no_channel_b(
         )
 
     monkeypatch.setattr(_patch_execution_headless, "_execute_claude_headless", fake_execute)
-    monkeypatch.setattr(_patch_headless__headless_execute, "_capture_git_head_sha", lambda *a: "")
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_compute_post_session_metrics",
@@ -1123,12 +1091,7 @@ async def test_execute_claude_headless_passes_stream_parser_to_runner(
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_compute_post_session_metrics",
-        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
-    )
-    monkeypatch.setattr(
-        _patch_headless__headless_execute,
-        "_capture_git_head_sha",
-        lambda *a: "",
+        lambda *a, **kw: PostSessionMetrics(0, 0),
     )
 
     await _execute_claude_headless(
@@ -1173,12 +1136,7 @@ async def test_execute_claude_headless_stream_parser_receives_completion_marker(
     monkeypatch.setattr(
         _patch_headless__headless_execute,
         "_compute_post_session_metrics",
-        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
-    )
-    monkeypatch.setattr(
-        _patch_headless__headless_execute,
-        "_capture_git_head_sha",
-        lambda *a: "",
+        lambda *a, **kw: PostSessionMetrics(0, 0),
     )
 
     await _execute_claude_headless(
@@ -1348,9 +1306,8 @@ async def test_sink_environment_reaches_contract_nudge_and_overrides_caller_valu
     monkeypatch.setattr(
         _execute_module,
         "_compute_post_session_metrics",
-        lambda *_args, **_kwargs: PostSessionMetrics(0, 0, str(tmp_path)),
+        lambda *_args, **_kwargs: PostSessionMetrics(0, 0),
     )
-    monkeypatch.setattr(_execute_module, "_capture_git_head_sha", lambda *_args: "")
 
     await _execute_claude_headless(
         build_spec,

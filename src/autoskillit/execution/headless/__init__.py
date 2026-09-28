@@ -42,9 +42,7 @@ from autoskillit.execution.headless._headless_execute import (
     _execute_claude_headless,
 )
 from autoskillit.execution.headless._headless_git import (
-    _capture_git_head_sha,  # noqa: F401
     _compute_loc_changed,  # noqa: F401
-    _detect_session_git_writes,  # noqa: F401
 )
 from autoskillit.execution.headless._headless_helpers import (
     PostSessionMetrics,

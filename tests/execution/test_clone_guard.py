@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import WorktreeRecord
 from autoskillit.core.types import (
     RetryReason,
     SkillResult,
@@ -17,8 +18,6 @@ from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.headless import _build_skill_result
 from autoskillit.execution.runtime.clone_guard import (
     CloneSnapshot,
-    _parse_worktree_branches,
-    _recover_branch_name,
     build_clone_guard_policy,
     check_and_revert_clone_contamination,
     derive_exclude_prefix,
@@ -31,7 +30,7 @@ from autoskillit.execution.runtime.clone_guard import (
 from autoskillit.pipeline.audit import DefaultAuditLog
 from tests.fakes import MockSubprocessRunner
 
-pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 _DEFAULT_POLICY = build_clone_guard_policy(
     readonly_skill=False,
@@ -119,23 +118,9 @@ class TestIsWorktreeSkillNegative:
 async def test_snapshot_clone_state_captures_sha(tmp_path):
     runner = MockSubprocessRunner()
     runner.push(_git_result(stdout="abc123\n"))
-    porcelain = f"worktree {tmp_path}\nHEAD abc123\nbranch refs/heads/main\n"
-    runner.push(_git_result(stdout=porcelain))
     snapshot = await snapshot_clone_state(str(tmp_path), runner)
     assert snapshot is not None
     assert snapshot.head_sha == "abc123"
-    assert snapshot.worktree_set == frozenset()
-
-
-@pytest.mark.anyio
-async def test_snapshot_clone_state_worktree_list_failure(tmp_path):
-    runner = MockSubprocessRunner()
-    runner.push(_git_result(stdout="abc123\n"))
-    runner.push(_git_result(returncode=128))
-    snapshot = await snapshot_clone_state(str(tmp_path), runner)
-    assert snapshot is not None
-    assert snapshot.head_sha == "abc123"
-    assert snapshot.worktree_set is None
 
 
 # ---------------------------------------------------------------------------
@@ -311,6 +296,7 @@ async def test_guard_full_flow_contamination_detected(tmp_path):
         runner,
         audit,
         skill_command="/autoskillit:implement-worktree-no-merge plan.md",
+        new_worktrees=(),
         policy=build_clone_guard_policy(
             readonly_skill=False,
             has_write_scope=True,
@@ -342,6 +328,7 @@ async def test_guard_skipped_when_success(tmp_path):
         str(tmp_path),
         runner,
         None,
+        new_worktrees=(),
         policy=_DEFAULT_POLICY,
     )
     assert not reverted
@@ -363,6 +350,7 @@ async def test_guard_skipped_when_worktree_created(tmp_path):
         str(tmp_path),
         runner,
         None,
+        new_worktrees=(),
         policy=_DEFAULT_POLICY,
     )
     assert not reverted
@@ -383,6 +371,7 @@ async def test_guard_skipped_when_no_snapshot(tmp_path):
         str(tmp_path),
         runner,
         None,
+        new_worktrees=(),
         policy=_DEFAULT_POLICY,
     )
     assert not reverted
@@ -446,6 +435,7 @@ async def test_audit_log_records_contamination(tmp_path):
         runner,
         audit,
         skill_command="/autoskillit:implement-worktree-no-merge plan.md",
+        new_worktrees=(),
         policy=build_clone_guard_policy(
             readonly_skill=False,
             has_write_scope=True,
@@ -488,6 +478,7 @@ async def test_readonly_check_fires_on_success(tmp_path):
         runner,
         None,
         skill_command="/autoskillit:investigate foo",
+        new_worktrees=(),
         policy=build_clone_guard_policy(
             readonly_skill=True,
             has_write_scope=False,
@@ -601,6 +592,7 @@ async def test_contamination_check_fires_on_success_when_write_scoped(tmp_path):
         str(tmp_path),
         runner,
         audit=None,
+        new_worktrees=(),
         policy=build_clone_guard_policy(
             readonly_skill=True,
             has_write_scope=True,
@@ -650,6 +642,7 @@ async def test_snapshot_not_taken_without_write_scope_or_readonly(tmp_path):
         str(tmp_path),
         MockSubprocessRunner(),
         audit=None,
+        new_worktrees=(),
         policy=_DEFAULT_POLICY,
     )
     assert not reverted
@@ -677,6 +670,7 @@ async def test_result_mutated_on_contamination_revert(tmp_path):
         runner,
         None,
         skill_command="/autoskillit:investigate foo",
+        new_worktrees=(),
         policy=build_clone_guard_policy(
             readonly_skill=True,
             has_write_scope=False,
@@ -710,6 +704,7 @@ async def test_result_not_mutated_when_no_contamination(tmp_path):
         runner,
         None,
         skill_command="/autoskillit:investigate foo",
+        new_worktrees=(),
         policy=build_clone_guard_policy(
             readonly_skill=True,
             has_write_scope=False,
@@ -742,6 +737,7 @@ async def test_result_needs_retry_set_on_revert(tmp_path):
         str(tmp_path),
         runner,
         None,
+        new_worktrees=(),
         policy=build_clone_guard_policy(
             readonly_skill=False,
             has_write_scope=True,
@@ -808,6 +804,7 @@ async def test_original_retry_reason_preserved_on_revert(tmp_path):
         str(tmp_path),
         runner,
         None,
+        new_worktrees=(),
         policy=build_clone_guard_policy(
             readonly_skill=False,
             has_write_scope=True,
@@ -850,6 +847,7 @@ async def test_original_subtype_preserved_on_revert(tmp_path):
         str(tmp_path),
         runner,
         None,
+        new_worktrees=(),
         policy=build_clone_guard_policy(
             readonly_skill=False,
             has_write_scope=True,
@@ -907,26 +905,23 @@ class TestDeriveExcludePrefix:
 
 
 # ---------------------------------------------------------------------------
-# T22: guard fires when worktree_path is None despite real worktree created
+# T22: guard recovers a worktree supplied by the executor's observation
 # ---------------------------------------------------------------------------
 @pytest.mark.anyio
 async def test_guard_fires_when_worktree_path_none_despite_real_worktree(tmp_path):
+    from tests._git_topology import add_linked_worktree, head, init_checkout
+
+    repo = init_checkout(tmp_path / "clone")
+    wt_dir = add_linked_worktree(repo, "impl-fix")
     runner = MockSubprocessRunner()
-    wt_dir = tmp_path / "worktrees" / "impl-fix"
-    wt_dir.mkdir(parents=True)
-    (wt_dir / ".git").write_text("gitdir: /tmp/fake/.git/worktrees/impl-fix\n")
-
-    porcelain_post = f"worktree {tmp_path}\n\nworktree {wt_dir}\n"
-
-    snapshot = CloneSnapshot(head_sha="abc123", worktree_set=frozenset())
+    snapshot = CloneSnapshot(head_sha=head(repo))
     skill_result = _make_skill_result(success=False, worktree_path=None)
-
-    runner.push(_git_result(stdout=porcelain_post))
+    worktrees = [WorktreeRecord(str(wt_dir), head(wt_dir), "impl-fix", False, False)]
 
     result, reverted = await check_and_revert_clone_contamination(
         snapshot,
         skill_result,
-        str(tmp_path),
+        str(repo),
         runner,
         None,
         skill_command="/autoskillit:implement-worktree-no-merge plan.md",
@@ -936,33 +931,10 @@ async def test_guard_fires_when_worktree_path_none_despite_real_worktree(tmp_pat
             is_clone_commit=False,
             is_worktree=True,
         ),
+        new_worktrees=worktrees,
     )
     assert not reverted
     assert result.worktree_path == str(wt_dir)
-
-
-# ---------------------------------------------------------------------------
-# T23: snapshot captures worktree set
-# ---------------------------------------------------------------------------
-@pytest.mark.anyio
-async def test_snapshot_captures_worktree_set(tmp_path):
-    runner = MockSubprocessRunner()
-    runner.push(_git_result(stdout="abc123\n"))
-    porcelain = (
-        f"worktree {tmp_path}\n"
-        "HEAD abc123\n"
-        "branch refs/heads/main\n"
-        "\n"
-        f"worktree {tmp_path}/worktrees/impl-a\n"
-        "HEAD def456\n"
-        "branch refs/heads/impl-a\n"
-    )
-    runner.push(_git_result(stdout=porcelain))
-
-    snapshot = await snapshot_clone_state(str(tmp_path), runner)
-    assert snapshot is not None
-    assert snapshot.head_sha == "abc123"
-    assert snapshot.worktree_set == frozenset({f"{tmp_path}/worktrees/impl-a"})
 
 
 # ---------------------------------------------------------------------------
@@ -970,22 +942,21 @@ async def test_snapshot_captures_worktree_set(tmp_path):
 # ---------------------------------------------------------------------------
 @pytest.mark.anyio
 async def test_worktree_recovery_requires_worktree_skill(tmp_path):
+    from tests._git_topology import add_linked_worktree, head, init_checkout
+
+    repo = init_checkout(tmp_path / "clone")
+    wt_dir = add_linked_worktree(repo, "impl-fix")
+    worktrees = [WorktreeRecord(str(wt_dir), head(wt_dir), "impl-fix", False, False)]
     runner = MockSubprocessRunner()
-    wt_dir = tmp_path / "worktrees" / "impl-fix"
-    wt_dir.mkdir(parents=True)
-
-    porcelain_post = f"worktree {tmp_path}\n\nworktree {wt_dir}\n"
-    snapshot = CloneSnapshot(head_sha="abc123", worktree_set=frozenset())
-    skill_result = _make_skill_result(success=True, worktree_path=None)
-
-    runner.push(_git_result(stdout=porcelain_post))
     runner.push(_git_result(stdout="abc123\n"))
     runner.push(_git_result(stdout=""))
+    snapshot = CloneSnapshot(head_sha="abc123")
+    skill_result = _make_skill_result(success=True, worktree_path=None)
 
-    result, reverted = await check_and_revert_clone_contamination(
+    result, _reverted = await check_and_revert_clone_contamination(
         snapshot,
         skill_result,
-        str(tmp_path),
+        str(repo),
         runner,
         None,
         skill_command="/autoskillit:investigate foo",
@@ -995,6 +966,7 @@ async def test_worktree_recovery_requires_worktree_skill(tmp_path):
             is_clone_commit=False,
             is_worktree=False,
         ),
+        new_worktrees=worktrees,
     )
     assert result.worktree_path is None
 
@@ -1004,21 +976,20 @@ async def test_worktree_recovery_requires_worktree_skill(tmp_path):
 # ---------------------------------------------------------------------------
 @pytest.mark.anyio
 async def test_recovered_worktree_path_is_validated(tmp_path):
+    from autoskillit.core import validate_worktree_path
+    from tests._git_topology import add_linked_worktree, head, init_checkout
+
+    repo = init_checkout(tmp_path / "clone")
+    wt_dir = add_linked_worktree(repo, "impl-fix")
     runner = MockSubprocessRunner()
-    wt_dir = tmp_path / "worktrees" / "impl-fix"
-    wt_dir.mkdir(parents=True)
-    (wt_dir / ".git").write_text("gitdir: /tmp/fake/.git/worktrees/impl-fix\n")
-
-    porcelain_post = f"worktree {tmp_path}\n\nworktree {wt_dir}\n"
-    snapshot = CloneSnapshot(head_sha="abc123", worktree_set=frozenset())
+    snapshot = CloneSnapshot(head_sha=head(repo))
     skill_result = _make_skill_result(success=False, worktree_path=None)
-
-    runner.push(_git_result(stdout=porcelain_post))
+    worktrees = [WorktreeRecord(str(wt_dir), head(wt_dir), "impl-fix", False, False)]
 
     result, reverted = await check_and_revert_clone_contamination(
         snapshot,
         skill_result,
-        str(tmp_path),
+        str(repo),
         runner,
         None,
         skill_command="/autoskillit:implement-worktree-no-merge plan.md",
@@ -1028,21 +999,20 @@ async def test_recovered_worktree_path_is_validated(tmp_path):
             is_clone_commit=False,
             is_worktree=True,
         ),
+        new_worktrees=worktrees,
     )
-    from autoskillit.core import validate_worktree_path
-
-    assert result.worktree_path is not None
+    assert not reverted
     assert result.worktree_path == str(wt_dir)
-    assert validate_worktree_path(result.worktree_path) is not None
+    assert validate_worktree_path(result.worktree_path, verify_git=True) is not None
 
 
 # ---------------------------------------------------------------------------
-# T26: recovery skipped when snapshot worktree_set is None
+# T26: no executor-observed worktree means no routing recovery
 # ---------------------------------------------------------------------------
 @pytest.mark.anyio
-async def test_worktree_recovery_skipped_when_snapshot_worktree_set_none(tmp_path):
+async def test_worktree_recovery_skipped_without_observed_worktrees(tmp_path):
     runner = MockSubprocessRunner()
-    snapshot = CloneSnapshot(head_sha="abc123", worktree_set=None)
+    snapshot = CloneSnapshot(head_sha="abc123")
     skill_result = _make_skill_result(success=False, worktree_path=None)
 
     runner.push(_git_result(stdout="def456\n"))
@@ -1063,6 +1033,7 @@ async def test_worktree_recovery_skipped_when_snapshot_worktree_set_none(tmp_pat
             is_clone_commit=False,
             is_worktree=False,
         ),
+        new_worktrees=(),
     )
     assert reverted
     assert result.worktree_path is None
@@ -1073,21 +1044,19 @@ async def test_worktree_recovery_skipped_when_snapshot_worktree_set_none(tmp_pat
 # ---------------------------------------------------------------------------
 @pytest.mark.anyio
 async def test_worktree_recovery_on_success_path(tmp_path):
+    from tests._git_topology import add_linked_worktree, head, init_checkout
+
+    repo = init_checkout(tmp_path / "clone")
+    wt_dir = add_linked_worktree(repo, "impl-fix")
+    worktrees = [WorktreeRecord(str(wt_dir), head(wt_dir), "impl-fix", False, False)]
     runner = MockSubprocessRunner()
-    wt_dir = tmp_path / "worktrees" / "impl-fix"
-    wt_dir.mkdir(parents=True)
-    (wt_dir / ".git").write_text("gitdir: /tmp/fake/.git/worktrees/impl-fix\n")
-
-    porcelain_post = f"worktree {tmp_path}\n\nworktree {wt_dir}\n"
-    snapshot = CloneSnapshot(head_sha="abc123", worktree_set=frozenset())
+    snapshot = CloneSnapshot(head_sha=head(repo))
     skill_result = _make_skill_result(success=True, worktree_path=None, exit_code=0)
-
-    runner.push(_git_result(stdout=porcelain_post))
 
     result, reverted = await check_and_revert_clone_contamination(
         snapshot,
         skill_result,
-        str(tmp_path),
+        str(repo),
         runner,
         None,
         skill_command="/autoskillit:implement-worktree-no-merge plan.md",
@@ -1097,6 +1066,7 @@ async def test_worktree_recovery_on_success_path(tmp_path):
             is_clone_commit=False,
             is_worktree=True,
         ),
+        new_worktrees=worktrees,
     )
     assert not reverted
     assert result.worktree_path == str(wt_dir)
@@ -1119,6 +1089,7 @@ async def test_clone_commit_skill_failure_does_not_revert(tmp_path):
         runner,
         None,
         skill_command="/autoskillit:resolve-failures",
+        new_worktrees=(),
         policy=build_clone_guard_policy(
             readonly_skill=False,
             has_write_scope=True,
@@ -1145,95 +1116,23 @@ def test_validate_worktree_path_verify_git_rejects_non_worktree_dir(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Branch name recovery from git worktree list --porcelain
+# Branch name recovery from executor-observed worktree records
 # ---------------------------------------------------------------------------
-
-
-def test_parse_worktree_branches_extracts_short_name(tmp_path):
-    """_parse_worktree_branches strips refs/heads/ and maps path → branch name."""
-    wt_dir = tmp_path / "worktrees" / "impl-feature"
-    porcelain = (
-        f"worktree {tmp_path}\n"
-        "HEAD abc123\n"
-        "branch refs/heads/main\n"
-        "\n"
-        f"worktree {wt_dir}\n"
-        "HEAD def456\n"
-        "branch refs/heads/impl-feature\n"
-    )
-    branches = _parse_worktree_branches(porcelain)
-    assert branches == {str(wt_dir): "impl-feature"}
-
-
-def test_parse_worktree_branches_skips_main_worktree(tmp_path):
-    """The first (main) worktree entry is not included in the result."""
-    porcelain = f"worktree {tmp_path}\nHEAD abc123\nbranch refs/heads/main\n"
-    branches = _parse_worktree_branches(porcelain)
-    assert branches == {}
-
-
-def test_parse_worktree_branches_omits_detached_head(tmp_path):
-    """Detached HEAD worktrees have no branch line and are absent from result."""
-    wt_dir = tmp_path / "worktrees" / "impl-detached"
-    porcelain = (
-        f"worktree {tmp_path}\n"
-        "HEAD abc123\n"
-        "branch refs/heads/main\n"
-        "\n"
-        f"worktree {wt_dir}\n"
-        "HEAD def456\n"
-        "detached\n"
-    )
-    branches = _parse_worktree_branches(porcelain)
-    assert str(wt_dir) not in branches
-
-
-def test_recover_branch_name_returns_branch_for_valid_worktree(tmp_path):
-    """_recover_branch_name returns the branch for the first valid new worktree."""
-    wt_dir = tmp_path / "worktrees" / "impl-feature"
-    wt_dir.mkdir(parents=True)
-    (wt_dir / ".git").write_text("gitdir: /tmp/fake/.git/worktrees/impl-feature\n")
-
-    branch_map = {str(wt_dir): "impl-feature"}
-    result = _recover_branch_name([str(wt_dir)], branch_map)
-    assert result == "impl-feature"
-
-
-def test_recover_branch_name_returns_none_when_no_branch_in_map(tmp_path):
-    """_recover_branch_name returns None when the worktree path is not in branch_map."""
-    wt_dir = tmp_path / "worktrees" / "impl-no-branch"
-    wt_dir.mkdir(parents=True)
-    (wt_dir / ".git").write_text("gitdir: /tmp/fake/.git/worktrees/impl-no-branch\n")
-
-    result = _recover_branch_name([str(wt_dir)], {})
-    assert result is None
-
-
 @pytest.mark.anyio
 async def test_guard_recovers_branch_name_alongside_worktree_path(tmp_path):
-    """When worktree_path is None and a new worktree is detected, branch_name is also recovered."""
-    runner = MockSubprocessRunner()
-    wt_dir = tmp_path / "worktrees" / "impl-feature"
-    wt_dir.mkdir(parents=True)
-    (wt_dir / ".git").write_text("gitdir: /tmp/fake/.git/worktrees/impl-feature\n")
+    from tests._git_topology import add_linked_worktree, head, init_checkout
 
-    porcelain_post = (
-        f"worktree {tmp_path}\n"
-        "HEAD abc123\n"
-        "branch refs/heads/main\n"
-        "\n"
-        f"worktree {wt_dir}\n"
-        "HEAD def456\n"
-        "branch refs/heads/impl-feature\n"
-    )
-    snapshot = CloneSnapshot(head_sha="abc123", worktree_set=frozenset())
+    repo = init_checkout(tmp_path / "clone")
+    wt_dir = add_linked_worktree(repo, "impl-feature")
+    runner = MockSubprocessRunner()
+    snapshot = CloneSnapshot(head_sha=head(repo))
     skill_result = _make_skill_result(success=False, worktree_path=None)
-    runner.push(_git_result(stdout=porcelain_post))
+    worktrees = [WorktreeRecord(str(wt_dir), head(wt_dir), "impl-feature", False, False)]
 
     result, reverted = await check_and_revert_clone_contamination(
         snapshot,
         skill_result,
-        str(tmp_path),
+        str(repo),
         runner,
         None,
         skill_command="/autoskillit:implement-worktree-no-merge plan.md",
@@ -1243,6 +1142,7 @@ async def test_guard_recovers_branch_name_alongside_worktree_path(tmp_path):
             is_clone_commit=False,
             is_worktree=True,
         ),
+        new_worktrees=worktrees,
     )
     assert not reverted
     assert result.worktree_path == str(wt_dir)

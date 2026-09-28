@@ -4428,6 +4428,7 @@ def test_reconcile_adapter_preserves_closed_setup_reason(
         CaptureFailureReason.LEDGER_INTEGRITY: CleanupBlocker.LEDGER_INTEGRITY,
         CaptureFailureReason.MIGRATION_BLOCKED: CleanupBlocker.MIGRATION_BLOCKED,
         CaptureFailureReason.SNAPSHOT_INTEGRITY: CleanupBlocker.LEDGER_INTEGRITY,
+        CaptureFailureReason.RUNNER_SETTLEMENT: CleanupBlocker.UNKNOWN_SETUP,
         CaptureFailureReason.UNKNOWN_SETUP: CleanupBlocker.UNKNOWN_SETUP,
     }
     assert set(expected_blockers) == set(CaptureFailureReason)

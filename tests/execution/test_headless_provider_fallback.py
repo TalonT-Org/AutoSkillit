@@ -173,12 +173,7 @@ class TestPostStartProviderSafety:
         monkeypatch.setattr(
             _patch_headless__headless_execute,
             "_compute_post_session_metrics",
-            lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
-        )
-        monkeypatch.setattr(
-            _patch_headless__headless_execute,
-            "_capture_git_head_sha",
-            lambda *a: "",
+            lambda *a, **kw: PostSessionMetrics(0, 0),
         )
         monkeypatch.setattr(
             _patch_headless__headless_execute,

@@ -145,6 +145,7 @@ from .io import ReadResult as ReadResult
 from .io import TerminalColumn as TerminalColumn
 from .io import TreeEntry as TreeEntry
 from .io import TreeVanishedError as TreeVanishedError
+from .io import WorktreeRecord as WorktreeRecord
 from .io import YAMLError as YAMLError
 from .io import _render_gfm_table as _render_gfm_table
 from .io import _render_terminal_table as _render_terminal_table
@@ -172,8 +173,10 @@ from .io import is_in_git_repo as is_in_git_repo
 from .io import is_python_bytecode_path as is_python_bytecode_path
 from .io import is_yaml_mapping_node as is_yaml_mapping_node
 from .io import load_yaml as load_yaml
+from .io import main_checkout_root as main_checkout_root
 from .io import mapping_entry_byte_ranges_from_yaml as mapping_entry_byte_ranges_from_yaml
 from .io import parse_pipe_table as parse_pipe_table
+from .io import parse_worktree_porcelain as parse_worktree_porcelain
 from .io import pkg_root as pkg_root
 from .io import read_stable_contained_bytes as read_stable_contained_bytes
 from .io import read_stable_contained_range as read_stable_contained_range
@@ -1028,6 +1031,8 @@ from .types import EnvPolicy as EnvPolicy
 from .types import EpochClosedEffect as EpochClosedEffect
 from .types import EpochFenceProof as EpochFenceProof
 from .types import EvidenceSpec as EvidenceSpec
+from .types import EvidenceWorktree as EvidenceWorktree
+from .types import EvidenceWorktreeSource as EvidenceWorktreeSource
 from .types import ExecutableLaunchBinding as ExecutableLaunchBinding
 from .types import ExecutionCandidateAttempt as ExecutionCandidateAttempt
 from .types import ExecutionIdentity as ExecutionIdentity

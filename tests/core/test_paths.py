@@ -278,6 +278,40 @@ class TestIsGitMainCheckout:
         assert is_git_main_checkout(subdir) is True
 
 
+class TestMainCheckoutRoot:
+    def test_returns_main_checkout_root(self, tmp_path: Path) -> None:
+        from autoskillit.core import main_checkout_root
+
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+        (git_dir / "HEAD").write_text("ref: refs/heads/main\n")
+
+        assert main_checkout_root(tmp_path) == tmp_path
+
+    def test_returns_main_root_for_subdirectory(self, tmp_path: Path) -> None:
+        from autoskillit.core import main_checkout_root
+
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+        (git_dir / "HEAD").write_text("ref: refs/heads/main\n")
+        subdir = tmp_path / "src" / "pkg"
+        subdir.mkdir(parents=True)
+
+        assert main_checkout_root(subdir) == tmp_path
+
+    def test_returns_none_for_linked_worktree(self, tmp_path: Path) -> None:
+        from autoskillit.core import main_checkout_root
+
+        (tmp_path / ".git").write_text("gitdir: /path/to/main/.git/worktrees/foo\n")
+
+        assert main_checkout_root(tmp_path) is None
+
+    def test_returns_none_for_non_git_directory(self, tmp_path: Path) -> None:
+        from autoskillit.core import main_checkout_root
+
+        assert main_checkout_root(tmp_path) is None
+
+
 class TestIsInGitRepo:
     def test_returns_true_for_git_directory(self, tmp_path: Path) -> None:
         from autoskillit.core.paths import is_in_git_repo

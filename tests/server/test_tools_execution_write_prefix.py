@@ -6,12 +6,13 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.server.tools._execution_helpers import scope_covers_cwd
 from autoskillit.server.tools.tools_execution import (
     _compute_write_prefixes,
     run_skill,
 )
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 
 # ---------------------------------------------------------------------------
@@ -24,13 +25,11 @@ def _make_worktree_layout(tmp_path: Path) -> tuple[Path, Path]:
 
     Returns (clone_root, worktree_path).
     """
-    clone_root = tmp_path / "repo"
-    clone_root.mkdir()
-    worktrees_dir = clone_root / "worktrees"
-    worktrees_dir.mkdir()
-    worktree = worktrees_dir / "impl-fix-123"
-    worktree.mkdir()
-    (worktree / ".git").write_text("gitdir: ../../.git/worktrees/impl-fix-123\n")
+    from tests._git_topology import add_linked_worktree, init_checkout
+
+    clone_root = init_checkout(tmp_path / "repo")
+    (clone_root / "worktrees").mkdir()
+    worktree = add_linked_worktree(clone_root, "impl-fix-123")
     return clone_root, worktree
 
 
@@ -52,6 +51,10 @@ def test_worktree_cwd_shape_produces_correct_parent_prefix(tmp_path: Path) -> No
     # Must include the worktree parent (worktrees/) — NOT worktrees/worktrees/
     worktree_parent_str = str(worktree.parent) + "/"
     assert worktree_parent_str in all_prefixes
+    assert all_prefixes[1:] == (
+        str(worktree.resolve()) + "/",
+        str(worktree.parent.resolve()) + "/",
+    )
     # Must NOT double-include as "worktrees/worktrees/"
     assert (str(worktree.parent) + "/worktrees/") not in all_prefixes
 
@@ -67,10 +70,43 @@ def test_clone_root_cwd_shape_still_produces_worktrees_sibling(tmp_path: Path) -
     )
 
     assert primary == str(clone_root) + "/"
-    worktrees_parent_str = str(clone_root / "worktrees") + "/"
-    assert worktrees_parent_str in all_prefixes
+    worktree_prefixes = list(all_prefixes[1:])
+    assert worktree_prefixes == [str((clone_root.parent / "worktrees").resolve()) + "/"]
+    assert not scope_covers_cwd(tuple(worktree_prefixes), str(clone_root))
     # Worktree was created but unused in this test.
     assert worktree.exists()
+
+
+def test_main_checkout_named_worktrees_is_not_covered_by_worktree_prefix(
+    tmp_path: Path,
+) -> None:
+    from tests._git_topology import init_checkout
+
+    checkout = init_checkout(tmp_path / "worktrees")
+    watch_dir = tmp_path / "watch"
+    watch_dir.mkdir()
+
+    _primary, all_prefixes = _compute_write_prefixes(
+        write_watch_dirs=[watch_dir],
+        cwd=str(checkout),
+        skill_command="/autoskillit:implement-worktree-no-merge plan.md",
+    )
+
+    worktree_prefixes = all_prefixes[1:]
+    assert not scope_covers_cwd(worktree_prefixes, str(checkout))
+
+
+def test_non_git_cwd_gets_no_worktree_prefix(tmp_path: Path) -> None:
+    non_git = tmp_path / "plain-directory"
+    non_git.mkdir()
+
+    _primary, all_prefixes = _compute_write_prefixes(
+        write_watch_dirs=[non_git],
+        cwd=str(non_git),
+        skill_command="/autoskillit:implement-worktree-no-merge plan.md",
+    )
+
+    assert all_prefixes[1:] == ()
 
 
 def test_worktree_cwd_self_inclusion(tmp_path: Path) -> None:
@@ -112,14 +148,13 @@ def test_non_worktree_skill_no_worktree_prefix(tmp_path: Path) -> None:
 
 @pytest.mark.anyio
 async def test_fail_fast_when_scope_excludes_cwd(
-    tool_ctx_kitchen_open, monkeypatch, tmp_path
+    tool_ctx_kitchen_open, monkeypatch, tmp_path, git_checkout
 ) -> None:
     """When write scope does NOT cover cwd for a WORKTREE_SKILLS dispatch, return gate_error."""
     import json
 
     from tests.fakes import InMemoryHeadlessExecutor
 
-    clone_root, worktree = _make_worktree_layout(tmp_path)
     plan_path = tmp_path / "plan.md"
     plan_path.write_text("# plan")
     executor = InMemoryHeadlessExecutor()
@@ -131,11 +166,9 @@ async def test_fail_fast_when_scope_excludes_cwd(
     # preflight's _scope_covers_cwd check must reject the dispatch.
     temp_dir = tmp_path / "elsewhere"
     temp_dir.mkdir()
-    non_worktree_cwd = tmp_path / "non_worktree_cwd"
-    non_worktree_cwd.mkdir()
     result = await run_skill(
         f"/autoskillit:implement-worktree-no-merge {plan_path}",
-        cwd=str(non_worktree_cwd),
+        cwd=str(git_checkout),
         output_dir=str(temp_dir),
     )
 

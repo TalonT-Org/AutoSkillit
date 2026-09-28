@@ -18,6 +18,12 @@ import these utilities via `from _<name> import …` (bare-name) using a
 sys.path bootstrap adds `hooks/_runtime/` so bare-name imports resolve there
 too — preserving the stdlib-only `hooks/AGENTS.md` contract.
 
+**Path identity.** `_path_identity.py` is the single canonicalization authority:
+identity and containment comparisons in hooks (`relative_to`, `is_relative_to`,
+`commonpath`, `commonprefix`, `relpath`) go through it, which canonicalizes both
+operands. `tests/arch/test_hook_path_identity_guard.py` fails on any other site that is
+not allowlisted with a rationale naming where each operand is canonicalized.
+
 **GitHub-mutation analysis.** `_github_mutation_analysis.py` (558 lines, under
 the 750-line REQ-CNST-010 default with no exemption needed) owns the segment
 walk and `analyze_github_mutations`, the repeatable-shell/process-substitution

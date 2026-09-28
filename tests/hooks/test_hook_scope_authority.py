@@ -9,6 +9,8 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from types import EllipsisType
+from typing import Literal
 
 import pytest
 
@@ -21,8 +23,10 @@ from autoskillit.hook_registry import (
     render_hook_scope_table,
 )
 from autoskillit.hooks._runtime import _hook_scope_table, _session_scope_authority
+from autoskillit.hooks._runtime._hook_constants import DENY_TRIGGER_BY_GUARD
 from autoskillit.workspace._projected_artifact._publication import write_generated_hooks_json
 from tests.conftest import production_interpreter_env
+from tests.fixtures.hook_script_inventory import identity_scope_callers
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
@@ -37,23 +41,149 @@ def _run_copied_guard(
     tmp_path: Path,
     script: str,
     *,
-    table_content: str | None,
+    table_content: str | None | EllipsisType = ...,
+    via: Literal["direct", "dispatch"] = "direct",
+    link: bool = False,
+    payload: dict[str, object] | None = None,
+    headless: bool = False,
 ) -> subprocess.CompletedProcess[str]:
-    copied_hooks = tmp_path / "hooks"
-    shutil.copytree(HOOKS_DIR, copied_hooks)
+    """Run one guard from a copied hooks tree, optionally through a symlinked root.
+
+    With ``link`` the tree is copied to ``real/hooks`` and reached through the
+    directory symlink ``current -> real``, the shape of the plugin-level
+    generation selector.
+    """
+    ignore = shutil.ignore_patterns("__pycache__", "*.py[co]")
+    if link:
+        shutil.copytree(HOOKS_DIR, tmp_path / "real" / "hooks", ignore=ignore)
+        (tmp_path / "current").symlink_to(tmp_path / "real", target_is_directory=True)
+        copied_hooks = tmp_path / "current" / "hooks"
+    else:
+        copied_hooks = tmp_path / "hooks"
+        shutil.copytree(HOOKS_DIR, copied_hooks, ignore=ignore)
     table_path = copied_hooks / "_runtime" / "_hook_scope_table.py"
     if table_content is None:
         table_path.unlink()
-    else:
+    elif isinstance(table_content, str):
         table_path.write_text(table_content, encoding="utf-8")
+    if via == "dispatch":
+        argv = [
+            sys.executable,
+            "-B",
+            str(copied_hooks / "_dispatch.py"),
+            script.removesuffix(".py"),
+        ]
+    else:
+        argv = [sys.executable, "-B", str(copied_hooks / script)]
+    env = production_interpreter_env()
+    env.pop("AUTOSKILLIT_HEADLESS", None)
+    env.pop("AUTOSKILLIT_SESSION_TYPE", None)
+    if headless:
+        env["AUTOSKILLIT_HEADLESS"] = "1"
+    env["AUTOSKILLIT_LOG_DIR"] = str(tmp_path / "logs")
     return subprocess.run(
-        [sys.executable, "-B", str(copied_hooks / script)],
-        input=json.dumps({"tool_name": "AskUserQuestion", "tool_input": {}}),
+        argv,
+        input=json.dumps(payload or {"tool_name": "AskUserQuestion", "tool_input": {}}),
         capture_output=True,
         text=True,
-        env=production_interpreter_env(),
+        env=env,
         timeout=10,
     )
+
+
+def _hook_def_for(script: str) -> HookDef:
+    return next(hook_def for hook_def in HOOK_REGISTRY if script in hook_def.scripts)
+
+
+def _benign_payload(hook_def: HookDef, tmp_path: Path) -> dict[str, object]:
+    tool_name = hook_def.matcher.split("|", 1)[0]
+    tool_inputs: dict[str, dict[str, object]] = {
+        "Bash": {"command": "echo hi"},
+        "Write": {"file_path": str(tmp_path / "benign.txt"), "content": "x"},
+        "AskUserQuestion": {},
+    }
+    return {"tool_name": tool_name, "tool_input": tool_inputs[tool_name]}
+
+
+@pytest.mark.parametrize("script", identity_scope_callers())
+def test_identity_callers_admit_through_symlinked_root(tmp_path: Path, script: str) -> None:
+    hook_def = _hook_def_for(script)
+    result = _run_copied_guard(
+        tmp_path,
+        script,
+        via="dispatch",
+        link=True,
+        payload=_benign_payload(hook_def, tmp_path),
+        headless=hook_def.session_scope == "headless_only",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "scope_authority_unavailable" not in result.stdout
+    assert "scope_authority_unavailable" not in result.stderr
+
+
+def test_real_policy_survives_symlinked_root(tmp_path: Path) -> None:
+    result = _run_copied_guard(
+        tmp_path,
+        "guards/test_runner_guard.py",
+        via="dispatch",
+        link=True,
+        payload={"tool_name": "Bash", "tool_input": {"command": "python -m pytest tests/x"}},
+        headless=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    decision = json.loads(result.stdout)["hookSpecificOutput"]
+    assert decision["permissionDecision"] == "deny"
+    assert decision["permissionDecisionReason"].startswith(
+        DENY_TRIGGER_BY_GUARD["test_runner_guard"]
+    )
+    assert "scope_authority_unavailable" not in decision["permissionDecisionReason"]
+
+
+_AUTHORITY_DRIVER = """
+import sys
+hooks_dir = sys.argv[1]
+sys.path[:0] = [hooks_dir + "/_runtime", hooks_dir]
+from _session_scope_authority import enforce_script_session_scope
+admitted = enforce_script_session_scope(sys.argv[2])
+sys.stdout.write("ADMITTED=" + repr(admitted) + "\\n")
+"""
+
+
+def test_authority_denies_noncanonical_identities(tmp_path: Path) -> None:
+    copied_hooks = tmp_path / "tree" / "hooks"
+    shutil.copytree(
+        HOOKS_DIR, copied_hooks, ignore=shutil.ignore_patterns("__pycache__", "*.py[co]")
+    )
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "escape.py").write_text("", encoding="utf-8")
+    guards = copied_hooks / "guards"
+    (guards / "escape.py").symlink_to(outside / "escape.py")
+    (guards / "unregistered_probe.py").write_text("", encoding="utf-8")
+    (guards / "loop.py").symlink_to(guards / "loop.py")
+
+    for identity in (
+        outside / "escape.py",
+        guards / "escape.py",
+        guards / "unregistered_probe.py",
+        guards / "loop.py",
+    ):
+        result = subprocess.run(
+            [sys.executable, "-B", "-c", _AUTHORITY_DRIVER, str(copied_hooks), str(identity)],
+            capture_output=True,
+            text=True,
+            env=production_interpreter_env(),
+            timeout=10,
+        )
+        assert result.returncode == 0, (identity, result.stderr)
+        assert "Traceback" not in result.stderr, (identity, result.stderr)
+        deny_line, admitted_line = result.stdout.strip().splitlines()
+        decision = json.loads(deny_line)["hookSpecificOutput"]
+        assert decision["permissionDecision"] == "deny", identity
+        assert "code=scope_authority_unavailable" in decision["permissionDecisionReason"]
+        assert admitted_line == "ADMITTED=False", identity
 
 
 def test_committed_scope_table_matches_registry_renderer() -> None:

@@ -56,7 +56,7 @@ class TestServerToolTypesNotInCore:
     """REQ-RELOC-002/003: Types removed from core re-export surface."""
 
     def test_types_not_in_core_types_all(self):
-        from autoskillit.core.types._type_results import __all__ as results_all
+        from autoskillit.core.types.results._type_results import __all__ as results_all
 
         relocated = {
             "KitchenStatusResult",
@@ -70,7 +70,7 @@ class TestServerToolTypesNotInCore:
         assert relocated.isdisjoint(set(results_all))
 
     def test_model_total_entry_still_in_core(self):
-        from autoskillit.core.types._type_results import ModelTotalEntry
+        from autoskillit.core.types.results._type_results import ModelTotalEntry
 
         assert "model" in ModelTotalEntry.__required_keys__
 

@@ -80,7 +80,7 @@ class TestExplicitBackendOverrideAdmissionDispatchAgreement:
         test_dry_walkthrough_codex_pin (which covers the backend resolution
         half) — together they prove REQ-MDL-002.
         """
-        from autoskillit.core.types._type_backend import (
+        from autoskillit.core.types.execution._type_backend import (
             CODEX_EFFORT_MAPPING,
             CODEX_MODEL_ALIASES,
         )

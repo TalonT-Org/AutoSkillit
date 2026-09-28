@@ -1,7 +1,8 @@
 """Protocol-based test fakes for autoskillit.
 
 Single authoritative module for in-memory test doubles that satisfy protocols
-defined in ``core/_type_protocols_*.py`` shards. Imports only from L0 (``autoskillit.core``).
+defined in ``core/types/protocols/_type_protocols_*.py`` shards.
+Imports only from L0 (``autoskillit.core``).
 """
 
 from __future__ import annotations

@@ -19,7 +19,7 @@ def test_backend_capabilities_fields_documented():
     """Every BackendCapabilities field must have inline or preceding-line documentation."""
     from autoskillit.core import paths
 
-    src_path = paths.pkg_root() / "core" / "types" / "_type_backend.py"
+    src_path = paths.pkg_root() / "core" / "types" / "execution" / "_type_backend.py"
     source = src_path.read_text()
     lines = source.splitlines()
     tree = ast.parse(source)

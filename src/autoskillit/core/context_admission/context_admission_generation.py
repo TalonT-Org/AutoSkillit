@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from ..types._type_context_admission import (
+from ..types.context_admission._type_context_admission import (
     ActiveContextAdmissionState,
     AdmissionEffect,
     AdmissionTransition,
@@ -23,7 +23,7 @@ from ..types._type_context_admission import (
     ReconcileGenerationEvent,
     StartGenerationEvent,
 )
-from ..types._type_enums import (
+from ..types.foundation._type_enums import (
     AdmissionDecisionKind,
     AdmissionState,
     ChargeDomain,

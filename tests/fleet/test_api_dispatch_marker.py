@@ -11,7 +11,7 @@ import pytest
 
 from autoskillit.core import SkillResult
 from autoskillit.core._execution_marker import _touch_marker
-from autoskillit.core.types._type_enums import RetryReason
+from autoskillit.core.types.foundation._type_enums import RetryReason
 from autoskillit.fleet._api import _run_dispatch
 from tests.fleet._helpers import (
     _mock_backend_with_locator,

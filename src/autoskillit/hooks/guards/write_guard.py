@@ -493,7 +493,7 @@ def main() -> None:
     raw_tool_names = os.environ.get("AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES", "")
     parsed_names = [t.strip() for t in raw_tool_names.split(",") if t.strip()]
     # Default must match CLAUDE_CODE_CAPABILITIES.write_guard_tool_names
-    # in core/types/_type_backend.py
+    # in core/types/execution/_type_backend.py
     effective_tool_names: frozenset[str] = (
         frozenset(parsed_names)
         if parsed_names

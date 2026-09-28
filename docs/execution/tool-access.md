@@ -318,7 +318,7 @@ fresh/resume behavior are documented in
 [Claude startup readiness](claude-startup-readiness.md).
 
 `GATED_TOOLS` and the category-specific sets in
-`core/types/_type_constants_registries.py` define the visible surfaces. The kitchen
+`core/types/constants/_type_constants_registries.py` define the visible surfaces. The kitchen
 set is derived by subtracting fleet, exploration, and evidence-reader tools from
 `GATED_TOOLS`.
 

@@ -171,12 +171,12 @@ class FleetTestRunner:
         **kwargs: Any,
     ) -> Any:
         from autoskillit.core.runtime._linux_proc import read_starttime_ticks
-        from autoskillit.core.types._type_enums import (
+        from autoskillit.core.types.execution._type_subprocess import SubprocessResult
+        from autoskillit.core.types.foundation._type_enums import (
             ChannelConfirmation,
             KillReason,
             TerminationReason,
         )
-        from autoskillit.core.types._type_subprocess import SubprocessResult
         from autoskillit.execution import kill_process_tree
 
         self.call_count += 1

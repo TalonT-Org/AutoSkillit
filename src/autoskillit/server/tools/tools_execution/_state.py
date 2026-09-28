@@ -87,7 +87,7 @@ if TYPE_CHECKING:
         VerifiedInputPreflightResult,
         WriteBehaviorSpec,
     )
-    from autoskillit.core.types._type_skill_contract import (
+    from autoskillit.core.types.launch._type_skill_contract import (
         ExplorationVectorApplicabilityId,
         SkillSessionContract,
     )

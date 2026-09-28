@@ -10,7 +10,7 @@ from ..closure_hashing import (
     parse_canonical_json_bytes,
 )
 from ..io.path_containment import ContainmentError, read_stable_contained_bytes
-from ..types._type_plan_set_authority import (
+from ..types.audit._type_plan_set_authority import (
     PLAN_SET_AUTHORITY_DOMAIN,
     PLAN_SET_MAX_AUTHORITY_BYTES,
     PLAN_SET_MAX_ISSUE_BYTES,

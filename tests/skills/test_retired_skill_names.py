@@ -30,7 +30,7 @@ def test_no_retired_skill_name_has_a_live_directory() -> None:
 
 def test_audit_feature_gates_in_retired_skill_names() -> None:
     """audit-feature-gates is in RETIRED_SKILL_NAMES after unbundling."""
-    from autoskillit.core.types._type_constants import RETIRED_SKILL_NAMES
+    from autoskillit.core.types.constants._type_constants import RETIRED_SKILL_NAMES
 
     assert "audit-feature-gates" in RETIRED_SKILL_NAMES
 

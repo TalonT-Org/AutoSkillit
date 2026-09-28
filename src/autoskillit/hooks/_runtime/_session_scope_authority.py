@@ -19,7 +19,7 @@ from typing import Final, Literal
 
 # Canonical session-scope value set for the hook runtime + hook_registry layer.
 # T17 (tests/hooks/test_hook_scope_authority.py) pins this value set equal to
-# the IL-0 inline constant in core/types/_type_session_shape.py. Defined here
+# the IL-0 inline constant in core/types/launch/_type_session_shape.py. Defined here
 # because _session_scope_authority is the canonical authority surface for this
 # layer (per the module docstring at lines 1-19).
 SESSION_SCOPE_VALUES: Final[frozenset[str]] = frozenset(

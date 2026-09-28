@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.core.types._type_checkpoint import SessionCheckpoint, compute_remaining
+from autoskillit.core.types.execution._type_checkpoint import SessionCheckpoint, compute_remaining
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 

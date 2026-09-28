@@ -4,7 +4,7 @@
 wrong directory: the offending text lived in ``tools_recipe.py``, but the
 sweep only scanned ``skills/*/SKILL.md``. This module guards the registry
 that closes that scope gap — ``ORCHESTRATOR_FACING_INSTRUCTION_SURFACES``
-(core/types/_type_orchestrator_instruction_surfaces.py) — against silently drifting the
+(core/types/constants/_type_orchestrator_instruction_surfaces.py) — against silently drifting the
 same way: a stale entry, an entry that resolves but extracts nothing, an
 unregistered bootstrap skill, or an unregistered kitchen-tagged tool module
 would all reproduce the #4707 failure mode inside its own fix.

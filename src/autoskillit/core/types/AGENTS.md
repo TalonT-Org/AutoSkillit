@@ -1,12 +1,42 @@
 # types/
 
-Type re-export hub and all typed building blocks for the autoskillit package (IL-0).
+Type re-export hub and typed building blocks for the autoskillit package (IL-0).
 
 ## Architecture Notes
 
-Internal dependency DAG: enums -> recipe_sections -> constants_registries -> constants_features; enums -> results -> protocols -> helpers; enums -> phoropter; enums + phoropter -> tradition_manifest; enums -> exceptions; exploration -> exceptions. `_type_intake_policy` is a DAG leaf — stdlib-only, zero sibling imports. `_type_recipe_sections.py` owns recipe-section registry and pagination-policy construction; `_type_constants_registries.py` imports its ten public names as a facade. Zero imports from any autoskillit sub-package outside core; the only permitted
-imports outside core are the stdlib-only hook-callable root authorities listed in
-`src/autoskillit/AGENTS.md`, which themselves import nothing from autoskillit. Production code imports from `autoskillit.core`, not from this package directly.
+The root `__init__.py` re-exports group facades. Each group facade imports only its own
+member modules, plus the stdlib `TYPE_CHECKING` flag. Runtime `__all__` composition
+is guarded by `not TYPE_CHECKING` so mypy can follow nested star re-exports.
+IL-013 enforces the following layers, from bottom to top:
+
+| Layer | Groups |
+|---|---|
+| 0 | `foundation`, `install`, `github` |
+| 1 | `skill`, `audit` |
+| 2 | `recipe` |
+| 3 | `constants` |
+| 4 | `results` |
+| 5 | `execution` |
+| 6 | `launch` |
+| 7 | `context_admission`, `protocols` |
+
+Cross-group imports target defining modules and point only downward. Outside `core/types`,
+production code imports from `autoskillit.core`; core-internal code and tests may import
+defining `_type_*` modules. Do not import group packages as consumer gateways: test-filter
+cascades identify defining modules by their stems.
+
+The eager imports outside this package target `core/audit/closure_hashing`, `core/_capacity`,
+and `core/_managed_worker_capacity`. These modules are stdlib-only and do not import back
+into `core.types`. Type-checking-only imports target `core/agent_definition` from
+`protocols/_type_protocols_backend.py`, and `autoskillit.recipe._contracts_types` and
+`autoskillit.recipe.schema` from `protocols/_type_protocols_recipe.py`. The recipe imports
+are the IL-001 exception pinned by `test_import_linter_contracts.py`.
+
+`recipe/_type_recipe_sections.py` owns recipe-section registry and pagination-policy
+construction; `constants/_type_constants_registries.py` re-exports its public names.
+
+Imports outside core are limited to the stdlib-only hook-callable root authorities
+listed in `src/autoskillit/AGENTS.md`, which import nothing from autoskillit.
 
 ## Extension Bundle Pattern
 
@@ -14,13 +44,35 @@ New feature fields go on frozen dataclass bundles (`InfraOutcome`, `ProviderOutc
 
 ## Concern map
 
-Each direct Python file has one responsibility:
+`__init__.py` is the public re-export hub. Group membership is documented below.
 
-### Public re-exports
+### foundation/
 
-- `__init__.py` — Core type contracts: re-export hub.
+- `_type_enums.py` — Core StrEnum discriminators; re-exports `TokenMeasureState` from `autoskillit._measure_aggregation`.
+- `_type_enums_context_admission.py` — Context-admission StrEnum discriminators.
+- `_type_exceptions.py` — Exception types for recipe loading failures.
+- `_type_exploration.py` — Immutable, deterministic contracts for read-only repository exploration.
+- `_type_dimensions.py` — Dimension-safe token, UTF-8 byte, and serialized-char limits.
+- `_type_execution_identity.py` — Cycle-free execution identity and backend-resolution types.
 
-### Audit contracts
+### install/
+
+- `_type_plugin_source.py` — Import-layer-safe plugin artifact lifecycle value objects.
+- `_type_retirement_backstops.py` — Declared safety backstops for destructive plugin-artifact retirement.
+- `_type_install.py` — Typed maintenance-install subprocess boundary shared across package layers.
+- `_type_managed_home.py` — Typed authority for AutoSkillit's process home.
+
+### github/
+
+- `_type_github_review.py` — Immutable contracts for authoritative GitHub pull-request reviews.
+- `_type_github_review_anchor.py` — Immutable, diff-bound inline review anchor authority.
+
+### skill/
+
+- `_type_skill_semantics.py` — Backend-neutral semantic requirements declared by portable skills.
+- `_type_session_invariant_admission.py` — Session-invariant admission classifier (single source of truth for the support / unsupported / launch-deferred verdict pattern).
+
+### audit/
 
 - `_type_audit_admission.py` — Immutable value contracts for server-owned audit admission and publication.
 - `_type_audit_admission_artifact_ownership.py` — Audit artifact field-ownership definitions and registry.
@@ -30,9 +82,60 @@ Each direct Python file has one responsibility:
 - `_type_audit_artifact_ref.py` — Immutable audit artifact reference value object.
 - `_type_audit_cycle_authority.py` — Immutable audit-cycle authority value objects.
 - `_type_audit_cycle_disposition.py` — Immutable audit-cycle plan-disposition value objects.
+- `_type_closure_report.py` — Closure-mode report schema for audit-impl (IL-0, stdlib-only).
 - `_type_plan_set_authority.py` — Immutable plan-set authority value objects and binding requests/results.
 
-### Context admission contracts
+### recipe/
+
+- `_type_recipe_binding.py` — Frozen recipe-step binding and phoropter value objects.
+- `_type_recipe_delivery.py` — Typed recipe-delivery budget, provenance, and decision contracts.
+- `_type_recipe_execution.py` — Immutable recipe-execution attestation and admission contracts.
+- `_type_recipe_sections.py` — Recipe-section schema validation and canonical digest helpers.
+- `_type_truth.py` — Closed truth-value dialect for values supplied to declared recipe guards.
+- `_type_capture.py` — Capture type contracts for the campaign dispatch capture chain.
+
+### constants/
+
+- `_type_constants.py` — Retired name registries, skill contracts, orchestration prompt sections, CI/domain constants.
+- `_type_constants_durable_writers.py` — Durable-artifact writer registry — forces every function that writes an artifact with a lifetime exceeding the writing process under a relocatability or machine-local-detection obligation.
+- `_type_constants_env.py` — Environment variable names, session type aliases, context markers, logging keys.
+- `_type_constants_features.py` — Feature gates (FeatureDef, FEATURE_REGISTRY), label lifecycle state machine.
+- `_type_constants_registries.py` — Tool registries, pack registries, tool-to-tag mappings, visibility tags.
+- `_type_constants_retirements.py` — Retirement and UNAFFECTED-skill registries.
+- `_type_constants_skill_contract.py` — Skill-contract remediation registry.
+- `_type_invariant_registry.py` — Invariant registry — prose prohibitions mapped to runtime gates.
+- `_type_orchestrator_instruction_surfaces.py` — Orchestrator-facing instruction surface definitions and registry.
+- `_type_intake_policy.py` — Codex context-intake rule registry — evidence-bound Codex instruction-reading policy.
+- `_type_persisted_formats.py` — Ledger of enums embedded in versioned persisted formats.
+
+### results/
+
+- `_type_results.py` — Core result dataclasses — universal types.
+- `_type_results_execution.py` — Execution-scoped result dataclasses.
+- `_type_results_records.py` — Leaf result, adjudication verdict, and persisted-index record contracts.
+- `_type_token.py` — Canonical token usage type; re-exports measure primitives and the aggregation API from `autoskillit._measure_aggregation`.
+- `_type_figure_spec.py` — Figure specification fields and required producer/consumer schema fields.
+
+### execution/
+
+- `_type_backend.py` — Backend capability declaration type.
+- `_type_checkpoint.py` — Session checkpoint for resume progress tracking.
+- `_type_native_shell_capture.py` — Closed launch-control and managed headless lineage contracts.
+- `_type_subprocess.py` — Subprocess execution types and contracts.
+- `_type_inspector.py` — Health Inspector types.
+
+### launch/
+
+- `_type_launch.py` — Portable launch authority and stable launch-contract values.
+- `_type_launch_authority.py` — Portable launch authority and provenance values.
+- `_type_launch_intent.py` — Closed CLI spelling and interactive-session launch intent values.
+- `_type_launch_projection.py` — Non-executable skill projection evidence bound beneath a physical launch.
+- `_type_session_shape.py` — Typed env specs for session launch boundaries.
+- `_type_dispatch_identity.py` — Dispatch identity value object — single source of truth for all sentinel strings.
+- `_type_skill_contract.py` — Backend-neutral skill source identity contracts.
+- `_type_helpers.py` — Skill-command grammar, session type, retry-reason, fleet-error, outcome-expression, and text helpers.
+
+### context_admission/
 
 - `_type_context_admission.py` — Stable facade re-exporting context-admission protocol-v1 contract values.
 - `_type_context_admission_base.py` — Shared serialization and validation for context-admission contracts.
@@ -45,17 +148,7 @@ Each direct Python file has one responsibility:
 - `_type_context_admission_records.py` — Context-admission snapshots, manifests, and lifecycle records.
 - `_type_context_admission_states.py` — Context-admission aggregate state, transition, and replay values.
 
-### Constants and registries
-
-- `_type_constants.py` — Retired name registries, skill contracts, orchestration prompt sections, CI/domain constants.
-- `_type_constants_durable_writers.py` — Durable-artifact writer registry — forces every function that writes an artifact with a lifetime exceeding the writing process under a relocatability or machine-local-detection obligation.
-- `_type_constants_env.py` — Environment variable names, session type aliases, context markers, logging keys.
-- `_type_constants_features.py` — Feature gates (FeatureDef, FEATURE_REGISTRY), label lifecycle state machine.
-- `_type_constants_registries.py` — Tool registries, pack registries, tool-to-tag mappings, visibility tags.
-- `_type_constants_retirements.py` — Retirement and UNAFFECTED-skill registries.
-- `_type_constants_skill_contract.py` — Skill-contract remediation registry.
-
-### Service protocols
+### protocols/
 
 - `_type_protocols_backend.py` — Backend abstraction protocol definitions.
 - `_type_protocols_execution.py` — Execution-layer protocol definitions.
@@ -64,55 +157,3 @@ Each direct Python file has one responsibility:
 - `_type_protocols_logging.py` — Logging and observer protocol definitions.
 - `_type_protocols_recipe.py` — Recipe and data access protocol definitions.
 - `_type_protocols_workspace.py` — Workspace and skill management protocol definitions.
-
-### Recipe contracts
-
-- `_type_recipe_binding.py` — Frozen recipe-step binding and phoropter value objects.
-- `_type_recipe_delivery.py` — Typed recipe-delivery budget, provenance, and decision contracts.
-- `_type_recipe_execution.py` — Immutable recipe-execution attestation and admission contracts.
-- `_type_recipe_sections.py` — Recipe-section schema validation and canonical digest helpers.
-
-### Result contracts
-
-- `_type_results.py` — Core result dataclasses — universal types.
-- `_type_results_execution.py` — Execution-scoped result dataclasses.
-- `_type_results_records.py` — Leaf result, adjudication verdict, and persisted-index record contracts.
-
-### Other IL-0 contracts
-
-- `_type_backend.py` — Backend capability declaration type.
-- `_type_capture.py` — Capture type contracts for the campaign dispatch capture chain.
-- `_type_checkpoint.py` — Session checkpoint for resume progress tracking.
-- `_type_closure_report.py` — Closure-mode report schema for audit-impl (IL-0, stdlib-only).
-- `_type_dimensions.py` — Dimension-safe token, UTF-8 byte, and serialized-char limits.
-- `_type_dispatch_identity.py` — Dispatch identity value object — single source of truth for all sentinel strings.
-- `_type_enums.py` — Core StrEnum discriminators; re-exports `TokenMeasureState` from `autoskillit._measure_aggregation`.
-- `_type_enums_context_admission.py` — Context-admission StrEnum discriminators.
-- `_type_exceptions.py` — Exception types for recipe loading failures.
-- `_type_execution_identity.py` — Cycle-free execution identity and backend-resolution types.
-- `_type_exploration.py` — Immutable, deterministic contracts for read-only repository exploration.
-- `_type_figure_spec.py` — Figure specification fields and required producer/consumer schema fields.
-- `_type_github_review.py` — Immutable contracts for authoritative GitHub pull-request reviews.
-- `_type_github_review_anchor.py` — Immutable, diff-bound inline review anchor authority.
-- `_type_helpers.py` — Core skill name resolution and text-processing helpers.
-- `_type_inspector.py` — Health Inspector types.
-- `_type_install.py` — Typed maintenance-install subprocess boundary shared across package layers.
-- `_type_intake_policy.py` — Codex context-intake rule registry — evidence-bound Codex instruction-reading policy.
-- `_type_invariant_registry.py` — Invariant registry — prose prohibitions mapped to runtime gates.
-- `_type_launch.py` — Portable launch authority and stable launch-contract values.
-- `_type_launch_authority.py` — Portable launch authority and provenance values.
-- `_type_launch_intent.py` — Closed CLI spelling and interactive-session launch intent values.
-- `_type_launch_projection.py` — Non-executable skill projection evidence bound beneath a physical launch.
-- `_type_managed_home.py` — Typed authority for AutoSkillit's process home.
-- `_type_native_shell_capture.py` — Closed launch-control and managed headless lineage contracts.
-- `_type_orchestrator_instruction_surfaces.py` — Orchestrator-facing instruction surface definitions and registry.
-- `_type_persisted_formats.py` — Ledger of enums embedded in versioned persisted formats.
-- `_type_plugin_source.py` — Import-layer-safe plugin artifact lifecycle value objects.
-- `_type_retirement_backstops.py` — Declared safety backstops for destructive plugin-artifact retirement.
-- `_type_session_shape.py` — Typed env specs for session launch boundaries.
-- `_type_skill_contract.py` — Backend-neutral skill source identity contracts.
-- `_type_skill_semantics.py` — Backend-neutral semantic requirements declared by portable skills.
-- `_type_session_invariant_admission.py` — Session-invariant admission classifier (single source of truth for the support / unsupported / launch-deferred verdict pattern).
-- `_type_subprocess.py` — Subprocess execution types and contracts.
-- `_type_token.py` — Canonical token usage type; re-exports the measure primitives and aggregation API from `autoskillit._measure_aggregation`.
-- `_type_truth.py` — Closed truth-value dialect for values supplied to declared recipe guards.

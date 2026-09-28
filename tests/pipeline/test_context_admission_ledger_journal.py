@@ -13,13 +13,15 @@ from types import MappingProxyType
 
 import pytest
 
-import autoskillit.core.types._type_context_admission_persistence_envelope as envelope_types
 from autoskillit.core import (
     AuthorityUnavailableEvent,
     ContextAdmissionAccountingStatus,
     ContextAdmissionStorageFailureReason,
     ContextAdmissionStorageHealthStatus,
     CoverageState,
+)
+from autoskillit.core.types.context_admission import (
+    _type_context_admission_persistence_envelope as envelope_types,
 )
 from autoskillit.pipeline.context_admission_ledger import (
     DefaultContextAdmissionLedger,

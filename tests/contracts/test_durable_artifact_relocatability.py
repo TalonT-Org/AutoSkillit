@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 import autoskillit.workspace.session_skills._catalog as _patch_workspace_session_skill_catalog
-from autoskillit.core.types._type_constants_durable_writers import (
+from autoskillit.core.types.constants._type_constants_durable_writers import (
     DURABLE_ARTIFACT_WRITERS,
     DurableArtifactWriterDef,
     _validate_durable_artifact_writer_defs,
@@ -56,7 +56,7 @@ class TestRegistryIntegrity:
         assert callable(_resolve(entry.detection))
 
     def test_execution_candidate_manifest_writer_is_relocatable(self, tmp_path: Path) -> None:
-        from autoskillit.core.types._type_results_execution import ExecutionSelection
+        from autoskillit.core.types.results._type_results_execution import ExecutionSelection
         from autoskillit.execution.session_log.session_log import (
             write_execution_candidate_manifest,
         )

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 
 from ..io.markdown_sections import STEP_HEADING_RE, extract_section, parse_pipe_table
-from ..types._type_plan_set_authority import (
+from ..types.audit._type_plan_set_authority import (
     AllocationKind,
     AllocationRowDef,
     PlanSetRejectReason,

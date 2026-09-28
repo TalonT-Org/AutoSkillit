@@ -6,6 +6,7 @@ REQ-ARCH-007: IL-003 must document the pipeline → config exception inline.
 from __future__ import annotations
 
 import ast
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -32,7 +33,7 @@ _FORBIDDEN_BY_CONTRACT: dict[str, frozenset[str]] = {
 }
 
 EXPECTED_CROSS_LAYER_GUARDS: dict[str, frozenset[str]] = {
-    "core/types/_type_protocols_recipe.py": frozenset({"recipe"}),
+    "core/types/protocols/_type_protocols_recipe.py": frozenset({"recipe"}),
     "execution/headless/__init__.py": frozenset({"pipeline", "recipe"}),
     "execution/headless/_headless_adjudication.py": frozenset({"recipe"}),
     "execution/headless/_headless_execute.py": frozenset({"pipeline", "recipe"}),
@@ -137,7 +138,7 @@ def test_il003_pipeline_config_exception_documented() -> None:
 
 
 def test_il_contract_count_is_guarded() -> None:
-    """All 12 IL-* contracts must be present in pyproject.toml.
+    """All 13 IL-* contracts must be present in pyproject.toml.
 
     Silently removing a contract from pyproject.toml would cause lint-imports
     to stop enforcing that layer boundary with no pytest signal. This test
@@ -150,7 +151,7 @@ def test_il_contract_count_is_guarded() -> None:
     pyproject_path = Path(__file__).resolve().parents[2] / "pyproject.toml"
     raw = pyproject_path.read_text()
 
-    expected_count = 12
+    expected_count = 13
     actual_count = raw.count("[[tool.importlinter.contracts]]")
     assert actual_count == expected_count, (
         f"Expected {expected_count} importlinter contracts in pyproject.toml, "
@@ -162,6 +163,34 @@ def test_il_contract_count_is_guarded() -> None:
     assert not missing, (
         f"Import-linter contract ID tags missing from pyproject.toml: {missing}. "
         "Each contract block must carry its IL-NNN comment tag."
+    )
+
+
+def test_core_types_layers_contract_covers_every_group() -> None:
+    """IL-013 must layer every discovered core.types group exactly once."""
+    pyproject_path = Path(__file__).resolve().parents[2] / "pyproject.toml"
+    raw = pyproject_path.read_text(encoding="utf-8")
+    data = tomllib.loads(raw)
+    contracts = data["tool"]["importlinter"]["contracts"]
+    matching = [contract for contract in contracts if contract["name"].startswith("IL-013")]
+    assert len(matching) == 1, f"Expected one IL-013 layers contract, found {len(matching)}"
+    contract = matching[0]
+    assert contract["type"] == "layers"
+    assert contract["containers"] == ["autoskillit.core.types"]
+
+    types_dir = SRC_ROOT / "core" / "types"
+    discovered_groups = {
+        path.name
+        for path in types_dir.iterdir()
+        if path.is_dir() and not path.name.startswith("_") and (path / "__init__.py").is_file()
+    }
+    layered_groups = [group.strip() for layer in contract["layers"] for group in layer.split("|")]
+    assert len(layered_groups) == len(set(layered_groups)), (
+        f"IL-013 contains duplicate group layers: {layered_groups}"
+    )
+    assert set(layered_groups) == discovered_groups, (
+        f"IL-013 group layers {sorted(layered_groups)} do not match discovered groups "
+        f"{sorted(discovered_groups)}"
     )
 
 

@@ -9,7 +9,7 @@ import pytest
 
 from autoskillit.core import SkillExecutionRole, SkillInvalidityKind
 from autoskillit.core.paths import pkg_root
-from autoskillit.core.types._type_backend import ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
+from autoskillit.core.types.execution._type_backend import ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
 from autoskillit.execution.backends import BACKEND_REGISTRY
 from autoskillit.workspace import compile_session_skill_catalog
 from autoskillit.workspace.skills import (

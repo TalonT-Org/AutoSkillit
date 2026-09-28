@@ -1,6 +1,6 @@
 """Sealed install identity for the current process (issue #4597).
 
-Modeled on :class:`ExecutableLaunchBinding` (``core/types/_type_backend.py``,
+Modeled on :class:`ExecutableLaunchBinding` (``core/types/execution/_type_backend.py``,
 sealed by ``core/runtime/executable_binding.py``): capture the process's
 install identity once, at first access, and never re-derive it. Unlike that
 binding — which additionally seals ``size``/``mtime_ns``/``file_sha256`` for
@@ -14,7 +14,7 @@ previously did it by reading live state twice.
 Purely in-process: the sealed binding lives only in ``lru_cache`` memory for
 the interpreter's lifetime and is never written to disk, so it carries no
 ``DURABLE_ARTIFACT_WRITERS`` obligation (see that registry's docstring in
-``core/types/_type_constants.py``).
+``core/types/constants/_type_constants.py``).
 
 ``resolve_install_binding()`` is forced very early in every process kind by
 ``hook_registry.py``'s module-scope ``HOOKS_DIR = pkg_root() / "hooks"``

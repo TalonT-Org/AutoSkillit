@@ -12,7 +12,6 @@ from typing import cast, get_args
 
 import pytest
 
-import autoskillit.core.types._type_context_admission_persistence_envelope as envelope_types
 from autoskillit.core import (
     CONTEXT_ADMISSION_ENCODING_VERSION,
     CONTEXT_ADMISSION_PROTOCOL_VERSION,
@@ -63,6 +62,9 @@ from autoskillit.core import (
     make_stored_context_admission_envelope,
     reduce_context_admission,
     validate_context_admission_persistence_value,
+)
+from autoskillit.core.types.context_admission import (
+    _type_context_admission_persistence_envelope as envelope_types,
 )
 from tests.fixtures.context_admission import (
     batch,

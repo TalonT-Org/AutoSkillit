@@ -74,7 +74,7 @@ def _validate_failure_record_dict(record_dict: dict[str, Any]) -> bool:
        declared type.
 
     Uses typing.get_type_hints() to resolve string annotations produced by
-    ``from __future__ import annotations`` in core/_type_results.py.
+    ``from __future__ import annotations`` in core/types/results/_type_results.py.
     Wrong-type or missing-field records are rejected (return False) so that
     load_from_log_dir skips them rather than silently accepting mistyped data.
     """

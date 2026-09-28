@@ -48,7 +48,7 @@
 
 **Dual-copy sync obligation for `_HEADLESS_EXCLUSIVE_VARS`:**
 - `IDE_ENV_DENYLIST` in `core/_claude_env.py`
-- `AUTOSKILLIT_PRIVATE_ENV_VARS` in `core/types/_type_constants.py`
+- `AUTOSKILLIT_PRIVATE_ENV_VARS` in `core/types/constants/_type_constants.py`
 - See block comment at `commands.py:163-171`: "All lists must be kept in sync when adding new exclusive variables."
 
 ### 1d. Re-exported Types (via `# noqa: F401, TC001`)
@@ -189,5 +189,5 @@ autoskillit.core
 - [x] Private helpers classified as moveable vs locked
 - [x] `build_skill_session_cmd` and `build_food_truck_cmd` documented as NOT in `__init__.__all__` but imported directly
 - [x] Checklist matches actual grep results
-- [x] Dual-copy sync obligation verified (`IDE_ENV_DENYLIST` in `core/_claude_env.py`, `AUTOSKILLIT_PRIVATE_ENV_VARS` in `core/types/_type_constants.py`)
+- [x] Dual-copy sync obligation verified (`IDE_ENV_DENYLIST` in `core/_claude_env.py`, `AUTOSKILLIT_PRIVATE_ENV_VARS` in `core/types/constants/_type_constants.py`)
 - [x] IL-004 forbidden modules confirmed in `pyproject.toml`

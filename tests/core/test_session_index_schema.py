@@ -36,7 +36,7 @@ class TestSessionIndexEntryCompleteness:
     """SessionIndexEntry TypedDict must declare every field written to sessions.jsonl."""
 
     def test_required_fields_declared(self):
-        from autoskillit.core.types._type_results import SessionIndexEntry
+        from autoskillit.core.types.results._type_results import SessionIndexEntry
 
         declared = set(SessionIndexEntry.__annotations__)
         missing = _REQUIRED_INDEX_FIELDS - declared
@@ -45,7 +45,7 @@ class TestSessionIndexEntryCompleteness:
     def test_has_schema_version(self):
         from typing import get_type_hints
 
-        from autoskillit.core.types._type_results import SessionIndexEntry
+        from autoskillit.core.types.results._type_results import SessionIndexEntry
 
         hints = get_type_hints(SessionIndexEntry)
         assert "schema_version" in hints
@@ -54,7 +54,7 @@ class TestSessionIndexEntryCompleteness:
     def test_has_caller_session_id(self):
         from typing import get_type_hints
 
-        from autoskillit.core.types._type_results import SessionIndexEntry
+        from autoskillit.core.types.results._type_results import SessionIndexEntry
 
         hints = get_type_hints(SessionIndexEntry)
         assert "caller_session_id" in hints
@@ -63,14 +63,14 @@ class TestSessionIndexEntryCompleteness:
     def test_has_nullable_session_type(self):
         from typing import get_type_hints
 
-        from autoskillit.core.types._type_results import SessionIndexEntry
+        from autoskillit.core.types.results._type_results import SessionIndexEntry
 
         hints = get_type_hints(SessionIndexEntry)
         assert hints["session_type"] == str | None
 
     def test_canonical_cache_fields(self):
         """SessionIndexEntry must use canonical cache field names, not v1 API names."""
-        from autoskillit.core.types._type_results import SessionIndexEntry
+        from autoskillit.core.types.results._type_results import SessionIndexEntry
 
         declared = set(SessionIndexEntry.__annotations__)
         assert "cache_write_tokens" in declared
@@ -84,7 +84,7 @@ class TestTokenUsageFileEntrySchema:
     """TokenUsageFileEntry must use canonical cache fields and include schema_version."""
 
     def test_canonical_cache_fields(self):
-        from autoskillit.core.types._type_results import TokenUsageFileEntry
+        from autoskillit.core.types.results._type_results import TokenUsageFileEntry
 
         declared = set(TokenUsageFileEntry.__annotations__)
         assert "cache_write_tokens" in declared
@@ -95,7 +95,7 @@ class TestTokenUsageFileEntrySchema:
     def test_has_schema_version(self):
         from typing import get_type_hints
 
-        from autoskillit.core.types._type_results import TokenUsageFileEntry
+        from autoskillit.core.types.results._type_results import TokenUsageFileEntry
 
         hints = get_type_hints(TokenUsageFileEntry)
         assert "schema_version" in hints

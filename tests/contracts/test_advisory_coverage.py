@@ -16,7 +16,7 @@ import sys
 import pytest
 
 from autoskillit.core.paths import pkg_root
-from autoskillit.core.types._type_constants import SKILL_FILE_ADVISORY_MAP
+from autoskillit.core.types.constants._type_constants import SKILL_FILE_ADVISORY_MAP
 from autoskillit.hook_registry import HOOK_REGISTRY
 from autoskillit.workspace.skills import DefaultSkillResolver
 from tests.conftest import production_interpreter_env

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.core.types._type_constants_registries import SKILL_CAPABILITY_REGISTRY
-from autoskillit.core.types._type_enums import SkillExecutionRole
+from autoskillit.core.types.constants._type_constants_registries import SKILL_CAPABILITY_REGISTRY
+from autoskillit.core.types.foundation._type_enums import SkillExecutionRole
 from autoskillit.workspace import SkillFrontmatterParseResult, read_skill_frontmatter
 from tests.arch._helpers import _iter_skill_dirs
 
@@ -49,7 +49,7 @@ def test_structured_review_posters_do_not_declare_github_api_write() -> None:
 
 
 def test_capability_registry_has_no_backend_routing_authority() -> None:
-    from autoskillit.core.types._type_constants_registries import SkillCapabilityDef
+    from autoskillit.core.types.constants._type_constants_registries import SkillCapabilityDef
 
     forbidden_fields = {
         "worker_routable",
@@ -105,7 +105,7 @@ def test_every_capability_def_declares_exact_allowed_execution_roles() -> None:
     import ast
     import inspect
 
-    import autoskillit.core.types._type_constants_registries as registries
+    import autoskillit.core.types.constants._type_constants_registries as registries
 
     tree = ast.parse(inspect.getsource(registries))
     definitions = [
@@ -136,7 +136,7 @@ def test_run_skill_is_owned_by_exact_orchestrator_role() -> None:
 
 
 def test_headless_tools_not_marked_not_applicable() -> None:
-    from autoskillit.core.types._type_constants_registries import HEADLESS_TOOLS
+    from autoskillit.core.types.constants._type_constants_registries import HEADLESS_TOOLS
 
     violations = [
         tool_name

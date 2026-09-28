@@ -142,7 +142,7 @@ Each row in Sections 2–5 carries one of three classifications:
 
 ## Section 2: Protocol Method Classification
 
-The `CodingAgentBackend` protocol (`src/autoskillit/core/types/_type_protocols_backend.py`,
+The `CodingAgentBackend` protocol (`src/autoskillit/core/types/protocols/_type_protocols_backend.py`,
 methods) and the `StreamParser`, `ResultParser`, `EnvPolicy`, and
 `SessionLocator` sub-protocols yield the rows below. The row
 order and per-method groupings follow `acp-session-contract.md` Section 1
@@ -437,10 +437,10 @@ semantics.
 
 | Section | Source of truth | File |
 |---|---|---|
-| §2 method enumeration | `CodingAgentBackend` Protocol and its sub-protocols | `src/autoskillit/core/types/_type_protocols_backend.py` |
-| §3 capability taxonomy | `BackendCapabilities` and `_FORWARD_DECLARED` | `src/autoskillit/core/types/_type_backend.py`, `tests/arch/test_capability_consumption.py` |
+| §2 method enumeration | `CodingAgentBackend` Protocol and its sub-protocols | `src/autoskillit/core/types/protocols/_type_protocols_backend.py` |
+| §3 capability taxonomy | `BackendCapabilities` and `_FORWARD_DECLARED` | `src/autoskillit/core/types/execution/_type_backend.py`, `tests/arch/test_capability_consumption.py` |
 | §3 capability categories | ACP-Mappable / autoskillit-Local / Forward-Declared membership | `docs/design/acp-session-contract.md` Section 3 |
-| §4 conventions | `BackendConventions` | `src/autoskillit/core/types/_type_backend.py:38–49` |
+| §4 conventions | `BackendConventions` | `src/autoskillit/core/types/execution/_type_backend.py:38–49` |
 | §5 B3a pattern | Codex NDJSON fixtures | `tests/execution/backends/fixtures/codex_ndjson/` |
 | §5 B3b pattern | Codex hook-efficacy probe | `tests/execution/backends/test_hook_deny_efficacy_probe.py` |
 | §6 PCR-001 / 003 blocker | `--sandbox deny` hard-coding | sst/opencode#13851 |

@@ -43,7 +43,7 @@ def test_all_guard() -> None:
     # SynthesisStrategy is intentionally absent: defined in _type_enums, not recipe binding.
     # It reaches autoskillit.core via a separate re-export path
     # (verified by test_importable_from_gateway).
-    from autoskillit.core.types._type_recipe_binding import __all__ as recipe_binding_all
+    from autoskillit.core.types.recipe._type_recipe_binding import __all__ as recipe_binding_all
 
     assert {
         "PhoropterPrescription",

@@ -1611,7 +1611,7 @@ def test_investigate_projects_adaptive_semantic_collections_and_guarded_candidat
     # investigate declares join.required=true; Codex refuses join-bearing
     # skills at admission (REQUIRED_JOIN — wait-any/mailbox-activity), so
     # the projection must fail closed rather than render adapted content.
-    from autoskillit.core.types._type_exceptions import SkillContractError
+    from autoskillit.core.types.foundation._type_exceptions import SkillContractError
 
     with pytest.raises(SkillContractError, match="wait-any/mailbox-activity"):
         _project_phase_d_skill(
@@ -1633,7 +1633,7 @@ def test_actual_migrated_phase_d_applicability_controls_native_dispatch(
     )
     applicabilities = {vector.applicability for vector in migrated}
 
-    from autoskillit.core.types._type_exceptions import SkillContractError
+    from autoskillit.core.types.foundation._type_exceptions import SkillContractError
 
     for selected in applicabilities:
         active = frozenset({ExplorationVectorApplicabilityId.ALWAYS, selected})

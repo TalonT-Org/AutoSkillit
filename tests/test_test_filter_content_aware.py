@@ -257,7 +257,7 @@ class TestIsAdditiveOnly:
             ]
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
-        result = _is_additive_only("/fake", "main", "src/core/_type_enums.py")
+        result = _is_additive_only("/fake", "main", "src/core/types/foundation/_type_enums.py")
         assert result is True
 
     def test_additive_only_new_field(
@@ -275,7 +275,7 @@ class TestIsAdditiveOnly:
             ]
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
-        result = _is_additive_only("/fake", "main", "src/core/_type_enums.py")
+        result = _is_additive_only("/fake", "main", "src/core/types/foundation/_type_enums.py")
         assert result is True
 
     def test_removal_detected_class(
@@ -293,7 +293,7 @@ class TestIsAdditiveOnly:
             ]
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
-        result = _is_additive_only("/fake", "main", "src/core/_type_enums.py")
+        result = _is_additive_only("/fake", "main", "src/core/types/foundation/_type_enums.py")
         assert result is False
 
     def test_removal_detected_function(
@@ -311,7 +311,7 @@ class TestIsAdditiveOnly:
             ]
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
-        result = _is_additive_only("/fake", "main", "src/core/_type_enums.py")
+        result = _is_additive_only("/fake", "main", "src/core/types/foundation/_type_enums.py")
         assert result is False
 
     def test_removal_detected_constant(
@@ -329,7 +329,7 @@ class TestIsAdditiveOnly:
             ]
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
-        result = _is_additive_only("/fake", "main", "src/core/_type_enums.py")
+        result = _is_additive_only("/fake", "main", "src/core/types/foundation/_type_enums.py")
         assert result is False
 
     def test_rename_detected(
@@ -347,7 +347,7 @@ class TestIsAdditiveOnly:
             ]
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
-        result = _is_additive_only("/fake", "main", "src/core/_type_enums.py")
+        result = _is_additive_only("/fake", "main", "src/core/types/foundation/_type_enums.py")
         assert result is False
 
     def test_mixed_diff_with_removal(
@@ -365,7 +365,7 @@ class TestIsAdditiveOnly:
             ]
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
-        result = _is_additive_only("/fake", "main", "src/core/_type_enums.py")
+        result = _is_additive_only("/fake", "main", "src/core/types/foundation/_type_enums.py")
         assert result is False
 
     def test_empty_diff_is_additive(
@@ -383,7 +383,7 @@ class TestIsAdditiveOnly:
             ]
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
-        result = _is_additive_only("/fake", "main", "src/core/_type_enums.py")
+        result = _is_additive_only("/fake", "main", "src/core/types/foundation/_type_enums.py")
         assert result is True
 
     def test_git_error_returns_false(
@@ -396,7 +396,7 @@ class TestIsAdditiveOnly:
             raise subprocess.CalledProcessError(1, "git")
 
         monkeypatch.setattr(subprocess, "run", _raise)
-        result = _is_additive_only("/fake", "main", "src/core/_type_enums.py")
+        result = _is_additive_only("/fake", "main", "src/core/types/foundation/_type_enums.py")
         assert result is False
 
     def test_invalid_sha_returns_false(
@@ -410,7 +410,7 @@ class TestIsAdditiveOnly:
             ]
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
-        result = _is_additive_only("/fake", "main", "src/core/_type_enums.py")
+        result = _is_additive_only("/fake", "main", "src/core/types/foundation/_type_enums.py")
         assert result is False
 
     def test_lowercase_field_change_is_additive(
@@ -428,7 +428,7 @@ class TestIsAdditiveOnly:
             ]
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
-        result = _is_additive_only("/fake", "main", "src/core/_type_enums.py")
+        result = _is_additive_only("/fake", "main", "src/core/types/foundation/_type_enums.py")
         assert result is True
 
     def test_indented_class_removal_detected(
@@ -446,7 +446,7 @@ class TestIsAdditiveOnly:
             ]
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
-        result = _is_additive_only("/fake", "main", "src/core/_type_enums.py")
+        result = _is_additive_only("/fake", "main", "src/core/types/foundation/_type_enums.py")
         assert result is False
 
 
@@ -505,7 +505,7 @@ class TestBuildTestScopeUniversalExclusions:
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/_type_enums.py"},
+            changed_files={"src/autoskillit/core/types/foundation/_type_enums.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
             cwd=str(tmp_path),
@@ -536,7 +536,7 @@ class TestBuildTestScopeUniversalExclusions:
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/_type_enums.py"},
+            changed_files={"src/autoskillit/core/types/foundation/_type_enums.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
             cwd=str(tmp_path),
@@ -584,7 +584,7 @@ class TestBuildTestScopeUniversalExclusions:
         """_type_enums with additive diff but no cwd/base_ref: full cascade."""
         tests_root = self._make_tests_root(tmp_path)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/_type_enums.py"},
+            changed_files={"src/autoskillit/core/types/foundation/_type_enums.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -606,7 +606,7 @@ class TestBuildTestScopeUniversalExclusions:
 
         monkeypatch.setattr(subprocess, "run", _raise)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/_type_enums.py"},
+            changed_files={"src/autoskillit/core/types/foundation/_type_enums.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
             cwd=str(tmp_path),

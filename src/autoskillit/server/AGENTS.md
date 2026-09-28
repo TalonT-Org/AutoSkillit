@@ -39,7 +39,7 @@ Controls whether the tool appears in `tools/list` (whether the agent can see it)
   - **ORCHESTRATOR/SKILL + interactive + non-notification backend**: lifespan boot runs `_pre_reveal_kitchen()`
   - **ORCHESTRATOR/SKILL + interactive + notification-capable backend**: nothing pre-revealed; `open_kitchen` reveals the `kitchen` tag
   - **Direct sessions without a registered ORCHESTRATOR/SKILL interactive handler**: not implicitly pre-revealed
-- All tags in `ALL_VISIBILITY_TAGS` are disabled at startup via `for tag in sorted(ALL_VISIBILITY_TAGS): mcp.disable(tags={tag})`. Session-type dispatch and `open_kitchen` selectively re-enable per session. `ALL_VISIBILITY_TAGS` is defined in `core/types/_type_constants_registries.py`.
+- All tags in `ALL_VISIBILITY_TAGS` are disabled at startup via `for tag in sorted(ALL_VISIBILITY_TAGS): mcp.disable(tags={tag})`. Session-type dispatch and `open_kitchen` selectively re-enable per session. `ALL_VISIBILITY_TAGS` is defined in `core/types/constants/_type_constants_registries.py`.
 
 ### Application-Gate (Python layer)
 
@@ -88,7 +88,7 @@ because the surface is read-only and the per-call lease is the enforcement point
 
 ### Registry Constants
 
-The canonical tool sets are in `core/types/_type_constants_registries.py`:
+The canonical tool sets are in `core/types/constants/_type_constants_registries.py`:
 
 - `GATED_TOOLS` — all tools that call `_require_enabled()` (validated by arch test)
 - `UNGATED_TOOLS` = `FREE_RANGE_TOOLS` — tools with no gating at all

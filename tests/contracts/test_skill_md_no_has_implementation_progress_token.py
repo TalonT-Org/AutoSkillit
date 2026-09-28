@@ -1,7 +1,7 @@
 """Contract: has_implementation_progress must NOT appear as an emit line in any SKILL.md.
 
 The token is server-computed via SkillResult.has_implementation_progress
-(src/autoskillit/core/types/_type_results.py:526) — it is never parsed from
+(src/autoskillit/core/types/results/_type_results.py:526) — it is never parsed from
 model text. Including it as an emit line in SKILL.md misleads models into
 self-reporting progress as authoritative. This test prevents re-introduction.
 """

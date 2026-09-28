@@ -18,20 +18,20 @@ from typing import Any, Literal, Protocol
 from ..io import YAMLError, load_yaml
 from ..io.io import decode_versioned_json_bytes
 from ..io.path_containment import ContainmentError, read_stable_contained_bytes
-from ..types._type_audit_admission import (
+from ..types.audit._type_audit_admission import (
     AUDIT_SEMANTIC_SCHEMA_VERSION,
     STANDALONE_AUDIT_EVIDENCE_KIND,
     STANDALONE_AUDIT_EVIDENCE_SCHEMA_VERSION,
     AuditSemanticResult,
     StandaloneAuditEvidence,
 )
-from ..types._type_audit_artifact_ref import ArtifactRef
-from ..types._type_audit_cycle_authority import (
+from ..types.audit._type_audit_artifact_ref import ArtifactRef
+from ..types.audit._type_audit_cycle_authority import (
     AuditAssessmentRow,
     AuditCycleAuthority,
     AuditDisposition,
 )
-from ..types._type_audit_cycle_disposition import (
+from ..types.audit._type_audit_cycle_disposition import (
     AdmissionReason,
     AuditFindingWaiver,
     InventoryAdmissionDecision,

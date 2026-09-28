@@ -528,7 +528,9 @@ def _record_module_collection_reads(
         # `members_upper` requires every member uppercase; `upper_members` may be
         # non-empty while `members_upper` is False (mixed-case ``__all__``).
         members_upper = bool(members) and len(upper_members) == len(members)
-        constants_export = target == "__all__" and rel == "core/types/_type_constants_env.py"
+        constants_export = (
+            target == "__all__" and rel == "core/types/constants/_type_constants_env.py"
+        )
         relevant_members = upper_members if constants_export else members
         if name_matches or members_upper or (constants_export and upper_members):
             for member in relevant_members:

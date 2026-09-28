@@ -208,7 +208,7 @@ async def test_provider_profile_preserves_authoritative_backend_for_materializat
     from unittest.mock import MagicMock
 
     from autoskillit.core import ValidatedAddDir
-    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.core.types.protocols._type_protocols_backend import CodingAgentBackend
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()

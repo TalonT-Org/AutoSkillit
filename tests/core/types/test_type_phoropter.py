@@ -6,12 +6,12 @@ import re
 
 import pytest
 
-from autoskillit.core.types._type_recipe_binding import (
+from autoskillit.core.types.recipe._type_recipe_binding import (
     READING_TOKEN_PATTERN,
     PhoropterPrescription,
     ReadingToken,
 )
-from autoskillit.core.types._type_recipe_binding import (
+from autoskillit.core.types.recipe._type_recipe_binding import (
     __all__ as recipe_binding_all,
 )
 

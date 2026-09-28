@@ -55,5 +55,5 @@ be forward-declared with a tracking issue (added to `_FORWARD_DECLARED` in
 - `execution/backends/__init__.py:46–49` — `BACKEND_REGISTRY`
 - `execution/headless/__init__.py:349` — `dispatch_food_truck`
 - `pipeline/context.py:164` — `ToolContext.backend`
-- `core/types/_type_backend.py:80` — `BackendCapabilities.food_truck_capable`
+- `core/types/execution/_type_backend.py:80` — `BackendCapabilities.food_truck_capable`
 - `fleet/` — campaign dispatch (reads `ctx.backend` per campaign)

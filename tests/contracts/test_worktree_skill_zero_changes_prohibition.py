@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.paths import pkg_root
-from autoskillit.core.types._type_constants import WORKTREE_SKILLS
+from autoskillit.core.types.constants._type_constants import WORKTREE_SKILLS
 
 pytestmark = [pytest.mark.small]
 

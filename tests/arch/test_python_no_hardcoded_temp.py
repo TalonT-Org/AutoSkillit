@@ -38,7 +38,9 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     "recipe/repository.py": "validate_from_path default arg mirrors canonical default",
     # Justification: RecipeRepository protocol method includes temp_dir_relpath with
     # the canonical default value for backward compatibility.
-    "core/types/_type_protocols_recipe.py": "RecipeRepository.validate_from_path default arg",
+    "core/types/protocols/_type_protocols_recipe.py": (
+        "RecipeRepository.validate_from_path default arg"
+    ),
     # Justification: SkillsDirectoryProvider default ctor arg matches canonical default.
     "workspace/session_skills/_provider.py": "SkillsDirectoryProvider default arg",
     # Justification: docstring example referencing the canonical default path.

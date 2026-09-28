@@ -210,7 +210,7 @@ def _codex_backend_enabled() -> bool:
     """
     try:
         from autoskillit.core.feature_flags import is_feature_enabled
-        from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
+        from autoskillit.core.types.constants._type_constants_features import FEATURE_REGISTRY
     except ImportError:
         return False
     if "codex_backend" not in FEATURE_REGISTRY:

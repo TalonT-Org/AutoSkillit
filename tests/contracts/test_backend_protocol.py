@@ -419,7 +419,7 @@ def test_build_interactive_cmd_signature_shape():
     import inspect
 
     from autoskillit.core import FreshLaunch
-    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.core.types.protocols._type_protocols_backend import CodingAgentBackend
 
     sig = inspect.signature(CodingAgentBackend.build_interactive_cmd)
     params = sig.parameters
@@ -434,7 +434,7 @@ def test_build_interactive_cmd_signature_shape():
 
 
 def test_model_config_overrides_on_protocol():
-    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.core.types.protocols._type_protocols_backend import CodingAgentBackend
 
     assert hasattr(CodingAgentBackend, "model_config_overrides"), (
         "CodingAgentBackend protocol must define model_config_overrides"

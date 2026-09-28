@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from autoskillit.core.types._type_audit_admission import (
+from autoskillit.core.types.audit._type_audit_admission import (
     AUDIT_ARTIFACT_FIELD_OWNERSHIP_REGISTRY,
     AUDIT_REFERENCE_IDENTITY_PROFILE_V1,
     AUDIT_SEMANTIC_SCHEMA_VERSION,
@@ -37,20 +37,20 @@ from autoskillit.core.types._type_audit_admission import (
     StandaloneAuditEvidence,
     compute_audit_reference_identity,
 )
-from autoskillit.core.types._type_audit_artifact_ref import ArtifactRef
-from autoskillit.core.types._type_audit_cycle_authority import (
+from autoskillit.core.types.audit._type_audit_artifact_ref import ArtifactRef
+from autoskillit.core.types.audit._type_audit_cycle_authority import (
     AuditAssessment,
     AuditAssessmentRow,
     AuditCycleAuthority,
     AuditVerdict,
 )
-from autoskillit.core.types._type_audit_cycle_disposition import PlanDispositionReport
-from autoskillit.core.types._type_enums import KillReason
-from autoskillit.core.types._type_protocols_infra import (
+from autoskillit.core.types.audit._type_audit_cycle_disposition import PlanDispositionReport
+from autoskillit.core.types.foundation._type_enums import KillReason
+from autoskillit.core.types.protocols._type_protocols_infra import (
     AuditAuthorityMaterializer,
     CommittedDispositionResolver,
 )
-from autoskillit.core.types._type_recipe_execution import (
+from autoskillit.core.types.recipe._type_recipe_execution import (
     compute_audit_slot_intent_digest,
     compute_runtime_binding_digest,
 )
@@ -770,10 +770,10 @@ def test_admission_shard_public_bindings_preserve_object_identity(
     shard_name: str,
     binding: str,
 ) -> None:
-    facade = importlib.import_module("autoskillit.core.types._type_audit_admission")
+    facade = importlib.import_module("autoskillit.core.types.audit._type_audit_admission")
     types_package = importlib.import_module("autoskillit.core.types")
     core_package = importlib.import_module("autoskillit.core")
-    shard = importlib.import_module(f"autoskillit.core.types.{shard_name}")
+    shard = importlib.import_module(f"autoskillit.core.types.audit.{shard_name}")
 
     shard_binding = getattr(shard, binding)
     assert getattr(facade, binding) is shard_binding
@@ -795,16 +795,18 @@ def test_admission_shard_public_bindings_preserve_object_identity(
 def test_admission_validation_shard_preserves_private_validator_identity(
     binding: str,
 ) -> None:
-    facade = importlib.import_module("autoskillit.core.types._type_audit_admission")
-    shard = importlib.import_module("autoskillit.core.types._type_audit_admission_validation")
+    facade = importlib.import_module("autoskillit.core.types.audit._type_audit_admission")
+    shard = importlib.import_module(
+        "autoskillit.core.types.audit._type_audit_admission_validation"
+    )
 
     assert getattr(facade, binding) is getattr(shard, binding)
 
 
 def test_admission_ownership_shard_preserves_private_registry_builder_identity() -> None:
-    facade = importlib.import_module("autoskillit.core.types._type_audit_admission")
+    facade = importlib.import_module("autoskillit.core.types.audit._type_audit_admission")
     shard = importlib.import_module(
-        "autoskillit.core.types._type_audit_admission_artifact_ownership"
+        "autoskillit.core.types.audit._type_audit_admission_artifact_ownership"
     )
 
     assert getattr(facade, "_ownership_registry") is getattr(shard, "_ownership_registry")

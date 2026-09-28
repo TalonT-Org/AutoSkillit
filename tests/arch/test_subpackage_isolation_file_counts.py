@@ -134,8 +134,7 @@ FILE_COUNT_LIMITS: dict[str, int] = {
     "core/plugins": 10,  # 7 files + __init__ + buffer
     "core/pipeline": 5,  # 4 files + __init__ + buffer
     "core/context_admission": 9,  # 8 files + __init__
-    # _type_truth replaces the retired _type_tradition_manifest shard.
-    "core/types": 77,
+    "core/types": 1,  # was 77; #5189 moved every _type_* module into layered group packages.
     "core/runtime": 11,
     "config": 20,
     "recipe": 12,  # 12 real files after excluding registered forwarding shims
@@ -285,6 +284,34 @@ def test_no_subpackage_exceeds_12_files_default_and_per_package_overrides() -> N
     assert not violations, (
         "Subpackages exceeding their Python file limits (default 12):\n"
         + "\n".join(f"  {v}" for v in violations)
+    )
+
+
+def test_core_types_group_packages_obey_file_count_limits() -> None:
+    """Groups sit three levels below SRC_ROOT, outside the generic walker's reach."""
+    types_dir = SRC_ROOT / "core" / "types"
+    group_dirs = sorted(
+        path
+        for path in types_dir.iterdir()
+        if path.is_dir() and not path.name.startswith("_") and (path / "__init__.py").is_file()
+    )
+    assert group_dirs, "Expected core.types group packages"
+    violations = []
+    for group_dir in group_dirs:
+        rel_key = str(group_dir.relative_to(SRC_ROOT))
+        py_files = list(group_dir.glob("*.py"))
+        limit = FILE_COUNT_LIMITS.get(rel_key, 12)
+        if len(py_files) > limit:
+            violations.append(f"{rel_key}/: {len(py_files)} Python files (max {limit})")
+
+    assert not violations, (
+        "Core type group packages exceeding their Python file limits (default 12):\n"
+        + "\n".join(f"  {violation}" for violation in violations)
+    )
+    actual_root_files = len(list(types_dir.glob("*.py")))
+    assert FILE_COUNT_LIMITS["core/types"] == actual_root_files, (
+        f"core/types/ file-count ceiling ({FILE_COUNT_LIMITS['core/types']}) must match "
+        f"its root Python file count ({actual_root_files})"
     )
 
 

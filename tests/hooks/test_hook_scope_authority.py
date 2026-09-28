@@ -352,6 +352,7 @@ def test_cross_layer_session_scope_values_match() -> None:
         / "autoskillit"
         / "core"
         / "types"
+        / "launch"
         / "_type_session_shape.py"
     )
     core_tree = ast.parse(core_path.read_text(encoding="utf-8"), filename=str(core_path))

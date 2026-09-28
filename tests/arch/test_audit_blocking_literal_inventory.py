@@ -17,7 +17,7 @@ _ASSESSMENT_VALUES = frozenset(member.value for member in AuditAssessment)
 _EXPECTED_LITERALS = Counter(
     {
         (
-            "core/types/_type_closure_report.py",
+            "core/types/audit/_type_closure_report.py",
             "<module>",
             frozenset(
                 {
@@ -31,7 +31,7 @@ _EXPECTED_LITERALS = Counter(
             ),
         ): 1,
         (
-            "core/types/_type_closure_report.py",
+            "core/types/audit/_type_closure_report.py",
             "<module>",
             frozenset(
                 {

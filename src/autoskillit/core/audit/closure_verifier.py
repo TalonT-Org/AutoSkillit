@@ -12,7 +12,7 @@ from pathlib import Path
 
 from ..io.io import decode_versioned_json_bytes
 from ..io.path_containment import ContainmentError, read_stable_contained_bytes
-from ..types._type_closure_report import (
+from ..types.audit._type_closure_report import (
     CLOSURE_ROW_BLOCKING_ASSESSMENTS,
     ClosureReport,
 )

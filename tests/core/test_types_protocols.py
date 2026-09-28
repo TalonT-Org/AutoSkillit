@@ -25,7 +25,7 @@ def test_managed_session_home_frozen_slots_exact_fields_and_exports(tmp_path) ->
         ManagedHomeProjection,
         ManagedSessionHome,
     )
-    from autoskillit.core.types._type_results import __all__ as results_all
+    from autoskillit.core.types.results._type_results import __all__ as results_all
 
     skills_dir = ValidatedAddDir(tmp_path / "home" / "skills")
     unavailability_payload: SkillUnavailabilityPayload = {

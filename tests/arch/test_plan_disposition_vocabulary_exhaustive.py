@@ -11,7 +11,7 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _SOURCE = (
     Path(__file__).resolve().parents[2]
-    / "src/autoskillit/core/types/_type_audit_cycle_disposition.py"
+    / "src/autoskillit/core/types/audit/_type_audit_cycle_disposition.py"
 )
 
 

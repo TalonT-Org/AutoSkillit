@@ -25,7 +25,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.config.settings import _CONFIG_SCHEMA, RETIRED_CONFIG_KEYS
-from autoskillit.core.types._type_constants_features import RETIRED_FEATURES
+from autoskillit.core.types.constants._type_constants_features import RETIRED_FEATURES
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 

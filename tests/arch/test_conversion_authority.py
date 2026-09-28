@@ -62,5 +62,5 @@ def test_no_bare_token_byte_conversion_outside_core() -> None:
     assert not violations, (
         "Bare token-limit × numeric-constant conversions found outside core/:\n"
         + "\n".join(f"  {v}" for v in violations)
-        + "\nRoute conversions through core/types/_type_dimensions.py policies."
+        + "\nRoute conversions through core/types/foundation/_type_dimensions.py policies."
     )

@@ -288,7 +288,7 @@ class TestProviderFieldsReachFlush:
         self, minimal_ctx, tmp_path, monkeypatch
     ):
         """model_identity must be forwarded to flush_session_log — not silently dropped."""
-        from autoskillit.core.types._type_results import ModelIdentity
+        from autoskillit.core.types.results._type_results import ModelIdentity
         from autoskillit.execution.headless import _execute_claude_headless
         from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
 

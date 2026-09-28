@@ -11,8 +11,8 @@ from importlib import import_module
 
 import pytest
 
-from autoskillit.core.types._type_execution_identity import BackendAuthorityKind
-from autoskillit.core.types._type_launch_authority import (
+from autoskillit.core.types.foundation._type_execution_identity import BackendAuthorityKind
+from autoskillit.core.types.launch._type_launch_authority import (
     BackendAuthority,
     BackendAuthorityTier,
     LaunchFallbackRoute,
@@ -22,8 +22,8 @@ from autoskillit.core.types._type_launch_authority import (
     ModelPinResolution,
     ProviderBinding,
 )
-from autoskillit.core.types._type_launch_authority import __all__ as _authority_all
-from autoskillit.core.types._type_launch_projection import LaunchContractError
+from autoskillit.core.types.launch._type_launch_authority import __all__ as _authority_all
+from autoskillit.core.types.launch._type_launch_projection import LaunchContractError
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
@@ -59,7 +59,7 @@ class TestExportsAndFacades:
         core = import_module("autoskillit.core")
         for name in _authority_all:
             canonical = getattr(
-                import_module("autoskillit.core.types._type_launch_authority"), name
+                import_module("autoskillit.core.types.launch._type_launch_authority"), name
             )
             assert getattr(core_types, name) is canonical
             assert getattr(core, name) is canonical

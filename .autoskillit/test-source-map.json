@@ -5703,7 +5703,6 @@
       "tests/hooks/test_recipe_write_advisor.py",
       "tests/hooks/test_token_summary_appender.py",
       "tests/infra/test_check_pyi_stub_format.py",
-      "tests/infra/test_check_pyi_stub_symbols.py",
       "tests/infra/test_conftest.py",
       "tests/infra/test_generated_file_write_guard.py",
       "tests/infra/test_generated_files.py",

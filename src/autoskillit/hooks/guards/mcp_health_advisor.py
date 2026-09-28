@@ -3,7 +3,7 @@
 
 Reads ~/.autoskillit/active_kitchens.json to find kitchen entries for the current
 project. If entries exist but all PIDs are dead, injects an informational message
-via hookSpecificOutput.message. Never blocks tool execution.
+through additionalContext. Never blocks tool execution.
 
 SIGHUP treated as shutdown: when a terminal disconnect kills the MCP server,
 active_kitchens.json still holds the dead PID. This hook surfaces that state to

@@ -12,10 +12,9 @@ Stdlib-only; runs as a bare sibling module under ``hooks/_runtime/``.
 from __future__ import annotations
 
 import importlib
-import json
 import sys
 from pathlib import Path
-from typing import Final, Literal
+from typing import TYPE_CHECKING, Final, Literal, NoReturn
 
 # Canonical session-scope value set for the hook runtime + hook_registry layer.
 # T17 (tests/hooks/test_hook_scope_authority.py) pins this value set equal to
@@ -33,38 +32,34 @@ SESSION_SCOPE_VALUES: Final[frozenset[str]] = frozenset(
 SessionScopeLiteral = Literal["any", "headless_only", "interactive_only"]
 
 
-def _deny_scope_authority_unavailable(script_identity: str) -> None:
-    from _policy_event import PolicyEvent, render_provenance_prefix
+def _deny_scope_authority_unavailable(script_identity: str) -> NoReturn:
+    if TYPE_CHECKING:
+        from ._hook_output import deny_tool_use
+        from ._policy_event import PolicyEvent, render_provenance_prefix
+    else:
+        from _hook_output import deny_tool_use
+        from _policy_event import PolicyEvent, render_provenance_prefix
 
-    reason = render_provenance_prefix(
-        PolicyEvent(
-            hook_id="session-scope-authority",
-            hook_version=1,
-            event="PreToolUse",
-            decision="deny",
-            reason_code="scope_authority_unavailable",
-            source=script_identity,
+    deny_tool_use(
+        render_provenance_prefix(
+            PolicyEvent(
+                hook_id="session-scope-authority",
+                hook_version=1,
+                event="PreToolUse",
+                decision="deny",
+                reason_code="scope_authority_unavailable",
+                source=script_identity,
+            )
         )
     )
-    payload = json.dumps(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": reason,
-            }
-        }
-    )
-    sys.stdout.write(payload + "\n")
-    sys.stdout.flush()
 
 
 def enforce_script_session_scope(script_identity: str) -> bool:
     """Return whether a registered PreToolUse guard applies to this session.
 
     A missing, unreadable, malformed, or incomplete generated table denies
-    the tool call before returning ``False``. A normal scope mismatch
-    returns ``False`` so the caller can ``sys.exit(0)``. Resolves the
+    the tool call and exits. A normal scope mismatch returns ``False`` so the
+    caller can ``sys.exit(0)``. Resolves the
     script's declared scope from the generated
     ``_hook_scope_table.HOOK_SCOPE_BY_SCRIPT`` table and compares it
     against the runtime session class.

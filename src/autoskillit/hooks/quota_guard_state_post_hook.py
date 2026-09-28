@@ -27,6 +27,7 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
+from _hook_output import add_context  # noqa: E402
 from _hook_settings import (  # noqa: E402
     clear_quota_disable_marker,
     write_quota_disable_marker,
@@ -34,10 +35,11 @@ from _hook_settings import (  # noqa: E402
 
 _HANDLED_TOOLS = frozenset({"disable_quota_guard", "close_kitchen"})
 
-_FAILURE_REWRITE = (
+_FAILURE_CONTEXT = (
     "quota_guard_state_post_hook: failed to write session-disable marker. "
-    "The MCP tool reported success but quota bypass was not persisted; treat "
-    "this run_skill as still subject to the configured quota enforcement."
+    "The quota guard is still active because the disable marker could not be written. "
+    "The success result above must not be relied on; this run_skill is still subject to "
+    "the configured quota enforcement."
 )
 
 
@@ -105,16 +107,7 @@ def main() -> None:
             sys.stderr.write(
                 f"quota_guard_state_post_hook: marker write failed for {session_id}: {exc}\n"
             )
-            sys.stdout.write(
-                json.dumps(
-                    {
-                        "hookSpecificOutput": {
-                            "hookEventName": "PostToolUse",
-                            "updatedMCPToolOutput": _FAILURE_REWRITE,
-                        }
-                    }
-                )
-            )
+            add_context("PostToolUse", _FAILURE_CONTEXT)
         sys.exit(0)
 
     if tool_name == "close_kitchen":

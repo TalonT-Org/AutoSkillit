@@ -174,7 +174,6 @@ def main() -> None:
         reason = _path_arg_denial_reason(skill_name, args_str)
     if reason is not None:
         deny_tool_use(reason)
-    sys.exit(0)
 
 
 if __name__ == "__main__":

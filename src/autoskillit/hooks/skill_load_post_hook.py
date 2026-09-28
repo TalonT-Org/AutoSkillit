@@ -27,6 +27,7 @@ if _RUNTIME_DIR not in sys.path:
 from _guard_decision_diagnostics import (  # noqa: E402
     record_guard_decision,
 )
+from _hook_output import add_context  # noqa: E402
 from _hook_payload import normalize_payload_cwd  # noqa: E402
 from _hook_settings import (  # noqa: E402
     bridge_session_registry,
@@ -222,17 +223,7 @@ def main() -> None:
         )
     if context_parts:
         context = "\n\n".join(context_parts)
-        payload = json.dumps(
-            {"additionalContext": context}
-            if event_name == "PostToolUse"
-            else {
-                "hookSpecificOutput": {
-                    "hookEventName": "UserPromptExpansion",
-                    "additionalContext": context,
-                }
-            }
-        )
-        sys.stdout.write(payload + "\n")
+        add_context(event_name, context)
 
     sys.exit(0)
 

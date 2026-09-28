@@ -220,8 +220,6 @@ def main() -> None:
     if denial_reason is not None:
         deny_tool_use(denial_reason)
 
-    sys.exit(0)
-
 
 if __name__ == "__main__":
     main()

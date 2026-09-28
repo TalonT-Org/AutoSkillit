@@ -23,6 +23,7 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
+from _hook_output import add_context, deny_tool_use  # noqa: E402
 from _hook_payload import (  # noqa: E402
     parse_hook_command,
     resolve_kitchen_state_dir,
@@ -63,10 +64,10 @@ def _write_kitchen_marker(session_id: str, recipe_name: str | None, payload_cwd:
 
 def _check_recipe_reload_block(
     session_id: str, tool_input: dict, payload_cwd: str = ""
-) -> dict | None:
+) -> str | None:
     """Block open_kitchen(name=...) if a recipe-confirmed marker exists for this session.
 
-    Returns a deny payload dict if blocked, or None if allowed.
+    Returns the denial reason if blocked, or None if allowed.
     """
     recipe_name = tool_input.get("name") or None
     if not recipe_name:
@@ -88,45 +89,25 @@ def _check_recipe_reload_block(
     except (json.JSONDecodeError, OSError):
         return None
 
-    return {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": (
-                f"RECIPE ALREADY LOADED: This session already loaded recipe "
-                f"'{recipe_name}'. The recipe is instructions, not runtime state "
-                "— re-loading cannot change pipeline behavior. If the user "
-                "requests enabling or disabling a step mid-run, execute or skip "
-                "it directly. To re-open the kitchen gate without loading a "
-                "recipe, call open_kitchen() without a name parameter."
-            ),
-        }
-    }
-
-
-def _deny(reason: str) -> None:
-    payload = json.dumps(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": reason,
-            }
-        }
+    return (
+        f"RECIPE ALREADY LOADED: This session already loaded recipe "
+        f"'{recipe_name}'. The recipe is instructions, not runtime state "
+        "— re-loading cannot change pipeline behavior. If the user "
+        "requests enabling or disabling a step mid-run, execute or skip "
+        "it directly. To re-open the kitchen gate without loading a "
+        "recipe, call open_kitchen() without a name parameter."
     )
-    sys.stdout.write(payload + "\n")
-    sys.exit(0)
 
 
 def _enforce_session_authorization() -> None:
     headless, tier = hook_session_shape()
     if headless:
         if tier in ("fleet",):
-            _deny(f"open_kitchen cannot be called from {tier!r} sessions.")
+            deny_tool_use(f"open_kitchen cannot be called from {tier!r} sessions.")
 
         if tier not in ("orchestrator",):
             # skill session, unset, or invalid — deny (fail-closed)
-            _deny(
+            deny_tool_use(
                 "open_kitchen cannot be called from skill sessions. "
                 "Open the kitchen in your orchestrator session using "
                 "/autoskillit:open-kitchen."
@@ -160,8 +141,7 @@ def main() -> None:
         if session_id and isinstance(tool_input, dict):
             denial = _check_recipe_reload_block(session_id, tool_input, payload_cwd)
             if denial:
-                sys.stdout.write(json.dumps(denial) + "\n")
-                sys.exit(0)
+                deny_tool_use(denial)
 
         if session_id:
             _write_kitchen_marker(session_id, recipe_name, payload_cwd)
@@ -176,18 +156,11 @@ def main() -> None:
         print(f"[open_kitchen_guard] marker write failed: {e}", file=sys.stderr)
         # Surface the failure so the user knows AskUserQuestion will be blocked
         # in headless sub-sessions (ask_user_question_guard relies on the marker).
-        payload = json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "message": (
-                        f"Warning: kitchen marker write failed ({e}). "
-                        "AskUserQuestion may be blocked in headless sub-sessions."
-                    ),
-                }
-            }
+        add_context(
+            "PreToolUse",
+            f"Warning: kitchen marker write failed ({e}). "
+            "AskUserQuestion may be blocked in headless sub-sessions.",
         )
-        sys.stdout.write(payload + "\n")
 
     sys.exit(0)
 

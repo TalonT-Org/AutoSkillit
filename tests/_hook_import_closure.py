@@ -87,16 +87,24 @@ def _runtime_nodes(node: ast.AST, qualname: str) -> Iterator[tuple[ast.AST, str]
 
 def runtime_imports(tree: ast.Module) -> RuntimeImports:
     """Collect runtime imports and unresolved loader calls with their enclosing scope."""
+    nodes = tuple(_runtime_nodes(tree, _MODULE_QUALNAME))
+    loader_aliases = {
+        alias.asname: alias.name
+        for node, _ in nodes
+        if isinstance(node, ast.ImportFrom)
+        for alias in node.names
+        if alias.asname and alias.name in _NAMED_IMPORT_CALLS | _OPAQUE_LOAD_CALLS
+    }
     refs: list[ImportRef] = []
     dynamic_sites: set[str] = set()
-    for node, qualname in _runtime_nodes(tree, _MODULE_QUALNAME):
+    for node, qualname in nodes:
         if isinstance(node, ast.Import):
             refs.extend(ImportRef(alias.name, 0, node.lineno) for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
             refs.append(ImportRef(node.module or "", node.level, node.lineno))
         elif isinstance(node, ast.Call):
             loader = (
-                node.func.id
+                loader_aliases.get(node.func.id, node.func.id)
                 if isinstance(node.func, ast.Name)
                 else node.func.attr
                 if isinstance(node.func, ast.Attribute)

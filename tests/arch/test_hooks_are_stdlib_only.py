@@ -166,10 +166,25 @@ def test_scanner_walks_both_arms_of_import_fallbacks() -> None:
 
 def test_scanner_finds_literal_dynamic_imports() -> None:
     imports = runtime_imports(
-        ast.parse('importlib.import_module("x")\nimport_module("y")\n__import__("z")')
+        ast.parse(
+            'importlib.import_module("x")\nimport_module("y")\n__import__("z")\n'
+            'from importlib import import_module as load\nload("aliased")'
+        )
     )
-    assert {ref.module for ref in imports.refs} == {"x", "y", "z"}
+    assert {ref.module for ref in imports.refs} == {"x", "y", "z", "importlib", "aliased"}
     assert not imports.dynamic_sites
+
+
+@pytest.mark.parametrize(
+    "loader_import",
+    ["from importlib import import_module as load", "from runpy import run_path as load"],
+)
+def test_scanner_records_aliased_loader_sites(loader_import: str) -> None:
+    imports = runtime_imports(
+        ast.parse(f"def f(target):\n    return load(target)\n{loader_import}\n")
+    )
+
+    assert imports.dynamic_sites == {"f"}
 
 
 def test_scanner_records_non_literal_dynamic_import_sites() -> None:

@@ -36,6 +36,16 @@ from ..types import (
     managed_home,
 )
 
+__all__ = [
+    "append_retiring_record",
+    "due_retiring_records",
+    "is_reclaimable_artifact_path",
+    "migrate_retiring_cache_v1",
+    "read_retiring_cache",
+    "remove_retiring_records",
+    "repair_corrupt_retiring_cache",
+]
+
 logger = get_logger(__name__)
 
 _RETIRING_CACHE_SCHEMA_VERSION = 2

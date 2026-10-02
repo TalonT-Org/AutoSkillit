@@ -94,8 +94,9 @@ def test_removed_symbols_are_gone_from_both_halves(name: str) -> None:
 @pytest.mark.parametrize("name", ADDED)
 def test_added_symbols_are_gateway_importable(name: str) -> None:
     assert hasattr(core, name), (
-        f"{name} is not importable from autoskillit.core — add its line to "
-        "core/__init__.pyi, which is what populates __all__ at runtime"
+        f"{name} is not importable from autoskillit.core — add the name to its source "
+        "module's __all__ (or to _PRIVATE_REEXPORTS for an underscore name) and run "
+        "task sync-core-stub"
     )
 
 

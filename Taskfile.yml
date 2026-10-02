@@ -976,6 +976,11 @@ tasks:
     cmds:
       - python scripts/sync_versions.py
 
+  sync-core-stub:
+    desc: Regenerate src/autoskillit/core/__init__.pyi from core source modules' __all__
+    cmds:
+      - python scripts/generate_core_stub.py
+
   sync-hooks-hash:
     desc: "Regenerate src/autoskillit/hooks/registry.sha256 from the live HOOK_REGISTRY"
     cmds:

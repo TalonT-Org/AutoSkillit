@@ -23,6 +23,27 @@ from ..types import (
 )
 from ._plugin_ids import _AUTOSKILLIT_INSTALL_ROOT_KEY, DIRECT_INSTALL_CACHE_SUBDIR
 
+__all__ = [
+    "INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS",
+    "INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION",
+    "classify_directory_tree_digest_error",
+    "generation_artifact_root",
+    "generation_plugin_selector_path",
+    "generation_selector_path",
+    "generation_staging_root",
+    "generation_store_root",
+    "generation_version_root",
+    "installed_plugin_artifact_lease_path",
+    "installed_plugin_artifact_manifest_path",
+    "installed_plugin_artifact_manifest_payload",
+    "installed_plugin_artifact_root",
+    "installed_plugin_cache_dir",
+    "read_installed_plugin_artifact_identity",
+    "resolve_current_generation",
+    "resolve_current_generation_for_plugin",
+    "resolve_installed_generation_root",
+]
+
 
 def installed_plugin_cache_dir(home: Path, plugin_ref: str) -> Path:
     """Return the managed cache directory containing installed plugin versions."""

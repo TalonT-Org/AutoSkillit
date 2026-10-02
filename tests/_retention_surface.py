@@ -1193,106 +1193,106 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "the prune already happened."
     ),
     # -- core.plugins._plugin_artifact_retirement::_current_identity_status --
-    f"{_PCS}::L190": _retries_after_input_changes(
+    f"{_PCS}::L194": _retries_after_input_changes(
         "Resolving the current on-disk identity failed as unavailable; an inspection "
         "failure, not evidence of liveness."
     ),
-    f"{_PCS}::L192": _retries_after_input_changes(
+    f"{_PCS}::L196": _retries_after_input_changes(
         "On-disk identity validation failed for the current generation; a validation guard, "
         "not a liveness or age decision."
     ),
-    f"{_PCS}::L194": _retries_after_input_changes(
+    f"{_PCS}::L198": _retries_after_input_changes(
         "The current on-disk identity no longer matches the record's recorded identity; a "
         "consistency guard against reclaiming the wrong artifact."
     ),
     # -- core.plugins._plugin_artifact_retirement::try_reclaim --
-    f"{_PC}::L232": _retries_after_input_changes(
+    f"{_PC}::L236": _retries_after_input_changes(
         "The record's artifact_kind does not match this coordinator's own kind; a type/"
         "ownership guard, not a liveness decision."
     ),
-    f"{_PC}::L234": RetentionDecision(
+    f"{_PC}::L238": RetentionDecision(
         Revocability.REVOCABLE,
         "The record's scheduled not_before time has not yet passed; retained until the "
         "grace/backoff window elapses.",
     ),
-    f"{_PC}::L236": _retries_after_input_changes(
+    f"{_PC}::L240": _retries_after_input_changes(
         "This coordinator no longer claims ownership of the managed path; an ownership "
         "guard, not liveness evidence."
     ),
-    f"{_PC}::L243": RetentionDecision(
+    f"{_PC}::L247": RetentionDecision(
         Revocability.REVOCABLE,
         "Lease contention means another process currently holds an exclusive lock on this "
         "artifact, a directly observed live reference.",
     ),
-    f"{_PC}::L249": _retries_after_input_changes(
+    f"{_PC}::L253": _retries_after_input_changes(
         "Lease acquisition failed with an OSError or RuntimeError; an infrastructure "
         "failure, not evidence about the record's liveness."
     ),
-    f"{_PC}::L258": _self_limiting(
+    f"{_PC}::L262": _self_limiting(
         "The retiring cache record is already absent, removed by a concurrent sweep; "
         "reports an already-completed outcome, not a retention gate."
     ),
-    f"{_PC}::L260": _retries_after_input_changes(
+    f"{_PC}::L264": _retries_after_input_changes(
         "The retiring cache is not in the expected exact-v2 state; an infrastructure/"
         "consistency guard, not liveness evidence."
     ),
-    f"{_PC}::L267": _self_limiting(
+    f"{_PC}::L271": _self_limiting(
         "The record is no longer present in the retiring queue, removed concurrently; "
         "reports an already-completed outcome, not a retention gate."
     ),
-    f"{_PC}::L269": _self_limiting(
+    f"{_PC}::L273": _self_limiting(
         "The freshly re-read queued record no longer matches the caller's exact identity; "
         "a consistency guard against acting on stale data."
     ),
-    f"{_PC}::L274": RetentionDecision(
+    f"{_PC}::L278": RetentionDecision(
         Revocability.REVOCABLE,
         "Re-verified under lock: the record's not_before time has not yet passed; retained "
         "until due.",
     ),
-    f"{_PC}::L276": RetentionDecision(
+    f"{_PC}::L280": RetentionDecision(
         Revocability.REVOCABLE,
         "The managed path is the actively selected generation, or a live session home "
         "still bakes hook and script paths inside it; retained because it is currently "
         "live and in use, an observed liveness reference.",
         bounded_by="SESSION_STALE_SECONDS",
     ),
-    f"{_PC}::L289": _retries_after_input_changes(
+    f"{_PC}::L293": _retries_after_input_changes(
         "Updating the retiring-cache record failed due to an unsafe cache state; an "
         "infrastructure failure, not liveness evidence."
     ),
-    f"{_PC}::L294": _self_limiting(
+    f"{_PC}::L298": _self_limiting(
         "None of the managed, manifest, or staging paths exist on disk; the artifact is "
         "already gone, reporting completion rather than a retention gate."
     ),
-    f"{_PC}::L297": _retries_after_input_changes(
+    f"{_PC}::L301": _retries_after_input_changes(
         "The staging path is in an ambiguous or unsafe state relative to the managed path; "
         "a consistency guard, not liveness evidence."
     ),
-    f"{_PC}::L307": _retries_after_input_changes(
+    f"{_PC}::L311": _retries_after_input_changes(
         "The non-destructive identity decision deferred reclamation because identity "
         "resolution was unavailable; an inspection failure, not liveness evidence."
     ),
-    f"{_PC}::L310": _retries_after_input_changes(
+    f"{_PC}::L314": _retries_after_input_changes(
         "Updating the retiring-cache record failed while rejecting an invalid or mismatched "
         "identity; an infrastructure failure, not liveness evidence."
     ),
-    f"{_PC}::L315": _retries_after_input_changes(
+    f"{_PC}::L319": _retries_after_input_changes(
         "The non-destructive identity decision rejected the current artifact identity; a "
         "validation or consistency guard, not a liveness or age decision."
     ),
-    f"{_PC}::L323": _retries_after_input_changes(
+    f"{_PC}::L327": _retries_after_input_changes(
         "Renaming the managed path into staging failed with an OSError; an execution "
         "failure, not liveness evidence."
     ),
-    f"{_PC}::L337": _retries_after_input_changes(
+    f"{_PC}::L341": _retries_after_input_changes(
         "The artifact was already removed from disk; updating the retiring-cache record "
         "afterward failed due to an unsafe cache state, an infrastructure failure."
     ),
-    f"{_PC}::L343": _retries_after_input_changes(
+    f"{_PC}::L347": _retries_after_input_changes(
         "Removing the manifest or staging directory failed with an OSError; an execution "
         "failure during the delete attempt, not liveness evidence."
     ),
-    f"{_PC}::L348": _self_limiting(
+    f"{_PC}::L352": _self_limiting(
         "The successful-reclaim completion path; not a retention skip, this line reports "
         "that reclamation succeeded."
     ),

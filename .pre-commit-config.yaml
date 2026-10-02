@@ -67,11 +67,11 @@ repos:
         files: __init__\.pyi$
         pass_filenames: false
 
-      - id: check-pyi-stub-symbols
-        name: Check __init__.pyi stub symbol completeness
+      - id: check-core-stub
+        name: Check core/__init__.pyi is generated from source-module __all__
         language: system
-        entry: python scripts/check_pyi_stub_symbols.py
-        files: __init__\.pyi$
+        entry: python scripts/generate_core_stub.py --check
+        files: ^(src/autoskillit/core/.*\.pyi?|scripts/generate_core_stub\.py)$
         pass_filenames: false
 
       - id: check-single-enforcement-point

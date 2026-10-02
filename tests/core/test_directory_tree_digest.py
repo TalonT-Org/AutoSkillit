@@ -457,6 +457,8 @@ class TestDirectoryTreeDigestRaceSafety:
             zzz_dir = root / "zzz_dir"
             zzz_dir.mkdir()
             (zzz_dir / "inner2.py").write_text("inside zzz")
+            for entry in root.rglob("*"):
+                entry.chmod(0o755 if entry.is_dir() else 0o644)
 
         build_multi_sibling_tree(tmp_path)
         assert directory_tree_digest(tmp_path) == (

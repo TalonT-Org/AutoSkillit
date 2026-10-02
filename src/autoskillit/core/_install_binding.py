@@ -41,6 +41,12 @@ from pathlib import Path
 
 from .logging import get_logger
 
+__all__ = [
+    "InstallBinding",
+    "install_binding_matches_current_state",
+    "resolve_install_binding",
+]
+
 logger = get_logger(__name__)
 
 _SELF_LEASE_HANDLE: object | None = None

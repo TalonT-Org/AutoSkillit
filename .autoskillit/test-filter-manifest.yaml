@@ -352,8 +352,9 @@ scripts/regen_contracts.py:
   - infra/
 scripts/check_pyi_stub_format.py:
   - infra/
-scripts/check_pyi_stub_symbols.py:
+scripts/generate_core_stub.py:
   - infra/
+  - arch/
 scripts/ci_target_policy.py:
   - infra/
 scripts/measure_codex_read_repetition.py:

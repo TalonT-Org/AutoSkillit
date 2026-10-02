@@ -47,11 +47,11 @@ def _load_script(name: str) -> ModuleType:
     ),
     [
         ("check_pyi_stub_format.py", "SRC_ROOT", "check", True, (), "no __init__.pyi"),
-        ("check_pyi_stub_symbols.py", "SRC_ROOT", "check", True, (), "no __init__.pyi"),
+        ("generate_core_stub.py", "CORE_DIR", "check", True, (), "no core export sources"),
         ("check_contract_freshness.py", "RECIPES_DIR", "main", False, (), "no recipe YAML"),
         ("compile_recipes.py", "RECIPES_DIR", "main", False, ("--check",), "no recipe YAML"),
     ],
-    ids=["stub-format", "stub-symbols", "contract-freshness", "recipe-compiler"],
+    ids=["stub-format", "core-stub", "contract-freshness", "recipe-compiler"],
 )
 def test_script_gate_fails_for_an_empty_universe(
     script_name: str,

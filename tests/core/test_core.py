@@ -91,7 +91,7 @@ def test_core_pyi_stub_consistent_with_all():
                 stub_names.add(alias.asname or alias.name)
 
     all_set = set(core.__all__)
-    private_reexports = core._PRIVATE_REEXPORTS
+    private_reexports = set(core._PRIVATE_REEXPORTS)
     assert all_set <= stub_names, f"Names in __all__ missing from stub: {all_set - stub_names}"
     assert stub_names - all_set == private_reexports, (
         f"Unexpected stub-only names: {(stub_names - all_set) - private_reexports}"

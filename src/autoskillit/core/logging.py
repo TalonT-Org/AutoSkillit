@@ -37,6 +37,13 @@ from typing import Any, Literal, Protocol
 
 import structlog
 
+__all__ = [
+    "PluginArtifactLifecycleLease",
+    "configure_logging",
+    "get_logger",
+    "log_plugin_artifact_lifecycle",
+]
+
 PACKAGE_LOGGER_NAME = "autoskillit"
 _PLUGIN_ARTIFACT_ACTIONS = frozenset(
     {

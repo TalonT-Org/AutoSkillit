@@ -41,8 +41,10 @@ def test_core_gateway_snapshot_symbols_all_resolve() -> None:
     assert not missing, (
         f"{len(missing)} symbol(s) frozen in CORE_GATEWAY_SYMBOLS no longer resolve on "
         f"autoskillit.core — the core/ and recipe/ decomposition dropped part of the public "
-        f"gateway surface. Either restore the re-export (likely a missing entry in "
-        f"core/__init__.pyi) or, if the removal is intentional, update the snapshot: {missing}"
+        f"gateway surface. Either restore the re-export (add the name to its source "
+        f"module's __all__, or to _PRIVATE_REEXPORTS for an underscore name, and run "
+        f"task sync-core-stub) or, if the removal is intentional, update the snapshot: "
+        f"{missing}"
     )
 
 

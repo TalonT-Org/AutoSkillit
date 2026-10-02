@@ -25,7 +25,7 @@ for the human-readable token and timing tables. The MCP tool
 `get_token_summary` delegates to it directly. The `token_summary_hook.py`
 PostToolUse hook maintains stdlib-only parallel implementations of
 `_format_efficiency_table` and `_format_table` (cannot import from
-`autoskillit.*` — enforced by `tests/arch/test_ast_rules.py`). Output
+`autoskillit.*` — enforced by `tests/arch/test_hooks_are_stdlib_only.py`). Output
 equivalence between the canonical formatter and the hook is enforced by
 `test_efficiency_table_equivalence` and `test_token_table_equivalence` in
 `tests/infra/test_token_summary_core.py`. The canonical formatter derives

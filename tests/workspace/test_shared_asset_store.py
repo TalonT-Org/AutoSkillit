@@ -110,6 +110,24 @@ def test_shared_store_never_introduces_a_symlink(tmp_path: Path) -> None:
         _copy_non_skill_plugin_assets(source, dest)
 
 
+def test_projection_copy_rejects_symlinks_under_hooks(tmp_path: Path) -> None:
+    """A hook guard that is a file symlink escaping the tree never reaches a projection."""
+    source = _make_source_plugin(tmp_path / "source")
+    guards = source / "hooks" / "guards"
+    guards.mkdir(parents=True)
+    (guards / "real.py").write_text("", encoding="utf-8")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "escape.py").write_text("", encoding="utf-8")
+    (guards / "escape.py").symlink_to(outside / "escape.py")
+
+    dest = tmp_path / "home" / ".autoskillit" / "plugin-projections" / "proj"
+    dest.mkdir(parents=True)
+
+    with pytest.raises(SkillContractError, match="symlink"):
+        _copy_non_skill_plugin_assets(source, dest)
+
+
 def test_shared_store_uses_hardlinks_never_symlinks(tmp_path: Path) -> None:
     """C4b: the populated store entry and the published copy are both regular files
     (hardlinks), never symlinks -- os.link, never os.symlink."""

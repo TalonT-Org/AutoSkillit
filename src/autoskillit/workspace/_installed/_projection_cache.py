@@ -50,6 +50,7 @@ from ._projection_assets import (
     per_file_asset_digest,
     public_plugin_asset_digest,
 )
+from ._projection_referrers import REFERRER_DIRECTORY_NAME, live_projected_artifact_referrers
 
 logger = get_logger(__name__)
 
@@ -118,10 +119,17 @@ class ProjectionEntryClass(StrEnum):
     IDENTITY_SIDECAR = "identity_sidecar"
     HOOK_QUARANTINE_SIDECAR = "hook_quarantine_sidecar"
     LEASE_DIRECTORY = "lease_directory"
+    REFERRER_DIRECTORY = "referrer_directory"
     PUBLICATION_STAGING_ROOT = "publication_staging_root"
     PUBLICATION_STAGING_MANIFEST = "publication_staging_manifest"
     RETIREMENT_STAGING_ROOT = "retirement_staging_root"
     RESIDUE_STAGING_ROOT = "residue_staging_root"
+
+
+_NAMED_DIRECTORY_ENTRIES: dict[str, ProjectionEntryClass] = {
+    ".artifact-leases": ProjectionEntryClass.LEASE_DIRECTORY,
+    REFERRER_DIRECTORY_NAME: ProjectionEntryClass.REFERRER_DIRECTORY,
+}
 
 
 class ProjectionReconcileDisposition(StrEnum):
@@ -156,8 +164,8 @@ def classify_projection_entry(
         return ProjectionEntryClass.IDENTITY_SIDECAR
     if _HOOK_QUARANTINE_SIDECAR_RE.fullmatch(name):
         return ProjectionEntryClass.HOOK_QUARANTINE_SIDECAR
-    if name == ".artifact-leases":
-        return ProjectionEntryClass.LEASE_DIRECTORY
+    if (named := _NAMED_DIRECTORY_ENTRIES.get(name)) is not None:
+        return named
     if _PUBLICATION_STAGING_ROOT_RE.fullmatch(name):
         return ProjectionEntryClass.PUBLICATION_STAGING_ROOT
     if _PUBLICATION_STAGING_MANIFEST_RE.fullmatch(name):
@@ -375,11 +383,19 @@ class ProjectedPluginRetirementOwner:
             current_identity=self._current_identity,
             logger=logger,
             is_current=lambda path: active_key is not None and path.name == active_key,
+            retention_pin=self._retention_pin,
         )
 
     @property
     def managed_root(self) -> Path:
         return self._retirement.managed_root
+
+    @staticmethod
+    def _retention_pin(path: Path) -> str | None:
+        homes = live_projected_artifact_referrers(path)
+        if not homes:
+            return None
+        return f"referenced by live session home {homes[0]}"
 
     def _contains(self, path: Path) -> bool:
         return self._retirement.contains(path)

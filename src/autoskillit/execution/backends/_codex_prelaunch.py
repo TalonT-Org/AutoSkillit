@@ -29,12 +29,13 @@ def codex_prelaunch_transaction(
     destination_home: Path,
     runtime_spec: CodexRuntimeSpec,
     hook_config_format: str = "",
-    plugin_dir: Path | None = None,
+    plugin_dir: Path,
 ) -> Iterator[Path]:
     """Provision a generated-home config from read-only native preferences.
 
     The source config is read once without locking or mutation. The destination
     config is then locked for all wrapper-owned configuration and hook writes.
+    Hooks are rendered from ``plugin_dir``, the launch's leased plugin tree.
     """
     source_config_path = Path(source_codex_home).expanduser().resolve(strict=False) / "config.toml"
     try:

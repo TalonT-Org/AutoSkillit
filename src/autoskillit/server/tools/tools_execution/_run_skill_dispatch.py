@@ -52,6 +52,7 @@ from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._execution_helpers import (
     rehydrate_skill_invocation as _rehydrate_skill_invocation,
 )
+from autoskillit.server.tools._execution_helpers import session_hook_root_scope
 from autoskillit.server.tools._execution_helpers import (
     validate_resumed_skill_contract as _validate_resumed_skill_contract,
 )
@@ -599,8 +600,8 @@ async def run_skill(
                         _te_pkg._prepare_dispatch_session(state)
                         resource_request = _ChildResourceOwnerRequest(
                             source_cwd=Path(state._invocation_cwd),
-                            prepare=lambda owned_cwd: _prepare_owned_dispatch_session(
-                                state, owned_cwd
+                            prepare=lambda owned_cwd, hook_root: _prepare_owned_dispatch_session(
+                                state, owned_cwd, hook_root
                             ),
                             session_manager=state.tool_ctx.session_skill_manager,
                             generated_home_id=state._cleanup_session_id,
@@ -608,6 +609,9 @@ async def run_skill(
                                 state._generated_home_cleanup_required
                             ),
                             copied_snapshot_path=lambda: state._copied_snapshot_dir,
+                            session_hook_root=lambda: session_hook_root_scope(
+                                state.tool_ctx, state._effective_backend_obj
+                            ),
                             cleanup_errors_are_terminal=False,
                         )
                         resource_owner = _te_pkg.scoped_child_resource_owner(resource_request)

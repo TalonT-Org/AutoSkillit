@@ -16,6 +16,7 @@ classified `REJECT` with `category: "arch_violation"`.
 | Atomic writes | `test_ast_rules.py` (REQ-AST-002) | `.write_text()` / `.write_bytes()` in `src/` — must use `_atomic_write()` |
 | No print | `test_ast_rules.py` (ARCH-001) | `print()` in production `src/` code |
 | No StrEnum-to-string compare | `test_ast_rules.py` (ARCH-010) | Comparing StrEnum fields to raw string literals |
+| Hook runtime import closure | `test_hooks_are_stdlib_only.py` (REQ-AST-001) | Python shipped into installed plugin trees (`hooks/` and the package-root modules they load) importing anything but the stdlib, a module under `hooks/`, or a package-root module listed in `_PUBLIC_PLUGIN_ASSET_NAMES`; a hook root dependency missing from `_PUBLIC_PLUGIN_ASSET_NAMES`; an uninventoried non-literal or opaque dynamic import |
 | Dataclass slots | `test_dataclass_slots.py` | `dataclass(frozen=True)` decorator without `slots=True` |
 | *Def/*Spec naming | `test_def_spec_naming.py` | `*Def` class that is not a `NamedTuple` or `@dataclass(frozen=True)`; `*Spec` class that is not a `@dataclass` or `TypedDict` |
 | Import layer ordering | `test_layer_enforcement.py` | Importing from a higher IL layer (e.g., IL-2 recipe/ imported by IL-0 core/) |

@@ -12,6 +12,7 @@ from autoskillit.execution.backends._codex_hooks import (
     sync_managed_codex_hooks_to_config,
 )
 from autoskillit.hook_registry import HOOK_REGISTRY, generate_hooks_json
+from tests.fixtures.hook_topology import projection_shaped_hook_root
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
@@ -84,10 +85,11 @@ class TestCodexTomlFormatContract:
         assert "PreCompact" not in generate_codex_hooks_config()
 
         config_path = tmp_path / "config.toml"
+        root = projection_shaped_hook_root(tmp_path)
         sync_managed_codex_hooks_to_config(
             config_path,
             route="parent",
-            include_runtime_only=True,
+            plugin_dir=root.plugin_dir,
         )
         config = tomllib.loads(config_path.read_text(encoding="utf-8"))
         entries = config["hooks"]["PreCompact"]

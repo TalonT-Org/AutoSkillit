@@ -68,8 +68,10 @@ def default_log_dir() -> Path:
 
 
 def pkg_root() -> Path:
-    """Return the canonical autoskillit package root directory.
+    """Return the autoskillit package root directory.
 
+    This is the import path this process sealed at first access, not a
+    symlink-resolved path; compare it against other paths via canonicalization.
     The root is sealed by ``resolve_install_binding()`` on first access and
     remains stable for the process lifetime even if the on-disk install is
     later replaced at the same path.

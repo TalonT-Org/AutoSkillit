@@ -41,6 +41,7 @@ from autoskillit.core import (  # IL-005: core only — never cli.InstalledPlugi
     ArtifactLease,
     ArtifactLeaseContention,
     ManagedHome,
+    PluginArtifactIdentity,
     PluginArtifactKind,
     PluginArtifactRetirementEngine,
     PluginArtifactUnavailableError,
@@ -54,10 +55,12 @@ from autoskillit.core import (  # IL-005: core only — never cli.InstalledPlugi
     installed_plugin_artifact_manifest_path,
     installed_plugin_semantic_key,
     managed_home,
+    parse_installed_plugin_semantic_key,
     read_installed_plugin_artifact_identity,
     read_retiring_cache,
     registered_install_paths,
     resolve_current_generation,
+    resolve_current_generation_for_plugin,
 )
 
 from ._artifact import (
@@ -124,52 +127,88 @@ def _generation_store_findings() -> list[InstallStateFinding]:
                 "a generation.",
             )
         ]
+    identity = _read_generation_identity(
+        current,
+        expected_semantic_key=installed_plugin_semantic_key(plugin_ref, expected_version),
+    )
+    return [identity] if isinstance(identity, InstallStateFinding) else []
+
+
+def _read_generation_identity(
+    generation: Path,
+    *,
+    expected_semantic_key: str | None,
+) -> PluginArtifactIdentity | InstallStateFinding:
+    """Read one generation's identity under a shared lease, or the finding explaining why not."""
     try:
         with ArtifactLease.acquire_existing_shared(
-            installed_plugin_artifact_lease_path(current),
+            installed_plugin_artifact_lease_path(generation),
             timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
         ):
-            read_installed_plugin_artifact_identity(
-                current,
-                expected_semantic_key=installed_plugin_semantic_key(
-                    plugin_ref,
-                    expected_version,
-                ),
-                manifest_path=installed_plugin_artifact_manifest_path(current),
+            return read_installed_plugin_artifact_identity(
+                generation,
+                expected_semantic_key=expected_semantic_key,
+                manifest_path=installed_plugin_artifact_manifest_path(generation),
             )
     except (ArtifactLeaseContention, PluginArtifactUnavailableError, OSError) as exc:
-        return [
-            InstallStateFinding(
-                Severity.ERROR,
-                "generation_artifact_unreadable",
-                f"Current generation at {current} cannot be read: {exc}. "
-                "Run `autoskillit install` to republish.",
-            )
-        ]
+        return InstallStateFinding(
+            Severity.ERROR,
+            "generation_artifact_unreadable",
+            f"Current generation at {generation} cannot be read: {exc}. "
+            "Run `autoskillit install` to republish.",
+        )
     except PluginArtifactValidationError as exc:
-        return [
-            InstallStateFinding(
-                Severity.ERROR,
-                "generation_artifact_invalid",
-                f"Current generation at {current} failed validation: {exc}. "
-                "Run `autoskillit install` to republish.",
-            )
-        ]
+        return InstallStateFinding(
+            Severity.ERROR,
+            "generation_artifact_invalid",
+            f"Current generation at {generation} failed validation: {exc}. "
+            "Run `autoskillit install` to republish.",
+        )
     except Exception as exc:
         logger.warning(
             "generation_store_verification_failed",
             error=str(exc),
             exc_info=True,
         )
-        return [
-            InstallStateFinding(
-                Severity.ERROR,
-                "generation_artifact_error",
-                f"Current generation at {current} could not be verified: {exc}. "
-                "Run `autoskillit install` to republish.",
-            )
-        ]
-    return []
+        return InstallStateFinding(
+            Severity.ERROR,
+            "generation_artifact_error",
+            f"Current generation at {generation} could not be verified: {exc}. "
+            "Run `autoskillit install` to republish.",
+        )
+
+
+def _plugin_selector_skew_findings() -> list[InstallStateFinding]:
+    """Report a plugin-level generation selector that lags the running version.
+
+    The global ``~/.codex/config.toml`` bakes the plugin-level ``current``
+    selector, and publication flips it best-effort, so a failed flip leaves
+    every global Codex hook executing an older tree.
+    """
+    from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY
+
+    home = _home()
+    if not registered_install_paths(home):
+        return []
+    target = resolve_current_generation_for_plugin(home, _AUTOSKILLIT_PLUGIN_KEY)
+    if target is None:
+        return []
+    identity = _read_generation_identity(target, expected_semantic_key=None)
+    if isinstance(identity, InstallStateFinding):
+        return [identity]
+    running_version = importlib.metadata.version("autoskillit")
+    _, target_version = parse_installed_plugin_semantic_key(identity.semantic_key)
+    if target_version == running_version:
+        return []
+    return [
+        InstallStateFinding(
+            Severity.WARNING,
+            "generation_plugin_selector_skew",
+            f"plugin-level generation selector current → {target_version}, running "
+            f"{running_version}; Codex global hooks execute the stale tree. "
+            "Run `autoskillit install`.",
+        )
+    ]
 
 
 def verify_install_state() -> tuple[InstallStateFinding, ...]:
@@ -179,6 +218,7 @@ def verify_install_state() -> tuple[InstallStateFinding, ...]:
 
     # 1. Generation-store current-generation validation (primary authority).
     findings.extend(_generation_store_findings())
+    findings.extend(_plugin_selector_skew_findings())
 
     # 2. Retired artifact shapes still present on disk.
     for key, retired in sorted(RETIRED_INSTALL_ARTIFACT_SHAPES.items()):

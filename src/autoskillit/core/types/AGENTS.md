@@ -36,7 +36,7 @@ are the IL-001 exception pinned by `test_import_linter_contracts.py`.
 construction; `constants/_type_constants_registries.py` re-exports its public names.
 
 Imports outside core are limited to the stdlib-only hook-callable root authorities
-listed in `src/autoskillit/AGENTS.md`, which import nothing from autoskillit.
+defined in `src/autoskillit/AGENTS.md`, which import nothing from autoskillit.
 
 ## Extension Bundle Pattern
 

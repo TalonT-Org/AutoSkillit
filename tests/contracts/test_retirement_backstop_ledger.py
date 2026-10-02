@@ -124,6 +124,27 @@ class _OwnerDiscovery(ast.NodeVisitor):
         self.generic_visit(node)
 
 
+class _RetentionPinCallDiscovery(ast.NodeVisitor):
+    """Record, per engine construction, its owner class and whether it passes retention_pin."""
+
+    def __init__(self, tree: ast.Module) -> None:
+        self._imports = _EngineImportMap(tree)
+        self._class_names: list[str] = []
+        self.calls: list[tuple[str, bool, int]] = []
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self._class_names.append(node.name)
+        for child in node.body:
+            self.visit(child)
+        self._class_names.pop()
+
+    def visit_Call(self, node: ast.Call) -> None:
+        if self._imports.resolves_engine(node) and self._class_names:
+            has_pin = any(keyword.arg == "retention_pin" for keyword in node.keywords)
+            self.calls.append((".".join(self._class_names), has_pin, node.lineno))
+        self.generic_visit(node)
+
+
 def _discover_engine_owners() -> tuple[set[tuple[PluginArtifactKind, str]], list[str]]:
     owners: set[tuple[PluginArtifactKind, str]] = set()
     unresolved: list[str] = []
@@ -166,6 +187,34 @@ def test_every_engine_construction_passes_is_current_explicitly() -> None:
     assert not missing, (
         "every PluginArtifactRetirementEngine construction must pass is_current "
         f"explicitly: {missing}"
+    )
+
+
+def test_projection_kind_wires_retention_pin_and_no_other_kind_does() -> None:
+    for kind, backstop in RETIREMENT_BACKSTOP_LEDGER.items():
+        assert backstop.wires_retention_pin is (kind is PluginArtifactKind.PROJECTION)
+
+
+def test_engine_constructions_wire_retention_pin_per_ledger() -> None:
+    ledger_by_owner = {
+        backstop.owner_qualname: backstop for backstop in RETIREMENT_BACKSTOP_LEDGER.values()
+    }
+    mismatched: list[str] = []
+    for path in sorted(_SOURCE_ROOT.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        visitor = _RetentionPinCallDiscovery(tree)
+        visitor.visit(tree)
+        for owner_qualname, has_pin, lineno in visitor.calls:
+            backstop = ledger_by_owner.get(owner_qualname)
+            if backstop is None:
+                continue
+            if has_pin != backstop.wires_retention_pin:
+                location = path.relative_to(_PROJECT_ROOT)
+                mismatched.append(f"{location}:{lineno} ({owner_qualname})")
+
+    assert not mismatched, (
+        "PluginArtifactRetirementEngine constructions must pass retention_pin= exactly "
+        f"when the owner's ledger entry sets wires_retention_pin=True: {mismatched}"
     )
 
 

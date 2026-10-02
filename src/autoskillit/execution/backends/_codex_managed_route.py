@@ -32,6 +32,8 @@ from autoskillit.execution.backends._codex_catalog import (
 )
 from autoskillit.execution.backends._codex_discovery import CODEX_MANAGED_HOME_ROUTE
 from autoskillit.execution.backends._codex_hooks import (
+    codex_session_hook_root_errors,
+    iter_codex_hook_commands,
     managed_codex_guard_set,
     managed_codex_mcp_tools,
     sync_managed_codex_hooks_to_config,
@@ -121,18 +123,10 @@ def verify_managed_session_dir(
 
 def _rendered_codex_guard_scripts(hooks: object) -> set[str]:
     """Collect guard script names from the rendered Codex hook tables."""
-    if not isinstance(hooks, dict):
-        return set()
     return {
-        command.rsplit(" ", 1)[-1].removeprefix("guards/")
-        for entries in hooks.values()
-        if isinstance(entries, list)
-        for entry in entries
-        if isinstance(entry, dict)
-        for hook in entry.get("hooks", [])
-        if isinstance(hook, dict)
-        for command in (hook.get("command"),)
-        if isinstance(command, str)
+        hook.logical_name.removeprefix("guards/")
+        for hook in iter_codex_hook_commands(hooks)
+        if hook.logical_name is not None
     }
 
 
@@ -211,6 +205,7 @@ def _managed_codex_config_errors(
     ]
     if missing_guards:
         errors.append(f"managed Codex config is missing guards: {', '.join(missing_guards)}")
+    errors.extend(codex_session_hook_root_errors(config_path))
     catalog_error = _managed_codex_catalog_error(
         managed_codex_catalog,
         attestation=attestation,
@@ -226,6 +221,7 @@ def _write_managed_codex_route(
     attestation: ManagedJoinAttestation,
     route: ManagedCodexRoute,
     catalog: bytes,
+    plugin_dir: Path,
 ) -> None:
     """Validate the synchronized config and write the attested route projection."""
     config_path = session_dir / "config.toml"
@@ -251,7 +247,7 @@ def _write_managed_codex_route(
     config["model_catalog_json"] = str(catalog_path.resolve())
     atomic_write(catalog_path, catalog)
     atomic_write(config_path, _codex_cfg._serialize_toml(config))
-    sync_managed_codex_hooks_to_config(config_path, route=route)
+    sync_managed_codex_hooks_to_config(config_path, route=route, plugin_dir=plugin_dir)
 
 
 def project_managed_route(
@@ -260,6 +256,7 @@ def project_managed_route(
     *,
     adaptation_context: SemanticAdaptationContext,
     route: ManagedCodexRoute,
+    plugin_dir: Path,
 ) -> None:
     """Project one attested route after source-config synchronization."""
     del backend
@@ -281,6 +278,7 @@ def project_managed_route(
         attestation=attestation,
         route=route,
         catalog=catalog,
+        plugin_dir=plugin_dir,
     )
     errors = _managed_codex_config_errors(
         session_dir,

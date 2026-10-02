@@ -36,6 +36,8 @@ from autoskillit.core import (
     InteractiveInvocationValidation,
     PluginLoadMode,
     PreLaunchReadiness,
+    RestoreSession,
+    ResumeWithBriefing,
 )
 from autoskillit.execution.backends.codex import CodexFlags
 from autoskillit.workspace import (
@@ -2389,6 +2391,8 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    import os
+
     from autoskillit.core import (
         CmdSpec,
         FreshLaunch,
@@ -2597,4 +2601,162 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
         lifecycle.event_for("attempt-exit", 3)
     )
     assert events.index(("projection-exit",)) > events.index(("managed-exit", launch_id))
-    assert lifecycle.projection_bindings[0].closed
+    assert len(lifecycle.projection_bindings) == 1
+    binding = lifecycle.projection_bindings[0]
+    managed_enter = lifecycle.event_for("managed-enter", launch_id)
+    projection_context = managed_enter[2]
+    assert projection_context.session_hook_root is not None
+    assert projection_context.session_hook_root.artifact_path == binding.identity.managed_path
+    assert projection_context.session_hook_root.plugin_dir == Path(
+        os.path.realpath(binding.plugin_dir)
+    )
+    assert binding.closed
+
+
+def _run_lifecycle_cook_session(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    key: str,
+    launch_id: str,
+    launch: FreshLaunch | RestoreSession | ResumeWithBriefing,
+) -> RecordingLifecycle:
+    """Run one top-level _launch_cook_session call against its own fresh projection root."""
+    from autoskillit.core import CmdSpec, SkillExecutionRole, ValidatedAddDir
+    from autoskillit.execution.backends.codex import CodexBackend
+    from autoskillit.workspace import DefaultSkillResolver, compile_session_skill_catalog
+
+    root = tmp_path / key
+    root.mkdir()
+    generated_home = root / "managed-home"
+    skills_dir = generated_home / "autoskillit-add-dir"
+    skills_dir.mkdir(parents=True)
+    projection_root = root / "projection"
+    projection_root.mkdir()
+    lifecycle = RecordingLifecycle(
+        generated_home=generated_home,
+        skills_dir=skills_dir,
+        projection_root=projection_root,
+        unavailability_payload={"backend": "codex", "unavailable": ()},
+        returncodes=(0,),
+    )
+
+    class _LifecycleCodexBackend(CodexBackend):
+        def binary_name(self) -> str:
+            return "true"
+
+        def ensure_pre_launch(self, **_kwargs: object) -> PreLaunchReadiness:
+            return PreLaunchReadiness((), {})
+
+        def probe_launch_readiness(self, **_kwargs: object) -> PreLaunchReadiness:
+            return PreLaunchReadiness((), {})
+
+        def build_interactive_cmd(self, **kwargs):  # type: ignore[no-untyped-def]
+            managed_skill_catalog = next(
+                (entry for entry in kwargs["add_dirs"] if isinstance(entry, ValidatedAddDir)),
+                None,
+            )
+            return CmdSpec(
+                cmd=("true",),
+                env={},
+                **interactive_launch_metadata(binary="true", launch=kwargs["launch"]),
+                inherited_fds=(),
+                managed_skill_catalog=managed_skill_catalog,
+            )
+
+        def validate_interactive_invocation(
+            self, spec: CmdSpec
+        ) -> InteractiveInvocationValidation:
+            return InteractiveInvocationValidation(errors=())
+
+        def session_attempt_context(self, **kwargs):  # type: ignore[no-untyped-def]
+            return lifecycle.session_attempt_context(**kwargs)
+
+    source_home = root / "source-codex"
+    source_home.mkdir(parents=True)
+    backend = _LifecycleCodexBackend(source_codex_home=source_home)
+    catalog = DefaultSkillResolver().list_effective(root, SkillExecutionRole.ORCHESTRATOR)
+    compilation = compile_session_skill_catalog(catalog, backend)
+
+    monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: "/usr/bin/true")
+    monkeypatch.setattr(
+        _patch_session__session_launch,
+        "render_skill_unavailability",
+        lifecycle.record_render,
+    )
+    monkeypatch.setattr(
+        "autoskillit.workspace.DefaultSessionSkillManager",
+        lambda *args, **kwargs: lifecycle,
+    )
+    monkeypatch.setattr(
+        _patch_install__plugin_artifact,
+        "interactive_plugin_authority",
+        lambda **_kwargs: (lifecycle, PluginLoadMode.GENERATED_HOME),
+    )
+    monkeypatch.setattr(
+        _patch_session__session_process,
+        "run_cook_attempt",
+        lifecycle.run_cook_attempt,
+    )
+
+    _launch_cook_session(
+        launch=launch,
+        project_dir=root,
+        required_env=frozenset(),
+        process_tether=ProcessTetherConfig(),
+        backend=backend,
+        skill_compilation=compilation,
+        launch_id=launch_id,
+        default_base_branch="main",
+        workspace_temp_dir=None,
+    )
+    return lifecycle
+
+
+@pytest.mark.parametrize(
+    "resumed_launch",
+    (
+        RestoreSession(session_id="resume-id"),
+        ResumeWithBriefing(session_id="resume-id", briefing="continue please"),
+    ),
+    ids=("restore_session", "resume_with_briefing"),
+)
+def test_resumed_launch_binds_a_fresh_session_hook_root_not_a_prior_home(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    resumed_launch: RestoreSession | ResumeWithBriefing,
+) -> None:
+    """A RestoreSession/ResumeWithBriefing launch entered directly through
+    _launch_cook_session — a fresh process picking up --resume, not the in-process
+    infra-resume/reload loop — materializes a fresh managed_session whose context
+    root comes from the binding this call acquires, never a prior process's home."""
+    import os
+
+    first = _run_lifecycle_cook_session(
+        tmp_path,
+        monkeypatch,
+        key="first-process",
+        launch_id="00000000000000f1",
+        launch=FreshLaunch(system_prompt="first process"),
+    )
+    first_root = first.projection_bindings[0].identity.managed_path
+
+    second = _run_lifecycle_cook_session(
+        tmp_path,
+        monkeypatch,
+        key="resumed-process",
+        launch_id="00000000000000f2",
+        launch=resumed_launch,
+    )
+
+    assert len(second.projection_bindings) == 1
+    binding = second.projection_bindings[0]
+    managed_enter = second.event_for("managed-enter", "00000000000000f2")
+    projection_context = managed_enter[2]
+    assert projection_context.session_hook_root is not None
+    assert projection_context.session_hook_root.artifact_path == binding.identity.managed_path
+    assert projection_context.session_hook_root.plugin_dir == Path(
+        os.path.realpath(binding.plugin_dir)
+    )
+    assert projection_context.session_hook_root.artifact_path != first_root
+    assert binding.closed

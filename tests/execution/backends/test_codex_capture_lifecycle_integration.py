@@ -61,6 +61,7 @@ from autoskillit.hooks._capture_lifecycle import (
 from tests.execution.backends._conformance_assertions import (
     assert_shell_capture_marker_authority,
 )
+from tests.fixtures.hook_topology import projection_shaped_hook_root
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -309,8 +310,11 @@ def _snapshot_codex_hooks(
     monkeypatch.setenv("CODEX_HOME", str(ambient_home))
     monkeypatch.setattr(Path, "home", staticmethod(lambda: ambient_home))
     backend = CodexBackend(source_codex_home=source_home)
+    hook_root = projection_shaped_hook_root(tmp_path)
 
-    readiness = backend.ensure_pre_launch(session_dir=generated_home)
+    readiness = backend.ensure_pre_launch(
+        session_dir=generated_home, plugin_dir=hook_root.plugin_dir
+    )
     assert readiness.errors == ()
     assert set(readiness.attested_env.values()) == {str(generated_home)}
     source_bytes = source_config.read_bytes()

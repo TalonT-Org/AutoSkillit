@@ -445,7 +445,12 @@ def test_cook_session_passes_behavioral_durable_root_to_projection(
     from autoskillit.workspace import EffectiveSkillCatalog, SkillsDirectoryProvider
 
     installed_root = tmp_path / "installed"
-    binding = SimpleNamespace(identity=SimpleNamespace(managed_path=installed_root))
+    binding = SimpleNamespace(
+        closed=False,
+        identity=SimpleNamespace(
+            managed_path=installed_root, semantic_key="test-plugin@test:1.0.0"
+        ),
+    )
 
     provider = SkillsDirectoryProvider(
         temp_dir_relpath=".autoskillit/temp",

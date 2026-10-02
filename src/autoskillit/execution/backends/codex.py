@@ -569,6 +569,13 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
         del executable
         if session_dir is None:
             return PreLaunchReadiness(())
+        if plugin_dir is None:
+            return PreLaunchReadiness(
+                (
+                    "Codex per-session hooks require a leased session hook root "
+                    "(SessionHookRoot); the launch binding did not reach materialization",
+                )
+            )
         try:
             assert self.source_codex_home is not None
             generated_home = Path(session_dir).expanduser().resolve(strict=False)

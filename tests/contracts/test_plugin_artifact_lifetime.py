@@ -26,23 +26,14 @@ from autoskillit.core import (
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.workspace import (
-    ProjectedPluginArtifactAuthority,
     project_default_plugin_authority,
     prune_stale_projections,
 )
 from tests._helpers import _flush_structlog_proxy_caches
-from tests.contracts._projection_helpers import session_catalog
+from tests.contracts._projection_helpers import projected_plugin_authority
 from tests.fixtures.startup_steady_state import plant_stale_projection
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
-
-
-def _authority(tmp_path: Path) -> ProjectedPluginArtifactAuthority:
-    return project_default_plugin_authority(
-        cwd=tmp_path,
-        base_branch="main",
-        catalog=session_catalog(),
-    )
 
 
 def _semantic_catalog(
@@ -86,7 +77,7 @@ def _semantic_catalog(
 def test_authority_creation_is_lazy(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
-    authority = _authority(tmp_path)
+    authority = projected_plugin_authority(tmp_path)
 
     assert authority.catalog is not None
     assert not (tmp_path / ".autoskillit").exists()
@@ -441,7 +432,7 @@ def test_projection_publication_preserves_control_flow_exceptions(
     )
 
     with pytest.raises(KeyboardInterrupt, match="stop projection publication"):
-        _authority(tmp_path).acquire_launch_binding(
+        projected_plugin_authority(tmp_path).acquire_launch_binding(
             backend=ClaudeCodeBackend(),
             load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
         )
@@ -456,7 +447,7 @@ def test_projection_staging_cleanup_preserves_primary_error(
     import autoskillit.workspace._projected_artifact.authority as projection
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    plan = _authority(tmp_path)._plan(ClaudeCodeBackend())
+    plan = projected_plugin_authority(tmp_path)._plan(ClaudeCodeBackend())
     plan.destination.parent.mkdir(parents=True)
     logger = Mock()
     monkeypatch.setattr(projection, "logger", logger)
@@ -493,7 +484,7 @@ def test_binding_owns_exact_v2_incarnation_and_stable_sidecar(
     )
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    authority = _authority(tmp_path)
+    authority = projected_plugin_authority(tmp_path)
     backend = ClaudeCodeBackend()
 
     first = authority.acquire_launch_binding(
@@ -540,7 +531,7 @@ def test_projection_lifecycle_events_cover_publication_and_binding(
     _flush_structlog_proxy_caches()
     try:
         with structlog.testing.capture_logs() as logs:
-            binding = _authority(tmp_path).acquire_launch_binding(
+            binding = projected_plugin_authority(tmp_path).acquire_launch_binding(
                 backend=ClaudeCodeBackend(),
                 load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
             )
@@ -569,7 +560,7 @@ def test_projection_reclaim_io_failure_stays_queued_for_retry(
     from autoskillit.workspace import ProjectedPluginRetirementOwner
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    binding = _authority(tmp_path).acquire_launch_binding(
+    binding = projected_plugin_authority(tmp_path).acquire_launch_binding(
         backend=ClaudeCodeBackend(),
         load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
     )
@@ -641,7 +632,7 @@ def test_projection_reclaim_preserves_outcome_when_writer_close_fails(
     from autoskillit.workspace._installed._projection_cache import projected_artifact_lease_path
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    binding = _authority(tmp_path).acquire_launch_binding(
+    binding = projected_plugin_authority(tmp_path).acquire_launch_binding(
         backend=ClaudeCodeBackend(),
         load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
     )
@@ -721,7 +712,7 @@ def test_corrupt_live_incarnation_is_not_replaced_until_reader_closes(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    authority = _authority(tmp_path)
+    authority = projected_plugin_authority(tmp_path)
     backend = ClaudeCodeBackend()
     binding = authority.acquire_launch_binding(
         backend=backend,
@@ -759,7 +750,7 @@ def test_transient_projection_io_does_not_trigger_destructive_repair(
     import autoskillit.workspace._installed._projection_cache as projection_cache
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    authority = _authority(tmp_path)
+    authority = projected_plugin_authority(tmp_path)
     backend = ClaudeCodeBackend()
     with authority.acquire_launch_binding(
         backend=backend,
@@ -795,7 +786,7 @@ def test_mode_only_mutation_invalidates_projection_identity(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    authority = _authority(tmp_path)
+    authority = projected_plugin_authority(tmp_path)
     backend = ClaudeCodeBackend()
     binding = authority.acquire_launch_binding(
         backend=backend,
@@ -825,7 +816,7 @@ def test_writer_to_reader_handoff_revalidates_exact_incarnation(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    authority = _authority(tmp_path)
+    authority = projected_plugin_authority(tmp_path)
     original_acquire = ArtifactLease.acquire_shared
     acquisitions = 0
 
@@ -871,7 +862,7 @@ def test_projected_authority_rejects_incompatible_load_modes(
     load_mode: PluginLoadMode,
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    authority = _authority(tmp_path)
+    authority = projected_plugin_authority(tmp_path)
 
     with pytest.raises(ValueError):
         authority.acquire_launch_binding(

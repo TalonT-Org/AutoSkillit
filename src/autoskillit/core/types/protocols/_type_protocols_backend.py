@@ -370,9 +370,11 @@ class CodingAgentBackend(Protocol):
         readiness policy seals or probes that binding validate it here; backends
         with a different readiness boundary may intentionally ignore it.
 
-        ``plugin_dir`` carries the session's validated generation path so that
-        Codex hooks can be resolved from the exact artifact tree rather than
-        performing an independent resolution.
+        ``plugin_dir`` carries the canonical path of the session's leased plugin
+        tree (``SessionHookRoot.plugin_dir``). A backend that bakes per-session
+        hook commands renders them from it and refuses to provision
+        ``session_dir`` without it, so no per-session home resolves hooks
+        through a re-pointable selector.
         """
         ...
 
@@ -450,7 +452,14 @@ class ManagedRouteHomeBackend(Protocol):
         *,
         adaptation_context: SemanticAdaptationContext,
         route: ManagedCodexRoute,
-    ) -> None: ...
+        plugin_dir: Path,
+    ) -> None:
+        """Project one attested route into ``session_dir``.
+
+        Route hooks are rendered from ``plugin_dir``, the same leased plugin
+        tree ``ensure_pre_launch`` provisioned the home from.
+        """
+        ...
 
     def verify_managed_session_dir(
         self,

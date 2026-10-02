@@ -954,6 +954,50 @@ def test_doctor_does_not_run_a_duplicate_installed_plugins_check(
     assert checks["install_state_consistency"]["severity"] == "ok"
 
 
+def test_doctor_reports_generation_plugin_selector_skew(tmp_path, monkeypatch, capsys):
+    """Doctor renders the plugin-level selector-skew finding generically."""
+    import autoskillit.workspace._installed._state as install_state
+    from autoskillit.core import _InstallLock, managed_home_for
+    from autoskillit.workspace import publish_generation
+    from tests.fixtures.plugin_artifact_state import write_registry
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    source_root = tmp_path / "generation-source"
+    source_root.mkdir()
+    (source_root / "marker.txt").write_text("content", encoding="utf-8")
+    with _InstallLock(managed_home_for(tmp_path)):
+        publish_generation(
+            home=tmp_path,
+            plugin_ref="autoskillit@autoskillit-local",
+            version="1.0.0",
+            semantic_key="autoskillit@autoskillit-local:1.0.0",
+            source_root=source_root,
+        )
+    write_registry(tmp_path, tmp_path / "cache" / "1.0.0")
+
+    real_version = install_state.importlib.metadata.version
+
+    def version_for_test(package: str) -> str:
+        if package == "autoskillit":
+            return "2.0.0"
+        return real_version(package)
+
+    monkeypatch.setattr(install_state.importlib.metadata, "version", version_for_test)
+
+    cli.doctor_cmd(output_json=True)
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+    checks = {result["check"]: result for result in data["results"]}
+
+    assert "install_state:generation_plugin_selector_skew" in checks
+    result = checks["install_state:generation_plugin_selector_skew"]
+    assert result["severity"] == "warning"
+    assert "1.0.0" in result["message"]
+    assert "2.0.0" in result["message"]
+
+
 def test_stale_gate_check_absent_from_doctor_output(tmp_path, monkeypatch, capsys):
     """Doctor must not report a stale_gate_file check."""
     monkeypatch.setattr(Path, "home", lambda: tmp_path)

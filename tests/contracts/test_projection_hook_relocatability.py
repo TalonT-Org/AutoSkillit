@@ -3,6 +3,7 @@
 T-A1: Projections are relocatable even when the bundled source is stale.
 T-A3: Literal executability of the deployed artifact.
 T-A5: Cache-hit reuse fails closed on divergent published hooks.
+T-A6: Installed trees contain the scanned hook runtime import closure.
 """
 
 from __future__ import annotations
@@ -11,15 +12,68 @@ import json
 import shlex
 import shutil
 import subprocess
+import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
 
 from autoskillit.core import pkg_root
 from autoskillit.hook_registry import HOOK_REGISTRY_HASH, PLUGIN_ROOT_TOKEN
+from tests._hook_import_closure import scan_shipped_import_closure, shipped_python_files
+from tests.conftest import production_interpreter_env
 from tests.contracts._relocatability_helpers import environment_pinned_path_segments
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
+
+
+_ROOT_DEPENDENCY_PROBE = (
+    "import importlib.util, json, sys\n"
+    "sys.path.insert(0, sys.argv[1])\n"
+    "def _origin(spec):\n"
+    "    if spec is None:\n"
+    "        return None\n"
+    "    return spec.origin or next(iter(spec.submodule_search_locations or ()), None)\n"
+    "print(json.dumps({n: _origin(importlib.util.find_spec(n)) for n in sys.argv[2:]}))\n"
+)
+
+
+@contextmanager
+def _installed_tree(builder: str, home: Path) -> Iterator[Path]:
+    from autoskillit.core import PluginLoadMode
+    from autoskillit.execution.backends.claude import ClaudeCodeBackend
+    from autoskillit.execution.backends.codex import CodexBackend
+    from autoskillit.workspace import (
+        SkillProjectionContext,
+        materialize_sanitized_plugin_root,
+        project_default_plugin_authority,
+    )
+    from tests.contracts._projection_helpers import session_catalog
+
+    catalog = session_catalog()
+    if builder == "sanitized-install-root":
+        destination = home / "plugins" / "autoskillit"
+        materialize_sanitized_plugin_root(
+            pkg_root(),
+            destination,
+            catalog,
+            SkillProjectionContext(cwd=home, catalog=catalog),
+        )
+        yield destination
+        return
+
+    authority = project_default_plugin_authority(cwd=home, base_branch="main", catalog=catalog)
+    with authority.acquire_launch_binding(
+        backend=ClaudeCodeBackend() if builder == "claude-projection" else CodexBackend(),
+        load_mode=(
+            PluginLoadMode.EXPLICIT_PLUGIN_DIR
+            if builder == "claude-projection"
+            else PluginLoadMode.PROJECTED_HOME
+        ),
+    ) as binding:
+        assert binding.plugin_dir is not None
+        yield binding.plugin_dir
 
 
 class TestProjectedHooksAreRelocatable:
@@ -114,12 +168,17 @@ class TestDeployedArtifactExecutability:
     def test_projected_hook_commands_execute_without_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """Every literal projected hook command must run to completion with exit 0."""
         from autoskillit.core import PluginLoadMode
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
         from autoskillit.workspace import project_default_plugin_authority
         from tests.contracts._projection_helpers import session_catalog
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        hook_cwd = tmp_path / "projected-hook-cwd"
+        hook_cwd.mkdir()
+        env = production_interpreter_env()
+        env.pop("PYTHONPATH", None)
 
         catalog = session_catalog()
         authority = project_default_plugin_authority(
@@ -138,9 +197,10 @@ class TestDeployedArtifactExecutability:
                     "tool_name": "Read",
                     "tool_input": {},
                     "session_id": "projection-executability",
-                    "cwd": str(tmp_path),
+                    "cwd": str(hook_cwd),
                 }
             )
+            failures: list[str] = []
             for event_type, entries in projected_hooks.get("hooks", {}).items():
                 for entry in entries:
                     for hook in entry.get("hooks", []):
@@ -157,14 +217,108 @@ class TestDeployedArtifactExecutability:
                             input=payload,
                             capture_output=True,
                             text=True,
+                            env=env,
+                            cwd=hook_cwd,
                             timeout=10,
                         )
-                        assert result.returncode != 2, (
-                            f"hook command exited 2 (can't open file) — "
-                            f"the literal command Claude Code would execute "
-                            f"fails:\n  command: {cmd}\n  resolved: {resolved}\n"
-                            f"  stderr: {result.stderr[:500]}"
-                        )
+                        if result.returncode != 0:
+                            failures.append(
+                                f"{event_type} {cmd}\n  resolved: {resolved}\n"
+                                f"  exit: {result.returncode}\n"
+                                f"  stderr tail: {result.stderr[-1500:]}"
+                            )
+            assert not failures, (
+                "projected hook commands must run to completion in a real installed tree "
+                "(exit 0); a nonzero exit here is a hook that crashes for every user of "
+                "this projection\n" + "\n".join(failures)
+            )
+
+
+class TestInstalledTreeImportClosure:
+    """T-A6: every installed tree ships the scanned Python, and hook root dependencies
+    resolve inside it.
+    """
+
+    @pytest.mark.parametrize(
+        "builder",
+        ("claude-projection", "codex-projection", "sanitized-install-root"),
+        ids=("claude-projection", "codex-projection", "sanitized-install-root"),
+    )
+    def test_every_installed_tree_ships_the_scanned_python_set(
+        self, builder: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        expected = {p.relative_to(pkg_root()).as_posix() for p in shipped_python_files(pkg_root())}
+        assert "hooks/_dispatch.py" in expected
+
+        with _installed_tree(builder, tmp_path) as tree:
+            actual = {
+                p.relative_to(tree).as_posix()
+                for p in tree.rglob("*.py")
+                if "__pycache__" not in p.parts
+            }
+            assert actual == expected, (
+                f"{builder} Python files differ from the scanned set: "
+                f"missing={sorted(expected - actual)}, extra={sorted(actual - expected)}"
+            )
+
+    def test_hook_root_dependencies_resolve_inside_generated_projection(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.core import PluginLoadMode
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
+        from autoskillit.workspace import project_default_plugin_authority
+        from tests.contracts._projection_helpers import session_catalog
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        report = scan_shipped_import_closure(pkg_root())
+        modules = sorted(name.removesuffix(".py") for name in report.root_dependencies)
+        assert modules, "vacuous probe: no hook root dependencies were discovered"
+
+        authority = project_default_plugin_authority(
+            cwd=tmp_path, base_branch="main", catalog=session_catalog()
+        )
+        with authority.acquire_launch_binding(
+            backend=ClaudeCodeBackend(),
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        ) as binding:
+            assert binding.plugin_dir is not None
+            plugin_root = binding.plugin_dir.resolve()
+            probe_cwd = tmp_path / "root-dependency-probe"
+            probe_cwd.mkdir()
+            env = production_interpreter_env()
+            env.pop("PYTHONPATH", None)
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-E",
+                    "-s",
+                    "-S",
+                    "-B",
+                    "-c",
+                    _ROOT_DEPENDENCY_PROBE,
+                    str(plugin_root),
+                    *modules,
+                ],
+                capture_output=True,
+                text=True,
+                cwd=probe_cwd,
+                env=env,
+                timeout=30,
+            )
+            assert result.returncode == 0, result.stderr
+            origins: dict[str, str | None] = json.loads(result.stdout)
+            misplaced = {
+                module: origin
+                for module, origin in origins.items()
+                if origin is None or not Path(origin).resolve().is_relative_to(plugin_root)
+            }
+            assert not misplaced, (
+                "hook root dependencies must resolve inside the generated projection; "
+                "None means a module is absent, and an outside origin means the stdlib "
+                f"or site-packages satisfied it: {misplaced}"
+            )
+        assert binding.closed
 
 
 class TestCacheHitReuseSafety:

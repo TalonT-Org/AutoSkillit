@@ -23,6 +23,7 @@ from autoskillit.core import (
     NoResume,
     RestoreSession,
     ResumeWithBriefing,
+    SessionHookRoot,
     SkillContractError,
     TerminationReason,
     executable_binding_matches_current_file,
@@ -780,6 +781,7 @@ def _launch_cook_session(
             durable_scripts_root=projection_binding.identity.managed_path,
             adaptation_context=adaptation_context,
             managed_codex_route=managed_codex_route,
+            session_hook_root=SessionHookRoot.from_binding(projection_binding),
         )
         with manager.managed_session(
             launch_id,

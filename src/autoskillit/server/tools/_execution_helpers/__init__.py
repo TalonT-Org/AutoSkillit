@@ -49,6 +49,7 @@ from autoskillit.server.tools._execution_helpers._run_python_coercion import (
     shape_execution_response,
     validate_path_arg_anchoring,
 )
+from autoskillit.server.tools._execution_helpers._session_hook_root import session_hook_root_scope
 from autoskillit.server.tools._execution_helpers._skill_contract import (
     _RunSkillContractLifecycle,
     build_skill_session_contract,
@@ -102,6 +103,7 @@ __all__ = [
     "select_audit_output_contract",
     "serialize_skill_contract",
     "server_injected_run_python_args",
+    "session_hook_root_scope",
     "shape_execution_response",
     "spill_run_cmd_result",
     "summarize_capture",

@@ -6,7 +6,7 @@ Sub-packages: types/ (see types/AGENTS.md) and runtime/ (see runtime/AGENTS.md).
 ## Architecture Notes
 
 Zero imports from any autoskillit sub-package outside core; the only permitted
-imports outside core are the stdlib-only hook-callable root authorities listed in
+imports outside core are the stdlib-only hook-callable root authorities defined in
 `src/autoskillit/AGENTS.md`, which themselves import nothing from autoskillit.
 Production code imports from `autoskillit.core`, not from sub-packages directly.
 **Pyright `reportAttributeAccessIssue` on `autoskillit.core` sub-package imports is ALWAYS a real violation.**

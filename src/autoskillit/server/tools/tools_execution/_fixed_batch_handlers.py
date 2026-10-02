@@ -70,6 +70,7 @@ from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._execution_helpers import (
     bind_projection_backend,
     build_fresh_projection_context,
+    session_hook_root_scope,
 )
 from autoskillit.server.tools.tools_execution._fixed_batch_request import (
     _normalize_assignments,
@@ -96,6 +97,7 @@ if TYPE_CHECKING:
         CodingAgentBackend,
         HeadlessExecutor,
         ManagedFixedBatchSupervisor,
+        SessionHookRoot,
         SubprocessRunner,
         ValidatedAddDir,
     )
@@ -259,7 +261,7 @@ class _ManagedLeafLaunchAdapter:
             leaf_session_id,
         )
 
-        async def prepare(owned_cwd: Path):
+        async def prepare(owned_cwd: Path, hook_root: SessionHookRoot | None):
             nonlocal materialized
             leaf_context = bind_projection_backend(
                 build_fresh_projection_context(
@@ -272,6 +274,7 @@ class _ManagedLeafLaunchAdapter:
             )
             if backend.capabilities.managed_fixed_batch_route_capable:
                 leaf_context = replace(leaf_context, managed_codex_route="leaf")
+            leaf_context = replace(leaf_context, session_hook_root=hook_root)
             source_document = project_agent_skill_document(
                 self.invocation.root,
                 leaf_context,
@@ -306,6 +309,7 @@ class _ManagedLeafLaunchAdapter:
             generated_home_id=leaf_session_id,
             generated_home_materialized=lambda: materialized,
             copied_snapshot_path=lambda: None,
+            session_hook_root=lambda: session_hook_root_scope(self.tool_ctx, backend),
             worktree=worktree,
         )
         async with _te_pkg.scoped_child_resource_owner(request) as child:

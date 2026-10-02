@@ -370,6 +370,7 @@ def test_live_codex_interactive_managed_route_gate(
         prepared.session_home,
         adaptation_context=issuance,
         route="interactive-parent",
+        plugin_dir=prepared.hook_root.plugin_dir,
     )
     catalog_digest = hashlib.sha256(
         backend.read_managed_session_catalog(prepared.session_home)

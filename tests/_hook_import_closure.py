@@ -137,6 +137,12 @@ def _resolve_import(
             return None, (
                 f"{rel}:{ref.lineno}: relative import {'.' * ref.level}{ref.module} escapes hooks/"
             )
+        target = base.joinpath(*ref.module.split("."))
+        if not target.with_suffix(".py").is_file() and not target.is_dir():
+            return None, (
+                f"{rel}:{ref.lineno}: relative import {'.' * ref.level}{ref.module} "
+                "resolves to no file an installed plugin tree ships"
+            )
         return None, None
     if not ref.module:
         return None, None

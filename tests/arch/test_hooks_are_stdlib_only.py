@@ -247,6 +247,38 @@ def test_scanner_attributes_definition_expressions_to_enclosing_scope(
     assert imports.dynamic_sites == {scope}
 
 
+@pytest.mark.parametrize(
+    ("module", "exists"),
+    [
+        ("sibling", True),
+        ("nested", True),
+        ("nested.sibling", True),
+        ("missing", False),
+        ("nested.missing", False),
+    ],
+)
+def test_scanner_resolves_relative_import_targets(
+    tmp_path: Path, module: str, exists: bool
+) -> None:
+    root = tmp_path / "pkg"
+    runtime_dir = root / "hooks" / "_runtime"
+    nested = runtime_dir / "nested"
+    nested.mkdir(parents=True)
+    (runtime_dir / "sibling.py").write_text("helper = None", encoding="utf-8")
+    (nested / "__init__.py").write_text("helper = None", encoding="utf-8")
+    (nested / "sibling.py").write_text("helper = None", encoding="utf-8")
+    hook = runtime_dir / "h.py"
+    hook.write_text(f"from .{module} import helper", encoding="utf-8")
+
+    report = scan_import_closure(root, [hook])
+
+    if exists:
+        assert not report.violations
+    else:
+        assert len(report.violations) == 1
+        assert f"relative import .{module} resolves to no file" in report.violations[0]
+
+
 def test_scanner_classifies_synthetic_tree(tmp_path: Path) -> None:
     root = tmp_path / "pkg"
     runtime_dir = root / "hooks" / "_runtime"

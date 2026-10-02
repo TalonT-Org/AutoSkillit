@@ -14,6 +14,7 @@ from autoskillit.execution.backends._codex_catalog import (
     resolve_codex_catalog_effort,
 )
 from tests.execution.backends._codex_fixtures import installed_catalog, with_migration_offer
+from tests.fixtures.hook_topology import projection_shaped_hook_root
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium, pytest.mark.model_contract]
 
@@ -331,10 +332,12 @@ def test_managed_parent_home_projects_catalog_tools_and_stop_hook(tmp_path, rout
         skill_load_applies=True,
         guards_apply=True,
     )
+    hook_root = projection_shaped_hook_root(tmp_path)
     CodexBackend(source_codex_home=tmp_path / "missing-source").configure_managed_session_dir(
         session_home,
         adaptation_context=context,
         route=route,
+        plugin_dir=hook_root.plugin_dir,
     )
 
     config = tomllib.loads((session_home / "config.toml").read_text(encoding="utf-8"))
@@ -425,9 +428,11 @@ def test_managed_home_refuses_context_without_attested_catalog_snapshot(tmp_path
         guards_apply=True,
     )
 
+    hook_root = projection_shaped_hook_root(tmp_path)
     with pytest.raises(ValueError, match="attested catalog snapshot"):
         CodexBackend().configure_managed_session_dir(
             session_home,
             adaptation_context=context,
             route="parent",
+            plugin_dir=hook_root.plugin_dir,
         )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager, nullcontext
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -15,6 +16,7 @@ from autoskillit.core import (
     EffectiveSkillInvocationAuthority,
     HeadlessExecutor,
     RetryReason,
+    SessionHookRoot,
     SessionSkillManager,
     SkillContractError,
     SkillResult,
@@ -187,9 +189,10 @@ async def test_child_resource_owner_prepares_before_yield_and_cleans_after_body(
     events: list[str] = []
     materialized = False
 
-    async def prepare(owned_cwd: Path) -> str:
+    async def prepare(owned_cwd: Path, hook_root: SessionHookRoot | None) -> str:
         nonlocal materialized
         assert owned_cwd == tmp_path.resolve()
+        assert hook_root is None
         events.append("prepare")
         materialized = True
         return "prepared"
@@ -201,6 +204,7 @@ async def test_child_resource_owner_prepares_before_yield_and_cleans_after_body(
         generated_home_id="headless-owner",
         generated_home_materialized=lambda: materialized,
         copied_snapshot_path=lambda: None,
+        session_hook_root=lambda: nullcontext(None),
     )
 
     async with scoped_child_resource_owner(request) as prepared:
@@ -219,7 +223,7 @@ async def test_child_resource_owner_attempts_snapshot_cleanup_after_manager_fail
     copied_snapshot.mkdir()
     materialized = False
 
-    async def prepare(_: Path) -> None:
+    async def prepare(_: Path, __: SessionHookRoot | None) -> None:
         nonlocal materialized
         materialized = True
 
@@ -230,6 +234,7 @@ async def test_child_resource_owner_attempts_snapshot_cleanup_after_manager_fail
         generated_home_id="headless-owner",
         generated_home_materialized=lambda: materialized,
         copied_snapshot_path=lambda: copied_snapshot,
+        session_hook_root=lambda: nullcontext(None),
     )
 
     with pytest.raises(BaseExceptionGroup, match="Child resource cleanup failed"):
@@ -247,7 +252,7 @@ async def test_child_resource_owner_cleans_materialized_home_after_preparation_f
     events: list[str] = []
     materialized = False
 
-    async def prepare(_: Path) -> None:
+    async def prepare(_: Path, __: SessionHookRoot | None) -> None:
         nonlocal materialized
         materialized = True
         raise RuntimeError("projection failed after materialization")
@@ -259,6 +264,7 @@ async def test_child_resource_owner_cleans_materialized_home_after_preparation_f
         generated_home_id="headless-owner",
         generated_home_materialized=lambda: materialized,
         copied_snapshot_path=lambda: None,
+        session_hook_root=lambda: nullcontext(None),
     )
 
     with pytest.raises(RuntimeError, match="projection failed"):
@@ -266,6 +272,55 @@ async def test_child_resource_owner_cleans_materialized_home_after_preparation_f
             pytest.fail("owner yielded after failed preparation")
 
     assert events == ["cleanup:headless-owner"]
+
+
+@pytest.mark.anyio
+async def test_child_resource_owner_exits_session_hook_root_scope_after_cleanup(
+    tmp_path: Path,
+) -> None:
+    events: list[str] = []
+    materialized = False
+    root = SessionHookRoot(
+        artifact_path=tmp_path / "plugin-root",
+        plugin_dir=tmp_path / "plugin-root",
+        semantic_key="test-key",
+    )
+
+    @contextmanager
+    def recording_session_hook_root():
+        events.append("scope-enter")
+        try:
+            yield root
+        finally:
+            events.append("scope-exit")
+
+    async def prepare(owned_cwd: Path, hook_root: SessionHookRoot | None) -> str:
+        nonlocal materialized
+        assert owned_cwd == tmp_path.resolve()
+        assert hook_root is root
+        events.append("prepare")
+        materialized = True
+        return "prepared"
+
+    request = _ChildResourceOwnerRequest(
+        source_cwd=tmp_path,
+        prepare=prepare,
+        session_manager=cast(SessionSkillManager, _CleanupManager(events)),
+        generated_home_id="headless-owner",
+        generated_home_materialized=lambda: materialized,
+        copied_snapshot_path=lambda: None,
+        session_hook_root=recording_session_hook_root,
+    )
+
+    async with scoped_child_resource_owner(request) as prepared:
+        assert prepared.value == "prepared"
+
+    assert events == [
+        "scope-enter",
+        "prepare",
+        "cleanup:headless-owner",
+        "scope-exit",
+    ]
 
 
 @pytest.mark.anyio

@@ -9,6 +9,7 @@ import pytest
 from autoskillit.execution.backends import BACKEND_REGISTRY
 from autoskillit.hook_registry import HOOKS_DIR
 from autoskillit.workspace.session_skills._materialization import _create_inert_rollout_paths
+from tests.fixtures.hook_topology import projection_shaped_hook_root
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.medium]
 
@@ -90,7 +91,13 @@ class TestRequiredSessionFilesCreated:
         backend = backend_cls()
         session_dir = tmp_path / "session"
         session_dir.mkdir()
-        assert backend.ensure_pre_launch(session_dir=session_dir).errors == ()
+        hook_root = projection_shaped_hook_root(fake_home)
+        assert (
+            backend.ensure_pre_launch(
+                session_dir=session_dir, plugin_dir=hook_root.plugin_dir
+            ).errors
+            == ()
+        )
         backend.setup_session_dir(session_dir)
         for filename in sorted(backend.capabilities.required_session_files):
             assert (session_dir / filename).is_file(), (
@@ -122,7 +129,13 @@ class TestSessionDirSymlinksAreSymlinks:
         backend = backend_cls()
         session_dir = tmp_path / "session"
         session_dir.mkdir()
-        assert backend.ensure_pre_launch(session_dir=session_dir).errors == ()
+        hook_root = projection_shaped_hook_root(fake_home)
+        assert (
+            backend.ensure_pre_launch(
+                session_dir=session_dir, plugin_dir=hook_root.plugin_dir
+            ).errors
+            == ()
+        )
         backend.setup_session_dir(session_dir)
         if backend.capabilities.session_dir_persistent:
             _create_inert_rollout_paths(session_dir, backend)

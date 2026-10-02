@@ -48,6 +48,7 @@ from tests.cli._cook_launch_helpers import cook_attempt_result
 from tests.cli._interactive_process import interactive_launch_metadata
 from tests.execution.backends._codex_fixtures import installed_catalog
 from tests.fakes import adapt_test_skill_semantics
+from tests.fixtures.hook_topology import fake_projected_plugin_root
 
 pytestmark = [
     pytest.mark.layer("cli"),
@@ -59,7 +60,9 @@ pytestmark = [
 class _CookBinding:
     def __init__(self, plugin_dir: Path) -> None:
         self.plugin_dir = plugin_dir
-        self.identity = SimpleNamespace(managed_path=plugin_dir)
+        self.identity = SimpleNamespace(
+            managed_path=plugin_dir, semantic_key="test-plugin@test:1.0.0"
+        )
         self.inherited_fds: tuple[int, ...] = ()
         self.closed = False
 
@@ -82,8 +85,7 @@ def _stub_plugin_artifact_authority(
 ) -> None:
     from autoskillit.core import PluginLoadMode
 
-    plugin_dir = tmp_path / ".autoskillit" / "plugin-projections" / "test-artifact"
-    plugin_dir.mkdir(parents=True)
+    plugin_dir = fake_projected_plugin_root(tmp_path, "test-artifact")
     plugin_metadata = plugin_dir / ".claude-plugin" / "plugin.json"
     plugin_metadata.parent.mkdir()
     plugin_metadata.write_text("{}\n", encoding="utf-8")
@@ -608,6 +610,8 @@ def test_cook_uses_managed_home_for_final_child_context(
 def test_cook_retains_projection_binding_when_launch_consumes_no_artifact(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    import os
+
     from autoskillit.core import PluginLoadMode
 
     backend = _Backend()
@@ -636,6 +640,11 @@ def test_cook_retains_projection_binding_when_launch_consumes_no_artifact(
     projection_context = managed_enter[3]
     expected_scripts = str(binding.plugin_dir / "recipes" / "scripts")
     assert projection_context.substitutions["{{AUTOSKILLIT_SCRIPTS}}"] == expected_scripts
+    assert projection_context.session_hook_root is not None
+    assert projection_context.session_hook_root.artifact_path == binding.identity.managed_path
+    assert projection_context.session_hook_root.plugin_dir == Path(
+        os.path.realpath(binding.identity.managed_path)
+    )
     assert backend.build_calls[0]["plugin_binding"] is None
     assert binding.closed
 

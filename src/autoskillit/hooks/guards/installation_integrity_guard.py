@@ -27,6 +27,7 @@ from _hook_payload import (  # noqa: E402
     normalize_payload_cwd,
     parse_hook_command,
 )
+from _path_identity import realpath_within  # noqa: E402
 from _policy_event import (  # noqa: E402
     PolicyEvent,
     render_provenance_prefix,
@@ -56,15 +57,6 @@ def _deny(reason_code: str, detail: str) -> None:
         sys.stdout,
     )
     sys.exit(0)
-
-
-def _path_is_within(path: str, root: Path) -> bool:
-    try:
-        return os.path.commonpath(
-            (os.path.realpath(path), os.path.realpath(root))
-        ) == os.path.realpath(root)
-    except (OSError, ValueError):
-        return False
 
 
 def _known_roots() -> tuple[Path, ...]:
@@ -145,7 +137,7 @@ def _is_protected_target(path: str) -> bool:
     if _has_install_layout(normalized) or _has_install_layout(ancestor):
         return True
     if any(
-        _path_is_within(normalized, root) or _path_is_within(ancestor, root)
+        realpath_within(normalized, root) or realpath_within(ancestor, root)
         for root in _known_roots()
     ):
         return True

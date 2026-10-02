@@ -26,6 +26,7 @@ from autoskillit.core import (
     load_bundled_agent_definitions,
     pkg_root,
 )
+from tests.fixtures.hook_topology import projection_shaped_hook_root
 from tests.workspace._helpers import (
     _CODEX_CAPABILITIES,
     _catalog_context,
@@ -124,6 +125,7 @@ def _managed_codex_materialization_context(
         durable_scripts_root=pkg_root(),
         adaptation_context=adaptation_context,
         managed_codex_route=route,
+        session_hook_root=projection_shaped_hook_root(tmp_path / "home"),
     )
     return backend, adaptation_context, catalog, projection_context
 
@@ -262,6 +264,7 @@ def test_managed_materialization_forwards_complete_catalog_context(
         skill_load_applies=True,
         guards_apply=True,
     )
+    root = projection_shaped_hook_root(tmp_path / "home")
 
     manager.materialize_invocation(
         f"managed-{route}",
@@ -275,6 +278,7 @@ def test_managed_materialization_forwards_complete_catalog_context(
             parent_sandbox_mode="read-only",
             adaptation_context=adaptation_context,
             managed_codex_route=route,
+            session_hook_root=root,
         ),
     )
 
@@ -282,6 +286,7 @@ def test_managed_materialization_forwards_complete_catalog_context(
         tmp_path / "codex-root" / f"managed-{route}",
         adaptation_context=adaptation_context,
         route=route,
+        plugin_dir=root.plugin_dir,
     )
 
 
@@ -594,6 +599,7 @@ def test_codex_discovery_root_uses_admitted_profile_union_with_profile_precedenc
         "profile-union",
         backend=backend,
         names=frozenset({"make-arch-diag"}),
+        session_hook_root=projection_shaped_hook_root(tmp_path / "home"),
     ) as managed:
         catalog = Path(managed.skills_dir.path) / "skills"
         profile_skill = catalog / "make-arch-diag"
@@ -620,6 +626,7 @@ def test_codex_session_home_has_exactly_one_managed_catalog(
         "single-catalog",
         backend=backend,
         names=frozenset({"make-arch-diag"}),
+        session_hook_root=projection_shaped_hook_root(tmp_path / "home"),
     ) as managed:
         home = managed.generated_home
         catalog = Path(managed.skills_dir.path) / "skills"
@@ -669,6 +676,7 @@ def test_empty_codex_catalog_materializes_only_unbound_baseline(
         "empty-baseline",
         backend=backend,
         names=frozenset(),
+        session_hook_root=projection_shaped_hook_root(tmp_path / "home"),
     ) as managed:
         assert {path.stem for path in (managed.generated_home / "agents").glob("*.toml")} == {
             "pluginless-explorer"
@@ -695,6 +703,7 @@ def test_bundled_codex_catalog_provisions_exact_admitted_role_union(
         manager.ephemeral_root,
         backend=backend,
         durable_scripts_root=pkg_root(),
+        session_hook_root=projection_shaped_hook_root(tmp_path / "home"),
     )
     admitted_names = {skill.name for skill in compilation.catalog.skills}
     admitted_roles = {
@@ -951,6 +960,7 @@ def test_restore_snapshot_session_rebuilds_home_around_retained_closure(
         tmp_path,
         backend=backend,
         durable_scripts_root=pkg_root(),
+        session_hook_root=projection_shaped_hook_root(tmp_path / "home"),
     )
 
     add_dir = manager.restore_snapshot_session("restored", snapshot, context)
@@ -1021,17 +1031,161 @@ def test_claude_backend_still_uses_dot_claude_layout(make_session_skill_manager)
     assert not list(returned.glob("*/SKILL.md"))
 
 
-def test_codex_init_session_calls_ensure_pre_launch(make_session_skill_manager, codex_env) -> None:
+def test_codex_init_session_calls_ensure_pre_launch(
+    make_session_skill_manager, codex_env, tmp_path: Path
+) -> None:
     """init_session() must call backend.ensure_pre_launch() when mcp_config_capable is True."""
     codex_env.backend.ensure_pre_launch.return_value = PreLaunchReadiness((), {})
+    root = projection_shaped_hook_root(tmp_path / "home")
 
     mgr = make_session_skill_manager()
     skills_dir = _materialize(
-        mgr, "sid", backend=codex_env.backend, names=frozenset({"make-arch-diag"})
+        mgr,
+        "sid",
+        backend=codex_env.backend,
+        names=frozenset({"make-arch-diag"}),
+        session_hook_root=root,
     )
     codex_env.backend.ensure_pre_launch.assert_called_once_with(
-        session_dir=Path(str(skills_dir)).parent
+        session_dir=Path(str(skills_dir)).parent,
+        plugin_dir=root.plugin_dir,
     )
+
+
+def _managed_mock_codex_backend_and_context(tmp_path: Path, session_hook_root: object):
+    import json
+
+    from autoskillit.execution.backends._codex_catalog import project_codex_catalog
+    from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
+    from autoskillit.workspace import EffectiveSkillCatalog, SkillsDirectoryProvider
+    from tests.execution.backends._codex_fixtures import installed_catalog
+
+    backend = _make_codex_backend()
+    backend.capabilities = replace(backend.capabilities, managed_fixed_batch_route_capable=True)
+    projection = project_codex_catalog(
+        json.dumps(installed_catalog()).encode("utf-8"),
+        expected_model=CODEX_MODEL_ALIASES["haiku"],
+        expected_reasoning_effort="high",
+    )
+    adaptation_context = DefaultManagedJoinAttestationAuthority().issue(
+        backend="codex",
+        launch_context="direct",
+        parent_session_id="parent-1",
+        direct_tool_mode=True,
+        resolved_model=CODEX_MODEL_ALIASES["haiku"],
+        resolved_reasoning_effort="high",
+        codex_catalog_digest=projection.projected_sha256.removeprefix("sha256:"),
+        managed_codex_catalog=projection.canonical_projected_bytes,
+        fixed_batch_tool_registry_digest="a" * 64,
+        hook_registry_digest="b" * 64,
+        skill_load_applies=True,
+        guards_apply=True,
+    )
+    context = SkillsDirectoryProvider().catalog_projection_context(
+        EffectiveSkillCatalog((), execution_role=SkillExecutionRole.SESSION),
+        tmp_path,
+        backend=backend,
+        durable_scripts_root=pkg_root(),
+        adaptation_context=adaptation_context,
+        managed_codex_route="parent",
+        session_hook_root=session_hook_root,
+    )
+    return backend, adaptation_context, context
+
+
+def test_codex_restore_passes_session_hook_root_to_both_writers(
+    make_session_skill_manager, tmp_path: Path
+) -> None:
+    root = projection_shaped_hook_root(tmp_path / "home")
+    backend, adaptation_context, context = _managed_mock_codex_backend_and_context(tmp_path, root)
+    snapshot = tmp_path / "snapshot"
+    _write_profile_skill(snapshot / "skills", "resumed-skill")
+    manager = make_session_skill_manager()
+
+    add_dir = manager.restore_snapshot_session("restored", snapshot, context)
+
+    home = Path(add_dir.session_home)
+    backend.ensure_pre_launch.assert_called_once_with(session_dir=home, plugin_dir=root.plugin_dir)
+    backend.configure_managed_session_dir.assert_called_once_with(
+        home,
+        adaptation_context=adaptation_context,
+        route="parent",
+        plugin_dir=root.plugin_dir,
+    )
+
+
+def test_codex_materialization_without_session_hook_root_fails_closed(
+    make_session_skill_manager, tmp_path: Path
+) -> None:
+    from autoskillit.execution.backends.codex import CodexBackend
+
+    backend = CodexBackend(source_codex_home=_prepare_codex_profile_source(tmp_path))
+    manager = make_session_skill_manager()
+
+    with pytest.raises(RuntimeError, match="session hook root"):
+        _materialize(manager, "rootless", backend=backend, names=frozenset({"make-arch-diag"}))
+
+    assert "rootless" not in manager._session_roots
+
+
+def test_session_hook_referrer_recorded_before_first_hook_write(
+    make_session_skill_manager,
+    codex_env,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = projection_shaped_hook_root(tmp_path / "home")
+    calls: list[tuple[str, Path]] = []
+
+    def _record(artifact_path: Path, home: Path) -> None:
+        calls.append(("referrer", artifact_path))
+
+    def _prelaunch(**kwargs: object) -> PreLaunchReadiness:
+        calls.append(("prelaunch", Path(str(kwargs["plugin_dir"]))))
+        return PreLaunchReadiness((), {})
+
+    monkeypatch.setattr(
+        session_skill_materialization, "record_projected_artifact_referrer", _record
+    )
+    codex_env.backend.ensure_pre_launch.side_effect = _prelaunch
+
+    _materialize(
+        make_session_skill_manager(),
+        "sid",
+        backend=codex_env.backend,
+        names=frozenset({"make-arch-diag"}),
+        session_hook_root=root,
+    )
+
+    assert calls == [("referrer", root.artifact_path), ("prelaunch", root.plugin_dir)]
+
+
+def test_claude_materialization_ignores_session_hook_root(
+    make_session_skill_manager,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.execution.backends.claude import ClaudeCodeBackend
+
+    root = projection_shaped_hook_root(tmp_path / "home")
+    prelaunch_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        ClaudeCodeBackend,
+        "ensure_pre_launch",
+        lambda _self, **kwargs: prelaunch_calls.append(kwargs),
+    )
+
+    add_dir = _materialize(
+        make_session_skill_manager(),
+        "sid",
+        backend=ClaudeCodeBackend(),
+        names=frozenset({"make-arch-diag"}),
+        session_hook_root=root,
+    )
+
+    assert isinstance(add_dir, ValidatedAddDir)
+    assert prelaunch_calls == []
+    assert not (root.artifact_path.parent / ".artifact-referrers").exists()
 
 
 def test_codex_init_session_raises_when_pre_launch_fails(
@@ -1322,6 +1476,7 @@ def test_profile_native_role_is_provisioned_before_setup_and_remains_projected(
         "profile-native-role",
         backend=backend,
         names=frozenset(),
+        session_hook_root=projection_shaped_hook_root(tmp_path / "home"),
     ) as managed:
         assert (managed.generated_home / "agents" / "session-log-reader.toml").is_file()
         assert (
@@ -1357,6 +1512,7 @@ def test_managed_codex_session_surfaces_profile_refusals_after_materialization(
         "profile-refusal",
         backend=backend,
         names=frozenset({"make-arch-diag"}),
+        session_hook_root=projection_shaped_hook_root(tmp_path / "home"),
     ) as managed:
         catalog_root = Path(managed.skills_dir.path) / "skills"
         payload = managed.unavailability_payload
@@ -1396,6 +1552,7 @@ def test_refused_profile_collision_leaves_the_admitted_ordinary_skill_discoverab
         "refused-profile-collision",
         backend=backend,
         names=frozenset({"make-arch-diag"}),
+        session_hook_root=projection_shaped_hook_root(tmp_path / "home"),
     ) as managed:
         catalog_skill = Path(managed.skills_dir.path) / "skills" / "make-arch-diag"
 
@@ -1424,6 +1581,7 @@ def test_profile_only_managed_codex_session_has_a_valid_discovery_root(
         "profile-only",
         backend=backend,
         names=frozenset(),
+        session_hook_root=projection_shaped_hook_root(tmp_path / "home"),
     ) as managed:
         catalog_root = Path(managed.skills_dir.path) / "skills"
         assert {entry.name for entry in catalog_root.iterdir()} == {"profile-only"}
@@ -1539,6 +1697,7 @@ def test_manager_filters_child_spawn_skill_by_finalized_ambient_role(
         project_root,
         backend=backend,
         durable_scripts_root=pkg_root(),
+        session_hook_root=projection_shaped_hook_root(fake_home),
     )
     manager = DefaultSessionSkillManager(
         provider,

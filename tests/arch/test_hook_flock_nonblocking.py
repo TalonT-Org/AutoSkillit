@@ -173,7 +173,7 @@ _EXPECTED_ACQUISITIONS = (
     ),
     (
         "workspace/_installed/_state.py",
-        "_generation_store_findings",
+        "_read_generation_identity",
         "ArtifactLease.acquire_existing_shared",
     ),
     (

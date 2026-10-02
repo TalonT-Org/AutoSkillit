@@ -37,6 +37,7 @@ from autoskillit.core import (
     ProfileActivation,
     RepositoryProfileId,
     SemanticAdaptationContext,
+    SessionHookRoot,
     SkillAuthority,
     SkillContractError,
     SkillSemanticAdaptationResult,
@@ -205,6 +206,7 @@ class SkillProjectionContext:
     managed_codex_route: ManagedCodexRoute | None = None
     provisioning_disposition: bool | None = None
     projection_version: int = SKILL_PROJECTION_VERSION
+    session_hook_root: SessionHookRoot | None = None
 
     def __post_init__(self) -> None:
         if type(self.projection_version) is not int or self.projection_version < 1:

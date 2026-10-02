@@ -20,6 +20,7 @@ class RetirementBackstopDef:
     wires_is_current: bool
     wires_current_identity: bool
     exclusive_lease_backstop: bool
+    wires_retention_pin: bool
     rationale: str
 
 
@@ -31,9 +32,12 @@ RETIREMENT_BACKSTOP_LEDGER: Mapping[PluginArtifactKind, RetirementBackstopDef] =
             wires_is_current=True,
             wires_current_identity=True,
             exclusive_lease_backstop=True,
+            wires_retention_pin=True,
             rationale=(
                 "The active semantic key blocks the selected projection; exact identity "
-                "and the launch reader lease protect every bound incarnation."
+                "and the launch reader lease protect every bound incarnation, and a "
+                "referrer record pins every projection still baked into an existing "
+                "session home."
             ),
         ),
         PluginArtifactKind.INSTALLED_PLUGIN: RetirementBackstopDef(
@@ -42,6 +46,7 @@ RETIREMENT_BACKSTOP_LEDGER: Mapping[PluginArtifactKind, RetirementBackstopDef] =
             wires_is_current=False,
             wires_current_identity=True,
             exclusive_lease_backstop=True,
+            wires_retention_pin=False,
             rationale=(
                 "The installed tree has no selector; exact identity plus the exclusive "
                 "lease prevents reclaiming a bound incarnation."
@@ -53,6 +58,7 @@ RETIREMENT_BACKSTOP_LEDGER: Mapping[PluginArtifactKind, RetirementBackstopDef] =
             wires_is_current=True,
             wires_current_identity=True,
             exclusive_lease_backstop=True,
+            wires_retention_pin=False,
             rationale=(
                 "The generation selector blocks the selected path; exact identity and "
                 "the exclusive lease protect concurrently bound generations."
@@ -64,6 +70,7 @@ RETIREMENT_BACKSTOP_LEDGER: Mapping[PluginArtifactKind, RetirementBackstopDef] =
             wires_is_current=True,
             wires_current_identity=True,
             exclusive_lease_backstop=True,
+            wires_retention_pin=False,
             rationale=(
                 "The install-root selector blocks the selected path; exact identity and "
                 "the exclusive lease protect concurrently bound generations."

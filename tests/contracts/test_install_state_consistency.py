@@ -539,6 +539,110 @@ class TestVerifyInstallState:
         }
 
 
+class TestPluginSelectorSkew:
+    """The plugin-level generation selector is compared against the running version."""
+
+    def test_skew_is_reported_and_actionable(
+        self,
+        home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import autoskillit.workspace._installed._state as install_state
+        from autoskillit.workspace import verify_install_state
+
+        _publish_generation(home, "1.0.0")
+
+        real_version = install_state.importlib.metadata.version
+
+        def version_for_test(package: str) -> str:
+            if package == "autoskillit":
+                return "2.0.0"
+            return real_version(package)
+
+        monkeypatch.setattr(install_state.importlib.metadata, "version", version_for_test)
+        write_registry(home, home / "cache" / "1.0.0")
+
+        findings = {f.check: f for f in verify_install_state()}
+        assert "generation_plugin_selector_skew" in findings
+        finding = findings["generation_plugin_selector_skew"]
+        assert finding.severity is Severity.WARNING
+        assert "1.0.0" in finding.message
+        assert "2.0.0" in finding.message
+        assert "autoskillit install" in finding.message
+
+    def test_no_finding_when_versions_match(self, home: Path) -> None:
+        from autoskillit import __version__
+
+        _publish_generation(home, __version__)
+        write_registry(home, home / "cache" / __version__)
+
+        assert "generation_plugin_selector_skew" not in _checks(home)
+
+    def test_no_finding_when_plugin_level_selector_is_absent(self, home: Path) -> None:
+        write_registry(home, home / "cache" / "whatever")
+
+        assert "generation_plugin_selector_skew" not in _checks(home)
+
+    def test_no_finding_without_a_registry_obligation(
+        self,
+        home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import autoskillit.workspace._installed._state as install_state
+
+        _publish_generation(home, "1.0.0")
+
+        real_version = install_state.importlib.metadata.version
+
+        def version_for_test(package: str) -> str:
+            if package == "autoskillit":
+                return "2.0.0"
+            return real_version(package)
+
+        monkeypatch.setattr(install_state.importlib.metadata, "version", version_for_test)
+
+        assert "generation_plugin_selector_skew" not in _checks(home)
+
+    def test_skew_is_reported_when_the_plugin_level_flip_fails(
+        self,
+        home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A best-effort plugin-level flip failure is now an observable finding."""
+        import autoskillit.workspace._installed._state as install_state
+        import autoskillit.workspace._projected_artifact._generation_publication as publication
+        from autoskillit.core import generation_plugin_selector_path
+
+        _publish_generation(home, "1.0.0")
+        plugin_selector = generation_plugin_selector_path(home, _PLUGIN_KEY)
+        original_target = plugin_selector.resolve(strict=True)
+
+        real_replace_symlink = publication._replace_symlink
+
+        def guarded_replace_symlink(path: Path, target: Path) -> None:
+            if path == plugin_selector:
+                raise OSError("injected plugin-level selector flip failure")
+            real_replace_symlink(path, target)
+
+        monkeypatch.setattr(publication, "_replace_symlink", guarded_replace_symlink)
+
+        real_version = install_state.importlib.metadata.version
+
+        def version_for_test(package: str) -> str:
+            if package == "autoskillit":
+                return "2.0.0"
+            return real_version(package)
+
+        monkeypatch.setattr(install_state.importlib.metadata, "version", version_for_test)
+
+        _publish_generation(home, "2.0.0")
+
+        assert plugin_selector.resolve(strict=True) == original_target
+
+        write_registry(home, home / "cache" / "2.0.0")
+        assert "generation_plugin_selector_skew" in _checks(home)
+
+
 class TestDoctorReportsTheBrokenState:
     """The diagnostic inversion: OK on a machine that cannot start."""
 

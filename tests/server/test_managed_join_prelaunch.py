@@ -14,6 +14,7 @@ from tests.execution.backends._codex_fixtures import (
     managed_source_home,
     use_bundled_catalog,
 )
+from tests.fixtures.hook_topology import projection_shaped_hook_root
 
 if TYPE_CHECKING:
     from autoskillit.core import SemanticAdaptationContext
@@ -324,8 +325,12 @@ def _prepared_managed_home(
     (home / "config.toml").write_text(
         '[mcp_servers.autoskillit]\ncommand = "autoskillit"\n', encoding="utf-8"
     )
+    root = projection_shaped_hook_root(tmp_path)
     backend.configure_managed_session_dir(
-        home, adaptation_context=context, route="interactive-parent"
+        home,
+        adaptation_context=context,
+        route="interactive-parent",
+        plugin_dir=root.plugin_dir,
     )
     (source_home / "models_cache.json").unlink()
     monkeypatch.setenv(CODEX_HOME_ENV_VAR, str(home))

@@ -45,6 +45,7 @@ from autoskillit.core import (
     PluginArtifactValidationError,
     PluginLaunchBinding,
     SemanticAdaptationContext,
+    SessionHookRoot,
     SkillAuthority,
     SkillContractError,
     SkillExecutionRole,
@@ -249,6 +250,7 @@ def _skill_projection_materialization_context(
         backend=backend,
         conventions=backend.conventions,
         adaptation_context=preparation.adaptation_context,
+        session_hook_root=SessionHookRoot.from_binding(binding),
         substitutions={
             "{{AUTOSKILLIT_TEMP}}": temp_dir_display_str(None),
             "{{AUTOSKILLIT_SCRIPTS}}": str(destination / "recipes" / "scripts"),

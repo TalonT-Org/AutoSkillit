@@ -76,6 +76,7 @@ from tests.execution.backends._generated_home_backend import (
 )
 from tests.execution.backends._otlp_test_data import OTLP_EXTRAS
 from tests.execution.backends._plugin_binding import plugin_binding
+from tests.fixtures.hook_topology import projection_shaped_hook_root
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -2293,6 +2294,7 @@ class TestCodexBackendEnsurePreLaunchStageTagging:
         self.session_dir.mkdir()
         (self.session_dir / "config.toml").write_text(self._CANONICAL_AUTOSKILLIT_MCP_CONFIG)
         monkeypatch.setattr(Path, "home", staticmethod(lambda: self.fake_home))
+        self.hook_root = projection_shaped_hook_root(self.fake_home)
 
     def test_runtime_mcp_sync_failure_is_tagged(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
@@ -2300,7 +2302,9 @@ class TestCodexBackendEnsurePreLaunchStageTagging:
             "_ensure_codex_mcp_registered_unlocked",
             lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
         )
-        readiness = CodexBackend().ensure_pre_launch(session_dir=self.session_dir)
+        readiness = CodexBackend().ensure_pre_launch(
+            session_dir=self.session_dir, plugin_dir=self.hook_root.plugin_dir
+        )
         assert len(readiness.errors) == 1
         assert "runtime MCP sync" in readiness.errors[0]
         assert "boom" in readiness.errors[0]
@@ -2311,7 +2315,9 @@ class TestCodexBackendEnsurePreLaunchStageTagging:
             "_sync_hooks_to_codex_config_unlocked",
             lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
         )
-        readiness = CodexBackend().ensure_pre_launch(session_dir=self.session_dir)
+        readiness = CodexBackend().ensure_pre_launch(
+            session_dir=self.session_dir, plugin_dir=self.hook_root.plugin_dir
+        )
         assert len(readiness.errors) == 1
         assert "runtime hook update" in readiness.errors[0]
         assert "boom" in readiness.errors[0]
@@ -2323,7 +2329,9 @@ class TestCodexBackendEnsurePreLaunchStageTagging:
             "atomic_write",
             lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
         )
-        readiness = CodexBackend().ensure_pre_launch(session_dir=self.session_dir)
+        readiness = CodexBackend().ensure_pre_launch(
+            session_dir=self.session_dir, plugin_dir=self.hook_root.plugin_dir
+        )
         assert len(readiness.errors) == 1
         assert "destination snapshot" in readiness.errors[0]
         assert "boom" in readiness.errors[0]
@@ -2369,6 +2377,7 @@ class TestCodexBackendSetupSessionDir:
             "default_log_dir",
             lambda: self.fake_log_dir,
         )
+        self.hook_root = projection_shaped_hook_root(self.fake_home)
 
     def _write_all_source_files(self) -> None:
         (self.codex_home / "config.toml").write_text(self._CANONICAL_AUTOSKILLIT_MCP_CONFIG)
@@ -3374,7 +3383,9 @@ class TestCodexBackendSetupSessionDir:
         monkeypatch.setenv(MCP_CLIENT_BACKEND_ENV_VAR, "pre-test-backend")
         backend = CodexBackend()
 
-        assert not backend.ensure_pre_launch(session_dir=self.session_dir).errors
+        assert not backend.ensure_pre_launch(
+            session_dir=self.session_dir, plugin_dir=self.hook_root.plugin_dir
+        ).errors
         role_names = backend.setup_session_dir(self.session_dir)
 
         eligible_bundled = {
@@ -3404,7 +3415,9 @@ class TestCodexBackendSetupSessionDir:
         (self.session_dir / "config.toml").unlink()
         backend = CodexBackend()
 
-        assert not backend.ensure_pre_launch(session_dir=self.session_dir).errors
+        assert not backend.ensure_pre_launch(
+            session_dir=self.session_dir, plugin_dir=self.hook_root.plugin_dir
+        ).errors
         with structlog.testing.capture_logs() as cap_logs:
             role_names = backend.setup_session_dir(self.session_dir)
 

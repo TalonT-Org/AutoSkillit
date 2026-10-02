@@ -13,12 +13,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from autoskillit.workspace import EffectiveSkillCatalog
+    from autoskillit.workspace import EffectiveSkillCatalog, ProjectedPluginArtifactAuthority
 
 __all__ = [
     "STALE_VERSION",
     "non_exploration_catalog",
     "plant_stale_snapshot",
+    "projected_plugin_authority",
     "session_catalog",
 ]
 
@@ -58,6 +59,17 @@ def session_catalog():
     return EffectiveSkillCatalog(
         skills=tuple(SkillCatalogEntry.from_skill_info(s) for s in skills),
         execution_role=SkillExecutionRole.SESSION,
+    )
+
+
+def projected_plugin_authority(tmp_path: Path) -> ProjectedPluginArtifactAuthority:
+    """A projected plugin authority over the bundled session catalog, rooted at ``tmp_path``."""
+    from autoskillit.workspace import project_default_plugin_authority
+
+    return project_default_plugin_authority(
+        cwd=tmp_path,
+        base_branch="main",
+        catalog=session_catalog(),
     )
 
 

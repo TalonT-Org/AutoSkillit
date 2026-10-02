@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -189,7 +190,7 @@ class _CookSessionManager:
         compilation: CompiledSessionSkillCatalogAuthority,
         projection_context: SkillProjectionContextAuthority,
     ) -> Iterator[ManagedSessionHome]:
-        self._events.append(("managed-enter", launch_id))
+        self._events.append(("managed-enter", launch_id, projection_context))
         assert projection_context.catalog == compilation.catalog
         skills_dir = self._generated_home / "skills"
         skills_dir.mkdir(parents=True, exist_ok=True)
@@ -495,11 +496,18 @@ def test_codex_managed_order_runtime_writes_do_not_mutate_projection(
     )
 
     generated_home = cast(Path, captured["generated_home"])
-    assert captured["events"] == [
+    events = cast(list[tuple[object, ...]], captured["events"])
+    assert [event[:2] for event in events] == [
         ("managed-enter", launch_id),
         ("run",),
         ("managed-exit", launch_id),
     ]
+    managed_enter_context = cast(SkillProjectionContextAuthority, events[0][2])
+    assert managed_enter_context.session_hook_root is not None
+    assert managed_enter_context.session_hook_root.artifact_path == projection_root
+    assert managed_enter_context.session_hook_root.plugin_dir == Path(
+        os.path.realpath(projection_root)
+    )
     assert len(backend.build_calls) == 2
     assert backend.build_calls[-1]["generated_home"] == generated_home
     assert backend.build_calls[-1]["plugin_binding"] is None

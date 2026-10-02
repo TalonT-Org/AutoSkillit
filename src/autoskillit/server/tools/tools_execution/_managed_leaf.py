@@ -31,7 +31,12 @@ from autoskillit.core import (
 )
 
 if TYPE_CHECKING:
-    from autoskillit.core import CleanupResult, SessionSkillManager, SubprocessRunner
+    from autoskillit.core import (
+        CleanupResult,
+        SessionHookRoot,
+        SessionSkillManager,
+        SubprocessRunner,
+    )
     from autoskillit.hooks._session_binding import LoadedSkillEntry
     from autoskillit.server._misc import AgentSkillDocument
 
@@ -66,11 +71,12 @@ class _ChildResourceOwnerRequest(Generic[_PreparedValue]):
     """Inputs owned for the complete lifetime of one prepared child."""
 
     source_cwd: Path
-    prepare: Callable[[Path], Awaitable[_PreparedValue]]
+    prepare: Callable[[Path, SessionHookRoot | None], Awaitable[_PreparedValue]]
     session_manager: SessionSkillManager | None
     generated_home_id: str | None
     generated_home_materialized: Callable[[], bool]
     copied_snapshot_path: Callable[[], Path | None]
+    session_hook_root: Callable[[], contextlib.AbstractContextManager[SessionHookRoot | None]]
     worktree: _ChildWorktreeRequest | None = None
     cleanup_errors_are_terminal: bool = True
 
@@ -542,9 +548,14 @@ async def _cleanup_owned_child_resources(
 async def scoped_child_resource_owner(
     request: _ChildResourceOwnerRequest[_PreparedValue],
 ) -> AsyncIterator[_PreparedChildLaunch[_PreparedValue]]:
-    """Own child cwd, preparation, and generated resources through finalization."""
+    """Own child cwd, preparation, and generated resources through finalization.
+
+    The session hook root is leased before preparation bakes it into a
+    generated home and released only after that home has been removed.
+    """
     owned_worktree: Path | None = None
     body_error: BaseException | None = None
+    hook_root_scope = contextlib.ExitStack()
     try:
         if request.worktree is None:
             owned_cwd = request.source_cwd.resolve()
@@ -560,7 +571,8 @@ async def scoped_child_resource_owner(
                 worktree.runner,
             )
             owned_worktree = owned_cwd
-        prepared = await request.prepare(owned_cwd)
+        hook_root = hook_root_scope.enter_context(request.session_hook_root())
+        prepared = await request.prepare(owned_cwd, hook_root)
         yield _PreparedChildLaunch(owned_cwd=owned_cwd, value=prepared)
     except BaseException as exc:
         body_error = exc
@@ -568,5 +580,10 @@ async def scoped_child_resource_owner(
     finally:
         with anyio.CancelScope(shield=True):
             cleanup_errors = await _cleanup_owned_child_resources(request, owned_worktree)
+        try:
+            hook_root_scope.close()
+        except BaseException as exc:
+            logger.warning("session_hook_root_release_failed", exc_info=True)
+            cleanup_errors.append(exc)
         if body_error is None and cleanup_errors and request.cleanup_errors_are_terminal:
             raise BaseExceptionGroup("Child resource cleanup failed", cleanup_errors)

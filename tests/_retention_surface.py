@@ -181,6 +181,14 @@ RECLAIMER_TARGETS: frozenset[ReclaimerTarget] = frozenset(
             "_reconcile_projection_retirement",
         ),
         (
+            "src/autoskillit/workspace/_installed/_projection_referrers.py",
+            "live_projected_artifact_referrers",
+        ),
+        (
+            "src/autoskillit/workspace/_installed/_projection_referrers.py",
+            "record_projected_artifact_referrer",
+        ),
+        (
             "src/autoskillit/core/plugins/_plugin_artifact_retirement.py",
             "PluginArtifactRetirementEngine._current_identity_status",
         ),
@@ -408,6 +416,24 @@ RECLAIMER_CONVERGENCE_CASES: Mapping[
         (
             "src/autoskillit/workspace/_installed/_projection_cache.py",
             "_reconcile_projection_retirement",
+        )
+    ),
+    (
+        "src/autoskillit/workspace/_installed/_projection_referrers.py",
+        "live_projected_artifact_referrers",
+    ): _convergence_adapters(
+        (
+            "src/autoskillit/workspace/_installed/_projection_referrers.py",
+            "live_projected_artifact_referrers",
+        )
+    ),
+    (
+        "src/autoskillit/workspace/_installed/_projection_referrers.py",
+        "record_projected_artifact_referrer",
+    ): _convergence_adapters(
+        (
+            "src/autoskillit/workspace/_installed/_projection_referrers.py",
+            "record_projected_artifact_referrer",
         )
     ),
     (
@@ -786,6 +812,10 @@ _PRE = "src/autoskillit/workspace/_installed/_projection_cache.py::_reconcile_pr
 _PRT = (
     "src/autoskillit/workspace/_installed/_projection_cache.py::_reconcile_projection_retirement"
 )
+_LPR = (
+    "src/autoskillit/workspace/_installed/_projection_referrers.py::"
+    "live_projected_artifact_referrers"
+)
 _PC = (
     "src/autoskillit/core/plugins/_plugin_artifact_retirement.py::"
     "PluginArtifactRetirementEngine.try_reclaim"
@@ -1087,167 +1117,182 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "evidence about the candidate's liveness; retried up to max_retry_seconds."
     ),
     # -- workspace._installed._projection_cache::prune_stale_projections --
-    f"{_PP}::L699": _retries_after_input_changes(
+    f"{_PP}::L715": _retries_after_input_changes(
         "The managed-home boundary does not contain the projection owner root, so mutation "
         "is refused before enumeration."
     ),
-    f"{_PP}::L702": _self_limiting(
+    f"{_PP}::L718": _self_limiting(
         "The projections root does not exist; there is nothing here to prune."
     ),
-    f"{_PP}::L711": _retries_after_input_changes(
+    f"{_PP}::L727": _retries_after_input_changes(
         "An operational failure inspecting the projection root defers reconciliation "
         "without risking launch availability."
     ),
     # -- workspace._installed._projection_cache::_reconcile_projection_entry --
-    f"{_PRE}::L469": _retries_after_input_changes(
+    f"{_PRE}::L485": _retries_after_input_changes(
         "A foreign user-writable cache entry is classified as deferred rather than "
         "aborting launch."
     ),
-    f"{_PRE}::L472": _retries_after_input_changes(
+    f"{_PRE}::L488": _retries_after_input_changes(
         "The caller-selected active projection is intentionally excluded from stale "
         "reconciliation."
     ),
-    f"{_PRE}::L474": _self_limiting(
+    f"{_PRE}::L490": _self_limiting(
         "A deterministic residue staging entry delegates to its original-key locked "
         "resume transition."
     ),
-    f"{_PRE}::L482": _retries_after_input_changes(
+    f"{_PRE}::L498": _retries_after_input_changes(
         "A recognized non-projection namespace belongs to another lifecycle owner and "
         "remains untouched."
     ),
-    f"{_PRE}::L484": _retries_after_input_changes(
+    f"{_PRE}::L500": _retries_after_input_changes(
         "A projection outside the exact scanned root fails the direct-child ownership guard."
     ),
-    f"{_PRT}::L513": RetentionDecision(
+    f"{_PRT}::L529": RetentionDecision(
         Revocability.REVOCABLE,
         "Lease contention means another process currently holds an exclusive lock on this "
         "candidate, a directly observed live reference.",
     ),
-    f"{_PRT}::L515": _retries_after_input_changes(
+    f"{_PRT}::L531": _retries_after_input_changes(
         "Lease acquisition failed operationally, so reconciliation defers without "
         "claiming deletion authority."
     ),
-    f"{_PRT}::L521": _self_limiting(
+    f"{_PRT}::L537": _self_limiting(
         "A permanently invalid projection delegates to the terminal quarantine transition "
         "under the held lease and lock."
     ),
-    f"{_PRT}::L528": _retries_after_input_changes(
+    f"{_PRT}::L544": _retries_after_input_changes(
         "Identity resolution was unavailable for this candidate; an inspection failure, "
         "not evidence of liveness."
     ),
-    f"{_PRT}::L531": _retries_after_input_changes(
+    f"{_PRT}::L547": _retries_after_input_changes(
         "The retirement queue could not be read to record this candidate; an infrastructure "
         "failure, not liveness evidence."
     ),
-    f"{_PRT}::L533": _self_limiting(
+    f"{_PRT}::L549": _self_limiting(
         "A new exact retirement record was durably created; this reports successful disposition."
     ),
-    f"{_PRT}::L534": _self_limiting(
+    f"{_PRT}::L550": _self_limiting(
         "The exact retirement record already exists, so no duplicate durable mutation is needed."
     ),
-    f"{_PRT}::L536": _retries_after_input_changes(
+    f"{_PRT}::L552": _retries_after_input_changes(
         "Install-lock or reconciliation I/O failed operationally and leaves the candidate "
         "retryable."
     ),
+    # -- workspace._installed._projection_referrers::live_projected_artifact_referrers --
+    f"{_LPR}::L76": _self_limiting(
+        "No referrer directory exists, so no session home pins the projection and "
+        "there is nothing to prune."
+    ),
+    f"{_LPR}::L78": _retries_after_input_changes(
+        "The referrer directory cannot be listed; the projection stays pinned because an "
+        "inspection failure is never evidence that no session home still bakes it."
+    ),
+    f"{_LPR}::L85": _self_limiting(
+        "The dead referrer was just unlinked; the loop moves to the next referrer after "
+        "the prune already happened."
+    ),
     # -- core.plugins._plugin_artifact_retirement::_current_identity_status --
-    f"{_PCS}::L188": _retries_after_input_changes(
+    f"{_PCS}::L190": _retries_after_input_changes(
         "Resolving the current on-disk identity failed as unavailable; an inspection "
         "failure, not evidence of liveness."
     ),
-    f"{_PCS}::L190": _retries_after_input_changes(
+    f"{_PCS}::L192": _retries_after_input_changes(
         "On-disk identity validation failed for the current generation; a validation guard, "
         "not a liveness or age decision."
     ),
-    f"{_PCS}::L192": _retries_after_input_changes(
+    f"{_PCS}::L194": _retries_after_input_changes(
         "The current on-disk identity no longer matches the record's recorded identity; a "
         "consistency guard against reclaiming the wrong artifact."
     ),
     # -- core.plugins._plugin_artifact_retirement::try_reclaim --
-    f"{_PC}::L222": _retries_after_input_changes(
+    f"{_PC}::L232": _retries_after_input_changes(
         "The record's artifact_kind does not match this coordinator's own kind; a type/"
         "ownership guard, not a liveness decision."
     ),
-    f"{_PC}::L224": RetentionDecision(
+    f"{_PC}::L234": RetentionDecision(
         Revocability.REVOCABLE,
         "The record's scheduled not_before time has not yet passed; retained until the "
         "grace/backoff window elapses.",
     ),
-    f"{_PC}::L226": _retries_after_input_changes(
+    f"{_PC}::L236": _retries_after_input_changes(
         "This coordinator no longer claims ownership of the managed path; an ownership "
         "guard, not liveness evidence."
     ),
-    f"{_PC}::L233": RetentionDecision(
+    f"{_PC}::L243": RetentionDecision(
         Revocability.REVOCABLE,
         "Lease contention means another process currently holds an exclusive lock on this "
         "artifact, a directly observed live reference.",
     ),
-    f"{_PC}::L239": _retries_after_input_changes(
+    f"{_PC}::L249": _retries_after_input_changes(
         "Lease acquisition failed with an OSError or RuntimeError; an infrastructure "
         "failure, not evidence about the record's liveness."
     ),
-    f"{_PC}::L248": _self_limiting(
+    f"{_PC}::L258": _self_limiting(
         "The retiring cache record is already absent, removed by a concurrent sweep; "
         "reports an already-completed outcome, not a retention gate."
     ),
-    f"{_PC}::L250": _retries_after_input_changes(
+    f"{_PC}::L260": _retries_after_input_changes(
         "The retiring cache is not in the expected exact-v2 state; an infrastructure/"
         "consistency guard, not liveness evidence."
     ),
-    f"{_PC}::L257": _self_limiting(
+    f"{_PC}::L267": _self_limiting(
         "The record is no longer present in the retiring queue, removed concurrently; "
         "reports an already-completed outcome, not a retention gate."
     ),
-    f"{_PC}::L259": _self_limiting(
+    f"{_PC}::L269": _self_limiting(
         "The freshly re-read queued record no longer matches the caller's exact identity; "
         "a consistency guard against acting on stale data."
     ),
-    f"{_PC}::L264": RetentionDecision(
+    f"{_PC}::L274": RetentionDecision(
         Revocability.REVOCABLE,
         "Re-verified under lock: the record's not_before time has not yet passed; retained "
         "until due.",
     ),
-    f"{_PC}::L266": RetentionDecision(
+    f"{_PC}::L276": RetentionDecision(
         Revocability.REVOCABLE,
-        "The managed path is the actively selected generation right now; retained because "
-        "it is currently live and in use, an observed liveness reference.",
+        "The managed path is the actively selected generation, or a live session home "
+        "still bakes hook and script paths inside it; retained because it is currently "
+        "live and in use, an observed liveness reference.",
+        bounded_by="SESSION_STALE_SECONDS",
     ),
-    f"{_PC}::L279": _retries_after_input_changes(
+    f"{_PC}::L289": _retries_after_input_changes(
         "Updating the retiring-cache record failed due to an unsafe cache state; an "
         "infrastructure failure, not liveness evidence."
     ),
-    f"{_PC}::L284": _self_limiting(
+    f"{_PC}::L294": _self_limiting(
         "None of the managed, manifest, or staging paths exist on disk; the artifact is "
         "already gone, reporting completion rather than a retention gate."
     ),
-    f"{_PC}::L287": _retries_after_input_changes(
+    f"{_PC}::L297": _retries_after_input_changes(
         "The staging path is in an ambiguous or unsafe state relative to the managed path; "
         "a consistency guard, not liveness evidence."
     ),
-    f"{_PC}::L297": _retries_after_input_changes(
+    f"{_PC}::L307": _retries_after_input_changes(
         "The non-destructive identity decision deferred reclamation because identity "
         "resolution was unavailable; an inspection failure, not liveness evidence."
     ),
-    f"{_PC}::L300": _retries_after_input_changes(
+    f"{_PC}::L310": _retries_after_input_changes(
         "Updating the retiring-cache record failed while rejecting an invalid or mismatched "
         "identity; an infrastructure failure, not liveness evidence."
     ),
-    f"{_PC}::L305": _retries_after_input_changes(
+    f"{_PC}::L315": _retries_after_input_changes(
         "The non-destructive identity decision rejected the current artifact identity; a "
         "validation or consistency guard, not a liveness or age decision."
     ),
-    f"{_PC}::L313": _retries_after_input_changes(
+    f"{_PC}::L323": _retries_after_input_changes(
         "Renaming the managed path into staging failed with an OSError; an execution "
         "failure, not liveness evidence."
     ),
-    f"{_PC}::L327": _retries_after_input_changes(
+    f"{_PC}::L337": _retries_after_input_changes(
         "The artifact was already removed from disk; updating the retiring-cache record "
         "afterward failed due to an unsafe cache state, an infrastructure failure."
     ),
-    f"{_PC}::L333": _retries_after_input_changes(
+    f"{_PC}::L343": _retries_after_input_changes(
         "Removing the manifest or staging directory failed with an OSError; an execution "
         "failure during the delete attempt, not liveness evidence."
     ),
-    f"{_PC}::L338": _self_limiting(
+    f"{_PC}::L348": _self_limiting(
         "The successful-reclaim completion path; not a retention skip, this line reports "
         "that reclamation succeeded."
     ),
@@ -1318,22 +1363,22 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "A newly created exact retirement record completes this generation's current disposition."
     ),
     # -- workspace._installed._state::_enqueue_legacy_installed_plugin_candidate --
-    f"{_IL}::L401": _self_limiting(
+    f"{_IL}::L441": _self_limiting(
         "The running legacy version without a selected generation remains outside retirement."
     ),
-    f"{_IL}::L404": _self_limiting(
+    f"{_IL}::L444": _self_limiting(
         "A durable rejected-legacy marker already records this invalid candidate's terminal "
         "disposition."
     ),
-    f"{_IL}::L428": _self_limiting(
+    f"{_IL}::L468": _self_limiting(
         "Another reconciler created the same durable rejection marker, completing this "
         "candidate's disposition."
     ),
-    f"{_IL}::L434": _self_limiting(
+    f"{_IL}::L474": _self_limiting(
         "Writing the rejected-legacy marker durably records this invalid candidate for quiet "
         "later passes."
     ),
-    f"{_IL}::L436": _resolves_with_contention(
+    f"{_IL}::L476": _resolves_with_contention(
         "A shared lease is currently contended, so the legacy candidate waits for its holder."
     ),
     # -- workspace._projected_artifact._hook_repair::repair_broken_plugin_cache_hooks --

@@ -14,7 +14,7 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -25,6 +25,10 @@ from autoskillit.execution.backends._codex_config import ensure_codex_mcp_regist
 from autoskillit.execution.backends._codex_hooks import sync_hooks_to_codex_config
 from autoskillit.execution.backends._explorer_conformance import project_codex_luna_catalog
 from autoskillit.execution.backends.codex import CodexBackend
+from tests.fixtures.hook_topology import projection_shaped_hook_root
+
+if TYPE_CHECKING:
+    from autoskillit.core import SessionHookRoot
 
 CODEX_LIVE_PROCESS_ENV_ALLOWLIST = frozenset(
     {
@@ -60,6 +64,7 @@ class LiveCodexParentSession:
     session_home: Path
     env: dict[str, str]
     explorer_binding_env: dict[str, dict[str, str]] | None
+    hook_root: SessionHookRoot
 
 
 @contextmanager
@@ -137,7 +142,11 @@ def prepare_live_codex_parent(
     ensure_codex_mcp_registered(config_path=profile_config, headless_auto_gate=False)
     sync_hooks_to_codex_config(config_path=profile_config)
     backend = CodexBackend()
-    assert backend.ensure_pre_launch(session_dir=session_home).errors == ()
+    hook_root = projection_shaped_hook_root(profile_home)
+    assert (
+        backend.ensure_pre_launch(session_dir=session_home, plugin_dir=hook_root.plugin_dir).errors
+        == ()
+    )
     issued_binding_env = (
         explorer_binding_env_factory(session_home)
         if explorer_binding_env_factory is not None
@@ -172,6 +181,7 @@ def prepare_live_codex_parent(
         session_home=session_home,
         env=env,
         explorer_binding_env=copied_binding_env,
+        hook_root=hook_root,
     )
 
 

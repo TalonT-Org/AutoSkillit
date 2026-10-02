@@ -22,6 +22,7 @@ from autoskillit.core import (
     RestoreSession,
     ResumeSpec,
     ResumeWithBriefing,
+    SessionHookRoot,
     SkillExecutionRole,
     dump_yaml_str,
     get_logger,
@@ -153,6 +154,7 @@ def _fleet_session_launcher(
             durable_scripts_root=projection_binding.identity.managed_path,
             adaptation_context=adaptation_context,
             managed_codex_route=managed_codex_route,
+            session_hook_root=SessionHookRoot.from_binding(projection_binding),
         )
         with manager.managed_session(
             launch_id,

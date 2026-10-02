@@ -71,22 +71,22 @@ def enforce_script_session_scope(script_identity: str) -> bool:
 
     Accepts either a relative path (``guards/ask_user_question_guard.py``
     — the canonical key in ``HOOK_SCOPE_BY_SCRIPT``) or an absolute path
-    (``__file__`` when the guard subprocess calls us directly). Absolute
-    paths are translated to the hooks-relative key before lookup so the
-    same call site works in both in-process and subprocess contexts.
+    (``__file__`` when the guard subprocess calls us directly). An absolute
+    path and this module's hooks tree are both canonicalized before the
+    absolute path is translated to its hooks-relative key, so a guard reached
+    through a symlinked root keeps its identity; a path outside the canonical
+    hooks tree denies.
     """
     key = script_identity
     try:
         script_path = Path(script_identity)
         if script_path.is_absolute():
-            try:
-                # /src/autoskillit/hooks/_runtime/_session_scope_authority.py -> .../hooks/
-                hooks_dir = Path(__file__).resolve().parent.parent
-                key = script_path.relative_to(hooks_dir).as_posix()
-            except ValueError:
-                # Script lives outside the hooks tree — preserve identity
-                # so the KeyError surfaces in the diagnostic.
-                key = script_identity
+            path_identity = importlib.import_module(
+                f"{__package__}._path_identity" if __package__ else "_path_identity"
+            )
+            # .../hooks/_runtime/_session_scope_authority.py -> .../hooks/
+            hooks_dir = Path(__file__).resolve().parent.parent
+            key = path_identity.hooks_relative_key(script_path, hooks_dir)
         table_module_name = (
             f"{__package__}._hook_scope_table" if __package__ else "_hook_scope_table"
         )

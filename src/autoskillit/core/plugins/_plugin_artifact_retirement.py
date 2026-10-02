@@ -54,6 +54,7 @@ class PluginArtifactRetirementEngine:
         current_identity: Callable[[RetiringArtifactRecord], PluginArtifactIdentity],
         logger: Any,
         is_current: Callable[[Path], bool] | None,
+        retention_pin: Callable[[Path], str | None] | None = None,
     ) -> None:
         self._home = home
         self.managed_root = Path(managed_root).expanduser().resolve(strict=False)
@@ -63,6 +64,7 @@ class PluginArtifactRetirementEngine:
         self._current_identity = current_identity
         self._logger = logger
         self._is_current = is_current
+        self._retention_pin = retention_pin
 
     def contains(self, path: Path) -> bool:
         """Return whether *path* is a child artifact owned by this engine."""
@@ -202,6 +204,14 @@ class PluginArtifactRetirementEngine:
             return None
         return path if is_reclaimable_artifact_path(path, self.managed_root) else None
 
+    def _retention_reason(self, path: Path) -> str | None:
+        """Return why a live reference still requires *path*, or ``None`` if none does."""
+        if self._is_current is not None and self._is_current(path):
+            return "managed_path is the actively selected generation"
+        if self._retention_pin is not None:
+            return self._retention_pin(path)
+        return None
+
     @staticmethod
     def _rederive_legacy_identity(
         path: Path,
@@ -262,11 +272,11 @@ class PluginArtifactRetirementEngine:
                     )
                 if now < queued.not_before:
                     return RetirementOutcome.DEFERRED_NOT_DUE
-                if self._is_current is not None and self._is_current(record.managed_path):
+                if (retained := self._retention_reason(record.managed_path)) is not None:
                     return self._log_reclaim(
                         record,
                         RetirementOutcome.DEFERRED_CONTENDED,
-                        detail="managed_path is the actively selected generation",
+                        detail=retained,
                     )
                 staging_path = _retirement_staging_path(record)
                 managed_exists = record.managed_path.exists() or record.managed_path.is_symlink()
@@ -383,7 +393,7 @@ class PluginArtifactRetirementEngine:
             )
             return RetirementOutcome.DEFERRED_IO_ERROR
         try:
-            if self._is_current is not None and self._is_current(path):
+            if self._retention_reason(path) is not None:
                 return RetirementOutcome.DEFERRED_CONTENDED
             identity = self._rederive_legacy_identity(path, identity_for_path)
             if identity is None:

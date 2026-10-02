@@ -1,6 +1,7 @@
 """Tests for headless.py dispatch flow: food truck dispatch, pack injection, executor protocol."""
 
 import json
+import os
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -107,6 +108,35 @@ def _make_success_stdout(marker: str = "%%FT_DONE%%") -> str:
             "is_error": False,
         }
     )
+
+
+def test_skill_projection_materialization_context_binds_session_hook_root(
+    tmp_path: Path,
+) -> None:
+    """SkillProjectionPreparation.materialization_context sources its
+    root from the exact binding it is handed."""
+    from autoskillit.core import PluginLoadMode, SessionHookRoot
+    from autoskillit.workspace import SkillProjectionPreparation
+    from tests.execution.conftest import _mock_backend
+
+    authority = _StaticPluginAuthority(tmp_path)
+    backend = _mock_backend(food_truck_capable=True, skill_injection_capable=True)
+    binding = authority.acquire_launch_binding(
+        backend=backend, load_mode=PluginLoadMode.PROJECTED_HOME
+    )
+    preparation = SkillProjectionPreparation(
+        cwd=tmp_path,
+        project_root=None,
+        default_base_branch="main",
+        catalog=object(),
+    )
+
+    context = preparation.materialization_context(backend=backend, binding=binding)
+
+    expected_root = SessionHookRoot.from_binding(binding)
+    assert context.session_hook_root == expected_root
+    assert context.session_hook_root.artifact_path == binding.identity.managed_path
+    assert context.session_hook_root.plugin_dir == Path(os.path.realpath(binding.plugin_dir))
 
 
 def test_plugin_binding_cleanup_does_not_replace_primary_error(

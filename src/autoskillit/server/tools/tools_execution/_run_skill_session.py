@@ -66,6 +66,7 @@ from autoskillit.server.tools._native_shell_capture import prepare_skill_native_
 from autoskillit.server.tools._types import ToolFailureEnvelope, deny_envelope
 
 if TYPE_CHECKING:
+    from autoskillit.core import SessionHookRoot
     from autoskillit.server.tools.tools_execution._state import _RunSkillDispatchState
 
 logger = get_logger(__name__)
@@ -333,6 +334,7 @@ def _resolve_caller_session(state: _RunSkillDispatchState) -> str | None:
 async def _prepare_owned_dispatch_session(
     state: _RunSkillDispatchState,
     owned_cwd: Path,
+    hook_root: SessionHookRoot | None,
 ) -> str | None:
     assert state.resolved_command is not None
     assert state._contract_store is not None
@@ -340,6 +342,10 @@ async def _prepare_owned_dispatch_session(
     assert state.expected_output_patterns is not None
     if (terminal := _rebuild_owned_dispatch_context(state, owned_cwd)) is not None:
         return terminal
+    if state.projection_context is not None:
+        # The root is this dispatch's lease, never persisted: a resumed session
+        # always bakes a freshly leased projection.
+        state.projection_context = replace(state.projection_context, session_hook_root=hook_root)
     assert state.write_watch_dirs is not None
     state.skill_add_dirs = []
     state.replay_snapshot_used = False

@@ -299,6 +299,7 @@ def build_ctx(tmp_path):
         FakePluginArtifactAuthority,
         FakeSkillSessionContractStore,
     )
+    from tests.fixtures.hook_topology import fake_projected_plugin_root
 
     owned_authorities = []
     context_count = 0
@@ -309,7 +310,7 @@ def build_ctx(tmp_path):
         if "plugin_authority" in overrides:
             plugin_authority = overrides.pop("plugin_authority")
         else:
-            plugin_authority = FakePluginArtifactAuthority(tmp_path)
+            plugin_authority = FakePluginArtifactAuthority(fake_projected_plugin_root(tmp_path))
             owned_authorities.append(plugin_authority)
         audit_admission_ledger = DefaultAuditAdmissionLedger(
             AuditAdmissionStoreAuthority(

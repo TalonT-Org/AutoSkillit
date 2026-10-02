@@ -691,8 +691,9 @@ def minimal_ctx(tmp_path):
         FakePluginArtifactAuthority,
         FakeSkillSessionContractStore,
     )
+    from tests.fixtures.hook_topology import fake_projected_plugin_root
 
-    plugin_authority = FakePluginArtifactAuthority(tmp_path)
+    plugin_authority = FakePluginArtifactAuthority(fake_projected_plugin_root(tmp_path))
     audit_admission_ledger = DefaultAuditAdmissionLedger(
         AuditAdmissionStoreAuthority(
             database_path=(
@@ -768,6 +769,7 @@ def make_tool_ctx(monkeypatch, tmp_path):
     from autoskillit.server.lifecycle import _state
     from autoskillit.server.tools.tools_execution import _run_skill_prepare
     from tests.fakes import FakePluginArtifactAuthority, MockSubprocessRunner
+    from tests.fixtures.hook_topology import fake_projected_plugin_root
 
     created_authorities: list[FakePluginArtifactAuthority] = []
     created_contexts = []
@@ -794,7 +796,7 @@ def make_tool_ctx(monkeypatch, tmp_path):
         runner: SubprocessRunner | None = None,
     ):
         subprocess_runner = runner if runner is not None else MockSubprocessRunner()
-        plugin_authority = FakePluginArtifactAuthority(tmp_path)
+        plugin_authority = FakePluginArtifactAuthority(fake_projected_plugin_root(tmp_path))
         created_authorities.append(plugin_authority)
         ctx = make_context(
             config if config is not None else AutomationConfig(features={"fleet": True}),

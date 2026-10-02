@@ -32,6 +32,7 @@ from autoskillit.execution.backends._codex_config import (
     _serialize_toml,
     _write_codex_config,
 )
+from tests.fixtures.hook_topology import projection_shaped_hook_root
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -1040,10 +1041,12 @@ def test_composed_prelaunch_uses_one_destination_lock_for_all_writes(
     )
     monkeypatch.setattr(prelaunch, "_apply_codex_runtime_spec_unlocked", fake_runtime)
 
+    root = projection_shaped_hook_root(tmp_path)
     with prelaunch.codex_prelaunch_transaction(
         source_codex_home=source_home,
         destination_home=destination_home,
         runtime_spec=CodexRuntimeSpec(),
+        plugin_dir=root.plugin_dir,
     ) as target:
         assert target == config_path
         assert lock_held is True

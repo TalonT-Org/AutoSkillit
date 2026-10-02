@@ -793,6 +793,7 @@ CORE_GATEWAY_SYMBOLS: frozenset[str] = frozenset(
         "ServeOverridesSnapshot",
         "SessionCheckpoint",
         "SessionEvent",
+        "SessionHookRoot",
         "SessionLocator",
         "SessionOutcome",
         "SessionSkillManager",

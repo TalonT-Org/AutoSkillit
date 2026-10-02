@@ -109,6 +109,7 @@ def _entry_names() -> tuple[tuple[str, projection_cache.ProjectionEntryClass], .
             projection_cache.ProjectionEntryClass.HOOK_QUARANTINE_SIDECAR,
         ),
         (".artifact-leases", projection_cache.ProjectionEntryClass.LEASE_DIRECTORY),
+        (".artifact-referrers", projection_cache.ProjectionEntryClass.REFERRER_DIRECTORY),
         (
             f".{_STALE_KEY}.plugin-{_UUID}",
             projection_cache.ProjectionEntryClass.PUBLICATION_STAGING_ROOT,
@@ -495,6 +496,46 @@ def test_invalid_projection_classes_converge_after_one_prune(
     assert not any(
         entry.get("event") == "projected_plugin_prune_validation_failed" for entry in second_logs
     )
+    assert _warning_or_error_events(second_logs) == []
+
+
+def test_referrer_directory_entry_reconciles_quietly(tmp_path: Path) -> None:
+    home = managed_home_for(tmp_path)
+    root = home.autoskillit_dir / "plugin-projections"
+    root.mkdir(parents=True)
+    (root / _ACTIVE_KEY).mkdir()
+    (root / ".artifact-referrers").mkdir()
+    target = (
+        "src/autoskillit/workspace/_installed/_projection_cache.py",
+        "prune_stale_projections",
+    )
+    run_adapter, observe_adapter = RECLAIMER_CONVERGENCE_CASES[target]
+
+    assert (
+        projection_cache.classify_projection_entry(
+            root / ".artifact-referrers", active_key=_ACTIVE_KEY
+        )
+        is projection_cache.ProjectionEntryClass.REFERRER_DIRECTORY
+    )
+
+    def run() -> object:
+        return projection_cache.prune_stale_projections(
+            root,
+            home=home,
+            active_key=_ACTIVE_KEY,
+        )
+
+    def observe() -> object:
+        return _filesystem_snapshot(root)
+
+    first_result, second_result, first_logs, second_logs = assert_second_pass_is_quiet(
+        lambda: run_adapter(run),
+        observe=lambda: observe_adapter(observe),
+    )
+
+    assert (first_result, second_result) == (0, 0)
+    assert (root / ".artifact-referrers").is_dir()
+    assert _warning_or_error_events(first_logs) == []
     assert _warning_or_error_events(second_logs) == []
 
 

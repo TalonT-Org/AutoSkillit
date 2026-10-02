@@ -21,6 +21,7 @@ from autoskillit.cli.session._session_launch import (
 from autoskillit.core import (
     PluginLaunchBinding,
     PluginLoadMode,
+    SessionHookRoot,
     SkillContractError,
     SourceCurrencyStatus,
     executable_binding_matches_current_file,
@@ -224,6 +225,7 @@ def _build_cook_projection_context(
         resolved_exploration_profile=resolved_exploration_profile,
         adaptation_context=adaptation_context,
         managed_codex_route=managed_codex_route,
+        session_hook_root=SessionHookRoot.from_binding(binding),
     )
     if provisioning_disposition is not None:
         return replace(

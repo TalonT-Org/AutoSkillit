@@ -19,6 +19,7 @@ from autoskillit.core import InteractiveInvocationValidation
 from autoskillit.execution.backends import _codex_probes as probes
 from autoskillit.execution.backends._codex import interactive_validation
 from autoskillit.execution.process._lifecycle import owned_group
+from tests.fixtures.hook_topology import projection_shaped_hook_root
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -1061,8 +1062,11 @@ def test_probe_launch_readiness_forwards_the_bound_executable_to_generated_home_
 
     monkeypatch.setattr(codex, "_validate_generated_codex_home", validate_generated)
     backend = codex.CodexBackend(source_codex_home=source_home)
+    hook_root = projection_shaped_hook_root(tmp_path)
 
-    provisioning = backend.ensure_pre_launch(session_dir=generated_home)
+    provisioning = backend.ensure_pre_launch(
+        session_dir=generated_home, plugin_dir=hook_root.plugin_dir
+    )
     assert provisioning.errors == ()
     assert captured == {}
 
@@ -1188,8 +1192,11 @@ def test_generated_home_provisions_runtime_without_mutating_source_preferences(
 
     monkeypatch.setenv("CODEX_HOME", str(ambient_home))
     monkeypatch.setattr(Path, "home", staticmethod(lambda: ambient_home))
+    hook_root = projection_shaped_hook_root(tmp_path)
 
-    readiness = backend.ensure_pre_launch(session_dir=generated_home)
+    readiness = backend.ensure_pre_launch(
+        session_dir=generated_home, plugin_dir=hook_root.plugin_dir
+    )
 
     assert readiness.errors == ()
     assert source_config.read_bytes() == b'[foreign]\nowner = "user"\n'
@@ -1220,6 +1227,7 @@ def test_generated_home_replaces_inherited_runtime_tuning_with_resolved_spec(
     source_config.write_bytes(source_bytes)
     generated_home = tmp_path / "generated-home"
     generated_home.mkdir()
+    hook_root = projection_shaped_hook_root(tmp_path)
 
     readiness = CodexBackend(
         source_codex_home=source_home,
@@ -1227,7 +1235,7 @@ def test_generated_home_replaces_inherited_runtime_tuning_with_resolved_spec(
             context_window_tokens=200_000,
             auto_compact_threshold_tokens=180_000,
         ),
-    ).ensure_pre_launch(session_dir=generated_home)
+    ).ensure_pre_launch(session_dir=generated_home, plugin_dir=hook_root.plugin_dir)
 
     assert readiness.errors == ()
     assert source_config.read_bytes() == source_bytes

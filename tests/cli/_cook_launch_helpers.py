@@ -77,7 +77,9 @@ class _RecordingProjectionBinding:
         events: list[tuple[object, ...]],
     ) -> None:
         self.plugin_dir = managed_path
-        self.identity = SimpleNamespace(managed_path=managed_path)
+        self.identity = SimpleNamespace(
+            managed_path=managed_path, semantic_key="test-plugin@test:1.0.0"
+        )
         self.inherited_fds = inherited_fds
         self.closed = False
         self._events = events
@@ -209,7 +211,9 @@ class RecordingLifecycle:
 class _Binding:
     def __init__(self, plugin_dir: Path) -> None:
         self.plugin_dir = plugin_dir
-        self.identity = SimpleNamespace(managed_path=plugin_dir)
+        self.identity = SimpleNamespace(
+            managed_path=plugin_dir, semantic_key="test-plugin@test:1.0.0"
+        )
         self.inherited_fds: tuple[int, ...] = ()
         self.closed = False
 

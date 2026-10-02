@@ -185,6 +185,7 @@ from tests.execution.backends._live_codex_parent import (
     prepare_live_codex_parent,
     run_live_codex_parent,
 )
+from tests.fixtures.hook_topology import projection_shaped_hook_root
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.large, pytest.mark.smoke]
 
@@ -676,11 +677,13 @@ def _run_codex_selection_case(
     backend = CodexBackend(source_codex_home=source_codex_home)
     provider = SkillsDirectoryProvider()
     catalog = EffectiveSkillCatalog((), execution_role=SkillExecutionRole.SESSION)
+    hook_root = projection_shaped_hook_root(case_root)
     context = provider.catalog_projection_context(
         catalog,
         workspace,
         backend=backend,
         durable_scripts_root=pkg_root(),
+        session_hook_root=hook_root,
     )
     manager = DefaultSessionSkillManager(
         provider,
@@ -1968,10 +1971,12 @@ def test_codex_managed_fixed_batch_smoke_conformance(
         assert isinstance(context, SemanticAdaptationContext)
         attestation = context.managed_join_attestation
         assert attestation is not None
+        fixed_batch_hook_root = projection_shaped_hook_root(tmp_path)
         backend.configure_managed_session_dir(
             generated_home,
             adaptation_context=context,
             route="interactive-parent",
+            plugin_dir=fixed_batch_hook_root.plugin_dir,
         )
         monkeypatch.setenv(CODEX_HOME_ENV_VAR, str(generated_home))
         monkeypatch.setenv(MANAGED_JOIN_PARENT_ID_ENV_VAR, parent_id)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -27,6 +28,7 @@ __all__ = [
     "RetiringCacheReadResult",
     "RetiringCacheState",
     "RetirementOutcome",
+    "SessionHookRoot",
     "is_canonical_plugin_artifact_digest",
     "is_canonical_plugin_artifact_incarnation_id",
     "new_plugin_artifact_incarnation_id",
@@ -390,6 +392,35 @@ class PluginLaunchBinding:
                 "plugin_artifact_binding_cleanup_failed",
                 exc_info=True,
             )
+
+
+@dataclass(frozen=True, slots=True)
+class SessionHookRoot:
+    """Leased plugin tree whose hooks one per-session backend home executes.
+
+    ``artifact_path`` is the leased identity path, the one retirement compares;
+    ``plugin_dir`` is its canonical form and the only path baked into hook
+    commands, so no re-pointable symlink sits between a session and its hooks.
+    """
+
+    artifact_path: Path
+    plugin_dir: Path
+    semantic_key: str
+
+    @property
+    def hooks_dir(self) -> Path:
+        return self.plugin_dir / "hooks"
+
+    @classmethod
+    def from_binding(cls, binding: PluginLaunchBinding) -> SessionHookRoot:
+        if binding.closed:
+            raise ValueError("session hook root requires an open plugin launch binding")
+        identity = binding.identity
+        return cls(
+            artifact_path=identity.managed_path,
+            plugin_dir=Path(os.path.realpath(identity.managed_path)),
+            semantic_key=identity.semantic_key,
+        )
 
 
 @dataclass(frozen=True, slots=True)

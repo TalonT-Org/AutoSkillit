@@ -30,6 +30,7 @@ from autoskillit.core import (
 )
 from autoskillit.execution.backends._codex_cmd_builders import CodexFlags
 from autoskillit.execution.backends._codex_config import _format_toml_value
+from autoskillit.execution.backends._codex_hooks import codex_session_hook_root_errors
 
 if TYPE_CHECKING:
     from autoskillit.execution.process._lifecycle.owned_group import OwnedProcessGroup
@@ -391,6 +392,9 @@ def _validate_generated_codex_home(
         config_bytes = config_path.read_bytes()
     except OSError as exc:
         return [f"Failed to read final Codex config: {type(exc).__name__}: {exc}"]
+    hook_root_errors = codex_session_hook_root_errors(config_path)
+    if hook_root_errors:
+        return hook_root_errors
     sqlite_override = f"sqlite_home={_format_toml_value(str(generated_home))}"
     command = (
         str(executable.path) if executable is not None else "codex",

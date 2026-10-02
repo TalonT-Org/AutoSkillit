@@ -25,6 +25,23 @@ from tests._hook_protocol_oracle import (
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 
 
+@pytest.mark.parametrize("event", ["PreCompact", "PostCompact"])
+def test_codex_compact_halt_preserves_system_message(event: str) -> None:
+    # codex-rs/hooks/src/events/compact.rs:260-278 records warnings before stopping.
+    verdict = codex_verdict(
+        event,
+        exit_code=0,
+        stdout=json.dumps(
+            {"continue": False, "stopReason": "stop now", "systemMessage": "limit reached"}
+        ),
+        stderr="",
+    )
+
+    assert verdict.status == STATUS_STOPPED
+    assert verdict.message == "stop now"
+    assert verdict.system_message == "limit reached"
+
+
 @pytest.mark.parametrize(
     (
         "event",

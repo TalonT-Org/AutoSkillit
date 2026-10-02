@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from tests._hook_protocol_oracle import EXPECTED_EFFECT
+from tests._hook_protocol_oracle import EXPECTED_EFFECT, STATUS_COMPLETED
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 
@@ -136,6 +136,15 @@ def test_render_block_uses_stderr_and_exit_two() -> None:
     assert emission.exit_code == 2
 
 
+@pytest.mark.parametrize("value", ["", "  "])
+def test_mcp_replacement_preserves_empty_strings(value: str) -> None:
+    emission = _emitter().render_mcp_tool_output(value)
+    verdict = _verdict("claude", "PostToolUse", emission)
+
+    assert verdict.status == STATUS_COMPLETED
+    assert verdict.mcp_output == value
+
+
 @pytest.mark.parametrize(
     ("render_name", "args", "kwargs"),
     [
@@ -145,7 +154,6 @@ def test_render_block_uses_stderr_and_exit_two() -> None:
         ("render_context", ("PreToolUse", " \n"), {}),
         ("render_allow_with_updated_input", ({},), {}),
         ("render_allow_with_updated_input", ({"command": "safe"},), {"context": "  "}),
-        ("render_mcp_tool_output", ("  ",), {}),
         ("render_notify", ("Stop", "\n"), {}),
         ("render_notify", ("Stop", "notice"), {"context": "context"}),
         ("render_halt", (" \t",), {"system_message": "message"}),

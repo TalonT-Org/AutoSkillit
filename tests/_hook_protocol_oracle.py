@@ -110,8 +110,8 @@ def _blocked(message: str | None) -> HookVerdict:
     return HookVerdict("blocked", message, (), None, None, None, None)
 
 
-def _stopped(message: str | None) -> HookVerdict:
-    return HookVerdict("stopped", message, (), None, None, None, None)
+def _stopped(message: str | None, *, system_message: str | None = None) -> HookVerdict:
+    return HookVerdict("stopped", message, (), None, None, system_message, None)
 
 
 def _failed(error: str) -> HookVerdict:
@@ -318,13 +318,17 @@ def _codex_subagent_stop(value: Mapping[str, Any]) -> HookVerdict:
 
 def _codex_pre_compact(value: Mapping[str, Any]) -> HookVerdict:
     if value.get("continue", True) is False:
-        return _stopped(_trimmed_text(value.get("stopReason")))
+        return _stopped(
+            _trimmed_text(value.get("stopReason")), system_message=_system_message(value)
+        )
     return _completed(system_message=_system_message(value))
 
 
 def _codex_post_compact(value: Mapping[str, Any]) -> HookVerdict:
     if value.get("continue", True) is False:
-        return _stopped(_trimmed_text(value.get("stopReason")))
+        return _stopped(
+            _trimmed_text(value.get("stopReason")), system_message=_system_message(value)
+        )
     return _completed(system_message=_system_message(value))
 
 

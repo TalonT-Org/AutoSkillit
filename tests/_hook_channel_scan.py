@@ -28,6 +28,7 @@ _EMITTER_MODULES = frozenset(
 )
 _HELPER_MODULES = frozenset(
     {
+        "_session_scope_authority",
         "_runtime._session_scope_authority",
         "autoskillit.hooks._runtime._session_scope_authority",
     }
@@ -55,7 +56,7 @@ class OutputSink:
 class _Bindings:
     wrappers: dict[str, str]
     modules: dict[str, str]
-    helper_names: set[str]
+    helper_names: dict[str, str]
     forbidden_names: set[str]
     sys_names: set[str]
     os_names: set[str]
@@ -80,7 +81,7 @@ def _bindings(tree: ast.AST) -> _Bindings:
     bindings = _Bindings(
         wrappers={},
         modules={},
-        helper_names=set(),
+        helper_names={},
         forbidden_names=set(),
         sys_names={"sys"},
         os_names={"os"},
@@ -123,7 +124,7 @@ def _bindings(tree: ast.AST) -> _Bindings:
                 for alias in node.names:
                     if alias.name == "*":
                         continue
-                    bindings.helper_names.add(alias.asname or alias.name)
+                    bindings.helper_names[alias.asname or alias.name] = alias.name
             elif module == "sys":
                 for alias in node.names:
                     local = alias.asname or alias.name
@@ -278,7 +279,7 @@ class _ChannelVisitor(ast.NodeVisitor):
             and isinstance(node.func, ast.Name)
             and node.func.id in self.bindings.helper_names
         ):
-            helper = node.func.id
+            helper = self.bindings.helper_names[node.func.id]
             for (path, name), channels in EMITTING_HELPERS.items():
                 if name == helper:
                     for inherited in channels:

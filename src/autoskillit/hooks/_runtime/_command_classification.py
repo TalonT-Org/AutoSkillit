@@ -192,7 +192,7 @@ def extract_patch_paths(command: str) -> list[str]:
             ("*** Update File: ", "*** Add File: ", "*** Delete File: ", "*** Move to: ")
         ):
             paths.append(line.partition(": ")[2].strip())
-    return paths
+    return [path for path in paths if path]
 
 
 def _shell_source(argv_tokens: Sequence[ArgvToken] | None, index: int) -> str | None:

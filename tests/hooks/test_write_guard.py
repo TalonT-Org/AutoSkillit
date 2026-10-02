@@ -357,12 +357,19 @@ class TestWriteGuardApplyPatch:
         parsed = json.loads(result)
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
 
-    def test_apply_patch_no_target_paths_denies(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
+    @pytest.mark.parametrize(
+        "patch_text",
+        ["some random text\nwithout any diff headers\n", "+++ b/\n", "*** Update File: \n"],
+    )
+    def test_apply_patch_no_target_paths_denies(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path, patch_text: str
+    ):
         allowed = tmp_path / "workspace"
         allowed.mkdir()
         monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", str(allowed) + "/")
-        patch_text = "some random text\nwithout any diff headers\n"
-        result = _run_hook(_build_apply_patch_event(patch_text))
+        event = _build_apply_patch_event(patch_text)
+        event["cwd"] = str(allowed)
+        result = _run_hook(event)
         parsed = json.loads(result)
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
         assert (

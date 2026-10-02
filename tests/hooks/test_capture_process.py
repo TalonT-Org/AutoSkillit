@@ -1142,7 +1142,7 @@ time.sleep(30)
         while time.monotonic() < deadline:
             try:
                 stat = Path(f"/proc/{leader_pid}/stat").read_text(encoding="utf-8")
-            except FileNotFoundError:
+            except (FileNotFoundError, ProcessLookupError):
                 break
             if stat.rpartition(")")[2].lstrip().startswith("Z"):
                 break

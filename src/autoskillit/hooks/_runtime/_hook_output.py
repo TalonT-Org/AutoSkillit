@@ -104,8 +104,6 @@ def render_allow_with_updated_input(
 
 
 def render_mcp_tool_output(value: object) -> HookEmission:
-    if isinstance(value, str):
-        _require_text(value)
     return _json_output(
         {"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedMCPToolOutput": value}}
     )

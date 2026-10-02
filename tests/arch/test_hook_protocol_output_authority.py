@@ -198,6 +198,16 @@ def test_literal_zero_exits_are_not_protocol_sinks() -> None:
             "output.add_context('PostToolUse', 'context')\n",
             id="package-module-import",
         ),
+        pytest.param(
+            "from _session_scope_authority import enforce_script_session_scope as enforce\n"
+            "enforce(__file__)\n",
+            id="inherited-helper-alias",
+        ),
+        pytest.param(
+            "import _session_scope_authority as scope\n"
+            "scope.enforce_script_session_scope(__file__)\n",
+            id="inherited-helper-module-alias",
+        ),
     ],
 )
 def test_channel_scanner_resolves_emitter_import_forms(source: str) -> None:
@@ -221,6 +231,10 @@ def test_channel_scanner_resolves_emitter_import_forms(source: str) -> None:
             "from _hook_output import render_block\nrender_block('reason')\n", id="render-call"
         ),
         pytest.param("import _hook_output as output\noutput.emit(emission)\n", id="emit-call"),
+        pytest.param(
+            "import _hook_output as output\noutput.unreviewed_emit('reason')\n",
+            id="unknown-emitter-member",
+        ),
     ],
 )
 def test_channel_scanner_fails_closed_on_unresolved_emission(source: str) -> None:

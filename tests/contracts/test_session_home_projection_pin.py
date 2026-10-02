@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import time
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -101,6 +102,38 @@ def test_referrer_pin_defers_reclaim_while_the_home_exists(
     assert owner.try_reclaim(record, deadline) is RetirementOutcome.RECLAIMED
     assert not identity.managed_path.exists()
     assert not referrer_file.exists()
+
+
+def test_unreadable_referrer_directory_defers_reclaim(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    identity = _closed_projection_identity(tmp_path)
+    session_home = tmp_path / "session-home"
+    session_home.mkdir()
+    record_projected_artifact_referrer(identity.managed_path, session_home)
+
+    owner = ProjectedPluginRetirementOwner(identity.managed_path.parent, home=managed_home())
+    deadline = datetime.now(UTC)
+    append_result = owner.enqueue_retirement(identity, deadline)
+    assert append_result is not None
+    record = next(
+        item for item in read_retiring_cache().records if item.record_id == append_result.record_id
+    )
+    referrer_dir = projected_artifact_referrer_dir(identity.managed_path)
+    original_iterdir = Path.iterdir
+
+    def _unreadable_iterdir(path: Path) -> Iterator[Path]:
+        if path == referrer_dir:
+            raise PermissionError("referrer directory is unreadable")
+        return original_iterdir(path)
+
+    monkeypatch.setattr(Path, "iterdir", _unreadable_iterdir)
+
+    assert live_projected_artifact_referrers(identity.managed_path) == (referrer_dir,)
+    assert owner.try_reclaim(record, deadline) is RetirementOutcome.DEFERRED_CONTENDED
+    assert identity.managed_path.is_dir()
 
 
 def test_crashed_launcher_home_pins_projection_until_cleanup_stale(

@@ -260,50 +260,55 @@ def _prepare_direct_skill_dispatch(
     normalized_cwd = Path(cwd).resolve()
     backend = tool_ctx.backend
     hook_root_scope = ExitStack()
+    dispatch: DirectSkillDispatch | None = None
     session_id = f"direct-{uuid4().hex[:12]}"
     try:
-        projection_context = SkillProjectionContext(
-            cwd=normalized_cwd,
-            invocation=invocation,
-            backend=backend,
-            conventions=backend.conventions if backend is not None else None,
-            substitutions={"{{AUTOSKILLIT_TEMP}}": str(normalized_cwd / ".autoskillit" / "temp")},
-            gating=False,
-            adaptation_context=None,
-            session_hook_root=hook_root_scope.enter_context(
-                session_hook_root_scope(tool_ctx, backend)
-            ),
-        )
-        add_dir = tool_ctx.session_skill_manager.materialize_invocation(
-            session_id,
-            invocation,
-            projection_context,
-        )
-    except (OSError, RuntimeError, ValueError, SkillContractError) as exc:
         try:
+            projection_context = SkillProjectionContext(
+                cwd=normalized_cwd,
+                invocation=invocation,
+                backend=backend,
+                conventions=backend.conventions if backend is not None else None,
+                substitutions={
+                    "{{AUTOSKILLIT_TEMP}}": str(normalized_cwd / ".autoskillit" / "temp")
+                },
+                gating=False,
+                adaptation_context=None,
+                session_hook_root=hook_root_scope.enter_context(
+                    session_hook_root_scope(tool_ctx, backend)
+                ),
+            )
+            add_dir = tool_ctx.session_skill_manager.materialize_invocation(
+                session_id,
+                invocation,
+                projection_context,
+            )
+        except (OSError, RuntimeError, ValueError, SkillContractError) as exc:
             tool_ctx.session_skill_manager.cleanup_session(session_id)
-        finally:
+            return None, SkillResult.crashed(
+                exception=exc,
+                skill_command=skill_command,
+                order_id=order_id,
+            ).to_json()
+        resolved_command = render_target_skill_command(
+            skill_command,
+            invocation.root.source_ref or invocation.root.source,
+            backend.conventions if backend is not None else None,
+        )
+        capability_contract = build_skill_projection_binding(
+            projection_context,
+            artifact_paths=(add_dir.path,),
+        )
+        dispatch = DirectSkillDispatch(
+            add_dirs=(add_dir,),
+            session_id=session_id,
+            capability_contract=capability_contract,
+            resolved_command=resolved_command,
+            invocation=invocation,
+            projection_context=projection_context,
+            hook_root_scope=hook_root_scope,
+        )
+        return dispatch, None
+    finally:
+        if dispatch is None:
             hook_root_scope.close()
-        return None, SkillResult.crashed(
-            exception=exc,
-            skill_command=skill_command,
-            order_id=order_id,
-        ).to_json()
-    resolved_command = render_target_skill_command(
-        skill_command,
-        invocation.root.source_ref or invocation.root.source,
-        backend.conventions if backend is not None else None,
-    )
-    capability_contract = build_skill_projection_binding(
-        projection_context,
-        artifact_paths=(add_dir.path,),
-    )
-    return DirectSkillDispatch(
-        add_dirs=(add_dir,),
-        session_id=session_id,
-        capability_contract=capability_contract,
-        resolved_command=resolved_command,
-        invocation=invocation,
-        projection_context=projection_context,
-        hook_root_scope=hook_root_scope,
-    ), None

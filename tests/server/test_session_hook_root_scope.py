@@ -19,6 +19,7 @@ import pytest
 from autoskillit.core import (
     ManagedWorkerPermit,
     SessionHookRoot,
+    SkillContractError,
     SkillExecutionRole,
     SkillSemanticAdaptationResult,
     SkillSource,
@@ -494,6 +495,43 @@ def test_direct_dispatch_releases_session_hook_root_on_materialization_failure(
 
     assert dispatch is None
     assert error is not None
+    assert len(authority.bindings) == 1
+    assert authority.bindings[0].closed
+
+
+@pytest.mark.parametrize("failure_phase", ["materialization", "dispatch-construction"])
+def test_direct_dispatch_releases_session_hook_root_before_ownership_transfer(
+    tool_ctx: Any,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure_phase: str,
+) -> None:
+    from autoskillit.server.tools import _backend_compat
+
+    tool_ctx.backend = CodexBackend()
+    _install_direct_dispatch_skill(tool_ctx, name="direct-skill")
+    _install_direct_dispatch_session_manager(tool_ctx, tmp_path)
+    project_root = Path(tool_ctx.project_dir).resolve()
+    authority = FakePluginArtifactAuthority(
+        project_root / ".autoskillit" / "plugin-projections" / "direct-dispatch"
+    )
+    _seed_plugin_dispatcher(authority.plugin_dir)
+    tool_ctx.plugin_authority = authority
+
+    if failure_phase == "materialization":
+        expected_error = KeyboardInterrupt
+
+        def _interrupt(*args: object, **kwargs: object) -> None:
+            raise KeyboardInterrupt("forced materialization interruption")
+
+        monkeypatch.setattr(tool_ctx.session_skill_manager, "materialize_invocation", _interrupt)
+    else:
+        expected_error = SkillContractError
+        monkeypatch.setattr(_backend_compat, "render_target_skill_command", lambda *args: "")
+
+    with pytest.raises(expected_error):
+        _prepare_direct_skill_dispatch("/direct-skill", str(project_root), tool_ctx)
+
     assert len(authority.bindings) == 1
     assert authority.bindings[0].closed
 

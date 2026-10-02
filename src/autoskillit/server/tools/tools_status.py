@@ -468,16 +468,21 @@ def _read_quota_events(log_root: Path, n: int) -> tuple[list[dict], int]:
 @_cancellation_shield()
 @track_response_size("get_quota_events")
 async def get_quota_events(n: int = 50) -> str:
-    """Return the most recent quota guard events from the diagnostic log.
+    """Return the most recent events from the quota diagnostic log.
 
-    Events are written by the quota_guard.py PreToolUse hook each time it
-    approves or blocks a run_skill call. Use this to diagnose quota throttling
-    during long pipeline runs.
+    Hooks append these rows around run_skill calls. They are diagnostics only:
+    the server owns quota admission, and no hook approves, blocks, or delays a
+    call. quota_guard (PreToolUse) writes ``quota_observation``, quota_post_hook
+    (PostToolUse) writes ``post_quota_observation``, and skill_load_post_hook
+    writes ``skill_load_backend_bypass`` and ``skill_load_binding_unresolved``.
+    Use this to diagnose quota throttling during long pipeline runs.
 
     Returns JSON with:
-      - events: list of {ts, event, effective_threshold?, window_name?,
-                         utilization?, sleep_seconds?, resets_at?, cache_path?}
-                         (most recent first)
+      - events: list of {ts, event, cache_path?, cache_state?,
+                         effective_threshold?, window_name?, utilization?,
+                         constraint_observed?, unknown_reset_observed?,
+                         resets_at?, tool_name?, backend?, session_id?,
+                         skill_name?, binding_error?} (most recent first)
       - total_count: int  (total events in the log, before limiting to n)
 
     Args:

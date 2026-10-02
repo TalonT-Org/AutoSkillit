@@ -193,6 +193,18 @@ def test_stale_stub_reports_symbols_and_remedy(make_core) -> None:
     assert gen.main(["--check"]) == 0
 
 
+def test_invalid_stub_syntax_is_a_stale_violation(make_core, capsys) -> None:
+    gen = make_core({"mod.py": '__all__ = ["A"]\n'}, (".mod",))
+    gen.STUB_PATH.write_text("from .mod import (\n")
+
+    [violation] = gen.check()
+    assert f"{gen.STUB_PATH} is stale:" in violation
+    assert "invalid Python syntax at line 1:" in violation
+    assert "task sync-core-stub" in violation
+    assert gen.main(["--check"]) == 1
+    assert capsys.readouterr().err == violation + "\n"
+
+
 def test_order_only_drift_is_reported(make_core) -> None:
     gen = make_core({"mod.py": '__all__ = ["A", "B"]\n'}, (".mod",))
     lines = gen.render_stub().splitlines(keepends=True)

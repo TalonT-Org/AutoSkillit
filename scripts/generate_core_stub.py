@@ -283,7 +283,15 @@ def _names(text: str) -> set[str]:
 
 
 def _stale_report(rendered: str, on_disk: str) -> str:
-    rendered_names, disk_names = _names(rendered), _names(on_disk)
+    rendered_names = _names(rendered)
+    try:
+        disk_names = _names(on_disk)
+    except SyntaxError as exc:
+        return (
+            f"{STUB_PATH} is stale:\n"
+            f"  invalid Python syntax at line {exc.lineno}: {exc.msg}\n"
+            f"Regenerate with: {REGENERATE_COMMAND}"
+        )
     lines = [f"{STUB_PATH} is stale:"]
     lines += [f"  + {name}" for name in sorted(rendered_names - disk_names)]
     lines += [f"  - {name}" for name in sorted(disk_names - rendered_names)]

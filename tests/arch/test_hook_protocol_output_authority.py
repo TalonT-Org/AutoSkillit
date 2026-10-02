@@ -205,6 +205,7 @@ def test_literal_zero_exits_are_not_protocol_sinks() -> None:
         ),
         pytest.param(
             "import _session_scope_authority as scope\n"
+            "values = scope.SESSION_SCOPE_VALUES\n"
             "scope.enforce_script_session_scope(__file__)\n",
             id="inherited-helper-module-alias",
         ),

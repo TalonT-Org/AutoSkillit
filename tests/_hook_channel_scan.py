@@ -313,6 +313,17 @@ class _ChannelVisitor(ast.NodeVisitor):
             while isinstance(parent, ast.Attribute) and parent.value is current:
                 current = parent
                 parent = self._parents.get(parent)
+            module = _module_target(current, self.bindings)
+            owner = (
+                _module_target(current.value, self.bindings)
+                if isinstance(current, ast.Attribute)
+                else module
+            )
+            if not (
+                (module and _is_emitter_module(module[1]))
+                or (owner and _is_emitter_module(owner[1]))
+            ):
+                return
             if not (isinstance(parent, ast.Call) and parent.func is current):
                 raise ChannelScanError(
                     f"emitter module {node.id} is referenced outside a direct call"

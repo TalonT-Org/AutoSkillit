@@ -549,7 +549,9 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_execution_identity": frozenset(
         {"core", "execution", "server", "cli", "fleet", "smoke_utils"}
     ),
-    "_type_exploration": frozenset({"core", "exploration", "pipeline", "server"}),
+    "_type_exploration": frozenset(
+        {"cli", "core", "execution", "exploration", "pipeline", "server", "workspace"}
+    ),
     "_type_backend": frozenset(
         {"core", "config", "execution", "cli", "migration", "recipe", "server", "workspace"}
     ),

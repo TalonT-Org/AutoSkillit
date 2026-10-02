@@ -363,12 +363,12 @@ def test_context_admission_private_codec_and_producer_surface_identity() -> None
     envelope = import_module(
         "autoskillit.core.types.context_admission._type_context_admission_persistence_envelope"
     )
-    reducer = import_module("autoskillit.core.context_admission")
+    types = import_module("autoskillit.core.types")
     enums = import_module("autoskillit.core.types.foundation._type_enums_context_admission")
 
     for name in ("_ContractValue", "_encode", "_decode"):
         assert getattr(envelope, name) is getattr(base, name), name
-    assert enums.ProducerSurface is reducer.ProducerSurface
+    assert enums.ProducerSurface is types.ProducerSurface
 
 
 def test_context_admission_registered_types_resolve_annotations_in_owning_shards() -> None:

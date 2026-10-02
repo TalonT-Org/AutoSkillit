@@ -253,6 +253,7 @@ def _seed_projected_compacted_store(project: Path) -> None:
     anchor = open_project_anchor(str(project))
     root = open_capture_root(anchor, create=True)
     try:
+        CaptureLifecycleStore.from_open_authorities(anchor, root, lock_wait=HOT_PATH_LOCK_WAIT)
         capacity = CaptureCapacitySpec()
         nonce_size = capture_ledger.MAX_FRAME_BYTES - 2 * 1024
         record_count = capacity.compaction_low_bytes // nonce_size + 2

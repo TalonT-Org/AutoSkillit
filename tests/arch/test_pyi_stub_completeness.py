@@ -9,11 +9,10 @@ the generator's output.
 from __future__ import annotations
 
 import ast
-import importlib.util
-from types import ModuleType
 
 import pytest
 
+from tests._helpers import load_core_stub_generator
 from tests.arch._helpers import SRC_ROOT
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
@@ -41,14 +40,5 @@ def test_cook_lifecycle_contracts_are_explicitly_exported_by_stub() -> None:
 @pytest.mark.medium
 def test_core_stub_matches_generator() -> None:
     """core/__init__.pyi must equal the stub rendered from source-module __all__."""
-    violations = _load_generator().check()
+    violations = load_core_stub_generator().check()
     assert violations == [], "\n".join(violations)
-
-
-def _load_generator() -> ModuleType:
-    script = SRC_ROOT.parent.parent / "scripts" / "generate_core_stub.py"
-    spec = importlib.util.spec_from_file_location("generate_core_stub", script)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module

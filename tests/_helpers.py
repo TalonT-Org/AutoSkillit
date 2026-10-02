@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import ast
 import importlib
+import importlib.util
 import os
 import re
 import shutil
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from types import ModuleType
 from typing import TypeVar
 from unittest.mock import MagicMock
 
@@ -34,6 +36,16 @@ T = TypeVar("T")
 # ``MagicMock`` is included because ``Path(...)`` accepts it via ``__fspath__``;
 # the explicit ``isinstance`` guard is what keeps the rejection test honest.
 INVALID_PATH_INPUTS: tuple[object, ...] = (None, 0, b"", object(), MagicMock())
+
+
+def load_core_stub_generator() -> ModuleType:
+    """Load a fresh generator module so callers can independently patch its paths."""
+    script = Path(__file__).resolve().parent.parent / "scripts" / "generate_core_stub.py"
+    spec = importlib.util.spec_from_file_location("generate_core_stub", script)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def delete_once_then_delegate(

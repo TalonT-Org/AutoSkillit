@@ -3,33 +3,21 @@
 from __future__ import annotations
 
 import ast
-import importlib.util
 import subprocess
 from pathlib import Path
 from types import ModuleType
 
 import pytest
 
-from autoskillit.core.paths import pkg_root
+from tests._helpers import load_core_stub_generator
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
-
-
-def _load_generator() -> ModuleType:
-    spec = importlib.util.spec_from_file_location(
-        "generate_core_stub",
-        pkg_root().parent.parent / "scripts" / "generate_core_stub.py",
-    )
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 @pytest.fixture
 def make_core(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Build a synthetic core package under tmp_path and point the generator at it."""
-    module = _load_generator()
+    module = load_core_stub_generator()
     assert module.RUFF.is_file(), f"no locked ruff at {module.RUFF}"
 
     def _make(

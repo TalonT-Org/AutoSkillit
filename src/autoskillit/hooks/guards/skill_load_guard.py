@@ -11,8 +11,9 @@ the Skill tool first.
 
 Bypass conditions (early-exit before the gate):
 - ``agent_id`` present in hook payload — subagent exemption
-- ``AUTOSKILLIT_AGENT_BACKEND == 'codex'``: codex backend does not fire PreToolUse
-  for apply_patch or MCP calls, making this guard structurally inert. Exit 0.
+- ``AUTOSKILLIT_AGENT_BACKEND == 'codex'``: explicit backend bypass. Codex fires
+  PreToolUse for apply_patch (aliased by Write|Edit matchers) and MCP calls;
+  this guard exits 0 for Codex before checking the skill-load gate.
 - ``AUTOSKILLIT_APPLICABLE_GUARDS`` does not contain the guard's filename stem —
   the guard is not applicable to this backend
 

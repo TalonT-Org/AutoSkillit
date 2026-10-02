@@ -34,6 +34,7 @@ from autoskillit.execution.backends._codex_discovery import CODEX_MANAGED_HOME_R
 from autoskillit.execution.backends._codex_hooks import (
     managed_codex_guard_set,
     managed_codex_mcp_tools,
+    managed_codex_route_for_launch_context,
     sync_managed_codex_hooks_to_config,
 )
 
@@ -47,10 +48,12 @@ def prepare_managed_codex_catalog(
     backend: CodexBackend,
     configured_model: str,
     *,
+    launch_context: str,
     scratch_root: Path,
     deadline: float,
 ) -> tuple[str, str, CodexCatalogProjection]:
     """Acquire and project the installed bundled catalog for managed issuance."""
+    managed_codex_route_for_launch_context(launch_context)
     if not backend.capabilities.managed_fixed_batch_route_capable:
         raise ValueError("backend has no managed fixed-batch route")
     model = backend.translate_model(configured_model)
@@ -65,7 +68,11 @@ def prepare_managed_codex_catalog(
         environment=os.environ,
         deadline=deadline,
     )
-    effort = CODEX_EFFORT_MAPPING.get(strip_context_window_suffix(configured_model))
+    effort = (
+        "high"
+        if launch_context == "interactive" and model == "gpt-6-sol"
+        else CODEX_EFFORT_MAPPING.get(strip_context_window_suffix(configured_model))
+    )
     if effort is None:
         effort = resolve_codex_catalog_effort(raw_catalog, expected_model=model)
     projection = project_codex_catalog(

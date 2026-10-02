@@ -642,6 +642,7 @@ class CodexCommandMixin(BackendCmdBuilderBase):
             config_overrides.append(
                 f"developer_instructions={_format_toml_value(developer_instructions)}",
             )
+        config_overrides.append('service_tier="default"')
         if generated_home is None and (
             plugin_binding is None or plugin_binding.load_mode is not PluginLoadMode.PROJECTED_HOME
         ):

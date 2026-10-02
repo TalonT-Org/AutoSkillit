@@ -127,7 +127,9 @@ class _RecordingSessionManager:
 
 
 @pytest.mark.anyio
-async def test_run_skill_fresh_materialization_receives_session_hook_root(tmp_path: Path) -> None:
+async def test_run_skill_fresh_materialization_receives_session_hook_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     manager = _RecordingSessionManager()
     tool_ctx = SimpleNamespace(
         session_skill_manager=manager,
@@ -149,12 +151,13 @@ async def test_run_skill_fresh_materialization_receives_session_hook_root(tmp_pa
         semantic_key="fresh-key",
     )
 
-    # Later phases (contract building, native-shell lineage) need machinery this
-    # focused test does not model; only the materialization call is asserted.
-    try:
-        await _prepare_owned_dispatch_session(state, tmp_path, hook_root)
-    except Exception:
-        pass
+    terminal = "stop-after-materialization"
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution._run_skill_session._extend_closure_write_scope",
+        lambda _: terminal,
+    )
+
+    assert await _prepare_owned_dispatch_session(state, tmp_path, hook_root) == terminal
 
     assert manager.materialize_calls
     assert manager.materialize_calls[0].session_hook_root is hook_root
@@ -162,7 +165,7 @@ async def test_run_skill_fresh_materialization_receives_session_hook_root(tmp_pa
 
 @pytest.mark.anyio
 async def test_run_skill_restore_materialization_receives_session_hook_root(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     manager = _RecordingSessionManager()
     tool_ctx = SimpleNamespace(
@@ -193,10 +196,13 @@ async def test_run_skill_restore_materialization_receives_session_hook_root(
         semantic_key="restore-key",
     )
 
-    try:
-        await _prepare_owned_dispatch_session(state, tmp_path, hook_root)
-    except Exception:
-        pass
+    terminal = "stop-after-materialization"
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution._run_skill_session._extend_closure_write_scope",
+        lambda _: terminal,
+    )
+
+    assert await _prepare_owned_dispatch_session(state, tmp_path, hook_root) == terminal
 
     assert manager.restore_calls
     assert manager.restore_calls[0].session_hook_root is hook_root

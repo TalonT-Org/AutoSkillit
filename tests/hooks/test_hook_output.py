@@ -10,7 +10,11 @@ from typing import Any
 
 import pytest
 
-from tests._hook_protocol_oracle import EXPECTED_EFFECT, STATUS_COMPLETED
+from tests._hook_protocol_oracle import (
+    EXPECTED_EFFECT,
+    KNOWN_UNSUPPORTED_CHANNELS,
+    STATUS_COMPLETED,
+)
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 
@@ -35,12 +39,6 @@ _EXPECTED_EMITTER_CHANNELS = {
     "notify": "notify",
     "halt_session": "halt",
 }
-_KNOWN_UNSUPPORTED = frozenset(
-    {
-        ("codex", "rewrite_mcp_output", "PostToolUse"),
-        ("claude", "halt", "PreCompact"),
-    }
-)
 
 
 def _emitter() -> Any:
@@ -104,7 +102,7 @@ def test_channel_renderings_have_the_declared_backend_effect() -> None:
                     stdout=emission.stdout,
                     stderr=emission.stderr,
                 )
-                unsupported = (backend, channel, event) in _KNOWN_UNSUPPORTED
+                unsupported = (backend, channel, event) in KNOWN_UNSUPPORTED_CHANNELS
                 if unsupported:
                     assert not EXPECTED_EFFECT[channel](verdict)
                 else:
@@ -122,7 +120,7 @@ def test_codex_oracle_rejects_events_outside_its_domain() -> None:
 
 def test_known_unsupported_channels_do_not_achieve_their_effect() -> None:
     emitter = _emitter()
-    for backend, channel, event in _KNOWN_UNSUPPORTED:
+    for backend, channel, event in KNOWN_UNSUPPORTED_CHANNELS:
         emission = _render(emitter, channel, event)
         verdict = _verdict(backend, event, emission)
         assert not EXPECTED_EFFECT[channel](verdict)

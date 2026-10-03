@@ -73,6 +73,13 @@ STATUS_BLOCKED = "blocked"
 STATUS_FAILED = "failed"
 STATUS_STOPPED = "stopped"
 
+KNOWN_UNSUPPORTED_CHANNELS = frozenset(
+    {
+        ("codex", "rewrite_mcp_output", "PostToolUse"),
+        ("claude", "halt", "PreCompact"),
+    }
+)
+
 EXPECTED_EFFECT: Mapping[str, Callable[[HookVerdict], bool]] = {
     "deny": lambda verdict: verdict.status == STATUS_BLOCKED and bool(verdict.message),
     "block": lambda verdict: (

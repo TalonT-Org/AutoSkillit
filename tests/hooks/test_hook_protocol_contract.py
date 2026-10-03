@@ -16,6 +16,7 @@ from tests._hook_channel_scan import (
     scan_source_sinks,
     validate_emitting_helper_inventory,
 )
+from tests._hook_protocol_oracle import KNOWN_UNSUPPORTED_CHANNELS
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 
@@ -25,12 +26,6 @@ _CODEX_ROUTES: tuple[tuple[str, str | None], ...] = (
     ("parent", "parent"),
     ("leaf", "leaf"),
     ("interactive-parent", "interactive-parent"),
-)
-_KNOWN_UNSUPPORTED = frozenset(
-    {
-        ("codex", "rewrite_mcp_output", "PostToolUse"),
-        ("claude", "halt", "PreCompact"),
-    }
 )
 
 _CODEX_BASE = frozenset(
@@ -198,7 +193,7 @@ def test_emitted_hook_channels_take_effect() -> None:
                         stdout=emission.stdout,
                         stderr=emission.stderr,
                     )
-                    if (backend, channel, event) in _KNOWN_UNSUPPORTED:
+                    if (backend, channel, event) in KNOWN_UNSUPPORTED_CHANNELS:
                         assert not EXPECTED_EFFECT[channel](verdict)
                         continue
                     assert EXPECTED_EFFECT[channel](verdict), (
@@ -288,7 +283,7 @@ def test_known_unsupported_channels_are_declared() -> None:
         for script in hook_def.scripts:
             for channel, events in scan_script_channels(script).items():
                 event = hook_def.event_type
-                if (backend, channel, event) in _KNOWN_UNSUPPORTED and (
+                if (backend, channel, event) in KNOWN_UNSUPPORTED_CHANNELS and (
                     None in events or event in events
                 ):
                     violations.append((backend, channel, event, script))

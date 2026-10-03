@@ -11,7 +11,15 @@ from typing import Any
 
 import regex as re
 
-from autoskillit.core import CANONICAL_ACCOUNTING_FIELDS, ModelTotalEntry, TokenMeasure, get_logger
+from autoskillit.core import (
+    CANONICAL_ACCOUNTING_FIELDS,
+    MeasureRecord,
+    ModelTotalEntry,
+    SourcePair,
+    TokenMeasure,
+    aggregate_measures,
+    get_logger,
+)
 from autoskillit.pipeline.audit import _iter_session_log_entries
 
 logger = get_logger(__name__)
@@ -29,15 +37,6 @@ def canonical_step_name(step_name: str) -> str:
 def _measure(raw: object, *, legacy: bool = False) -> TokenMeasure:
     """Decode one live or durable measure through the canonical helper."""
     return TokenMeasure.measure_from_raw(raw, legacy=legacy)
-
-
-def _combine(left: TokenMeasure, right: TokenMeasure) -> TokenMeasure:
-    """Combine evidence conservatively when a partial observation is incompatible."""
-    return TokenMeasure.combine_or_unknown(left, right)
-
-
-def _maximum(left: TokenMeasure, right: TokenMeasure) -> TokenMeasure:
-    return TokenMeasure.maximum_or_unknown(left, right)
 
 
 def _primary_model(token_usage: dict[str, Any]) -> str:
@@ -90,32 +89,34 @@ class TokenEntry:
     peak_context: TokenMeasure = field(default_factory=TokenMeasure.unknown)
     turn_count: int = 0
 
+    def _reduce(self, incoming: dict[str, TokenMeasure], *, initialize: bool = False) -> None:
+        pair = SourcePair(self.backend, self.provider_used)
+        fields = (*_TOKEN_FIELDS, "peak_context")
+        records = [MeasureRecord(pair, incoming)]
+        if not initialize:
+            records.insert(0, MeasureRecord(pair, {name: getattr(self, name) for name in fields}))
+        result = aggregate_measures(records, fields)
+        for name in fields:
+            setattr(self, name, result.fields[name].value)
+
     def add(self, token_usage: dict[str, Any], *, legacy: bool = False) -> None:
+        incoming = {}
         for name in _TOKEN_FIELDS:
             value = token_usage.get(name)
             if value is None and name == "cache_write_tokens":
                 value = token_usage.get("cache_creation_input_tokens")
             if value is None and name == "cache_read_tokens":
                 value = token_usage.get("cache_read_input_tokens")
-            parsed = _measure(value, legacy=legacy)
-            setattr(
-                self,
-                name,
-                parsed if self.invocation_count == 0 else _combine(getattr(self, name), parsed),
-            )
-        peak = _measure(token_usage.get("peak_context"), legacy=legacy)
-        self.peak_context = (
-            peak if self.invocation_count == 0 else _maximum(self.peak_context, peak)
-        )
+            incoming[name] = _measure(value, legacy=legacy)
+        incoming["peak_context"] = _measure(token_usage.get("peak_context"), legacy=legacy)
+        self._reduce(incoming, initialize=self.invocation_count == 0)
 
     def merge(self, other: TokenEntry) -> None:
         if (self.backend, self.provider_used) != (other.backend, other.provider_used):
             raise ValueError("Token entries from different source pairs cannot be merged")
         if other.model and not self.model:
             self.model = other.model
-        for name in (*_TOKEN_FIELDS, "peak_context"):
-            operation = _maximum if name == "peak_context" else _combine
-            setattr(self, name, operation(getattr(self, name), getattr(other, name)))
+        self._reduce({name: getattr(other, name) for name in (*_TOKEN_FIELDS, "peak_context")})
         self.invocation_count += other.invocation_count
         self.elapsed_seconds += other.elapsed_seconds
         self.loc_insertions += other.loc_insertions

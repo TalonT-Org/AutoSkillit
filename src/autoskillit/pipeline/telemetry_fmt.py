@@ -5,10 +5,9 @@ the PostToolUse hook delegate formatting to this module. The hook's inline forma
 (pretty_output.py) cannot import this module (stdlib-only constraint), so it
 maintains an output-equivalent inline implementation guarded by test 1g.
 
-TokenMeasureState taxonomy literals are imported from the canonical
-TokenMeasureState StrEnum in core.types; the hook layer's stdlib-only
-mirror in hooks/_runtime/_token_measure.py must redeclare them as
-string literals (enforced by tests/arch/test_hooks_are_stdlib_only.py).
+Token measures and reductions share the stdlib authority in
+_measure_aggregation.py, imported through core by packaged consumers and by
+bare name by standalone hooks. Markdown rendering remains local here.
 """
 
 from __future__ import annotations

@@ -68,6 +68,8 @@ def prepare_managed_codex_catalog(
         environment=os.environ,
         deadline=deadline,
     )
+    # Cook defaults GPT-6-Sol to high effort (#5218); direct launches keep the
+    # delegated/headless model mapping.
     effort = (
         "high"
         if launch_context == "interactive" and model == "gpt-6-sol"

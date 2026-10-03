@@ -30,13 +30,13 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 if TYPE_CHECKING:
-    from autoskillit.hooks._runtime._github_mutation_analysis import (
+    from .._runtime._github_mutation_analysis import (
         GitHubMutationKind,
         GitHubMutationStatus,
         analyze_github_mutations,
     )
-    from autoskillit.hooks._runtime._hook_output import deny_tool_use
-    from autoskillit.hooks._runtime._hook_payload import (
+    from .._runtime._hook_output import deny_tool_use
+    from .._runtime._hook_payload import (
         ParsedHookCommand,
         PayloadAnomaly,
         parse_hook_command,

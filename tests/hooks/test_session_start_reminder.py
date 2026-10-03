@@ -9,9 +9,7 @@ from pathlib import Path
 import pytest
 
 from tests._hook_protocol_oracle import (
-    STATUS_COMPLETED,
-    claude_verdict,
-    codex_verdict,
+    assert_both_protocols_context,
     run_hook,
 )
 
@@ -105,16 +103,13 @@ def test_session_start_source_and_marker_matrix(
     assert "not automatically restored" not in context
     assert "RESUME REMINDER" not in context
 
-    for verdict_fn in (codex_verdict, claude_verdict):
-        verdict = verdict_fn(
-            payload["hook_event_name"],
-            exit_code=emission.exit_code,
-            stdout=emission.stdout,
-            stderr=emission.stderr,
-        )
-        assert verdict.status == STATUS_COMPLETED
-        assert len(verdict.contexts) == 1
-        assert verdict.contexts[0] == context
+    assert_both_protocols_context(
+        payload["hook_event_name"],
+        exit_code=emission.exit_code,
+        stdout=emission.stdout,
+        stderr=emission.stderr,
+        expected_context=context,
+    )
 
 
 @pytest.mark.parametrize(

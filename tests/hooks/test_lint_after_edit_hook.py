@@ -14,9 +14,7 @@ from unittest.mock import patch
 import pytest
 
 from tests._hook_protocol_oracle import (
-    STATUS_COMPLETED,
-    claude_verdict,
-    codex_verdict,
+    assert_both_protocols_context,
 )
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
@@ -66,18 +64,6 @@ def _run_hook(
         except SystemExit as exc:
             exit_code = int(exc.code) if exc.code is not None else 0
     return buf.getvalue(), exit_code
-
-
-def _assert_both_protocols_complete(
-    event: dict, stdout: str, exit_code: int, context: str
-) -> None:
-    for verdict_fn in (codex_verdict, claude_verdict):
-        verdict = verdict_fn(
-            event["hook_event_name"], exit_code=exit_code, stdout=stdout, stderr=""
-        )
-        assert verdict.status == STATUS_COMPLETED
-        assert len(verdict.contexts) == 1
-        assert verdict.contexts[0] == context
 
 
 class TestScopingGates:
@@ -259,7 +245,9 @@ class TestLintBehavior:
         context = parsed["hookSpecificOutput"]["additionalContext"]
         assert LINT_AUTOFIX_TRIGGER in context
         assert "re-read" in context.lower()
-        _assert_both_protocols_complete(_build_event("Edit", str(f)), out, code, context)
+        assert_both_protocols_context(
+            "PostToolUse", exit_code=code, stdout=out, stderr="", expected_context=context
+        )
 
     def test_autofix_resorts_pyi_stub_imports(self, tmp_path, monkeypatch):
         (tmp_path / "pyproject.toml").write_text('[tool.ruff.lint]\nselect = ["I"]\n')
@@ -287,7 +275,9 @@ class TestLintBehavior:
         assert out != "", "the hook must lint .pyi stubs, not skip them"
         context = json.loads(out)["hookSpecificOutput"]["additionalContext"]
         assert LINT_AUTOFIX_TRIGGER in context
-        _assert_both_protocols_complete(_build_event("Edit", str(stub)), out, code, context)
+        assert_both_protocols_context(
+            "PostToolUse", exit_code=code, stdout=out, stderr="", expected_context=context
+        )
         sorted_stub = stub.read_text()
         assert sorted_stub.index("import Beta") < sorted_stub.index("import launch_digest")
 
@@ -335,7 +325,9 @@ class TestLintBehavior:
         parsed = json.loads(out)
         context = parsed["hookSpecificOutput"]["additionalContext"]
         assert LINT_ERROR_TRIGGER in context
-        _assert_both_protocols_complete(_build_event("Edit", str(f)), out, code, context)
+        assert_both_protocols_context(
+            "PostToolUse", exit_code=code, stdout=out, stderr="", expected_context=context
+        )
 
     def test_autofix_ignore_flag_is_narrow(self):
         """The --ignore flag in the ruff check --fix call must be 'F4', not a real rule code.

@@ -18,7 +18,9 @@ from autoskillit.hooks._session_binding import (
     SESSION_BINDING_SCHEMA_VERSION,
     UNREADABLE_PRIOR_BINDING_ENTRY,
 )
-from tests._hook_protocol_oracle import STATUS_COMPLETED, claude_verdict, codex_verdict
+from tests._hook_protocol_oracle import (
+    assert_both_protocols_context,
+)
 from tests.conftest import production_interpreter_env
 from tests.hooks._session_binding_helpers import (
     copy_projected_hook,
@@ -124,12 +126,12 @@ def _assert_post_tool_context(event: dict, stdout: str, exit_code: int) -> str:
     hook_output = payload["hookSpecificOutput"]
     context = hook_output["additionalContext"]
     assert "additionalContext" not in payload
-    for verdict_fn in (codex_verdict, claude_verdict):
-        verdict = verdict_fn(
-            event["hook_event_name"], exit_code=exit_code, stdout=stdout, stderr=""
-        )
-        assert verdict.status == STATUS_COMPLETED
-        assert verdict.contexts
+    assert_both_protocols_context(
+        event["hook_event_name"],
+        exit_code=exit_code,
+        stdout=stdout,
+        stderr="",
+    )
     return context
 
 

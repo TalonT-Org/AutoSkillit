@@ -16,7 +16,9 @@ import pytest
 
 from autoskillit.core.paths import pkg_root
 from tests._helpers import seed_registry_owner
-from tests._hook_protocol_oracle import STATUS_COMPLETED, claude_verdict, codex_verdict
+from tests._hook_protocol_oracle import (
+    assert_both_protocols_context,
+)
 from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
@@ -330,12 +332,12 @@ def test_marker_write_failure_advises_both_backends(
     hook_output = output["hookSpecificOutput"]
     assert "permissionDecision" not in hook_output
     assert "marker write failed" in hook_output["additionalContext"].lower()
-    for verdict_fn in (codex_verdict, claude_verdict):
-        verdict = verdict_fn(
-            event["hook_event_name"], exit_code=0, stdout=stdout, stderr=captured.err
-        )
-        assert verdict.status == STATUS_COMPLETED
-        assert verdict.contexts
+    assert_both_protocols_context(
+        event["hook_event_name"],
+        exit_code=0,
+        stdout=stdout,
+        stderr=captured.err,
+    )
 
 
 # --- Group P-3: Hook namespacing ---

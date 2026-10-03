@@ -41,7 +41,9 @@ from autoskillit.workspace import (
     SkillCatalogEntry,
     project_default_plugin_authority,
 )
-from tests._hook_protocol_oracle import STATUS_COMPLETED, claude_verdict, codex_verdict
+from tests._hook_protocol_oracle import (
+    assert_both_protocols_context,
+)
 from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
@@ -264,15 +266,12 @@ def test_end_to_end_real_projection_real_hook_real_handler(
         additional_context = json.loads(completed.stdout)["hookSpecificOutput"][
             "additionalContext"
         ]
-        for verdict_fn in (codex_verdict, claude_verdict):
-            verdict = verdict_fn(
-                "PostToolUse",
-                exit_code=completed.returncode,
-                stdout=completed.stdout,
-                stderr=completed.stderr,
-            )
-            assert verdict.status == STATUS_COMPLETED
-            assert verdict.contexts
+        assert_both_protocols_context(
+            "PostToolUse",
+            exit_code=completed.returncode,
+            stdout=completed.stdout,
+            stderr=completed.stderr,
+        )
         delivered = re.search(
             r'skill_name="([^"]+)".*session_id="([^"]+)"',
             additional_context,

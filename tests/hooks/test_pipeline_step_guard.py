@@ -7,7 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from tests._hook_protocol_oracle import STATUS_COMPLETED, claude_verdict, codex_verdict, run_hook
+from tests._hook_protocol_oracle import (
+    assert_both_protocols_context,
+    run_hook,
+)
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 
@@ -24,15 +27,12 @@ def _assert_context(event: dict, emission) -> str:
     hook_output = output["hookSpecificOutput"]
     assert "permissionDecision" not in hook_output
     context = hook_output["additionalContext"]
-    for verdict_fn in (codex_verdict, claude_verdict):
-        verdict = verdict_fn(
-            event["hook_event_name"],
-            exit_code=emission.exit_code,
-            stdout=emission.stdout,
-            stderr=emission.stderr,
-        )
-        assert verdict.status == STATUS_COMPLETED
-        assert verdict.contexts
+    assert_both_protocols_context(
+        event["hook_event_name"],
+        exit_code=emission.exit_code,
+        stdout=emission.stdout,
+        stderr=emission.stderr,
+    )
     return context
 
 

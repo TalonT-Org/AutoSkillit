@@ -20,7 +20,9 @@ from unittest.mock import patch
 
 import pytest
 
-from tests._hook_protocol_oracle import STATUS_COMPLETED, claude_verdict, codex_verdict
+from tests._hook_protocol_oracle import (
+    assert_both_protocols_context,
+)
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 
@@ -271,10 +273,12 @@ def test_atomic_write_failure_surfaces_diagnostic_and_leaves_no_marker(
     # Must not echo raw tool_response content
     assert '"content"' not in context
     assert '"result"' not in context
-    for verdict_fn in (codex_verdict, claude_verdict):
-        verdict = verdict_fn(event["hook_event_name"], exit_code=exit_code, stdout=out, stderr="")
-        assert verdict.status == STATUS_COMPLETED
-        assert verdict.contexts
+    assert_both_protocols_context(
+        event["hook_event_name"],
+        exit_code=exit_code,
+        stdout=out,
+        stderr="",
+    )
 
 
 # T10: malformed event JSON exits silently with no marker

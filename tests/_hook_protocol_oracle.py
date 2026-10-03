@@ -681,6 +681,23 @@ def claude_verdict(
     return _completed()
 
 
+def assert_both_protocols_context(
+    event: str,
+    *,
+    exit_code: int,
+    stdout: str,
+    stderr: str,
+    expected_context: str | None = None,
+) -> None:
+    """Require both backends to complete with the expected context, when supplied."""
+    for verdict_fn in (codex_verdict, claude_verdict):
+        verdict = verdict_fn(event, exit_code=exit_code, stdout=stdout, stderr=stderr)
+        assert verdict.status == STATUS_COMPLETED, verdict
+        assert verdict.contexts, verdict
+        if expected_context is not None:
+            assert verdict.contexts == (expected_context,), verdict
+
+
 def run_hook(
     script_rel: str | Path,
     payload: dict[str, object] | str,

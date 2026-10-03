@@ -12,7 +12,10 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import is_pid_zombie
-from tests._hook_protocol_oracle import STATUS_COMPLETED, claude_verdict, codex_verdict, run_hook
+from tests._hook_protocol_oracle import (
+    assert_both_protocols_context,
+    run_hook,
+)
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
@@ -53,15 +56,12 @@ def _assert_reconnect_context(event: dict, emission) -> None:
     hook_output = payload["hookSpecificOutput"]
     context = hook_output["additionalContext"]
     assert "/MCP" in context
-    for verdict_fn in (codex_verdict, claude_verdict):
-        verdict = verdict_fn(
-            event["hook_event_name"],
-            exit_code=emission.exit_code,
-            stdout=emission.stdout,
-            stderr=emission.stderr,
-        )
-        assert verdict.status == STATUS_COMPLETED
-        assert verdict.contexts
+    assert_both_protocols_context(
+        event["hook_event_name"],
+        exit_code=emission.exit_code,
+        stdout=emission.stdout,
+        stderr=emission.stderr,
+    )
 
 
 def _dead_pid(tmp_path: Path) -> int:

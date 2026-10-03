@@ -12,9 +12,7 @@ import pytest
 
 from autoskillit.core.paths import pkg_root
 from tests._hook_protocol_oracle import (
-    STATUS_COMPLETED,
-    claude_verdict,
-    codex_verdict,
+    assert_both_protocols_context,
     run_hook,
 )
 
@@ -38,16 +36,13 @@ def _assert_completed_context(payload: dict, emission) -> str:
     assert "message" not in specific
     context = specific["additionalContext"]
     event = {"hook_event_name": "PreToolUse", **payload}
-    for verdict_fn in (codex_verdict, claude_verdict):
-        verdict = verdict_fn(
-            event["hook_event_name"],
-            exit_code=emission.exit_code,
-            stdout=emission.stdout,
-            stderr=emission.stderr,
-        )
-        assert verdict.status == STATUS_COMPLETED
-        assert len(verdict.contexts) == 1
-        assert verdict.contexts[0] == context
+    assert_both_protocols_context(
+        event["hook_event_name"],
+        exit_code=emission.exit_code,
+        stdout=emission.stdout,
+        stderr=emission.stderr,
+        expected_context=context,
+    )
     return context
 
 

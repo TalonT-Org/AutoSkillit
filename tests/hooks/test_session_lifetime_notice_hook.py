@@ -7,7 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from tests._hook_protocol_oracle import STATUS_COMPLETED, claude_verdict, codex_verdict, run_hook
+from tests._hook_protocol_oracle import (
+    STATUS_COMPLETED,
+    assert_both_protocols_context,
+    claude_verdict,
+    run_hook,
+)
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
@@ -79,15 +84,12 @@ def test_post_tool_use_delivers_and_consumes_notice_once(tmp_path: Path) -> None
     assert "systemMessage" in result
     assert "hookSpecificOutput" in result
     assert "additionalContext" in result["hookSpecificOutput"]
-    for verdict_fn in (codex_verdict, claude_verdict):
-        verdict = verdict_fn(
-            event["hook_event_name"],
-            exit_code=emission.exit_code,
-            stdout=emission.stdout,
-            stderr=emission.stderr,
-        )
-        assert verdict.status == STATUS_COMPLETED
-        assert verdict.contexts
+    assert_both_protocols_context(
+        event["hook_event_name"],
+        exit_code=emission.exit_code,
+        stdout=emission.stdout,
+        stderr=emission.stderr,
+    )
     assert not notice_path.exists()
 
     second = _run(tmp_path, event, env=env)

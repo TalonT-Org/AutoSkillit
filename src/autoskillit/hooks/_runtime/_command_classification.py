@@ -183,7 +183,10 @@ class SearchPattern(Protocol):
 
 
 def extract_patch_paths(command: str) -> list[str]:
-    """Extract target paths from unified and Codex apply_patch input."""
+    """Extract non-empty target paths from unified and Codex apply_patch input.
+
+    Includes both source and destination paths for Codex ``Move to`` edits.
+    """
     paths: list[str] = []
     for line in command.splitlines():
         if line.startswith("+++ b/"):

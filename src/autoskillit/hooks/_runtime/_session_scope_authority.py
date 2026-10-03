@@ -37,10 +37,9 @@ def enforce_script_session_scope(script_identity: str) -> bool:
 
     A missing, unreadable, malformed, or incomplete generated table denies
     the tool call and exits. A normal scope mismatch returns ``False`` so the
-    caller can ``sys.exit(0)``. Resolves the
-    script's declared scope from the generated
-    ``_hook_scope_table.HOOK_SCOPE_BY_SCRIPT`` table and compares it
-    against the runtime session class.
+    caller can ``sys.exit(0)``. The function resolves the script's declared scope
+    from the generated ``_hook_scope_table.HOOK_SCOPE_BY_SCRIPT`` table and
+    compares it against the runtime session class.
 
     Accepts either a relative path (``guards/ask_user_question_guard.py``
     — the canonical key in ``HOOK_SCOPE_BY_SCRIPT``) or an absolute path

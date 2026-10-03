@@ -15,6 +15,16 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
+
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+_RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
+if _RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, _RUNTIME_DIR)
+
+from _hook_output import deny_tool_use  # noqa: E402
 
 # Sentinel: backslash followed by pipe — BRE alternation, invalid in ripgrep ERE
 _BRE_ALTERNATION = "\\|"
@@ -35,23 +45,13 @@ def main() -> None:
         sys.exit(0)  # no BRE alternation present — allow
 
     corrected = pattern.replace(_BRE_ALTERNATION, "|")
-    payload = json.dumps(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": (
-                    "The Grep tool uses ripgrep (ERE/PCRE) syntax where `|` is alternation. "
-                    "`\\|` is not alternation in ripgrep — it matches a literal backslash-pipe "
-                    "character, which is extremely rare in source code. "
-                    f"Corrected pattern: `{corrected}` "
-                    "(If you genuinely need to match a literal backslash-pipe, use `\\\\|`.)"
-                ),
-            }
-        }
+    deny_tool_use(
+        "The Grep tool uses ripgrep (ERE/PCRE) syntax where `|` is alternation. "
+        "`\\|` is not alternation in ripgrep — it matches a literal backslash-pipe "
+        "character, which is extremely rare in source code. "
+        f"Corrected pattern: `{corrected}` "
+        "(If you genuinely need to match a literal backslash-pipe, use `\\\\|`.)"
     )
-    sys.stdout.write(payload + "\n")
-    sys.exit(0)
 
 
 if __name__ == "__main__":

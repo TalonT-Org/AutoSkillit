@@ -161,13 +161,13 @@ FAIL_CLOSED_GUARD_BASENAMES: frozenset[str] = frozenset(
 # join_settle_guard                      | not-applicable
 # join_stop_guard                        | not-applicable
 # fleet_dispatch_guard (+ resume_own. + fleet_claim)   | works-as-is
-# pretty_output_hook                     | works-as-is
+# pretty_output_hook                     | not-applicable
 # token_summary_hook (+ quota_post)       | works-as-is
 # review_gate_post_hook                  | works-as-is
 # resume_gate_post_hook                  | works-as-is
 # recipe_confirmed_post_hook             | works-as-is
 # quota_guard_state_post_hook            | works-as-is
-# lint_after_edit_hook                   | degraded
+# lint_after_edit_hook                   | works-as-is
 # skill_load_post_hook                   | not-applicable
 # skill_load_guard                       | works-as-is
 # review_loop_gate                       | works-as-is
@@ -483,7 +483,8 @@ def _build_hook_registry() -> list[HookDef]:
             matcher="mcp__.*autoskillit.*",
             scripts=["formatters/pretty_output_hook.py"],
             mechanism="output-rewrite",
-            enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
+            codex_status="not-applicable",
+            enforcement_strength={"claude_code": "soft", "codex": "not-applicable"},
         ),
         HookDef(
             event_type="PostToolUse",
@@ -500,7 +501,7 @@ def _build_hook_registry() -> list[HookDef]:
             event_type="PostToolUse",
             matcher=r"mcp__.*autoskillit.*__(disable_quota_guard|close_kitchen).*",
             scripts=["quota_guard_state_post_hook.py"],
-            mechanism="output-rewrite",
+            mechanism="additionalContext",
             enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
         ),
         HookDef(
@@ -522,9 +523,9 @@ def _build_hook_registry() -> list[HookDef]:
             matcher=r"Write|Edit",
             scripts=["lint_after_edit_hook.py"],
             session_scope="headless_only",
-            codex_status="degraded",
-            mechanism="output-rewrite",
-            enforcement_strength={"claude_code": "hard", "codex": "degraded"},
+            codex_status="works-as-is",
+            mechanism="additionalContext",
+            enforcement_strength={"claude_code": "hard", "codex": "works-as-is"},
         ),
         HookDef(
             event_type="PostToolUse",
@@ -599,8 +600,9 @@ def _build_hook_registry() -> list[HookDef]:
         # Child terminal-reason observation (issue #4623). Purely observational
         # (mechanism="side-effect"): records durable child-outcome evidence,
         # never denies. SubagentStart/SubagentStop/SessionEnd are Claude-only
-        # (Codex has no equivalents); the shared PostToolUse/PostToolUseFailure
-        # matcher covers both backends' child-spawning tool names. Matcher is
+        # (Codex has no equivalents); the shared PostToolUse matcher covers both
+        # backends' child-spawning tool names. PostToolUseFailure is Claude-only
+        # because Codex has no equivalent event. Matcher is
         # ``.+`` rather than ``.*`` solely to avoid colliding, in
         # generate_codex_hooks_config()'s matcher-string exclusion check, with
         # the pre-existing works-as-is ``.*`` matcher on a different event
@@ -637,9 +639,9 @@ def _build_hook_registry() -> list[HookDef]:
             event_type="PostToolUseFailure",
             scripts=["lifecycle/child_outcome_hook.py"],
             session_scope="any",
-            codex_status="works-as-is",
+            codex_status="not-applicable",
             mechanism="side-effect",
-            enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
+            enforcement_strength={"claude_code": "soft", "codex": "not-applicable"},
         ),
         HookDef(
             matcher=r".+",

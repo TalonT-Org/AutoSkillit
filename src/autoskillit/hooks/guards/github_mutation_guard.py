@@ -29,13 +29,13 @@ _RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
 if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
-
 if TYPE_CHECKING:
     from autoskillit.hooks._runtime._github_mutation_analysis import (
         GitHubMutationKind,
         GitHubMutationStatus,
         analyze_github_mutations,
     )
+    from autoskillit.hooks._runtime._hook_output import deny_tool_use
     from autoskillit.hooks._runtime._hook_payload import (
         ParsedHookCommand,
         PayloadAnomaly,
@@ -47,6 +47,7 @@ else:
         GitHubMutationStatus,
         analyze_github_mutations,
     )
+    from _hook_output import deny_tool_use
     from _hook_payload import (
         ParsedHookCommand,
         PayloadAnomaly,
@@ -172,15 +173,7 @@ def _deny(trigger: DenyTrigger, reason_code: str) -> NoReturn:
     reason = _DENY_MESSAGES[trigger]
     if trigger is DenyTrigger.UNRESOLVED_MUTATION:
         reason = f"{reason} classifier_code={reason_code or 'unclassified_uncertainty'}"
-    payload = {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": reason,
-        }
-    }
-    sys.stdout.write(json.dumps(payload) + "\n")
-    raise SystemExit(0)
+    deny_tool_use(reason)
 
 
 def main() -> None:

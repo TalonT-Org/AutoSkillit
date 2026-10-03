@@ -33,6 +33,7 @@ from _hook_constants import (  # noqa: E402
     DENY_TRIGGER_BY_GUARD,
     EXEMPT_SKILLS_BY_GUARD,
 )
+from _hook_output import deny_tool_use  # noqa: E402
 from _hook_payload import (  # noqa: E402
     parse_hook_command,
     resolve_state_root,
@@ -112,17 +113,7 @@ def main() -> None:
         sys.stderr.write(f"pr_create_guard: config read error: {exc}\n")
 
     # Kitchen is open and command matches: deny
-    payload = json.dumps(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": _DENY_REASON,
-            }
-        }
-    )
-    sys.stdout.write(payload + "\n")
-    sys.exit(0)
+    deny_tool_use(_DENY_REASON)
 
 
 if __name__ == "__main__":

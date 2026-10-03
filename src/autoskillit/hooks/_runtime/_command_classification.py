@@ -188,9 +188,11 @@ def extract_patch_paths(command: str) -> list[str]:
     for line in command.splitlines():
         if line.startswith("+++ b/"):
             paths.append(line[6:])
-        elif line.startswith(("*** Update File: ", "*** Add File: ", "*** Delete File: ")):
+        elif line.startswith(
+            ("*** Update File: ", "*** Add File: ", "*** Delete File: ", "*** Move to: ")
+        ):
             paths.append(line.partition(": ")[2].strip())
-    return paths
+    return [path for path in paths if path]
 
 
 def _shell_source(argv_tokens: Sequence[ArgvToken] | None, index: int) -> str | None:

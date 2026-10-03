@@ -31,6 +31,7 @@ from _hook_constants import (  # noqa: E402
     DENY_TRIGGER_BY_GUARD,
     EXEMPT_SKILLS_BY_GUARD,
 )
+from _hook_output import deny_tool_use  # noqa: E402
 from _hook_payload import parse_hook_command  # noqa: E402
 from _session_scope_authority import enforce_script_session_scope  # noqa: E402
 
@@ -171,16 +172,7 @@ def main() -> None:
             "If you need to run a specific test subset, set AUTOSKILLIT_TEST_FILTER=none "
             "on the configured command."
         )
-        payload = json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": reason,
-                }
-            }
-        )
-        sys.stdout.write(payload + "\n")
+        deny_tool_use(reason)
 
     sys.exit(0)
 

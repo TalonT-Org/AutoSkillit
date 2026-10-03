@@ -24,6 +24,7 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
+from _hook_output import deny_tool_use  # noqa: E402
 from _hook_payload import resolve_state_root  # noqa: E402
 from _session_scope_authority import enforce_script_session_scope  # noqa: E402
 
@@ -86,22 +87,12 @@ def main() -> None:
     if marker is not None and _is_fresh(marker):
         sys.exit(0)  # kitchen is open — permit AskUserQuestion
 
-    deny_payload = json.dumps(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": (
-                    "AskUserQuestion is not available in headless sessions without "
-                    "an open kitchen. If this is a pipeline worker, proceed without "
-                    "user confirmation or use a default/fallback behavior. "
-                    "If an orchestrator session, call open_kitchen first."
-                ),
-            }
-        }
+    deny_tool_use(
+        "AskUserQuestion is not available in headless sessions without "
+        "an open kitchen. If this is a pipeline worker, proceed without "
+        "user confirmation or use a default/fallback behavior. "
+        "If an orchestrator session, call open_kitchen first."
     )
-    sys.stdout.write(deny_payload + "\n")
-    sys.exit(0)
 
 
 if __name__ == "__main__":

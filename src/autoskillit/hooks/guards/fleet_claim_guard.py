@@ -12,25 +12,20 @@ import json
 import re
 import subprocess
 import sys
+from pathlib import Path
+
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+_RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
+if _RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, _RUNTIME_DIR)
+
+from _hook_output import deny_tool_use  # noqa: E402
 
 FLEET_CLAIM_DENY_TRIGGER: str = "already has an in-progress label"
 
 _ISSUE_URL_RE = re.compile(r"https://github\.com/([^/]+/[^/]+)/issues/(\d+)")
-
-
-def _deny(reason: str) -> None:
-    sys.stdout.write(
-        json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": reason,
-                }
-            }
-        )
-        + "\n"
-    )
 
 
 def _issue_has_in_progress_label(issue_url: str) -> bool | None:
@@ -96,7 +91,7 @@ def main() -> None:
     for url in urls:
         has_label = _issue_has_in_progress_label(url)
         if has_label is True:
-            _deny(
+            deny_tool_use(
                 f"Issue {url} already has an in-progress label from a prior dispatch. "
                 f"You MUST resume the prior session — pass resume_session_id (from "
                 f"dispatched_session_id in the prior result) and prior_dispatch_id (from "
@@ -106,7 +101,6 @@ def main() -> None:
                 f"dispatch_id=<prior_dispatch_id>) to clean stale artifacts, then "
                 f"re-dispatch fresh with a new dispatch_name."
             )
-            sys.exit(0)
 
     # No claimed issues found — allow.
     sys.exit(0)

@@ -413,7 +413,7 @@ def test_hook_registry_has_codex_status() -> None:
 @pytest.mark.small
 def test_degraded_hooks_are_expected() -> None:
     """The set of hooks with codex_status='degraded' must equal the expected set."""
-    _EXPECTED_DEGRADED = {"lint_after_edit_hook", "mcp_health_advisor"}
+    _EXPECTED_DEGRADED = {"mcp_health_advisor"}
 
     degraded_scripts: set[str] = set()
     for hook_def in HOOK_REGISTRY:

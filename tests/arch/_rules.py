@@ -82,26 +82,14 @@ _PRINT_EXEMPT = frozenset(
         "_sessions.py",
         "_validate.py",
         "_workspace.py",
-        "branch_protection_guard.py",
-        "exploration_request_identity_guard.py",
         "_hook_settings.py",
         "_hook_log_dispatch.py",
         "_session_scope_authority.py",
         "_guard_decision_diagnostics.py",
-        "lint_after_edit_hook.py",
         "open_kitchen_guard.py",
-        "pretty_output_hook.py",
         "quota_guard.py",
-        "quota_post_hook.py",
-        "remove_clone_guard.py",
         "review_gate_post_hook.py",
-        "review_loop_gate.py",
-        "skill_cmd_guard.py",
-        "skill_command_guard.py",
         "_dispatch.py",
-        "pipeline_step_guard.py",
-        "resume_gate_post_hook.py",
-        "reset_resume_gate.py",
         "_fmt_recipe.py",
         "_capture_store.py",
         "_codex_orphans.py",
@@ -110,7 +98,7 @@ _PRINT_EXEMPT = frozenset(
     }
 )
 
-# Standalone hook scripts: fail-open design requires silent broad excepts and print() for JSON.
+# Standalone hook scripts silently fail open on malformed input.
 _BROAD_EXCEPT_EXEMPT = frozenset(
     {
         "_hook_settings.py",
@@ -432,6 +420,22 @@ RULES: tuple[RuleDescriptor, ...] = (
         exemptions=frozenset(),
         severity="error",
         defense_standard="DS-014",
+    ),
+    RuleDescriptor(
+        rule_id="ARCH-013",
+        name="hook-protocol-output-authority",
+        lens="operational",
+        description=(
+            "Hook scripts must send protocol output and non-zero exits through the shared emitter."
+        ),
+        rationale=(
+            "Hand-written stdout and exit paths can silently produce shapes that one hook "
+            "backend ignores or rejects. A single emitter owns those channels, and the hook "
+            "AST guard keeps new output paths within that contract."
+        ),
+        exemptions=frozenset(),
+        severity="error",
+        defense_standard="DS-003",
     ),
     RuleDescriptor(
         rule_id="REQ-CNST-003",

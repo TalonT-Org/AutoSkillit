@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import ast
 import json
-import subprocess
-import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -31,8 +30,17 @@ from autoskillit.hooks._session_binding import (
 )
 from autoskillit.server.tools.tools_kitchen import _declare_join_batch as declare_module
 from tests._helpers import _EnvVarReadCollector
-from tests.conftest import production_interpreter_env
+from tests._hook_protocol_oracle import (
+    STATUS_BLOCKED,
+    STATUS_COMPLETED,
+    claude_verdict,
+    codex_verdict,
+    run_hook,
+)
 from tests.hooks._session_binding_helpers import copy_projected_hook, write_projection_manifest
+
+if TYPE_CHECKING:
+    from autoskillit.hooks._runtime._hook_output import HookEmission
 
 pytestmark = [pytest.mark.medium]
 
@@ -77,29 +85,6 @@ def _settlement_event_cases() -> tuple[tuple[str, dict[str, object], str], ...]:
 _SETTLEMENT_EVENT_CASES = _settlement_event_cases()
 
 
-def _child_env(tmp_path: Path, *, overrides: dict[str, str] | None = None) -> dict[str, str]:
-    """Build a hook-process environment without retired authority channels."""
-    env = production_interpreter_env()
-    for name in (
-        *_RETIRED_JOIN_ENV,
-        "AUTOSKILLIT_LAUNCH_ID",
-        "AUTOSKILLIT_HEADLESS",
-        MANAGED_JOIN_PARENT_ID_ENV_VAR,
-        "AUTOSKILLIT_STATE_ROOT",
-    ):
-        env.pop(name, None)
-    env.update(
-        {
-            "AUTOSKILLIT_AGENT_BACKEND": "claude-code",
-            "AUTOSKILLIT_LOG_DIR": str(tmp_path / "logs"),
-            "AUTOSKILLIT_SESSION_TYPE": "skill",
-        }
-    )
-    if overrides:
-        env.update(overrides)
-    return env
-
-
 def _run_hook(
     tmp_path: Path,
     hook: Path,
@@ -107,18 +92,24 @@ def _run_hook(
     *,
     cwd: Path,
     env_overrides: dict[str, str] | None = None,
-) -> subprocess.CompletedProcess[str]:
-    """Run a real hook program with an isolated production-like environment."""
-    stdin = payload if isinstance(payload, str) else json.dumps(payload)
-    return subprocess.run(
-        [sys.executable, str(hook)],
-        input=stdin,
-        text=True,
-        capture_output=True,
-        check=False,
+) -> HookEmission:
+    """Run a real hook program with the shared protocol-test environment."""
+    script = hook.relative_to(_HOOKS_DIR) if hook.is_relative_to(_HOOKS_DIR) else hook
+    return run_hook(
+        script,
+        payload,
+        env={
+            "AUTOSKILLIT_AGENT_BACKEND": "claude-code",
+            "AUTOSKILLIT_LOG_DIR": str(tmp_path / "logs"),
+            "AUTOSKILLIT_SESSION_TYPE": "skill",
+            **(env_overrides or {}),
+        },
+        unset=(
+            *_RETIRED_JOIN_ENV,
+            "AUTOSKILLIT_LAUNCH_ID",
+            MANAGED_JOIN_PARENT_ID_ENV_VAR,
+        ),
         cwd=cwd,
-        env=_child_env(tmp_path, overrides=env_overrides),
-        timeout=10,
     )
 
 
@@ -188,25 +179,34 @@ def _load_join_bearing_skill_with_context(
                 worktree / ".autoskillit" / "temp" / "session_registry.json"
             ).read_bytes()
 
+    skill_load_event = _skill_load_payload(
+        worktree,
+        session_id=session_id,
+        activation_source=activation_source,
+    )
     completed = _run_hook(
         tmp_path,
         skill_load_hook,
-        _skill_load_payload(
-            worktree,
-            session_id=session_id,
-            activation_source=activation_source,
-        ),
+        skill_load_event,
         cwd=worktree,
         env_overrides=({"AUTOSKILLIT_LAUNCH_ID": cook_launch_id} if cook_launch_id else None),
     )
-    assert completed.returncode == 0, completed.stderr
-    output = _stdout_json(completed)
-    if activation_source == "PostToolUse":
-        context = output.get("additionalContext", "")
-    else:
-        hook_output = output.get("hookSpecificOutput")
-        context = hook_output.get("additionalContext", "") if isinstance(hook_output, dict) else ""
+    assert completed.exit_code == 0, completed.stderr
+    output = json.loads(completed.stdout)
+    hook_output = output.get("hookSpecificOutput")
+    context = hook_output.get("additionalContext", "") if isinstance(hook_output, dict) else ""
     assert isinstance(context, str)
+    assert context
+    if activation_source == "PostToolUse":
+        for verdict_fn in (codex_verdict, claude_verdict):
+            verdict = verdict_fn(
+                "PostToolUse",
+                exit_code=completed.exit_code,
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+            )
+            assert verdict.status == STATUS_COMPLETED
+            assert verdict.contexts
     binding = read_binding(resolve_binding_path(str(worktree), session_id))
     assert binding is not None and binding.join_required
     if registry_before is not None:
@@ -230,6 +230,23 @@ def _declare_one_assignment(worktree: Path, *, session_id: str) -> Path:
     return flag_dir
 
 
+def _mark_binding_scope_invalid(worktree: Path, *, session_id: str) -> None:
+    binding_path = resolve_binding_path(str(worktree), session_id)
+    binding = read_binding(binding_path)
+    assert binding is not None
+    write_binding(
+        binding_path,
+        merge_binding(
+            binding,
+            session_id=session_id,
+            new_entry=unresolved_loaded_skill(
+                "autoskillit:ghost", "2026-09-26T00:00:00+00:00", "unresolved skill"
+            ),
+            artifact_digest=binding.artifact_digest,
+        ),
+    )
+
+
 def _agent_payload(worktree: Path, *, session_id: str, tool_use_id: str) -> dict[str, object]:
     return {
         "tool_name": "Agent",
@@ -240,11 +257,11 @@ def _agent_payload(worktree: Path, *, session_id: str, tool_use_id: str) -> dict
     }
 
 
-def _stdout_json(completed: subprocess.CompletedProcess[str]) -> dict[str, object]:
-    assert completed.stdout, completed.stderr
-    parsed = json.loads(completed.stdout)
-    assert isinstance(parsed, dict)
-    return parsed
+def _block_reason(emission: HookEmission) -> str:
+    assert emission.exit_code == 2
+    assert emission.stdout == ""
+    assert emission.stderr.strip()
+    return emission.stderr
 
 
 def _write_cook_registry(worktree: Path, *, launch_id: str, session_id: str | None) -> None:
@@ -345,8 +362,8 @@ def test_claim_guard_denies_an_undeclared_agent_call_in_a_real_session(tmp_path:
         cwd=worktree,
     )
 
-    assert completed.returncode == 0
-    output = _stdout_json(completed)["hookSpecificOutput"]
+    assert completed.exit_code == 0
+    output = json.loads(completed.stdout)["hookSpecificOutput"]
     assert isinstance(output, dict)
     assert output["permissionDecision"] == "deny"
 
@@ -366,7 +383,7 @@ def test_claim_guard_permits_an_agent_call_that_belongs_to_a_declared_wave(
         cwd=worktree,
     )
 
-    assert completed.returncode == 0
+    assert completed.exit_code == 0
     assert not completed.stdout
     batch = active_batch(flag_dir, session_id=session_id, top_level_parent="top_level")
     assert batch is not None
@@ -403,7 +420,7 @@ def test_settle_guard_maps_every_registered_event_type(
         cwd=worktree,
     )
 
-    assert completed.returncode == 0, completed.stderr
+    assert completed.exit_code == 0, completed.stderr
     batch = active_batch(flag_dir, session_id=session_id, top_level_parent="top_level")
     assert batch is not None
     assert batch["assignments"][0]["outcome"] == expected_outcome
@@ -486,7 +503,7 @@ def test_authenticated_top_level_cook_full_join_sequence_never_opens_a_wave(
             cwd=worktree,
             env_overrides=env,
         )
-        assert completed.returncode == 0, (script_name, completed.stderr)
+        assert completed.exit_code == 0, (script_name, completed.stderr)
         assert not completed.stdout, script_name
 
     redeclared = declare_module._declare_join_batch_handler(
@@ -508,7 +525,7 @@ def test_authenticated_top_level_cook_full_join_sequence_never_opens_a_wave(
             cwd=worktree,
             env_overrides=env,
         )
-        assert completed.returncode == 0, (script_name, completed.stderr)
+        assert completed.exit_code == 0, (script_name, completed.stderr)
         assert not completed.stdout, script_name
 
     assert (
@@ -599,7 +616,7 @@ def test_cook_redeclaration_is_not_refused_by_a_pre_fix_stranded_wave(
             cwd=worktree,
             env_overrides=env,
         )
-        assert completed.returncode == 0, (script_name, completed.stderr)
+        assert completed.exit_code == 0, (script_name, completed.stderr)
         assert not completed.stdout, script_name
 
     unchanged = active_batch(
@@ -653,7 +670,7 @@ def test_authenticated_cook_bypass_survives_an_absent_managed_scope(tmp_path: Pa
             cwd=worktree,
             env_overrides=env,
         )
-        assert completed.returncode == 0, (script_name, completed.stderr)
+        assert completed.exit_code == 0, (script_name, completed.stderr)
         assert completed.stdout == ""
 
     diagnostics_path = tmp_path / "logs" / "join_diagnostics.jsonl"
@@ -723,8 +740,8 @@ def test_cook_authentication_rejects_non_top_level_shapes(
         cwd=worktree,
         env_overrides=env,
     )
-    assert claim.returncode == 0
-    claim_output = _stdout_json(claim)["hookSpecificOutput"]
+    assert claim.exit_code == 0
+    claim_output = json.loads(claim.stdout)["hookSpecificOutput"]
     assert isinstance(claim_output, dict)
     assert claim_output["permissionDecision"] == "deny"
 
@@ -736,11 +753,10 @@ def test_cook_authentication_rejects_non_top_level_shapes(
         env_overrides=env,
     )
     if case == "managed_leaf":
-        assert stop.returncode == 0
+        assert stop.exit_code == 0
         assert stop.stdout == ""
     else:
-        assert stop.returncode == 2
-        assert _stdout_json(stop)["decision"] == "block"
+        _block_reason(stop)
     monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(tmp_path / "logs"))
     result = declare_module._declare_join_batch_handler(
         skill_name="join-bearing",
@@ -820,7 +836,7 @@ def test_descendant_is_natively_exempt_but_never_authenticated_as_top_level_cook
             cwd=worktree,
             env_overrides=env,
         )
-        assert completed.returncode == 0, (script_name, completed.stderr)
+        assert completed.exit_code == 0, (script_name, completed.stderr)
         assert completed.stdout == ""
 
     batch = active_batch(flag_dir, session_id=session_id, top_level_parent="top_level")
@@ -834,8 +850,7 @@ def test_descendant_is_natively_exempt_but_never_authenticated_as_top_level_cook
         cwd=worktree,
         env_overrides=env,
     )
-    assert stop.returncode == 2
-    assert _stdout_json(stop)["decision"] == "block"
+    _block_reason(stop)
 
 
 def test_claim_and_settle_guards_use_the_managed_binding_identity(tmp_path: Path) -> None:
@@ -879,7 +894,7 @@ def test_claim_and_settle_guards_use_the_managed_binding_identity(tmp_path: Path
         cwd=worktree,
         env_overrides=env,
     )
-    assert claimed.returncode == 0, claimed.stderr
+    assert claimed.exit_code == 0, claimed.stderr
     assert not claimed.stdout
 
     settled = _run_hook(
@@ -893,7 +908,7 @@ def test_claim_and_settle_guards_use_the_managed_binding_identity(tmp_path: Path
         cwd=worktree,
         env_overrides=env,
     )
-    assert settled.returncode == 0, settled.stderr
+    assert settled.exit_code == 0, settled.stderr
     batch = active_batch(
         flag_dir,
         session_id=managed_join_id,
@@ -915,27 +930,13 @@ def test_stop_guard_blocks_on_an_unresolved_wave_using_payload_identity(tmp_path
         cwd=worktree,
     )
 
-    assert completed.returncode == 2
-    assert _stdout_json(completed)["decision"] == "block"
+    _block_reason(completed)
 
 
 def test_stop_guard_blocks_an_invalid_managed_scope(tmp_path: Path) -> None:
     session_id = "stop-invalid-scope"
     worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
-    binding_path = resolve_binding_path(str(worktree), session_id)
-    binding = read_binding(binding_path)
-    assert binding is not None
-    write_binding(
-        binding_path,
-        merge_binding(
-            binding,
-            session_id=session_id,
-            new_entry=unresolved_loaded_skill(
-                "autoskillit:ghost", "2026-09-26T00:00:00+00:00", "unresolved skill"
-            ),
-            artifact_digest=binding.artifact_digest,
-        ),
-    )
+    _mark_binding_scope_invalid(worktree, session_id=session_id)
 
     completed = _run_hook(
         tmp_path,
@@ -944,8 +945,131 @@ def test_stop_guard_blocks_an_invalid_managed_scope(tmp_path: Path) -> None:
         cwd=worktree,
     )
 
-    assert completed.returncode == 2
-    assert "required-join binding scope" in _stdout_json(completed)["reason"]
+    assert "required-join binding scope" in _block_reason(completed)
+
+
+@pytest.mark.parametrize(
+    "case",
+    (
+        "stop_malformed_payload",
+        "stop_non_object_payload",
+        "stop_missing_session_id",
+        "stop_invalid_managed_scope",
+        "stop_unresolved_wave",
+        "followup_unresolved_wave",
+        "followup_invalid_managed_scope",
+        "followup_omits_guard",
+        "settle_invalid_managed_scope",
+    ),
+)
+def test_join_block_paths_are_codex_blocking(tmp_path: Path, case: str) -> None:
+    env_overrides: dict[str, str] | None = None
+    if case in {"stop_malformed_payload", "stop_non_object_payload", "stop_missing_session_id"}:
+        worktree = tmp_path / "worktree"
+        (worktree / ".autoskillit").mkdir(parents=True)
+        hook = _GUARDS_DIR / "join_stop_guard.py"
+        event: dict[str, object] = {"hook_event_name": "Stop", "cwd": str(worktree)}
+        if case == "stop_malformed_payload":
+            payload: dict[str, object] | str = "not valid json"
+        elif case == "stop_non_object_payload":
+            payload = "[]"
+        else:
+            payload = event
+    else:
+        session_id = f"block-{case}"
+        worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
+        event = {"hook_event_name": "Stop", "session_id": session_id, "cwd": str(worktree)}
+        if case in {
+            "stop_invalid_managed_scope",
+            "followup_invalid_managed_scope",
+            "settle_invalid_managed_scope",
+        }:
+            _mark_binding_scope_invalid(worktree, session_id=session_id)
+        if case in {"stop_unresolved_wave", "followup_unresolved_wave"}:
+            _declare_one_assignment(worktree, session_id=session_id)
+
+        if case.startswith("followup_"):
+            hook = _GUARDS_DIR / "join_followup_guard.py"
+            event = {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "true"},
+                "session_id": session_id,
+                "cwd": str(worktree),
+            }
+            if case == "followup_omits_guard":
+                managed_join_id = f"{session_id}-managed"
+                binding = read_binding(resolve_binding_path(str(worktree), session_id))
+                assert binding is not None
+                write_binding(
+                    resolve_binding_path(str(worktree), managed_join_id),
+                    binding._replace(
+                        session_id=managed_join_id,
+                        managed_parent_id=managed_join_id,
+                        managed_route="parent",
+                        managed_guard_set=(),
+                        managed_config_digest="managed-config",
+                    ),
+                )
+                env_overrides = {
+                    "AUTOSKILLIT_AGENT_BACKEND": "codex",
+                    MANAGED_JOIN_PARENT_ID_ENV_VAR: managed_join_id,
+                }
+            payload = event
+        elif case == "settle_invalid_managed_scope":
+            hook = _GUARDS_DIR / "join_settle_guard.py"
+            event = {
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Agent",
+                "tool_use_id": "agent-1",
+                "tool_response": "complete",
+                "session_id": session_id,
+                "cwd": str(worktree),
+            }
+            payload = event
+        else:
+            hook = _GUARDS_DIR / "join_stop_guard.py"
+            payload = event
+
+    emission = _run_hook(
+        tmp_path,
+        hook,
+        payload,
+        cwd=worktree,
+        env_overrides=env_overrides,
+    )
+    reason = _block_reason(emission)
+
+    if case == "settle_invalid_managed_scope":
+        verdict = claude_verdict(
+            event["hook_event_name"],
+            exit_code=emission.exit_code,
+            stdout=emission.stdout,
+            stderr=emission.stderr,
+        )
+        assert verdict.status == STATUS_COMPLETED
+        assert verdict.message
+        return
+
+    assert (
+        codex_verdict(
+            event["hook_event_name"],
+            exit_code=emission.exit_code,
+            stdout=emission.stdout,
+            stderr=emission.stderr,
+        ).status
+        == STATUS_BLOCKED
+    )
+    claude = claude_verdict(
+        event["hook_event_name"],
+        exit_code=emission.exit_code,
+        stdout=emission.stdout,
+        stderr=emission.stderr,
+    )
+    assert claude.status == STATUS_BLOCKED
+    assert claude.message
+    if case == "followup_omits_guard":
+        assert "managed Codex parent binding omits join_followup_guard" in reason
 
 
 def test_stop_guard_releases_when_the_wave_is_complete(tmp_path: Path) -> None:
@@ -974,7 +1098,7 @@ def test_stop_guard_releases_when_the_wave_is_complete(tmp_path: Path) -> None:
         cwd=worktree,
     )
 
-    assert completed.returncode == 0
+    assert completed.exit_code == 0
     assert not completed.stdout
 
 
@@ -987,11 +1111,9 @@ def test_stop_guard_blocks_on_a_malformed_payload(tmp_path: Path) -> None:
         _GUARDS_DIR / "join_stop_guard.py",
         "not valid json",
         cwd=worktree,
-        env_overrides={"AUTOSKILLIT_STATE_ROOT": str(worktree)},
     )
 
-    assert completed.returncode == 2
-    assert _stdout_json(completed)["decision"] == "block"
+    _block_reason(completed)
 
 
 def test_followup_guard_blocks_a_followup_while_a_wave_is_unresolved(tmp_path: Path) -> None:
@@ -1011,8 +1133,7 @@ def test_followup_guard_blocks_a_followup_while_a_wave_is_unresolved(tmp_path: P
         cwd=worktree,
     )
 
-    assert completed.returncode == 2
-    assert _stdout_json(completed)["decision"] == "block"
+    _block_reason(completed)
 
 
 @pytest.mark.parametrize(
@@ -1055,7 +1176,7 @@ def test_followup_guard_allows_exact_recovery_declaration_after_terminal_failure
         cwd=worktree,
     )
 
-    assert completed.returncode == 0, completed.stderr
+    assert completed.exit_code == 0, completed.stderr
     assert not completed.stdout
     diagnostics_path = tmp_path / "logs" / "join_diagnostics.jsonl"
     diagnostics = [json.loads(line) for line in diagnostics_path.read_text().splitlines()]
@@ -1113,8 +1234,7 @@ def test_followup_guard_keeps_other_effects_blocked_after_terminal_failure(
         cwd=worktree,
     )
 
-    assert completed.returncode == 2
-    assert _stdout_json(completed)["decision"] == "block"
+    _block_reason(completed)
 
 
 def test_followup_guard_blocks_recovery_declaration_while_wave_is_pending(
@@ -1136,8 +1256,7 @@ def test_followup_guard_blocks_recovery_declaration_while_wave_is_pending(
         cwd=worktree,
     )
 
-    assert completed.returncode == 2
-    assert _stdout_json(completed)["decision"] == "block"
+    _block_reason(completed)
 
 
 def test_followup_guard_blocks_recovery_declaration_when_ledger_is_corrupt(
@@ -1160,8 +1279,7 @@ def test_followup_guard_blocks_recovery_declaration_when_ledger_is_corrupt(
         cwd=worktree,
     )
 
-    assert completed.returncode == 2
-    assert _stdout_json(completed)["decision"] == "block"
+    _block_reason(completed)
 
 
 def test_stop_guard_stays_blocked_after_terminal_failure(tmp_path: Path) -> None:
@@ -1189,8 +1307,7 @@ def test_stop_guard_stays_blocked_after_terminal_failure(tmp_path: Path) -> None
         cwd=worktree,
     )
 
-    assert completed.returncode == 2
-    assert "settled non-success" in str(_stdout_json(completed)["reason"])
+    assert "settled non-success" in _block_reason(completed)
 
 
 def test_stop_guard_is_safe_under_python_optimization(tmp_path: Path) -> None:
@@ -1201,22 +1318,19 @@ def test_stop_guard_is_safe_under_python_optimization(tmp_path: Path) -> None:
     """
     session_id = "stop-O-flag"
     worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
-    completed = subprocess.run(
-        [sys.executable, "-O", str(_GUARDS_DIR / "join_stop_guard.py")],
+    completed = _run_hook(
+        tmp_path,
+        _GUARDS_DIR / "join_stop_guard.py",
+        {"hook_event_name": "Stop", "session_id": session_id, "cwd": str(worktree)},
         cwd=worktree,
-        env=_child_env(tmp_path),
-        input=json.dumps({"session_id": session_id, "cwd": str(worktree)}),
-        text=True,
-        capture_output=True,
-        check=False,
-        timeout=10,
+        env_overrides={"PYTHONOPTIMIZE": "1"},
     )
 
     # Either the guard exits 0 (no wave registered yet) or it raises a
     # structured error — but it must NOT crash with an unhandled
     # AttributeError from a stripped assert.
-    assert completed.returncode in (0, 2), (
-        f"unexpected return code {completed.returncode}: stderr={completed.stderr!r}"
+    assert completed.exit_code in (0, 2), (
+        f"unexpected return code {completed.exit_code}: stderr={completed.stderr!r}"
     )
     assert "AttributeError" not in completed.stderr
 
@@ -1262,8 +1376,7 @@ def test_followup_guard_prefers_the_managed_join_identity(tmp_path: Path) -> Non
         },
     )
 
-    assert completed.returncode == 2
-    assert _stdout_json(completed)["decision"] == "block"
+    _block_reason(completed)
 
 
 def test_background_exec_guard_binds_without_any_join_env_var(tmp_path: Path) -> None:
@@ -1282,8 +1395,8 @@ def test_background_exec_guard_binds_without_any_join_env_var(tmp_path: Path) ->
         cwd=worktree,
     )
 
-    assert completed.returncode == 0
-    output = _stdout_json(completed)["hookSpecificOutput"]
+    assert completed.exit_code == 0
+    output = json.loads(completed.stdout)["hookSpecificOutput"]
     assert isinstance(output, dict)
     assert output["permissionDecision"] == "deny"
 

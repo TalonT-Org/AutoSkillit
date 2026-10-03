@@ -210,6 +210,9 @@ tests/fixtures/codex/*.jsonl:
 tests/fixtures/codex/discovery_prompt_input_*.json:
   - execution/
 
+tests/fixtures/codex_hook_protocol/**/*.json:
+  - hooks/
+
 tests/fixtures/claude_code/*.jsonl:
   - execution/
 

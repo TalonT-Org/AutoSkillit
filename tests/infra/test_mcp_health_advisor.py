@@ -12,8 +12,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import is_pid_zombie
-from autoskillit.core.paths import pkg_root
-from tests.conftest import production_interpreter_env
+from tests._hook_protocol_oracle import STATUS_COMPLETED, claude_verdict, codex_verdict, run_hook
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
@@ -25,9 +24,8 @@ def _run_guard(
     kitchens: list[dict] | None = None,
     cwd: Path | str | None = None,
     headless: bool = False,
-) -> tuple[int, dict]:
-    """Run mcp_health_advisor.py as a subprocess, return (returncode, parsed_stdout)."""
-    hook_path = pkg_root() / "hooks" / "guards" / "mcp_health_advisor.py"
+):
+    """Run mcp_health_advisor.py with an isolated home and hook environment."""
     home = tmp_path / "fakehome"
     home.mkdir(exist_ok=True)
     ak_dir = home / ".autoskillit"
@@ -36,22 +34,34 @@ def _run_guard(
         (ak_dir / "active_kitchens.json").write_text(
             json.dumps({"kitchens": kitchens, "schema_version": 1})
         )
-    env = {k: v for k, v in production_interpreter_env().items() if k != "AUTOSKILLIT_HEADLESS"}
-    env["HOME"] = str(home)
+    env = {"HOME": str(home), "AUTOSKILLIT_LOG_DIR": str(tmp_path / "logs")}
     if headless:
         env["AUTOSKILLIT_HEADLESS"] = "1"
     env.update(env_extra)
-    result = subprocess.run(
-        [sys.executable, str(hook_path)],
-        input=json.dumps({"tool_name": tool_name}),
-        capture_output=True,
-        text=True,
+    return run_hook(
+        "guards/mcp_health_advisor.py",
+        {"hook_event_name": "PreToolUse", "tool_name": tool_name},
         env=env,
-        timeout=10,
-        cwd=str(cwd) if cwd else None,
+        unset=() if headless else ("AUTOSKILLIT_HEADLESS",),
+        cwd=Path(cwd) if cwd else tmp_path,
     )
-    parsed = json.loads(result.stdout) if result.stdout.strip() else {}
-    return result.returncode, parsed
+
+
+def _assert_reconnect_context(event: dict, emission) -> None:
+    assert emission.exit_code == 0, emission.stderr
+    payload = json.loads(emission.stdout)
+    hook_output = payload["hookSpecificOutput"]
+    context = hook_output["additionalContext"]
+    assert "/MCP" in context
+    for verdict_fn in (codex_verdict, claude_verdict):
+        verdict = verdict_fn(
+            event["hook_event_name"],
+            exit_code=emission.exit_code,
+            stdout=emission.stdout,
+            stderr=emission.stderr,
+        )
+        assert verdict.status == STATUS_COMPLETED
+        assert verdict.contexts
 
 
 def _dead_pid(tmp_path: Path) -> int:
@@ -80,13 +90,17 @@ def test_mcp_health_advisor_dead_pid_injects_message(tmp_path: Path) -> None:
             "opened_at": "2026-01-01T00:00:00+00:00",
         }
     ]
-    returncode, payload = _run_guard(
-        tmp_path, {}, tool_name="Read", kitchens=kitchens, cwd=tmp_path, headless=False
-    )
-    assert returncode == 0
-    hook_out = payload.get("hookSpecificOutput", {})
-    assert "/MCP" in hook_out.get("message", ""), (
-        f"Expected /MCP reconnect hint in message, got: {hook_out}"
+    event = {"hook_event_name": "PreToolUse", "tool_name": "Read"}
+    _assert_reconnect_context(
+        event,
+        _run_guard(
+            tmp_path,
+            {},
+            tool_name="Read",
+            kitchens=kitchens,
+            cwd=tmp_path,
+            headless=False,
+        ),
     )
 
 
@@ -110,13 +124,10 @@ def test_mcp_health_advisor_zombie_pid_injects_message(tmp_path: Path) -> None:
                 "opened_at": "2026-01-01T00:00:00+00:00",
             }
         ]
-        returncode, payload = _run_guard(
-            tmp_path, {}, tool_name="Read", kitchens=kitchens, cwd=tmp_path, headless=False
-        )
-        assert returncode == 0
-        hook_out = payload.get("hookSpecificOutput", {})
-        assert "/MCP" in hook_out.get("message", ""), (
-            f"Expected /MCP reconnect hint for zombie PID, got: {hook_out}"
+        event = {"hook_event_name": "PreToolUse", "tool_name": "Read"}
+        _assert_reconnect_context(
+            event,
+            _run_guard(tmp_path, {}, tool_name="Read", kitchens=kitchens, cwd=tmp_path),
         )
     finally:
         os.waitpid(child_pid, 0)
@@ -124,9 +135,9 @@ def test_mcp_health_advisor_zombie_pid_injects_message(tmp_path: Path) -> None:
 
 def test_mcp_health_advisor_no_kitchens_silent(tmp_path: Path) -> None:
     """No active_kitchens.json at all → silent exit 0."""
-    returncode, payload = _run_guard(tmp_path, {}, tool_name="Bash")
-    assert returncode == 0
-    assert payload == {}, f"Expected empty output, got: {payload}"
+    emission = _run_guard(tmp_path, {}, tool_name="Bash")
+    assert emission.exit_code == 0
+    assert emission.stdout == ""
 
 
 def test_mcp_health_advisor_alive_pid_silent(tmp_path: Path) -> None:
@@ -139,11 +150,9 @@ def test_mcp_health_advisor_alive_pid_silent(tmp_path: Path) -> None:
             "opened_at": "2026-01-01T00:00:00+00:00",
         }
     ]
-    returncode, payload = _run_guard(
-        tmp_path, {}, tool_name="Read", kitchens=kitchens, cwd=tmp_path
-    )
-    assert returncode == 0
-    assert payload == {}, f"Expected empty output for alive PID, got: {payload}"
+    emission = _run_guard(tmp_path, {}, tool_name="Read", kitchens=kitchens, cwd=tmp_path)
+    assert emission.exit_code == 0
+    assert emission.stdout == ""
 
 
 def test_mcp_health_advisor_headless_bypass(tmp_path: Path) -> None:
@@ -157,7 +166,7 @@ def test_mcp_health_advisor_headless_bypass(tmp_path: Path) -> None:
             "opened_at": "2026-01-01T00:00:00+00:00",
         }
     ]
-    returncode, payload = _run_guard(
+    emission = _run_guard(
         tmp_path,
         {},
         tool_name="Read",
@@ -165,8 +174,8 @@ def test_mcp_health_advisor_headless_bypass(tmp_path: Path) -> None:
         cwd=tmp_path,
         headless=True,
     )
-    assert returncode == 0
-    assert payload == {}, f"Expected empty output in headless mode, got: {payload}"
+    assert emission.exit_code == 0
+    assert emission.stdout == ""
 
 
 def test_mcp_health_advisor_no_matching_project(tmp_path: Path) -> None:
@@ -181,11 +190,9 @@ def test_mcp_health_advisor_no_matching_project(tmp_path: Path) -> None:
         }
     ]
     # Run from tmp_path — project_path mismatch → no message
-    returncode, payload = _run_guard(
-        tmp_path, {}, tool_name="Read", kitchens=kitchens, cwd=tmp_path
-    )
-    assert returncode == 0
-    assert payload == {}, f"Expected empty output for non-matching project, got: {payload}"
+    emission = _run_guard(tmp_path, {}, tool_name="Read", kitchens=kitchens, cwd=tmp_path)
+    assert emission.exit_code == 0
+    assert emission.stdout == ""
 
 
 def test_mcp_health_advisor_malformed_json_failopen(tmp_path: Path) -> None:
@@ -196,17 +203,12 @@ def test_mcp_health_advisor_malformed_json_failopen(tmp_path: Path) -> None:
     ak_dir.mkdir(exist_ok=True)
     (ak_dir / "active_kitchens.json").write_text("this is not valid JSON {{{{")
 
-    hook_path = pkg_root() / "hooks" / "guards" / "mcp_health_advisor.py"
-    env = {**production_interpreter_env(), "HOME": str(home)}
-    result = subprocess.run(
-        [sys.executable, str(hook_path)],
-        input=json.dumps({"tool_name": "Read"}),
-        capture_output=True,
-        text=True,
-        env=env,
-        timeout=10,
+    emission = run_hook(
+        "guards/mcp_health_advisor.py",
+        "{not valid JSON",
+        env={"HOME": str(home), "AUTOSKILLIT_LOG_DIR": str(tmp_path / "logs")},
+        unset=("AUTOSKILLIT_HEADLESS",),
+        cwd=tmp_path,
     )
-    assert result.returncode == 0
-    assert not result.stdout.strip(), (
-        f"Expected empty output on malformed JSON, got: {result.stdout!r}"
-    )
+    assert emission.exit_code == 0
+    assert emission.stdout == ""

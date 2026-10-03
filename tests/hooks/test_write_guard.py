@@ -13,6 +13,7 @@ import pytest
 
 from autoskillit.hook_registry import PROTECTION_WAIVERS
 from autoskillit.hooks._runtime import UNRESOLVED_WRITE_TARGET_REMEDIATION
+from autoskillit.hooks._runtime._command_classification import extract_patch_paths
 from autoskillit.hooks._session_binding import (
     PROJECTION_MANIFEST_SCHEMA_VERSION,
     SessionBinding,
@@ -356,12 +357,19 @@ class TestWriteGuardApplyPatch:
         parsed = json.loads(result)
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
 
-    def test_apply_patch_no_target_paths_denies(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
+    @pytest.mark.parametrize(
+        "patch_text",
+        ["some random text\nwithout any diff headers\n", "+++ b/\n", "*** Update File: \n"],
+    )
+    def test_apply_patch_no_target_paths_denies(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path, patch_text: str
+    ):
         allowed = tmp_path / "workspace"
         allowed.mkdir()
         monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", str(allowed) + "/")
-        patch_text = "some random text\nwithout any diff headers\n"
-        result = _run_hook(_build_apply_patch_event(patch_text))
+        event = _build_apply_patch_event(patch_text)
+        event["cwd"] = str(allowed)
+        result = _run_hook(event)
         parsed = json.loads(result)
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
         assert (
@@ -377,13 +385,34 @@ class TestWriteGuardApplyPatch:
         parsed = json.loads(result)
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
 
+    def test_relative_patch_path_resolves_against_payload_cwd(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        allowed = tmp_path / "allowed"
+        outside = tmp_path / "outside"
+        allowed.mkdir()
+        outside.mkdir()
+        monkeypatch.chdir(outside)
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", str(allowed) + "/")
+        event = {
+            "tool_name": "apply_patch",
+            "cwd": str(allowed),
+            "tool_input": {
+                "command": (
+                    "*** Begin Patch\n*** Update File: relative.py\n"
+                    "@@ -1 +1 @@\n-old\n+new\n*** End Patch"
+                )
+            },
+        }
+
+        assert _run_hook(event) == ""
+
 
 class TestWriteGuardCodexPatchFormat:
     """Tests for Codex's *** Update/Add/Delete File: format."""
 
     def test_extract_paths_from_codex_update_file(self):
-        from autoskillit.hooks.guards.write_guard import _extract_paths_from_patch
-
         patch = (
             "*** Begin Patch\n"
             "*** Update File: src/main.rs\n"
@@ -391,26 +420,20 @@ class TestWriteGuardCodexPatchFormat:
             "+new line\n"
             "*** End Patch"
         )
-        paths = _extract_paths_from_patch(patch)
+        paths = extract_patch_paths(patch)
         assert paths == ["src/main.rs"]
 
     def test_extract_paths_from_codex_add_file(self):
-        from autoskillit.hooks.guards.write_guard import _extract_paths_from_patch
-
         patch = "*** Begin Patch\n*** Add File: src/new_module.rs\n+content\n*** End Patch"
-        paths = _extract_paths_from_patch(patch)
+        paths = extract_patch_paths(patch)
         assert paths == ["src/new_module.rs"]
 
     def test_extract_paths_from_codex_delete_file(self):
-        from autoskillit.hooks.guards.write_guard import _extract_paths_from_patch
-
         patch = "*** Begin Patch\n*** Delete File: src/old_module.rs\n*** End Patch"
-        paths = _extract_paths_from_patch(patch)
+        paths = extract_patch_paths(patch)
         assert paths == ["src/old_module.rs"]
 
     def test_extract_paths_from_codex_multi_file_patch(self):
-        from autoskillit.hooks.guards.write_guard import _extract_paths_from_patch
-
         patch = (
             "*** Begin Patch\n"
             "*** Update File: src/a.rs\n"
@@ -423,8 +446,18 @@ class TestWriteGuardCodexPatchFormat:
             "+new\n"
             "*** End Patch"
         )
-        paths = _extract_paths_from_patch(patch)
+        paths = extract_patch_paths(patch)
         assert paths == ["src/a.rs", "src/b.rs", "src/c.rs"]
+
+    def test_extract_paths_includes_codex_rename_destination(self):
+        patch = (
+            "*** Begin Patch\n"
+            "*** Update File: src/original.py\n"
+            "*** Move to: .claude/settings.json\n"
+            "@@ -1 +1 @@\n-old\n+new\n"
+            "*** End Patch"
+        )
+        assert extract_patch_paths(patch) == ["src/original.py", ".claude/settings.json"]
 
     def test_apply_patch_codex_format_allowed(self, monkeypatch, tmp_path):
         allowed = str(tmp_path / ".autoskillit" / "temp")
@@ -448,10 +481,8 @@ class TestWriteGuardCodexPatchFormat:
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
 
     def test_extract_paths_handles_both_formats(self):
-        from autoskillit.hooks.guards.write_guard import _extract_paths_from_patch
-
         patch = "+++ b/file_a.py\n*** Update File: file_b.rs\n"
-        paths = _extract_paths_from_patch(patch)
+        paths = extract_patch_paths(patch)
         assert "file_a.py" in paths
         assert "file_b.rs" in paths
 
@@ -1596,49 +1627,31 @@ class TestShellVariableWriteGuardIntegration:
         assert result.targets == ()
 
 
-try:
-    from autoskillit.hooks.guards.write_guard import _extract_paths_from_patch as _probe_fn
-
-    _CODEX_FORMAT_SUPPORTED = bool(_probe_fn("*** Update File: /tmp/probe.py\n"))
-except ImportError:
-    _CODEX_FORMAT_SUPPORTED = False
-
-
 class TestExtractPathsFromPatch:
     def test_empty_string_returns_empty_list(self):
-        from autoskillit.hooks.guards.write_guard import _extract_paths_from_patch
-
-        assert _extract_paths_from_patch("") == []
+        assert extract_patch_paths("") == []
 
     def test_single_plus_plus_plus_b_line_returns_path(self):
-        from autoskillit.hooks.guards.write_guard import _extract_paths_from_patch
-
         patch = "--- a/old.py\n+++ b/foo.py\n@@ -1 +1 @@\n-old\n+new"
-        assert _extract_paths_from_patch(patch) == ["foo.py"]
+        assert extract_patch_paths(patch) == ["foo.py"]
 
     def test_multi_file_patch_returns_all_paths_in_order(self):
-        from autoskillit.hooks.guards.write_guard import _extract_paths_from_patch
-
         patch = (
             "--- a/alpha.py\n+++ b/alpha.py\n@@ -1 +1 @@\n-old\n+new\n"
             "--- a/beta.py\n+++ b/beta.py\n@@ -1 +1 @@\n-old\n+new"
         )
-        assert _extract_paths_from_patch(patch) == ["alpha.py", "beta.py"]
+        assert extract_patch_paths(patch) == ["alpha.py", "beta.py"]
 
     def test_non_plus_plus_plus_b_lines_are_excluded(self):
-        from autoskillit.hooks.guards.write_guard import _extract_paths_from_patch
-
         patch = "--- a/foo.py\n@@ -1 +1 @@\n context line\n"
-        assert _extract_paths_from_patch(patch) == []
+        assert extract_patch_paths(patch) == []
 
     def test_subdirectory_path_is_extracted_correctly(self):
-        from autoskillit.hooks.guards.write_guard import _extract_paths_from_patch
-
-        assert _extract_paths_from_patch("+++ b/src/foo.py") == ["src/foo.py"]
+        assert extract_patch_paths("+++ b/src/foo.py") == ["src/foo.py"]
 
 
-class TestWriteGuardCodexPatchFormatXfail:
-    """Xfail-guarded integration tests for Codex patch format via _run_hook."""
+class TestWriteGuardCodexPatchFormatIntegration:
+    """Integration tests for Codex patch format via _run_hook."""
 
     @pytest.fixture(autouse=True)
     def _enable_headless(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
@@ -1647,42 +1660,22 @@ class TestWriteGuardCodexPatchFormatXfail:
         monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", allowed)
         self._allowed = allowed
 
-    @pytest.mark.xfail(
-        not _CODEX_FORMAT_SUPPORTED,
-        reason="P2 Codex patch format support not yet merged",
-        strict=False,
-    )
     def test_codex_patch_within_prefix_allowed(self):
         patch = f"*** Update File: {self._allowed}/plan.md\n"
         result = _run_hook(_build_apply_patch_event(patch))
         assert result == ""
 
-    @pytest.mark.xfail(
-        not _CODEX_FORMAT_SUPPORTED,
-        reason="P2 Codex patch format support not yet merged",
-        strict=False,
-    )
     def test_codex_patch_outside_prefix_denied(self):
         patch = "*** Update File: /outside/bar.py\n"
         result = _run_hook(_build_apply_patch_event(patch))
         parsed = json.loads(result)
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
 
-    @pytest.mark.xfail(
-        not _CODEX_FORMAT_SUPPORTED,
-        reason="P2 Codex patch format support not yet merged",
-        strict=False,
-    )
     def test_codex_mixed_format_patch_no_crash(self):
         patch = f"+++ b/{self._allowed}/a.py\n*** Update File: {self._allowed}/b.py\n"
         result = _run_hook(_build_apply_patch_event(patch))
         assert isinstance(result, str)
 
-    @pytest.mark.xfail(
-        not _CODEX_FORMAT_SUPPORTED,
-        reason="P2 Codex patch format support not yet merged",
-        strict=False,
-    )
     def test_codex_empty_patch_triggers_no_paths_deny(self):
         patch = "*** Begin Patch\n*** End Patch\n"
         result = _run_hook(_build_apply_patch_event(patch))

@@ -27,6 +27,7 @@ from _command_classification import (  # noqa: E402
     all_evaluated_segments,
     command_verb_and_args,
 )
+from _hook_output import deny_tool_use  # noqa: E402
 from _hook_payload import parse_hook_command  # noqa: E402
 
 ARTIFACT_DOWNLOAD_DENY_TRIGGER: str = "gh artifact download without --dir is prohibited"
@@ -83,17 +84,7 @@ def main() -> None:
     if sub1 is None:
         sys.exit(0)
 
-    payload = json.dumps(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": _DENY_REASON.format(sub1=sub1),
-            }
-        }
-    )
-    sys.stdout.write(payload + "\n")
-    sys.exit(0)
+    deny_tool_use(_DENY_REASON.format(sub1=sub1))
 
 
 if __name__ == "__main__":

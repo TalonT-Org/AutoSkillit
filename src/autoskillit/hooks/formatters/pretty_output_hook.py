@@ -29,7 +29,8 @@ from typing import Any
 # consistent across both invocation modes.
 _HOOKS_DIR = str(Path(__file__).resolve().parent)
 _PACKAGE_ROOT = str(Path(__file__).resolve().parents[2])
-for _import_dir in (_HOOKS_DIR, _PACKAGE_ROOT):
+_RUNTIME_DIR = str(Path(__file__).resolve().parents[1] / "_runtime")
+for _import_dir in (_HOOKS_DIR, _PACKAGE_ROOT, _RUNTIME_DIR):
     if _import_dir not in sys.path:
         sys.path.insert(0, _import_dir)
 
@@ -103,6 +104,7 @@ from _fmt_status import (  # noqa: E402, F401
     _fmt_get_token_summary,
     _fmt_kitchen_status,
 )
+from _hook_output import rewrite_mcp_tool_output  # noqa: E402
 
 
 def _fmt_tool_exception(data: dict, pipeline: bool) -> str:
@@ -338,15 +340,7 @@ def main() -> None:
     if formatted is None:
         sys.exit(0)  # pass-through
 
-    output = json.dumps(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PostToolUse",
-                "updatedMCPToolOutput": formatted,
-            }
-        }
-    )
-    print(output)
+    rewrite_mcp_tool_output(formatted)
 
 
 if __name__ == "__main__":

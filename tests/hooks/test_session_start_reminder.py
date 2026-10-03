@@ -1,299 +1,190 @@
-"""Tests for the SessionStart hook — session_start_hook.py."""
+"""Source-driven resume reminders and unconditional marker cleanup."""
 
 from __future__ import annotations
 
 import json
-import os
-import subprocess
-import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
-from tests.conftest import production_interpreter_env
+from tests._hook_protocol_oracle import (
+    STATUS_COMPLETED,
+    claude_verdict,
+    codex_verdict,
+    run_hook,
+)
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 SCRIPT = Path(__file__).resolve().parents[2] / "src/autoskillit/hooks/session_start_hook.py"
+_NO_SOURCE = object()
+_SESSION_START_CASES = [
+    (source, marker_kind, False)
+    for source in ("startup", "clear", "compact", _NO_SOURCE)
+    for marker_kind in ("fresh_recipe", "none")
+]
+_SESSION_START_CASES.extend(
+    (source, marker_kind, marker_kind == "fresh_recipe")
+    for source in ("resume", "fork")
+    for marker_kind in ("fresh_recipe", "none", "no_recipe")
+)
+_SESSION_START_SOURCES = ["startup", "clear", "compact", "resume", "fork", _NO_SOURCE]
 
 
-def _run(stdin_data: str, env: dict | None = None) -> tuple[int, str]:
-    result = subprocess.run(
-        [sys.executable, str(SCRIPT)],
-        input=stdin_data,
-        capture_output=True,
-        text=True,
-        env={**production_interpreter_env(), **(env or {})},
-    )
-    return result.returncode, result.stdout
+def _payload(source: object, transcript_path: Path, *, cwd: Path | None = None) -> dict:
+    payload = {
+        "hook_event_name": "SessionStart",
+        "session_id": "session-1",
+        "transcript_path": str(transcript_path),
+    }
+    if source is not _NO_SOURCE:
+        payload["source"] = source
+    if cwd is not None:
+        payload["cwd"] = str(cwd)
+    return payload
 
 
-def _write_marker(
-    marker_dir: Path, session_id: str, recipe_name: object, *, fresh: bool = True
-) -> None:
-    opened_at = datetime.now(UTC) if fresh else datetime.now(UTC) - timedelta(hours=25)
-    (marker_dir / f"{session_id}.json").write_text(
+def _write_marker(state_dir: Path, *, recipe_name: str | None, opened_at: datetime) -> Path:
+    marker_dir = state_dir / "kitchen_state"
+    marker_dir.mkdir(parents=True, exist_ok=True)
+    marker = marker_dir / "session-1.json"
+    marker.write_text(
         json.dumps(
             {
-                "session_id": session_id,
                 "opened_at": opened_at.isoformat(),
                 "recipe_name": recipe_name,
+                "session_id": "session-1",
                 "marker_version": 1,
             }
-        )
+        ),
+        encoding="utf-8",
+    )
+    return marker
+
+
+@pytest.mark.parametrize(
+    ("source", "marker_kind", "should_remind"),
+    _SESSION_START_CASES,
+    ids=[
+        f"{source if source is not _NO_SOURCE else 'missing-source'}-{marker}"
+        for source, marker, _ in _SESSION_START_CASES
+    ],
+)
+def test_session_start_source_and_marker_matrix(
+    tmp_path: Path, source: object, marker_kind: str, should_remind: bool
+) -> None:
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text('{"type":"say","text":"hello"}\n', encoding="utf-8")
+    state_dir = tmp_path / "state"
+    if marker_kind != "none":
+        recipe_name = "recipe-x" if marker_kind == "fresh_recipe" else None
+        _write_marker(state_dir, recipe_name=recipe_name, opened_at=datetime.now(UTC))
+    payload = _payload(source, transcript)
+
+    emission = run_hook(
+        SCRIPT,
+        payload,
+        env={"AUTOSKILLIT_STATE_DIR": str(state_dir)},
+        unset=("AUTOSKILLIT_HEADLESS",),
     )
 
+    assert emission.exit_code == 0
+    if not should_remind:
+        assert emission.stdout == ""
+        return
 
-# REQ-HOOK-002, REQ-HOOK-003
-def test_fresh_session_no_output(tmp_path: Path) -> None:
-    """Empty transcript_path → no additionalContext injected."""
-    transcript = tmp_path / "session.jsonl"
-    transcript.write_text("")
-    payload = json.dumps({"session_id": "abc", "transcript_path": str(transcript)})
-    rc, out = _run(payload)
-    assert rc == 0
-    assert "additionalContext" not in out
+    output = json.loads(emission.stdout)
+    assert set(output) == {"hookSpecificOutput"}
+    specific = output["hookSpecificOutput"]
+    assert set(specific) == {"hookEventName", "additionalContext"}
+    assert specific["hookEventName"] == "SessionStart"
+    context = specific["additionalContext"]
+    assert "open_kitchen(name='recipe-x')" in context
+    assert "/autoskillit:open-kitchen" not in context
+    assert "not automatically restored" not in context
+    assert "RESUME REMINDER" not in context
 
-
-def test_resumed_session_injects_context(tmp_path: Path) -> None:
-    """Non-empty transcript → additionalContext with open-kitchen reminder."""
-    transcript = tmp_path / "session.jsonl"
-    transcript.write_text('{"type":"say","text":"hello"}\n')
-    payload = json.dumps({"session_id": "abc", "transcript_path": str(transcript)})
-    env = {**os.environ, "AUTOSKILLIT_STATE_DIR": str(tmp_path / "empty_state")}
-    rc, out = _run(payload, env=env)
-    assert rc == 0
-    data = json.loads(out.strip())
-    assert "additionalContext" in data
-    assert "open-kitchen" in data["additionalContext"]
-
-
-def test_missing_transcript_path_no_crash(tmp_path: Path) -> None:
-    """Missing transcript_path key → fail-open, no output, exit 0."""
-    payload = json.dumps({"session_id": "abc"})
-    rc, out = _run(payload)
-    assert rc == 0
+    for verdict_fn in (codex_verdict, claude_verdict):
+        verdict = verdict_fn(
+            payload["hook_event_name"],
+            exit_code=emission.exit_code,
+            stdout=emission.stdout,
+            stderr=emission.stderr,
+        )
+        assert verdict.status == STATUS_COMPLETED
+        assert len(verdict.contexts) == 1
+        assert verdict.contexts[0] == context
 
 
-def test_nonexistent_transcript_no_crash(tmp_path: Path) -> None:
-    """transcript_path pointing to non-existent file → fail-open, no output."""
-    payload = json.dumps({"session_id": "abc", "transcript_path": "/nonexistent/path.jsonl"})
-    rc, out = _run(payload)
-    assert rc == 0
-    assert "additionalContext" not in out
-
-
-def test_session_start_sweeps_stale_markers(tmp_path: Path) -> None:
-    import json
-    from datetime import datetime
-
-    marker_dir = tmp_path / "kitchen_state"
+@pytest.mark.parametrize(
+    "source",
+    _SESSION_START_SOURCES,
+    ids=[
+        str(source) if source is not _NO_SOURCE else "missing-source"
+        for source in _SESSION_START_SOURCES
+    ],
+)
+def test_session_start_sweeps_expired_markers_for_every_source(
+    tmp_path: Path, source: object
+) -> None:
+    state_dir = tmp_path / "state"
+    marker_dir = state_dir / "kitchen_state"
     marker_dir.mkdir(parents=True)
-    stale = marker_dir / "old-session.json"
+    stale = marker_dir / "expired.json"
     stale.write_text(
         json.dumps(
             {
-                "session_id": "old-session",
-                "opened_at": "2020-01-01T00:00:00+00:00",
-                "recipe_name": None,
+                "opened_at": (datetime.now(UTC) - timedelta(hours=25)).isoformat(),
+                "recipe_name": "expired-recipe",
+                "session_id": "expired",
                 "marker_version": 1,
             }
-        )
+        ),
+        encoding="utf-8",
     )
-    fresh = marker_dir / "new-session.json"
-    fresh.write_text(
-        json.dumps(
-            {
-                "session_id": "new-session",
-                "opened_at": datetime.now(UTC).isoformat(),
-                "recipe_name": None,
-                "marker_version": 1,
-            }
-        )
+    fresh = _write_marker(state_dir, recipe_name="current-recipe", opened_at=datetime.now(UTC))
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text('{"type":"say","text":"hello"}\n', encoding="utf-8")
+    payload = _payload(source, transcript)
+
+    emission = run_hook(
+        SCRIPT,
+        payload,
+        env={"AUTOSKILLIT_STATE_DIR": str(state_dir)},
+        unset=("AUTOSKILLIT_HEADLESS",),
     )
-    transcript = tmp_path / "transcript.jsonl"
-    transcript.write_text("")
-    payload = json.dumps(
-        {
-            "session_id": "new-session",
-            "transcript_path": str(transcript),
-            "autoskillit_state_dir": str(tmp_path),
-        }
-    )
-    import subprocess
-    import sys
 
-    result = subprocess.run(
-        [sys.executable, str(SCRIPT)],
-        input=payload,
-        capture_output=True,
-        text=True,
-        env={**production_interpreter_env(), "AUTOSKILLIT_STATE_DIR": str(tmp_path)},
-    )
-    assert result.returncode == 0
-    assert not stale.exists(), "Stale marker should have been swept"
-    assert fresh.exists(), "Fresh marker must survive"
+    assert emission.exit_code == 0
+    assert not stale.exists(), "expired marker should be removed on every SessionStart source"
+    assert fresh.exists(), "fresh marker should survive the TTL sweep"
 
 
-def test_resumed_session_includes_recipe_name_from_fresh_marker(tmp_path: Path) -> None:
-    """Fresh marker with recipe_name → name appears in additionalContext."""
-    marker_dir = tmp_path / "state" / "kitchen_state"
-    marker_dir.mkdir(parents=True)
-    _write_marker(marker_dir, "sess-1", "my-recipe", fresh=True)
-    transcript = tmp_path / "transcript.jsonl"
-    transcript.write_text('{"type":"say","text":"hello"}\n')
-    payload = json.dumps({"session_id": "sess-1", "transcript_path": str(transcript)})
-    env = {**os.environ, "AUTOSKILLIT_STATE_DIR": str(tmp_path / "state")}
-    rc, out = _run(payload, env=env)
-    assert rc == 0
-    data = json.loads(out.strip())
-    assert "my-recipe" in data["additionalContext"]
-
-
-def test_resumed_session_no_recipe_name_when_marker_has_none(tmp_path: Path) -> None:
-    """Fresh marker with recipe_name=None → generic reminder, no recipe name."""
-    marker_dir = tmp_path / "state" / "kitchen_state"
-    marker_dir.mkdir(parents=True)
-    _write_marker(marker_dir, "sess-2", None, fresh=True)
-    transcript = tmp_path / "transcript.jsonl"
-    transcript.write_text('{"type":"say","text":"hello"}\n')
-    payload = json.dumps({"session_id": "sess-2", "transcript_path": str(transcript)})
-    env = {**os.environ, "AUTOSKILLIT_STATE_DIR": str(tmp_path / "state")}
-    rc, out = _run(payload, env=env)
-    assert rc == 0
-    data = json.loads(out.strip())
-    assert "recipe" not in data["additionalContext"]
-
-
-def test_resumed_session_no_recipe_name_when_no_markers_exist(tmp_path: Path) -> None:
-    """No marker files → additionalContext present but no recipe name."""
-    (tmp_path / "state" / "kitchen_state").mkdir(parents=True)
-    transcript = tmp_path / "transcript.jsonl"
-    transcript.write_text('{"type":"say","text":"hello"}\n')
-    payload = json.dumps({"session_id": "sess-3", "transcript_path": str(transcript)})
-    env = {**os.environ, "AUTOSKILLIT_STATE_DIR": str(tmp_path / "state")}
-    rc, out = _run(payload, env=env)
-    assert rc == 0
-    data = json.loads(out.strip())
-    assert "additionalContext" in data
-    assert "recipe" not in data["additionalContext"]
-
-
-def test_resumed_session_picks_most_recent_fresh_marker(tmp_path: Path) -> None:
-    """Two fresh markers → most recent recipe_name wins."""
-    marker_dir = tmp_path / "state" / "kitchen_state"
-    marker_dir.mkdir(parents=True)
-    # Write older marker first
-    older_at = datetime.now(UTC) - timedelta(seconds=10)
-    (marker_dir / "old-sess.json").write_text(
-        json.dumps(
-            {
-                "session_id": "old-sess",
-                "opened_at": older_at.isoformat(),
-                "recipe_name": "old-recipe",
-                "marker_version": 1,
-            }
-        )
-    )
-    # Write newer marker
-    newer_at = datetime.now(UTC)
-    (marker_dir / "new-sess.json").write_text(
-        json.dumps(
-            {
-                "session_id": "new-sess",
-                "opened_at": newer_at.isoformat(),
-                "recipe_name": "new-recipe",
-                "marker_version": 1,
-            }
-        )
-    )
-    transcript = tmp_path / "transcript.jsonl"
-    transcript.write_text('{"type":"say","text":"hello"}\n')
-    payload = json.dumps({"session_id": "new-sess", "transcript_path": str(transcript)})
-    env = {**os.environ, "AUTOSKILLIT_STATE_DIR": str(tmp_path / "state")}
-    rc, out = _run(payload, env=env)
-    assert rc == 0
-    data = json.loads(out.strip())
-    assert "new-recipe" in data["additionalContext"]
-    assert "old-recipe" not in data["additionalContext"]
-
-
-def test_resumed_session_ignores_stale_marker_recipe_name(tmp_path: Path) -> None:
-    """Stale marker recipe_name must not appear in additionalContext."""
-    marker_dir = tmp_path / "state" / "kitchen_state"
-    marker_dir.mkdir(parents=True)
-    _write_marker(marker_dir, "stale-sess", "stale-recipe", fresh=False)
-    transcript = tmp_path / "transcript.jsonl"
-    transcript.write_text('{"type":"say","text":"hello"}\n')
-    payload = json.dumps({"session_id": "stale-sess", "transcript_path": str(transcript)})
-    env = {**os.environ, "AUTOSKILLIT_STATE_DIR": str(tmp_path / "state")}
-    rc, out = _run(payload, env=env)
-    assert rc == 0
-    data = json.loads(out.strip())
-    assert "stale-recipe" not in data["additionalContext"]
-
-
-def test_fresh_session_not_affected_by_markers(tmp_path: Path) -> None:
-    """Fresh session (empty transcript) stays silent even with a marker present."""
-    marker_dir = tmp_path / "state" / "kitchen_state"
-    marker_dir.mkdir(parents=True)
-    _write_marker(marker_dir, "sess-6", "some-recipe", fresh=True)
-    transcript = tmp_path / "transcript.jsonl"
-    transcript.write_text("")
-    payload = json.dumps({"session_id": "sess-6", "transcript_path": str(transcript)})
-    env = {**os.environ, "AUTOSKILLIT_STATE_DIR": str(tmp_path / "state")}
-    rc, out = _run(payload, env=env)
-    assert rc == 0
-    assert "additionalContext" not in out
-
-
-def test_resumed_session_marker_dir_missing_no_crash(tmp_path: Path) -> None:
-    """Missing AUTOSKILLIT_STATE_DIR path → exit 0, generic reminder, no crash."""
-    transcript = tmp_path / "transcript.jsonl"
-    transcript.write_text('{"type":"say","text":"hello"}\n')
-    payload = json.dumps({"session_id": "sess-7", "transcript_path": str(transcript)})
-    env = {**os.environ, "AUTOSKILLIT_STATE_DIR": str(tmp_path / "nonexistent")}
-    rc, out = _run(payload, env=env)
-    assert rc == 0
-    data = json.loads(out.strip())
-    assert "additionalContext" in data
-    assert "recipe" not in data["additionalContext"]
-
-
-# --- Group P-3: Hook namespacing ---
-
-
-def test_session_start_hook_resolves_campaign_namespace(tmp_path: Path, monkeypatch) -> None:
-    """session_start_hook inline path logic includes AUTOSKILLIT_CAMPAIGN_ID."""
-    monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
-    monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "camp-88")
-
-    # Create a marker in the campaign-namespaced directory
+def test_session_start_resolves_campaign_marker_namespace(tmp_path: Path) -> None:
     state_dir = tmp_path / ".autoskillit" / "temp" / "kitchen_state" / "camp-88"
     state_dir.mkdir(parents=True)
-    marker = {
-        "session_id": "sess-88",
-        "opened_at": datetime.now(UTC).isoformat(),
-        "recipe_name": None,
-        "marker_version": 1,
-    }
-    (state_dir / "sess-88.json").write_text(json.dumps(marker))
-
-    # Run the hook with the campaign-namespaced marker and a resumed transcript
+    (state_dir / "session-1.json").write_text(
+        json.dumps(
+            {
+                "opened_at": datetime.now(UTC).isoformat(),
+                "recipe_name": "campaign-recipe",
+                "session_id": "session-1",
+                "marker_version": 1,
+            }
+        ),
+        encoding="utf-8",
+    )
     transcript = tmp_path / "transcript.jsonl"
-    transcript.write_text('{"type":"say","text":"hello"}\n')
-    payload = json.dumps({"session_id": "sess-88", "transcript_path": str(transcript)})
-    env = {
-        **os.environ,
-        "AUTOSKILLIT_CAMPAIGN_ID": "camp-88",
-    }
-    # Remove AUTOSKILLIT_STATE_DIR so the hook uses the campaign-namespaced path
-    env.pop("AUTOSKILLIT_STATE_DIR", None)
-    # Use monkeypatch chdir so the hook resolves CWD correctly
-    monkeypatch.chdir(tmp_path)
-    rc, out = _run(payload, env=env)
-    assert rc == 0
-    # The hook should find the marker and produce a resume reminder
-    data = json.loads(out.strip())
-    assert "additionalContext" in data
+    transcript.write_text("existing transcript\n", encoding="utf-8")
+    payload = _payload("resume", transcript, cwd=tmp_path)
+
+    emission = run_hook(
+        SCRIPT,
+        payload,
+        env={"AUTOSKILLIT_CAMPAIGN_ID": "camp-88"},
+        unset=("AUTOSKILLIT_HEADLESS", "AUTOSKILLIT_STATE_DIR"),
+    )
+
+    assert emission.exit_code == 0
+    specific = json.loads(emission.stdout)["hookSpecificOutput"]
+    assert "open_kitchen(name='campaign-recipe')" in specific["additionalContext"]

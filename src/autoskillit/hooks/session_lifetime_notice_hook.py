@@ -16,6 +16,7 @@ _RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
 if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
+from _hook_output import notify  # noqa: E402
 from _hook_settings import enforce_session_scope  # noqa: E402
 
 
@@ -40,15 +41,12 @@ def main() -> None:
         if not isinstance(message, str) or not message:
             return
 
-        output: dict[str, object] = {"systemMessage": message}
-        if event_name == "PostToolUse":
-            output["hookSpecificOutput"] = {
-                "hookEventName": "PostToolUse",
-                "additionalContext": message,
-            }
-        json.dump(output, sys.stdout)
-        sys.stdout.flush()
         Path(notice_path).unlink()
+        notify(
+            event_name,
+            message,
+            context=message if event_name == "PostToolUse" else None,
+        )
     except Exception:
         logging.warning("session_lifetime_notice_failed", exc_info=True)
         return

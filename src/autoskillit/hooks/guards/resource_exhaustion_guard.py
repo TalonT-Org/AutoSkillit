@@ -47,6 +47,7 @@ if _RUNTIME_DIR not in sys.path:
 from _command_classification import (  # noqa: E402
     live_command_text,
 )
+from _hook_output import deny_tool_use  # noqa: E402
 from _hook_payload import parse_hook_command  # noqa: E402
 
 RESOURCE_EXHAUSTION_DENY_TRIGGER: str = "Blocked: resource-exhaustion command pattern"
@@ -110,22 +111,12 @@ def main() -> None:
     if reason is None:
         sys.exit(0)
 
-    payload = json.dumps(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": (
-                    f"{RESOURCE_EXHAUSTION_DENY_TRIGGER}: {reason}. "
-                    "Capture the PID with `kill $!` (or a named PID) instead of a "
-                    "job-control spec, wrap long-running loops with `timeout`, and "
-                    "run them in the foreground where the caller can bound them."
-                ),
-            }
-        }
+    deny_tool_use(
+        f"{RESOURCE_EXHAUSTION_DENY_TRIGGER}: {reason}. "
+        "Capture the PID with `kill $!` (or a named PID) instead of a "
+        "job-control spec, wrap long-running loops with `timeout`, and "
+        "run them in the foreground where the caller can bound them."
     )
-    sys.stdout.write(payload + "\n")
-    sys.exit(0)
 
 
 if __name__ == "__main__":

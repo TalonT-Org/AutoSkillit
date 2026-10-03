@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 _RUN_CMD_SUFFIX = "__run_cmd"
 TEMP_RELATIVE_DIR = Path(".autoskillit") / "temp"
@@ -145,6 +145,48 @@ def extract_apply_patch_text(data: dict[str, Any]) -> str | None:
         return None
     raw = tool_input.get("command")
     return raw if isinstance(raw, str) else None
+
+
+def edit_target_paths(data: dict[str, Any]) -> tuple[str, ...]:
+    """Return the file paths a file-edit tool call targets, on either backend.
+
+    Claude ``Write``/``Edit`` carry ``tool_input.file_path``. Codex serializes every
+    file edit as ``tool_name: "apply_patch"`` with patch text in
+    ``tool_input.command``; ``Write``/``Edit`` are only matcher aliases there
+    (codex-rs core/src/tools/hook_names.rs). Relative patch paths are resolved
+    against the payload ``cwd``. Returns ``()`` for any other tool or malformed input.
+    """
+    tool_name = data.get("tool_name")
+    tool_input = data.get("tool_input")
+
+    if tool_name in ("Write", "Edit"):
+        if not isinstance(tool_input, dict):
+            return ()
+        file_path = tool_input.get("file_path")
+        return (file_path,) if isinstance(file_path, str) and file_path else ()
+
+    if tool_name != "apply_patch":
+        return ()
+
+    if TYPE_CHECKING:
+        from ._command_classification import extract_patch_paths
+    else:
+        try:
+            from ._command_classification import extract_patch_paths
+        except ImportError:
+            from _command_classification import extract_patch_paths
+
+    command = extract_apply_patch_text(data) or ""
+    payload_cwd = normalize_payload_cwd(data.get("cwd"))
+    paths: list[str] = []
+    seen: set[str] = set()
+    for path in extract_patch_paths(command):
+        if payload_cwd and not os.path.isabs(path):
+            path = os.path.join(payload_cwd, path)
+        if path not in seen:
+            seen.add(path)
+            paths.append(path)
+    return tuple(paths)
 
 
 def resolve_state_root(payload_cwd: str) -> Path:

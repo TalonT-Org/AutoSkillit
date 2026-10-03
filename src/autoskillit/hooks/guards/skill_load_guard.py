@@ -11,8 +11,9 @@ the Skill tool first.
 
 Bypass conditions (early-exit before the gate):
 - ``agent_id`` present in hook payload — subagent exemption
-- ``AUTOSKILLIT_AGENT_BACKEND == 'codex'``: codex backend does not fire PreToolUse
-  for apply_patch or MCP calls, making this guard structurally inert. Exit 0.
+- ``AUTOSKILLIT_AGENT_BACKEND == 'codex'``: explicit backend bypass. Codex fires
+  PreToolUse for apply_patch (aliased by Write|Edit matchers) and MCP calls;
+  this guard exits 0 for Codex before checking the skill-load gate.
 - ``AUTOSKILLIT_APPLICABLE_GUARDS`` does not contain the guard's filename stem —
   the guard is not applicable to this backend
 
@@ -41,6 +42,7 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
+from _hook_output import deny_tool_use  # noqa: E402
 from _hook_payload import (  # noqa: E402
     normalize_payload_cwd,
     resolve_state_root,
@@ -193,17 +195,7 @@ def main() -> None:
 
     _record_denial(temp_dir, session_id)
 
-    payload = json.dumps(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": _DENY_MESSAGE,
-            }
-        }
-    )
-    sys.stdout.write(payload + "\n")
-    sys.exit(0)
+    deny_tool_use(_DENY_MESSAGE)
 
 
 if __name__ == "__main__":

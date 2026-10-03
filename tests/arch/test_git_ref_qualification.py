@@ -116,7 +116,7 @@ _EXPECTED_GIT_REF_SITES: tuple[tuple[str, str, int, str, str], ...] = (
         "<unresolved>",
         "UNRESOLVABLE",
     ),
-    ("hooks/guards/remove_clone_guard.py", "_git", 47, "<unresolved>", "UNRESOLVABLE"),
+    ("hooks/guards/remove_clone_guard.py", "_git", 57, "<unresolved>", "UNRESOLVABLE"),
     ("recipe/cmd_rpc/_cmd_rpc_guards.py", "_check_regression", 543, "merge-base", "BARE"),
     (
         "recipe/cmd_rpc/_cmd_rpc_guards.py",

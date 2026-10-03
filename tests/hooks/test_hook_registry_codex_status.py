@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import shlex
 
 import pytest
 
@@ -63,16 +64,21 @@ class TestHookDefCodexStatus:
                 )
 
     def test_generate_codex_hooks_config_excludes_not_applicable(self):
-        not_applicable_matchers = {
-            hd.matcher for hd in HOOK_REGISTRY if hd.codex_status == "not-applicable"
+        not_applicable_registrations = {
+            (hook_def.event_type, script.removesuffix(".py"))
+            for hook_def in HOOK_REGISTRY
+            if hook_def.codex_status == "not-applicable"
+            for script in hook_def.scripts
         }
         config = generate_codex_hooks_config()
-        for _event_type, entries in config.items():
+        for event_type, entries in config.items():
             for entry in entries:
-                assert entry.get("matcher") not in not_applicable_matchers, (
-                    f"not-applicable hook with matcher={entry.get('matcher')!r} "
-                    "must not appear in Codex config"
-                )
+                for hook in entry["hooks"]:
+                    script_name = shlex.split(hook["command"])[-1]
+                    assert (event_type, script_name) not in not_applicable_registrations, (
+                        f"not-applicable hook {script_name!r} for event {event_type!r} "
+                        "must not appear in Codex config"
+                    )
 
     def test_managed_routes_project_only_their_required_guard_sets(self):
         parent = generate_codex_hooks_config(managed_route="parent")

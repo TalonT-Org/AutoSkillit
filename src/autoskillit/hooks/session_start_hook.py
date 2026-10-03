@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""SessionStart hook — injects /autoskillit:open-kitchen reminder on session resume.
+"""SessionStart hook — sweep stale kitchen markers and restore resumed recipe state.
 
-Detects resume by checking whether the transcript file at transcript_path has content.
-An empty or non-existent transcript means a fresh session; a non-empty transcript means
-a resumed session that needs kitchen tools restored.
+The stale-marker sweep runs on every well-formed SessionStart payload, including in a
+pre-revealed interactive session that never calls ``open_kitchen``. ``open_kitchen`` and
+fleet campaign teardown are the only other marker-pruning paths. On ``resume`` or
+``fork``, a fresh MCP server restores pre-revealed kitchen access but resets recipe
+state, so the hook reminds the model to reload the recipe recorded by the freshest
+marker. ``startup``, ``clear`` and ``compact`` do not need that reminder.
 
 Stdlib-only — runs under any Python interpreter without the autoskillit package.
 """
@@ -23,11 +26,14 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
+from _hook_output import add_context  # noqa: E402
 from _hook_payload import (  # noqa: E402
     normalize_payload_cwd,
     resolve_kitchen_state_dir,
 )
 from _hook_settings import enforce_session_scope  # noqa: E402
+
+_REMINDER_SOURCES = frozenset({"resume", "fork"})
 
 
 def _sweep_kitchen_markers(payload_cwd: object) -> str | None:
@@ -71,38 +77,16 @@ def main() -> None:
     except (json.JSONDecodeError, ValueError, OSError):
         sys.exit(0)  # fail-open on malformed input
 
-    _best_recipe_name = _sweep_kitchen_markers(data.get("cwd"))
-
-    transcript_path = data.get("transcript_path", "")
-    if not transcript_path:
+    recipe_name = _sweep_kitchen_markers(data.get("cwd"))
+    if data.get("source") not in _REMINDER_SOURCES or not recipe_name:
         sys.exit(0)
 
-    try:
-        size = Path(transcript_path).stat().st_size
-    except OSError:
-        sys.exit(0)  # fail-open if file is unreadable or missing
-
-    if size == 0:
-        sys.exit(0)  # fresh session — no reminder needed
-
-    _base_msg = (
-        "RESUME REMINDER: You are resuming a previous AutoSkillit session. "
-        "MCP tool access (kitchen) is not automatically restored on resume. "
+    add_context(
+        "SessionStart",
+        f"Session resumed: recipe '{recipe_name}' was loaded before the resume, "
+        f"and recipe state does not carry over. Call open_kitchen(name='{recipe_name}') "
+        "to reload it before continuing.",
     )
-    if _best_recipe_name:
-        _detail = (
-            f"You were running recipe '{_best_recipe_name}' — "
-            f"call open_kitchen(name='{_best_recipe_name}') to regain access to all "
-            "AutoSkillit MCP tools before continuing your work."
-        )
-    else:
-        _detail = (
-            "Call /autoskillit:open-kitchen first to regain access to all "
-            "AutoSkillit MCP tools before continuing your work."
-        )
-    payload = json.dumps({"additionalContext": _base_msg + _detail})
-    sys.stdout.write(payload + "\n")
-    sys.exit(0)
 
 
 if __name__ == "__main__":

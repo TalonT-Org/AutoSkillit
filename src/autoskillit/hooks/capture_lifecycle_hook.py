@@ -62,15 +62,15 @@ def _emit_crash_diagnostic() -> None:
     )
 
 
-def main() -> int:
+def main() -> None:
     try:
         raw_bytes = sys.stdin.buffer.read(_MAX_INPUT_BYTES + 1)
         if len(raw_bytes) > _MAX_INPUT_BYTES:
-            return 0
+            return
         raw = raw_bytes.decode("utf-8")
         payload = json.loads(raw)
         if not isinstance(payload, dict):
-            return 0
+            return
         payload_cwd = payload.get("cwd")
         if (
             not isinstance(payload_cwd, str)
@@ -78,13 +78,13 @@ def main() -> int:
             or not os.path.isabs(payload_cwd)
             or "\x00" in payload_cwd
         ):
-            return 0
+            return
         outcome = reconcile_capture_store(payload_cwd, SESSION_START_BUDGET)
         emit_owner_diagnostic(outcome, owner=_OWNER, write=sys.stderr.write)
     except Exception:
         _emit_crash_diagnostic()
-    return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
+    sys.exit(0)

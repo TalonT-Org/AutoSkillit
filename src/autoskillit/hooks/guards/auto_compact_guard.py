@@ -16,6 +16,7 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 from _hook_constants import CODEX_AUTO_COMPACTION_DENIED_REASON  # noqa: E402
+from _hook_output import halt_session  # noqa: E402
 
 _SYSTEM_MESSAGE = (
     "AutoSkillit blocked automatic compaction before changing history. Start a new session, "
@@ -35,14 +36,7 @@ def main() -> None:
         return
     if event.get("hook_event_name") != "PreCompact" or event.get("trigger") != "auto":
         return
-    json.dump(
-        {
-            "continue": False,
-            "stopReason": CODEX_AUTO_COMPACTION_DENIED_REASON,
-            "systemMessage": _SYSTEM_MESSAGE,
-        },
-        sys.stdout,
-    )
+    halt_session(CODEX_AUTO_COMPACTION_DENIED_REASON, system_message=_SYSTEM_MESSAGE)
 
 
 if __name__ == "__main__":

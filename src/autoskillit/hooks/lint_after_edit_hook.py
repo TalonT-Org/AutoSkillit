@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PostToolUse hook: runs ruff lint on Python files after Edit/Write in headless sessions."""
+"""PostToolUse hook: runs ruff on edited Python files in headless sessions."""
 
 from __future__ import annotations
 
@@ -18,6 +18,8 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
+from _hook_output import add_context  # noqa: E402
+from _hook_payload import edit_target_paths  # noqa: E402
 from _hook_settings import enforce_session_scope  # noqa: E402
 
 _IMPLEMENT_PREFIXES = ("implement-", "resolve-")
@@ -103,49 +105,38 @@ def main() -> None:
     except (json.JSONDecodeError, ValueError, OSError):
         sys.exit(0)
 
-    tool_input = data.get("tool_input", {})
-    if not isinstance(tool_input, dict):
+    paths = [
+        path
+        for path in edit_target_paths(data)
+        if path.endswith(RUFF_SOURCE_SUFFIXES) and Path(path).is_file()
+    ]
+    if not paths:
         sys.exit(0)
-    file_path = tool_input.get("file_path", "")
-
-    if not file_path or not file_path.endswith(RUFF_SOURCE_SUFFIXES):
-        sys.exit(0)
-
-    if not Path(file_path).is_file():
-        sys.exit(0)
-
-    file_changed, remaining_errors = _run_ruff_pipeline(file_path)
 
     messages: list[str] = []
+    multiple_paths = len(paths) > 1
+    for file_path in paths:
+        file_changed, remaining_errors = _run_ruff_pipeline(file_path)
+        prefix = f"{file_path}: " if multiple_paths else ""
 
-    if file_changed:
-        messages.append(
-            f"{LINT_AUTOFIX_TRIGGER}\n"
-            "ruff auto-formatted this file. Re-read it before your next Edit "
-            "to avoid stale old_string mismatches."
-        )
+        if file_changed:
+            messages.append(
+                f"{prefix}{LINT_AUTOFIX_TRIGGER}\n"
+                "ruff auto-formatted this file. Re-read it before your next Edit "
+                "to avoid stale old_string mismatches."
+            )
 
-    if remaining_errors:
-        messages.append(
-            f"{LINT_ERROR_TRIGGER}\n"
-            "ruff found errors that --fix cannot resolve. "
-            f"Fix these before proceeding:\n{remaining_errors}"
-        )
+        if remaining_errors:
+            messages.append(
+                f"{prefix}{LINT_ERROR_TRIGGER}\n"
+                "ruff found errors that --fix cannot resolve. "
+                f"Fix these before proceeding:\n{remaining_errors}"
+            )
 
     if not messages:
         sys.exit(0)
 
-    print(
-        json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PostToolUse",
-                    "updatedToolResult": "\n\n".join(messages),
-                }
-            }
-        )
-    )
-    sys.exit(0)
+    add_context("PostToolUse", "\n\n".join(messages))
 
 
 if __name__ == "__main__":

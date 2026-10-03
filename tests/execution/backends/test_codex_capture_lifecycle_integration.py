@@ -261,6 +261,7 @@ def _seed_projected_compacted_store(project: Path) -> None:
         now = time.time()
         ledger = project.joinpath(*CAPTURE_PATH_COMPONENTS, LEDGER_NAME)
         with ledger.open("ab") as stream:
+            os.fchmod(stream.fileno(), 0o600)
             for index in range(record_count):
                 capture_id = f"{index:016x}"
                 record = CaptureLifecycleRecord(

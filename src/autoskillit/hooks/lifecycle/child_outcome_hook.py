@@ -6,9 +6,10 @@ Records every observed L0 child run in the durable child-outcome snapshot
 Purely observational (``mechanism="side-effect"``): never denies, never
 mutates tool behavior, always exits 0. Registered for Claude's native
 ``SubagentStart``/``SubagentStop``/``SessionEnd`` lifecycle events, the
-shared ``PostToolUse``/``PostToolUseFailure`` surface for
-``Agent``/``Task``/``spawn_agent`` tool calls (covering both backends), and
-Codex's ``Stop`` event (session-end equivalent — Codex has no ``SessionEnd``).
+shared ``PostToolUse`` surface for ``Agent``/``Task``/``spawn_agent`` tool
+calls (covering both backends), Claude-only ``PostToolUseFailure`` for those
+calls, and Codex's ``Stop`` event (session-end equivalent — Codex has no
+``SessionEnd``).
 
 Correlation limitation (documented, not fabricated — see the issue #4623
 Step 1 investigation notes, gitignored under the project temp directory):

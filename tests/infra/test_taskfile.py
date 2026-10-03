@@ -57,7 +57,7 @@ class TestTaskfile:
         tasks = self._load()["tasks"]
         for task_name in ("test-all", "test-check"):
             commands = "\n".join(str(command) for command in tasks[task_name]["cmds"])
-            assert 'TEST_OUTPUT="temp/test-{{.PYTEST_RUN_ID}}.txt"' in commands
+            assert 'TEST_OUTPUT=".autoskillit/temp/test-{{.PYTEST_RUN_ID}}.txt"' in commands
             assert "date +%Y-%m-%d_%H%M%S" not in commands
 
     def test_cleanup_shm_delegates_pytest_reaping(self) -> None:

@@ -87,6 +87,9 @@ coverage result, never a prose estimate.
 
 Group the filtered entries by step_name. Each group represents one phase of the pipeline (e.g., plan, implement, test, merge).
 
+This analysis remains independent of token-measure aggregation: session identity,
+coverage, and severity findings are its domain, rather than token totals or ratios.
+
 ### Step 2b: Build reader packets
 
 Assign every step group a stable batch ID. If there are at most six groups, build one

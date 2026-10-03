@@ -208,10 +208,10 @@ after significant architectural changes (new subpackages, major refactors).
 
 **Workflow:**
 1. `task coverage-audit` runs the full test suite with `--cov-context=test --cov-branch`
-2. `scripts/compare-coverage-ast.py` queries the `.coverage` SQLite database
+2. `scripts/compare-coverage-ast.py` queries `.autoskillit/temp/coverage-audit/.coverage`
 3. AST-derived function map is compared against actual coverage
 4. Report identifies uncovered and partially covered functions
-5. Results saved to `temp/coverage-audit-{timestamp}.json`
+5. Results saved to `.autoskillit/temp/coverage-audit/report-{timestamp}.json`
 
 **Interpreting results:**
 - **Uncovered functions**: Production code with zero test coverage — potential blind spots

@@ -25,6 +25,14 @@ class HarnessEnvOverride:
 
 
 TEST_HARNESS_ENV_OVERRIDES: dict[str, HarnessEnvOverride] = {
+    "COVERAGE_FILE": HarnessEnvOverride(
+        var="COVERAGE_FILE",
+        value="{{.ROOT_DIR}}/.autoskillit/temp/coverage-audit/.coverage",
+        justification=(
+            "Keeps coverage collection and source-map input in the project temp directory."
+        ),
+        parity_fixture=None,
+    ),
     "PYTHONDONTWRITEBYTECODE": HarnessEnvOverride(
         var="PYTHONDONTWRITEBYTECODE",
         value="1",

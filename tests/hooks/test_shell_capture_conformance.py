@@ -468,10 +468,18 @@ def test_nested_harness_runs_inner_command_once(tmp_path: Path) -> None:
 def _proc_gone_or_zombie(pid: int) -> bool:
     try:
         stat = Path(f"/proc/{pid}/stat").read_text()
-    except FileNotFoundError:
+    except (FileNotFoundError, ProcessLookupError):
         return True
     state_fields = stat[stat.rfind(")") + 1 :].split()
     return bool(state_fields) and state_fields[0] == "Z"
+
+
+def test_proc_disappearance_during_stat_read_is_gone(monkeypatch: pytest.MonkeyPatch) -> None:
+    def vanished(_path: Path) -> str:
+        raise ProcessLookupError("process exited during procfs read")
+
+    monkeypatch.setattr(Path, "read_text", vanished)
+    assert _proc_gone_or_zombie(123)
 
 
 def _wait_for_proc_gone_or_zombie(pid: int, *, timeout: float) -> bool:

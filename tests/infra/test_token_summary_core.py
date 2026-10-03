@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -78,6 +79,8 @@ def test_tsa5_matching_sessions_formats_table_and_edits_pr(tmp_path: Path) -> No
                 "cwd": "/some/worktree",
                 "kitchen_id": pipeline_id,
                 "step_name": "plan-1",
+                "model_identifier": "claude-sonnet-4-6",
+                "loc_insertions": 10,
                 "input_tokens": 1000,
                 "output_tokens": 500,
                 "cache_write_tokens": 100,
@@ -89,6 +92,8 @@ def test_tsa5_matching_sessions_formats_table_and_edits_pr(tmp_path: Path) -> No
                 "cwd": "/some/worktree",
                 "kitchen_id": pipeline_id,
                 "step_name": "plan-2",
+                "model_identifier": "claude-sonnet-4-6",
+                "loc_insertions": 10,
                 "input_tokens": 1000,
                 "output_tokens": 500,
                 "cache_write_tokens": 100,
@@ -100,6 +105,8 @@ def test_tsa5_matching_sessions_formats_table_and_edits_pr(tmp_path: Path) -> No
                 "cwd": "/some/worktree",
                 "kitchen_id": pipeline_id,
                 "step_name": "open-pr",
+                "model_identifier": "claude-sonnet-4-6",
+                "loc_insertions": 5,
                 "input_tokens": 500,
                 "output_tokens": 250,
                 "cache_write_tokens": 50,
@@ -136,15 +143,28 @@ def test_tsa5_matching_sessions_formats_table_and_edits_pr(tmp_path: Path) -> No
     assert len(edit_calls) == 1
     field_idx = edit_calls[0].index("--raw-field")
     body_arg = edit_calls[0][field_idx + 1]
-    assert body_arg.startswith("body=")
-    body_content = body_arg[len("body=") :]
-    assert "## Token Usage Summary" in body_content
-    assert "plan" in body_content
-    assert "open-pr" in body_content
-    assert "**Total (" in body_content
-    assert "uncached" in body_content
-    assert "cache_read" in body_content
-    assert "cache_write" in body_content
+    assert body_arg == (
+        "body=Existing PR body without summary.\n\n## Token Usage Summary\n\n"
+        "| Step | Model | count | uncached | output | cache_read | peak_ctx | turns"
+        " | cache_write | time |\n"
+        "|------|-------|-------|----------|--------|------------|----------|-------"
+        "|-------------|------|\n"
+        "| plan (unknown/unknown) | claude-sonnet-4-6 | 2 | 2.0k | 1.0k | 400"
+        " | unknown | 0 | 200 | 20s |\n"
+        "| open-pr (unknown/unknown) | claude-sonnet-4-6 | 1 | 500 | 250 | 100"
+        " | unknown | 0 | 50 | 5s |\n"
+        "| **Total (unknown/unknown)** | | | 2.5k | 1.2k | 500 | unknown | | 250 | 25s |\n\n"
+        "## Token Efficiency\n\n"
+        "| Step | LoC Changed | cache_read/LoC | cache_write/LoC | output/LoC |\n"
+        "|------|-------------|----------------|-----------------|------------|\n"
+        "| plan (unknown/unknown) | 20 | 20.0 | 10.0 | 50.0 |\n"
+        "| open-pr (unknown/unknown) | 5 | 20.0 | 10.0 | 50.0 |\n"
+        "| **Total (unknown/unknown)** | **25** | 20.0 | 10.0 | 50.0 |\n\n"
+        "## Model Usage Breakdown\n\n"
+        "| Model | steps | uncached | output | cache_read | cache_write | time |\n"
+        "|-------|-------|----------|--------|------------|-------------|------|\n"
+        "| unknown/unknown: claude-sonnet-4-6 | 2 | 2.5k | 1.2k | 500 | 250 | 25s |"
+    )
 
 
 def test_tsa6_idempotency_skips_if_summary_present(tmp_path: Path) -> None:
@@ -1271,3 +1291,393 @@ def test_load_sessions_handles_null_cache_write(tmp_path: Path) -> None:
     assert entry["step_name"] == "plan"
     assert entry["cache_write_tokens"] == {"state": "unknown", "value": None}
     assert entry["cache_read_tokens"] == {"state": "unknown", "value": None}
+
+
+@pytest.fixture
+def token_summary_source_corpus() -> dict[str, dict]:
+    """Small full-table corpus: repeated step/model, partial sources, and explicit unknown."""
+    entries = [
+        ("both-missing", {}, 100, 10, 20, 40, 100, 1, 10.0, 1),
+        ("provider-missing", {"backend": "codex"}, 200, 20, 40, 80, 200, 2, 20.0, 2),
+        ("backend-missing", {"provider_used": "openai"}, 300, 30, 60, 120, 300, 3, 30.0, 3),
+        (
+            "explicit-unknown",
+            {"backend": "unknown", "provider_used": "unknown"},
+            400,
+            40,
+            80,
+            160,
+            400,
+            4,
+            40.0,
+            4,
+        ),
+    ]
+    return {
+        key: {
+            "step_name": "implement",
+            **source,
+            "model": "shared-model",
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cache_write_tokens": cache_write_tokens,
+            "cache_read_tokens": cache_read_tokens,
+            "peak_context": peak_context,
+            "turn_count": turns,
+            "invocation_count": 1,
+            "elapsed_seconds": elapsed,
+            "loc_insertions": loc,
+            "loc_deletions": 0,
+        }
+        for (
+            key,
+            source,
+            input_tokens,
+            output_tokens,
+            cache_write_tokens,
+            cache_read_tokens,
+            peak_context,
+            turns,
+            elapsed,
+            loc,
+        ) in entries
+    }
+
+
+@pytest.mark.parametrize(
+    "steps,raws,expected_rows",
+    [
+        (
+            ["plan-1", "plan-2"],
+            [100, {"state": "unavailable", "value": None}],
+            [
+                "| plan (unknown/unknown) | 30 | unknown | unknown | unknown |",
+                "| **Total (unknown/unknown)** | **30** | unknown | unknown | unknown |",
+            ],
+        ),
+        (
+            ["plan", "implement"],
+            [100, {"state": "unavailable", "value": None}],
+            [
+                "| plan (unknown/unknown) | 10 | 10.0 | 10.0 | 10.0 |",
+                "| implement (unknown/unknown) | 20 | unavailable | unavailable | unavailable |",
+                "| **Total (unknown/unknown)** | **30** | 10.0 | 10.0 | 10.0 |",
+            ],
+        ),
+        (
+            ["plan", "implement"],
+            [None, 100],
+            [
+                "| plan (unknown/unknown) | 10 | unknown | unknown | unknown |",
+                "| implement (unknown/unknown) | 20 | 5.0 | 5.0 | 5.0 |",
+                "| **Total (unknown/unknown)** | **30** | unknown | unknown | unknown |",
+            ],
+        ),
+        (
+            ["plan", "implement"],
+            [{"state": "unavailable", "value": None}, {"state": "not_applicable", "value": None}],
+            [
+                "| plan (unknown/unknown) | 10 | unavailable | unavailable | unavailable |",
+                "| implement (unknown/unknown) | 20 | not_applicable | not_applicable"
+                " | not_applicable |",
+                "| **Total (unknown/unknown)** | **30** | — | — | — |",
+            ],
+        ),
+    ],
+    ids=["strict-step", "eligible-denominator", "unknown-propagation", "all-excluded"],
+)
+def test_efficiency_bucket_eligibility_goldens(tmp_path, steps, raws, expected_rows):
+    from autoskillit.hooks.token_summary_hook import _format_efficiency_table, _load_sessions
+    from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
+
+    _write_sessions(
+        tmp_path,
+        [
+            {
+                "dir_name": f"s{i}",
+                "kitchen_id": "ratio-corpus",
+                "step_name": step,
+                "output_tokens": raw,
+                "cache_read_tokens": raw,
+                "cache_write_tokens": raw,
+                "loc_insertions": loc,
+            }
+            for i, (step, raw, loc) in enumerate(zip(steps, raws, [10, 20], strict=True))
+        ],
+    )
+    aggregated = _load_sessions(tmp_path, "ratio-corpus")
+    table = _format_efficiency_table(aggregated)
+    assert table.splitlines()[4:] == expected_rows
+    assert table == TelemetryFormatter.format_efficiency_table(list(aggregated.values()), {})
+
+
+def test_absent_and_zero_loc_have_identical_efficiency_projection(tmp_path):
+    from autoskillit.hooks.token_summary_hook import _format_efficiency_table, _load_sessions
+
+    _write_sessions(
+        tmp_path,
+        [
+            {
+                "dir_name": name,
+                "kitchen_id": "zero-loc",
+                "step_name": name,
+                "output_tokens": 100,
+                "cache_read_tokens": 100,
+                "cache_write_tokens": 100,
+                "loc_insertions": loc,
+            }
+            for name, loc in [("plan", 0), ("implement", 10)]
+        ],
+    )
+    explicit = _format_efficiency_table(_load_sessions(tmp_path, "zero-loc"))
+    path = tmp_path / "sessions" / "plan" / "token_usage.json"
+    payload = json.loads(path.read_text())
+    del payload["loc_insertions"], payload["loc_deletions"]
+    path.write_text(json.dumps(payload))
+    absent = _format_efficiency_table(_load_sessions(tmp_path, "zero-loc"))
+    assert absent == explicit
+    assert absent.splitlines()[4:] == [
+        "| plan (unknown/unknown) | 0 | — | — | — |",
+        "| implement (unknown/unknown) | 10 | 10.0 | 10.0 | 10.0 |",
+        "| **Total (unknown/unknown)** | **10** | 20.0 | 20.0 | 20.0 |",
+    ]
+
+
+def test_source_corpus_preserves_full_tables_and_pr_assembly(
+    token_summary_source_corpus: dict[str, dict],
+) -> None:
+    from autoskillit.hooks.token_summary_hook import (
+        _format_efficiency_table,
+        _format_model_table,
+        _format_table,
+    )
+    from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
+
+    steps = list(token_summary_source_corpus.values())
+    total = {
+        "input_tokens": 1000,
+        "output_tokens": 100,
+        "cache_write_tokens": 200,
+        "cache_read_tokens": 400,
+        "peak_context": 400,
+        "total_elapsed_seconds": 100.0,
+        "loc_insertions": 10,
+        "loc_deletions": 0,
+    }
+    models = [
+        {
+            "model": "shared-model",
+            "step_count": 1,
+            "input_tokens": 600,
+            "output_tokens": 60,
+            "cache_write_tokens": 120,
+            "cache_read_tokens": 240,
+            "elapsed_seconds": 60.0,
+        },
+        {
+            "model": "unknown/unknown: shared-model",
+            "step_count": 1,
+            "input_tokens": 400,
+            "output_tokens": 40,
+            "cache_write_tokens": 80,
+            "cache_read_tokens": 160,
+            "elapsed_seconds": 40.0,
+        },
+    ]
+    hook_tables = (
+        _format_table(token_summary_source_corpus),
+        _format_efficiency_table(token_summary_source_corpus),
+        _format_model_table(token_summary_source_corpus),
+    )
+    token_golden = (
+        "## Token Usage Summary\n\n"
+        "| Step | Model | count | uncached | output | cache_read | peak_ctx | turns"
+        " | cache_write | time |\n"
+        "|------|-------|-------|----------|--------|------------|----------|-------"
+        "|-------------|------|\n"
+        "| implement* | shared-model | 1 | 100 | 10 | 40 | 100 | 1 | 20 | 10s |\n"
+        "| implement* | shared-model | 1 | 200 | 20 | 80 | 200 | 2 | 40 | 20s |\n"
+        "| implement* | shared-model | 1 | 300 | 30 | 120 | 300 | 3 | 60 | 30s |\n"
+        "| implement (unknown/unknown)* | shared-model | 1 | 400 | 40 | 160 | 400"
+        " | 4 | 80 | 40s |\n"
+        "| **Total** | | | 600 | 60 | 240 | 300 | | 120 | 1m 0s |\n"
+        "| **Total (unknown/unknown)** | | | 400 | 40 | 160 | 400 | | 80 | 40s |\n\n"
+        r"\* *Step used a non-Anthropic provider; caching behavior may differ.*"
+    )
+    expected_tables = (
+        token_golden,
+        TelemetryFormatter.format_efficiency_table(steps, total),
+        TelemetryFormatter.format_model_table(models),
+    )
+    assert hook_tables == expected_tables
+    assert hook_tables[0].count("| implement* |") == 3
+    assert "implement (unknown/unknown)" in hook_tables[0]
+    assert "unknown/unknown: shared-model" in hook_tables[2]
+    assert "**Total (unknown/unknown)**" in hook_tables[1]
+    assert "\n\n".join(hook_tables) == "\n\n".join(expected_tables)
+
+
+@pytest.mark.parametrize(
+    "schema_version,raw,expected",
+    [
+        pytest.param(3, 0, {"state": "unknown", "value": None}, id="legacy-zero"),
+        pytest.param(4, 0, {"state": "measured_zero", "value": 0}, id="v4-numeric-zero"),
+        pytest.param(
+            4,
+            {"state": "measured_zero", "value": 0},
+            {"state": "measured_zero", "value": 0},
+            id="v4-serialized-zero",
+        ),
+    ],
+)
+def test_schema_zero_measure_projection(
+    tmp_path: Path, schema_version: int, raw: object, expected: dict
+) -> None:
+    from autoskillit.hooks.token_summary_hook import _load_sessions
+
+    log_root = tmp_path / "logs"
+    log_root.mkdir()
+    kitchen_id = "schema-zero"
+    _write_sessions(log_root, [{"dir_name": "s1", "kitchen_id": kitchen_id, "step_name": "plan"}])
+    path = log_root / "sessions" / "s1" / "token_usage.json"
+    payload = json.loads(path.read_text())
+    payload.update(schema_version=schema_version, cache_read_tokens=raw)
+    path.write_text(json.dumps(payload))
+    result = _load_sessions(log_root, kitchen_id)
+    assert next(iter(result.values()))["cache_read_tokens"] == expected
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        pytest.param({"state": "measured", "value": 0}, id="measured-zero-value"),
+        pytest.param({"state": "measured_zero", "value": 7}, id="measured-zero-seven"),
+        pytest.param({"state": "measured", "value": -3}, id="negative-measured"),
+    ],
+)
+def test_canonical_rejection_downgrades_malformed_measures(tmp_path: Path, raw: dict) -> None:
+    from autoskillit.hooks.token_summary_hook import _load_sessions
+
+    log_root = tmp_path / "logs"
+    log_root.mkdir()
+    kitchen_id = "malformed-measure"
+    _write_sessions(log_root, [{"dir_name": "s1", "kitchen_id": kitchen_id, "step_name": "plan"}])
+    path = log_root / "sessions" / "s1" / "token_usage.json"
+    payload = json.loads(path.read_text())
+    payload.update(schema_version=4, cache_read_tokens=raw)
+    path.write_text(json.dumps(payload))
+    result = _load_sessions(log_root, kitchen_id)
+    assert next(iter(result.values()))["cache_read_tokens"] == {"state": "unknown", "value": None}
+
+
+def test_shared_authority_substitution_reaches_all_rendered_tables(
+    monkeypatch: pytest.MonkeyPatch, token_summary_source_corpus: dict[str, dict]
+) -> None:
+    from dataclasses import replace
+
+    from autoskillit.hooks import token_summary_hook as hook
+
+    real_aggregate = hook.aggregate_measures
+    real_ratio = hook.measure_ratio
+    calls = {"aggregate": 0, "ratio": 0}
+
+    def aggregate_wrapper(*args, **kwargs):
+        calls["aggregate"] += 1
+        aggregate = real_aggregate(*args, **kwargs)
+        fields = dict(aggregate.fields)
+        fields["input_tokens"] = replace(
+            fields["input_tokens"], value=hook.TokenMeasure.observed(1_234_567)
+        )
+        return replace(aggregate, fields=fields)
+
+    def ratio_wrapper(*args, **kwargs):
+        calls["ratio"] += 1
+        ratio = real_ratio(*args, **kwargs)
+        return replace(ratio, numerator_total=234, denominator_total=10, value=23.4)
+
+    monkeypatch.setattr(hook, "aggregate_measures", aggregate_wrapper)
+    monkeypatch.setattr(hook, "measure_ratio", ratio_wrapper)
+    token = hook._format_table(token_summary_source_corpus)
+    model = hook._format_model_table(token_summary_source_corpus)
+    efficiency = hook._format_efficiency_table(token_summary_source_corpus)
+    assert calls["aggregate"] and calls["ratio"]
+    assert "1.2M" in token and "1.2M" in model
+    assert "23.4" in efficiency
+
+
+@pytest.mark.skipif(shutil.which("python3") is None, reason="python3 not on PATH")
+def test_projected_shared_import_uses_bundled_measure_asset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from autoskillit.core import PluginLoadMode
+    from autoskillit.execution.backends.claude import ClaudeCodeBackend
+    from autoskillit.workspace import project_default_plugin_authority
+    from tests.contracts._projection_helpers import session_catalog
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    authority = project_default_plugin_authority(
+        cwd=tmp_path, base_branch="main", catalog=session_catalog()
+    )
+    with authority.acquire_launch_binding(
+        backend=ClaudeCodeBackend(), load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR
+    ) as binding:
+        assert binding.plugin_dir is not None
+        projected_hook = binding.plugin_dir / "hooks" / "token_summary_hook.py"
+        projected_asset = binding.plugin_dir / "_measure_aggregation.py"
+        assert projected_asset.is_file()
+        script = (
+            "import runpy, sys\n"
+            "runpy.run_path(sys.argv[1], run_name='projected_probe')\n"
+            "module = sys.modules['_measure_aggregation']\n"
+            "print(module.__file__)\n"
+            "print(any(name == 'autoskillit' or name.startswith('autoskillit.') "
+            "for name in sys.modules))\n"
+        )
+        result = subprocess.run(
+            [shutil.which("python3") or "python3", "-I", "-S", "-c", script, str(projected_hook)],
+            capture_output=True,
+            text=True,
+            env=production_interpreter_env(),
+            timeout=10,
+        )
+        assert result.returncode == 0, result.stderr
+        assert Path(result.stdout.splitlines()[0]).resolve() == projected_asset.resolve()
+        assert result.stdout.splitlines()[1] == "False"
+
+
+def test_rendered_source_label_collision_keeps_pairs_separate() -> None:
+    from autoskillit.hooks.token_summary_hook import (
+        _format_efficiency_table,
+        _format_model_table,
+        _format_table,
+    )
+
+    entries = {
+        backend: {
+            "step_name": "plan",
+            "backend": backend,
+            "provider_used": provider,
+            "model": "claude-test",
+            "input_tokens": tokens,
+            "output_tokens": tokens,
+            "cache_read_tokens": tokens,
+            "cache_write_tokens": tokens,
+            "peak_context": tokens,
+            "elapsed_seconds": 1.0,
+            "loc_insertions": 10,
+            "loc_deletions": 0,
+        }
+        for backend, provider, tokens in [("a/b", "c", 100), ("a", "b/c", 200)]
+    }
+    assert _format_table(entries).splitlines()[-2:] == [
+        "| **Total (a/b/c)** | | | 100 | 100 | 100 | 100 | | 100 | 1s |",
+        "| **Total (a/b/c)** | | | 200 | 200 | 200 | 200 | | 200 | 1s |",
+    ]
+    assert _format_efficiency_table(entries).splitlines()[-2:] == [
+        "| **Total (a/b/c)** | **10** | 10.0 | 10.0 | 10.0 |",
+        "| **Total (a/b/c)** | **10** | 20.0 | 20.0 | 20.0 |",
+    ]
+    assert _format_model_table(entries).splitlines()[-2:] == [
+        "| a/b/c: claude-test | 1 | 100 | 100 | 100 | 100 | 1s |",
+        "| a/b/c: claude-test | 1 | 200 | 200 | 200 | 200 | 1s |",
+    ]

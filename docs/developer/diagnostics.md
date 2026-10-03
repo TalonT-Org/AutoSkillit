@@ -211,6 +211,32 @@ does not reparse a transcript. Older diagnostics acquire a series only when
 their native evidence is explicitly processed; no automatic archive backfill
 is performed.
 
+## Analysis surface decisions
+
+`_measure_aggregation.py` is the shared stdlib authority for token availability,
+field sums, peak-context maxima, and eligible token ratios. The standalone
+`token_summary_hook.py` imports it by bare name from the projected package
+assets. The packaged `patch_pr_token_summary` path uses `DefaultTokenLog`, whose
+`TokenEntry` reductions import the same authority through `autoskillit.core`.
+Both paths retain their valid-input fixture reports and PR sections. Session
+and evidence selection, non-token metadata, source/model grouping, and Markdown
+rendering remain local responsibilities; source pairs are not normalized or
+pooled across providers.
+
+| Surface | Decision | Reason |
+| --- | --- | --- |
+| PR-body token summary | Adopt | Both the standalone hook and the packaged token log use the shared token reductions and source pairs. |
+| `analyze_tool_sequences` | Independent | DFG/bigram counts, within-turn n-grams, and inter-turn gaps are sequence statistics outside the token-measure domain. |
+| `inspect_session_logs` | Independent | Bounded raw evidence, citations, and paging are its contract; it does not aggregate token measures. |
+| `analyze-pipeline-health` | Independent | Session identity, coverage, and severity findings have a different analysis domain. |
+| Supplied `audit-token-efficiency` | Independent at the repository ownership boundary | Its skill and installed scripts are externally owned relative to the bundled source directories. Token semantics may differ; external output parity has not been established. |
+
+Numerical comparisons with externally owned `audit-token-efficiency` output
+require matching session scope, availability and legacy interpretation, and
+backend/provider grouping. Those external semantics and output parity have not
+been validated here; this decision claims no external migration or semantic
+independence.
+
 ## Native OTLP capture and correlation
 
 Headless execution enables vendor-native logs and metrics against one

@@ -5,6 +5,12 @@ The bundled skills grouped by purpose. `src/autoskillit/skills/` and
 tier counts cover the three tiers below; exact-role/internal skills are
 listed at the bottom and intentionally excluded from the tier totals.
 
+The supplied `audit-token-efficiency` skill and its installed scripts are
+externally owned and independent at this repository's ownership boundary.
+Their token semantics may differ; external output parity has not been
+established. See the [analysis surface decisions](../developer/diagnostics.md#analysis-surface-decisions)
+for the bundled consumers' adoption and independence decisions.
+
 ## Tier 1 — free range
 
 Plugin-scanned at `src/autoskillit/skills/`:

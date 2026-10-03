@@ -16,6 +16,39 @@ from tests._helpers import observed_measure as _observed
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
 
 
+def test_shared_authority_result_reaches_packaged_reports(monkeypatch):
+    from dataclasses import replace
+
+    from autoskillit.pipeline import tokens
+
+    real_aggregate = tokens.aggregate_measures
+
+    def substitute(*args, **kwargs):
+        result = real_aggregate(*args, **kwargs)
+        fields = dict(result.fields)
+        fields["input_tokens"] = replace(
+            fields["input_tokens"], value=TokenMeasure.observed(123456)
+        )
+        return replace(result, fields=fields)
+
+    monkeypatch.setattr(tokens, "aggregate_measures", substitute)
+    log = DefaultTokenLog()
+    log.record("plan", _make_usage(), model="model-a")
+    assert log.get_report()[0]["input_tokens"] == _observed(123456)
+    assert log.compute_total()[0]["input_tokens"] == _observed(123456)
+    assert log.compute_model_totals()[0]["input_tokens"] == _observed(123456)
+
+
+@pytest.mark.parametrize(
+    "backend,provider,message",
+    [("", "anthropic", "harness"), ("claude-code", "", "provider")],
+)
+def test_direct_token_entry_empty_source_is_rejected(backend, provider, message):
+    entry = TokenEntry("plan", backend=backend, provider_used=provider)
+    with pytest.raises(ValueError, match=f"{message} must be a non-empty str"):
+        entry.add(_make_usage())
+
+
 def _make_usage(**overrides: int) -> dict[str, int]:
     defaults = {
         "input_tokens": 100,
@@ -81,6 +114,48 @@ class TestTokenEntry:
         }
         assert d["step_name"] == "implement"
         assert d["input_tokens"] == _observed(42)
+
+    def test_add_initializes_from_incoming_measures_when_count_is_zero(self):
+        entry = TokenEntry(
+            step_name="plan",
+            input_tokens=TokenMeasure.observed(100),
+            output_tokens=TokenMeasure.observed(200),
+            peak_context=TokenMeasure.observed(900),
+        )
+
+        entry.add({"input_tokens": 7, "peak_context": 300})
+
+        assert entry.input_tokens == TokenMeasure.observed(7)
+        assert entry.output_tokens == TokenMeasure.unknown()
+        assert entry.peak_context == TokenMeasure.observed(300)
+
+    def test_merge_combines_measures_even_when_counts_are_zero(self):
+        left = TokenEntry(step_name="plan", input_tokens=TokenMeasure.observed(4))
+        right = TokenEntry(step_name="plan", input_tokens=TokenMeasure.observed(6))
+
+        left.merge(right)
+
+        assert left.input_tokens == TokenMeasure.observed(10)
+        assert left.invocation_count == 0
+
+    @pytest.mark.parametrize(
+        ("canonical", "alias", "expected"),
+        [
+            (0, 42, {"state": "measured_zero", "value": 0}),
+            (None, 42, {"state": "measured", "value": 42}),
+        ],
+    )
+    def test_add_uses_cache_alias_only_when_canonical_is_none(self, canonical, alias, expected):
+        entry = TokenEntry(step_name="plan")
+
+        entry.add(
+            {
+                "cache_write_tokens": canonical,
+                "cache_creation_input_tokens": alias,
+            }
+        )
+
+        assert entry.cache_write_tokens.to_dict() == expected
 
 
 class TestDefaultTokenLog:
@@ -298,9 +373,269 @@ def _write_session(
     session_dir = log_root / "sessions" / dir_name
     session_dir.mkdir(parents=True, exist_ok=True)
     (session_dir / "token_usage.json").write_text(json.dumps(tu_data))
-    index_entry = {"dir_name": dir_name, "timestamp": timestamp, "session_id": dir_name}
+    index_entry = {
+        "dir_name": dir_name,
+        "timestamp": timestamp,
+        "session_id": dir_name,
+        "order_id": tu_data.get("order_id", ""),
+    }
     with (log_root / "sessions.jsonl").open("a") as f:
         f.write(json.dumps(index_entry) + "\n")
+
+
+def test_report_methods_match_fresh_log_corpus_goldens(tmp_path):
+    """Reports preserve measure states, source pairs, filters, metadata, and order."""
+    sessions = [
+        (
+            "s001",
+            {
+                "session_label": "plan",
+                "order_id": "run-a",
+                "backend": "codex",
+                "provider_used": "openai",
+                "model_identifier": "model-a",
+                "input_tokens": 100,
+                "output_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 5,
+                "timing_seconds": 2.0,
+                "loc_insertions": 4,
+                "loc_deletions": 1,
+                "peak_context": 50000,
+                "turn_count": 2,
+                "schema_version": 4,
+            },
+        ),
+        (
+            "s002",
+            {
+                "session_label": "plan",
+                "order_id": "run-a",
+                "backend": "codex",
+                "provider_used": "openai",
+                "model_identifier": "ignored-model",
+                "input_tokens": 40,
+                "output_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 7,
+                "timing_seconds": 3.0,
+                "loc_insertions": 6,
+                "loc_deletions": 2,
+                "peak_context": 40000,
+                "turn_count": 3,
+                "schema_version": 3,
+            },
+        ),
+        (
+            "s003",
+            {
+                "session_label": "implement",
+                "order_id": "run-a",
+                "backend": "codex",
+                "provider_used": "openai",
+                "model_identifier": "model-b",
+                "input_tokens": 20,
+                "output_tokens": 80,
+                "cache_write_tokens": 5,
+                "cache_read_tokens": 2,
+                "timing_seconds": 5.0,
+                "loc_insertions": 3,
+                "loc_deletions": 0,
+                "peak_context": 70000,
+                "turn_count": 4,
+                "schema_version": 4,
+            },
+        ),
+        (
+            "s004",
+            {
+                "session_label": "review",
+                "order_id": "run-a",
+                "backend": "claude-code",
+                "provider_used": "anthropic",
+                "model_identifier": "claude-opus-4-6",
+                "input_tokens": 300,
+                "output_tokens": 100,
+                "cache_write_tokens": 10,
+                "cache_read_tokens": 5,
+                "timing_seconds": 6.0,
+                "loc_insertions": 2,
+                "loc_deletions": 2,
+                "peak_context": 65000,
+                "turn_count": 6,
+                "schema_version": 4,
+            },
+        ),
+        (
+            "s005",
+            {
+                "session_label": "unsupported",
+                "order_id": "run-b",
+                "backend": "codex",
+                "provider_used": "unsupported-provider",
+                "input_tokens": {"state": "unavailable", "value": None},
+                "output_tokens": {"state": "not_applicable", "value": None},
+                "cache_write_tokens": {"state": "unavailable", "value": None},
+                "cache_read_tokens": {"state": "not_applicable", "value": None},
+                "peak_context": {"state": "unavailable", "value": None},
+                "schema_version": 4,
+            },
+        ),
+        (
+            "s006",
+            {
+                "session_label": "verify",
+                "order_id": "run-b",
+                "backend": "codex",
+                "provider_used": "openai",
+                "model_identifier": "model-c",
+                "input_tokens": 900,
+                "output_tokens": 400,
+                "cache_write_tokens": 8,
+                "cache_read_tokens": 3,
+                "timing_seconds": 4.0,
+                "loc_insertions": 1,
+                "loc_deletions": 1,
+                "peak_context": 90000,
+                "turn_count": 2,
+                "schema_version": 4,
+            },
+        ),
+    ]
+    for dir_name, data in sessions:
+        _write_session(tmp_path, dir_name, data)
+
+    log = DefaultTokenLog()
+    assert log.load_from_log_dir(tmp_path) == 6
+
+    assert log.get_report(order_id="run-a") == [
+        {
+            "step_name": "plan",
+            "backend": "codex",
+            "provider_used": "openai",
+            "model": "model-a",
+            "input_tokens": {"state": "measured", "value": 140},
+            "output_tokens": {"state": "unknown", "value": None},
+            "cache_write_tokens": {"state": "unknown", "value": None},
+            "cache_read_tokens": {"state": "measured", "value": 12},
+            "invocation_count": 2,
+            "elapsed_seconds": 5.0,
+            "loc_insertions": 10,
+            "loc_deletions": 3,
+            "peak_context": {"state": "measured", "value": 50000},
+            "turn_count": 5,
+        },
+        {
+            "step_name": "implement",
+            "backend": "codex",
+            "provider_used": "openai",
+            "model": "model-b",
+            "input_tokens": {"state": "measured", "value": 20},
+            "output_tokens": {"state": "measured", "value": 80},
+            "cache_write_tokens": {"state": "measured", "value": 5},
+            "cache_read_tokens": {"state": "measured", "value": 2},
+            "invocation_count": 1,
+            "elapsed_seconds": 5.0,
+            "loc_insertions": 3,
+            "loc_deletions": 0,
+            "peak_context": {"state": "measured", "value": 70000},
+            "turn_count": 4,
+        },
+        {
+            "step_name": "review",
+            "backend": "claude-code",
+            "provider_used": "anthropic",
+            "model": "claude-opus-4-6",
+            "input_tokens": {"state": "measured", "value": 300},
+            "output_tokens": {"state": "measured", "value": 100},
+            "cache_write_tokens": {"state": "measured", "value": 10},
+            "cache_read_tokens": {"state": "measured", "value": 5},
+            "invocation_count": 1,
+            "elapsed_seconds": 6.0,
+            "loc_insertions": 2,
+            "loc_deletions": 2,
+            "peak_context": {"state": "measured", "value": 65000},
+            "turn_count": 6,
+        },
+    ]
+    assert [row["step_name"] for row in log.get_report(order_id="run-b")] == [
+        "unsupported",
+        "verify",
+    ]
+    assert log.get_report(order_id="missing") == []
+
+    assert log.compute_total(order_id="run-a") == [
+        {
+            "step_name": "",
+            "backend": "codex",
+            "provider_used": "openai",
+            "model": "model-a",
+            "input_tokens": {"state": "measured", "value": 160},
+            "output_tokens": {"state": "unknown", "value": None},
+            "cache_write_tokens": {"state": "unknown", "value": None},
+            "cache_read_tokens": {"state": "measured", "value": 14},
+            "invocation_count": 3,
+            "elapsed_seconds": 10.0,
+            "loc_insertions": 13,
+            "loc_deletions": 3,
+            "peak_context": {"state": "measured", "value": 70000},
+            "turn_count": 9,
+            "total_elapsed_seconds": 10.0,
+        },
+        {
+            "step_name": "",
+            "backend": "claude-code",
+            "provider_used": "anthropic",
+            "model": "claude-opus-4-6",
+            "input_tokens": {"state": "measured", "value": 300},
+            "output_tokens": {"state": "measured", "value": 100},
+            "cache_write_tokens": {"state": "measured", "value": 10},
+            "cache_read_tokens": {"state": "measured", "value": 5},
+            "invocation_count": 1,
+            "elapsed_seconds": 6.0,
+            "loc_insertions": 2,
+            "loc_deletions": 2,
+            "peak_context": {"state": "measured", "value": 65000},
+            "turn_count": 6,
+            "total_elapsed_seconds": 6.0,
+        },
+    ]
+
+    assert log.compute_model_totals(order_id="run-a") == [
+        {
+            "backend": "codex",
+            "provider_used": "openai",
+            "model": "model-a",
+            "step_count": 2,
+            "input_tokens": {"state": "measured", "value": 140},
+            "output_tokens": {"state": "unknown", "value": None},
+            "cache_write_tokens": {"state": "unknown", "value": None},
+            "cache_read_tokens": {"state": "measured", "value": 12},
+            "elapsed_seconds": 5.0,
+        },
+        {
+            "backend": "codex",
+            "provider_used": "openai",
+            "model": "model-b",
+            "step_count": 1,
+            "input_tokens": {"state": "measured", "value": 20},
+            "output_tokens": {"state": "measured", "value": 80},
+            "cache_write_tokens": {"state": "measured", "value": 5},
+            "cache_read_tokens": {"state": "measured", "value": 2},
+            "elapsed_seconds": 5.0,
+        },
+        {
+            "backend": "claude-code",
+            "provider_used": "anthropic",
+            "model": "claude-opus-4-6",
+            "step_count": 1,
+            "input_tokens": {"state": "measured", "value": 300},
+            "output_tokens": {"state": "measured", "value": 100},
+            "cache_write_tokens": {"state": "measured", "value": 10},
+            "cache_read_tokens": {"state": "measured", "value": 5},
+            "elapsed_seconds": 6.0,
+        },
+    ]
 
 
 class TestDefaultTokenLogLoadFromLogDir:

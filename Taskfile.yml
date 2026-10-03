@@ -41,8 +41,8 @@ tasks:
       AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED: "true"
     cmds:
       - |
-        mkdir -p temp
-        TEST_OUTPUT="temp/test-{{.PYTEST_RUN_ID}}.txt"
+        mkdir -p .autoskillit/temp
+        TEST_OUTPUT=".autoskillit/temp/test-{{.PYTEST_RUN_ID}}.txt"
         echo "Running all tests with -n 4"
         echo "Output: $TEST_OUTPUT"
 
@@ -130,8 +130,8 @@ tasks:
       AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED: "true"
     cmds:
       - |
-        mkdir -p temp
-        TEST_OUTPUT="temp/test-{{.PYTEST_RUN_ID}}.txt"
+        mkdir -p .autoskillit/temp
+        TEST_OUTPUT=".autoskillit/temp/test-{{.PYTEST_RUN_ID}}.txt"
 
         if [[ -d ".venv" ]]; then
           PYTEST_CMD=".venv/bin/python -m pytest"
@@ -219,9 +219,10 @@ tasks:
       TMPDIR: "{{.PYTEST_TMPDIR}}"
       UV_PYTHON_INSTALL_DIR: "{{.UV_CACHE_ROOT}}/python"
       UV_CACHE_DIR: "{{.UV_CACHE_ROOT}}/cache"
+      COVERAGE_FILE: "{{.ROOT_DIR}}/.autoskillit/temp/coverage-audit/.coverage"
     cmds:
       - |
-        mkdir -p temp
+        mkdir -p .autoskillit/temp/coverage-audit
 
         if [[ -d ".venv" ]]; then
           PYTEST_CMD=".venv/bin/python -m pytest"
@@ -252,15 +253,15 @@ tasks:
         echo ""
         echo "--- Coverage AST Comparison ---"
         $PYTHON scripts/compare-coverage-ast.py \
-          --coverage-db .coverage \
-          --output "temp/coverage-audit-$(date +%Y%m%d-%H%M%S).json"
+          --coverage-db "{{.ROOT_DIR}}/.autoskillit/temp/coverage-audit/.coverage" \
+          --output ".autoskillit/temp/coverage-audit/report-$(date +%Y%m%d-%H%M%S).json"
 
         echo ""
         echo "--- Building test-source map ---"
         set +e
         $PYTHON scripts/compare-coverage-ast.py \
           --mode build-test-source-map \
-          --coverage-db .coverage \
+          --coverage-db "{{.ROOT_DIR}}/.autoskillit/temp/coverage-audit/.coverage" \
           --output ".autoskillit/test-source-map.json" \
           --pytest-status "$PYTEST_EXIT" \
           --source-commit "$(git rev-parse HEAD)"

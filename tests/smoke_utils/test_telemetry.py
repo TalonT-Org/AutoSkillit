@@ -43,6 +43,9 @@ def _write_test_sessions(log_root: Path, entries: list[dict]) -> None:
             "loc_deletions": entry.get("loc_deletions", 0),
             "schema_version": 2,
         }
+        for field in ("backend", "provider_used"):
+            if field in entry:
+                token_data[field] = entry[field]
         if "model_identifier" in entry:
             token_data["model_identifier"] = entry["model_identifier"]
         (session_dir / "token_usage.json").write_text(json.dumps(token_data))
@@ -508,6 +511,60 @@ def test_pts_includes_model_usage_breakdown(mock_run, _mock_sleep, tmp_path: Pat
     assert body_arg.count("## Model Usage Breakdown") == 1
     assert "claude-sonnet-4-6" in body_arg
     assert "## Next Section" in body_arg
+
+
+@patch("time.sleep")
+@patch("subprocess.run")
+def test_pts_patches_complete_literal_source_and_model_body(
+    mock_run, _mock_sleep, tmp_path: Path
+) -> None:
+    cwd = "/clone/test"
+    _write_test_sessions(
+        tmp_path,
+        [
+            {
+                "dir_name": "s1",
+                "cwd": cwd,
+                "step_name": "plan",
+                "backend": "claude-code",
+                "provider_used": "anthropic",
+                "input_tokens": 1200,
+                "output_tokens": 600,
+                "cache_write_tokens": 100,
+                "cache_read_tokens": 80,
+                "timing_seconds": 30.0,
+                "loc_insertions": 12,
+                "loc_deletions": 3,
+                "model_identifier": "claude-sonnet-4-6",
+            },
+        ],
+    )
+    mock_run.side_effect = _make_gh_mock(get_body="## Summary\nIntro")
+
+    result = patch_pr_token_summary(PR_URL, cwd, log_dir=str(tmp_path))
+
+    assert result == {"success": "true", "sessions_loaded": "1"}
+    patch_call = mock_run.call_args_list[-1]
+    body_arg = next(arg for arg in patch_call[0][0] if arg.startswith("body="))
+    assert body_arg == (
+        "body=## Summary\nIntro\n\n"
+        "## Token Usage Summary\n\n"
+        "| Step | Model | count | uncached | output | cache_read | peak_ctx | turns"
+        " | cache_write | time |\n"
+        "|------|-------|-------|----------|--------|------------|----------|-------|-------------|------|\n"
+        "| plan (claude-code/anthropic) | claude-sonnet-4-6 | 1 | 1.2k | 600 | 80"
+        " | unknown | 0 | 100 | 30s |\n"
+        "| **Total (claude-code/anthropic)** | | | 1.2k | 600 | 80 | unknown | | 100 | 30s |\n\n"
+        "## Token Efficiency\n\n"
+        "| Step | LoC Changed | cache_read/LoC | cache_write/LoC | output/LoC |\n"
+        "|------|-------------|----------------|-----------------|------------|\n"
+        "| plan (claude-code/anthropic) | 15 | 5.3 | 6.7 | 40.0 |\n"
+        "| **Total (claude-code/anthropic)** | **15** | 5.3 | 6.7 | 40.0 |\n\n"
+        "## Model Usage Breakdown\n\n"
+        "| Model | steps | uncached | output | cache_read | cache_write | time |\n"
+        "|-------|-------|----------|--------|------------|-------------|------|\n"
+        "| claude-code/anthropic: claude-sonnet-4-6 | 1 | 1.2k | 600 | 80 | 100 | 30s |"
+    )
 
 
 def test_section_re_consumes_all_three_sections() -> None:

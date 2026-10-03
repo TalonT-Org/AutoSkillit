@@ -8,17 +8,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from autoskillit.hooks._runtime._hook_output import EMITTER_CHANNELS
+
 HOOKS_DIR = Path(__file__).resolve().parents[1] / "src" / "autoskillit" / "hooks"
 
-_CHANNEL_WRAPPERS = {
-    "deny_tool_use": "deny",
-    "block": "block",
-    "add_context": "context",
-    "allow_with_updated_input": "rewrite_input",
-    "rewrite_mcp_tool_output": "rewrite_mcp_output",
-    "notify": "notify",
-    "halt_session": "halt",
-}
+_CHANNEL_WRAPPERS = EMITTER_CHANNELS
 _CHANNELS_WITH_EVENT_POSITION = frozenset({"context", "notify"})
 _EMITTER_MODULES = frozenset(
     {

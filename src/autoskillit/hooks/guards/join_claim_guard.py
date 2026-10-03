@@ -118,6 +118,8 @@ def main() -> None:
             tool_use_id=tool_use_id,
         )
     except (JoinLedgerError, OSError) as exc:
+        # Deny when the ledger cannot confirm an assignment; allowing the child
+        # would leave its delegation outside the parent's required join set.
         write_join_diagnostic(
             {
                 "gate": "join_claim_guard",

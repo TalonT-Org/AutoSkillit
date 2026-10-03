@@ -24,13 +24,12 @@ from typing import Any
 # autoskillit venv (test_hooks_are_stdlib_only). To split the formatter without
 # breaking that constraint, sibling helpers are imported by bare name with the
 # script's directory placed first on sys.path. The same bootstrap makes
-# package-mode loading (``from autoskillit.hooks.pretty_output import ...``)
+# package-mode loading (``from autoskillit.hooks.formatters.pretty_output_hook import ...``)
 # resolve the helpers to the same top-level modules so identity stays
 # consistent across both invocation modes.
 _HOOKS_DIR = str(Path(__file__).resolve().parent)
-_PACKAGE_ROOT = str(Path(__file__).resolve().parents[2])
 _RUNTIME_DIR = str(Path(__file__).resolve().parents[1] / "_runtime")
-for _import_dir in (_HOOKS_DIR, _PACKAGE_ROOT, _RUNTIME_DIR):
+for _import_dir in (_HOOKS_DIR, _RUNTIME_DIR):
     if _import_dir not in sys.path:
         sys.path.insert(0, _import_dir)
 

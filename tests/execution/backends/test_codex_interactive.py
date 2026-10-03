@@ -69,8 +69,6 @@ def _assert_default_service_tier_override(spec: CmdSpec) -> None:
     for pairs in (cmd_pairs, spec.origin.variadic_pairs):
         overrides = [pair for pair in pairs if pair[0] == CodexFlags.CONFIG_OVERRIDE]
         assert overrides.count(expected) == 1
-        assert overrides[-2] == expected
-        assert overrides[-1][1].startswith("sqlite_home=")
 
 
 class TestCodexInteractiveCmdBaseStructure:

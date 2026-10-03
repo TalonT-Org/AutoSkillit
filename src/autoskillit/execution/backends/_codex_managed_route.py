@@ -8,7 +8,7 @@ import os
 import shutil
 import tomllib
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from autoskillit.core import (
     CODEX_EFFORT_MAPPING,
@@ -48,7 +48,7 @@ def prepare_managed_codex_catalog(
     backend: CodexBackend,
     configured_model: str,
     *,
-    launch_context: str,
+    launch_context: Literal["interactive", "direct"],
     scratch_root: Path,
     deadline: float,
 ) -> tuple[str, str, CodexCatalogProjection]:

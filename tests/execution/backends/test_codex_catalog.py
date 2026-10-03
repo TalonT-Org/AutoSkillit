@@ -137,6 +137,7 @@ def test_managed_preparation_uses_bundled_catalog_and_resolves_native_default(
 
     model, effort, projection = CodexBackend().prepare_managed_codex_catalog(
         "gpt-6-sol",
+        launch_context="direct",
         scratch_root=tmp_path,
         deadline=123.0,
     )
@@ -145,6 +146,14 @@ def test_managed_preparation_uses_bundled_catalog_and_resolves_native_default(
     assert json.loads(projection.canonical_projected_bytes)["models"][0]["tool_mode"] == "direct"
     assert seen["scratch_root"] == tmp_path
     assert seen["deadline"] == 123.0
+
+    with pytest.raises(ValueError, match="launch context"):
+        CodexBackend().prepare_managed_codex_catalog(
+            "gpt-6-sol",
+            launch_context="unsupported",
+            scratch_root=tmp_path,
+            deadline=123.0,
+        )
 
 
 def test_bundled_catalog_acquisition_owns_scratch_and_rejects_stderr(tmp_path: Path) -> None:

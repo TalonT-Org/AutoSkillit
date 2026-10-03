@@ -108,6 +108,7 @@ def prepare_managed_join_context(
             )
         model, effort, projection = prepare_catalog(
             configured_model,
+            launch_context=launch_context,
             scratch_root=resolve_temp_dir(state_root) / "managed-codex-preparation",
             deadline=time.monotonic() + _MANAGED_CODEX_PREPARATION_TIMEOUT_SECONDS,
         )

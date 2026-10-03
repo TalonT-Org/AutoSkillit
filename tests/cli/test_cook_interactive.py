@@ -22,6 +22,7 @@ import autoskillit.cli.session._session_reload as _patch_session__session_reload
 import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
 from autoskillit import cli
 from autoskillit.core import (
+    CODEX_MODEL_ALIASES,
     CODEX_RESERVED_HOME_ENV_VARS,
     CODEX_STARTUP_TRACE_ENV_VAR,
     LAUNCH_ID_ENV_VAR,
@@ -426,7 +427,7 @@ def test_codex_cook_admits_compose_pr_roles_from_exact_bundled_catalog_probe(
     tmp_path: Path,
 ) -> None:
     from autoskillit.core import SkillExecutionRole
-    from autoskillit.execution.backends.codex import CodexBackend
+    from autoskillit.execution.backends.codex import CodexBackend, CodexFlags
     from autoskillit.workspace import DefaultSkillResolver
 
     project_root = tmp_path / "project"
@@ -434,7 +435,9 @@ def test_codex_cook_admits_compose_pr_roles_from_exact_bundled_catalog_probe(
     source_home = tmp_path / "home" / ".codex"
     source_home.mkdir(parents=True)
     (source_home / "config.toml").write_text(
-        'cli_auth_credentials_store = "keyring"\n',
+        'cli_auth_credentials_store = "keyring"\n'
+        'model_reasoning_effort = "medium"\n'
+        'service_tier = "priority"\n',
         encoding="utf-8",
     )
     (source_home / "auth.json").write_text("{}\n", encoding="utf-8")
@@ -461,6 +464,17 @@ def test_codex_cook_admits_compose_pr_roles_from_exact_bundled_catalog_probe(
 
     def run_attempt(spec: CmdSpec, **kwargs: object) -> object:
         generated_home = Path(spec.env["CODEX_HOME"])
+        generated_config = tomllib.loads(
+            (generated_home / "config.toml").read_text(encoding="utf-8")
+        )
+        captured["generated_model"] = generated_config["model"]
+        captured["generated_effort"] = generated_config["model_reasoning_effort"]
+        config_overrides = [
+            spec.cmd[index + 1]
+            for index, value in enumerate(spec.cmd[:-1])
+            if value == CodexFlags.CONFIG_OVERRIDE
+        ]
+        captured["default_service_tier_count"] = config_overrides.count('service_tier="default"')
         compose_projection = generated_home / "add-dir" / "skills" / "compose-pr" / "SKILL.md"
         captured["compose_projected"] = compose_projection.is_file()
         captured["source_cache_exists"] = (source_home / "models_cache.json").exists()
@@ -519,6 +533,9 @@ def test_codex_cook_admits_compose_pr_roles_from_exact_bundled_catalog_probe(
 
     cli.cook(backend=backend)
 
+    assert captured["generated_model"] == CODEX_MODEL_ALIASES["sonnet"]
+    assert captured["generated_effort"] == "high"
+    assert captured["default_service_tier_count"] == 1
     assert captured["compose_projected"] is True
     assert captured["source_cache_exists"] is False
     assert not (source_home / "models_cache.json").exists()

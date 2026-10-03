@@ -49,6 +49,7 @@ def _check_codex_managed_preparation(
     try:
         model, effort, _projection = backend.prepare_managed_codex_catalog(
             configured_model,
+            launch_context="direct",
             scratch_root=scratch_root,
             deadline=time.monotonic() + 10.0,
         )

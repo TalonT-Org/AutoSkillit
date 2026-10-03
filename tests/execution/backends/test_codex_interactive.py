@@ -58,6 +58,19 @@ def _developer_instructions(spec: CmdSpec) -> str | None:
     return tomllib.loads(f"developer_instructions = {rendered}")["developer_instructions"]
 
 
+def _assert_default_service_tier_override(spec: CmdSpec) -> None:
+    expected = (CodexFlags.CONFIG_OVERRIDE, 'service_tier="default"')
+    cmd_pairs = [
+        (value, spec.cmd[index + 1])
+        for index, value in enumerate(spec.cmd[:-1])
+        if value == CodexFlags.CONFIG_OVERRIDE
+    ]
+    assert spec.origin is not None
+    for pairs in (cmd_pairs, spec.origin.variadic_pairs):
+        overrides = [pair for pair in pairs if pair[0] == CodexFlags.CONFIG_OVERRIDE]
+        assert overrides.count(expected) == 1
+
+
 class TestCodexInteractiveCmdBaseStructure:
     def test_requires_and_pins_a_canonical_generated_home(self, tmp_path: Path) -> None:
         backend = _CodexBackend()
@@ -77,6 +90,7 @@ class TestCodexInteractiveCmdBaseStructure:
 
     def test_fresh_base_command(self) -> None:
         spec = CodexBackend().build_interactive_cmd(launch=FreshLaunch())
+        _assert_default_service_tier_override(spec)
         assert spec.cmd[0] == "codex"
         assert CodexFlags.DANGEROUSLY_BYPASS in spec.cmd
         assert "resume" not in spec.cmd
@@ -123,6 +137,8 @@ class TestCodexInteractiveCmdLaunchVariants:
             CodexFlags.CONFIG_OVERRIDE,
             "features.image_generation=false",
             CodexFlags.CONFIG_OVERRIDE,
+            'service_tier="default"',
+            CodexFlags.CONFIG_OVERRIDE,
             'sqlite_home="/session/home"',
             CodexFlags.ADD_DIR,
             "/first",
@@ -145,14 +161,17 @@ class TestCodexInteractiveCmdLaunchVariants:
             ),
             variadic_pairs=(
                 (CodexFlags.CONFIG_OVERRIDE, "features.image_generation=false"),
+                (CodexFlags.CONFIG_OVERRIDE, 'service_tier="default"'),
                 (CodexFlags.CONFIG_OVERRIDE, 'sqlite_home="/session/home"'),
                 (CodexFlags.ADD_DIR, "/first"),
                 (CodexFlags.ADD_DIR, "/second"),
             ),
         )
+        _assert_default_service_tier_override(spec)
 
     def test_restore_session_includes_resume_with_no_prompt(self) -> None:
         spec = CodexBackend().build_interactive_cmd(launch=RestoreSession(session_id="abc123"))
+        _assert_default_service_tier_override(spec)
         assert CodexFlags.RESUME_SUBCOMMAND in spec.cmd
         idx = list(spec.cmd).index(CodexFlags.RESUME_SUBCOMMAND)
         assert spec.cmd[idx + 1] == CodexFlags.DANGEROUSLY_BYPASS
@@ -172,6 +191,7 @@ class TestCodexInteractiveCmdModelFlag:
 
     def test_no_model_kwarg_excludes_model_flag(self) -> None:
         spec = CodexBackend().build_interactive_cmd()
+        _assert_default_service_tier_override(spec)
         assert "--model" not in spec.cmd
 
 
@@ -203,6 +223,7 @@ class TestCodexInteractiveCmdSystemPrompt:
         ]
         assert not any(v.startswith("developer_instructions=") for v in overrides)
         assert "features.image_generation=false" in overrides
+        _assert_default_service_tier_override(spec)
 
     def test_fresh_launch_without_system_prompt_uses_scope_discipline(self) -> None:
         spec = CodexBackend().build_interactive_cmd(launch=FreshLaunch())
@@ -238,11 +259,12 @@ class TestCodexInteractiveCmdSystemPrompt:
                 config_pairs.extend(spec.cmd[index : index + 2])
 
         overrides = config_pairs[1::2]
-        assert len(config_pairs) == 6
-        assert len(overrides) == 3
+        assert len(config_pairs) == 8
+        assert len(overrides) == 4
         assert {value.partition("=")[0] for value in overrides} == {
             "developer_instructions",
             "features.image_generation",
+            "service_tier",
             "sqlite_home",
         }
         assert caller_prompt in _developer_instructions(spec)

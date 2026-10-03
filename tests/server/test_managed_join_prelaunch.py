@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from autoskillit.core import ManagedJoinRefusalReason
+from autoskillit.core import CODEX_MODEL_ALIASES, ManagedJoinRefusalReason
 from tests.execution.backends._codex_fixtures import (
     installed_catalog,
     managed_source_home,
@@ -28,14 +28,20 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small, pytest.mark.model_
 
 
 @pytest.mark.parametrize(
-    ("configured_model", "expected_model"),
-    [("gpt-6-luna", "gpt-6-luna"), ("gpt-6-sol", "gpt-6-sol")],
+    ("configured_model", "launch_context", "expected_effort"),
+    [
+        ("gpt-6-luna", "interactive", "medium"),
+        ("gpt-6-sol", "interactive", "high"),
+        ("sonnet", "interactive", "high"),
+        ("sonnet", "direct", "medium"),
+    ],
 )
-def test_prelaunch_issuance_admits_native_gpt6_models_with_catalog_effort(
+def test_prelaunch_issuance_admits_contextual_models_with_catalog_effort(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     configured_model: str,
-    expected_model: str,
+    launch_context: str,
+    expected_effort: str,
 ) -> None:
     from autoskillit.core import SemanticAdaptationContext
     from autoskillit.execution.backends import CodexBackend
@@ -47,15 +53,17 @@ def test_prelaunch_issuance_admits_native_gpt6_models_with_catalog_effort(
         backend=CodexBackend(source_codex_home=source_home),
         configured_model=configured_model,
         state_root=tmp_path / "state",
-        parent_id=f"native-{configured_model}",
-        launch_context="interactive",
+        parent_id=f"admitted-{configured_model}-{launch_context}",
+        launch_context=launch_context,
     )
 
     assert isinstance(context, SemanticAdaptationContext)
     attestation = context.managed_join_attestation
     assert attestation is not None
-    assert attestation.resolved_model == expected_model
-    assert attestation.resolved_reasoning_effort == "medium"
+    assert attestation.resolved_model == CODEX_MODEL_ALIASES.get(
+        configured_model, configured_model
+    )
+    assert attestation.resolved_reasoning_effort == expected_effort
 
 
 @pytest.mark.parametrize(
@@ -167,10 +175,37 @@ def test_prelaunch_issuance_refuses_unresolvable_model_identity(
         configured_model="gpt-6-sol",
         state_root=state_root,
         parent_id="missing-default",
-        launch_context="interactive",
+        launch_context="direct",
     )
     assert isinstance(missing_default, ManagedJoinIssuanceRefusal)
     assert "gpt-6-sol" in missing_default.reason
+
+    unsupported_high_catalog = installed_catalog()
+    unsupported_models = unsupported_high_catalog["models"]
+    assert isinstance(unsupported_models, list)
+    unsupported_sol = unsupported_models[0]
+    assert isinstance(unsupported_sol, dict)
+    supported_levels = unsupported_sol["supported_reasoning_levels"]
+    assert isinstance(supported_levels, list)
+    unsupported_sol["supported_reasoning_levels"] = [
+        level
+        for level in supported_levels
+        if not isinstance(level, dict) or level.get("effort") != "high"
+    ]
+    unsupported_home, unsupported_catalog = managed_source_home(
+        tmp_path / "unsupported-high", catalog=unsupported_high_catalog
+    )
+    use_bundled_catalog(monkeypatch, unsupported_catalog)
+    unsupported_high = prepare_managed_join_context(
+        backend=CodexBackend(source_codex_home=unsupported_home),
+        configured_model="gpt-6-sol",
+        state_root=state_root,
+        parent_id="unsupported-high",
+        launch_context="interactive",
+    )
+    assert isinstance(unsupported_high, ManagedJoinIssuanceRefusal)
+    assert "gpt-6-sol" in unsupported_high.reason
+    assert "high" in unsupported_high.reason
 
     absent_home, absent_catalog = managed_source_home(tmp_path / "absent", include_sol=False)
     use_bundled_catalog(monkeypatch, absent_catalog)

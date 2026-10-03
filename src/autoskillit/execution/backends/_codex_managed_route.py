@@ -8,7 +8,7 @@ import os
 import shutil
 import tomllib
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from autoskillit.core import (
     CODEX_EFFORT_MAPPING,
@@ -36,6 +36,7 @@ from autoskillit.execution.backends._codex_hooks import (
     iter_codex_hook_commands,
     managed_codex_guard_set,
     managed_codex_mcp_tools,
+    managed_codex_route_for_launch_context,
     sync_managed_codex_hooks_to_config,
 )
 
@@ -49,10 +50,12 @@ def prepare_managed_codex_catalog(
     backend: CodexBackend,
     configured_model: str,
     *,
+    launch_context: Literal["interactive", "direct"],
     scratch_root: Path,
     deadline: float,
 ) -> tuple[str, str, CodexCatalogProjection]:
     """Acquire and project the installed bundled catalog for managed issuance."""
+    managed_codex_route_for_launch_context(launch_context)
     if not backend.capabilities.managed_fixed_batch_route_capable:
         raise ValueError("backend has no managed fixed-batch route")
     model = backend.translate_model(configured_model)
@@ -67,7 +70,13 @@ def prepare_managed_codex_catalog(
         environment=os.environ,
         deadline=deadline,
     )
-    effort = CODEX_EFFORT_MAPPING.get(strip_context_window_suffix(configured_model))
+    # Cook defaults GPT-6-Sol to high effort (#5218); direct launches keep the
+    # delegated/headless model mapping.
+    effort = (
+        "high"
+        if launch_context == "interactive" and model == "gpt-6-sol"
+        else CODEX_EFFORT_MAPPING.get(strip_context_window_suffix(configured_model))
+    )
     if effort is None:
         effort = resolve_codex_catalog_effort(raw_catalog, expected_model=model)
     projection = project_codex_catalog(

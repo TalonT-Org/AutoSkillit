@@ -50,11 +50,13 @@ class TestCheckCodexManagedPreparation:
             _self: CodexBackend,
             configured_model: str,
             *,
+            launch_context: str,
             scratch_root: Path,
             deadline: float,
         ) -> tuple[str, str, object]:
             seen.update(
                 configured_model=configured_model,
+                launch_context=launch_context,
                 scratch_root=scratch_root,
                 deadline=deadline,
             )
@@ -74,6 +76,7 @@ class TestCheckCodexManagedPreparation:
             f"model={CODEX_MODEL_ALIASES['sonnet']}, effort=high."
         )
         assert seen["configured_model"] == "sonnet"
+        assert seen["launch_context"] == "direct"
         assert seen["scratch_root"] == (
             tmp_path / "project" / ".autoskillit/temp/doctor-managed-codex-preparation"
         )

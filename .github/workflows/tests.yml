@@ -109,6 +109,8 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: "1.98.1"
 
       - name: Install dependencies
         run: uv sync --locked --extra dev
@@ -179,39 +181,45 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: "1.98.1"
 
       - name: Install ripgrep
         shell: bash
+        env:
+          RG_VERSION: "15.2.0"
         run: |
-          if command -v rg >/dev/null 2>&1; then
-            rg --version
-            exit 0
-          fi
-          case "$RUNNER_OS" in
-            Linux)
-              # Fetched directly from ripgrep's GitHub Releases (verified against a
-              # pinned SHA256) instead of via apt/azure.archive.ubuntu.com, which has a
-              # known, chronic upstream throughput instability that has repeatedly
-              # stalled this step for 10+ minutes — see issue #4697.
-              RG_VERSION="14.1.0"
-              RG_SHA256="f84757b07f425fe5cf11d87df6644691c644a5cd2348a2c670894272999d3ba7"
-              RG_TARBALL="ripgrep-${RG_VERSION}-x86_64-unknown-linux-musl.tar.gz"
-              curl -fsSL -o "${RG_TARBALL}" \
-                "https://github.com/BurntSushi/ripgrep/releases/download/${RG_VERSION}/${RG_TARBALL}"
-              echo "${RG_SHA256}  ${RG_TARBALL}" | sha256sum -c -
-              tar -xzf "${RG_TARBALL}" "ripgrep-${RG_VERSION}-x86_64-unknown-linux-musl/rg"
-              sudo install -m 0755 "ripgrep-${RG_VERSION}-x86_64-unknown-linux-musl/rg" /usr/local/bin/rg
-              rm -rf "${RG_TARBALL}" "ripgrep-${RG_VERSION}-x86_64-unknown-linux-musl"
+          # Fetched from ripgrep's GitHub Releases and verified against a pinned SHA256 on
+          # every runner: apt (azure.archive.ubuntu.com) has stalled this step for 10+
+          # minutes (issue #4697) and Homebrew cannot pin a version. RG_VERSION must equal
+          # RIPGREP_VERSION in scripts/docker/Dockerfile.
+          case "${RUNNER_OS}-${RUNNER_ARCH}" in
+            Linux-X64)
+              RG_TARGET="x86_64-unknown-linux-musl"
+              RG_SHA256="33e15bcf1624b25cdd2a55813a47a2f95dbe126268203e76aa6a585d1e7b149c"
+              CHECKSUM=(sha256sum)
               ;;
-            macOS)
-              brew install ripgrep
+            macOS-ARM64)
+              RG_TARGET="aarch64-apple-darwin"
+              RG_SHA256="3750b2e93f37e0c692657da574d7019a101c0084da05a790c83fd335bad973e4"
+              CHECKSUM=(shasum -a 256)
               ;;
             *)
-              echo "::error::Unsupported runner OS for ripgrep installation: $RUNNER_OS"
+              echo "::error::Unsupported runner for ripgrep installation: ${RUNNER_OS}-${RUNNER_ARCH}"
               exit 1
               ;;
           esac
-          rg --version
+          RG_DIR="ripgrep-${RG_VERSION}-${RG_TARGET}"
+          curl -fsSL -o "${RG_DIR}.tar.gz" \
+            "https://github.com/BurntSushi/ripgrep/releases/download/${RG_VERSION}/${RG_DIR}.tar.gz"
+          echo "${RG_SHA256}  ${RG_DIR}.tar.gz" | "${CHECKSUM[@]}" -c -
+          tar -xzf "${RG_DIR}.tar.gz" "${RG_DIR}/rg"
+          RG_BIN_DIR="${RUNNER_TEMP}/ripgrep-${RG_VERSION}"
+          mkdir -p "${RG_BIN_DIR}"
+          install -m 0755 "${RG_DIR}/rg" "${RG_BIN_DIR}/rg"
+          rm -rf "${RG_DIR}.tar.gz" "${RG_DIR}"
+          echo "${RG_BIN_DIR}" >> "$GITHUB_PATH"
+          "${RG_BIN_DIR}/rg" --version | grep -q "^ripgrep ${RG_VERSION}"
 
       - name: Install dependencies
         run: uv sync --locked --extra dev

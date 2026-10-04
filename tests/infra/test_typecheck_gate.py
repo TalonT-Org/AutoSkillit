@@ -165,9 +165,7 @@ def test_test_all_propagates_typecheck_failure() -> None:
 
 
 def test_verification_container_uses_project_mypy() -> None:
-    dockerfile = (REPO_ROOT / "scripts" / "docker" / "verification" / "Dockerfile").read_text(
-        encoding="utf-8"
-    )
+    dockerfile = (REPO_ROOT / "scripts" / "docker" / "Dockerfile").read_text(encoding="utf-8")
     assert "MYPY_VERSION" not in dockerfile
     assert "TYPES_PYYAML_VERSION" not in dockerfile
     assert "/usr/local/bin/mypy" not in dockerfile

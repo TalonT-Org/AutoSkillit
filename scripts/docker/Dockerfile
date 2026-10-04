@@ -1,8 +1,15 @@
 # syntax=docker/dockerfile:1.7
 
-FROM ghcr.io/astral-sh/uv:0.9.21 AS uv
-FROM node:22-bookworm AS node
-FROM rust:1.90-bookworm
+# Toolchain pins: each tool version in these images is declared once, here or at the top
+# of the toolchain stage. tests/infra/test_verification_container.py requires every CI
+# step, Taskfile precondition and code constant that installs or requires one to match.
+ARG UV_VERSION=0.9.21
+ARG NODE_VERSION=24.21.0
+ARG RUST_VERSION=1.98.1
+
+FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
+FROM node:${NODE_VERSION}-bookworm AS node
+FROM rust:${RUST_VERSION}-bookworm AS toolchain
 
 ARG CODEX_VERSION=0.156.1
 ARG CLAUDE_VERSION=2.1.280
@@ -10,8 +17,7 @@ ARG GO_TASK_VERSION=3.43.3
 ARG PRE_COMMIT_VERSION=4.6.2
 ARG RIPGREP_VERSION=15.2.0
 ARG JQ_VERSION=1.8.2
-ARG VERIFIER_UID=1000
-ARG VERIFIER_GID=1000
+ARG GH_VERSION=2.102.0
 
 COPY --from=uv /uv /uvx /usr/local/bin/
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
@@ -58,8 +64,19 @@ RUN tool_arch="$(dpkg --print-architecture)" \
     && curl --fail --location --silent --show-error --output /usr/local/bin/jq \
         "https://github.com/jqlang/jq/releases/download/jq-${JQ_VERSION}/jq-linux-${tool_arch}" \
     && chmod 0755 /usr/local/bin/jq \
+    && gh_archive="gh_${GH_VERSION}_linux_${tool_arch}" \
+    && curl --fail --location --silent --show-error \
+        "https://github.com/cli/cli/releases/download/v${GH_VERSION}/${gh_archive}.tar.gz" \
+        | tar --extract --gzip --strip-components=2 --directory /usr/local/bin \
+            "${gh_archive}/bin/gh" \
     && rg --version | grep --quiet "^ripgrep ${RIPGREP_VERSION}" \
-    && test "$(jq --version)" = "jq-${JQ_VERSION}"
+    && test "$(jq --version)" = "jq-${JQ_VERSION}" \
+    && gh --version | grep --quiet "^gh version ${GH_VERSION} "
+
+FROM toolchain AS dev
+
+ARG VERIFIER_UID=1000
+ARG VERIFIER_GID=1000
 
 RUN groupadd --gid "${VERIFIER_GID}" verifier \
     && useradd --uid "${VERIFIER_UID}" --gid verifier --create-home --shell /bin/bash verifier \
@@ -99,5 +116,32 @@ RUN --mount=type=secret,id=github_token,required=false,uid=${VERIFIER_UID} \
 
 RUN task regen-contracts \
     && task compile-recipes
+
+CMD ["bash"]
+
+FROM toolchain AS user
+
+RUN groupadd --gid 1000 autoskillit \
+    && useradd --uid 1000 --gid autoskillit --create-home --shell /bin/bash autoskillit \
+    && install --directory --owner autoskillit --group autoskillit /workspace
+
+# uv's default tool layout under HOME, as on a real install: doctor, the
+# installation-integrity guard and the entrypoint shim all resolve ~/.local.
+ENV HOME=/home/autoskillit \
+    PATH=/home/autoskillit/.local/bin:${PATH} \
+    AUTOSKILLIT_SKIP_UPDATE_CHECK=1 \
+    AUTOSKILLIT_SKIP_STALE_CHECK=1 \
+    DISABLE_AUTOUPDATER=1
+
+USER autoskillit
+WORKDIR /workspace
+
+# The build context is mounted for this instruction only, so AutoSkillit installs from
+# the archived source exactly as a release installs from its Git URL and no source
+# tree, token or Git metadata reaches the image.
+RUN --mount=type=bind,target=/opt/autoskillit-source \
+    uv tool install --no-cache --python /usr/bin/python3 /opt/autoskillit-source \
+    && expected_version="$(python3 -c 'import sys, tomllib; print(tomllib.load(open(sys.argv[1], "rb"))["project"]["version"])' /opt/autoskillit-source/pyproject.toml)" \
+    && test "$(autoskillit --version)" = "${expected_version}"
 
 CMD ["bash"]

@@ -189,11 +189,14 @@ ALWAYS_RUN_AGGRESSIVE: frozenset[str] = frozenset(
 # tracked-layout invariants (gate-selector coverage) whose verdict changes with file
 # moves outside the infra trigger set. Gate-contract tests pinned here (e.g.
 # test_typecheck_gate.py) read tracked files like .python-version and
-# scripts/docker/verification/Dockerfile that are NOT covered by the infra trigger
+# scripts/docker/Dockerfile that are NOT covered by the infra trigger
 # prefixes/files, so a Dockerfile-only or .python-version-only change would otherwise
-# skip the test and let a drift pass silently.
+# skip the test and let a drift pass silently. test_verification_container.py
+# likewise compares the Dockerfile's pins with code constants under src/, which no infra
+# trigger covers.
 _INFRA_UNCONDITIONAL_FILES: frozenset[str] = frozenset(
     {
+        "test_verification_container.py",
         "test_manifest_completeness.py",
         "test_manifest_directory_completeness.py",
         "test_guard_coverage.py",

@@ -73,7 +73,7 @@ so it does not delay capture EOF.
 Command semantics use raw `bash -c`; process lifetime uses native Codex CLI
 0.156.1 `unified_exec`, which SIGKILLs the command's process group on release,
 capacity eviction, and session shutdown. The pinned baseline is declared by
-`ARG CODEX_VERSION=0.156.1` in `scripts/docker/verification/Dockerfile`, and the
+`ARG CODEX_VERSION=0.156.1` in `scripts/docker/Dockerfile`, and the
 executable registry is `tests/hooks/_shell_conformance_matrix.py`. Each
 invariant has executable cases in capture and direct mode.
 

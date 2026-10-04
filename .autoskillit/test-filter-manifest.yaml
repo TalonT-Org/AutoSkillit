@@ -194,6 +194,7 @@ README.md:
 src/autoskillit/assets/**/*:
   - assets/
   - contracts/
+  - report/
 
 tests/arch/fixtures/*:
   - arch/

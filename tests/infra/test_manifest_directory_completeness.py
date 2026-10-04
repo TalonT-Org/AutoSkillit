@@ -67,6 +67,7 @@ _SOURCE_DEPENDENCIES: dict[str, frozenset[str]] = {
         }
     ),
     "contracts": frozenset({"src/autoskillit/assets/**/*", "src/autoskillit/agents/**"}),
+    "report": frozenset({"src/autoskillit/assets/**/*"}),
     "recipe": frozenset(
         {
             "src/autoskillit/skills_extended/*/SKILL.md",

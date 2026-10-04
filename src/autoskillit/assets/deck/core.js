@@ -1,0 +1,205 @@
+globalThis.DeckCore = (() => {
+  "use strict";
+  const CHIP_STATES = Object.freeze({LIVE: "live", STRUCK: "struck", ABSENT: "absent"});
+  const DAY_MS = 86400000;
+  const enc = encodeURIComponent;
+  const formatCount = n => new Intl.NumberFormat("en-US").format(n);
+  const formatDate = ms => new Date(ms).toISOString().slice(0, 10);
+  const decodeTable = ({columns, rows}) => rows.map(r =>
+    Object.fromEntries(columns.map((c, i) => [c, r[i]])));
+
+  function encodeRoute(route, cohortKeys) {
+    let path = "#/" + enc(route.view);
+    if (route.entity != null) path += "/" + enc(route.entity);
+    const params = route.params || {};
+    const keys = [...new Set([...cohortKeys, "sort", ...Object.keys(params).sort()])];
+    const pairs = [];
+    for (const key of keys) {
+      const values = params[key];
+      if (values == null || values.length === 0) continue;
+      pairs.push(enc(key) + "=" + values.map(enc).join(","));
+    }
+    return path + (pairs.length ? "?" + pairs.join("&") : "");
+  }
+
+  function decodeRoute(hash, landing) {
+    const text = hash.replace(/^#/, "").replace(/^\//, "");
+    const split = text.indexOf("?");
+    const path = (split < 0 ? text : text.slice(0, split)).split("/");
+    const query = split < 0 ? "" : text.slice(split + 1);
+    let view = landing, entity = null;
+    try { view = decodeURIComponent(path[0]) || landing; } catch (_) {}
+    if (path.length > 1) {
+      try { entity = decodeURIComponent(path[1]); } catch (_) {}
+    }
+    const params = {};
+    for (const pair of query.split("&")) {
+      const at = pair.indexOf("=");
+      if (at <= 0 || at === pair.length - 1) continue;
+      try {
+        const key = decodeURIComponent(pair.slice(0, at));
+        const values = pair.slice(at + 1).split(",").map(decodeURIComponent);
+        if (key && values.every(v => v !== "")) {
+          Object.defineProperty(params, key, {value: values, enumerable: true,
+            writable: true, configurable: true});
+        }
+      } catch (_) {}
+    }
+    return {view, entity, params};
+  }
+
+  function hrefFor(route, target, cohortKeys) {
+    const params = Object.fromEntries(cohortKeys.filter(k =>
+      Object.hasOwn(route.params, k)).map(k => [k, [...route.params[k]]]));
+    for (const [key, value] of Object.entries(target.params || {})) {
+      if (value === null) delete params[key];
+      else Object.defineProperty(params, key, {value, enumerable: true,
+        writable: true, configurable: true});
+    }
+    return encodeRoute({view: target.view, entity: target.entity ?? null, params}, cohortKeys);
+  }
+
+  function effectiveSelection(chips, selected) {
+    const live = chips.filter(c => c.state === "live").map(c => c.key);
+    if (selected == null) return {keys: live, dropped: [], widened: false};
+    const keys = live.filter(k => selected.includes(k));
+    const dropped = selected.filter(k => !live.includes(k));
+    return {keys: keys.length ? keys : live, dropped, widened: keys.length === 0};
+  }
+
+  function toggleSelection(chips, selected, key) {
+    const live = chips.filter(c => c.state === "live").map(c => c.key);
+    const current = effectiveSelection(chips, selected).keys;
+    const next = live.filter(k => k === key ? !current.includes(k) : current.includes(k));
+    if (!next.length) return current;
+    return next.length === live.length ? null : next;
+  }
+
+  function windowSelection(chips, selected) {
+    const want = selected?.[0];
+    const chip = chips.find(c => c.state === "live" && c.key === want) ||
+      chips.find(c => c.key === "all");
+    return {chip, dropped: want && chip.key !== want ? [want] : []};
+  }
+
+  function filterRows(model, rows, chips, route) {
+    let filtered = rows;
+    for (const facet of model.facets.filter(f => f.kind === "values")) {
+      const keys = effectiveSelection(chips[facet.id], route.params[facet.id] ?? null).keys;
+      const allowed = new Set(chips[facet.id].filter(c => keys.includes(c.key)).map(c => c.match));
+      filtered = filtered.filter(r => allowed.has(r[facet.column] ?? null));
+    }
+    let untimed = 0;
+    const window = windowSelection(chips.window, route.params.window ?? null).chip;
+    if (window.days != null) {
+      filtered = filtered.filter(row => {
+        if (row.time_ms == null) { untimed += 1; return false; }
+        return row.time_ms >= model.generated_at_ms - window.days * DAY_MS;
+      });
+    }
+    return {rows: filtered, untimed};
+  }
+
+  const reasonText = chip => chip.reason + (chip.issue != null ? " (#" + chip.issue + ")" : "");
+  function droppedNote(chips, key) {
+    const chip = chips.find(c => c.key === key);
+    return chip ? chip.label + " is not selectable on this view — " + reasonText(chip) :
+      key + " does not appear in this index";
+  }
+
+  function populationSentence(model, chips, route, result) {
+    const n = result.rows.length;
+    const notes = [], parts = [];
+    for (const facet of model.facets.filter(f => f.kind === "values")) {
+      const values = chips[facet.id];
+      const selection = effectiveSelection(values, route.params[facet.id] ?? null);
+      const live = values.filter(c => c.state === "live");
+      const labels = values.filter(c => selection.keys.includes(c.key)).map(c => c.label);
+      parts.push(facet.label + " " + (!live.length ? "none recorded" : labels.join(" + ") +
+        (selection.keys.length === live.length ? " (all)" : "")));
+      notes.push(...selection.dropped.map(k => droppedNote(values, k)));
+      if (selection.widened) notes.push("no selected " + facet.label +
+        " is selectable here — showing every selectable " + facet.label);
+    }
+    const selection = windowSelection(chips.window, route.params.window ?? null);
+    const window = selection.chip;
+    if (window.days != null) {
+      parts.push("window last " + window.label + " (" +
+        formatDate(model.generated_at_ms - window.days * DAY_MS) + " → " +
+        formatDate(model.generated_at_ms) + ")");
+    } else {
+      parts.push("window all history" + (model.history.first_ms == null ? "" :
+        " (" + formatDate(model.history.first_ms) + " → " + formatDate(model.generated_at_ms) + ")"));
+    }
+    notes.push(...selection.dropped.map(k => droppedNote(chips.window, k)));
+    if (result.untimed) notes.push(formatCount(result.untimed) + (result.untimed === 1 ?
+      " run without a timestamp falls outside every window" :
+      " runs without a timestamp fall outside every window"));
+    return {headline: formatCount(n) + (n === 1 ? " run" : " runs"), detail: parts.join(" · "), notes};
+  }
+
+  function summarizePairs(rows) {
+    const groups = new Map();
+    for (const row of rows) {
+      const key = JSON.stringify([row.harness, row.provider]);
+      if (!groups.has(key)) groups.set(key, {harness: row.harness, provider: row.provider,
+        runs: 0, skills: new Set(), first_ms: null, last_ms: null});
+      const group = groups.get(key);
+      group.runs += 1;
+      if (row.skill != null) group.skills.add(row.skill);
+      if (row.time_ms != null) {
+        group.first_ms = group.first_ms == null ? row.time_ms : Math.min(group.first_ms, row.time_ms);
+        group.last_ms = group.last_ms == null ? row.time_ms : Math.max(group.last_ms, row.time_ms);
+      }
+    }
+    return [...groups.values()].map(g => ({...g, skills: g.skills.size})).sort((a, b) =>
+      b.runs - a.runs || compare(a.harness, b.harness) || compare(a.provider, b.provider));
+  }
+
+  const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+  function sortRows(rows, key, dir) {
+    return rows.map((row, i) => ({row, i})).sort((a, b) => {
+      const av = a.row[key], bv = b.row[key];
+      if (av == null || bv == null) {
+        return av == null && bv == null ? a.i - b.i : av == null ? 1 : -1;
+      }
+      const order = typeof av === "number" && typeof bv === "number" ? compare(av, bv) :
+        compare(String(av), String(bv));
+      return order * (dir === "desc" ? -1 : 1) || a.i - b.i;
+    }).map(x => x.row);
+  }
+
+  function parseSort(value, keys, fallback) {
+    const [key, dir] = (value || "").split(":");
+    return keys.includes(key) && (dir === "asc" || dir === "desc") &&
+      value === key + ":" + dir ? {key, dir} : fallback;
+  }
+
+  function chipPresentation(chip, selected) {
+    const live = chip.state === "live";
+    return {text: chip.label + (chip.state === "absent" ? " ✕" : ""),
+      className: "chip" + (live ? "" : " chip--" + chip.state), disabled: !live,
+      pressed: live && selected, reason: live ? null : reasonText(chip)};
+  }
+
+  function availabilityPresentation(measure, vocabulary) {
+    const entry = vocabulary.find(v => v.state === measure.state);
+    if (!entry) throw new Error("unknown availability state: " + measure.state);
+    return {text: measure.state === "measured" ? formatCount(measure.value) :
+      measure.state === "measured_zero" ? "0" : entry.label,
+      className: "av av--" + measure.state, title: entry.description};
+  }
+
+  function barLayout(items, {width, labelWidth, valueWidth, rowHeight, gap}) {
+    const plot = width - labelWidth - valueWidth;
+    const max = items.reduce((max, item) => item.value == null ? max : Math.max(max, item.value), 0);
+    return items.map((item, i) => ({label: item.label, value: item.value, href: item.href,
+      x: labelWidth, y: i * (rowHeight + gap), w: item.value == null ? null :
+        max > 0 ? item.value / max * plot : 0, h: rowHeight}));
+  }
+
+  return Object.freeze({decodeTable, encodeRoute, decodeRoute, hrefFor, effectiveSelection,
+    toggleSelection, windowSelection, filterRows, populationSentence, summarizePairs, sortRows,
+    parseSort, chipPresentation, availabilityPresentation, barLayout, formatCount, formatDate,
+    CHIP_STATES, DAY_MS});
+})();

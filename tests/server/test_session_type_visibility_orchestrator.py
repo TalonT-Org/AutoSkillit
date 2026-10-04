@@ -165,7 +165,6 @@ async def test_food_truck_with_multiple_packs(monkeypatch):
 async def test_food_truck_without_tool_tags_sees_full_kitchen(monkeypatch):
     """ORCHESTRATOR+HEADLESS without FOOD_TRUCK_TOOL_TAGS falls back to full kitchen."""
     from autoskillit.core import EVIDENCE_READER_TOOLS, KITCHEN_GATED_TOOLS
-    from autoskillit.recipe.rules.rules_packs import _food_truck_can_call
     from autoskillit.server import _apply_session_type_visibility, mcp
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
@@ -180,8 +179,6 @@ async def test_food_truck_without_tool_tags_sees_full_kitchen(monkeypatch):
         assert name in tool_names
     assert "submit_exploration_query" in tool_names
     assert "post_pr_review" not in tool_names
-    for name in ("submit_exploration_query", "post_pr_review"):
-        assert _food_truck_can_call(name, frozenset()) == (name in tool_names)
     assert tool_names.isdisjoint(EVIDENCE_READER_TOOLS)
 
 

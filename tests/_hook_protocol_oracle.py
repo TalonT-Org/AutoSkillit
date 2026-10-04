@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import json
-import subprocess
-import sys
-import tempfile
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Literal, NamedTuple
 
 from jsonschema import validators
+
+from tests._hook_protocol_runner import run_hook as run_hook
 
 CODEX_PROTOCOL_VERSION: str = "0.156.1"
 CODEX_PROTOCOL_SOURCE: str = (
@@ -159,21 +158,7 @@ def _unsupported_pre_tool_use(value: Mapping[str, Any]) -> str | None:
     )
     if use_specific_decision:
         assert isinstance(specific, dict)
-        decision = specific.get("permissionDecision")
-        if "updatedInput" in specific and decision != "allow":
-            return "PreToolUse hook returned updatedInput without permissionDecision:allow"
-        if decision == "allow" and "updatedInput" not in specific:
-            return "PreToolUse hook returned unsupported permissionDecision:allow"
-        if decision == "ask":
-            return "PreToolUse hook returned unsupported permissionDecision:ask"
-        if decision == "deny" and _trimmed_text(specific.get("permissionDecisionReason")) is None:
-            return (
-                "PreToolUse hook returned permissionDecision:deny without a "
-                "non-empty permissionDecisionReason"
-            )
-        if decision is None and specific.get("permissionDecisionReason") is not None:
-            return "PreToolUse hook returned permissionDecisionReason without permissionDecision"
-        return None
+        return _unsupported_permission_decision(specific)
 
     decision = value.get("decision")
     reason = value.get("reason")
@@ -183,6 +168,24 @@ def _unsupported_pre_tool_use(value: Mapping[str, Any]) -> str | None:
         return "PreToolUse hook returned decision:block without a non-empty reason"
     if decision is None and reason is not None:
         return "PreToolUse hook returned reason without decision"
+    return None
+
+
+def _unsupported_permission_decision(specific: Mapping[str, Any]) -> str | None:
+    decision = specific.get("permissionDecision")
+    if "updatedInput" in specific and decision != "allow":
+        return "PreToolUse hook returned updatedInput without permissionDecision:allow"
+    if decision == "allow" and "updatedInput" not in specific:
+        return "PreToolUse hook returned unsupported permissionDecision:allow"
+    if decision == "ask":
+        return "PreToolUse hook returned unsupported permissionDecision:ask"
+    if decision == "deny" and _trimmed_text(specific.get("permissionDecisionReason")) is None:
+        return (
+            "PreToolUse hook returned permissionDecision:deny without a "
+            "non-empty permissionDecisionReason"
+        )
+    if decision is None and specific.get("permissionDecisionReason") is not None:
+        return "PreToolUse hook returned permissionDecisionReason without permissionDecision"
     return None
 
 
@@ -357,6 +360,10 @@ def _codex_semantics(event: str, value: Mapping[str, Any]) -> HookVerdict:
         return _codex_subagent_start(value)
     if event == "UserPromptSubmit":
         return _codex_user_prompt_submit(value)
+    return _codex_terminal_semantics(event, value)
+
+
+def _codex_terminal_semantics(event: str, value: Mapping[str, Any]) -> HookVerdict:
     if event == "Stop":
         return _codex_stop_event(value)
     if event == "SubagentStop":
@@ -381,16 +388,7 @@ def _validated_output(event: str, value: object) -> str | None:
     return "; ".join(str(error) for error in errors) if errors else None
 
 
-def codex_verdict(
-    event: str,
-    *,
-    exit_code: int | None,
-    stdout: str,
-    stderr: str,
-) -> HookVerdict:
-    """Return Codex's hook verdict for an emitted process result."""
-    if event not in CODEX_EVENTS:
-        raise ValueError(f"Codex does not emit a {event!r} hook event")
+def _codex_exit_verdict(event: str, exit_code: int | None, stderr: str) -> HookVerdict | None:
     if exit_code is None:
         return _failed("hook process terminated without an exit code")
     if exit_code == 2:
@@ -402,6 +400,22 @@ def codex_verdict(
         return _failed(f"hook exited with code {exit_code}")
     if exit_code != 0:
         return _failed(f"hook exited with code {exit_code}")
+    return None
+
+
+def codex_verdict(
+    event: str,
+    *,
+    exit_code: int | None,
+    stdout: str,
+    stderr: str,
+) -> HookVerdict:
+    """Return Codex's hook verdict for an emitted process result."""
+    if event not in CODEX_EVENTS:
+        raise ValueError(f"Codex does not emit a {event!r} hook event")
+    exit_verdict = _codex_exit_verdict(event, exit_code, stderr)
+    if exit_verdict is not None:
+        return exit_verdict
     if event not in CODEX_OUTPUT_EVENTS:
         return _completed()
 
@@ -422,9 +436,11 @@ def codex_verdict(
         return _completed()
 
     validation_error = _validated_output(event, parsed)
-    if validation_error is not None:
-        return _failed(validation_error)
-    return _codex_semantics(event, parsed)
+    return (
+        _failed(validation_error)
+        if validation_error is not None
+        else _codex_semantics(event, parsed)
+    )
 
 
 # These keys and event exceptions come from Claude's JSON output and
@@ -519,6 +535,13 @@ def _claude_output_error(event: str, value: Mapping[str, Any]) -> str | None:
     if unknown:
         return f"unsupported top-level output fields for {event}: {sorted(unknown)!r}"
 
+    error = _claude_universal_error(value)
+    if error is not None:
+        return error
+    return _claude_specific_error(event, value)
+
+
+def _claude_universal_error(value: Mapping[str, Any]) -> str | None:
     if "continue" in value and not isinstance(value["continue"], bool):
         return "continue must be a boolean"
     for field in ("stopReason", "systemMessage"):
@@ -533,6 +556,10 @@ def _claude_output_error(event: str, value: Mapping[str, Any]) -> str | None:
     if "reason" in value and not isinstance(value["reason"], str):
         return "reason must be a string"
 
+    return None
+
+
+def _claude_specific_error(event: str, value: Mapping[str, Any]) -> str | None:
     specific = value.get("hookSpecificOutput")
     if specific is None:
         return None
@@ -547,6 +574,10 @@ def _claude_output_error(event: str, value: Mapping[str, Any]) -> str | None:
         return f"unsupported hookSpecificOutput fields for {event}: {sorted(unknown_specific)!r}"
     if specific.get("hookEventName") != event:
         return f"hookSpecificOutput.hookEventName must be {event}"
+    return _claude_specific_field_error(specific)
+
+
+def _claude_specific_field_error(specific: Mapping[str, Any]) -> str | None:
     for field in (
         "permissionDecisionReason",
         "additionalContext",
@@ -597,22 +628,20 @@ def _claude_json_verdict(event: str, value: Mapping[str, Any]) -> HookVerdict:
     context_values = (contexts,) if contexts is not None else ()
     system_message = _trimmed_text(value.get("systemMessage"))
 
-    if event == "PreCompact":
-        # Claude hooks reference, PreCompact: systemMessage and continue are discarded.
-        system_message = None
-        continue_processing = True
-    else:
-        continue_processing = value.get("continue", True)
-    if not continue_processing:
+    # Claude's PreCompact discards systemMessage and continue.
+    system_message = None if event == "PreCompact" else system_message
+    if event != "PreCompact" and not value.get("continue", True):
         return _stopped(_trimmed_text(value.get("stopReason")))
 
     if event == "PreToolUse":
         permission_decision = specific.get("permissionDecision")
         if permission_decision == "deny":
             reason = _trimmed_text(specific.get("permissionDecisionReason"))
-            if reason is None:
-                return _failed("permissionDecision:deny requires a reason")
-            return _blocked(reason)
+            return (
+                _failed("permissionDecision:deny requires a reason")
+                if reason is None
+                else _blocked(reason)
+            )
         if permission_decision == "allow" and "updatedInput" in specific:
             return _completed(
                 contexts=context_values,
@@ -673,9 +702,11 @@ def claude_verdict(
     if not trimmed:
         return _completed()
     if looks_structured:
-        if candidate is None:
-            return _failed(f"invalid Claude hook JSON output for {event}")
-        return _claude_json_verdict(event, candidate)
+        return (
+            _failed(f"invalid Claude hook JSON output for {event}")
+            if candidate is None
+            else _claude_json_verdict(event, candidate)
+        )
     if event in _CLAUDE_CONTEXT_EVENTS:
         return _completed(contexts=(trimmed,))
     return _completed()
@@ -696,49 +727,3 @@ def assert_both_protocols_context(
         assert verdict.contexts, verdict
         if expected_context is not None:
             assert verdict.contexts == (expected_context,), verdict
-
-
-def run_hook(
-    script_rel: str | Path,
-    payload: dict[str, object] | str,
-    *,
-    env: Mapping[str, str] | None = None,
-    unset: Iterable[str] = (),
-    cwd: Path | None = None,
-    timeout: float | None = 10,
-):
-    """Run one hook in a fresh interpreter and adapt its process result."""
-    from autoskillit.hooks._runtime._hook_output import HookEmission
-    from tests.conftest import production_interpreter_env
-
-    script = Path(script_rel)
-    if not script.is_absolute():
-        script = Path(__file__).parents[1] / "src" / "autoskillit" / "hooks" / script
-    input_text = payload if isinstance(payload, str) else json.dumps(payload)
-    run_env = production_interpreter_env()
-    run_env.pop("AUTOSKILLIT_STATE_ROOT", None)
-    run_env.pop("AUTOSKILLIT_STATE_DIR", None)
-    run_env.pop("AUTOSKILLIT_LOG_DIR", None)
-    if env is None or "AUTOSKILLIT_HEADLESS" not in env:
-        run_env.pop("AUTOSKILLIT_HEADLESS", None)
-    for name in unset:
-        run_env.pop(name, None)
-    run_env.update(env or {})
-    run_env.pop("AUTOSKILLIT_STATE_ROOT", None)
-
-    with tempfile.TemporaryDirectory(prefix="hook-protocol-") as temp_dir:
-        log_dir = Path(temp_dir) / "logs"
-        log_dir.mkdir()
-        if env is None or "AUTOSKILLIT_LOG_DIR" not in env:
-            run_env["AUTOSKILLIT_LOG_DIR"] = str(log_dir)
-        result = subprocess.run(
-            [sys.executable, "-B", str(script)],
-            input=input_text,
-            capture_output=True,
-            text=True,
-            check=False,
-            cwd=cwd,
-            env=run_env,
-            timeout=timeout,
-        )
-    return HookEmission(result.stdout, result.stderr, result.returncode)

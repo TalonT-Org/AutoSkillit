@@ -71,6 +71,53 @@ def _is_helper_module(module: str | None) -> bool:
     )
 
 
+def _bind_module(bindings: _Bindings, alias: ast.alias) -> None:
+    module = alias.name
+    if _is_emitter_module(module) or _is_helper_module(module):
+        # An unaliased dotted import binds its root name.
+        root = module.split(".", 1)[0]
+        bindings.modules[alias.asname or root] = module if alias.asname else root
+    if module == "sys":
+        bindings.sys_names.add(alias.asname or "sys")
+    elif module == "os":
+        bindings.os_names.add(alias.asname or "os")
+
+
+def _bind_member(bindings: _Bindings, module: str | None, alias: ast.alias) -> None:
+    local = alias.asname or alias.name
+    if _is_emitter_module(module):
+        if alias.name == "*":
+            raise ChannelScanError("star import from _hook_output cannot be resolved")
+        if alias.name in _CHANNEL_WRAPPERS:
+            bindings.wrappers[local] = _CHANNEL_WRAPPERS[alias.name]
+        else:
+            bindings.forbidden_names.add(local)
+    elif _is_helper_module(module):
+        if alias.name != "*":
+            bindings.helper_names[local] = alias.name
+    else:
+        members = {
+            ("sys", "stdout"): bindings.stdout_names,
+            ("sys", "__stdout__"): bindings.stdout_names,
+            ("sys", "stderr"): bindings.stderr_names,
+            ("sys", "exit"): bindings.sys_exit_names,
+            ("os", "write"): bindings.os_write_names,
+            ("os", "_exit"): bindings.os_exit_names,
+        }
+        names = members.get((module, alias.name))
+        if names is not None:
+            names.add(local)
+    if (
+        module
+        and (
+            module in {"_runtime", "autoskillit.hooks._runtime"}
+            or module.endswith(".hooks._runtime")
+        )
+        and alias.name in {"_hook_output", "_session_scope_authority"}
+    ):
+        bindings.modules[local] = f"{module}.{alias.name}"
+
+
 def _bindings(tree: ast.AST) -> _Bindings:
     bindings = _Bindings(
         wrappers={},
@@ -88,80 +135,10 @@ def _bindings(tree: ast.AST) -> _Bindings:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                module = alias.name
-                if _is_emitter_module(module):
-                    if alias.asname:
-                        bindings.modules[alias.asname] = module
-                    else:
-                        bindings.modules[module.split(".", 1)[0]] = module.split(".", 1)[0]
-                elif _is_helper_module(module):
-                    if alias.asname:
-                        bindings.modules[alias.asname] = module
-                    else:
-                        bindings.modules[module.split(".", 1)[0]] = module.split(".", 1)[0]
-                if module == "sys":
-                    bindings.sys_names.add(alias.asname or "sys")
-                elif module == "os":
-                    bindings.os_names.add(alias.asname or "os")
+                _bind_module(bindings, alias)
         elif isinstance(node, ast.ImportFrom):
-            module = node.module
-            if _is_emitter_module(module):
-                for alias in node.names:
-                    local = alias.asname or alias.name
-                    if alias.name == "*":
-                        raise ChannelScanError("star import from _hook_output cannot be resolved")
-                    if alias.name in _CHANNEL_WRAPPERS:
-                        bindings.wrappers[local] = _CHANNEL_WRAPPERS[alias.name]
-                    else:
-                        bindings.forbidden_names.add(local)
-            elif _is_helper_module(module):
-                for alias in node.names:
-                    if alias.name == "*":
-                        continue
-                    bindings.helper_names[alias.asname or alias.name] = alias.name
-            elif module == "sys":
-                for alias in node.names:
-                    local = alias.asname or alias.name
-                    if alias.name in {"stdout", "__stdout__"}:
-                        bindings.stdout_names.add(local)
-                    elif alias.name == "stderr":
-                        bindings.stderr_names.add(local)
-                    elif alias.name == "exit":
-                        bindings.sys_exit_names.add(local)
-            elif module == "os":
-                for alias in node.names:
-                    local = alias.asname or alias.name
-                    if alias.name == "write":
-                        bindings.os_write_names.add(local)
-                    elif alias.name == "_exit":
-                        bindings.os_exit_names.add(local)
-        if isinstance(node, ast.ImportFrom) and node.module:
-            if node.module in {"_runtime", "autoskillit.hooks._runtime"} or node.module.endswith(
-                ".hooks._runtime"
-            ):
-                for alias in node.names:
-                    if alias.name == "_hook_output":
-                        bindings.modules[alias.asname or alias.name] = (
-                            f"{node.module}._hook_output"
-                        )
-                    elif alias.name == "_session_scope_authority":
-                        bindings.modules[alias.asname or alias.name] = (
-                            f"{node.module}._session_scope_authority"
-                        )
-        if isinstance(node, ast.Import):
             for alias in node.names:
-                # `import autoskillit.hooks._runtime._hook_output` binds the
-                # root name unless an alias is supplied.
-                if alias.name.endswith(".hooks._runtime._hook_output"):
-                    if alias.asname:
-                        bindings.modules[alias.asname] = alias.name
-                    else:
-                        bindings.modules[alias.name.split(".", 1)[0]] = alias.name.split(".", 1)[0]
-                elif alias.name.endswith(".hooks._runtime._session_scope_authority"):
-                    if alias.asname:
-                        bindings.modules[alias.asname] = alias.name
-                    else:
-                        bindings.modules[alias.name.split(".", 1)[0]] = alias.name.split(".", 1)[0]
+                _bind_member(bindings, node.module, alias)
     return bindings
 
 
@@ -240,7 +217,7 @@ class _ChannelVisitor(ast.NodeVisitor):
         self.visit(node)
         return {name: frozenset(events) for name, events in self.channels.items()}
 
-    def visit_Call(self, node: ast.Call) -> None:
+    def _call_channel(self, node: ast.Call) -> str | None:
         function_name = _called_name(node.func, self.bindings)
         module_target = (
             _module_target(node.func.value, self.bindings)
@@ -258,34 +235,34 @@ class _ChannelVisitor(ast.NodeVisitor):
             channel = _CHANNEL_WRAPPERS.get(member)
             if channel is None:
                 raise ChannelScanError(f"unresolved call to _hook_output.{member}")
-            self.channels.setdefault(channel, set()).add(_event_argument(node, channel))
         else:
             channel = _resolve_wrapper(node.func, self.bindings)
-            if channel:
-                self.channels.setdefault(channel, set()).add(_event_argument(node, channel))
         if function_name in {"getattr", "builtins.getattr"} and node.args:
-            if _module_target(node.args[0], self.bindings) and _is_emitter_module(
-                _module_target(node.args[0], self.bindings)[1]
-            ):
+            target = _module_target(node.args[0], self.bindings)
+            if target and _is_emitter_module(target[1]):
                 raise ChannelScanError("getattr on _hook_output cannot be resolved statically")
-        if (
-            self.include_helpers
-            and isinstance(node.func, ast.Name)
-            and node.func.id in self.bindings.helper_names
-        ):
-            helper = self.bindings.helper_names[node.func.id]
-            for (path, name), channels in EMITTING_HELPERS.items():
-                if name == helper:
-                    for inherited in channels:
-                        self.channels.setdefault(inherited, set()).add(None)
-        if self.include_helpers and isinstance(node.func, ast.Attribute):
+        return channel
+
+    def _add_helper_channels(self, node: ast.Call) -> None:
+        if not self.include_helpers:
+            return
+        helper = None
+        if isinstance(node.func, ast.Name):
+            helper = self.bindings.helper_names.get(node.func.id)
+        elif isinstance(node.func, ast.Attribute):
             owner = _module_target(node.func.value, self.bindings)
             if owner and _is_helper_module(owner[1]):
                 helper = node.func.attr
-                for (path, name), channels in EMITTING_HELPERS.items():
-                    if name == helper:
-                        for inherited in channels:
-                            self.channels.setdefault(inherited, set()).add(None)
+        for (_path, name), channels in EMITTING_HELPERS.items():
+            if name == helper:
+                for inherited in channels:
+                    self.channels.setdefault(inherited, set()).add(None)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        channel = self._call_channel(node)
+        if channel:
+            self.channels.setdefault(channel, set()).add(_event_argument(node, channel))
+        self._add_helper_channels(node)
         self.generic_visit(node)
 
     def visit_Name(self, node: ast.Name) -> None:
@@ -451,6 +428,31 @@ def _is_stdout_fileno(expression: ast.expr, bindings: _Bindings) -> bool:
     )
 
 
+def _call_sink_kinds(node: ast.Call, bindings: _Bindings) -> list[str]:
+    kinds: list[str] = []
+    if isinstance(node.func, ast.Name) and node.func.id == "print":
+        file_arg = next((kw.value for kw in node.keywords if kw.arg == "file"), None)
+        if file_arg is None or not _is_stderr_expression(file_arg, bindings):
+            kinds.append("print-stdout")
+    if _is_os_write(node.func, bindings) and node.args:
+        fd = node.args[0]
+        if (
+            isinstance(fd, ast.Constant) and type(fd.value) is int and fd.value == 1
+        ) or _is_stdout_fileno(fd, bindings):
+            kinds.append("os-write-stdout")
+    exit_call = _is_sys_exit(node.func, bindings) or _is_os_exit(node.func, bindings)
+    exit_call = exit_call or (
+        isinstance(node.func, ast.Name) and node.func.id in {"SystemExit", "exit", "quit"}
+    )
+    if exit_call and node.args:
+        status = node.args[0]
+        if not (
+            isinstance(status, ast.Constant) and type(status.value) is int and status.value == 0
+        ):
+            kinds.append("nonzero-exit")
+    return kinds
+
+
 def scan_source_sinks(source: str, *, filename: str = "<source>") -> tuple[OutputSink, ...]:
     """Return stdout and non-zero-exit protocol sinks in Python source text."""
     try:
@@ -469,26 +471,8 @@ def scan_source_sinks(source: str, *, filename: str = "<source>") -> tuple[Outpu
                 if alias.name in {"stdout", "__stdout__"}:
                     sinks.append(OutputSink(node.lineno, node.col_offset, "stdout-import"))
         elif isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Name) and node.func.id == "print":
-                file_arg = next((kw.value for kw in node.keywords if kw.arg == "file"), None)
-                if file_arg is None or not _is_stderr_expression(file_arg, bindings):
-                    sinks.append(OutputSink(node.lineno, node.col_offset, "print-stdout"))
-            if _is_os_write(node.func, bindings) and node.args:
-                fd = node.args[0]
-                if (
-                    isinstance(fd, ast.Constant) and type(fd.value) is int and fd.value == 1
-                ) or _is_stdout_fileno(fd, bindings):
-                    sinks.append(OutputSink(node.lineno, node.col_offset, "os-write-stdout"))
-            exit_call = _is_sys_exit(node.func, bindings) or _is_os_exit(node.func, bindings)
-            exit_call = exit_call or (
-                isinstance(node.func, ast.Name) and node.func.id in {"SystemExit", "exit", "quit"}
+            sinks.extend(
+                OutputSink(node.lineno, node.col_offset, kind)
+                for kind in _call_sink_kinds(node, bindings)
             )
-            if exit_call and node.args:
-                status = node.args[0]
-                if not (
-                    isinstance(status, ast.Constant)
-                    and type(status.value) is int
-                    and status.value == 0
-                ):
-                    sinks.append(OutputSink(node.lineno, node.col_offset, "nonzero-exit"))
     return tuple(sorted(sinks, key=lambda sink: (sink.line, sink.col, sink.kind)))

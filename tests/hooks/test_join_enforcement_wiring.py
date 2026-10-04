@@ -969,12 +969,10 @@ def test_join_block_paths_are_codex_blocking(tmp_path: Path, case: str) -> None:
         (worktree / ".autoskillit").mkdir(parents=True)
         hook = _GUARDS_DIR / "join_stop_guard.py"
         event: dict[str, object] = {"hook_event_name": "Stop", "cwd": str(worktree)}
-        if case == "stop_malformed_payload":
-            payload: dict[str, object] | str = "not valid json"
-        elif case == "stop_non_object_payload":
-            payload = "[]"
-        else:
-            payload = event
+        payload: dict[str, object] | str = {
+            "stop_malformed_payload": "not valid json",
+            "stop_non_object_payload": "[]",
+        }.get(case, event)
     else:
         session_id = f"block-{case}"
         worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)

@@ -116,6 +116,9 @@ class CanaryIssueUpdater:
     def append_to_issue(self, title: str, header: str, section: str) -> int:
         """Append *section* to the open issue titled *title*; open or rotate it as needed.
 
+        *header* seeds new and successor issues; ordinary appends preserve the
+        existing body and add only *section*.
+
         An append that would cross ``ISSUE_BODY_MAX_CHARS`` closes the full issue and
         opens a successor linking it, so the title keeps one open reporting channel.
         """

@@ -1,0 +1,183 @@
+name: E2E
+
+# Live end-to-end recipe runs on MiniMax. scripts/e2e/README.md documents the selection
+# policy, the secrets and the sandbox repository this workflow relies on.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  merge_group:
+  workflow_dispatch:
+    inputs:
+      tests:
+        description: Comma-separated catalog test names (at most two)
+        type: string
+        required: true
+        default: canary
+
+permissions:
+  contents: read
+
+jobs:
+  select:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      selected: ${{ steps.select.outputs.selected }}
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          sparse-checkout: scripts/e2e
+
+      - name: List changed paths
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
+            --jq '.[].filename' > "$RUNNER_TEMP/changed-paths.txt"
+
+      - name: Select tests
+        id: select
+        run: |
+          python3 scripts/e2e/e2e_select.py select \
+            --changed-paths "$RUNNER_TEMP/changed-paths.txt" >> "$GITHUB_OUTPUT"
+
+  run:
+    needs: select
+    if: needs.select.outputs.selected == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.timeout_minutes }}
+    permissions:
+      contents: read
+      issues: write
+    # One repository-wide queue: every selected test of every run waits its turn, so
+    # concurrent MiniMax sessions stay within one test's peak.
+    concurrency:
+      group: e2e
+      queue: max
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.select.outputs.matrix) }}
+    env:
+      IMAGE: autoskillit-e2e:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Prepare directories
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP"/e2e/{out,data,upload}
+          # The container runs as uid 1000, which is not the runner's uid.
+          chmod 0777 "$RUNNER_TEMP"/e2e/{out,data,upload}
+
+      - name: Export the archived build context
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/build-context"
+          git archive "$GITHUB_SHA" | tar -x -C "$RUNNER_TEMP/build-context"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build the user image
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ runner.temp }}/build-context
+          file: ${{ runner.temp }}/build-context/scripts/docker/Dockerfile
+          target: user
+          load: true
+          push: false
+          tags: ${{ env.IMAGE }}
+          cache-from: type=gha,scope=docker-image-user
+
+      - name: Run the E2E test
+        id: e2e
+        env:
+          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+          E2E_SANDBOX_TOKEN: ${{ secrets.E2E_SANDBOX_TOKEN }}
+          TEST: ${{ matrix.test }}
+        run: |
+          docker run --rm \
+            --env MINIMAX_API_KEY \
+            --env E2E_SANDBOX_TOKEN \
+            --volume "$GITHUB_WORKSPACE/scripts/e2e:/opt/e2e:ro" \
+            --volume "$RUNNER_TEMP/e2e/out:/artifacts" \
+            --volume "$RUNNER_TEMP/e2e/data:/home/autoskillit/.local/share/autoskillit" \
+            "$IMAGE" \
+            python3 /opt/e2e/e2e_harness.py run --test "$TEST" --out /artifacts
+
+      - name: Redact secrets from the artifacts
+        id: redact
+        if: always() && steps.build.outcome == 'success'
+        env:
+          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+          E2E_SANDBOX_TOKEN: ${{ secrets.E2E_SANDBOX_TOKEN }}
+        run: |
+          docker run --rm \
+            --env MINIMAX_API_KEY \
+            --env E2E_SANDBOX_TOKEN \
+            --volume "$GITHUB_WORKSPACE/scripts/e2e:/opt/e2e:ro" \
+            --volume "$RUNNER_TEMP/e2e:/e2e" \
+            "$IMAGE" \
+            python3 /opt/e2e/e2e_harness.py redact --dest /e2e/upload \
+              --secret-env MINIMAX_API_KEY --secret-env E2E_SANDBOX_TOKEN \
+              /e2e/out /e2e/data/logs
+
+      - name: Upload the redacted artifacts
+        if: always() && steps.redact.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: e2e-${{ matrix.test }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/e2e/upload
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Report failure
+        if: failure() && (steps.e2e.outcome == 'failure' || steps.redact.outcome == 'failure')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TEST: ${{ matrix.test }}
+          STAGE: ${{ steps.e2e.outcome == 'failure' && 'test' || 'redaction' }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          docker run --rm \
+            --env GH_TOKEN \
+            --env GITHUB_REPOSITORY \
+            --volume "$GITHUB_WORKSPACE/scripts/e2e:/opt/e2e:ro" \
+            "$IMAGE" \
+            /opt/e2e/post-e2e-failure.sh "$TEST" "$STAGE" "$PULL_REQUEST" "$HEAD_SHA" "$RUN_URL"
+
+  e2e-gate:
+    needs: [select, run]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          sparse-checkout: scripts/e2e
+
+      - name: Judge the E2E gate
+        env:
+          SELECT_RESULT: ${{ needs.select.result }}
+          SELECTED: ${{ needs.select.outputs.selected }}
+          RUN_RESULT: ${{ needs.run.result }}
+        run: |
+          python3 scripts/e2e/e2e_select.py gate \
+            --select-result "$SELECT_RESULT" \
+            --selected "$SELECTED" \
+            --run-result "$RUN_RESULT"

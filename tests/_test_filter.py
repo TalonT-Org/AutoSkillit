@@ -1174,6 +1174,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # file-level: the Docker pin guard compares CODEX_CLI_MIN_VERSION from
             # execution.backends with the Dockerfile's CODEX_VERSION pin.
             "infra/test_docker_image.py",
+            # file-level: the deck column drift guard imports execution.ReportSessionRow.
+            "report/test_deck_registry.py",
             "_llm_triage",
             "smoke_utils",
         }

@@ -1,0 +1,236 @@
+#!/usr/bin/env bash
+# Manage a persistent AutoSkillit session container running the published user image.
+set -euo pipefail
+
+IMAGE_REPOSITORY=trecek/autoskillit
+IMAGE_TAG=${AUTOSKILLIT_IMAGE_TAG:-develop}
+CONTAINER_NAME=${AUTOSKILLIT_CONTAINER_NAME:-autoskillit-session}
+CPUS=${AUTOSKILLIT_CPUS:-2}
+MEMORY=${AUTOSKILLIT_MEMORY:-4g}
+HOME_VOLUME="$CONTAINER_NAME-home"
+WORKSPACE_VOLUME="$CONTAINER_NAME-workspace"
+# The user target's HOME in scripts/docker/Dockerfile.
+CONTAINER_HOME=/home/autoskillit
+# AutoSkillit's uv tool installation inside that home.
+TOOL_PATHS=(.local/share/uv/tools/autoskillit .local/bin/autoskillit)
+
+usage() {
+    cat <<'EOF'
+Usage: autoskillit-container COMMAND
+
+Commands:
+  update     Pull the published image and recreate the session container
+  start      Start the session container, creating it with update if necessary
+  stop       Stop the session container without deleting its volumes
+  shell      Start the session and open an interactive shell in it
+  status     Show the image, container, AutoSkillit, and authentication status
+  sync-auth  Copy host agent, provider, and GitHub CLI credentials into the home volume
+
+Environment:
+  AUTOSKILLIT_IMAGE_TAG       Published image tag to run (default: develop)
+  AUTOSKILLIT_CONTAINER_NAME  Session container name (default: autoskillit-session)
+  AUTOSKILLIT_CPUS            CPU limit (default: 2)
+  AUTOSKILLIT_MEMORY          Memory limit, also the memory-plus-swap limit (default: 4g)
+EOF
+}
+
+die() {
+    echo "error: $*" >&2
+    exit 1
+}
+
+container_exists() {
+    docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1
+}
+
+container_running() {
+    [[ $(docker inspect --format '{{.State.Running}}' "$CONTAINER_NAME" 2>/dev/null || true) == true ]]
+}
+
+container_has_active_agents() {
+    container_running || return 1
+    # Process names, never `pgrep -f`, whose pattern would match this probe's own shell.
+    # Claude runs as `claude` through the npm bin symlink, as `claude.exe` when exec'd
+    # directly; Codex's npm launcher runs the native `codex` binary.
+    docker exec "$CONTAINER_NAME" sh -c '
+        pgrep -x autoskillit >/dev/null \
+            || pgrep -x "claude(\.exe)?" >/dev/null \
+            || pgrep -x codex >/dev/null
+    '
+}
+
+ensure_workspace_repo() {
+    docker exec --workdir /workspace "$CONTAINER_NAME" sh -c '
+        if [ ! -d /workspace/AutoSkillit/.git ]; then
+            git clone --branch develop --single-branch \
+                https://github.com/TalonT-Org/AutoSkillit.git /workspace/AutoSkillit
+        elif [ "$(git -C /workspace/AutoSkillit branch --show-current)" = develop ] \
+            && [ -z "$(git -C /workspace/AutoSkillit status --porcelain)" ]; then
+            git -C /workspace/AutoSkillit pull --ff-only --quiet origin develop
+        fi
+    '
+}
+
+refresh_home() {
+    # Docker seeds only an empty volume from the image, so an existing home would keep
+    # shadowing the pulled image's AutoSkillit. Seed a new home; replace only the tool.
+    docker run --rm --user root --entrypoint bash \
+        --env CONTAINER_HOME="$CONTAINER_HOME" \
+        --volume "$HOME_VOLUME:/mnt/home" "$1" -c '
+            set -euo pipefail
+            if [ -z "$(ls -A /mnt/home)" ]; then
+                cp -a "$CONTAINER_HOME/." /mnt/home/
+                chown --reference="$CONTAINER_HOME" /mnt/home
+                chmod --reference="$CONTAINER_HOME" /mnt/home
+            fi
+            for path in "$@"; do
+                rm -rf "/mnt/home/$path"
+                cp -a "$CONTAINER_HOME/$path" "/mnt/home/$path"
+            done
+        ' refresh "${TOOL_PATHS[@]}"
+}
+
+create_session() {
+    docker run --detach --init --name "$CONTAINER_NAME" \
+        --cpus "$CPUS" --memory "$MEMORY" --memory-swap "$MEMORY" \
+        --env TERM=xterm-256color \
+        --volume "$HOME_VOLUME:$CONTAINER_HOME" \
+        --volume "$WORKSPACE_VOLUME:/workspace" \
+        --workdir /workspace "$1" sleep infinity >/dev/null
+}
+
+update_image() {
+    local image="$IMAGE_REPOSITORY:$IMAGE_TAG" version was_running=false
+    if container_has_active_agents; then
+        die "$CONTAINER_NAME has active AutoSkillit/Claude/Codex processes; stop them before updating"
+    fi
+    docker pull "$image" >/dev/null
+    version=$(docker run --rm "$image" autoskillit --version)
+    if container_running; then was_running=true; fi
+    if container_exists; then docker rm --force "$CONTAINER_NAME" >/dev/null; fi
+    refresh_home "$image"
+    create_session "$image"
+    ensure_workspace_repo
+    [[ $(docker exec "$CONTAINER_NAME" autoskillit --version) == "$version" ]] \
+        || die "$CONTAINER_NAME does not run AutoSkillit $version from $image"
+    if [[ $was_running != true ]]; then docker stop "$CONTAINER_NAME" >/dev/null; fi
+    echo "Updated $CONTAINER_NAME to AutoSkillit $version ($image)."
+}
+
+start_session() {
+    if container_exists; then
+        if ! container_running; then
+            docker start "$CONTAINER_NAME" >/dev/null
+        fi
+    else
+        update_image
+        docker start "$CONTAINER_NAME" >/dev/null
+    fi
+    echo "$CONTAINER_NAME is running."
+}
+
+stop_session() {
+    if container_running; then
+        docker stop "$CONTAINER_NAME" >/dev/null
+        echo "$CONTAINER_NAME is stopped. Credentials and workspace remain in Docker volumes."
+    elif container_exists; then
+        echo "$CONTAINER_NAME is already stopped."
+    else
+        echo "$CONTAINER_NAME does not exist."
+    fi
+}
+
+show_status() {
+    if ! container_exists; then
+        echo "$CONTAINER_NAME does not exist; run 'autoskillit-container update' to create it."
+        return
+    fi
+    docker inspect "$CONTAINER_NAME" \
+        --format 'container={{.Name}} image={{.Config.Image}} status={{.State.Status}}'
+    if container_running; then
+        echo "AutoSkillit $(docker exec "$CONTAINER_NAME" autoskillit --version)"
+        docker exec "$CONTAINER_NAME" claude --version
+        docker exec "$CONTAINER_NAME" codex --version
+        docker exec "$CONTAINER_NAME" codex login status || true
+        if timeout 15s docker exec "$CONTAINER_NAME" claude auth status >/dev/null 2>&1; then
+            echo "Claude authentication is available."
+        else
+            echo "Claude authentication is unavailable or its status check is unsupported."
+        fi
+    fi
+}
+
+sync_auth() {
+    local -a mounts=()
+    local copy_codex=false copy_claude=false copy_github=false copy_autoskillit=false
+
+    container_exists || die "$CONTAINER_NAME does not exist; run update first"
+    if [[ -f "$HOME/.codex/auth.json" ]]; then
+        mounts+=( -v "$HOME/.codex/auth.json:/run/host-codex-auth.json:ro" )
+        copy_codex=true
+    fi
+    if [[ -f "$HOME/.claude/.credentials.json" ]]; then
+        mounts+=( -v "$HOME/.claude/.credentials.json:/run/host-claude-credentials.json:ro" )
+        copy_claude=true
+    fi
+    if [[ -f "$HOME/.config/gh/hosts.yml" ]]; then
+        mounts+=( -v "$HOME/.config/gh/hosts.yml:/run/host-gh-hosts.yml:ro" )
+        copy_github=true
+    fi
+    if [[ -f "$HOME/.config/gh/config.yml" ]]; then
+        mounts+=( -v "$HOME/.config/gh/config.yml:/run/host-gh-config.yml:ro" )
+    fi
+    if [[ -f "$HOME/.autoskillit/config.yaml" ]]; then
+        mounts+=( -v "$HOME/.autoskillit/config.yaml:/run/host-autoskillit-config.yaml:ro" )
+        copy_autoskillit=true
+    fi
+    if [[ -f "$HOME/.autoskillit/.secrets.yaml" ]]; then
+        mounts+=( -v "$HOME/.autoskillit/.secrets.yaml:/run/host-autoskillit-secrets.yaml:ro" )
+    fi
+    [[ $copy_codex == true || $copy_claude == true || $copy_github == true || $copy_autoskillit == true ]] \
+        || die "no supported host credential files were found"
+
+    docker run --rm --user root --entrypoint sh \
+        --env CONTAINER_HOME="$CONTAINER_HOME" \
+        --volume "$HOME_VOLUME:$CONTAINER_HOME" "${mounts[@]}" \
+        "$IMAGE_REPOSITORY:$IMAGE_TAG" -c '
+            set -eu
+            owner=$(stat -c %u "$CONTAINER_HOME")
+            group=$(stat -c %g "$CONTAINER_HOME")
+            # install -d creates missing parents as root, so create ~/.config first.
+            install -d -o "$owner" -g "$group" "$CONTAINER_HOME/.config"
+            install -d -m 700 -o "$owner" -g "$group" \
+                "$CONTAINER_HOME/.codex" "$CONTAINER_HOME/.claude" \
+                "$CONTAINER_HOME/.config/gh" "$CONTAINER_HOME/.autoskillit"
+            copy() {
+                if [ -f "$1" ]; then
+                    install -m 600 -o "$owner" -g "$group" "$1" "$CONTAINER_HOME/$2"
+                fi
+            }
+            copy /run/host-codex-auth.json .codex/auth.json
+            copy /run/host-claude-credentials.json .claude/.credentials.json
+            copy /run/host-gh-hosts.yml .config/gh/hosts.yml
+            copy /run/host-gh-config.yml .config/gh/config.yml
+            copy /run/host-autoskillit-config.yaml .autoskillit/config.yaml
+            copy /run/host-autoskillit-secrets.yaml .autoskillit/.secrets.yaml
+        '
+    echo "Copied available host credentials into the persistent home volume."
+}
+
+command=${1:-}
+case "$command" in
+    update) update_image ;;
+    start) start_session ;;
+    stop) stop_session ;;
+    shell)
+        start_session
+        exec docker exec -it -w /workspace/AutoSkillit "$CONTAINER_NAME" bash
+        ;;
+    status) show_status ;;
+    sync-auth) sync_auth ;;
+    -h|--help|help) usage ;;
+    *)
+        usage >&2
+        exit 2
+        ;;
+esac

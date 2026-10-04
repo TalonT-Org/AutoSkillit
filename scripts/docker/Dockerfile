@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 # Toolchain pins: each tool version in these images is declared once, here or at the top
-# of the toolchain stage. tests/infra/test_verification_container.py requires every CI
+# of the toolchain stage. tests/infra/test_docker_image.py requires every CI
 # step, Taskfile precondition and code constant that installs or requires one to match.
 ARG UV_VERSION=0.9.21
 ARG NODE_VERSION=24.21.0

@@ -529,7 +529,7 @@ def test_workflow_consumes_one_target_policy_authority() -> None:
     assert lint_imports[0]["if"] == "matrix.shard == 'execution'"
     assert lint_imports[0]["run"] == "uv run lint-imports"
     assert install_rg["shell"] == "bash"
-    # Its value is guarded against the Dockerfile pin by test_verification_container.py.
+    # Its value is guarded against the Dockerfile pin by test_docker_image.py.
     assert "RG_VERSION" in install_rg["env"]
     # Every runner installs ripgrep from a pinned, SHA256-verified GitHub Releases asset
     # rather than apt or Homebrew: azure.archive.ubuntu.com has a known, chronic throughput

@@ -11,7 +11,7 @@
 | `user` | An installed copy of AutoSkillit, as a user gets it; the default target |
 
 The `ARG` pins in `scripts/docker/Dockerfile` are the only place to change a tool
-version. `tests/infra/test_verification_container.py` fails until every CI step,
+version. `tests/infra/test_docker_image.py` fails until every CI step,
 Taskfile precondition and code constant that installs or requires that tool agrees.
 Node, pre-commit, jq and gh are pinned only there: CI uses the runner's Node to host
 npm and does not install the others. Changing `CODEX_VERSION` also requires rerunning

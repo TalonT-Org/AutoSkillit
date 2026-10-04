@@ -191,12 +191,12 @@ ALWAYS_RUN_AGGRESSIVE: frozenset[str] = frozenset(
 # test_typecheck_gate.py) read tracked files like .python-version and
 # scripts/docker/Dockerfile that are NOT covered by the infra trigger
 # prefixes/files, so a Dockerfile-only or .python-version-only change would otherwise
-# skip the test and let a drift pass silently. test_verification_container.py
+# skip the test and let a drift pass silently. test_docker_image.py
 # likewise compares the Dockerfile's pins with code constants under src/, which no infra
 # trigger covers.
 _INFRA_UNCONDITIONAL_FILES: frozenset[str] = frozenset(
     {
-        "test_verification_container.py",
+        "test_docker_image.py",
         "test_manifest_completeness.py",
         "test_manifest_directory_completeness.py",
         "test_guard_coverage.py",
@@ -1170,7 +1170,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "infra/test_conftest.py",
             # file-level: the Docker pin guard compares CODEX_CLI_MIN_VERSION from
             # execution.backends with the Dockerfile's CODEX_VERSION pin.
-            "infra/test_verification_container.py",
+            "infra/test_docker_image.py",
             "_llm_triage",
             "smoke_utils",
         }

@@ -129,7 +129,7 @@ class TestTieredAlwaysRun:
 
         A constant-only change is outside every infra trigger, so routing must never drop it.
         """
-        assert "test_verification_container.py" in _INFRA_UNCONDITIONAL_FILES
+        assert "test_docker_image.py" in _INFRA_UNCONDITIONAL_FILES
 
     def test_empty_changed_files_uses_full_always_run(self, tmp_path: Path) -> None:
         """REQ-TIER-004: empty changed_files → fail-open → full always-run set as dirs."""

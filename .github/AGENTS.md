@@ -81,7 +81,7 @@ Pre-commit and preflight enforce this consistency with `uv lock --check`, and
 `scripts/docker/Dockerfile`'s `ARG` pins are the single authority for tool versions (uv,
 Task, Rust, ripgrep, Claude Code, Codex, Node, pre-commit, jq, gh); a workflow step that
 installs or requires one must use the same version, enforced by
-`tests/infra/test_verification_container.py`. `docker-image.yml` publishes from develop
+`tests/infra/test_docker_image.py`. `docker-image.yml` publishes from develop
 pushes that change the version and from `v*` tag pushes, which only start workflows when
 pushed with `GH_PAT`, so the bump and release workflows check out with it.
 

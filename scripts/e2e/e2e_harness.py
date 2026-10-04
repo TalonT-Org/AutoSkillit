@@ -372,7 +372,7 @@ def run_test(
     out.mkdir(parents=True, exist_ok=True)
     try:
         failures = _run_test(test, catalog, out=out, home=home, env=env, runner=runner)
-    except (OSError, ValueError) as exc:
+    except Exception as exc:
         failures = [f"harness error: {exc}"]
     result = {"test": test.name, "passed": not failures, "failures": failures}
     (out / "result.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")

@@ -349,6 +349,15 @@ class TestRecipeFlow:
         assert any("fleet run: timed out" in failure for failure in failures)
         assert runner.calls[-1].argv[:4] == ["gh", "pr", "close", "8"]
 
+    def test_unexpected_fleet_error_records_failure_and_still_cleans_up(
+        self, tmp_path: Path
+    ) -> None:
+        runner = FakeRunner(_recipe_handler(fleet=RuntimeError("unexpected fleet error")))
+        failures, result = _run_recipe(tmp_path, runner)
+        assert failures == ["harness error: unexpected fleet error"]
+        assert result == {"test": "impl", "passed": False, "failures": failures}
+        assert runner.calls[-1].argv[:4] == ["gh", "pr", "close", "8"]
+
     def test_missing_gh_is_a_failure_string(self, tmp_path: Path) -> None:
         def no_gh(argv: list[str]):
             return (

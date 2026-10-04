@@ -474,13 +474,12 @@ def _proc_gone_or_zombie(pid: int) -> bool:
     return bool(state_fields) and state_fields[0] == "Z"
 
 
-def test_proc_disappearing_during_read_is_gone(monkeypatch: pytest.MonkeyPatch) -> None:
-    def vanished_stat(_path: Path) -> str:
+def test_proc_disappearance_during_stat_read_is_gone(monkeypatch: pytest.MonkeyPatch) -> None:
+    def vanished(_path: Path) -> str:
         raise ProcessLookupError("process exited during procfs read")
 
-    monkeypatch.setattr(Path, "read_text", vanished_stat)
-
-    assert _proc_gone_or_zombie(os.getpid())
+    monkeypatch.setattr(Path, "read_text", vanished)
+    assert _proc_gone_or_zombie(123)
 
 
 def _wait_for_proc_gone_or_zombie(pid: int, *, timeout: float) -> bool:

@@ -106,6 +106,8 @@ update_image() {
     fi
     docker pull "$image" >/dev/null
     version=$(docker run --rm "$image" autoskillit --version)
+    # An empty version would make the post-update version check below pass vacuously.
+    [[ -n $version ]] || die "$image printed no AutoSkillit version"
     if container_running; then was_running=true; fi
     if container_exists; then docker rm --force "$CONTAINER_NAME" >/dev/null; fi
     refresh_home "$image"

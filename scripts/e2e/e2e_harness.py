@@ -195,6 +195,8 @@ def _list_pull_requests(
         return None, "gh pr list: output is not JSON"
     if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
         return None, "gh pr list: output is not a list of objects"
+    if any(type(row.get("number")) is not int or row["number"] <= 0 for row in rows):
+        return None, "gh pr list: pull request number is missing or invalid"
     return rows, None
 
 

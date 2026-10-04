@@ -385,6 +385,19 @@ class TestRecipeFlow:
         assert failures == ["gh pr list: output is not JSON"]
         assert runner.calls[-1].argv[:4] == ["gh", "pr", "close", "8"]
 
+    @pytest.mark.parametrize("limit", ["1", "20"])
+    def test_missing_pull_request_number_records_failure(self, tmp_path: Path, limit: str) -> None:
+        def malformed_listing(argv: list[str]):
+            if argv[:3] == ["gh", "pr", "list"] and limit in argv:
+                return _completed(argv, json.dumps([{"state": "OPEN"}]))
+            return None
+
+        runner = FakeRunner(_recipe_handler(extra=malformed_listing))
+        failures, result = _run_recipe(tmp_path, runner)
+        assert "gh pr list: pull request number is missing or invalid" in failures
+        assert result == {"test": "impl", "passed": False, "failures": failures}
+        assert ("gh", "pr", "close") not in runner.argv_prefixes()
+
     def test_missing_sandbox_token_fails_before_any_launch(self, tmp_path: Path) -> None:
         runner = FakeRunner(_recipe_handler())
         failures, result = _run_recipe(tmp_path, runner, env=_env(E2E_SANDBOX_TOKEN=""))

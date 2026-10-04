@@ -6,6 +6,9 @@ Each caller keeps its own _CHECK_MODULE_NAME / module-loading call site (per-fil
 sys.modules isolation stays a parameter, not shared state) -- only the byte-identical
 bodies live here, matching the tests/infra/_pretty_output_helpers.py convention of a
 dedicated underscore-prefixed helper module for one feature's split test files.
+
+tests/infra/test_e2e_select.py also loads scripts/e2e/e2e_select.py through
+load_check_script, so its sibling ``import e2e_catalog`` resolves.
 """
 
 from __future__ import annotations

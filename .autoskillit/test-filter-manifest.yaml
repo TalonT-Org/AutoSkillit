@@ -169,6 +169,9 @@ Taskfile.yml:
 scripts/docker/*:
   - infra/
 
+scripts/e2e/*:
+  - infra/
+
 .gitattributes:
   - infra/
 

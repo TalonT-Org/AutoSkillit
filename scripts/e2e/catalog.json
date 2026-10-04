@@ -1,0 +1,16 @@
+{
+  "sandbox_repository": "TalonT-Org/autoskillit-e2e-sandbox",
+  "tests": [
+    {
+      "name": "canary",
+      "kind": "canary",
+      "peak_sessions": 1,
+      "timeout_sec": 300,
+      "trigger_paths": [
+        "scripts/e2e/*",
+        "scripts/docker/*",
+        ".github/workflows/e2e.yml"
+      ]
+    }
+  ]
+}

@@ -9,6 +9,7 @@ import structlog.testing
 
 import autoskillit._probe_canary as _patch_autoskillit__probe_canary
 from autoskillit._probe_canary import (
+    ISSUE_BODY_MAX_CHARS,
     N_CONSECUTIVE_FLAKE_GUARD,
     CanaryIssueUpdater,
     CanaryState,
@@ -204,6 +205,175 @@ class TestCanaryIssueUpdater:
         assert num == 42
         assert state.last_issue_number == 42
         assert any(e.get("event") == "canary_issue_edit_failed" for e in cap_logs)
+
+
+_E2E_TITLE = "[E2E] canary failure"
+
+
+class _FakeGh:
+    """Answer gh issue commands for one optional open issue; record argv and body files."""
+
+    def __init__(
+        self,
+        *,
+        existing: int | None = None,
+        body: str = "old body",
+        failing: frozenset[str] = frozenset(),
+    ) -> None:
+        self.existing = existing
+        self.body = body
+        self.failing = failing
+        self.calls: list[list[str]] = []
+        self.bodies: dict[str, str] = {}
+
+    def __call__(self, args, **kwargs):
+        args = list(args)
+        self.calls.append(args)
+        command = args[1]
+        if "--body-file" in args:
+            self.bodies[command] = Path(args[args.index("--body-file") + 1]).read_text()
+        if command in self.failing:
+            return CompletedProcess(args=args, returncode=1, stdout="", stderr=f"{command} boom")
+        if command == "list":
+            issues = (
+                [] if self.existing is None else [{"number": self.existing, "title": _E2E_TITLE}]
+            )
+            return CompletedProcess(args=args, returncode=0, stdout=json.dumps(issues), stderr="")
+        if command == "view":
+            stdout = json.dumps({"body": self.body})
+            return CompletedProcess(args=args, returncode=0, stdout=stdout, stderr="")
+        if command == "create":
+            stdout = json.dumps({"number": 99})
+            return CompletedProcess(args=args, returncode=0, stdout=stdout, stderr="")
+        return CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+
+    def commands(self) -> list[str]:
+        return [call[1] for call in self.calls]
+
+
+def _append(monkeypatch: pytest.MonkeyPatch, gh: _FakeGh, section: str = "### Section") -> int:
+    monkeypatch.setattr(_patch_autoskillit__probe_canary, "run_gh", gh)
+    updater = CanaryIssueUpdater(owner="test-org", repo="test-repo")
+    return updater.append_to_issue(_E2E_TITLE, "Header", section)
+
+
+class TestAppendToIssue:
+    def test_no_open_issue_creates_one_with_header_and_section(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        gh = _FakeGh()
+        assert _append(monkeypatch, gh) == 99
+        assert gh.commands() == ["list", "create"]
+        assert gh.bodies["create"] == "Header\n\n### Section"
+
+    def test_open_issue_gets_the_section_appended(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        gh = _FakeGh(existing=42)
+        assert _append(monkeypatch, gh) == 42
+        assert gh.calls[1] == ["issue", "view", "42", "--repo", "test-org/test-repo"] + [
+            "--json",
+            "body",
+        ]
+        assert gh.calls[2][:5] == ["issue", "edit", "42", "--repo", "test-org/test-repo"]
+        assert gh.bodies["edit"] == "old body\n\n### Section"
+
+    def test_view_failure_raises_without_editing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        gh = _FakeGh(existing=42, failing=frozenset({"view"}))
+        with pytest.raises(RuntimeError, match="gh issue view failed"):
+            _append(monkeypatch, gh)
+        assert "edit" not in gh.commands()
+
+    def test_edit_failure_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        gh = _FakeGh(existing=42, failing=frozenset({"edit"}))
+        with pytest.raises(RuntimeError, match="gh issue edit failed"):
+            _append(monkeypatch, gh)
+
+    def test_append_exactly_at_the_limit_edits(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        section = "### Section"
+        gh = _FakeGh(existing=42, body="x" * (ISSUE_BODY_MAX_CHARS - 2 - len(section)))
+        assert _append(monkeypatch, gh, section) == 42
+        assert gh.commands() == ["list", "view", "edit"]
+
+    def test_append_past_the_limit_rotates_to_a_successor(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        section = "### Section"
+        gh = _FakeGh(existing=42, body="x" * (ISSUE_BODY_MAX_CHARS - 1 - len(section)))
+        assert _append(monkeypatch, gh, section) == 99
+        assert gh.commands() == ["list", "view", "close", "create"]
+        assert gh.calls[2] == ["issue", "close", "42", "--repo", "test-org/test-repo"]
+        assert "#42" in gh.bodies["create"]
+        assert gh.bodies["create"].endswith(section)
+
+    def test_close_failure_raises_without_creating(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        section = "### Section"
+        gh = _FakeGh(
+            existing=42,
+            body="x" * ISSUE_BODY_MAX_CHARS,
+            failing=frozenset({"close"}),
+        )
+        with pytest.raises(RuntimeError, match="gh issue close failed"):
+            _append(monkeypatch, gh, section)
+        assert "create" not in gh.commands()
+
+
+def _post_e2e_failure(*extra: str) -> int:
+    return _cli_main(
+        [
+            "post-e2e-failure",
+            "--test",
+            "canary",
+            "--head-sha",
+            "abcdef0123456789abcdef0123456789abcdef01",
+            "--workflow-run-url",
+            "https://example.com/run/9",
+            *extra,
+        ]
+    )
+
+
+class TestPostE2eFailure:
+    def test_missing_github_repository_returns_one(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+        assert _post_e2e_failure("--stage", "test", "--pull-request", "12") == 1
+
+    @pytest.mark.parametrize("stage", ["test", "redaction"])
+    def test_section_names_pull_request_commit_run_and_stage(
+        self, monkeypatch: pytest.MonkeyPatch, stage: str
+    ) -> None:
+        monkeypatch.setenv("GITHUB_REPOSITORY", "test-org/test-repo")
+        gh = _FakeGh()
+        monkeypatch.setattr(_patch_autoskillit__probe_canary, "run_gh", gh)
+        assert _post_e2e_failure("--stage", stage, "--pull-request", "12") == 0
+        create = gh.calls[-1]
+        assert create[create.index("--title") + 1] == _E2E_TITLE
+        body = gh.bodies["create"]
+        assert "#12" in body
+        assert "abcdef0123456789abcdef0123456789abcdef01" in body
+        assert "### Failure at abcdef012345" in body
+        assert "https://example.com/run/9" in body
+        assert f"**Stage:** {stage}" in body
+
+    def test_empty_pull_request_reports_workflow_dispatch(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("GITHUB_REPOSITORY", "test-org/test-repo")
+        gh = _FakeGh()
+        monkeypatch.setattr(_patch_autoskillit__probe_canary, "run_gh", gh)
+        assert _post_e2e_failure("--stage", "test", "--pull-request", "") == 0
+        assert "workflow_dispatch" in gh.bodies["create"]
+
+    def test_unknown_stage_is_rejected(self) -> None:
+        with pytest.raises(SystemExit):
+            _post_e2e_failure("--stage", "other")
+
+    def test_issue_failure_returns_one(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("GITHUB_REPOSITORY", "test-org/test-repo")
+        monkeypatch.setattr(
+            _patch_autoskillit__probe_canary, "run_gh", _FakeGh(failing=frozenset({"create"}))
+        )
+        with structlog.testing.capture_logs() as cap_logs:
+            assert _post_e2e_failure("--stage", "test") == 1
+        assert any(e.get("event") == "e2e_failure_issue_failed" for e in cap_logs)
 
 
 class TestCliMain:

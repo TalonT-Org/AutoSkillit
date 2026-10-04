@@ -52,6 +52,27 @@ class TestPostProbeFailureValidation:
         assert "Usage" in result.stderr
 
 
+class TestPostE2eFailure:
+    _SCRIPT = SCRIPTS_DIR / "e2e" / "post-e2e-failure.sh"
+
+    def test_syntax(self) -> None:
+        result = subprocess.run(["bash", "-n", str(self._SCRIPT)], capture_output=True, text=True)
+        assert result.returncode == 0, result.stderr
+
+    def test_executable(self) -> None:
+        assert os.access(self._SCRIPT, os.X_OK)
+
+    def test_rejects_missing_args(self) -> None:
+        result = subprocess.run(
+            ["bash", str(self._SCRIPT)],
+            capture_output=True,
+            text=True,
+            env={"PATH": os.environ["PATH"], "HOME": os.environ.get("HOME", "/tmp")},
+        )
+        assert result.returncode != 0
+        assert "Usage" in result.stderr
+
+
 class TestCreateProbeCanaryIssueValidation:
     def test_rejects_missing_github_repository(self) -> None:
         """Exits non-zero when GITHUB_REPOSITORY is not set."""

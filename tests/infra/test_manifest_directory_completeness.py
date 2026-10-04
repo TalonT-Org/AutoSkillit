@@ -34,6 +34,7 @@ _SOURCE_DEPENDENCIES: dict[str, frozenset[str]] = {
             "scripts/check_complexity.py",
             "scripts/_git_plumbing.py",
             "scripts/docker/*",
+            "scripts/e2e/*",
         }
     ),
     "workspace": frozenset(

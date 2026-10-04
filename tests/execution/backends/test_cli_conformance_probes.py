@@ -33,9 +33,9 @@ from typing import NamedTuple, Protocol, TypeVar
 import pytest
 
 from autoskillit._probe_canary import (
-    CanaryIssueUpdater,
     CanaryState,
     ErrorKind,
+    IssueUpdater,
 )
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
@@ -388,7 +388,7 @@ class TestCodexLiveProbes:
             repo_slug = os.environ.get("GITHUB_REPOSITORY", "")
             if repo_slug and "/" in repo_slug:
                 owner, repo = repo_slug.split("/", 1)
-                updater = CanaryIssueUpdater(owner=owner, repo=repo)
+                updater = IssueUpdater(owner=owner, repo=repo)
                 title = f"{_CANARY_TITLE_PREFIX}: {probe_name}"
                 body = _make_canary_body(probe_name, kind, cli_version, detail)
                 updater.ensure_issue(state, title, body)

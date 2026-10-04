@@ -1,7 +1,7 @@
-"""Reusable canary state machine and GitHub issue updater for live probes.
+"""Reusable canary state machine and GitHub issue updater for live probes and E2E runs.
 
-IL-1 module: imports only stdlib and `autoskillit.core`. Provides the
-persistence + flake-guard primitives that live probe classes build on.
+IL-1 module: imports only stdlib and `autoskillit.core`. Provides the persistence +
+flake-guard primitives live probes build on and the E2E workflow's failure issue.
 """
 
 from __future__ import annotations
@@ -79,7 +79,11 @@ def _run_gh_with_body_file(args: list[str], body: str) -> subprocess.CompletedPr
             logger.debug("canary_body_file_unlink_failed", path=body_path)
 
 
-class CanaryIssueUpdater:
+# GitHub rejects an issue body longer than this many characters.
+ISSUE_BODY_MAX_CHARS = 65536
+
+
+class IssueUpdater:
     def __init__(self, *, owner: str, repo: str) -> None:
         self._owner = owner
         self._repo = repo
@@ -105,6 +109,37 @@ class CanaryIssueUpdater:
                 )
             state.last_issue_number = existing
             return existing
+        issue_number = self._create(title, body)
+        state.last_issue_number = issue_number
+        return issue_number
+
+    def append_to_issue(self, title: str, header: str, section: str) -> int:
+        """Append *section* to the open issue titled *title*; open or rotate it as needed.
+
+        *header* seeds new and successor issues; ordinary appends preserve the
+        existing body and add only *section*.
+
+        An append that would cross ``ISSUE_BODY_MAX_CHARS`` closes the full issue and
+        opens a successor linking it, so the title keeps one open reporting channel.
+        """
+        existing = self._find_existing(title)
+        if existing is None:
+            return self._create(title, f"{header}\n\n{section}")
+        repo = f"{self._owner}/{self._repo}"
+        body = self._current_body(existing)
+        if len(body) + 2 + len(section) > ISSUE_BODY_MAX_CHARS:
+            result = run_gh(["issue", "close", str(existing), "--repo", repo])
+            if result.returncode != 0:
+                raise RuntimeError(f"gh issue close failed: {result.stderr}")
+            return self._create(title, f"{header}\n\nContinues #{existing}.\n\n{section}")
+        result = _run_gh_with_body_file(
+            ["issue", "edit", str(existing), "--repo", repo], f"{body}\n\n{section}"
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"gh issue edit failed: {result.stderr}")
+        return existing
+
+    def _create(self, title: str, body: str) -> int:
         result = _run_gh_with_body_file(
             [
                 "issue",
@@ -126,8 +161,21 @@ class CanaryIssueUpdater:
         except (json.JSONDecodeError, KeyError) as exc:
             msg = f"gh issue create returned unexpected output: {result.stdout!r}"
             raise RuntimeError(msg) from exc
-        state.last_issue_number = issue_number
         return issue_number
+
+    def _current_body(self, number: int) -> str:
+        repo = f"{self._owner}/{self._repo}"
+        result = run_gh(["issue", "view", str(number), "--repo", repo, "--json", "body"])
+        if result.returncode != 0:
+            raise RuntimeError(f"gh issue view failed: {result.stderr}")
+        try:
+            body = json.loads(result.stdout)["body"]
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            msg = f"gh issue view returned unexpected output: {result.stdout!r}"
+            raise RuntimeError(msg) from exc
+        if not isinstance(body, str):
+            raise RuntimeError(f"gh issue view returned a non-string body: {body!r}")
+        return body
 
     def _find_existing(self, title: str) -> int | None:
         result = run_gh(
@@ -200,13 +248,49 @@ def _handle_post_failure(
             f"**Network Streak:** {state.network_streak}\n"
             f"**Schema Streak:** {state.schema_streak}\n"
         )
-        updater = CanaryIssueUpdater(owner=owner, repo=repo)
+        updater = IssueUpdater(owner=owner, repo=repo)
         try:
             updater.ensure_issue(state, title, body)
         except Exception as exc:
             logger.error("canary_ensure_issue_failed", error=str(exc))
 
     state.save(state_path)
+    return 0
+
+
+def _handle_post_e2e_failure(
+    *,
+    test: str,
+    stage: str,
+    pull_request: str,
+    head_sha: str,
+    workflow_run_url: str,
+) -> int:
+    repo_slug = os.environ.get("GITHUB_REPOSITORY", "")
+    if not repo_slug or "/" not in repo_slug:
+        logger.error("post_e2e_failure_missing_github_repository")
+        return 1
+
+    owner, repo = repo_slug.split("/", 1)
+    title = f"[E2E] {test} failure"
+    header = (
+        f"Tracks failures of the `{test}` test in `.github/workflows/e2e.yml`. "
+        "Each failed run appends a section below."
+    )
+    trigger = f"pull request #{pull_request}" if pull_request else "workflow_dispatch"
+    section = (
+        f"### Failure at {head_sha[:12]}\n\n"
+        f"**Stage:** {stage}\n"
+        f"**Trigger:** {trigger}\n"
+        f"**Commit:** {head_sha}\n"
+        f"**Workflow Run:** {workflow_run_url}\n"
+    )
+    updater = IssueUpdater(owner=owner, repo=repo)
+    try:
+        updater.append_to_issue(title, header, section)
+    except Exception as exc:
+        logger.error("e2e_failure_issue_failed", error=str(exc), exc_info=True)
+        return 1
     return 0
 
 
@@ -230,6 +314,22 @@ def _cli_main(argv: list[str] | None = None) -> int:
     )
     post.add_argument("--workflow-run-url", required=True, help="GitHub Actions workflow run URL")
 
+    e2e = sub.add_parser(
+        "post-e2e-failure", help="Append an E2E test failure to that test's tracking issue"
+    )
+    e2e.add_argument("--test", required=True, help="Catalog name of the failed E2E test")
+    e2e.add_argument(
+        "--stage",
+        required=True,
+        choices=("test", "redaction"),
+        help="Workflow stage that failed",
+    )
+    e2e.add_argument(
+        "--pull-request", default="", help="Pull request number; empty for workflow_dispatch"
+    )
+    e2e.add_argument("--head-sha", required=True, help="Commit the E2E run tested")
+    e2e.add_argument("--workflow-run-url", required=True, help="GitHub Actions workflow run URL")
+
     args = parser.parse_args(argv)
 
     if args.command is None:
@@ -242,6 +342,15 @@ def _cli_main(argv: list[str] | None = None) -> int:
             backend=args.backend,
             cli_version=args.cli_version,
             failure_type=args.failure_type,
+            workflow_run_url=args.workflow_run_url,
+        )
+
+    if args.command == "post-e2e-failure":
+        return _handle_post_e2e_failure(
+            test=args.test,
+            stage=args.stage,
+            pull_request=args.pull_request,
+            head_sha=args.head_sha,
             workflow_run_url=args.workflow_run_url,
         )
 

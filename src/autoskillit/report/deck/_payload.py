@@ -24,7 +24,6 @@ from ._registry import (
 )
 
 DAY_MS = 86_400_000
-_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 
 def encode_table(rows: Sequence[Mapping[str, Any]], columns: Sequence[str]) -> dict[str, Any]:
@@ -128,7 +127,7 @@ def _window_chips(
             retained = (generated_at_ms - first) // DAY_MS
             if retained < window.days:
                 state = ChipState.ABSENT
-                date = (_EPOCH + timedelta(milliseconds=first)).date().isoformat()
+                date = datetime.fromtimestamp(first / 1000, UTC).date().isoformat()
                 reason = ReasonDef(
                     f"index history begins {date} — {retained} days retained", WINDOW_HISTORY_ISSUE
                 )
@@ -165,7 +164,8 @@ def build_deck_payload(
 ) -> dict[str, Any]:
     if generated_at.utcoffset() is None:
         raise ValueError("generated_at must be timezone-aware")
-    generated_at_ms = (generated_at - _EPOCH) // timedelta(milliseconds=1)
+    epoch = datetime(1970, 1, 1, tzinfo=UTC)
+    generated_at_ms = (generated_at - epoch) // timedelta(milliseconds=1)
     rows = sorted(
         (dict(r) for r in session_rows),
         key=lambda r: (r.get("time_ms") is None, r.get("time_ms") or 0, r.get("key") or ""),

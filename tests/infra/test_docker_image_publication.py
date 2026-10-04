@@ -45,6 +45,48 @@ def _step_using(steps: list[dict[str, Any]], action: str) -> dict[str, Any]:
     return next(step for step in steps if str(step.get("uses", "")).startswith(f"{action}@"))
 
 
+def _repo_with_history(tmp_path: Path, history: tuple[str | None, ...]) -> tuple[Path, str]:
+    """``history`` lists one commit per entry: a version to write, or None for a README edit."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "--quiet")
+    for index, version in enumerate(history):
+        if version is None:
+            (repo / "README.md").write_text(f"revision {index}\n", encoding="utf-8")
+        else:
+            (repo / "pyproject.toml").write_text(
+                f'[project]\nname = "example"\nversion = "{version}"\n', encoding="utf-8"
+            )
+        _git(repo, "add", "--all")
+        _git(repo, "commit", "--quiet", "--message", f"commit {index}")
+    return repo, _git(repo, "rev-parse", "HEAD")
+
+
+def _run_plan_step(
+    repo: Path, tip: str, ref_type: str, output: Path
+) -> subprocess.CompletedProcess[str]:
+    plan_step = next(
+        step for step in _workflow()["jobs"]["plan"]["steps"] if step.get("id") == "plan"
+    )
+    output.touch()
+    return subprocess.run(
+        ["bash", "-c", plan_step["run"]],
+        cwd=str(repo),
+        env={
+            **_GIT_ENV,
+            # The step's python3 needs tomllib; resolve it to this interpreter.
+            "PATH": f"{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}",
+            "IMAGE_NAME": _IMAGE_NAME,
+            "GITHUB_SHA": tip,
+            "GITHUB_REF_TYPE": ref_type,
+            "GITHUB_OUTPUT": str(output),
+        },
+        capture_output=True,
+        text=True,
+        timeout=_SUBPROCESS_TIMEOUT_SECONDS,
+    )
+
+
 @pytest.mark.parametrize(
     ("history", "ref_type", "channel_tags"),
     [
@@ -59,44 +101,12 @@ def test_plan_step_resolves_the_published_tags(
     ref_type: str,
     channel_tags: tuple[str, ...] | None,
 ) -> None:
-    """``history`` lists one commit per entry: a version to write, or None for a README edit."""
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    _git(repo, "init", "--quiet")
-    for index, version in enumerate(history):
-        if version is None:
-            (repo / "README.md").write_text(f"revision {index}\n", encoding="utf-8")
-        else:
-            (repo / "pyproject.toml").write_text(
-                f'[project]\nname = "example"\nversion = "{version}"\n', encoding="utf-8"
-            )
-        _git(repo, "add", "--all")
-        _git(repo, "commit", "--quiet", "--message", f"commit {index}")
-    tip = _git(repo, "rev-parse", "HEAD")
+    repo, tip = _repo_with_history(tmp_path, history)
     output = tmp_path / "github_output"
-    output.touch()
-    plan_step = next(
-        step for step in _workflow()["jobs"]["plan"]["steps"] if step.get("id") == "plan"
-    )
 
-    subprocess.run(
-        ["bash", "-c", plan_step["run"]],
-        cwd=str(repo),
-        env={
-            **_GIT_ENV,
-            # The step's python3 needs tomllib; resolve it to this interpreter.
-            "PATH": f"{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}",
-            "IMAGE_NAME": _IMAGE_NAME,
-            "GITHUB_SHA": tip,
-            "GITHUB_REF_TYPE": ref_type,
-            "GITHUB_OUTPUT": str(output),
-        },
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=_SUBPROCESS_TIMEOUT_SECONDS,
-    )
+    result = _run_plan_step(repo, tip, ref_type, output)
 
+    assert result.returncode == 0, result.stderr
     if channel_tags is None:
         assert output.read_text(encoding="utf-8") == "publish=false\n"
         return
@@ -109,6 +119,17 @@ def test_plan_step_resolves_the_published_tags(
         *tags,
         "EOF",
     ]
+
+
+def test_plan_step_fails_when_the_parent_version_is_unreadable(tmp_path: Path) -> None:
+    """A branch push whose parent pyproject cannot be read must fail, not publish."""
+    repo, tip = _repo_with_history(tmp_path, ("0.1.0",))
+    output = tmp_path / "github_output"
+
+    result = _run_plan_step(repo, tip, "branch", output)
+
+    assert result.returncode != 0
+    assert "publish=true" not in output.read_text(encoding="utf-8")
 
 
 class TestDockerImageWorkflow:

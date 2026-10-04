@@ -39,11 +39,14 @@ jobs:
           version=$(version_of < pyproject.toml)
           if [ "$GITHUB_REF_TYPE" = tag ]; then
             channel_tags="stable latest"
-          elif [ "$(git show HEAD^:pyproject.toml | version_of)" != "$version" ]; then
-            channel_tags="develop"
           else
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            # Assigned, not tested inline: a failed parent read must fail the step, not publish.
+            previous=$(git show HEAD^:pyproject.toml | version_of)
+            if [ "$previous" = "$version" ]; then
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            channel_tags="develop"
           fi
           {
             echo "publish=true"

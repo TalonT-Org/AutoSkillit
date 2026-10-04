@@ -44,8 +44,9 @@ def _check_unknown_required_pack(ctx: ValidationContext) -> list[RuleFinding]:
 def _food_truck_can_call(tool: str, declared_packs: frozenset[str]) -> bool:
     """Whether a food truck dispatched with *declared_packs* exposes *tool*.
 
-    Non-empty packs enable ``kitchen-core`` plus each declared pack. Empty packs
-    enable the ``kitchen`` tag, including exploration tools.
+    Mirrors the headless-orchestrator branch of ``_apply_session_type_visibility``:
+    non-empty ``requires_packs`` enables ``kitchen-core`` plus each declared pack;
+    empty ``requires_packs`` falls back to the ``kitchen`` tag surface.
     """
     if not declared_packs:
         return tool in KITCHEN_GATED_TOOLS | EXPLORATION_TOOLS

@@ -20,7 +20,7 @@ _WORKFLOWS = _ROOT / ".github" / "workflows"
 _DOCKER_IMAGE_WORKFLOW = _WORKFLOWS / "docker-image.yml"
 _VERIFY_IMAGE = _ROOT / "scripts" / "docker" / "verify-image"
 _IMAGE_NAME = "trecek/autoskillit"
-_GIT_TIMEOUT_SECONDS = 30
+_SUBPROCESS_TIMEOUT_SECONDS = 30
 _GIT_ENV = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
 
 
@@ -32,7 +32,7 @@ def _git(repo: Path, *args: str) -> str:
         check=True,
         capture_output=True,
         text=True,
-        timeout=_GIT_TIMEOUT_SECONDS,
+        timeout=_SUBPROCESS_TIMEOUT_SECONDS,
     )
     return result.stdout.strip()
 
@@ -94,7 +94,7 @@ def test_plan_step_resolves_the_published_tags(
         check=True,
         capture_output=True,
         text=True,
-        timeout=_GIT_TIMEOUT_SECONDS,
+        timeout=_SUBPROCESS_TIMEOUT_SECONDS,
     )
 
     if channel_tags is None:
@@ -188,7 +188,12 @@ class TestPublicationTriggersFire:
 
 class TestVerifyImageScript:
     def test_syntax_is_valid(self) -> None:
-        result = subprocess.run(["bash", "-n", str(_VERIFY_IMAGE)], capture_output=True, text=True)
+        result = subprocess.run(
+            ["bash", "-n", str(_VERIFY_IMAGE)],
+            capture_output=True,
+            text=True,
+            timeout=_SUBPROCESS_TIMEOUT_SECONDS,
+        )
         assert result.returncode == 0, result.stderr
 
     def test_is_executable(self) -> None:
@@ -200,6 +205,7 @@ class TestVerifyImageScript:
             capture_output=True,
             text=True,
             env={"PATH": os.environ["PATH"], "HOME": os.environ.get("HOME", "/tmp")},
+            timeout=_SUBPROCESS_TIMEOUT_SECONDS,
         )
         assert result.returncode == 2
         assert "Usage" in result.stderr

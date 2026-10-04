@@ -7,6 +7,7 @@ requires_packs:
 - research
 - exp-lens
 - vis-lens
+- github
 description: 'PR creation, review, claim audit, and finalization worktree and completed experiment outputs from a campaign
   dispatch, then runs the 22-step PR/review pipeline: prepare PR, run experiment lenses, stage bundle, compose PR, review,
   audit claims, resolve feedback, re-run if needed, finalize, and export. Terminates with sentinel emission of output paths.

@@ -4,7 +4,8 @@
   "requires_packs": [
     "research",
     "exp-lens",
-    "vis-lens"
+    "vis-lens",
+    "github"
   ],
   "description": "End-to-end technical research: scope, implement, report\n",
   "summary": "scope > plan > [review?] > worktree > env-setup > decompose > phases > experiment > report > open-pr > [review? > resolve > [re-run?] > push] > archive",

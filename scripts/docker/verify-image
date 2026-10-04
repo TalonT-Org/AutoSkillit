@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Verify an AutoSkillit user image: versions match the tracked pins, no layer holds a credential.
+set -euo pipefail
+
+die() { echo "error: $*" >&2; exit 1; }
+[[ $# -eq 1 ]] || { echo "Usage: verify-image IMAGE" >&2; exit 2; }
+image=$1
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
+
+pin() {
+    local value
+    value=$(sed -n "s/^ARG $1=//p" "$root/scripts/docker/Dockerfile")
+    [[ -n $value ]] || die "scripts/docker/Dockerfile has no ARG $1"
+    echo "$value"
+}
+
+expect() {
+    local expected=$1 actual
+    shift
+    actual=$(docker run --rm "$image" "$@")
+    [[ $actual == "$expected" ]] || die "$*: expected '$expected', got '$actual'"
+    echo "$*: $actual"
+}
+
+# Assigned rather than expanded inline: a failure inside an argument's $(...) does not stop
+# the script, so a missing pin would surface only as a confusing version mismatch.
+version=$(python3 -c 'import sys, tomllib; print(tomllib.load(open(sys.argv[1], "rb"))["project"]["version"])' "$root/pyproject.toml")
+claude_version=$(pin CLAUDE_VERSION)
+codex_version=$(pin CODEX_VERSION)
+expect "$version" autoskillit --version
+expect "$claude_version (Claude Code)" claude --version
+expect "codex-cli $codex_version" codex --version
+
+# Captured first: inside the `if`, a failing docker command would read as "no match".
+image_history=$(docker history --no-trunc --format '{{.CreatedBy}}' "$image") \
+    || die "docker history failed for $image"
+if grep -Eq 'gh[pousr]_[A-Za-z0-9]{20,}|github_pat_|x-access-token:[A-Za-z0-9]|dckr_pat_|sk-ant-|sk-(proj|svcacct|admin)-|T3BlbkFJ' \
+    <<<"$image_history"; then
+    die "the history of $image contains a credential"
+fi
+echo "No credential in the history of $image"

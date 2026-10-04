@@ -33,6 +33,7 @@ _SOURCE_DEPENDENCIES: dict[str, frozenset[str]] = {
             "scripts/ci_target_policy.py",
             "scripts/check_complexity.py",
             "scripts/_git_plumbing.py",
+            "scripts/docker/*",
         }
     ),
     "workspace": frozenset(

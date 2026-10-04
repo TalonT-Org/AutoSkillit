@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -328,7 +328,7 @@ def _observe_case(
 def main() -> int:
     argparse.ArgumentParser(description=__doc__).parse_args()
     if shutil.which("codex") is None:
-        raise RuntimeError("codex CLI is required; run this tool inside the verification image")
+        raise RuntimeError("codex CLI is required; run this tool inside the dev image")
     if not Path("/proc/self/stat").is_file():
         raise RuntimeError("host-lifetime baseline requires /proc")
 

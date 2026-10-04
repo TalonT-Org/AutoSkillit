@@ -529,16 +529,21 @@ def test_workflow_consumes_one_target_policy_authority() -> None:
     assert lint_imports[0]["if"] == "matrix.shard == 'execution'"
     assert lint_imports[0]["run"] == "uv run lint-imports"
     assert install_rg["shell"] == "bash"
-    assert "command -v rg" in install_rg["run"]
-    # Linux installs ripgrep from a pinned, SHA256-verified GitHub Releases asset rather
-    # than apt: azure.archive.ubuntu.com has a known, chronic throughput instability that
-    # repeatedly stalled this step for 10+ minutes in production (issue #4697). Assert the
-    # apt path is gone so it can't silently regress back in.
+    # Its value is guarded against the Dockerfile pin by test_docker_image.py.
+    assert "RG_VERSION" in install_rg["env"]
+    # Every runner installs ripgrep from a pinned, SHA256-verified GitHub Releases asset
+    # rather than apt or Homebrew: azure.archive.ubuntu.com has a known, chronic throughput
+    # instability that repeatedly stalled this step for 10+ minutes in production (issue
+    # #4697), and Homebrew cannot pin a version. Assert both paths are gone so neither can
+    # silently regress back in.
     assert "sudo apt-get install --yes ripgrep" not in install_rg["run"]
+    assert "brew install" not in install_rg["run"]
     assert "github.com/BurntSushi/ripgrep/releases/download/" in install_rg["run"]
-    assert "sha256sum -c" in install_rg["run"]
-    assert "brew install ripgrep" in install_rg["run"]
-    assert 'case "$RUNNER_OS" in' in install_rg["run"]
+    assert '"${CHECKSUM[@]}" -c -' in install_rg["run"]
+    assert 'case "${RUNNER_OS}-${RUNNER_ARCH}" in' in install_rg["run"]
+    assert "aarch64-apple-darwin" in install_rg["run"]
+    assert "x86_64-unknown-linux-musl" in install_rg["run"]
+    assert '>> "$GITHUB_PATH"' in install_rg["run"]
     assert run_tests["env"] == {
         "AUTOSKILLIT_FILTER_STATS_FILE": (
             "${{ github.workspace }}/.autoskillit/temp/filter-stats.json"

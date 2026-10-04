@@ -107,13 +107,13 @@ class TestTieredAlwaysRun:
         assert "infra" in dir_names
 
     def test_unconditional_files_constants_have_correct_counts(self) -> None:
-        """_INFRA_UNCONDITIONAL_FILES has 12 entries; hooks has 3 entries.
+        """_INFRA_UNCONDITIONAL_FILES has 13 entries; hooks has 3 entries.
 
         Pin the unconditional-files contract: a silent mutation to these
         frozensets changes the always-run behavior, so any new entry must be
         reflected here as well.
         """
-        assert len(_INFRA_UNCONDITIONAL_FILES) == 12
+        assert len(_INFRA_UNCONDITIONAL_FILES) == 13
         assert len(_HOOKS_UNCONDITIONAL_FILES) == 3
 
     def test_lint_gate_selection_contract_is_unconditional(self) -> None:
@@ -123,6 +123,13 @@ class TestTieredAlwaysRun:
         ``.pyi``), not on any infra trigger file, so path routing must never drop it.
         """
         assert "test_lint_gate_selection.py" in _INFRA_UNCONDITIONAL_FILES
+
+    def test_docker_pin_guard_is_unconditional(self) -> None:
+        """The Docker pin guard compares the Dockerfile with code constants under src/.
+
+        A constant-only change is outside every infra trigger, so routing must never drop it.
+        """
+        assert "test_docker_image.py" in _INFRA_UNCONDITIONAL_FILES
 
     def test_empty_changed_files_uses_full_always_run(self, tmp_path: Path) -> None:
         """REQ-TIER-004: empty changed_files → fail-open → full always-run set as dirs."""

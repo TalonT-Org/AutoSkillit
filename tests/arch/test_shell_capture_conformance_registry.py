@@ -61,9 +61,9 @@ def test_adr_0008_conformance_matrix_matches_registry() -> None:
     assert documented == registered
 
 
-def test_native_baseline_matches_verification_image() -> None:
+def test_native_baseline_matches_dockerfile_codex_pin() -> None:
     project_root = Path(__file__).resolve().parents[2]
-    dockerfile = (project_root / "scripts/docker/verification/Dockerfile").read_text()
+    dockerfile = (project_root / "scripts/docker/Dockerfile").read_text()
     version = re.search(r"(?m)^ARG CODEX_VERSION=(\S+)\s*$", dockerfile)
     assert version is not None
     assert version.group(1) == NATIVE_BASELINE_CODEX_VERSION

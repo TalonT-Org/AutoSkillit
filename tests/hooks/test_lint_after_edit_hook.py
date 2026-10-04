@@ -13,7 +13,11 @@ from unittest.mock import patch
 
 import pytest
 
-pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
+from tests._hook_protocol_oracle import (
+    assert_both_protocols_context,
+)
+
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
 
 def _build_event(
@@ -22,6 +26,7 @@ def _build_event(
     tool_response: str = "The file was edited successfully.",
 ) -> dict:
     return {
+        "hook_event_name": "PostToolUse",
         "tool_name": tool_name,
         "tool_input": {"file_path": file_path},
         "tool_response": tool_response,
@@ -237,9 +242,12 @@ class TestLintBehavior:
 
         assert out != "", "ruff should auto-format x=1 to x = 1"
         parsed = json.loads(out)
-        updated = parsed["hookSpecificOutput"]["updatedToolResult"]
-        assert LINT_AUTOFIX_TRIGGER in updated
-        assert "re-read" in updated.lower()
+        context = parsed["hookSpecificOutput"]["additionalContext"]
+        assert LINT_AUTOFIX_TRIGGER in context
+        assert "re-read" in context.lower()
+        assert_both_protocols_context(
+            "PostToolUse", exit_code=code, stdout=out, stderr="", expected_context=context
+        )
 
     def test_autofix_resorts_pyi_stub_imports(self, tmp_path, monkeypatch):
         (tmp_path / "pyproject.toml").write_text('[tool.ruff.lint]\nselect = ["I"]\n')
@@ -265,8 +273,11 @@ class TestLintBehavior:
         from autoskillit.hooks.lint_after_edit_hook import LINT_AUTOFIX_TRIGGER
 
         assert out != "", "the hook must lint .pyi stubs, not skip them"
-        updated = json.loads(out)["hookSpecificOutput"]["updatedToolResult"]
-        assert LINT_AUTOFIX_TRIGGER in updated
+        context = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+        assert LINT_AUTOFIX_TRIGGER in context
+        assert_both_protocols_context(
+            "PostToolUse", exit_code=code, stdout=out, stderr="", expected_context=context
+        )
         sorted_stub = stub.read_text()
         assert sorted_stub.index("import Beta") < sorted_stub.index("import launch_digest")
 
@@ -312,8 +323,11 @@ class TestLintBehavior:
 
         assert out != "", "E501 should be reported for 200-char variable"
         parsed = json.loads(out)
-        updated = parsed["hookSpecificOutput"]["updatedToolResult"]
-        assert LINT_ERROR_TRIGGER in updated
+        context = parsed["hookSpecificOutput"]["additionalContext"]
+        assert LINT_ERROR_TRIGGER in context
+        assert_both_protocols_context(
+            "PostToolUse", exit_code=code, stdout=out, stderr="", expected_context=context
+        )
 
     def test_autofix_ignore_flag_is_narrow(self):
         """The --ignore flag in the ruff check --fix call must be 'F4', not a real rule code.
@@ -340,10 +354,10 @@ class TestLintBehavior:
 
 
 class TestOutputContract:
-    """updatedToolResult must not contain the original tool_response content."""
+    """Lint context must not contain the original tool_response content."""
 
     def test_output_excludes_tool_response_content(self, tmp_path, monkeypatch):
-        """updatedToolResult must not contain tool_response content."""
+        """additionalContext must not contain tool_response content."""
         f = tmp_path / "bad_fmt.py"
         f.write_text("x=1\n")
         large_tool_response = "The file was edited successfully. originalFile: " + "A" * 10000
@@ -356,12 +370,12 @@ class TestOutputContract:
         assert code == 0
         assert out != "", "Hook should emit output for bad_fmt.py"
         parsed = json.loads(out)
-        updated = parsed["hookSpecificOutput"]["updatedToolResult"]
-        assert "originalFile:" not in updated
-        assert "A" * 100 not in updated
+        context = parsed["hookSpecificOutput"]["additionalContext"]
+        assert "originalFile:" not in context
+        assert "A" * 100 not in context
 
     def test_output_excludes_short_tool_response(self, tmp_path, monkeypatch):
-        """Even short tool_response must not appear in updatedToolResult."""
+        """Even short tool_response must not appear in additionalContext."""
         f = tmp_path / "bad_fmt.py"
         f.write_text("x=1\n")
         out, code = _run_hook(
@@ -373,8 +387,8 @@ class TestOutputContract:
         assert code == 0
         assert out != ""
         parsed = json.loads(out)
-        updated = parsed["hookSpecificOutput"]["updatedToolResult"]
-        assert "The file was edited." not in updated
+        context = parsed["hookSpecificOutput"]["additionalContext"]
+        assert "The file was edited." not in context
 
 
 class TestRegistration:

@@ -63,6 +63,7 @@ from _hook_constants import (  # noqa: E402
 from _hook_constants import (  # noqa: E402
     RISKY_GIT_OPERATIONS as _BLOCKED_GIT_OPS,
 )
+from _hook_output import block, deny_tool_use  # noqa: E402
 from _hook_payload import (  # noqa: E402
     parse_hook_command,
     resolve_state_root,
@@ -193,19 +194,7 @@ def _deny_checked_out_ref(
     reason = CHECKED_OUT_REF_DENY_PREFIX + json.dumps(
         details, sort_keys=True, separators=(",", ":")
     )
-    sys.stdout.write(
-        json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": reason,
-                }
-            }
-        )
-        + "\n"
-    )
-    raise SystemExit(0)
+    deny_tool_use(reason)
 
 
 def _raw_write_targets(
@@ -601,8 +590,7 @@ def main() -> None:
             # Fail-closed on preflight exception. SystemExit raised by
             # _deny_checked_out_ref is BaseException, not Exception, so it
             # bypasses this handler and serves as the explicit deny signal.
-            sys.stderr.write(f"git_ops_guard: preflight failed: {exc}\n")
-            sys.exit(2)
+            block(f"git_ops_guard: preflight failed: {exc}")
 
     headless, tier = hook_session_shape()
     if not headless:
@@ -632,17 +620,7 @@ def main() -> None:
 
     op_str = " ".join(("git",) + blocked)
     deny_reason = _DENY_REASON_TEMPLATE.format(op=op_str)
-    payload = json.dumps(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": deny_reason,
-            }
-        }
-    )
-    sys.stdout.write(payload + "\n")
-    sys.exit(0)
+    deny_tool_use(deny_reason)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """PreToolUse hook — suggests the appropriate skill when writing recipe YAML files.
 
-Non-blocking advisory: emits hookSpecificOutput.message, never permissionDecision.
+Non-blocking advisory: emits PreToolUse context, never a permission decision.
 Skips headless sessions (AUTOSKILLIT_HEADLESS=1) to avoid noise in automated runs.
 
 Stdlib-only — runs under any Python interpreter without the autoskillit package.
@@ -25,6 +25,8 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
+from _hook_output import add_context  # noqa: E402
+from _hook_payload import edit_target_paths  # noqa: E402
 from _hook_settings import enforce_session_scope  # noqa: E402
 
 # Inlined subset of SKILL_FILE_ADVISORY_MAP (recipe-related entries only).
@@ -48,31 +50,16 @@ def main() -> None:
     except (json.JSONDecodeError, ValueError, OSError):
         sys.exit(0)
 
-    tool_name = data.get("tool_name", "")
-    if tool_name not in ("Write", "Edit"):
-        sys.exit(0)
-
-    file_path = data.get("tool_input", {}).get("file_path", "")
-    if not isinstance(file_path, str) or not file_path:
-        sys.exit(0)
-
-    normalized = file_path.replace(os.sep, "/")
-    for pattern, skill_name in _COMPILED:
-        if pattern.search(normalized):
-            payload = json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "message": (
-                            f"Consider using /{skill_name} for this file. "
-                            f"It provides schema validation, worked examples, and "
-                            f"prevents common recipe errors."
-                        ),
-                    }
-                }
-            )
-            sys.stdout.write(payload + "\n")
-            sys.exit(0)
+    for file_path in edit_target_paths(data):
+        normalized = file_path.replace(os.sep, "/")
+        for pattern, skill_name in _COMPILED:
+            if pattern.search(normalized):
+                add_context(
+                    "PreToolUse",
+                    f"Consider using /{skill_name} for this file. "
+                    "It provides schema validation, worked examples, and "
+                    "prevents common recipe errors.",
+                )
 
     sys.exit(0)
 

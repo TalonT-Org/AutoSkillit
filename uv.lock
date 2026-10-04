@@ -161,6 +161,7 @@ dependencies = [
 dev = [
     { name = "api-simulator", marker = "sys_platform == 'linux'" },
     { name = "import-linter" },
+    { name = "jsonschema" },
     { name = "mypy" },
     { name = "packaging" },
     { name = "pytest" },
@@ -191,6 +192,7 @@ requires-dist = [
     { name = "fastmcp", specifier = ">=3.3.1,<4.0" },
     { name = "httpx", specifier = ">=0.28,<1.0" },
     { name = "import-linter", marker = "extra == 'dev'", specifier = ">=2.1" },
+    { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.26.0" },
     { name = "lazy-loader", specifier = ">=0.4" },
     { name = "markdown-it-py", specifier = ">=3.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=2.3.1" },

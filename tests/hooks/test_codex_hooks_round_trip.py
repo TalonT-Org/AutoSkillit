@@ -82,9 +82,7 @@ class TestCodexHooksConfigRoundTrip:
     def test_dict_keys_are_event_types(self):
         result = generate_codex_hooks_config()
         assert len(result) > 0
-        assert set(result.keys()).issubset(
-            {"PreToolUse", "PostToolUse", "PostToolUseFailure", "SessionStart", "Stop"}
-        )
+        assert set(result.keys()).issubset({"PreToolUse", "PostToolUse", "SessionStart", "Stop"})
 
     def test_dict_values_are_lists_of_dicts(self):
         result = generate_codex_hooks_config()

@@ -21,6 +21,7 @@ if _HOOKS_DIR not in sys.path:
 _RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
 if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
+from _hook_output import deny_tool_use  # noqa: E402
 from _hook_settings import read_merged_hook_config  # noqa: E402
 
 INGREDIENT_LOCK_DENY_TRIGGER: str = "INGREDIENT LOCK ENFORCED"
@@ -70,17 +71,7 @@ def main() -> None:
             f"Locked ingredients for pipeline '{deny_pipeline}': {locked_ingredients}. "
             f"Call lock_ingredients(unlock=[...]) to release."
         )
-        sys.stdout.write(
-            json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "deny",
-                        "permissionDecisionReason": reason,
-                    }
-                }
-            )
-        )
+        deny_tool_use(reason)
     sys.exit(0)
 
 

@@ -53,7 +53,7 @@ def test_every_advisory_pattern_has_a_hook() -> None:
 
 
 def test_advisory_hooks_are_non_blocking() -> None:
-    """Advisory hook emits message payload, never permissionDecision."""
+    """Advisory hook emits context, never a permission decision."""
     payload = {
         "tool_name": "Write",
         "tool_input": {"file_path": ".autoskillit/recipes/test.yaml"},
@@ -63,7 +63,8 @@ def test_advisory_hooks_are_non_blocking() -> None:
     assert stdout.strip(), "Expected advisory output for a recipe YAML path"
     data = json.loads(stdout.strip())
     hook_out = data["hookSpecificOutput"]
-    assert "message" in hook_out, f"Expected 'message' key in hookSpecificOutput, got {hook_out!r}"
+    assert hook_out["hookEventName"] == "PreToolUse"
+    assert hook_out.get("additionalContext"), f"Expected advisory context, got {hook_out!r}"
     assert "permissionDecision" not in hook_out, "Advisory hook must not emit permissionDecision"
 
 
@@ -88,7 +89,9 @@ def test_advisory_hook_message_uses_bare_prefix() -> None:
     assert rc == 0
     assert stdout.strip()
     data = json.loads(stdout.strip())
-    message = data["hookSpecificOutput"]["message"]
+    hook_out = data["hookSpecificOutput"]
+    assert hook_out["hookEventName"] == "PreToolUse"
+    message = hook_out["additionalContext"]
     assert "/autoskillit:" not in message, (
         f"Advisory message uses /autoskillit: prefix for a skills_extended skill: {message}"
     )

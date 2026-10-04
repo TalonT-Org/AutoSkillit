@@ -31,7 +31,6 @@ class TestCodexTomlFormatContract:
             assert event_type in (
                 "PreToolUse",
                 "PostToolUse",
-                "PostToolUseFailure",
                 "SessionStart",
                 "Stop",
             ), f"Unknown event type key: {event_type}"

@@ -157,11 +157,19 @@ def test_scoped_guard_has_both_session_type_test_cases(guard_script: str) -> Non
     code_lines = "\n".join(
         line for line in source.splitlines() if not line.lstrip().startswith("#")
     )
-    has_headless_true = "headless=True" in code_lines or "AUTOSKILLIT_HEADLESS" in code_lines
-    # Accept explicit headless=False OR the env-strip pattern used by subprocess-style hook tests
-    # (k != "AUTOSKILLIT_HEADLESS" strips the var to exercise the non-headless code path)
+    has_headless_true = (
+        "headless=True" in code_lines
+        or '"AUTOSKILLIT_HEADLESS": "1"' in code_lines
+        or 'env["AUTOSKILLIT_HEADLESS"] = "1"' in code_lines
+    )
+    # Shared run_hook tests select interactive mode by setting AUTOSKILLIT_HEADLESS
+    # or by naming it in `unset`; older subprocess helpers stripped it from the
+    # inherited environment with the `k != ...` expression.
     has_headless_false = (
-        "headless=False" in code_lines or '!= "AUTOSKILLIT_HEADLESS"' in code_lines
+        "headless=False" in code_lines
+        or '!= "AUTOSKILLIT_HEADLESS"' in code_lines
+        or 'unset=("AUTOSKILLIT_HEADLESS",)' in code_lines
+        or 'unset=() if headless else ("AUTOSKILLIT_HEADLESS",)' in code_lines
     )
     assert has_headless_true, (
         f"{test_file.name} must test the headless=True path for scoped guard '{guard_script}'."

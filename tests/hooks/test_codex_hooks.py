@@ -125,7 +125,6 @@ class TestGenerateCodexHooksConfig:
             assert key in (
                 "PreToolUse",
                 "PostToolUse",
-                "PostToolUseFailure",
                 "SessionStart",
                 "Stop",
             )

@@ -3,40 +3,44 @@
 from __future__ import annotations
 
 import json
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
-from tests.conftest import production_interpreter_env
+from tests._hook_protocol_oracle import (
+    STATUS_COMPLETED,
+    assert_both_protocols_context,
+    claude_verdict,
+    run_hook,
+)
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
-SCRIPT = (
-    Path(__file__).resolve().parents[2] / "src/autoskillit/hooks/session_lifetime_notice_hook.py"
-)
 NOTICE_ENV = "AUTOSKILLIT_SESSION_LIFETIME_NOTICE"
 
 
 def _run(
-    event: object, *, env: dict[str, str] | None = None, headless: bool = False
-) -> tuple[int, str]:
-    run_env = production_interpreter_env()
-    run_env.pop("AUTOSKILLIT_HEADLESS", None)
-    run_env.pop(NOTICE_ENV, None)
-    run_env.update(env or {})
+    tmp_path: Path,
+    event: dict,
+    *,
+    env: dict[str, str] | None = None,
+    headless: bool = False,
+):
+    run_env = {"AUTOSKILLIT_LOG_DIR": str(tmp_path / "logs"), **(env or {})}
     if headless:
         run_env["AUTOSKILLIT_HEADLESS"] = "1"
-    result = subprocess.run(
-        [sys.executable, str(SCRIPT)],
-        input=json.dumps(event),
-        capture_output=True,
-        text=True,
+    unset = []
+    if not headless:
+        unset.append("AUTOSKILLIT_HEADLESS")
+    if NOTICE_ENV not in run_env:
+        unset.append(NOTICE_ENV)
+    return run_hook(
+        "session_lifetime_notice_hook.py",
+        event,
         env=run_env,
-        check=False,
+        unset=unset,
+        cwd=tmp_path,
     )
-    return result.returncode, result.stdout
 
 
 def test_headless_session_leaves_interactive_notice_untouched(tmp_path: Path) -> None:
@@ -46,14 +50,15 @@ def test_headless_session_leaves_interactive_notice_untouched(tmp_path: Path) ->
         encoding="utf-8",
     )
 
-    code, output = _run(
+    emission = _run(
+        tmp_path,
         {"hook_event_name": "PostToolUse", "tool_name": "Bash"},
         env={NOTICE_ENV: str(notice_path)},
         headless=True,
     )
 
-    assert code == 0
-    assert output == ""
+    assert emission.exit_code == 0
+    assert emission.stdout == ""
     assert notice_path.exists()
 
 
@@ -72,19 +77,25 @@ def test_post_tool_use_delivers_and_consumes_notice_once(tmp_path: Path) -> None
     event = {"hook_event_name": "PostToolUse", "tool_name": "Bash"}
     env = {NOTICE_ENV: str(notice_path)}
 
-    code, output = _run(event, env=env, headless=False)
+    emission = _run(tmp_path, event, env=env, headless=False)
 
-    assert code == 0
-    result = json.loads(output)
+    assert emission.exit_code == 0
+    result = json.loads(emission.stdout)
     assert "systemMessage" in result
     assert "hookSpecificOutput" in result
     assert "additionalContext" in result["hookSpecificOutput"]
+    assert_both_protocols_context(
+        event["hook_event_name"],
+        exit_code=emission.exit_code,
+        stdout=emission.stdout,
+        stderr=emission.stderr,
+    )
     assert not notice_path.exists()
 
-    second_code, second_output = _run(event, env=env)
+    second = _run(tmp_path, event, env=env)
 
-    assert second_code == 0
-    assert second_output == ""
+    assert second.exit_code == 0
+    assert second.stdout == ""
 
 
 def test_stop_delivers_only_system_message(tmp_path: Path) -> None:
@@ -100,15 +111,25 @@ def test_stop_delivers_only_system_message(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    code, output = _run(
-        {"hook_event_name": "Stop"},
+    event = {"hook_event_name": "Stop"}
+    emission = _run(
+        tmp_path,
+        event,
         env={NOTICE_ENV: str(notice_path)},
     )
 
-    assert code == 0
-    result = json.loads(output)
+    assert emission.exit_code == 0
+    result = json.loads(emission.stdout)
     assert "systemMessage" in result
     assert "hookSpecificOutput" not in result
+    verdict = claude_verdict(
+        event["hook_event_name"],
+        exit_code=emission.exit_code,
+        stdout=emission.stdout,
+        stderr=emission.stderr,
+    )
+    assert verdict.status == STATUS_COMPLETED
+    assert verdict.system_message
 
 
 @pytest.mark.parametrize("case", ["unset", "missing", "malformed"])
@@ -121,7 +142,11 @@ def test_hook_is_silent_without_a_valid_notice(tmp_path: Path, case: str) -> Non
         notice_path.write_text("{not-json", encoding="utf-8")
         env[NOTICE_ENV] = str(notice_path)
 
-    code, output = _run({"hook_event_name": "PostToolUse", "tool_name": "Bash"}, env=env)
+    emission = _run(
+        tmp_path,
+        {"hook_event_name": "PostToolUse", "tool_name": "Bash"},
+        env=env,
+    )
 
-    assert code == 0
-    assert output == ""
+    assert emission.exit_code == 0
+    assert emission.stdout == ""

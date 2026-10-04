@@ -27,6 +27,7 @@ from _command_classification import (  # noqa: E402
     command_verb_and_args,
     extract_interpreter_command_payloads,
 )
+from _hook_output import deny_tool_use  # noqa: E402
 from _hook_payload import parse_hook_command  # noqa: E402
 
 UNSAFE_INSTALL_DENY_TRIGGER: str = "Blocked: editable install without --python .venv"
@@ -254,38 +255,18 @@ def main() -> None:
         sys.exit(0)
 
     if _is_unsafe_editable_install(cmd):
-        payload = json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": (
-                        "Blocked: editable install without --python .venv. "
-                        "Use `task install-worktree` or add `--python .venv/bin/python`. "
-                        "Installing into system Python creates dangling entry points when "
-                        "the worktree is deleted."
-                    ),
-                }
-            }
+        deny_tool_use(
+            "Blocked: editable install without --python .venv. "
+            "Use `task install-worktree` or add `--python .venv/bin/python`. "
+            "Installing into system Python creates dangling entry points when "
+            "the worktree is deleted."
         )
-        sys.stdout.write(payload + "\n")
-        sys.exit(0)
 
     if _is_system_install(cmd):
-        payload = json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": (
-                        "Blocked: --system install from worktree contaminates global environment. "
-                        "Use `task install-worktree` or add `--python .venv/bin/python`."
-                    ),
-                }
-            }
+        deny_tool_use(
+            "Blocked: --system install from worktree contaminates global environment. "
+            "Use `task install-worktree` or add `--python .venv/bin/python`."
         )
-        sys.stdout.write(payload + "\n")
-        sys.exit(0)
 
     sys.exit(0)
 

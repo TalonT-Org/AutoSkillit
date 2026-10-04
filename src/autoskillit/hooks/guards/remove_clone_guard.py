@@ -17,6 +17,16 @@ Approves silently (fail-open) when:
 import json
 import subprocess
 import sys
+from pathlib import Path
+
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+_RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
+if _RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, _RUNTIME_DIR)
+
+from _hook_output import deny_tool_use  # noqa: E402
 
 REMOVE_CLONE_DENY_TRIGGER: str = "Clone at"
 
@@ -173,17 +183,7 @@ def main() -> None:
 
     approved, reason = _check_sync(clone_path)
     if not approved:
-        print(
-            json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "deny",
-                        "permissionDecisionReason": reason,
-                    }
-                }
-            )
-        )
+        deny_tool_use(reason)
     sys.exit(0)
 
 

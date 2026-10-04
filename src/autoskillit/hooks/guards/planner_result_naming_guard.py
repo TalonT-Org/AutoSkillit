@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse hook — blocks Write/Edit calls that produce non-canonical planner result filenames.
+"""PreToolUse hook — blocks file edits that produce non-canonical planner result filenames.
 
 Planner result files must follow strict naming conventions:
   - Phases:     P{N}_result.json     (e.g. P1_result.json, P12_result.json)
@@ -29,6 +29,8 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
+from _hook_output import deny_tool_use  # noqa: E402
+from _hook_payload import edit_target_paths  # noqa: E402
 from _session_scope_authority import enforce_script_session_scope  # noqa: E402
 
 PLANNER_NAMING_DENY_TRIGGER: str = "Non-canonical planner result filename"
@@ -42,18 +44,6 @@ _WP_RE = re.compile(r"^P\d+-A\d+-WP\d+_result\.json$")
 
 # Directories that contain tier result files
 _TIER_DIRS = ("phases", "assignments", "work_packages")
-
-
-def _build_deny(corrector: str) -> str:
-    return json.dumps(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": corrector,
-            }
-        }
-    )
 
 
 def _invalid_planner_result_reason(file_path: str) -> str | None:
@@ -118,20 +108,10 @@ def main() -> None:
     except (json.JSONDecodeError, ValueError, OSError):
         sys.exit(0)  # fail-open on malformed input
 
-    tool_name = data.get("tool_name", "")
-    if tool_name not in ("Write", "Edit"):
-        sys.exit(0)
-
-    tool_input = data.get("tool_input") or {}
-    file_path = tool_input.get("file_path", "")
-    if not file_path:
-        sys.exit(0)
-
-    reason = _invalid_planner_result_reason(file_path)
-    if reason is None:
-        sys.exit(0)
-    sys.stdout.write(_build_deny(reason))
-    sys.stdout.flush()
+    for file_path in edit_target_paths(data):
+        reason = _invalid_planner_result_reason(file_path)
+        if reason is not None:
+            deny_tool_use(reason)
     sys.exit(0)
 
 

@@ -20,6 +20,10 @@ from unittest.mock import patch
 
 import pytest
 
+from tests._hook_protocol_oracle import (
+    assert_both_protocols_context,
+)
+
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 
 
@@ -27,8 +31,8 @@ def _run_hook(stdin_data: dict) -> tuple[str, int]:
     """Run quota_guard_state_post_hook.main() with synthetic stdin.
 
     Returns (stdout, exit_code). The hook always exits 0 on success and
-    emits an ``updatedMCPToolOutput`` rewrite only when the marker mutation
-    failed for a recognized tool event.
+    emits ``additionalContext`` only when the marker mutation failed for a
+    recognized tool event.
     """
 
     import autoskillit.hooks.quota_guard_state_post_hook as hook_mod
@@ -230,7 +234,7 @@ def test_two_sessions_share_one_project_root(tmp_path, monkeypatch):
     assert payload_b["session_id"] == "session-bbb"
 
 
-# T9: atomic-write failure surfaces via updatedMCPToolOutput, never a partial marker
+# T9: atomic-write failure surfaces through context, never a partial marker
 def test_atomic_write_failure_surfaces_diagnostic_and_leaves_no_marker(
     tmp_path, monkeypatch, capsys
 ):
@@ -248,6 +252,7 @@ def test_atomic_write_failure_surfaces_diagnostic_and_leaves_no_marker(
     monkeypatch.setattr(hook_module, "write_quota_disable_marker", _raise)
 
     event = {
+        "hook_event_name": "PostToolUse",
         "session_id": "session-aaa",
         "tool_name": "disable_quota_guard",
         "tool_response": _disable_response(success=True),
@@ -259,14 +264,21 @@ def test_atomic_write_failure_surfaces_diagnostic_and_leaves_no_marker(
     marker = state_dir / "session-aaa_quota_guard_disabled.json"
     assert not marker.exists(), "No partial marker must remain after a failed write"
 
-    # Failure must surface as updatedMCPToolOutput rewrite so the caller sees the failure.
+    # Failure must surface as additionalContext so the caller knows quota enforcement remains.
     parsed = json.loads(out)
-    assert "hookSpecificOutput" in parsed
-    rewrite = parsed["hookSpecificOutput"].get("updatedMCPToolOutput", "")
-    assert rewrite, "Failure must surface via updatedMCPToolOutput"
+    hook_output = parsed["hookSpecificOutput"]
+    context = hook_output.get("additionalContext", "")
+    assert context, "Failure must surface through additionalContext"
+    assert "still subject to" in context
     # Must not echo raw tool_response content
-    assert '"content"' not in rewrite
-    assert '"result"' not in rewrite
+    assert '"content"' not in context
+    assert '"result"' not in context
+    assert_both_protocols_context(
+        event["hook_event_name"],
+        exit_code=exit_code,
+        stdout=out,
+        stderr="",
+    )
 
 
 # T10: malformed event JSON exits silently with no marker

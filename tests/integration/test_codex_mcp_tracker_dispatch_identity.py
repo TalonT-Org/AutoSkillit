@@ -25,7 +25,9 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
+import time
 import tomllib
 from pathlib import Path
 from uuid import uuid4
@@ -46,6 +48,7 @@ from autoskillit.core import (
     release_tracker_lease,
 )
 from autoskillit.execution.backends._codex_config import _ensure_codex_mcp_registered_unlocked
+from autoskillit.execution.process._process_tether import default_tether_dir
 from autoskillit.fleet._checkpoint_bridge import (
     load_dispatch_progress,
     retain_dispatch_tracker_authority,
@@ -82,6 +85,8 @@ import os
 import json
 import re
 import sys
+import time
+from pathlib import Path
 
 os.makedirs({_WRITE_PATH!r}, exist_ok=True)
 with open(os.path.join({_WRITE_PATH!r}, "result.md"), "w") as f:
@@ -90,6 +95,23 @@ with open(os.path.join({_WRITE_PATH!r}, "result.md"), "w") as f:
 prompt = sys.argv[sys.argv.index("-p") + 1] if "-p" in sys.argv else ""
 match = re.search({_MARKER_PATTERN!r}, prompt)
 marker = match.group(0) if match else ""
+# Stay observable until the runner records this workload's identity.
+tether_dir = Path(__TETHER_DIR__)
+deadline = time.monotonic() + 10
+acknowledged = False
+while not acknowledged and time.monotonic() < deadline:
+    for path in tether_dir.glob("*.json"):
+        try:
+            record = json.loads(path.read_text())
+        except FileNotFoundError:
+            continue
+        if record.get("workload_pid") == os.getpid():
+            acknowledged = True
+            break
+    if not acknowledged:
+        time.sleep(0.01)
+if not acknowledged:
+    raise RuntimeError("runner did not acknowledge the synthetic workload PID")
 text = "pr_url = \\nverdict = dry_run\\ncategory_summary = synthetic test run\\n" + marker
 envelope = {{
     "type": "result",
@@ -116,10 +138,12 @@ _CLAUDE_SHIM_SCRIPT = (
 )
 
 
-def _write_claude_shim(bin_dir: Path) -> None:
+def _write_claude_shim(bin_dir: Path, tether_dir: Path) -> None:
     bin_dir.mkdir(parents=True, exist_ok=True)
     impl_path = bin_dir / "_claude_impl.py"
-    impl_path.write_text(_CLAUDE_IMPL_SCRIPT, encoding="utf-8")
+    impl_path.write_text(
+        _CLAUDE_IMPL_SCRIPT.replace("__TETHER_DIR__", repr(str(tether_dir))), encoding="utf-8"
+    )
     impl_path.chmod(0o755)
     shim_path = bin_dir / "claude"
     shim_path.write_text(_CLAUDE_SHIM_SCRIPT, encoding="utf-8")
@@ -143,6 +167,39 @@ def _tool_json(result: object) -> dict[str, object]:
     return decoded
 
 
+def test_claude_shim_waits_for_workload_identity(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    tether_dir = tmp_path / "tethers"
+    tether_dir.mkdir()
+    _write_claude_shim(bin_dir, tether_dir)
+    marker = "%%ORDER_UP::" + "a" * 32 + "%%"
+    process = subprocess.Popen(
+        [str(bin_dir / "claude"), "-p", marker],
+        cwd=tmp_path,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=production_interpreter_env(),
+    )
+    try:
+        artifact = tmp_path / _WRITE_PATH / "result.md"
+        deadline = time.monotonic() + 5
+        while not artifact.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert artifact.exists()
+        assert process.poll() is None
+        (tether_dir / "workload.json").write_text(
+            json.dumps({"workload_pid": process.pid}), encoding="utf-8"
+        )
+        stdout, stderr = process.communicate(timeout=10)
+        assert process.returncode == 0, stderr
+        assert marker in json.loads(stdout)["result"]
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
+
+
 async def test_tracker_keys_off_dispatch_id_across_real_codex_mcp_boundary(
     tmp_path: Path, tool_ctx
 ) -> None:
@@ -155,7 +212,7 @@ async def test_tracker_keys_off_dispatch_id_across_real_codex_mcp_boundary(
     codex_home = tmp_path / "codex-home"
     codex_home.mkdir()
     bin_dir = tmp_path / "bin"
-    _write_claude_shim(bin_dir)
+    _write_claude_shim(bin_dir, default_tether_dir())
 
     config_path = codex_home / "config.toml"
     assert _ensure_codex_mcp_registered_unlocked(config_path=config_path) is True

@@ -25,6 +25,7 @@ if _RUNTIME_DIR not in sys.path:
 from _hook_constants import (  # noqa: E402
     MANAGED_PARENT_ALLOWED_TOOL_SET,
 )
+from _hook_output import deny_tool_use  # noqa: E402
 from _hook_payload import normalize_payload_cwd  # noqa: E402
 from _hook_settings import (  # noqa: E402
     enforce_session_scope,
@@ -38,22 +39,6 @@ SKILL_ORCHESTRATION_DENY_TRIGGER: str = "cannot be called from skill sessions"
 _ORCHESTRATION_TOOLS: frozenset[str] = frozenset({"run_skill", "run_cmd", "run_python"})
 
 
-def _deny(reason: str) -> None:
-    sys.stdout.write(
-        json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": reason,
-                }
-            }
-        )
-        + "\n"
-    )
-    sys.exit(0)
-
-
 def _enforce_managed_codex_route(tool: str, payload_cwd: str | None, session_id: object) -> None:
     managed_route = payload_managed_codex_route(payload_cwd, session_id)
     if managed_route is not None:
@@ -61,10 +46,10 @@ def _enforce_managed_codex_route(tool: str, payload_cwd: str | None, session_id:
         if route == "interactive-parent":
             return
         if "skill_orchestration_guard" not in guards:
-            _deny("managed Codex binding omits skill_orchestration_guard")
+            deny_tool_use("managed Codex binding omits skill_orchestration_guard")
         if route == "parent" and tool in MANAGED_PARENT_ALLOWED_TOOL_SET:
             sys.exit(0)
-        _deny(
+        deny_tool_use(
             f"{tool} is unavailable to the managed Codex {route}; "
             "only the route's explicit direct-tool surface may be used"
         )
@@ -116,7 +101,7 @@ def main() -> None:
                 f" (AUTOSKILLIT_SESSION_TYPE={tier!r} is not a recognized tier;"
                 " expected: orchestrator, fleet, or skill)"
             )
-    _deny(denial_reason)
+    deny_tool_use(denial_reason)
 
 
 if __name__ == "__main__":

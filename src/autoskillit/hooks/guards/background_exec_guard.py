@@ -36,6 +36,7 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
+from _hook_output import deny_tool_use  # noqa: E402
 from _hook_payload import normalize_payload_cwd  # noqa: E402
 from _hook_settings import (  # noqa: E402
     hook_join_applicability,
@@ -71,19 +72,6 @@ def _governed_skill_session(session_type: str) -> bool:
     if session_type in ("orchestrator", "fleet"):
         return False
     return True
-
-
-def _emit_deny(reason: str) -> None:
-    payload = json.dumps(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": reason,
-            }
-        }
-    )
-    sys.stdout.write(payload + "\n")
 
 
 def _managed_route_denial(
@@ -206,8 +194,7 @@ def main() -> None:
     payload_cwd = normalize_payload_cwd(data.get("cwd"))
     denial_reason = _managed_route_denial(payload_cwd, session_id, tool_name, tool_input)
     if denial_reason is not None:
-        _emit_deny(denial_reason)
-        sys.exit(0)
+        deny_tool_use(denial_reason)
 
     # --- Join-bound session enforcement (Claude, all session types) ---
     # Inside a claimed child's own subagent context, exempt join re-evaluation:
@@ -222,8 +209,7 @@ def main() -> None:
         tool_input,
     )
     if denial_reason is not None:
-        _emit_deny(denial_reason)
-        sys.exit(0)
+        deny_tool_use(denial_reason)
 
     if not headless:
         # Interactive non-governed sessions fall through after the join check.
@@ -232,9 +218,7 @@ def main() -> None:
     # --- ADR-0001 background/SessionWakeup gate (headless only) ---
     denial_reason = _headless_background_denial(tier, tool_name, tool_input)
     if denial_reason is not None:
-        _emit_deny(denial_reason)
-
-    sys.exit(0)
+        deny_tool_use(denial_reason)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """PreToolUse guard: advisory unmet-dependency warning for pipeline steps.
 
-Non-blocking advisory — permissionDecision is always "allow". The server-side
+Non-blocking advisory — it does not make a permission decision. The server-side
 _check_pipeline_deps in run_skill is the primary enforcer.
 
 Tracker resolution uses the kitchen_id from the merged hook config (the same
@@ -25,6 +25,7 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
+from _hook_output import add_context  # noqa: E402
 from _hook_payload import (  # noqa: E402
     parse_hook_command,
     resolve_state_root,
@@ -84,22 +85,12 @@ def main() -> None:
         if kitchen_id:
             order_id = _resolve_order_id_from_kitchen(tracker_dir, kitchen_id)
         if not order_id:
-            print(
-                json.dumps(
-                    {
-                        "hookSpecificOutput": {
-                            "hookEventName": "PreToolUse",
-                            "permissionDecision": "allow",
-                            "additionalContext": (
-                                "Pipeline step guard: cannot resolve tracker — "
-                                "no order_id, no kitchen_id, or ambiguous tracker state. "
-                                "The server-side enforcer will handle dependency checks."
-                            ),
-                        }
-                    }
-                )
+            add_context(
+                "PreToolUse",
+                "Pipeline step guard: cannot resolve tracker — "
+                "no order_id, no kitchen_id, or ambiguous tracker state. "
+                "The server-side enforcer will handle dependency checks.",
             )
-            sys.exit(0)
 
     canonical = STEP_SUFFIX_RE.sub("", step_name)
     tracker_path = project_root / ".autoskillit" / "temp" / "pipeline_tracker" / f"{order_id}.json"
@@ -126,18 +117,7 @@ def main() -> None:
         f"which have not completed. The server will block this call — "
         f"run the missing step(s) first."
     )
-    print(
-        json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "allow",
-                    "additionalContext": msg,
-                }
-            }
-        )
-    )
-    sys.exit(0)
+    add_context("PreToolUse", msg)
 
 
 if __name__ == "__main__":

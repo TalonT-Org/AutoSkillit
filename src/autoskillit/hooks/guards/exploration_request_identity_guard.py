@@ -7,7 +7,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
@@ -21,6 +21,11 @@ from _exploration_request_record import (  # noqa: E402
     SUPPORTED_EXPLORATION_REQUEST_TOOLS,
     write_exploration_request_record,
 )
+
+if TYPE_CHECKING:
+    from .._runtime._hook_output import allow_with_updated_input, deny_tool_use
+else:
+    from _hook_output import allow_with_updated_input, deny_tool_use
 from _hook_payload import resolve_state_root  # noqa: E402
 from _hook_settings import enforce_session_scope  # noqa: E402
 
@@ -29,22 +34,6 @@ _TOKEN_PARAM = "_autoskillit_exploration_request_token"
 _TOOL_NAME = re.compile(
     rf"mcp__.*autoskillit.*__({'|'.join(sorted(SUPPORTED_EXPLORATION_REQUEST_TOOLS))})\Z"
 )
-
-
-def _deny(reason: str) -> None:
-    print(
-        json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": (
-                        f"{EXPLORATION_REQUEST_IDENTITY_DENY_TRIGGER}: {reason}"
-                    ),
-                }
-            }
-        )
-    )
 
 
 def _short_tool_name(raw_name: object) -> str | None:
@@ -77,8 +66,10 @@ def main() -> None:
         or not 0 < len(session_id) <= 128
         or not isinstance(tool_input, dict)
     ):
-        _deny("supported tool event did not carry a bounded session_id and input mapping")
-        return
+        deny_tool_use(
+            f"{EXPLORATION_REQUEST_IDENTITY_DENY_TRIGGER}: "
+            "supported tool event did not carry a bounded session_id and input mapping"
+        )
 
     try:
         root = resolve_state_root(data.get("cwd") if isinstance(data.get("cwd"), str) else "")
@@ -87,22 +78,14 @@ def main() -> None:
         sys.stderr.write(
             f"exploration_request_identity_guard: request record write failed: {exc}\n"
         )
-        _deny("the correlated one-shot record could not be written")
-        return
+        deny_tool_use(
+            f"{EXPLORATION_REQUEST_IDENTITY_DENY_TRIGGER}: "
+            "the correlated one-shot record could not be written"
+        )
 
     updated_input = dict(tool_input)
     updated_input[_TOKEN_PARAM] = token
-    print(
-        json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "allow",
-                    "updatedInput": updated_input,
-                }
-            }
-        )
-    )
+    allow_with_updated_input(updated_input)
 
 
 if __name__ == "__main__":

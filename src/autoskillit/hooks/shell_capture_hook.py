@@ -29,7 +29,6 @@ _RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
 if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
-
 if TYPE_CHECKING:
     from autoskillit.hooks._capture_contract import (
         _CAPTURE_ID_RE,
@@ -47,6 +46,7 @@ if TYPE_CHECKING:
         decode_lineage_ref_json,
         encode_capture_request,
     )
+    from autoskillit.hooks._runtime._hook_output import allow_with_updated_input
     from autoskillit.hooks._runtime._policy_event import PolicyEvent, render_provenance_prefix
 else:
     from _capture_contract import (
@@ -65,6 +65,7 @@ else:
         decode_lineage_ref_json,
         encode_capture_request,
     )
+    from _hook_output import allow_with_updated_input
     from _policy_event import PolicyEvent, render_provenance_prefix
 
 _HARNESS_SENTINEL = "# autoskillit-shell-capture v1"
@@ -339,16 +340,7 @@ def main() -> None:
         attempt_id=control.attempt_id,
         lineage_ref=control.lineage_ref,
     )
-    hook_output = {
-        "hookEventName": "PreToolUse",
-        "permissionDecision": "allow",
-        "updatedInput": {"command": harness},
-    }
-    if control.diagnostic is not None:
-        hook_output["additionalContext"] = control.diagnostic
-    payload = json.dumps({"hookSpecificOutput": hook_output})
-    sys.stdout.write(payload + "\n")
-    sys.exit(0)
+    allow_with_updated_input({"command": harness}, context=control.diagnostic)
 
 
 if __name__ == "__main__":

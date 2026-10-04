@@ -28,6 +28,7 @@ _PLUGIN_ROOT = str(Path(__file__).resolve().parents[2])
 if _PLUGIN_ROOT not in sys.path:
     sys.path.insert(0, _PLUGIN_ROOT)
 
+from _hook_output import deny_tool_use  # noqa: E402
 from _parent_assistant_turns import is_parent_assistant_record  # noqa: E402
 
 FABRICATED_COMPLETION_DENY_TRIGGER: str = "FABRICATED BACKGROUND COMPLETION"
@@ -383,18 +384,7 @@ def main() -> None:
         f"{FABRICATED_COMPLETION_DENY_TRIGGER}. Wait for the actual run_skill tool "
         "result, then acknowledge its exact receipt_id with complete_run_skill_result."
     )
-    sys.stdout.write(
-        json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": reason,
-                }
-            }
-        )
-        + "\n"
-    )
+    deny_tool_use(reason)
 
 
 if __name__ == "__main__":

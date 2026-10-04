@@ -34,15 +34,10 @@ _EXEMPT_LITERALS = frozenset(
         "AutoSkillit MCP server appears disconnected — all registered server PIDs "
         "for this project are dead. Kitchen state has been lost. Ask the user to run "
         "/MCP to reconnect, then re-open the kitchen with open_kitchen.",
-        "RESUME REMINDER: You are resuming a previous AutoSkillit session. MCP tool "
-        "access (kitchen) is not automatically restored on resume. ",
-        "Call /autoskillit:open-kitchen first to regain access to all AutoSkillit MCP "
-        "tools before continuing your work.",
         # The runtime-only guard runs as a stdlib-only standalone hook and must
         # return the documented visible Codex message verbatim.
         "AutoSkillit blocked automatic compaction before changing history. Start a new "
         "session, or compact manually and resume deliberately.",
-        "') to regain access to all AutoSkillit MCP tools before continuing your work.",
         # Stop completion gate docstring describes the platform's success/completion
         # marker by name; the gate itself emits PolicyEvent-rendered messages.
         "Stop completion gate — block success/Stop until the active wave is complete.\n\n"
@@ -54,8 +49,10 @@ _EXEMPT_LITERALS = frozenset(
         "In a clean session (no join-bearing skill loaded) this guard is a no-op.\n\n"
         "``Stop`` is the correct gate surface — per official documentation it\n"
         "fires once per turn and exit code 2 prevents Claude from stopping while\n"
-        "continuing the conversation. This blocks premature completion between\n"
-        "waves as well as at the end of the whole conversation.\n\n"
+        "continuing the conversation. The block reason is delivered on stderr:\n"
+        "Codex uses it as the continuation prompt, and Claude uses stderr when no\n"
+        "JSON reason exists. This blocks premature completion between waves as well\n"
+        "as at the end of the whole conversation.\n\n"
         "Unlike PreToolUse and PostToolUse guards, Stop fails closed for malformed input\n"
         "or a missing session identity: a false release would lose the active wave.\n\n"
         "Stdlib-only — no autoskillit imports.\n",

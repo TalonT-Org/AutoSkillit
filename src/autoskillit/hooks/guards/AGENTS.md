@@ -58,7 +58,10 @@ The package initializer remains import-free.
 
 ## Architecture Notes
 
-Each guard is a standalone Python script executed as a subprocess (not imported as a module). Protocol: read PreToolUse JSON from stdin, write decision JSON to stdout, exit 0. Most are stdlib-only for fast startup.
+Each guard is a standalone stdlib-only Python script executed as a subprocess.
+Read hook JSON from stdin and emit protocol output only through
+`_runtime/_hook_output.py` channel functions: deny and context use exit-0 JSON,
+while `block` writes its reason to stderr and exits 2.
 
 ### Fail-Mode Contract
 

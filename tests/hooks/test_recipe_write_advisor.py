@@ -5,107 +5,103 @@ from __future__ import annotations
 import io
 import json
 import os
-import subprocess
-import sys
 from contextlib import redirect_stdout
 from unittest.mock import patch
 
 import pytest
 
 from autoskillit.core.paths import pkg_root
-from tests.conftest import production_interpreter_env
+from tests._hook_protocol_oracle import (
+    assert_both_protocols_context,
+    run_hook,
+)
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
+HOOK_PATH = pkg_root() / "hooks" / "guards" / "recipe_write_advisor.py"
 
-def _run_advisor(payload: dict, extra_env: dict[str, str] | None = None) -> tuple[int, str]:
-    hook_path = pkg_root() / "hooks" / "guards" / "recipe_write_advisor.py"
-    env = {k: v for k, v in production_interpreter_env().items() if k != "AUTOSKILLIT_HEADLESS"}
-    env.update(extra_env or {})
-    result = subprocess.run(
-        [sys.executable, str(hook_path)],
-        input=json.dumps(payload),
-        capture_output=True,
-        text=True,
-        env=env,
+
+def _run_advisor(payload: dict, extra_env: dict[str, str] | None = None):
+    env = extra_env or {}
+    unset = () if "AUTOSKILLIT_HEADLESS" in env else ("AUTOSKILLIT_HEADLESS",)
+    event = {"hook_event_name": "PreToolUse", **payload}
+    return run_hook(HOOK_PATH, event, env=env, unset=unset)
+
+
+def _assert_completed_context(payload: dict, emission) -> str:
+    output = json.loads(emission.stdout)
+    specific = output["hookSpecificOutput"]
+    assert set(output) == {"hookSpecificOutput"}
+    assert "additionalContext" in specific
+    assert "message" not in specific
+    context = specific["additionalContext"]
+    event = {"hook_event_name": "PreToolUse", **payload}
+    assert_both_protocols_context(
+        event["hook_event_name"],
+        exit_code=emission.exit_code,
+        stdout=emission.stdout,
+        stderr=emission.stderr,
+        expected_context=context,
     )
-    return result.returncode, result.stdout
+    return context
 
 
 class TestRecipeWriteAdvisor:
     def test_recipe_yaml_write_triggers_advisory(self) -> None:
-        """Write to .autoskillit/recipes/foo.yaml triggers write-recipe advisory."""
         payload = {
             "tool_name": "Write",
             "tool_input": {"file_path": ".autoskillit/recipes/foo.yaml"},
         }
-        rc, stdout = _run_advisor(payload)
-        assert rc == 0
-        assert stdout.strip(), "Expected advisory output for recipe YAML"
-        data = json.loads(stdout.strip())
-        assert "write-recipe" in data["hookSpecificOutput"]["message"]
+        emission = _run_advisor(payload)
+        assert emission.exit_code == 0
+        assert "write-recipe" in _assert_completed_context(payload, emission)
 
     def test_non_recipe_yaml_write_is_silent(self) -> None:
-        """Write to a non-recipe path produces no output (exit 0)."""
         payload = {
             "tool_name": "Write",
             "tool_input": {"file_path": "/home/user/project/config.py"},
         }
-        rc, stdout = _run_advisor(payload)
-        assert rc == 0
-        assert not stdout.strip()
+        emission = _run_advisor(payload)
+        assert emission.exit_code == 0
+        assert emission.stdout == ""
 
     def test_campaign_yaml_suggests_make_campaign(self) -> None:
-        """Write to campaigns/ subdir suggests make-campaign instead of write-recipe."""
         payload = {
             "tool_name": "Write",
             "tool_input": {"file_path": ".autoskillit/recipes/campaigns/my_campaign.yaml"},
         }
-        rc, stdout = _run_advisor(payload)
-        assert rc == 0
-        assert stdout.strip(), "Expected advisory output for campaign YAML"
-        data = json.loads(stdout.strip())
-        msg = data["hookSpecificOutput"]["message"]
-        assert "make-campaign" in msg
-        assert "write-recipe" not in msg
+        emission = _run_advisor(payload)
+        assert emission.exit_code == 0
+        context = _assert_completed_context(payload, emission)
+        assert "make-campaign" in context
+        assert "write-recipe" not in context
 
     def test_headless_session_skips_advisory(self) -> None:
-        """When AUTOSKILLIT_HEADLESS=1, no advisory is emitted."""
         payload = {
             "tool_name": "Write",
             "tool_input": {"file_path": ".autoskillit/recipes/foo.yaml"},
         }
-        rc, stdout = _run_advisor(payload, extra_env={"AUTOSKILLIT_HEADLESS": "1"})
-        assert rc == 0
-        assert not stdout.strip(), "Advisory must be suppressed in headless sessions"
+        emission = _run_advisor(payload, extra_env={"AUTOSKILLIT_HEADLESS": "1"})
+        assert emission.exit_code == 0
+        assert emission.stdout == ""
 
     def test_edit_tool_also_triggers_advisory(self) -> None:
-        """Edit (not just Write) to a recipe YAML also emits the advisory."""
         payload = {
             "tool_name": "Edit",
             "tool_input": {"file_path": "src/autoskillit/recipes/my_recipe.yaml"},
         }
-        rc, stdout = _run_advisor(payload)
-        assert rc == 0
-        assert stdout.strip()
-        data = json.loads(stdout.strip())
-        assert "write-recipe" in data["hookSpecificOutput"]["message"]
+        emission = _run_advisor(payload)
+        assert emission.exit_code == 0
+        assert "write-recipe" in _assert_completed_context(payload, emission)
 
     def test_non_write_edit_tool_is_silent(self) -> None:
-        """Tools other than Write/Edit produce no output even for recipe paths."""
         payload = {
             "tool_name": "Read",
             "tool_input": {"file_path": ".autoskillit/recipes/foo.yaml"},
         }
-        rc, stdout = _run_advisor(payload)
-        assert rc == 0
-        assert not stdout.strip()
-
-
-# ---------------------------------------------------------------------------
-# In-process session-scope enforcement tests (satisfies
-# test_scoped_guard_has_both_session_type_test_cases contract)
-# ---------------------------------------------------------------------------
+        emission = _run_advisor(payload)
+        assert emission.exit_code == 0
+        assert emission.stdout == ""
 
 
 def _run_advisor_inprocess(
@@ -116,7 +112,13 @@ def _run_advisor_inprocess(
 ) -> str:
     from autoskillit.hooks.guards.recipe_write_advisor import main
 
-    payload = json.dumps({"tool_name": tool_name, "tool_input": {"file_path": file_path}})
+    payload = json.dumps(
+        {
+            "hook_event_name": "PreToolUse",
+            "tool_name": tool_name,
+            "tool_input": {"file_path": file_path},
+        }
+    )
     env_clean = {"AUTOSKILLIT_HEADLESS": "1"} if headless else {}
     with (
         patch.dict(os.environ, env_clean, clear=True),
@@ -132,14 +134,13 @@ def _run_advisor_inprocess(
 
 
 def test_recipe_advisor_emits_advisory_when_headless_false() -> None:
-    """Non-headless session: advisory message is emitted for recipe YAML writes."""
     out = _run_advisor_inprocess("Write", ".autoskillit/recipes/foo.yaml", headless=False)
     assert out.strip(), "Expected advisory output in interactive session"
-    data = json.loads(out.strip())
-    assert "write-recipe" in data["hookSpecificOutput"]["message"]
+    specific = json.loads(out)["hookSpecificOutput"]
+    assert "write-recipe" in specific["additionalContext"]
+    assert "message" not in specific
 
 
 def test_recipe_advisor_suppressed_when_headless_true() -> None:
-    """Headless session: advisory is suppressed (AUTOSKILLIT_HEADLESS=1)."""
     out = _run_advisor_inprocess("Write", ".autoskillit/recipes/foo.yaml", headless=True)
     assert not out.strip(), "Advisory must be suppressed in headless sessions"

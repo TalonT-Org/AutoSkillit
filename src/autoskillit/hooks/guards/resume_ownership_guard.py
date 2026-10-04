@@ -16,6 +16,7 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
+from _hook_output import deny_tool_use  # noqa: E402
 from _hook_payload import (  # noqa: E402
     parse_hook_command,
     resolve_state_root,
@@ -23,19 +24,6 @@ from _hook_payload import (  # noqa: E402
 from _hook_settings import enforce_session_scope  # noqa: E402
 
 RESUME_OWNERSHIP_DENY_TRIGGER: str = "resume_session_id ownership validation failed"
-
-
-def _deny(reason: str) -> None:
-    json.dump(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": reason,
-            }
-        },
-        sys.stdout,
-    )
 
 
 def _resolve_provenance_path(payload_cwd: str = "") -> Path:
@@ -97,12 +85,11 @@ def main() -> None:
         sys.exit(0)
 
     if not record.get("recipe_name"):
-        _deny(
+        deny_tool_use(
             f"resume_session_id '{resume_session_id}' is not a food truck "
             f"session (no recipe_name in provenance). Cannot resume an L3 "
             f"orchestrator session."
         )
-        sys.exit(0)
 
     caller_session_id = data.get("session_id", "")
     record_caller = record.get("caller_session_id", "")
@@ -113,12 +100,11 @@ def main() -> None:
     kitchen_matches = record_kitchen and record_kitchen == current_kitchen
 
     if not caller_matches and not kitchen_matches:
-        _deny(
+        deny_tool_use(
             f"resume_session_id '{resume_session_id}' is not owned by this "
             f"session. Owner: caller={record_caller}, kitchen={record_kitchen}. "
             f"Current: caller={caller_session_id}, kitchen={current_kitchen}."
         )
-        sys.exit(0)
 
     sys.exit(0)
 

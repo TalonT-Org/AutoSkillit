@@ -134,7 +134,6 @@ _INTENTIONAL_ENV_INPUT_SITES: dict[str, str] = {
         "tests/hooks/test_pipeline_step_guard.py::AUTOSKILLIT_DISPATCH_ID",
         "tests/hooks/test_pr_create_guard.py::AUTOSKILLIT_SESSION_TYPE",
         "tests/hooks/test_pr_create_guard.py::AUTOSKILLIT_SKILL_NAME",
-        "tests/hooks/test_session_start_reminder.py::AUTOSKILLIT_STATE_DIR",
         "tests/hooks/test_shell_capture_hook.py::AUTOSKILLIT_AGENT_BACKEND",
         "tests/hooks/test_state_root_resolution.py::AUTOSKILLIT_STATE_ROOT",
         "tests/hooks/test_test_runner_guard.py::AUTOSKILLIT_HEADLESS",

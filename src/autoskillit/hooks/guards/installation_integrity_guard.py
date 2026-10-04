@@ -7,6 +7,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING, NoReturn
 
 _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
@@ -18,12 +19,16 @@ if _RUNTIME_DIR not in sys.path:
 from _command_classification import (  # noqa: E402
     UNRESOLVED_WRITE_TARGET_REMEDIATION,
     extract_interpreter_write_paths,
-    extract_patch_paths,
     resolve_write_target,
     scan_write_targets,
 )
+
+if TYPE_CHECKING:
+    from .._runtime._hook_output import deny_tool_use
+else:
+    from _hook_output import deny_tool_use
 from _hook_payload import (  # noqa: E402
-    extract_apply_patch_text,
+    edit_target_paths,
     normalize_payload_cwd,
     parse_hook_command,
 )
@@ -36,7 +41,7 @@ from _policy_event import (  # noqa: E402
 INSTALLATION_INTEGRITY_DENY_TRIGGER = "protected installation"
 
 
-def _deny(reason_code: str, detail: str) -> None:
+def _deny(reason_code: str, detail: str) -> NoReturn:
     prefix = render_provenance_prefix(
         PolicyEvent(
             hook_id="installation-integrity-guard",
@@ -46,17 +51,7 @@ def _deny(reason_code: str, detail: str) -> None:
             reason_code=reason_code,
         )
     )
-    json.dump(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": f"{prefix} {detail}",
-            }
-        },
-        sys.stdout,
-    )
-    sys.exit(0)
+    deny_tool_use(f"{prefix} {detail}")
 
 
 def _known_roots() -> tuple[Path, ...]:
@@ -181,15 +176,9 @@ def _collect_write_targets(data: dict[str, object]) -> tuple[list[str], bool]:
     if not isinstance(tool_name, str):
         return [], False
     payload_cwd = normalize_payload_cwd(data.get("cwd"))
-    if tool_name in {"Write", "Edit"}:
-        tool_input = data.get("tool_input")
-        path = tool_input.get("file_path", "") if isinstance(tool_input, dict) else ""
-        if not isinstance(path, str) or not path:
-            return [], False
-        return _resolve_targets([path], payload_cwd)
-    if tool_name == "apply_patch":
-        command = extract_apply_patch_text(data) or ""
-        return _resolve_targets(extract_patch_paths(command), payload_cwd)
+    edit_paths = edit_target_paths(data)
+    if edit_paths:
+        return _resolve_targets(list(edit_paths), payload_cwd)
     parsed = parse_hook_command(data)
     if parsed.tool_kind in {"bash", "run_cmd"}:
         return _bash_targets(parsed.command or "", parsed.execution_cwd)

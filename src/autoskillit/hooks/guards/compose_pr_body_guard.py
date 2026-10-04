@@ -31,6 +31,7 @@ from _command_classification import (  # noqa: E402
     _command_position_candidate_spans,
     command_verb_and_args,
 )
+from _hook_output import deny_tool_use  # noqa: E402
 from _hook_payload import (  # noqa: E402
     parse_hook_command,
     resolve_state_root,
@@ -277,20 +278,6 @@ def _valid_integration_pair(body: str, metadata: dict[str, object]) -> bool:
     return body_issue_urls == issue_urls
 
 
-def _deny(reason: str) -> None:
-    payload = json.dumps(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": (f"{COMPOSE_PR_BODY_DENY_TRIGGER}: {reason}"),
-            }
-        }
-    )
-    sys.stdout.write(payload + "\n")
-    sys.stdout.flush()
-
-
 def _body_path_validation_error(
     body_path_str: str | None, project_root: Path, skill_name: str
 ) -> str | None:
@@ -339,8 +326,7 @@ def main() -> None:
     for body_path_str in body_path_strs:
         error = _body_path_validation_error(body_path_str, project_root, skill_name)
         if error is not None:
-            _deny(error)
-            sys.exit(0)
+            deny_tool_use(f"{COMPOSE_PR_BODY_DENY_TRIGGER}: {error}")
     sys.exit(0)
 
 

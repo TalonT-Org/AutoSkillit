@@ -22,6 +22,7 @@ _PROJECTED_HOOK_FILES_FLAT = (
 _PROJECTED_HOOK_FILES_RUNTIME = (
     "_guard_decision_diagnostics.py",
     "_hook_log_dispatch.py",
+    "_hook_output.py",
     "_hook_payload.py",
     "_session_registry_bridge.py",
     "_hook_settings.py",
@@ -35,10 +36,10 @@ _SOURCE_FOR.update({name: _RUNTIME_SOURCE for name in _PROJECTED_HOOK_FILES_RUNT
 def copy_projected_hook(tmp_path: Path, name: str = "join-plugin") -> tuple[Path, Path]:
     """Copy the stdlib-only hook runtime under a projected plugin root.
 
-    After #4672's decomposition, `_hook_payload.py` and `_hook_settings.py`
-    live under `hooks/_runtime/`. The dispatcher bootstrap adds both
-    `hooks/` and `hooks/_runtime/` to sys.path, so the test fixture mirrors
-    that layout here.
+    Runtime siblings such as `_hook_output.py`, `_hook_payload.py`, and
+    `_hook_settings.py` live under `hooks/_runtime/`. The dispatcher bootstrap
+    adds both `hooks/` and `hooks/_runtime/` to sys.path, so the test fixture
+    mirrors that layout here.
     """
     projection_root = tmp_path / name
     hooks_dir = projection_root / "hooks"

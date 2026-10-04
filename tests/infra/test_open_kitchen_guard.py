@@ -16,6 +16,9 @@ import pytest
 
 from autoskillit.core.paths import pkg_root
 from tests._helpers import seed_registry_owner
+from tests._hook_protocol_oracle import (
+    assert_both_protocols_context,
+)
 from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
@@ -298,6 +301,43 @@ def test_open_kitchen_guard_no_marker_on_deny(tmp_path: Path, monkeypatch) -> No
     payload = json.loads(result.stdout)
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert not (tmp_path / "kitchen_state" / "session-abc.json").exists()
+
+
+def test_marker_write_failure_advises_both_backends(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from autoskillit.hooks.guards import open_kitchen_guard
+
+    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
+
+    def fail_marker_write(*_args, **_kwargs) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(open_kitchen_guard, "_write_kitchen_marker", fail_marker_write)
+    event = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__autoskillit__open_kitchen",
+        "tool_input": {"name": "my_recipe"},
+        "session_id": "session-write-failure",
+        "cwd": str(tmp_path),
+    }
+    _run_standalone_hook(open_kitchen_guard.main, monkeypatch, payload=event, cwd=tmp_path)
+
+    captured = capsys.readouterr()
+    stdout = captured.out
+    output = json.loads(stdout)
+    hook_output = output["hookSpecificOutput"]
+    assert "permissionDecision" not in hook_output
+    assert "marker write failed" in hook_output["additionalContext"].lower()
+    assert_both_protocols_context(
+        event["hook_event_name"],
+        exit_code=0,
+        stdout=stdout,
+        stderr=captured.err,
+    )
 
 
 # --- Group P-3: Hook namespacing ---

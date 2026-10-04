@@ -33,6 +33,7 @@ from _hook_constants import (  # noqa: E402
     _RECOVERY_DECLARE_TOOL_PARTS,
     MANAGED_PARENT_ALLOWED_TOOL_SET,
 )
+from _hook_output import block  # noqa: E402
 from _hook_payload import (  # noqa: E402
     normalize_payload_cwd,
     resolve_state_root,
@@ -91,16 +92,7 @@ def _managed_route_exempts(payload_cwd: str, session_id: str, tool_name: object)
         return False
     route, guards, _config_digest = managed_route
     if route != "leaf" and "join_followup_guard" not in guards:
-        sys.stdout.write(
-            json.dumps(
-                {
-                    "decision": "block",
-                    "reason": "managed Codex parent binding omits join_followup_guard.",
-                }
-            )
-            + "\n"
-        )
-        raise SystemExit(2)
+        block("managed Codex parent binding omits join_followup_guard.")
     return route == "leaf" or (
         isinstance(tool_name, str) and tool_name.split("__")[-1] in MANAGED_PARENT_ALLOWED_TOOL_SET
     )
@@ -137,16 +129,7 @@ def main() -> None:
             },
             caller="join_followup_guard",
         )
-        sys.stdout.write(
-            json.dumps(
-                {
-                    "decision": "block",
-                    "reason": "required-join binding has no valid managed scope.",
-                }
-            )
-            + "\n"
-        )
-        sys.exit(2)
+        block("required-join binding has no valid managed scope.")
     top_level_parent, _managed_leaf_id = scope
     flag_dir = resolve_flag_dir(resolve_state_root(payload_cwd))
     batch = active_batch(
@@ -185,8 +168,7 @@ def main() -> None:
         },
         caller="join_followup_guard",
     )
-    sys.stdout.write(json.dumps({"decision": "block", "reason": _denial_reason(tool_name)}) + "\n")
-    sys.exit(2)
+    block(_denial_reason(tool_name))
 
 
 if __name__ == "__main__":

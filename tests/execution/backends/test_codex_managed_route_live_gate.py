@@ -104,6 +104,24 @@ def _calls(events: list[dict[str, Any]], name: str) -> list[dict[str, Any]]:
     ]
 
 
+def _ordered_effect_items(
+    events: list[dict[str, Any]],
+) -> list[tuple[int, str, dict[str, Any]]]:
+    ordered: list[tuple[int, str, dict[str, Any]]] = []
+    for index, event in enumerate(events):
+        if event.get("type") != "item.completed":
+            continue
+        item = event.get("item")
+        if not isinstance(item, dict):
+            continue
+        kind = item.get("type")
+        if kind == "agent_message" or (
+            kind == "mcp_tool_call" and item.get("server") == "autoskillit"
+        ):
+            ordered.append((index, kind, item))
+    return ordered
+
+
 def _json_values(value: object) -> list[object]:
     values = [value]
     if isinstance(value, str):
@@ -237,14 +255,66 @@ def _run_denial_then_release(
     assert not watcher.is_alive(), "pending-wave watcher did not finish"
     if watcher_errors:
         raise watcher_errors[0]
-    assert "join_stop_guard" in observed, "native Codex Stop did not observe the pending wave"
-    assert "join_followup_guard" in observed, "native Codex follow-up did not observe the wave"
+    assert "join_stop_guard" in observed, "join_stop_guard decided to block the pending wave"
+    assert "join_followup_guard" in observed, "join_followup_guard decided to block the follow-up"
     assert completed.returncode == 0, completed.stderr[-4_000:].decode("utf-8", errors="replace")
     events = [
         json.loads(line)
         for line in completed.stdout.decode("utf-8", errors="replace").splitlines()
         if line.strip().startswith("{")
     ]
+    ordered_items = _ordered_effect_items(events)
+    probe_index = next(
+        (
+            index
+            for index, kind, item in ordered_items
+            if kind == "agent_message" and "PENDING_STOP_PROBE" in json.dumps(item)
+        ),
+        None,
+    )
+    assert probe_index is not None, "Codex did not emit the PENDING_STOP_PROBE agent message"
+
+    release_result = f"LIVE_RELEASE_{label.upper()}"
+    run_python_calls = [
+        (index, item)
+        for index, kind, item in ordered_items
+        if kind == "mcp_tool_call" and item.get("tool") == "run_python"
+    ]
+    assert run_python_calls, "Codex emitted no run_python MCP call in the live exec stream"
+    successful_release_calls = [
+        (index, item)
+        for index, item in run_python_calls
+        if item.get("error") is None and release_result in _json_values(item.get("result"))
+    ]
+    assert successful_release_calls, (
+        f"no successful {release_result} run_python result in the live exec stream"
+    )
+    successful_release_index = successful_release_calls[0][0]
+    assert probe_index < successful_release_index, (
+        "the successful run_python result did not follow PENDING_STOP_PROBE in the same exec"
+    )
+
+    first_call_index, first_call = run_python_calls[0]
+    if release_result in _json_values(first_call.get("result")):
+        # Codex omitted an item for the hook-blocked call; the probe's position
+        # before the first successful result is the observable denial oracle.
+        assert probe_index < first_call_index, (
+            "PENDING_STOP_PROBE did not precede the first successful run_python result"
+        )
+    else:
+        denial = (
+            "required-join wave is unresolved: top-level parent may not invoke "
+            "'run_python' before every declared Agent handle settles. "
+            "Wait for the JoinLedger wave_outcome to reach 'complete' before "
+            "issuing side-effecting follow-up tools."
+        )
+        assert release_result not in _json_values(first_call.get("result"))
+        assert denial in json.dumps(first_call.get("error"), ensure_ascii=False), (
+            "first run_python MCP item did not carry the join_followup_guard denial; "
+            f"captured item: {json.dumps(first_call, ensure_ascii=False, sort_keys=True)[:4_000]}"
+        )
+        assert first_call_index < successful_release_index
+
     thread_ids = {
         str(event["thread_id"])
         for event in events

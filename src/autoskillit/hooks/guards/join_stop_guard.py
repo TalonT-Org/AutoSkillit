@@ -11,8 +11,10 @@ In a clean session (no join-bearing skill loaded) this guard is a no-op.
 
 ``Stop`` is the correct gate surface — per official documentation it
 fires once per turn and exit code 2 prevents Claude from stopping while
-continuing the conversation. This blocks premature completion between
-waves as well as at the end of the whole conversation.
+continuing the conversation. The block reason is delivered on stderr:
+Codex uses it as the continuation prompt, and Claude uses stderr when no
+JSON reason exists. This blocks premature completion between waves as well
+as at the end of the whole conversation.
 
 Unlike PreToolUse and PostToolUse guards, Stop fails closed for malformed input
 or a missing session identity: a false release would lose the active wave.
@@ -25,7 +27,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import NoReturn
+from typing import TYPE_CHECKING, NoReturn
 
 _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
@@ -35,6 +37,10 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
+if TYPE_CHECKING:
+    from .._runtime._hook_output import block
+else:
+    from _hook_output import block
 from _hook_payload import (  # noqa: E402
     normalize_payload_cwd,
     resolve_state_root,
@@ -61,8 +67,7 @@ def _block_stop(*, reason: str, denial_reason: str) -> NoReturn:
         },
         caller="join_stop_guard",
     )
-    sys.stdout.write(json.dumps({"decision": "block", "reason": reason}) + "\n")
-    raise SystemExit(2)
+    block(reason)
 
 
 def _read_stop_payload() -> tuple[dict[str, object], str]:
@@ -145,19 +150,9 @@ def main() -> None:
     if allow_stop:
         sys.exit(0)
 
-    # Per Claude docs, exit code 2 prevents Claude from stopping and
-    # continues the conversation. We use stdout to communicate the reason
-    # to the harness.
-    sys.stdout.write(
-        json.dumps(
-            {
-                "decision": "block",
-                "reason": reason,
-            }
-        )
-        + "\n"
-    )
-    sys.exit(2)
+    # Codex uses the stderr reason as the continuation prompt; Claude uses
+    # stderr when no JSON reason exists.
+    block(reason)
 
 
 if __name__ == "__main__":

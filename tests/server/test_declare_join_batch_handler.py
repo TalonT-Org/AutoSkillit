@@ -41,6 +41,9 @@ from autoskillit.workspace import (
     SkillCatalogEntry,
     project_default_plugin_authority,
 )
+from tests._hook_protocol_oracle import (
+    assert_both_protocols_context,
+)
 from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
@@ -260,7 +263,15 @@ def test_end_to_end_real_projection_real_hook_real_handler(
             check=False,
         )
         assert completed.returncode == 0, completed.stderr
-        additional_context = json.loads(completed.stdout)["additionalContext"]
+        additional_context = json.loads(completed.stdout)["hookSpecificOutput"][
+            "additionalContext"
+        ]
+        assert_both_protocols_context(
+            "PostToolUse",
+            exit_code=completed.returncode,
+            stdout=completed.stdout,
+            stderr=completed.stderr,
+        )
         delivered = re.search(
             r'skill_name="([^"]+)".*session_id="([^"]+)"',
             additional_context,
@@ -755,10 +766,12 @@ def test_replacement_lifecycle_rejects_mismatches_and_retains_history(
     for tool_name in ("Bash", "Write"):
         denied = _run_join_guard(state_root, project_root, session_id, tool_name=tool_name)
         assert denied.returncode == 2
-        assert json.loads(denied.stdout)["decision"] == "block"
+        assert denied.stdout == ""
+        assert denied.stderr.strip()
     failed_stop = _run_join_guard(state_root, project_root, session_id)
     assert failed_stop.returncode == 2
-    assert json.loads(failed_stop.stdout)["decision"] == "block"
+    assert failed_stop.stdout == ""
+    assert failed_stop.stderr.strip()
 
     replacement = declare_module._declare_join_batch_handler(
         "autoskillit:rectify", ["replacement"], session_id, project_root
@@ -785,7 +798,8 @@ def test_replacement_lifecycle_rejects_mismatches_and_retains_history(
 
     pending_stop = _run_join_guard(state_root, project_root, session_id)
     assert pending_stop.returncode == 2
-    assert json.loads(pending_stop.stdout)["decision"] == "block"
+    assert pending_stop.stdout == ""
+    assert pending_stop.stderr.strip()
 
     claim_assignment(
         channel_dir,

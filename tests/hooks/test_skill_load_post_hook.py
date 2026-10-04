@@ -18,6 +18,9 @@ from autoskillit.hooks._session_binding import (
     SESSION_BINDING_SCHEMA_VERSION,
     UNREADABLE_PRIOR_BINDING_ENTRY,
 )
+from tests._hook_protocol_oracle import (
+    assert_both_protocols_context,
+)
 from tests.conftest import production_interpreter_env
 from tests.hooks._session_binding_helpers import (
     copy_projected_hook,
@@ -107,6 +110,7 @@ def _make_skill_event(
     agent_id: str | None = None,
 ) -> dict:
     event = {
+        "hook_event_name": "PostToolUse",
         "tool_name": "Skill",
         "tool_input": {"skill": skill},
         "session_id": session_id,
@@ -114,6 +118,21 @@ def _make_skill_event(
     if agent_id is not None:
         event["agent_id"] = agent_id
     return event
+
+
+def _assert_post_tool_context(event: dict, stdout: str, exit_code: int) -> str:
+    assert exit_code == 0
+    payload = json.loads(stdout)
+    hook_output = payload["hookSpecificOutput"]
+    context = hook_output["additionalContext"]
+    assert "additionalContext" not in payload
+    assert_both_protocols_context(
+        event["hook_event_name"],
+        exit_code=exit_code,
+        stdout=stdout,
+        stderr="",
+    )
+    return context
 
 
 def test_writes_flag_when_provider_profile_set(tmp_path: Path) -> None:
@@ -333,17 +352,15 @@ def _run_hook_with_marker(
 def test_emits_additional_context_when_completion_marker_set(tmp_path: Path) -> None:
     """T1-6: When AUTOSKILLIT_COMPLETION_MARKER is set, hook emits additionalContext JSON."""
     marker = "%%ORDER_UP::abc12345%%"
+    event = _make_skill_event()
     stdout, exit_code = _run_hook_with_marker(
-        stdin_data=_make_skill_event(),
+        stdin_data=event,
         tmp_dir=tmp_path,
         provider_profile="minimax",
         completion_marker=marker,
     )
-    assert exit_code == 0
     assert stdout.strip(), "Hook must emit additionalContext to stdout"
-    payload = json.loads(stdout)
-    assert "additionalContext" in payload
-    assert marker in payload["additionalContext"]
+    assert marker in _assert_post_tool_context(event, stdout, exit_code)
 
 
 def test_skips_flag_write_when_agent_id_present(tmp_path: Path) -> None:
@@ -588,14 +605,14 @@ def test_join_authority_renders_exact_values_as_json_strings(tmp_path: Path) -> 
     projection_root, hook_path = copy_projected_hook(tmp_path)
     write_projection_manifest(projection_root, skill_name=skill_name, join_required=True)
 
+    event = _make_skill_event(session_id=session_id, skill=skill_name)
     stdout, exit_code = _run_hook(
-        stdin_data=_make_skill_event(session_id=session_id, skill=skill_name),
+        stdin_data=event,
         tmp_dir=tmp_path,
         hook_path=hook_path,
     )
 
-    assert exit_code == 0
-    additional_context = json.loads(stdout)["additionalContext"]
+    additional_context = _assert_post_tool_context(event, stdout, exit_code)
     assert f"skill_name={json.dumps(skill_name)}" in additional_context
     assert f"session_id={json.dumps(session_id)}" in additional_context
     assert "cook_bypass" not in additional_context
@@ -614,16 +631,16 @@ def test_cook_join_authority_context_announces_the_bypass(tmp_path: Path) -> Non
         join_required=True,
     )
 
+    event = _make_skill_event(session_id=session_id, skill=skill_name)
     stdout, exit_code = _run_hook(
-        stdin_data=_make_skill_event(session_id=session_id, skill=skill_name),
+        stdin_data=event,
         tmp_dir=tmp_path,
         hook_path=hook_path,
         launch_id="cook-launch",
         extra_env={"AUTOSKILLIT_LOG_DIR": str(tmp_path / "logs")},
     )
 
-    assert exit_code == 0
-    additional_context = json.loads(stdout)["additionalContext"]
+    additional_context = _assert_post_tool_context(event, stdout, exit_code)
     assert "JOIN DECLARATION AUTHORITY" in additional_context
     assert f"session_id={json.dumps(session_id)}" in additional_context
     assert "cook_bypass" in additional_context

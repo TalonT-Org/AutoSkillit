@@ -228,8 +228,8 @@ same-UID payload/checksum rewrite remain outside detection. Native local Linux
 and processes that ignore advisory locks are excluded. Ordered sync supports
 process-termination recovery, not universal OS-crash or power-loss durability.
 
-Codex hook generation includes the cleanup-only SessionStart owner and excludes the
-separate interactive-only resume reminder. Runner-tail cleanup is the
+Codex hook generation includes the cleanup-only SessionStart owner and the
+recipe-reload reminder on the `interactive-parent` managed cook route. Runner-tail cleanup is the
 authoritative interactive/headless Bash owner; cleanup-only `SessionStart` is
 the supplemental startup owner. ADR-0008 resolves #4322 for Codex shell capture
 only. #4323 is resolved by runner-owned completion (ADR-0008 § Process lifetime
@@ -497,8 +497,8 @@ quota hooks bypass enforcement for that exact session only. After a
 successful `close_kitchen` response, the hook clears only that session's
 marker. The marker is read by `quota_guard.py` and `quota_post_hook.py` via
 the shared helper in `_hook_settings.py`. If atomic marker write fails, the
-hook surfaces an `updatedMCPToolOutput` rewrite so a disable response cannot
-appear successful when no marker was written.
+hook surfaces `hookSpecificOutput.additionalContext` explaining that the quota
+guard is still active and the disable response must not be relied on.
 
 ### `review_gate_post_hook.py`
 **Guarded tools:** `run_skill`, `run_python`
@@ -538,8 +538,8 @@ persisted shape.
 Delivers the current attempt's one-shot warning from the JSON path injected by
 `run_cook_attempt`. It emits the notice message as `systemMessage`; on
 `PostToolUse`, it also adds the same message through
-`hookSpecificOutput.additionalContext`. After delivery it unlinks the notice
-file, and errors fail open. Notices are advisory and event-driven: an idle
+`hookSpecificOutput.additionalContext`. It unlinks the notice file before emission,
+and errors fail open. Notices are advisory and event-driven: an idle
 session may reach its hard cap without a matching hook event to show a warning.
 The hard-cap decision does not depend on successful notice delivery.
 
@@ -552,9 +552,45 @@ and always exits zero. Cleanup errors are bounded and fail open independently
 of reminder delivery.
 
 ### `session_start_hook.py`
-Injects a reminder to call `/autoskillit:open-kitchen` when resuming a
-prior session (transcript_path size > 0). Without this, resumed orchestrator
-sessions silently lose access to the kitchen tools.
+Sweeps stale kitchen markers on every well-formed interactive SessionStart.
+For `source` equal to `resume` or `fork`, a fresh recipe marker triggers nested
+`hookSpecificOutput.additionalContext` asking to reload that recipe with
+`open_kitchen(name=...)`. `startup`, `clear`, `compact`, and missing source emit
+no reminder. Codex reports forks as `startup`; older Claude versions report them
+as `resume`. Interactive boot pre-reveals kitchen tools but resets recipe state,
+so reloading the recipe restores that state. The unconditional TTL sweep also
+prunes markers when a pre-revealed session never calls `open_kitchen`.
+
+## Hook output protocol
+
+Hook scripts emit protocol output only through the channel functions in
+`hooks/_runtime/_hook_output.py`. The sole-writer rule is enforced by
+`tests/arch/test_hook_protocol_output_authority.py`.
+
+| Channel | Events | Output |
+|---------|--------|--------|
+| `deny` | PreToolUse | Nested `permissionDecision: deny` and reason, exit 0 |
+| `block` | PreToolUse, PostToolUse, PostToolUseFailure, Stop, SubagentStop | Exit 2 with a non-empty reason on stderr; stdout is empty |
+| `context` | SessionStart, PreToolUse, PostToolUse, UserPromptExpansion | Nested `additionalContext`, exit 0 |
+| `rewrite_input` | PreToolUse | Nested `permissionDecision: allow` with non-empty `updatedInput`, exit 0 |
+| `rewrite_mcp_output` | PostToolUse | Nested `updatedMCPToolOutput`, exit 0; Claude-only |
+| `notify` | Stop, PostToolUse | `systemMessage`, with optional nested PostToolUse context, exit 0 |
+| `halt` | PreCompact | `continue: false`, `stopReason`, and `systemMessage`, exit 0; Codex-only |
+
+Blocking uses exit 2 plus stderr. Claude's PostToolUse and PostToolUseFailure
+hooks deliver the reason as feedback after the tool has run. Codex's blocking
+events require non-empty stderr, which becomes the continuation prompt.
+`pretty_output_hook` is Claude-only because Codex refuses `updatedMCPToolOutput`.
+Claude discards PreCompact's `continue` and `systemMessage`, so
+`auto_compact_guard` remains runtime-only for Codex.
+
+The [backend oracles](../../tests/_hook_protocol_oracle.py) interpret output using
+the vendored schemas in `tests/fixtures/codex_hook_protocol/`, pinned to
+`CODEX_CLI_MIN_VERSION`, and cited Codex parser rules. When raising that minimum,
+re-vendor the matching release's input/output schemas, verify its parser rules,
+and update the oracle's version and source commit together. The Claude oracle
+uses the raw [hooks reference](https://code.claude.com/docs/en/hooks.md), including
+its “Exit code 2 behavior per event” and per-event decision-control tables.
 
 ## Fail Modes
 

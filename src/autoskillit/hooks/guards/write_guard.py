@@ -17,7 +17,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Literal, NamedTuple, assert_never
+from typing import TYPE_CHECKING, Literal, NamedTuple, NoReturn, assert_never
 
 _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
@@ -31,14 +31,18 @@ from _command_classification import (  # noqa: E402
     UNRESOLVED_WRITE_TARGET_REMEDIATION,
     WriteTargetScan,
     extract_interpreter_write_paths,
-    extract_patch_paths,
     scan_write_targets,
 )
 from _guard_decision_diagnostics import (  # noqa: E402
     record_guard_decision,
 )
+
+if TYPE_CHECKING:
+    from .._runtime._hook_output import deny_tool_use
+else:
+    from _hook_output import deny_tool_use
 from _hook_payload import (  # noqa: E402
-    extract_apply_patch_text,
+    edit_target_paths,
     parse_hook_command,
 )
 from _hook_settings import (  # noqa: E402
@@ -132,14 +136,6 @@ def _bash_validation_error(
     return _paths_validation_error(list(scan.targets), norm_prefixes, display_prefix)
 
 
-def _extract_paths_from_patch(command: str) -> list[str]:
-    """Extract target file paths from a patch.
-
-    Supports unified diff ('+++ b/') and Codex apply_patch ('*** Update/Add/Delete File:').
-    """
-    return extract_patch_paths(command)
-
-
 def _record(data: object, *, activation: str, scope: str, decision: str, reason: str) -> None:
     record_guard_decision(
         data,
@@ -151,7 +147,7 @@ def _record(data: object, *, activation: str, scope: str, decision: str, reason:
     )
 
 
-def _deny(data: object, reason: str, *, reason_code: str, activation: str) -> None:
+def _deny(data: object, reason: str, *, reason_code: str, activation: str) -> NoReturn:
     _record(
         data,
         activation=activation,
@@ -159,17 +155,7 @@ def _deny(data: object, reason: str, *, reason_code: str, activation: str) -> No
         decision="deny",
         reason=reason_code,
     )
-    json.dump(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": reason,
-            }
-        },
-        sys.stdout,
-    )
-    sys.exit(0)
+    deny_tool_use(reason)
 
 
 def _normalize_prefixes(raw_prefixes: list[str], *, source_label: str) -> list[str]:
@@ -345,18 +331,6 @@ def _direct_path_validation_error(
     return _paths_validation_error([file_path], norm_prefixes, display_prefix)
 
 
-def _patch_validation_error(
-    command: str, norm_prefixes: list[str], display_prefix: str
-) -> str | None:
-    paths = _extract_paths_from_patch(command)
-    if not paths:
-        return (
-            f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} "
-            f"(no target paths found in patch)."
-        )
-    return _paths_validation_error(paths, norm_prefixes, display_prefix)
-
-
 def _interpreter_validation_error(
     command: str, execution_cwd: str, norm_prefixes: list[str], display_prefix: str
 ) -> str | None:
@@ -387,9 +361,6 @@ def _tool_validation_error(
     norm_prefixes: list[str],
     display_prefix: str,
 ) -> str | None:
-    raw_tool_input = data.get("tool_input")
-    tool_input: dict[str, object] = raw_tool_input if isinstance(raw_tool_input, dict) else {}
-
     if tool_name == "Bash" or "run_cmd" in tool_name:
         parsed = parse_hook_command(data)
         command = parsed.command or ""
@@ -401,12 +372,18 @@ def _tool_validation_error(
         return _bash_validation_error(command, parsed.execution_cwd, norm_prefixes, display_prefix)
 
     if tool_name == "apply_patch":
-        command = extract_apply_patch_text(data) or ""
-        return _patch_validation_error(command, norm_prefixes, display_prefix)
+        paths = edit_target_paths(data)
+        if not paths:
+            return (
+                f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} "
+                f"(no target paths found in patch)."
+            )
+        return _paths_validation_error(list(paths), norm_prefixes, display_prefix)
 
-    raw_file_path = tool_input.get("file_path", "")
-    file_path = raw_file_path if isinstance(raw_file_path, str) else ""
-    return _direct_path_validation_error(file_path, norm_prefixes, display_prefix)
+    paths = edit_target_paths(data)
+    if tool_name in {"Write", "Edit"} and not paths:
+        return _direct_path_validation_error("", norm_prefixes, display_prefix)
+    return _paths_validation_error(list(paths), norm_prefixes, display_prefix)
 
 
 def _settle_inactive_policy(
@@ -434,7 +411,6 @@ def _settle_inactive_policy(
                 reason_code="empty",
                 activation=activation,
             )
-            return True
         case "unresolved":
             _deny(
                 data,
@@ -443,7 +419,6 @@ def _settle_inactive_policy(
                 reason_code="unresolved",
                 activation=activation,
             )
-            return True
         case "active":
             return False
         case _ as unreachable:
@@ -479,7 +454,6 @@ def main() -> None:
             reason_code="malformed_input",
             activation="headless",
         )
-        return
 
     policy = _write_prefix_policy(data, headless)
     activation = "headless" if headless else "skill_binding"
@@ -515,7 +489,6 @@ def main() -> None:
     reason = _tool_validation_error(tool_name, data, norm_prefixes, display_prefix)
     if reason is not None:
         _deny(data, reason, reason_code="scope_violation", activation=activation)
-        return
     _record(data, activation=activation, scope="write_prefix", decision="allow", reason="in_scope")
     sys.exit(0)
 

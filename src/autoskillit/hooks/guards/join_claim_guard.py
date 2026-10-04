@@ -36,6 +36,7 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
+from _hook_output import deny_tool_use  # noqa: E402
 from _hook_payload import (  # noqa: E402
     normalize_payload_cwd,
     resolve_state_root,
@@ -90,19 +91,7 @@ def main() -> None:
     scope = session_managed_scope(payload_cwd, session_id)
     if scope is None:
         denial_reason = f"{JOIN_CLAIM_DENY_TRIGGER}: binding has no valid managed scope."
-        sys.stdout.write(
-            json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "deny",
-                        "permissionDecisionReason": denial_reason,
-                    }
-                }
-            )
-            + "\n"
-        )
-        sys.exit(0)
+        deny_tool_use(denial_reason)
 
     tool_name = data.get("tool_name")
     if tool_name != "Agent":
@@ -117,17 +106,7 @@ def main() -> None:
         denial_reason = (
             f"{JOIN_CLAIM_DENY_TRIGGER}: Agent tool_use_id was not provided by the harness."
         )
-        payload = json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": denial_reason,
-                }
-            }
-        )
-        sys.stdout.write(payload + "\n")
-        sys.exit(0)
+        deny_tool_use(denial_reason)
 
     flag_dir = resolve_flag_dir(resolve_state_root(payload_cwd))
     top_level_parent, _managed_leaf_id = scope
@@ -139,6 +118,8 @@ def main() -> None:
             tool_use_id=tool_use_id,
         )
     except (JoinLedgerError, OSError) as exc:
+        # Deny when the ledger cannot confirm an assignment; allowing the child
+        # would leave its delegation outside the parent's required join set.
         write_join_diagnostic(
             {
                 "gate": "join_claim_guard",
@@ -151,22 +132,7 @@ def main() -> None:
             caller="join_claim_guard",
         )
         denial_reason = f"{JOIN_CLAIM_DENY_TRIGGER}: {exc}"
-        payload = json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": denial_reason,
-                }
-            }
-        )
-        sys.stdout.write(payload + "\n")
-        # Exit 0 with a structured deny payload — Claude Code treats the
-        # tool call as DENY (non-zero would be treated as non-blocking).
-        # The exception was already translated by the ledger into a
-        # JoinLedgerError when possible; OSError here means the ledger
-        # could not confirm state, and the safe default is to deny.
-        sys.exit(0)
+        deny_tool_use(denial_reason)
 
     if claimed is None:
         write_join_diagnostic(
@@ -183,17 +149,7 @@ def main() -> None:
             f"{JOIN_CLAIM_DENY_TRIGGER}: no declared batch is open for this turn. "
             "Call declare_join_batch with one assignment label per direct child first."
         )
-        payload = json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": denial_reason,
-                }
-            }
-        )
-        sys.stdout.write(payload + "\n")
-        sys.exit(0)
+        deny_tool_use(denial_reason)
 
     write_join_diagnostic(
         {

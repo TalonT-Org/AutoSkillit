@@ -11,9 +11,9 @@ import autoskillit._probe_canary as _patch_autoskillit__probe_canary
 from autoskillit._probe_canary import (
     ISSUE_BODY_MAX_CHARS,
     N_CONSECUTIVE_FLAKE_GUARD,
-    CanaryIssueUpdater,
     CanaryState,
     ErrorKind,
+    IssueUpdater,
     _cli_main,
 )
 
@@ -126,7 +126,7 @@ class TestErrorKind:
         assert set(ErrorKind) == {ErrorKind.NETWORK, ErrorKind.SCHEMA}
 
 
-class TestCanaryIssueUpdater:
+class TestIssueUpdater:
     def test_ensure_issue_creates_new(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def mock_run_gh(args, **kwargs):
             if args[0:2] == ["issue", "list"]:
@@ -142,7 +142,7 @@ class TestCanaryIssueUpdater:
             return CompletedProcess(args=args, returncode=1, stdout="", stderr="")
 
         monkeypatch.setattr(_patch_autoskillit__probe_canary, "run_gh", mock_run_gh)
-        updater = CanaryIssueUpdater(owner="test-org", repo="test-repo")
+        updater = IssueUpdater(owner="test-org", repo="test-repo")
         state = CanaryState()
         num = updater.ensure_issue(state, "Probe failure", "Details here")
         assert num == 123
@@ -163,7 +163,7 @@ class TestCanaryIssueUpdater:
             return CompletedProcess(args=args, returncode=1, stdout="", stderr="")
 
         monkeypatch.setattr(_patch_autoskillit__probe_canary, "run_gh", mock_run_gh)
-        updater = CanaryIssueUpdater(owner="test-org", repo="test-repo")
+        updater = IssueUpdater(owner="test-org", repo="test-repo")
         state = CanaryState()
         num = updater.ensure_issue(state, "Probe failure", "Updated body")
         assert num == 42
@@ -178,7 +178,7 @@ class TestCanaryIssueUpdater:
             raise AssertionError(f"Unexpected gh call: {args}")
 
         monkeypatch.setattr(_patch_autoskillit__probe_canary, "run_gh", mock_run_gh)
-        updater = CanaryIssueUpdater(owner="test-org", repo="test-repo")
+        updater = IssueUpdater(owner="test-org", repo="test-repo")
         state = CanaryState()
         with pytest.raises(RuntimeError, match="gh issue create failed"):
             updater.ensure_issue(state, "Probe failure", "Details")
@@ -198,7 +198,7 @@ class TestCanaryIssueUpdater:
             raise AssertionError(f"Unexpected gh call: {args}")
 
         monkeypatch.setattr(_patch_autoskillit__probe_canary, "run_gh", mock_run_gh)
-        updater = CanaryIssueUpdater(owner="test-org", repo="test-repo")
+        updater = IssueUpdater(owner="test-org", repo="test-repo")
         state = CanaryState()
         with structlog.testing.capture_logs() as cap_logs:
             num = updater.ensure_issue(state, "Probe failure", "Updated body")
@@ -253,7 +253,7 @@ class _FakeGh:
 
 def _append(monkeypatch: pytest.MonkeyPatch, gh: _FakeGh, section: str = "### Section") -> int:
     monkeypatch.setattr(_patch_autoskillit__probe_canary, "run_gh", gh)
-    updater = CanaryIssueUpdater(owner="test-org", repo="test-repo")
+    updater = IssueUpdater(owner="test-org", repo="test-repo")
     return updater.append_to_issue(_E2E_TITLE, "Header", section)
 
 

@@ -83,7 +83,7 @@ def _run_gh_with_body_file(args: list[str], body: str) -> subprocess.CompletedPr
 ISSUE_BODY_MAX_CHARS = 65536
 
 
-class CanaryIssueUpdater:
+class IssueUpdater:
     def __init__(self, *, owner: str, repo: str) -> None:
         self._owner = owner
         self._repo = repo
@@ -248,7 +248,7 @@ def _handle_post_failure(
             f"**Network Streak:** {state.network_streak}\n"
             f"**Schema Streak:** {state.schema_streak}\n"
         )
-        updater = CanaryIssueUpdater(owner=owner, repo=repo)
+        updater = IssueUpdater(owner=owner, repo=repo)
         try:
             updater.ensure_issue(state, title, body)
         except Exception as exc:
@@ -285,7 +285,7 @@ def _handle_post_e2e_failure(
         f"**Commit:** {head_sha}\n"
         f"**Workflow Run:** {workflow_run_url}\n"
     )
-    updater = CanaryIssueUpdater(owner=owner, repo=repo)
+    updater = IssueUpdater(owner=owner, repo=repo)
     try:
         updater.append_to_issue(title, header, section)
     except Exception as exc:

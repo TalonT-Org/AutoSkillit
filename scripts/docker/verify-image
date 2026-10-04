@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Verify an AutoSkillit user image: versions match the tracked pins, no layer holds a credential.
+set -euo pipefail
+
+die() { echo "error: $*" >&2; exit 1; }
+[[ $# -eq 1 ]] || { echo "Usage: verify-image IMAGE" >&2; exit 2; }
+image=$1
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
+
+pin() { sed -n "s/^ARG $1=//p" "$root/scripts/docker/Dockerfile"; }
+
+expect() {
+    local expected=$1 actual
+    shift
+    actual=$(docker run --rm "$image" "$@")
+    [[ $actual == "$expected" ]] || die "$*: expected '$expected', got '$actual'"
+    echo "$*: $actual"
+}
+
+expect "$(python3 -c 'import sys, tomllib; print(tomllib.load(open(sys.argv[1], "rb"))["project"]["version"])' "$root/pyproject.toml")" \
+    autoskillit --version
+expect "$(pin CLAUDE_VERSION) (Claude Code)" claude --version
+expect "codex-cli $(pin CODEX_VERSION)" codex --version
+
+# Captured first: inside the `if`, a failing docker command would read as "no match".
+image_history=$(docker history --no-trunc --format '{{.CreatedBy}}' "$image") \
+    || die "docker history failed for $image"
+if grep -Eq 'gh[pousr]_[A-Za-z0-9]{20,}|github_pat_|x-access-token:[A-Za-z0-9]|dckr_pat_|sk-ant-|sk-(proj|svcacct|admin)-|T3BlbkFJ' \
+    <<<"$image_history"; then
+    die "the history of $image contains a credential"
+fi
+echo "No credential in the history of $image"

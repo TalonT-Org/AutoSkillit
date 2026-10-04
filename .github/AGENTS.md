@@ -75,3 +75,17 @@ Changing the `api-simulator.rev` value under `[tool.uv.sources]` in `pyproject.t
 requires running `uv lock` and committing the regenerated `uv.lock` in the same change.
 Pre-commit and preflight enforce this consistency with `uv lock --check`, and
 `uv sync --locked --extra dev` cannot proceed with a stale lockfile.
+
+## Toolchain pins and image publication
+
+`scripts/docker/Dockerfile`'s `ARG` pins are the single authority for tool versions (uv,
+Task, Rust, ripgrep, Claude Code, Codex, Node, pre-commit, jq, gh); a workflow step that
+installs or requires one must use the same version, enforced by
+`tests/infra/test_verification_container.py`. `docker-image.yml` publishes from develop
+pushes that change the version and from `v*` tag pushes, which only start workflows when
+pushed with `GH_PAT`, so the bump and release workflows check out with it.
+
+Never pass a credential to an image build as an `ARG` or a `docker/build-push-action`
+`build-args` value: `docker history` and the `mode=max` provenance attestation the action
+attaches by default for this public repository both record build-arg values. Use
+`RUN --mount=type=secret` for build-time secrets.

@@ -1,24 +1,47 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 from cyclopts import App
 
 sessions_app = App(name="sessions", help="Session diagnostics and analysis.")
 
 
+def _refresh_report_index(log_root: Path, index_dir: Path, *, rebuild: bool) -> None:
+    from autoskillit.core import ArtifactLeaseContention
+    from autoskillit.execution import rebuild_report_index, update_report_index
+
+    try:
+        result = (
+            rebuild_report_index(log_root, index_dir)
+            if rebuild
+            else update_report_index(log_root, index_dir)
+        )
+    except ArtifactLeaseContention:
+        print(
+            "report index: another operation holds a required index or source lease",
+            file=sys.stderr,
+        )
+        raise SystemExit(1) from None
+
+    print(f"report index: walked {result.items_walked} items, wrote {result.rows_written} rows")
+    for source in result.source_gaps:
+        print(
+            f"report index: {source} cursor no longer retained; re-walked retained {source} data",
+            file=sys.stderr,
+        )
+
+
 @sessions_app.command(name="index")
 def sessions_index(*, update: bool = False, rebuild: bool = False) -> None:
     """Report the derived report index; refresh with --update or re-derive with --rebuild."""
     from autoskillit.config import load_config
-    from autoskillit.core import ArtifactLeaseContention
     from autoskillit.execution import (
         REPORT_INDEX_SCHEMA_VERSION,
         read_report_index,
-        rebuild_report_index,
         report_index_dir,
         resolve_log_dir,
-        update_report_index,
     )
 
     cfg = load_config()
@@ -26,28 +49,7 @@ def sessions_index(*, update: bool = False, rebuild: bool = False) -> None:
     index_dir = report_index_dir(log_root)
 
     if rebuild or update:
-        try:
-            result = (
-                rebuild_report_index(log_root, index_dir)
-                if rebuild
-                else update_report_index(log_root, index_dir)
-            )
-        except ArtifactLeaseContention:
-            print(
-                "report index: another operation holds a required index or source lease",
-                file=sys.stderr,
-            )
-            raise SystemExit(1) from None
-
-        print(
-            f"report index: walked {result.items_walked} items, wrote {result.rows_written} rows"
-        )
-        for source in result.source_gaps:
-            print(
-                f"report index: {source} cursor no longer retained; "
-                f"re-walked retained {source} data",
-                file=sys.stderr,
-            )
+        _refresh_report_index(log_root, index_dir, rebuild=rebuild)
 
     report = read_report_index(index_dir)
     print(

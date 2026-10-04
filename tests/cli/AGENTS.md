@@ -7,4 +7,4 @@ install-over-something as well as install-from-nothing.
 
 ## Architecture Notes
 
-`conftest.py` auto-patches `sync_hooks_to_settings()` worktree guard so CLI init tests don't fail in worktree environments. `_fleet_helpers.py` and `_update_checks_helpers.py` are shared factory modules used across split test files for fleet and update-checks functionality respectively. `_split_helpers.py` is a shared module for structural guard helpers (e.g., `_has_pytestmark_cli`) used by multiple split-guard test files.
+`conftest.py` auto-patches `sync_hooks_to_settings()` worktree guard so CLI init tests don't fail in worktree environments. `_fleet_helpers.py` and `_update_checks_helpers.py` are shared factory modules used across split test files for fleet and update-checks functionality respectively. `_split_helpers.py` is a shared module for structural guard helpers (e.g., `_has_pytestmark_cli`) used by multiple split-guard test files. `_sessions_helpers.py` is a shared factory module (`_configure_log_root`, `_seed_session`) used by `test_sessions_index_cmd.py` and `test_sessions_deck_cmd.py`.

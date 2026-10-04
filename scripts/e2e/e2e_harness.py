@@ -406,7 +406,11 @@ def _find_leak(dest: Path, needles: Sequence[bytes]) -> Path | None:
     for root, _dirs, files in os.walk(dest, followlinks=False):
         for name in files:
             path = Path(root) / name
-            data = path.read_bytes()
+            try:
+                data = path.read_bytes()
+            except (FileNotFoundError, NotADirectoryError):
+                # A file that vanished after the walk cannot be uploaded, so it cannot leak.
+                continue
             if any(needle in data for needle in needles):
                 return path
     return None

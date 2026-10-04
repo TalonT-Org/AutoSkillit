@@ -4,7 +4,6 @@ import json
 from typing import Any
 
 import pytest
-from py_mini_racer import JSUndefined
 
 from autoskillit.report.deck._registry import ChipState
 
@@ -362,7 +361,14 @@ def test_sort_rows_orders_numbers_strings_nulls_and_stable_ties(deck_js: Any) ->
         "dir": "desc",
     }
     assert deck_js.call("DeckCore.parseSort", "bogus", ["runs"], fallback) == fallback
-    assert deck_js.call("DeckCore.parseSort", JSUndefined, ["runs"], fallback) == fallback
+    assert (
+        json.loads(
+            deck_js.eval(
+                'JSON.stringify(DeckCore.parseSort(undefined, ["runs"], {key:"runs", dir:"asc"}))'
+            )
+        )
+        == fallback
+    )
 
 
 def test_bar_layout_scales_values_and_handles_zero_and_null(

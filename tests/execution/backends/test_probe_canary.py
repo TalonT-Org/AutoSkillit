@@ -373,7 +373,8 @@ class TestPostE2eFailure:
         )
         with structlog.testing.capture_logs() as cap_logs:
             assert _post_e2e_failure("--stage", "test") == 1
-        assert any(e.get("event") == "e2e_failure_issue_failed" for e in cap_logs)
+        failure = next(e for e in cap_logs if e.get("event") == "e2e_failure_issue_failed")
+        assert failure["exc_info"] is True
 
 
 class TestCliMain:

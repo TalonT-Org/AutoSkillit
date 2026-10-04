@@ -286,7 +286,7 @@ def _handle_post_e2e_failure(
     try:
         updater.append_to_issue(title, header, section)
     except Exception as exc:
-        logger.error("e2e_failure_issue_failed", error=str(exc))
+        logger.error("e2e_failure_issue_failed", error=str(exc), exc_info=True)
         return 1
     return 0
 

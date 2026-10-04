@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
-from autoskillit.core import PACK_REGISTRY, SKILL_TOOLS, Severity
+from autoskillit.core import (
+    CATEGORY_TAGS,
+    EXPLORATION_TOOLS,
+    KITCHEN_GATED_TOOLS,
+    PACK_REGISTRY,
+    SKILL_TOOLS,
+    TOOL_SUBSET_TAGS,
+    Severity,
+)
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._skill_helpers import _get_skill_category_map
 from autoskillit.recipe.contracts import resolve_skill_name
@@ -33,22 +41,37 @@ def _check_unknown_required_pack(ctx: ValidationContext) -> list[RuleFinding]:
     return findings
 
 
+def _food_truck_can_call(tool: str, declared_packs: frozenset[str]) -> bool:
+    """Whether a food truck dispatched with *declared_packs* exposes *tool*.
+
+    Non-empty packs enable ``kitchen-core`` plus each declared pack. Empty packs
+    enable the ``kitchen`` tag, including exploration tools.
+    """
+    if not declared_packs:
+        return tool in KITCHEN_GATED_TOOLS | EXPLORATION_TOOLS
+    return bool(TOOL_SUBSET_TAGS[tool] & (declared_packs | {"kitchen-core"}))
+
+
 @semantic_rule(
     name="undeclared-pack-requirement",
     description=(
-        "Recipes dispatching skills in default-disabled pack categories "
-        "must declare those packs in requires_packs"
+        "Recipes must declare in requires_packs every pack gating a dispatched "
+        "skill category or a direct tool step's food-truck visibility"
     ),
     severity=Severity.ERROR,
 )
 def _check_undeclared_pack_requirement(ctx: ValidationContext) -> list[RuleFinding]:
-    """Flag recipes that dispatch skills in default-disabled pack categories without
-    declaring the corresponding requires_packs entry.
+    """Flag dispatched skills in undeclared default-disabled pack categories.
 
-    Mirrors the pattern of check_requires_features_declared in rules_features.py.
-    PACK_REGISTRY keys directly equal CATEGORY_TAGS, so no intermediate mapping
-    (like FeatureDef.skill_categories) is needed — a category that appears in
-    PACK_REGISTRY with default_enabled=False is exactly a pack that must be declared.
+    Direct tools must be visible under the exact non-empty ``requires_packs``
+    allowlist, with ``kitchen-core`` implicit. Empty packs expose kitchen-tagged
+    tools, including exploration tools. ``_food_truck_can_call`` mirrors
+    ``_apply_session_type_visibility``: each declared pack is enabled separately,
+    so any matching tag suffices.
+
+    Only the static pack axis is checked. Config-disabled subsets and feature
+    tags suppressed by ``_suppress_disabled_feature_tags`` are covered separately
+    by ``_check_subset_disabled_tool`` and ``check_requires_features_declared``.
     """
     category_map = (
         ctx.skill_category_map if ctx.skill_category_map is not None else _get_skill_category_map()
@@ -60,7 +83,22 @@ def _check_undeclared_pack_requirement(ctx: ValidationContext) -> list[RuleFindi
 
     findings: list[RuleFinding] = []
     for step_name, step in ctx.recipe.steps.items():
+        if step.tool is None:
+            continue
         if step.tool not in SKILL_TOOLS:
+            tool_packs = TOOL_SUBSET_TAGS.get(step.tool, frozenset()) & CATEGORY_TAGS
+            if tool_packs and not _food_truck_can_call(step.tool, declared_packs):
+                findings.append(
+                    make_finding(
+                        rule_name="undeclared-pack-requirement",
+                        step_name=step_name,
+                        message=(
+                            f"step '{step_name}': tool '{step.tool}' is not callable in this "
+                            f"recipe's food-truck session. Declare one of its packs "
+                            f"{sorted(tool_packs)} in requires_packs."
+                        ),
+                    )
+                )
             continue
         skill_cmd = (step.with_args or {}).get("skill_command") or ""
         skill_name = resolve_skill_name(skill_cmd)

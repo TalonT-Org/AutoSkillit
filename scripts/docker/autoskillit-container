@@ -48,6 +48,7 @@ container_running() {
 }
 
 container_has_active_agents() {
+    local status=0
     container_running || return 1
     # Match process names: a full command-line pattern would match this probe's own shell.
     # Claude runs as `claude` through the npm bin symlink, as `claude.exe` when exec'd
@@ -56,7 +57,12 @@ container_has_active_agents() {
         pgrep -x autoskillit >/dev/null \
             || pgrep -x "claude(\.exe)?" >/dev/null \
             || pgrep -x codex >/dev/null
-    '
+    ' || status=$?
+    # Only pgrep's 1 means "no match"; a failed exec or pgrep error must not read as idle.
+    case $status in
+        0|1) return "$status" ;;
+        *) die "could not check $CONTAINER_NAME for active agents (exit status $status)" ;;
+    esac
 }
 
 ensure_workspace_repo() {

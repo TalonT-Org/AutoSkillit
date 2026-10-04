@@ -16,6 +16,7 @@ pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 _ROOT = Path(__file__).resolve().parents[2]
 _MANAGER = _ROOT / "scripts" / "docker" / "autoskillit-container"
 _COMMANDS = ("update", "start", "stop", "shell", "status", "sync-auth")
+_BASH_TIMEOUT_SECONDS = 30
 
 
 def _run_manager(*args: str) -> subprocess.CompletedProcess[str]:
@@ -24,6 +25,7 @@ def _run_manager(*args: str) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
         env={"PATH": os.environ["PATH"], "HOME": os.environ.get("HOME", "/tmp")},
+        timeout=_BASH_TIMEOUT_SECONDS,
     )
 
 
@@ -35,7 +37,12 @@ def _assignment(text: str, name: str) -> str:
 
 class TestManagerScript:
     def test_syntax_is_valid(self) -> None:
-        result = subprocess.run(["bash", "-n", str(_MANAGER)], capture_output=True, text=True)
+        result = subprocess.run(
+            ["bash", "-n", str(_MANAGER)],
+            capture_output=True,
+            text=True,
+            timeout=_BASH_TIMEOUT_SECONDS,
+        )
         assert result.returncode == 0, result.stderr
 
     def test_is_executable(self) -> None:

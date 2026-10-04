@@ -539,7 +539,7 @@ def test_workflow_consumes_one_target_policy_authority() -> None:
     assert "sudo apt-get install --yes ripgrep" not in install_rg["run"]
     assert "brew install" not in install_rg["run"]
     assert "github.com/BurntSushi/ripgrep/releases/download/" in install_rg["run"]
-    assert "-c -" in install_rg["run"]
+    assert '"${CHECKSUM[@]}" -c -' in install_rg["run"]
     assert 'case "${RUNNER_OS}-${RUNNER_ARCH}" in' in install_rg["run"]
     assert "aarch64-apple-darwin" in install_rg["run"]
     assert "x86_64-unknown-linux-musl" in install_rg["run"]

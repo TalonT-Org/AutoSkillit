@@ -188,9 +188,6 @@ sync_auth() {
         mounts+=( -v "$HOME/.autoskillit/config.yaml:/run/host-autoskillit-config.yaml:ro" )
         copy_autoskillit=true
     fi
-    if [[ -f "$HOME/.autoskillit/.secrets.yaml" ]]; then
-        mounts+=( -v "$HOME/.autoskillit/.secrets.yaml:/run/host-autoskillit-secrets.yaml:ro" )
-    fi
     [[ $copy_codex == true || $copy_claude == true || $copy_github == true || $copy_autoskillit == true ]] \
         || die "no supported host credential files were found"
 
@@ -216,7 +213,6 @@ sync_auth() {
             copy /run/host-gh-hosts.yml .config/gh/hosts.yml
             copy /run/host-gh-config.yml .config/gh/config.yml
             copy /run/host-autoskillit-config.yaml .autoskillit/config.yaml
-            copy /run/host-autoskillit-secrets.yaml .autoskillit/.secrets.yaml
         '
     echo "Copied available host credentials into the persistent home volume."
 }

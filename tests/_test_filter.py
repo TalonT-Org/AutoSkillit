@@ -1553,7 +1553,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
     ),
     # Standalone modules (not subpackage directories)
     # L1
-    "report": frozenset({"report", "skills_extended"}),
+    "report": frozenset({"report", "skills_extended", "cli"}),
     "exploration": frozenset({"exploration", "server", "cli"}),
     "planner": frozenset(
         {

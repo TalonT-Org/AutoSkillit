@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 from cyclopts import App
@@ -57,6 +58,32 @@ def sessions_index(*, update: bool = False, rebuild: bool = False) -> None:
         f"sessions={len(report.sessions)} requests={len(report.requests)} "
         f"tools={len(report.tools)} subagents={len(report.subagents)}"
     )
+
+
+@sessions_app.command(name="deck")
+def sessions_deck(output: str) -> None:
+    """Render the observability deck from the report index into one self-contained HTML file."""
+    from autoskillit.config import load_config
+    from autoskillit.core import atomic_write
+    from autoskillit.execution import (
+        REPORT_INDEX_SCHEMA_VERSION,
+        read_report_index,
+        report_index_dir,
+        resolve_log_dir,
+    )
+    from autoskillit.report import render_deck
+
+    log_root = resolve_log_dir(load_config().linux_tracing.log_dir)
+    index_dir = report_index_dir(log_root)
+    _refresh_report_index(log_root, index_dir, rebuild=False)
+    report = read_report_index(index_dir)
+    html = render_deck(
+        report.sessions.values(),
+        generated_at=datetime.now(UTC),
+        index_schema_version=REPORT_INDEX_SCHEMA_VERSION,
+    )
+    atomic_write(Path(output), html)
+    print(f"deck: wrote {output} ({len(report.sessions)} session rows)")
 
 
 @sessions_app.command(name="analyze")

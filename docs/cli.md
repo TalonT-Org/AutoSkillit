@@ -141,6 +141,17 @@ required report-index or source lease.
 
 ---
 
+## autoskillit sessions deck
+
+    autoskillit sessions deck <output>
+
+Incrementally refreshes the derived report index, then writes a self-contained HTML
+observability deck to `<output>`. Open the file directly in a browser; it needs no
+server or network connection. The command exits with status 1 without writing the file
+when another operation holds a required report-index or source lease.
+
+---
+
 ## autoskillit codex-orphans
 
     autoskillit codex-orphans [--reap] [--output-json]

@@ -367,6 +367,84 @@ Codex OTLP token events are not projected: they do not carry a stable request
 identity for deduplication. Codex token measures enter the report index through
 the session rows.
 
+## Observability deck
+
+`autoskillit sessions deck <output>` incrementally refreshes the report index and writes
+one self-contained HTML deck. It can be opened from `file://` without a server or network
+connection. The deck embeds the index's session rows and filters them in the browser.
+ADR-0017 records why charts use first-party SVG.
+
+### Payload contract
+
+The payload keys are `generated_at_ms`, `index_schema_version`, `landing`, and `history`;
+`tables.sessions{columns,rows}`; `facets[{id,label,column,kind}]`;
+`views[{id,question,decision,group,status,issue}]`;
+`chips{view:{facet:[{key,label,state,count,reason,issue,match|days}]}}`; and
+`availability[{state,label,description}]`. `match` is used for value facets and `days`
+for windows. `views[].issue` tracks the issue for building a planned view; a chip's
+`issue` identifies why that choice is unavailable. These fields have separate meanings.
+
+### Chip states
+
+Each cohort choice is `live`, `struck`, or `absent`. Live choices filter the rows.
+Struck choices remain visible with a reason and cannot be selected. Absent choices have
+no matching rows. L0 is struck because L0 leaf agents write no session row and exist
+only as subagent transcripts. On a legacy index, unavailable orchestration levels cite
+[#4622](https://github.com/TalonT-Org/AutoSkillit/issues/4622); windows extending before
+the retained history cite [#4621](https://github.com/TalonT-Org/AutoSkillit/issues/4621).
+
+### Routing
+
+Routes use `#/<view>[/<entity>][?k=v1,v2]`. Cohort selections survive navigation between
+views and entities; the `sort` choice applies only to its view. Every state change is a
+hash navigation, so browser back and forward restore prior selections. Planned views
+show a notice while keeping the cohort bar available.
+
+### Offline rendering and client code
+
+The generated HTML embeds its assets and JSON payload. Its content security policy
+disallows network requests, and the JSON is escaped before embedding. The asset set is
+`deck.html`, `deck.css`, `core.js`, `shell.js`, and the built view scripts under
+`assets/deck/views/`; no other files are allowed. See
+[ADR-0017](../decisions/0017-deck-renderer.md) for the renderer decision.
+
+`core.js` is DOM-free and tested in V8 with `mini-racer`. `shell.js` renders the page
+without putting data in `innerHTML` or using inline event handlers. Availability uses
+the five producer states: `measured`, `measured_zero`, `unavailable`, `unknown`, and
+`not_applicable`.
+
+### Adding a view
+
+Mark its `DeckViewDef` as built by providing its table and script, add
+`assets/deck/views/<id>.js`, and register it with `DeckShell.registerView`. Use
+`ctx.sortableTable`, `ctx.href` or `entityLink`, `ctx.availabilityCell`, and
+`ctx.barChart` for shared rendering. Pair each `ctx.barChart` with a visible
+`ctx.sortableTable` over the same rows so exact values remain available in a sortable
+list. Do not give the chart `role="img"`; that hides its bar labels and links from
+assistive technology.
+
+### Manual check
+
+1. Generate a deck at a repository-local temporary path:
+
+       autoskillit sessions deck .autoskillit/temp/deck.html
+
+2. Open that file from `file://` with DevTools Network set to offline. The landing view
+   and cohort bar should render with no hash, and the page should make zero requests.
+3. Toggle harness and provider chips; confirm the population sentence changes.
+4. Confirm L0 is struck with its reason. On a legacy index, L1–L3 should show ✕ with
+   #4622; windows longer than retained history should show ✕ with #4621.
+5. Follow a harness link, then use back and forward; confirm the cohort remains selected.
+6. Open a planned route such as `#/spend`; confirm its notice appears and the cohort bar
+   remains visible.
+7. Emulate `prefers-color-scheme: dark`, then `light`; confirm both palettes render.
+8. In print preview, confirm the light palette, vector bars, printed cohort sentence, and
+   hidden navigation rail.
+9. In the Accessibility tree, confirm that “Runs by harness and provider” is a named
+   list whose items expose their label link and value (with the SVG rectangles hidden),
+   each chip button has a name, disabled-chip reasons are exposed, and planned nav
+   entries are `aria-disabled`.
+
 ## Child Terminal Reasons
 
 Issue #4623. Every observed L0 child run (native Claude subagent, native Codex

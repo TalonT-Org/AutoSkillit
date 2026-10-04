@@ -159,12 +159,8 @@ show_status() {
         echo "AutoSkillit $(docker exec "$CONTAINER_NAME" autoskillit --version)"
         docker exec "$CONTAINER_NAME" claude --version
         docker exec "$CONTAINER_NAME" codex --version
+        docker exec "$CONTAINER_NAME" claude auth status --text || true
         docker exec "$CONTAINER_NAME" codex login status || true
-        if timeout 15s docker exec "$CONTAINER_NAME" claude auth status >/dev/null 2>&1; then
-            echo "Claude authentication is available."
-        else
-            echo "Claude authentication is unavailable or its status check is unsupported."
-        fi
     fi
 }
 

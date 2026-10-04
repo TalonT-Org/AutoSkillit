@@ -7,8 +7,9 @@ sys.modules isolation stays a parameter, not shared state) -- only the byte-iden
 bodies live here, matching the tests/infra/_pretty_output_helpers.py convention of a
 dedicated underscore-prefixed helper module for one feature's split test files.
 
-tests/infra/test_e2e_select.py also loads scripts/e2e/e2e_select.py through
-load_check_script, so its sibling ``import e2e_catalog`` resolves.
+tests/infra/test_e2e_select.py and tests/infra/test_e2e_harness.py also load
+scripts/e2e/e2e_select.py and scripts/e2e/e2e_harness.py through load_check_script, so
+their sibling ``import e2e_catalog`` resolves.
 """
 
 from __future__ import annotations

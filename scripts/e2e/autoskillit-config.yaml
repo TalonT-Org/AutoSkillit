@@ -1,0 +1,31 @@
+# AutoSkillit user-layer config the E2E harness installs as ~/.autoskillit/config.yaml.
+# See scripts/e2e/README.md for why each key is set.
+quota_guard:
+  enabled: false
+
+features:
+  fleet: true
+  fleet_headless_run: true
+
+agent_backend:
+  recipe_overrides:
+    implementation:
+      run_arch_lenses: claude-code
+    implementation-groups:
+      run_arch_lenses: claude-code
+    planner:
+      analyze: claude-code
+      extract_domain: claude-code
+      elaborate_phases: claude-code
+    remediation:
+      investigate: claude-code
+      run_arch_lenses: claude-code
+    research:
+      run_experiment_lenses: claude-code
+      scope: claude-code
+      vis_apply: claude-code
+    research-design:
+      scope: claude-code
+      vis_apply: claude-code
+    research-review:
+      run_experiment_lenses: claude-code

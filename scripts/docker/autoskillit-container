@@ -49,7 +49,7 @@ container_running() {
 
 container_has_active_agents() {
     container_running || return 1
-    # Process names, never `pgrep -f`, whose pattern would match this probe's own shell.
+    # Match process names: a full command-line pattern would match this probe's own shell.
     # Claude runs as `claude` through the npm bin symlink, as `claude.exe` when exec'd
     # directly; Codex's npm launcher runs the native `codex` binary.
     docker exec "$CONTAINER_NAME" sh -c '

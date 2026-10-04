@@ -1168,6 +1168,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # file-level: relocated test_conftest exercises autoskillit.execution.quota.logger
             # directly when asserting output scrubbing captures quota warnings before stdout.
             "infra/test_conftest.py",
+            # file-level: the Docker pin guard compares CODEX_CLI_MIN_VERSION from
+            # execution.backends with the Dockerfile's CODEX_VERSION pin.
+            "infra/test_verification_container.py",
             "_llm_triage",
             "smoke_utils",
         }

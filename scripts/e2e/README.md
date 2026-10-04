@@ -1,8 +1,9 @@
-# Live E2E runs on MiniMax
+# E2E tests in the user image
 
-`.github/workflows/e2e.yml` runs AutoSkillit recipes end to end against a real model —
-MiniMax, through its Anthropic-compatible endpoint — inside the published `user` Docker
-image. This directory holds everything the workflow runs:
+`.github/workflows/e2e.yml` builds the `user` Docker image and runs catalog tests inside it.
+`clean-install` checks installation and doctor without credentials or model calls.
+Canary and recipe tests use MiniMax through its Anthropic-compatible endpoint.
+This directory holds everything the workflow runs:
 
 | File | Role |
 |------|------|
@@ -17,6 +18,9 @@ image. This directory holds everything the workflow runs:
 image as `/usr/bin/python3`. Both are stdlib-only, which is why the catalog is JSON.
 
 ## Maintainer setup
+
+`clean-install` needs no provider or sandbox secrets. The following secrets support live
+model tests:
 
 1. **`MINIMAX_API_KEY`** — an organization or repository secret holding a MiniMax API key.
 2. **`E2E_SANDBOX_TOKEN`** — a repository secret holding a fine-grained personal access
@@ -82,7 +86,40 @@ the settings file is the single source of provider configuration. The sandbox to
 `gh auth login` on stdin only. Because settings `env` reaches every agent subprocess, the key
 can still surface in session output, so redaction is mandatory (see below).
 
-## Why `autoskillit install` is not run
+## Clean installation and doctor
+
+`clean-install` starts a fresh container with only script and artifact mounts. Its actual
+HOME, PATH, XDG values and uv tool layout are preserved, and provider credentials are
+removed from every child environment. The harness runs:
+
+1. `autoskillit install`.
+2. `git init` in a fresh artifact-local `.autoskillit/temp/clean-install/` directory.
+3. Write a `.pre-commit-config.yaml` using the gitleaks hook pinned to `v8.30.0`.
+4. `autoskillit init --test-command "git diff --check"`.
+5. `autoskillit doctor --output-json` in that repository.
+
+One monotonic deadline bounds the command sequence. The scratch repository is removed in
+`finally`; command stdout, stderr and status records remain in the artifact directory,
+including partial timeout output. `doctor.json` retains the raw doctor stdout.
+
+A clean pass requires successful commands and a complete nonempty JSON `results` list
+with valid `ok`, `info`, `warning` or `error` rows. Warnings require an exact check/message
+entry with a documented reason in `CLEAN_INSTALL_ALLOWED_WARNINGS`. Only observed
+environmental or advisory warnings qualify; installation, plugin and hook defects need
+bug tracking.
+
+Catalog `expected_failures` match exact severity/check/message diagnostics linked to
+open AutoSkillit bug issues. Reproduce and verify the bug before adding its expectation.
+Every expected diagnostic must appear and every other problem fails the test. Remove
+an expectation when its diagnostic disappears; stale expectations fail. Command failures
+and malformed JSON always fail.
+
+`result.json` records `outcome` and `expected_findings`: a clean `passed` outcome has
+`passed: true`; an accepted `expected_failure` has `passed: false` and exits zero for the
+CI gate; an unexpected `failed` outcome exits nonzero. The console uses the same outcome.
+Select this test directly with workflow dispatch's `tests=clean-install` input.
+
+## Installation in model tests
 
 `fleet run` builds its context with `make_context(cfg, project_dir=Path.cwd(), ...)`
 (`src/autoskillit/cli/fleet/_fleet_run.py`). Without an installed plugin it falls back to
@@ -91,11 +128,12 @@ can still surface in session output, so redaction is mandatory (see below).
 publishes the projection on demand. The food-truck errors for a missing installation fire
 only for backends that inject skills without plugin installs (Codex); the `claude-code`
 backend receives the projection as `--plugin-dir`, and the harness routes every step to
-`claude-code`. `install` also defers under `CLAUDECODE`, and the image never runs it.
+`claude-code`. These model tests skip `autoskillit install`; the clean-install harness
+executes it explicitly.
 
 ## AutoSkillit user config
 
-`autoskillit-config.yaml` becomes `~/.autoskillit/config.yaml` in the container:
+For model tests, `autoskillit-config.yaml` becomes `~/.autoskillit/config.yaml` in the container:
 
 - `quota_guard.enabled: false` — the guard measures Anthropic account quota through Claude
   credentials (`~/.claude/.credentials.json`) the container does not have; `fleet run` also
@@ -146,6 +184,7 @@ waits its turn and never cancels another. `select` and `e2e-gate` are not queued
 catalog entry's `peak_sessions` is capped at `MAX_PEAK_SESSIONS` (8): one step's fan-out of
 up to six subagents plus the orchestrator and step session. With one test running at a
 time, CI stays at or below eight of the roughly twelve concurrent MiniMax sessions.
+`clean-install` requires exactly zero `peak_sessions`.
 
 Every harness subprocess has a timeout that fires before the job's: `fleet run` gets the
 test's `timeout_sec` plus `HARNESS_GRACE_SEC`, and the job gets that budget in minutes plus
@@ -154,12 +193,16 @@ cleanup and redaction never depend on GitHub cancelling the job.
 
 ## Artifacts and redaction
 
-The container's AutoSkillit data directory (`~/.local/share/autoskillit`) is bind-mounted
+For model tests, the container's AutoSkillit data directory (`~/.local/share/autoskillit`) is bind-mounted
 from the runner, so session logs survive a killed container. Those files belong to uid 1000
 and are often `0600`, so a second container run copies `out/` and `data/logs/` into
 `upload/` world-readable with both secrets replaced by `[REDACTED]`, skips symlinks, and
 fails if any secret survives. Only `upload/` is uploaded, and only when redaction
 succeeded.
+
+`clean-install` mounts no home directories and retains evidence under `out/`. Its redactor
+receives the same required `--secret-env` names with variables unset and skips the absent
+home-log tree. Redaction and upload still run after test failures.
 
 ## Failure issues
 
@@ -187,22 +230,33 @@ pull request still open — but only once it captured the baseline.
   "sandbox_repository": "OWNER/REPO",
   "tests": [
     {
-      "name": "lower-case-with-dashes",
-      "kind": "canary | recipe",
+      "name": "recipe-example",
+      "kind": "recipe",
       "peak_sessions": 1,
       "timeout_sec": 300,
       "trigger_paths": ["scripts/e2e/*"],
       "recipe": "implementation",
       "ingredients": {"task": "..."},
-      "expected_pull_request_state": "open | merged | closed"
+      "expected_pull_request_state": "open"
+    },
+    {
+      "name": "clean-install",
+      "kind": "clean-install",
+      "peak_sessions": 0,
+      "timeout_sec": 300,
+      "trigger_paths": ["src/autoskillit/cli/*", "scripts/e2e/*"]
     }
   ]
 }
 ```
 
 `recipe`, `ingredients` and `expected_pull_request_state` are required for `recipe` tests
-and forbidden for `canary` tests; any other key is rejected. `peak_sessions` must be 1–8 and
-`timeout_sec` must keep the derived job timeout within 360 minutes.
+and forbidden for `canary` and `clean-install` tests. `expected_failures` is optional only
+for `clean-install`: each row contains nonempty `severity` (`error` or `warning`), `check`,
+`message`, and `issue` (`https://github.com/TalonT-Org/AutoSkillit/issues/<number>`).
+Duplicate diagnostic identities and unknown keys are rejected. `peak_sessions` must be
+1–8 for model tests and exactly zero for clean-install. `timeout_sec` must keep the
+derived job timeout within 360 minutes.
 
 ### Adding a test
 
@@ -216,12 +270,25 @@ and forbidden for `canary` tests; any other key is rejected. `peak_sessions` mus
 ```bash
 git archive HEAD | docker build --file scripts/docker/Dockerfile --target user \
   --tag autoskillit-e2e:local -
-mkdir -p /tmp/e2e/out /tmp/e2e/data && chmod 0777 /tmp/e2e/out /tmp/e2e/data
+mkdir -p .autoskillit/temp/e2e/{out,data}
+chmod 0777 .autoskillit/temp/e2e/{out,data}
 MINIMAX_API_KEY=... docker run --rm \
   --env MINIMAX_API_KEY --env E2E_SANDBOX_TOKEN \
   --volume "$PWD/scripts/e2e:/opt/e2e:ro" \
-  --volume /tmp/e2e/out:/artifacts \
-  --volume /tmp/e2e/data:/home/autoskillit/.local/share/autoskillit \
+  --volume "$PWD/.autoskillit/temp/e2e/out:/artifacts" \
+  --volume "$PWD/.autoskillit/temp/e2e/data:/home/autoskillit/.local/share/autoskillit" \
   autoskillit-e2e:local \
   python3 /opt/e2e/e2e_harness.py run --test canary --out /artifacts
+```
+
+For clean-install, use a fresh artifact directory and omit credentials and home mounts:
+
+```bash
+mkdir -p .autoskillit/temp/e2e/clean-install-out
+chmod 0777 .autoskillit/temp/e2e/clean-install-out
+docker run --rm \
+  --volume "$PWD/scripts/e2e:/opt/e2e:ro" \
+  --volume "$PWD/.autoskillit/temp/e2e/clean-install-out:/artifacts" \
+  autoskillit-e2e:local \
+  python3 /opt/e2e/e2e_harness.py run --test clean-install --out /artifacts
 ```

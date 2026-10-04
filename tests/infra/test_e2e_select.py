@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import itertools
+from collections.abc import Mapping, MutableMapping
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -54,6 +56,35 @@ def _entry(name: str, trigger_paths: tuple[str, ...] = ("src/*",), **overrides) 
     }
     entry.update(overrides)
     return entry
+
+
+_CLEAN_INSTALL_TRIGGER_PATHS = (
+    "src/autoskillit/cli/*",
+    "src/autoskillit/workspace/*",
+    "scripts/docker/*",
+    "scripts/e2e/*",
+    ".github/workflows/e2e.yml",
+)
+
+
+def _clean_install_entry(**overrides) -> dict:
+    entry = _entry(
+        "clean-install",
+        _CLEAN_INSTALL_TRIGGER_PATHS,
+        kind="clean-install",
+        peak_sessions=0,
+        timeout_sec=300,
+    )
+    entry.update(overrides)
+    return entry
+
+
+_EXPECTED_FAILURE = {
+    "severity": "error",
+    "check": "install-check",
+    "message": "expected install failure",
+    "issue": "https://github.com/TalonT-Org/AutoSkillit/issues/123",
+}
 
 
 def _raw_catalog(*entries: dict) -> dict:
@@ -245,6 +276,16 @@ def test_matrix_for_an_empty_selection_is_parseable() -> None:
     assert select.matrix_json(selection, _catalog(_entry("a"))) == '{"include":[]}'
 
 
+def test_matrix_includes_kind_from_each_catalog_entry() -> None:
+    catalog = _catalog(_clean_install_entry(), _entry("canary"))
+    selection = select.Selection(("clean-install", "canary"), "selected")
+    assert select.matrix_json(selection, catalog) == (
+        '{"include":[{"test":"clean-install","kind":"clean-install",'
+        '"timeout_minutes":37},{"test":"canary","kind":"canary",'
+        '"timeout_minutes":37}]}'
+    )
+
+
 _RECIPE_FIELDS = {
     "recipe": "implementation",
     "ingredients": {"task": "Add a greeting"},
@@ -265,7 +306,11 @@ _INVALID_CATALOGS = {
     "bad-name": _raw_catalog(_entry("Bad_Name")),
     "unknown-kind": _raw_catalog(_entry("a", kind="smoke")),
     "zero-peak-sessions": _raw_catalog(_entry("a", peak_sessions=0)),
+    "zero-recipe-peak-sessions": _raw_catalog(
+        _entry("impl", kind="recipe", peak_sessions=0, **_RECIPE_FIELDS)
+    ),
     "nine-peak-sessions": _raw_catalog(_entry("a", peak_sessions=9)),
+    "clean-install-nonzero-peak-sessions": _raw_catalog(_clean_install_entry(peak_sessions=1)),
     "timeout-over-job-limit": _raw_catalog(_entry("a", timeout_sec=_MAX_TIMEOUT_SEC + 1)),
     "recipe-without-recipe": _raw_catalog(_recipe_entry_without("recipe")),
     "recipe-without-ingredients": _raw_catalog(_recipe_entry_without("ingredients")),
@@ -274,6 +319,64 @@ _INVALID_CATALOGS = {
         _entry("a", kind="recipe", **{**_RECIPE_FIELDS, "expected_pull_request_state": "draft"})
     ),
     "canary-with-recipe-fields": _raw_catalog(_entry("a", **_RECIPE_FIELDS)),
+    "clean-install-with-recipe-fields": _raw_catalog(_clean_install_entry(**_RECIPE_FIELDS)),
+    "clean-install-unknown-key": _raw_catalog(_clean_install_entry(extra=1)),
+    "expected-failures-on-canary": _raw_catalog(
+        _entry("a", expected_failures=[_EXPECTED_FAILURE])
+    ),
+    "expected-failures-on-recipe": _raw_catalog(
+        _entry(
+            "impl",
+            kind="recipe",
+            expected_failures=[_EXPECTED_FAILURE],
+            **_RECIPE_FIELDS,
+        )
+    ),
+    "expected-failures-missing-field": _raw_catalog(
+        _clean_install_entry(
+            expected_failures=[
+                {key: value for key, value in _EXPECTED_FAILURE.items() if key != "message"}
+            ]
+        )
+    ),
+    "expected-failures-extra-field": _raw_catalog(
+        _clean_install_entry(expected_failures=[{**_EXPECTED_FAILURE, "extra": "value"}])
+    ),
+    "expected-failures-empty-message": _raw_catalog(
+        _clean_install_entry(expected_failures=[{**_EXPECTED_FAILURE, "message": ""}])
+    ),
+    "expected-failures-empty-check": _raw_catalog(
+        _clean_install_entry(expected_failures=[{**_EXPECTED_FAILURE, "check": ""}])
+    ),
+    "expected-failures-unknown-severity": _raw_catalog(
+        _clean_install_entry(expected_failures=[{**_EXPECTED_FAILURE, "severity": "info"}])
+    ),
+    "expected-failures-zero-issue": _raw_catalog(
+        _clean_install_entry(
+            expected_failures=[
+                {
+                    **_EXPECTED_FAILURE,
+                    "issue": "https://github.com/TalonT-Org/AutoSkillit/issues/0",
+                }
+            ]
+        )
+    ),
+    "expected-failures-bad-issue-url": _raw_catalog(
+        _clean_install_entry(
+            expected_failures=[{**_EXPECTED_FAILURE, "issue": "https://example.com/issues/123"}]
+        )
+    ),
+    "expected-failures-duplicate-identity": _raw_catalog(
+        _clean_install_entry(
+            expected_failures=[
+                _EXPECTED_FAILURE,
+                {
+                    **_EXPECTED_FAILURE,
+                    "issue": "https://github.com/TalonT-Org/AutoSkillit/issues/124",
+                },
+            ]
+        )
+    ),
     "empty-trigger-paths": _raw_catalog(_entry("a", ())),
     "unknown-key": _raw_catalog(_entry("a", extra=1)),
     "unknown-top-level-key": {**_raw_catalog(_entry("a")), "extra": 1},
@@ -288,6 +391,34 @@ class TestCatalog:
         assert canary.kind == "canary"
         assert canary.recipe is None
         assert e2e_catalog.job_timeout_minutes(canary) == 37
+
+        clean_install = catalog.get("clean-install")
+        assert clean_install.kind == "clean-install"
+        assert clean_install.peak_sessions == 0
+        assert clean_install.timeout_sec == 300
+        assert clean_install.trigger_paths == _CLEAN_INSTALL_TRIGGER_PATHS
+        assert clean_install.recipe is None
+
+    def test_clean_install_expected_failures_are_immutable_mapping_rows(self) -> None:
+        rows = [{**_EXPECTED_FAILURE}, {**_EXPECTED_FAILURE, "severity": "warning"}]
+        test = _catalog(_clean_install_entry(expected_failures=rows)).get("clean-install")
+
+        assert isinstance(test.expected_failures, tuple)
+        assert len(test.expected_failures) == 2
+        for row in test.expected_failures:
+            assert isinstance(row, Mapping)
+            assert not isinstance(row, MutableMapping)
+            with pytest.raises(TypeError):
+                cast(MutableMapping[str, str], row)["message"] = "changed"
+
+    def test_clean_install_expected_failures_allow_distinct_identities(self) -> None:
+        rows = [
+            _EXPECTED_FAILURE,
+            {**_EXPECTED_FAILURE, "message": "another message"},
+            {**_EXPECTED_FAILURE, "severity": "warning"},
+        ]
+        test = _catalog(_clean_install_entry(expected_failures=rows)).get("clean-install")
+        assert len(test.expected_failures) == 3
 
     def test_recipe_entry_parses(self) -> None:
         catalog = _catalog(_entry("impl", kind="recipe", **_RECIPE_FIELDS))

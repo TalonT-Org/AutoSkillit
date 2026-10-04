@@ -102,16 +102,18 @@ jobs:
       - name: Run the E2E test
         id: e2e
         env:
-          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
-          E2E_SANDBOX_TOKEN: ${{ secrets.E2E_SANDBOX_TOKEN }}
+          MINIMAX_API_KEY: ${{ matrix.kind != 'clean-install' && secrets.MINIMAX_API_KEY || '' }}
+          E2E_SANDBOX_TOKEN: ${{ matrix.kind != 'clean-install' && secrets.E2E_SANDBOX_TOKEN || '' }}
           TEST: ${{ matrix.test }}
         run: |
-          docker run --rm \
-            --env MINIMAX_API_KEY \
-            --env E2E_SANDBOX_TOKEN \
+          docker_args=()
+          if [[ '${{ matrix.kind }}' != 'clean-install' ]]; then
+            docker_args+=(--env MINIMAX_API_KEY --env E2E_SANDBOX_TOKEN)
+            docker_args+=(--volume "$RUNNER_TEMP/e2e/data:/home/autoskillit/.local/share/autoskillit")
+          fi
+          docker run --rm "${docker_args[@]}" \
             --volume "$GITHUB_WORKSPACE/scripts/e2e:/opt/e2e:ro" \
             --volume "$RUNNER_TEMP/e2e/out:/artifacts" \
-            --volume "$RUNNER_TEMP/e2e/data:/home/autoskillit/.local/share/autoskillit" \
             "$IMAGE" \
             python3 /opt/e2e/e2e_harness.py run --test "$TEST" --out /artifacts
 
@@ -119,12 +121,14 @@ jobs:
         id: redact
         if: always() && steps.build.outcome == 'success'
         env:
-          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
-          E2E_SANDBOX_TOKEN: ${{ secrets.E2E_SANDBOX_TOKEN }}
+          MINIMAX_API_KEY: ${{ matrix.kind != 'clean-install' && secrets.MINIMAX_API_KEY || '' }}
+          E2E_SANDBOX_TOKEN: ${{ matrix.kind != 'clean-install' && secrets.E2E_SANDBOX_TOKEN || '' }}
         run: |
-          docker run --rm \
-            --env MINIMAX_API_KEY \
-            --env E2E_SANDBOX_TOKEN \
+          docker_args=()
+          if [[ '${{ matrix.kind }}' != 'clean-install' ]]; then
+            docker_args+=(--env MINIMAX_API_KEY --env E2E_SANDBOX_TOKEN)
+          fi
+          docker run --rm "${docker_args[@]}" \
             --volume "$GITHUB_WORKSPACE/scripts/e2e:/opt/e2e:ro" \
             --volume "$RUNNER_TEMP/e2e:/e2e" \
             "$IMAGE" \

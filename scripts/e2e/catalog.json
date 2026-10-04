@@ -11,6 +11,45 @@
         "scripts/docker/*",
         ".github/workflows/e2e.yml"
       ]
+    },
+    {
+      "name": "clean-install",
+      "kind": "clean-install",
+      "peak_sessions": 0,
+      "timeout_sec": 300,
+      "trigger_paths": [
+        "src/autoskillit/cli/*",
+        "src/autoskillit/workspace/*",
+        "scripts/docker/*",
+        "scripts/e2e/*",
+        ".github/workflows/e2e.yml"
+      ],
+      "expected_failures": [
+        {
+          "severity": "warning",
+          "check": "mcp_server_registered",
+          "message": "autoskillit not registered. Run 'autoskillit install' to install as a plugin, or 'autoskillit init' to register in mcpServers.",
+          "issue": "https://github.com/TalonT-Org/AutoSkillit/issues/5242"
+        },
+        {
+          "severity": "warning",
+          "check": "plugin_cache_exists",
+          "message": "Plugin cache directory missing: /home/autoskillit/.claude/plugins/cache/autoskillit-local/autoskillit. Run `autoskillit install` to recreate it.",
+          "issue": "https://github.com/TalonT-Org/AutoSkillit/issues/5243"
+        },
+        {
+          "severity": "warning",
+          "check": "plugin_cache_integrity",
+          "message": "Plugin cache directory is absent, so hook paths could not be verified: /home/autoskillit/.claude/plugins/cache/autoskillit-local/autoskillit. Run `autoskillit install` to rebuild it.",
+          "issue": "https://github.com/TalonT-Org/AutoSkillit/issues/5243"
+        },
+        {
+          "severity": "error",
+          "check": "installation_record_invalid",
+          "message": "Invalid RECORD path '../../../bin/autoskillit' in /home/autoskillit/.local/share/uv/tools/autoskillit/lib/python3.11/site-packages/autoskillit (active distribution: /home/autoskillit/.local/share/uv/tools/autoskillit/lib/python3.11/site-packages/autoskillit; uv tool: /home/autoskillit/.local/share/uv/tools/autoskillit/lib/python3.11/site-packages/autoskillit)",
+          "issue": "https://github.com/TalonT-Org/AutoSkillit/issues/5244"
+        }
+      ]
     }
   ]
 }

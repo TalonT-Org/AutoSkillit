@@ -179,11 +179,11 @@ def test_authority_denies_noncanonical_identities(tmp_path: Path) -> None:
         )
         assert result.returncode == 0, (identity, result.stderr)
         assert "Traceback" not in result.stderr, (identity, result.stderr)
-        deny_line, admitted_line = result.stdout.strip().splitlines()
+        (deny_line,) = result.stdout.strip().splitlines()
         decision = json.loads(deny_line)["hookSpecificOutput"]
         assert decision["permissionDecision"] == "deny", identity
         assert "code=scope_authority_unavailable" in decision["permissionDecisionReason"]
-        assert admitted_line == "ADMITTED=False", identity
+        assert "ADMITTED=" not in result.stdout, identity
 
 
 def test_committed_scope_table_matches_registry_renderer() -> None:

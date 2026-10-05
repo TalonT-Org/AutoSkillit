@@ -440,9 +440,9 @@ def test_formatters_and_chip_state_parity(deck_js: Any, deck_model: dict[str, An
 
 
 def test_core_js_has_no_browser_global_dependency(deck_js: Any) -> None:
-    assert deck_js.eval("typeof window + typeof document + typeof location") == (
-        "undefinedundefinedundefined"
-    )
+    assert deck_js.eval("typeof window") == "undefined"
+    assert deck_js.eval("typeof document") == "undefined"
+    assert deck_js.eval("typeof location") == "undefined"
 
 
 def test_shell_registers_built_views_without_document(deck_asset: Any) -> None:

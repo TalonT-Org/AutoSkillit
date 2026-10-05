@@ -6,7 +6,7 @@ from dataclasses import replace
 
 import pytest
 
-from autoskillit.core import Severity
+from autoskillit.core import TOOL_SUBSET_TAGS, Severity
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep
@@ -254,6 +254,7 @@ class TestUndeclaredPackRequirementToolSteps:
         assert not self._run_rule(recipe)
 
     def test_kitchen_core_plus_category_tool_needs_no_declaration(self):
+        assert "research" not in TOOL_SUBSET_TAGS["write_telemetry_files"]
         recipe = _make_recipe_with_tool(["research"], "write_telemetry_files")
         assert not self._run_rule(recipe)
 

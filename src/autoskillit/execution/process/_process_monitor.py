@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from autoskillit.core import ObservedEntry, SessionEvent, StreamParser
 
 logger = get_logger(__name__)
+_LEASE_DEFERRED_LOG_INTERVAL_SECONDS = 300
 
 
 class _OperationLeaseActivity:
@@ -61,7 +62,11 @@ class _OperationLeaseActivity:
         if not leases:
             return reference, suppression_start
         signature = tuple((lease.operation_id, lease.not_after_epoch) for lease in leases)
-        if signature != self._signature or self._logged_at is None or now - self._logged_at >= 300:
+        if (
+            signature != self._signature
+            or self._logged_at is None
+            or now - self._logged_at >= _LEASE_DEFERRED_LOG_INTERVAL_SECONDS
+        ):
             self._log(
                 self._event,
                 operation=leases[0].operation,

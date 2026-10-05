@@ -6,6 +6,7 @@ from dataclasses import replace
 
 import pytest
 
+import autoskillit.recipe  # noqa: F401 -- triggers rule registration
 from autoskillit.core import TOOL_SUBSET_TAGS, Severity
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
@@ -62,7 +63,6 @@ def _make_recipe_with_tool(
 
 def test_unknown_pack_produces_error():
     """Pack name not in PACK_REGISTRY produces an ERROR finding."""
-    import autoskillit.recipe  # noqa: F401 -- triggers rule registration
 
     recipe = _make_recipe(["nonexistent-pack"])
     findings = [f for f in run_semantic_rules(recipe) if f.rule == "unknown-required-pack"]
@@ -73,7 +73,6 @@ def test_unknown_pack_produces_error():
 
 def test_known_pack_produces_no_finding():
     """Known pack name (in PACK_REGISTRY) produces no finding."""
-    import autoskillit.recipe  # noqa: F401 -- triggers rule registration
 
     recipe = _make_recipe(["research"])
     findings = [f for f in run_semantic_rules(recipe) if f.rule == "unknown-required-pack"]
@@ -82,7 +81,6 @@ def test_known_pack_produces_no_finding():
 
 def test_mixed_packs_flags_only_unknown():
     """Only unknown packs are flagged; known packs pass silently."""
-    import autoskillit.recipe  # noqa: F401 -- triggers rule registration
 
     recipe = _make_recipe(["research", "bogus-pack"])
     findings = [f for f in run_semantic_rules(recipe) if f.rule == "unknown-required-pack"]
@@ -92,7 +90,6 @@ def test_mixed_packs_flags_only_unknown():
 
 def test_empty_requires_packs_produces_no_finding():
     """Recipes without requires_packs produce no finding."""
-    import autoskillit.recipe  # noqa: F401 -- triggers rule registration
 
     recipe = _make_recipe([])
     findings = [f for f in run_semantic_rules(recipe) if f.rule == "unknown-required-pack"]
@@ -101,7 +98,6 @@ def test_empty_requires_packs_produces_no_finding():
 
 def test_all_builtin_packs_pass():
     """Every pack in PACK_REGISTRY is a valid name (no self-flagging)."""
-    import autoskillit.recipe  # noqa: F401 -- triggers rule registration
     from autoskillit.core import PACK_REGISTRY
 
     recipe = _make_recipe(list(PACK_REGISTRY.keys()))
@@ -130,7 +126,6 @@ class TestUndeclaredPackRequirement:
         recipe: Recipe,
         skill_category_map: dict[str, frozenset[str]] | None = None,
     ) -> list:
-        import autoskillit.recipe  # noqa: F401 -- triggers rule registration
 
         if skill_category_map is not None:
             from autoskillit.recipe._analysis import make_validation_context
@@ -217,7 +212,6 @@ class TestUndeclaredPackRequirement:
 
     def test_research_design_yaml_triggers_error_without_vis_lens(self):
         """research-design.yaml with only [research] triggers vis-lens ERROR."""
-        import autoskillit.recipe  # noqa: F401 -- triggers rule registration
 
         base_recipe = load_recipe(builtin_recipes_dir() / "research-design.yaml")
         recipe = replace(base_recipe, requires_packs=["research"])
@@ -232,8 +226,6 @@ class TestUndeclaredPackRequirement:
 
 class TestUndeclaredPackRequirementToolSteps:
     def _run_rule(self, recipe: Recipe) -> list:
-        import autoskillit.recipe  # noqa: F401
-
         return [f for f in run_semantic_rules(recipe) if f.rule == "undeclared-pack-requirement"]
 
     def test_tool_needing_undeclared_enabled_pack_is_error(self):

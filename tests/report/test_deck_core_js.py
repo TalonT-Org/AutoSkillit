@@ -116,40 +116,32 @@ def test_window_selection_falls_back_to_all_for_absent_window(
     assert deck_js.call("DeckCore.windowSelection", windows, ["7d"])["chip"]["key"] == "7d"
 
 
+@pytest.mark.parametrize(
+    ("params", "expected_keys", "untimed"),
+    [
+        pytest.param({"level": ["unrecorded"]}, ["s1", "s2", "s3", "s4"], 0, id="unrecorded"),
+        pytest.param({"harness": ["codex"]}, ["s4"], 0, id="codex"),
+        pytest.param({"window": ["7d"]}, ["s1", "s2"], 1, id="last-week"),
+        pytest.param({"harness": ["codex"], "window": ["7d"]}, [], 1, id="untimed-codex"),
+        pytest.param({"window": ["28d"]}, ["s1", "s2", "s3", "s4"], 0, id="absent-window"),
+    ],
+)
 def test_filter_rows_applies_facets_windows_and_untimed_count(
-    deck_js: Any, deck_model: dict[str, Any]
+    deck_js: Any,
+    deck_model: dict[str, Any],
+    params: dict[str, list[str]],
+    expected_keys: list[str],
+    untimed: int,
 ) -> None:
-    model = deck_model
-    rows = model["tables"]["sessions"]
-    chips = model["chips"]["cohort"]
-
-    unrecorded = deck_js.call(
-        "DeckCore.filterRows", model, rows, chips, _route(level=["unrecorded"])
+    result = deck_js.call(
+        "DeckCore.filterRows",
+        deck_model,
+        deck_model["tables"]["sessions"],
+        deck_model["chips"]["cohort"],
+        _route(**params),
     )
-    assert sorted(row["key"] for row in unrecorded["rows"]) == ["s1", "s2", "s3", "s4"]
-    assert unrecorded["untimed"] == 0
-
-    codex = deck_js.call("DeckCore.filterRows", model, rows, chips, _route(harness=["codex"]))
-    assert [row["key"] for row in codex["rows"]] == ["s4"]
-    assert codex["untimed"] == 0
-
-    last_week = deck_js.call("DeckCore.filterRows", model, rows, chips, _route(window=["7d"]))
-    assert sorted(row["key"] for row in last_week["rows"]) == ["s1", "s2"]
-    assert last_week["untimed"] == 1
-
-    no_timed_codex = deck_js.call(
-        "DeckCore.filterRows", model, rows, chips, _route(harness=["codex"], window=["7d"])
-    )
-    assert no_timed_codex["rows"] == []
-    assert no_timed_codex["untimed"] == 1
-
-    absent_window = deck_js.call("DeckCore.filterRows", model, rows, chips, _route(window=["28d"]))
-    assert sorted(row["key"] for row in absent_window["rows"]) == [
-        "s1",
-        "s2",
-        "s3",
-        "s4",
-    ]
+    assert sorted(row["key"] for row in result["rows"]) == expected_keys
+    assert result["untimed"] == untimed
 
 
 def test_population_sentence_explains_the_effective_population(

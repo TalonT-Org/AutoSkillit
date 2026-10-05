@@ -59,6 +59,7 @@ DeckShell.registerView("cohort", ctx => {
   ];
   const helpCard = ctx.el("section", {class: "card"}, [
     ctx.el("h2", {}, "How to read this deck"),
+    ctx.el("p", {}, "Example availability values:"),
     ctx.el("dl", {}, availabilityRows),
     ...samples.map(sample => {
       const presentation = DeckCore.chipPresentation(sample.chip, sample.selected);

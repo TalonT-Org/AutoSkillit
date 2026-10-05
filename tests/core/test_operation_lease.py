@@ -121,6 +121,40 @@ async def test_heartbeat_restores_freshness_while_body_is_active(tmp_path: Path)
 
 
 @pytest.mark.anyio
+async def test_heartbeat_recovers_after_transient_io_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    recovered = anyio.Event()
+    original_utime = os.utime
+    attempts = 0
+
+    def flaky_utime(path, times) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise OSError("temporary heartbeat failure")
+        original_utime(path, times)
+        recovered.set()
+
+    async with operation_lease(
+        tmp_path,
+        operation="tool",
+        not_after_epoch=time.time() + 60,
+        registry=InFlightOperations(),
+        heartbeat_interval=0.001,
+    ) as handle:
+        assert handle.path is not None
+        old_mtime = time.time() - OPERATION_LEASE_FRESHNESS_SECONDS - 1
+        original_utime(handle.path, (old_mtime, old_mtime))
+        monkeypatch.setattr(lease_module.os, "utime", flaky_utime)
+        with anyio.fail_after(1):
+            await recovered.wait()
+        assert read_active_operation_leases(tmp_path, now_epoch=time.time())
+
+    assert not tuple(tmp_path.glob("*.lease.json"))
+
+
+@pytest.mark.anyio
 async def test_heartbeat_never_recreates_a_missing_lease_file(tmp_path: Path) -> None:
     registry = InFlightOperations()
 

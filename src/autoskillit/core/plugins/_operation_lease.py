@@ -185,6 +185,8 @@ async def _heartbeat(handle: OperationLeaseHandle, interval: float) -> None:
             if handle.path == path:
                 handle.path = None
             return
+        except OSError:
+            logger.warning("operation_lease_heartbeat_failed", path=str(path), exc_info=True)
 
 
 @asynccontextmanager

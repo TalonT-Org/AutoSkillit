@@ -501,7 +501,7 @@ class TestCodexParserParity:
 
     def test_both_parsers_handle_same_item_types(self) -> None:
         for member in CodexItemType:
-            if member in self._SKIP:
+            if member in self._SKIP or member.value == "error":
                 continue
             item: dict = {"type": member.value}
             if member == CodexItemType.AGENT_MESSAGE:

@@ -326,6 +326,7 @@ def build_terminal_flush_kwargs(
         "success": skill_result.success,
         "needs_retry": skill_result.needs_retry,
         "retry_reason": skill_result.retry_reason.value,
+        "session_errors": skill_result.session_error.messages,
         "infra": skill_result.infra,
         "api_error_status": skill_result.api_failure.status,
         "is_error": skill_result.is_error,

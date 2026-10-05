@@ -1277,6 +1277,7 @@ from .types import SerializedTokenMeasure as SerializedTokenMeasure
 from .types import ServeOverridesSnapshot as ServeOverridesSnapshot
 from .types import SessionAttemptHandle as SessionAttemptHandle
 from .types import SessionCheckpoint as SessionCheckpoint
+from .types import SessionErrorOutcome as SessionErrorOutcome
 from .types import SessionEvent as SessionEvent
 from .types import SessionHookRoot as SessionHookRoot
 from .types import SessionInvariantAdaptationRefusal as SessionInvariantAdaptationRefusal

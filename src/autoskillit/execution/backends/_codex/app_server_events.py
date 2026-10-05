@@ -383,6 +383,18 @@ class CodexStreamParser:
             for block in item.get("content", []):
                 if isinstance(block, dict) and block.get("type") == "text":
                     self._check_marker_text(block.get("text", ""))
+        elif item_type == CodexItemType.ERROR:
+            return SessionEvent(
+                kind=BackendEventKind.IGNORED,
+                is_terminal=False,
+                has_marker=False,
+                backend_data=CodexEventData(
+                    record_type="item.completed",
+                    thread_id="",
+                    item_type=CodexItemType.ERROR.value,
+                    raw=obj,
+                ),
+            )
         elif item_type not in (
             CodexItemType.FILE_CHANGE,
             CodexItemType.COMMAND_EXECUTION,

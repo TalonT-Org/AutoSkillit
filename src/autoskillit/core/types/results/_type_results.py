@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
@@ -115,6 +116,7 @@ __all__ = [
     "ApiRetryOutcome",
     "CandidatePreSpawnRejection",
     "NdjsonDriftOutcome",
+    "SessionErrorOutcome",
     "SkillResult",
     "CleanupResult",
     "CloneSuccessResult",
@@ -453,6 +455,17 @@ class NdjsonDriftOutcome:
 
 
 @dataclass(frozen=True, slots=True)
+class SessionErrorOutcome:
+    """Bounded session error messages retained for results and diagnostics."""
+
+    messages: tuple[str, ...] = ()
+
+    @classmethod
+    def from_errors(cls, errors: Sequence[str]) -> SessionErrorOutcome:
+        return cls(messages=tuple(message[:500] for message in errors[:5]))
+
+
+@dataclass(frozen=True, slots=True)
 class AuditResultOutcome:
     """Server-authored audit outcome attached to a skill result."""
 
@@ -540,6 +553,8 @@ class SkillResult:
     """Pre-contamination context bundle — populated only when clone_guard fires."""
     ndjson_drift: NdjsonDriftOutcome = field(default_factory=NdjsonDriftOutcome)
     """NDJSON parser vocabulary drift counters — populated by Codex sessions."""
+    session_error: SessionErrorOutcome = field(default_factory=SessionErrorOutcome)
+    """Bounded error messages parsed from the session's output stream."""
     audit: AuditResultOutcome = field(default_factory=AuditResultOutcome)
     """Server-authored audit outcome bundle."""
     completion_required: bool = False
@@ -608,6 +623,7 @@ class SkillResult:
             "pre_contamination_subtype": self.contamination.subtype,
             "ndjson_unknown_event_count": self.ndjson_drift.unknown_event_count,
             "ndjson_unknown_item_count": self.ndjson_drift.unknown_item_count,
+            "session_errors": list(self.session_error.messages),
             "audit_status": self.audit.status.value if self.audit.status is not None else None,
             "audit_verdict": (
                 self.audit.verdict.value if self.audit.verdict is not None else None

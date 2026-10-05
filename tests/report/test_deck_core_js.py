@@ -220,51 +220,98 @@ def test_population_sentence_explains_the_effective_population(
     }
 
 
+@pytest.mark.parametrize(
+    ("facet", "key", "selected", "expected"),
+    [
+        pytest.param(
+            "harness",
+            "codex",
+            True,
+            {
+                "text": "codex",
+                "className": "chip",
+                "disabled": False,
+                "pressed": True,
+                "reason": None,
+            },
+            id="live",
+        ),
+        pytest.param(
+            "level",
+            "L0",
+            True,
+            {
+                "text": "L0",
+                "className": "chip chip--struck",
+                "disabled": True,
+                "pressed": False,
+                "reason": (
+                    "L0 leaf agents write no session row; they exist only as subagent transcripts"
+                ),
+            },
+            id="struck",
+        ),
+        pytest.param(
+            "level",
+            "L1",
+            False,
+            {
+                "text": "L1 ✕",
+                "className": "chip chip--absent",
+                "disabled": True,
+                "pressed": False,
+                "reason": "no session row in this index records its orchestration level (#4622)",
+            },
+            id="absent-level",
+        ),
+        pytest.param(
+            "window",
+            "28d",
+            False,
+            {
+                "text": "28 days ✕",
+                "className": "chip chip--absent",
+                "disabled": True,
+                "pressed": False,
+                "reason": "index history begins 2026-09-25 — 9 days retained (#4621)",
+            },
+            id="absent-window",
+        ),
+        pytest.param(
+            None,
+            "future",
+            False,
+            {
+                "text": "future",
+                "className": "chip chip--struck",
+                "disabled": True,
+                "pressed": False,
+                "reason": "A custom strike (#9999)",
+            },
+            id="custom-issue",
+        ),
+    ],
+)
 def test_chip_presentation_covers_live_struck_absent_and_issue_reasons(
-    deck_js: Any, deck_model: dict[str, Any]
+    deck_js: Any,
+    deck_model: dict[str, Any],
+    facet: str | None,
+    key: str,
+    selected: bool,
+    expected: dict[str, Any],
 ) -> None:
-    cohort = deck_model["chips"]["cohort"]
-    live = next(chip for chip in cohort["harness"] if chip["key"] == "codex")
-    assert deck_js.call("DeckCore.chipPresentation", live, True) == {
-        "text": live["label"],
-        "className": "chip",
-        "disabled": False,
-        "pressed": True,
-        "reason": None,
-    }
-
-    struck = next(chip for chip in cohort["level"] if chip["key"] == "L0")
-    struck_view = deck_js.call("DeckCore.chipPresentation", struck, True)
-    assert struck_view == {
-        "text": struck["label"],
-        "className": "chip chip--struck",
-        "disabled": True,
-        "pressed": False,
-        "reason": struck["reason"],
-    }
-
-    absent_level = next(chip for chip in cohort["level"] if chip["key"] == "L1")
-    absent_view = deck_js.call("DeckCore.chipPresentation", absent_level, False)
-    assert absent_view["text"] == absent_level["label"] + " ✕"
-    assert absent_view["className"] == "chip chip--absent"
-    assert absent_view["disabled"] is True
-    assert absent_view["pressed"] is False
-    assert absent_view["reason"].endswith("(#4622)")
-
-    absent_window = next(chip for chip in cohort["window"] if chip["key"] == "28d")
-    assert deck_js.call("DeckCore.chipPresentation", absent_window, False)["reason"].endswith(
-        "(#4621)"
+    chip = (
+        next(chip for chip in deck_model["chips"]["cohort"][facet] if chip["key"] == key)
+        if facet is not None
+        else {
+            "key": key,
+            "label": key,
+            "state": ChipState.STRUCK.value,
+            "reason": "A custom strike",
+            "issue": 9999,
+        }
     )
-    custom_strike = {
-        "key": "future",
-        "label": "future",
-        "state": ChipState.STRUCK.value,
-        "reason": "A custom strike",
-        "issue": 9999,
-    }
-    assert deck_js.call("DeckCore.chipPresentation", custom_strike, False)["reason"] == (
-        "A custom strike (#9999)"
-    )
+    assert deck_js.call("DeckCore.chipPresentation", chip, selected) == expected
 
 
 @pytest.mark.parametrize(

@@ -1,8 +1,11 @@
-"""Deterministic session rows shared by deck tests."""
+"""Deterministic sample data shared by deck tests."""
 
+from datetime import UTC, datetime
 from typing import Any
 
 from autoskillit.report.deck._registry import SESSION_COLUMNS
+
+DECK_GENERATED_AT = datetime(2026, 10, 4, tzinfo=UTC)
 
 
 def session_row(key: str, **fields: Any) -> dict[str, Any]:

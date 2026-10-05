@@ -8,9 +8,7 @@ from py_mini_racer import MiniRacer
 
 from autoskillit.core import pkg_root
 from autoskillit.report.deck import build_deck_payload
-from tests.report._fixtures import session_row
-
-DECK_GENERATED_AT = datetime(2026, 10, 4, tzinfo=UTC)
+from tests.report._fixtures import DECK_GENERATED_AT, session_row
 
 
 @pytest.fixture

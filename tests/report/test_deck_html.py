@@ -2,7 +2,6 @@
 
 import json
 import re
-from datetime import UTC, datetime
 from html.parser import HTMLParser
 from typing import Any
 
@@ -15,10 +14,9 @@ from autoskillit.report.deck import build_deck_payload
 from autoskillit.report.deck import render_deck as render_deck_from_deck
 from autoskillit.report.deck._html import render_deck_html, script_hash
 from autoskillit.report.deck._registry import DECK_VIEWS
+from tests.report._fixtures import DECK_GENERATED_AT
 
 pytestmark = [pytest.mark.small]
-
-GEN = datetime(2026, 10, 4, tzinfo=UTC)
 
 
 class _HTMLCollector(HTMLParser):
@@ -123,7 +121,7 @@ def test_embedded_json_escapes_markup_and_round_trips(deck_rows: list[dict[str, 
             "skill": "</script><img src=x onerror=alert(1)><!--deck:css-->",
         },
     ]
-    payload = build_deck_payload(rows, generated_at=GEN, index_schema_version=1)
+    payload = build_deck_payload(rows, generated_at=DECK_GENERATED_AT, index_schema_version=1)
     html = render_deck_html(payload)
     collector = _collect(html)
     data = next(source for attrs, source in collector.scripts if attrs.get("id") == "deck-data")
@@ -215,5 +213,10 @@ def test_render_deck_facades_match_html_wrapper(
 ) -> None:
     expected = render_deck_html(deck_payload)
 
-    assert render_deck(deck_rows, generated_at=GEN, index_schema_version=1) == expected
-    assert render_deck_from_deck(deck_rows, generated_at=GEN, index_schema_version=1) == expected
+    assert (
+        render_deck(deck_rows, generated_at=DECK_GENERATED_AT, index_schema_version=1) == expected
+    )
+    assert (
+        render_deck_from_deck(deck_rows, generated_at=DECK_GENERATED_AT, index_schema_version=1)
+        == expected
+    )

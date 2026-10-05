@@ -16,16 +16,16 @@ from autoskillit.report.deck._registry import (
     SESSION_COLUMNS,
     SESSION_TABLE,
 )
+from tests.report._fixtures import DECK_GENERATED_AT
 from tests.report._fixtures import session_row as _row
 
 pytestmark = [pytest.mark.small]
-GEN = datetime(2026, 10, 4, tzinfo=UTC)
 EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
-GEN_MS = (GEN - EPOCH) // timedelta(milliseconds=1)
+GEN_MS = (DECK_GENERATED_AT - EPOCH) // timedelta(milliseconds=1)
 
 
 def _payload(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    return build_deck_payload(rows, generated_at=GEN, index_schema_version=7)
+    return build_deck_payload(rows, generated_at=DECK_GENERATED_AT, index_schema_version=7)
 
 
 def _chip(chips: dict[str, list[dict[str, Any]]], facet: str, key: str) -> dict[str, Any]:

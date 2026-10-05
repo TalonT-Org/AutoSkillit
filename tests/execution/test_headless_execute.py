@@ -11,7 +11,7 @@ import pytest
 import structlog
 
 import autoskillit.execution.headless._headless_execute as _patch_headless__headless_execute
-from autoskillit.core import CmdSpec
+from autoskillit.core import CmdSpec, ValidatedAddDir
 from autoskillit.core.types import SubprocessResult, TerminationReason
 from tests.execution.conftest import _sink_env
 
@@ -600,6 +600,14 @@ async def test_real_backend_launches_keep_idle_policy_out_of_cmd_spec_and_pass_l
     original_builder = type(real_backend).build_skill_session_cmd
 
     def build_skill_session_spec(self, *args, **kwargs):
+        if backend_name == "codex" and not kwargs.get("add_dirs"):
+            kwargs["add_dirs"] = (
+                ValidatedAddDir(
+                    path=str(tmp_path / "add-dir"),
+                    session_home=str(tmp_path),
+                    skill_entries=(("test", "test/SKILL.md"),),
+                ),
+            )
         spec = original_builder(self, *args, **kwargs)
         built_specs.append(spec)
         return spec

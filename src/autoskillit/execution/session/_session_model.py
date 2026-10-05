@@ -26,6 +26,7 @@ from autoskillit.execution.session._provider_parse import _parse_provider_record
 from autoskillit.execution.session.turn_usage import (
     build_turn_token_entry,
     classify_token_measure,
+    claude_inclusive_input_tokens,
     first_nonempty_string,
     first_valid_token_count,
     merge_turn_usage,
@@ -410,11 +411,7 @@ def _build_turn_usage_and_model_buckets(
         raw_input = row["input_tokens"]
         cache_read = row["cache_read_tokens"]
         cache_creation = row["cache_creation_tokens"]
-        inclusive_input = (
-            raw_input + cache_read + cache_creation
-            if raw_input is not None and cache_read is not None and cache_creation is not None
-            else None
-        )
+        inclusive_input = claude_inclusive_input_tokens(raw_input, cache_read, cache_creation)
         windows = model_windows.get(model, set()) if model is not None else set()
         context_window = next(iter(windows)) if len(windows) == 1 else None
         turn_usage.append(

@@ -230,6 +230,17 @@ def first_valid_token_count(usage: Mapping[str, Any], *fields: str) -> int | Non
     return None
 
 
+def claude_inclusive_input_tokens(
+    raw_input: int | None,
+    cache_read: int | None,
+    cache_write: int | None,
+) -> int | None:
+    """Return inclusive Claude input only when every raw component was observed."""
+    if raw_input is None or cache_read is None or cache_write is None:
+        return None
+    return raw_input + cache_read + cache_write
+
+
 def valid_context_window(value: Any) -> int | None:
     """Return a positive provider-supplied context capacity."""
     count = valid_token_count(value)

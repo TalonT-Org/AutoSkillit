@@ -157,14 +157,14 @@ class OperationLeaseHandle:
             return
         try:
             write_versioned_json(path, self.record.to_payload(), schema_version=_SCHEMA_VERSION)
-        except OSError:
+        except OSError as exc:
             self.path = None
             logger.warning("operation_lease_narrow_write_failed", path=str(path), exc_info=True)
             try:
                 path.unlink(missing_ok=True)
             except OSError:
                 logger.warning("operation_lease_unlink_failed", path=str(path), exc_info=True)
-            raise
+            raise OSError("Operation lease deadline could not be persisted") from exc
 
 
 def current_operation_lease() -> OperationLeaseHandle | None:

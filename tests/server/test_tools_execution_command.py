@@ -574,6 +574,42 @@ class TestRunSkillMcpTimeout:
     """run_skill wraps executor.run with anyio.fail_after(mcp_tool_timeout_sec)."""
 
     @pytest.mark.anyio
+    async def test_run_skill_sanitizes_lease_narrow_write_failure(
+        self, tool_ctx_kitchen_open, tmp_path, monkeypatch
+    ):
+        import time
+
+        import autoskillit.core.plugins._operation_lease as lease_module
+        from autoskillit.core import operation_lease
+
+        cfg = _command_config()
+        cfg.safety.require_dry_walkthrough = False
+        tool_ctx_kitchen_open.config = cfg
+        tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))
+
+        async with operation_lease(
+            tmp_path,
+            operation="run_skill",
+            not_after_epoch=time.time() + 100_000,
+            registry=tool_ctx_kitchen_open.in_flight_operations,
+        ) as handle:
+            path = handle.path
+            assert path is not None
+
+            def fail_write(*args, **kwargs):
+                raise OSError(f"permission denied: {path}")
+
+            monkeypatch.setattr(lease_module, "write_versioned_json", fail_write)
+            result_json = await run_skill("/investigate lease deadline", "/tmp")
+
+        result = json.loads(result_json)
+        assert result["subtype"] == "crashed"
+        assert "Operation lease deadline could not be persisted" in result["result"]
+        assert str(path) not in result_json
+        assert tool_ctx_kitchen_open.in_flight_operations.active_count == 0
+        assert not tuple(tmp_path.glob("*.lease.json"))
+
+    @pytest.mark.anyio
     async def test_run_skill_narrows_current_operation_lease_to_invocation_deadline(
         self, tool_ctx_kitchen_open, monkeypatch
     ):

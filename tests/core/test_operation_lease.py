@@ -395,7 +395,7 @@ async def test_narrow_write_failure_retires_lease_and_balances_count(
             raise OSError("rewrite failed")
 
         monkeypatch.setattr(lease_module, "write_versioned_json", fail_write)
-        with pytest.raises(OSError, match="rewrite failed"):
+        with pytest.raises(OSError, match="Operation lease deadline could not be persisted"):
             handle.narrow(narrowed_deadline)
         assert handle.record.not_after_epoch == narrowed_deadline
         assert handle.path is None

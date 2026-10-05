@@ -5,6 +5,43 @@ globalThis.DeckCore = (() => {
   const enc = encodeURIComponent;
   const formatCount = n => new Intl.NumberFormat("en-US").format(n);
   const formatDate = ms => new Date(ms).toISOString().slice(0, 10);
+
+  function formatRatio(ratio, percent = false) {
+    if (!ratio || (ratio.state !== "measured" && ratio.state !== "measured_zero")) return null;
+    if (ratio.state === "measured_zero") return percent ? "0%" : "0";
+    if (typeof ratio.value !== "number" || !Number.isFinite(ratio.value)) return null;
+    const value = Math.round(ratio.value * (percent ? 100 : 1) * 100) / 100;
+    return String(value) + (percent ? "%" : "");
+  }
+
+  function ratioSample(ratio) {
+    if (ratio?.sample_size == null) return "sample size unavailable";
+    const unit = ratio.sample_unit === "skill-run" ? "skill run" :
+      ratio.sample_unit === "child-invocation" ? "child invocation" : ratio.sample_unit;
+    return formatCount(ratio.sample_size) + " " + unit + (ratio.sample_size === 1 ? "" : "s");
+  }
+
+  function reviewEligibility(ratio, definitions) {
+    const roles = [...new Set(ratio?.definition_roles ?? [])];
+    if (!ratio || (ratio.state !== "measured" && ratio.state !== "measured_zero")) {
+      return {eligible: false,
+        reason: ratio?.review_reason || "No measured review signal is available.", roles};
+    }
+    if (ratio.review_eligible !== true || !(ratio.sample_size > 0)) {
+      return {eligible: false,
+        reason: ratio.review_reason || "This signal is not eligible for review.", roles};
+    }
+    if (!roles.length) {
+      return {eligible: false,
+        reason: "No contributor definitions are linked to this signal.", roles};
+    }
+    const unavailable = roles.filter(role => definitions?.[role]?.state !== "available");
+    if (unavailable.length) {
+      return {eligible: false,
+        reason: "Contributor definitions unavailable: " + unavailable.join(", ") + ".", roles};
+    }
+    return {eligible: true, reason: null, roles};
+  }
   const decodeTable = ({columns, rows}) => rows.map(r =>
     Object.fromEntries(columns.map((c, i) => [c, r[i]])));
 
@@ -124,9 +161,9 @@ globalThis.DeckCore = (() => {
       roleRows = roleRows.filter(row => row.role === route.entity);
     }
     const relationships = (prepared.relationships ?? []).filter(edge => {
-      if (viewId === "skill" && route.entity && edge.skill !== route.entity) return false;
-      if (viewId === "role" && route.entity && edge.role !== route.entity) return false;
-      return harnesses.has(edge.harness) && providers.has(edge.provider);
+      if (viewId === "skill" && route.entity != null) return edge.skill === route.entity;
+      if (viewId === "role" && route.entity != null) return edge.role === route.entity;
+      return true;
     });
 
     return {
@@ -261,5 +298,6 @@ globalThis.DeckCore = (() => {
   return Object.freeze({decodeTable, encodeRoute, decodeRoute, hrefFor, effectiveSelection,
     toggleSelection, windowSelection, selectPrepared, filterRows, populationSentence,
     summarizePairs, sortRows, parseSort, chipPresentation, availabilityPresentation,
-    barLayout, formatCount, formatDate, CHIP_STATES, DAY_MS});
+    barLayout, formatCount, formatRatio, ratioSample, reviewEligibility, formatDate,
+    CHIP_STATES, DAY_MS});
 })();

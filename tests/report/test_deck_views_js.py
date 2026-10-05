@@ -147,6 +147,7 @@ def _view_context(view_id: str, *, definitions_available: bool = True) -> dict[s
         "review_reason": "Definitions are available for all contributors.",
         "definition_roles": list(roles),
     }
+    skill_ratio = {**ratio, "sample_unit": "skill-run"}
     skill_row = {
         "skill": "summarizer",
         "harness": "codex",
@@ -157,7 +158,7 @@ def _view_context(view_id: str, *, definitions_available: bool = True) -> dict[s
             "cache_read_tokens": {"state": "measured", "value": 20, "runs": 2},
             "cache_write_tokens": {"state": "measured", "value": 3, "runs": 2},
         },
-        "ratios": {"input_output": ratio, "cache_read_input": ratio},
+        "ratios": {"input_output": skill_ratio, "cache_share": skill_ratio},
         "recipe_steps": [],
     }
     role_row = {
@@ -166,10 +167,11 @@ def _view_context(view_id: str, *, definitions_available: bool = True) -> dict[s
         "harnesses": [
             {
                 "harness": "codex",
+                "models": ["observed-model"],
                 "measures": {"input_tokens": {"state": "measured", "value": 11, "runs": 2}},
                 "ratios": {
                     "input_output": ratio,
-                    "cache_read_input": ratio,
+                    "cache_share": ratio,
                     "tool_mix": {"read_file": ratio},
                 },
             }
@@ -227,6 +229,9 @@ def test_each_prepared_view_renders_its_population_and_cohort_links(deck_asset: 
         role_view = context.call("DeckTest.render", "role", _view_context("role"))
         assert "L0" in role_view["text"]
         assert "spawning skill level" in role_view["text"].lower()
+        assert "observed-model" in role_view["text"]
+        assert "Claude Code declared tools" in role_view["text"]
+        assert "Codex read-only tools" in role_view["text"]
     finally:
         context.close()
 
@@ -236,29 +241,56 @@ def test_review_toggle_requires_every_contributor_definition_and_resets_route(
 ) -> None:
     context = _load_renderers(deck_asset)
     try:
-        available = context.call("DeckTest.render", "role", _view_context("role"))
+        available = context.call("DeckTest.render", "efficiency", _view_context("efficiency"))
         assert available["review"] is not None
         assert "disabled" not in available["review"]["attrs"]
+        assert available["text"].index("definition-first marker") < available["text"].index(
+            "Show reviewable signals"
+        )
 
         unavailable = context.call(
-            "DeckTest.render", "role", _view_context("role", definitions_available=False)
+            "DeckTest.render",
+            "efficiency",
+            _view_context("efficiency", definitions_available=False),
         )
         assert unavailable["review"] is not None
         assert "disabled" in unavailable["review"]["attrs"]
         assert "definition" in unavailable["text"].lower()
 
-        context.call("DeckTest.render", "role", _view_context("role"))
+        context.call("DeckTest.render", "efficiency", _view_context("efficiency"))
         enabled_hash = context.call("DeckTest.clickReview")
         enabled_route = context.call("DeckCore.decodeRoute", enabled_hash, "cohort")
         assert enabled_route["params"].get("review")
         assert enabled_route["params"].get("harness") == ["codex"]
         assert enabled_route["params"].get("provider") == ["openai"]
 
-        context.call("DeckTest.render", "role", {**_view_context("role"), "route": enabled_route})
+        context.call(
+            "DeckTest.render",
+            "efficiency",
+            {**_view_context("efficiency"), "route": enabled_route},
+        )
         reset_hash = context.call("DeckTest.clickReview")
         reset_route = context.call("DeckCore.decodeRoute", reset_hash, "cohort")
         assert "review" not in reset_route["params"]
         assert reset_route["params"].get("harness") == ["codex"]
         assert reset_route["params"].get("provider") == ["openai"]
+    finally:
+        context.close()
+
+
+def test_role_definition_and_spawning_links_survive_empty_metric_scope(deck_asset: Any) -> None:
+    context = _load_renderers(deck_asset)
+    try:
+        view = _view_context("role")
+        view["route"]["entity"] = "reviewer"
+        view["metrics"] = []
+        view["roleMetrics"] = []
+
+        rendered = context.call("DeckTest.render", "role", view)
+
+        assert "reviewer" in rendered["text"]
+        assert "reviewer role instructions" in rendered["text"]
+        assert "No child-invocation metrics match these facets." in rendered["text"]
+        assert any("#/skill/summarizer" in href for href in rendered["links"])
     finally:
         context.close()

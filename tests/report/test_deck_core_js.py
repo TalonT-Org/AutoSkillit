@@ -269,6 +269,98 @@ def test_prepared_selection_returns_no_metrics_for_stale_scope(deck_js: Any) -> 
 
 
 @pytest.mark.parametrize(
+    ("levels", "expected"),
+    [
+        pytest.param(None, ["short-window-skill"], id="window-local-default"),
+        pytest.param(["L1", "L2"], ["short-window-skill"], id="mixed-levels-intersect"),
+        pytest.param(["L2"], [], id="unobserved-window-level-is-empty"),
+    ],
+)
+def test_prepared_selection_uses_the_selected_windows_level_domain(
+    deck_js: Any,
+    levels: list[str] | None,
+    expected: list[str],
+) -> None:
+    chips = {
+        "window": [
+            {"key": "7d", "match": "7d", "label": "7d", "state": "live", "days": 7},
+            {"key": "all", "match": "all", "label": "all", "state": "live", "days": None},
+        ],
+        "level": [
+            {"key": "L1", "match": "skill", "label": "L1", "state": "live"},
+            {"key": "L2", "match": "orchestrator", "label": "L2", "state": "live"},
+        ],
+        "harness": [{"key": "codex", "match": "codex", "label": "codex", "state": "live"}],
+        "provider": [{"key": "openai", "match": "openai", "label": "openai", "state": "live"}],
+    }
+    short_row = {"skill": "short-window-skill", "harness": "codex", "provider": "openai"}
+    all_row = {"skill": "older-orchestrator", "harness": "codex", "provider": "openai"}
+    prepared = {
+        "skills": [
+            {"window": "7d", "levels": ["skill"], "rows": [short_row]},
+            {"window": "all", "levels": ["orchestrator", "skill"], "rows": [all_row]},
+        ],
+        "roles": [],
+        "relationships": [],
+        "definitions": {},
+    }
+    params = {"window": ["7d"], "harness": ["codex"], "provider": ["openai"]}
+    if levels is not None:
+        params["level"] = levels
+
+    selected = deck_js.call(
+        "DeckCore.selectPrepared", prepared, "skill", chips, {"params": params}
+    )
+
+    assert [row["skill"] for row in selected["skillRows"]] == expected
+
+
+def test_prepared_selection_keeps_skill_edges_with_unknown_child_provider(
+    deck_js: Any,
+) -> None:
+    chips = {
+        "window": [{"key": "all", "match": "all", "label": "all", "state": "live", "days": None}],
+        "level": [{"key": "L1", "match": "skill", "label": "L1", "state": "live"}],
+        "harness": [{"key": "codex", "match": "codex", "label": "codex", "state": "live"}],
+        "provider": [{"key": "openai", "match": "openai", "label": "openai", "state": "live"}],
+    }
+    skill = {
+        "skill": "parent-skill",
+        "harness": "codex",
+        "provider": "openai",
+        "measures": {"input_tokens": {"state": "measured", "value": 42}},
+    }
+    edge = {
+        "skill": "parent-skill",
+        "role": "native-reader",
+        "harness": "codex",
+        "provider": "unknown",
+    }
+    prepared = {
+        "skills": [{"window": "all", "levels": ["skill"], "rows": [skill]}],
+        "roles": [],
+        "relationships": [edge, {**edge, "skill": "another-skill"}],
+        "definitions": {"native-reader": {"state": "available"}},
+        "view_histories": {"skill": {"first_ms": 1, "last_ms": 1, "untimed": 0}},
+    }
+    route = {
+        "view": "skill",
+        "entity": "parent-skill",
+        "params": {
+            "window": ["all"],
+            "level": ["L1"],
+            "harness": ["codex"],
+            "provider": ["openai"],
+        },
+    }
+
+    selected = deck_js.call("DeckCore.selectPrepared", prepared, "skill", chips, route)
+
+    assert selected["skillRows"] == [skill]
+    assert selected["relationships"] == [edge]
+
+
+@pytest.mark.parametrize(
     ("params", "expected_keys", "untimed"),
     [
         pytest.param({"level": ["unrecorded"]}, ["s1", "s2", "s3", "s4"], 0, id="unrecorded"),

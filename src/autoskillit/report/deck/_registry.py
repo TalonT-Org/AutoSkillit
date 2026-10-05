@@ -152,8 +152,8 @@ DECK_VIEWS: tuple[DeckViewDef, ...] = (
         "Where it is worth spending optimization time at all",
         "What do you need to know?",
         None,
+        "views/spend.js",
         None,
-        4651,
     ),
     DeckViewDef(
         "efficiency",
@@ -161,8 +161,8 @@ DECK_VIEWS: tuple[DeckViewDef, ...] = (
         "Which skill or role is wasteful, as opposed to merely big",
         "What do you need to know?",
         None,
+        "views/efficiency.js",
         None,
-        4651,
     ),
     DeckViewDef(
         "skill",
@@ -170,8 +170,8 @@ DECK_VIEWS: tuple[DeckViewDef, ...] = (
         "Which step, which subagent, how much is re-transmitted prompt",
         "What do you need to know?",
         None,
+        "views/skill.js",
         None,
-        4651,
     ),
     DeckViewDef(
         "role",
@@ -179,8 +179,8 @@ DECK_VIEWS: tuple[DeckViewDef, ...] = (
         "Whether to restrict a role to read-only on a smaller model",
         "What do you need to know?",
         None,
+        "views/role.js",
         None,
-        4651,
     ),
     DeckViewDef(
         "context",

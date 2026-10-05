@@ -1802,9 +1802,12 @@ class MockSubprocessRunner(SubprocessRunner):
         on_process_spawned: Callable[[int, int], None] | None = None,
         on_process_reaped: Callable[[int, int], None] | None = None,
         pass_fds: tuple[int, ...] = (),
+        operation_lease_dir: Path | None = None,
         **kwargs: object,
     ) -> SubprocessResult:
         kwargs["pass_fds"] = pass_fds
+        if operation_lease_dir is not None:
+            kwargs["operation_lease_dir"] = operation_lease_dir
         kwargs["on_process_spawned"] = on_process_spawned
         kwargs["on_process_reaped"] = on_process_reaped
         self.call_args_list.append((cmd, cwd, timeout, kwargs))

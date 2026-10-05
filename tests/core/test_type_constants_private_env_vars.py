@@ -32,6 +32,7 @@ def test_private_env_vars_includes_execution_control_vars() -> None:
         "AUTOSKILLIT_ALLOWED_WRITE_PREFIX",
         "AUTOSKILLIT_ALLOWED_WRITE_PREFIXES",
         "MAX_MCP_OUTPUT_TOKENS",
+        "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT",
     }
     assert expected <= AUTOSKILLIT_PRIVATE_ENV_VARS
 

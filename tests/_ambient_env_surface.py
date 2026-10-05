@@ -1033,19 +1033,19 @@ FORWARDING_SITES: dict[str, str] = {
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         " Codex generic-prompt launch; the finalized generated home is layered by the caller."
     ),
-    "execution/backends/_codex/session_commands.py:187": (
+    "execution/backends/_codex/session_commands.py:176": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex skill-session launch."
     ),
-    "execution/backends/_codex/session_commands.py:518": (
+    "execution/backends/_codex/session_commands.py:494": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex food-truck orchestrator-session launch."
     ),
-    "execution/backends/_codex/session_commands.py:205": (
+    "execution/backends/_codex/session_commands.py:194": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before extras merge for a Codex interactive-session"
         "launch base env."
     ),
-    "execution/backends/_codex/session_commands.py:732": (
+    "execution/backends/_codex/session_commands.py:707": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex resume-session launch."
     ),
@@ -1527,9 +1527,8 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
         disposition="scrub",
         owner="autoskillit",
         justification=(
-            "Real AutoSkillit orchestration/session-control environment variable read by"
-            "production code; scrubbed as internal state that must not leak across test"
-            "boundaries."
+            "Produced by the L2 food-truck attempt and consumed by its kitchen for the"
+            "one-session L1 idle policy; private so nested launches cannot inherit it."
         ),
     ),
     "AUTOSKILLIT_INSTALLED_VERSION": AmbientEnvDisposition(

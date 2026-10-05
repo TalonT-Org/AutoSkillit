@@ -507,6 +507,7 @@ class TestGroupDApiContractPreservation:
             "max_extension_seconds",
             "marker_dir",
             "session_id",
+            "operation_lease_dir",
             "stream_parser",
             "inspector_callback",
             "workload_basenames",
@@ -589,6 +590,7 @@ class TestGroupDApiContractPreservation:
             "max_extension_seconds",
             "marker_dir",
             "session_id",
+            "operation_lease_dir",
             "stream_parser",
             "completion_record_types",
             "session_record_types",
@@ -626,6 +628,13 @@ class TestGroupDApiContractPreservation:
         assert marker_dir_idx == session_id_timeout_idx + 1
         assert session_id_idx == marker_dir_idx + 1
 
+    def test_run_managed_async_operation_lease_dir_defaults_and_order(self):
+        sig = inspect.signature(run_managed_async)
+        assert sig.parameters["operation_lease_dir"].default is None
+        assert list(sig.parameters).index("operation_lease_dir") == (
+            list(sig.parameters).index("session_id") + 1
+        )
+
     def test_default_subprocess_runner_marker_dir_session_id_defaults(self):
         """DefaultSubprocessRunner.__call__ marker_dir and session_id default to None."""
         sig = inspect.signature(DefaultSubprocessRunner.__call__)
@@ -640,6 +649,13 @@ class TestGroupDApiContractPreservation:
         session_id_idx = list(sig.parameters).index("session_id")
         assert marker_dir_idx == max_extension_idx + 1
         assert session_id_idx == marker_dir_idx + 1
+
+    def test_default_subprocess_runner_operation_lease_dir_defaults_and_order(self):
+        sig = inspect.signature(DefaultSubprocessRunner.__call__)
+        assert sig.parameters["operation_lease_dir"].default is None
+        assert list(sig.parameters).index("operation_lease_dir") == (
+            list(sig.parameters).index("session_id") + 1
+        )
 
     def test_default_subprocess_runner_satisfies_protocol_with_marker_params(self):
         """DefaultSubprocessRunner() satisfies SubprocessRunner with marker_dir/session_id."""

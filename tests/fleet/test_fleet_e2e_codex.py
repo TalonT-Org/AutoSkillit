@@ -109,6 +109,46 @@ def _add_recipe(recipes: InMemoryRecipeRepository, name: str) -> None:
 class TestCodexFleetE2E:
     """REQ-SHIM-001: codex shim dispatch through event-driven result path."""
 
+    @pytest.mark.anyio
+    async def test_food_truck_lease_channel_and_l2_idle_floor(
+        self, codex_runtime: dict[str, Any]
+    ) -> None:
+        ctx = codex_runtime["tool_ctx"]
+        recipes = codex_runtime["recipes"]
+        runner: FleetTestRunner = codex_runtime["runner"]
+        _add_recipe(recipes, "lease-floor-recipe")
+        ctx.config.run_skill.timeout = 3600
+        ctx.config.fleet.idle_output_timeout = 1800
+        channels: list[Path] = []
+
+        for dispatch_name, override, expected_idle in (
+            ("below-floor", 1800, 3600),
+            ("above-floor", 4200, 4200),
+        ):
+            await execute_dispatch(
+                tool_ctx=ctx,
+                recipe="lease-floor-recipe",
+                task="verify operation lease launch wiring",
+                ingredients=None,
+                dispatch_name=dispatch_name,
+                timeout_sec=None,
+                idle_output_timeout=override,
+                prompt_builder=_simple_prompt_builder,
+                quota_refresher=_noop_quota_refresher,
+            )
+
+            call = runner.last_kwargs
+            channel = call["operation_lease_dir"]
+            assert isinstance(channel, Path) and channel.is_absolute()
+            assert call["env"]["AUTOSKILLIT_OPERATION_LEASE_DIR"] == str(channel)
+            assert runner.operation_lease_dir_exists_during_call is True
+            assert call["idle_output_timeout"] == expected_idle
+            assert call["env"]["AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT"] == "1800"
+            assert not channel.exists()
+            channels.append(channel)
+
+        assert channels[0] != channels[1]
+
     @pytest.fixture()
     def codex_runtime(
         self, tool_ctx: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

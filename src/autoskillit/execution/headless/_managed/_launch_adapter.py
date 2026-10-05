@@ -121,7 +121,6 @@ class _HeadlessLaunchAdapter:
             "origin": repr(spec.origin),
             "nonsecret_env": nonsecret_environment,
             "secret_keys": secret_keys,
-            "process_idle_timeout_ms": spec.process_idle_timeout_ms,
             "inherited_fd_count": len(spec.inherited_fds),
             "force_inactive_agent_teams": self._force_inactive_agent_teams,
             "app_server_plan": _app_server_plan_digest_payload(spec.app_server_plan),

@@ -45,7 +45,6 @@ def test_cmd_spec_fields():
         "cwd",
         "origin",
         "is_resume",
-        "process_idle_timeout_ms",
         "inherited_fds",
         "managed_skill_catalog",
         "projected_skill_entries",
@@ -67,13 +66,6 @@ def test_cmd_spec_is_resume_default():
 
     spec = CmdSpec(cmd=(), env={})
     assert spec.is_resume is False
-
-
-def test_cmd_spec_process_idle_timeout_default():
-    from autoskillit.core import CmdSpec
-
-    spec = CmdSpec(cmd=(), env={})
-    assert spec.process_idle_timeout_ms == 0
 
 
 def test_cmd_spec_inherited_fds_default():

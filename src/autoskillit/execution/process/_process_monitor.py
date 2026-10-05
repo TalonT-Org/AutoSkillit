@@ -10,7 +10,13 @@ from typing import TYPE_CHECKING, Literal, NamedTuple
 import anyio
 import psutil
 
-from autoskillit.core import VANISHED_ERRORS, ChannelBStatus, get_logger, scan_observed
+from autoskillit.core import (
+    VANISHED_ERRORS,
+    ChannelBStatus,
+    get_logger,
+    read_active_operation_leases,
+    scan_observed,
+)
 from autoskillit.execution.process._process_jsonl import (
     EventCursor,
     _jsonl_contains_marker,
@@ -22,6 +28,49 @@ if TYPE_CHECKING:
     from autoskillit.core import ObservedEntry, SessionEvent, StreamParser
 
 logger = get_logger(__name__)
+
+
+class _OperationLeaseActivity:
+    """Sample operation evidence, refresh its clock, and throttle deferred logs."""
+
+    def __init__(
+        self,
+        channel: Path | None,
+        event: str,
+        log: Callable[..., None],
+    ) -> None:
+        self._channel = channel
+        self._event = event
+        self._log = log
+        self._signature: tuple[tuple[str, float], ...] = ()
+        self._logged_at: float | None = None
+
+    def refresh(
+        self,
+        now: float,
+        reference: float,
+        suppression_start: float | None,
+        *,
+        silence_seconds: float,
+    ) -> tuple[float, float | None]:
+        leases = (
+            read_active_operation_leases(self._channel, now_epoch=time.time())
+            if self._channel is not None
+            else ()
+        )
+        if not leases:
+            return reference, suppression_start
+        signature = tuple((lease.operation_id, lease.not_after_epoch) for lease in leases)
+        if signature != self._signature or self._logged_at is None or now - self._logged_at >= 300:
+            self._log(
+                self._event,
+                operation=leases[0].operation,
+                not_after_epoch=leases[0].not_after_epoch,
+                silence_seconds=silence_seconds,
+            )
+            self._signature = signature
+            self._logged_at = now
+        return now, None
 
 
 class SessionMonitorResult(NamedTuple):
@@ -240,12 +289,20 @@ async def _discover_session_log(
     phase1_timeout: float,
     expected_session_id: str | None,
     resume_cursor: EventCursor | None,
+    operation_lease_dir: Path | None = None,
 ) -> Path | SessionMonitorResult:
     """Find the session JSONL file or report why discovery cannot continue."""
     session_file = None
     os_error_count = 0
     phase1_start = time.monotonic()
     while session_file is None:
+        operation_leases = (
+            read_active_operation_leases(operation_lease_dir, now_epoch=time.time())
+            if operation_lease_dir is not None
+            else ()
+        )
+        if operation_leases:
+            phase1_start = time.monotonic()
         if time.monotonic() - phase1_start >= phase1_timeout:
             logger.warning(
                 "Session log file not found within phase1_timeout (%.1fs); treating as stale",
@@ -297,10 +354,12 @@ def _active_liveness_signals(
     pid: int | None,
     marker_dir: Path | None,
     session_id: str | None,
+    *,
+    operation_lease_dir: Path | None = None,
 ) -> frozenset[str]:
-    """Return the subset of {'api_connection', 'child_processes', 'dispatch_marker'}
-    currently active — the three liveness predicates shared with _termination.py's
-    post-completion drain deferral.
+    """Return active network, child, marker, and operation-lease signals.
+
+    The same evidence set is used by the termination drain and the session monitor.
     """
     signals: set[str] = set()
     if pid is not None and _has_active_api_connection(pid):
@@ -309,6 +368,10 @@ def _active_liveness_signals(
         signals.add("child_processes")
     if marker_dir is not None and _has_active_execution_marker(marker_dir, session_id=session_id):
         signals.add("dispatch_marker")
+    if operation_lease_dir is not None and read_active_operation_leases(
+        operation_lease_dir, now_epoch=time.time()
+    ):
+        signals.add("operation_lease")
     return frozenset(signals)
 
 
@@ -407,6 +470,7 @@ async def _session_log_monitor(
     resume_cursor: EventCursor | None = None,
     on_session_file_selected: Callable[[Path, EventCursor], None] | None = None,
     has_pending_tasks: Callable[[], bool] | None = None,
+    operation_lease_dir: Path | None = None,
 ) -> SessionMonitorResult:
     """Watch Claude Code session log for completion or staleness.
 
@@ -433,6 +497,7 @@ async def _session_log_monitor(
         _phase1_timeout,
         expected_session_id,
         resume_cursor,
+        operation_lease_dir,
     )
     if isinstance(discovered, SessionMonitorResult):
         return discovered
@@ -473,10 +538,17 @@ async def _session_log_monitor(
     os_error_count = 0
     suppression_start: float | None = None
     _last_record_type: str | None = None
+    operation_activity = _OperationLeaseActivity(
+        operation_lease_dir, "stale_deferred_to_operation", logger.info
+    )
     while True:
         await anyio.sleep(_phase2_poll)
         if _on_poll is not None:
             _on_poll()
+        now = time.monotonic()
+        last_change, suppression_start = operation_activity.refresh(
+            now, last_change, suppression_start, silence_seconds=now - last_change
+        )
         try:
             current_size = session_file.stat().st_size
             os_error_count = 0
@@ -487,7 +559,7 @@ async def _session_log_monitor(
             continue
         if current_size > last_size:
             last_size = current_size
-            last_change = time.monotonic()
+            last_change = now
             suppression_start = None
             try:
                 content = session_file.read_bytes()
@@ -511,7 +583,7 @@ async def _session_log_monitor(
             except OSError:
                 pass
         else:
-            elapsed = time.monotonic() - last_change
+            elapsed = now - last_change
             if elapsed >= stale_threshold:
                 reason = _stale_suppression_reason(
                     has_pending_tasks, pid, marker_dir, caller_session_id

@@ -211,6 +211,12 @@ AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
         "AUTOSKILLIT_CWD",
         "MAX_MCP_OUTPUT_TOKENS",
         "AUTOSKILLIT_SESSION_DEADLINE",
+        # L2 producer: _merge_food_truck_extras; L1 consumer: _attempt; lifetime: one L2 session.
+        AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR,
+        # Backend launch producer; kitchen factory consumer; lifetime: one headless session.
+        "AUTOSKILLIT_CHILD_OUTCOME_LOG_DIR",
+        # Campaign session shape producer; fleet tool consumer; lifetime: one campaign session.
+        "AUTOSKILLIT_CONTINUE_ON_FAILURE",
         # Hook-script-only escape hatch (src/autoskillit/hooks/_runtime/_hook_settings.py) —
         # read directly via os.environ, bypassing Dynaconf/_CONFIG_SCHEMA entirely.
         # No quota_guard.disabled field exists; adding this name here (rather than

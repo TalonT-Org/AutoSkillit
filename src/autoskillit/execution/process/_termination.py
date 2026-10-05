@@ -88,6 +88,7 @@ async def _drain_before_escalation(
     pid: int | None,
     marker_dir: Path | None,
     session_id: str | None,
+    operation_lease_dir: Path | None = None,
     child_deferral_ceiling: float,
 ) -> tuple[int | None, ProcessCleanupResult] | None:
     with anyio.move_on_after(grace_seconds):
@@ -105,7 +106,14 @@ async def _drain_before_escalation(
                 return await anyio.to_thread.run_sync(
                     owner.settle_evidence, abandon_on_cancel=False
                 )
-            active = bool(_active_liveness_signals(pid, marker_dir, session_id))
+            active = bool(
+                _active_liveness_signals(
+                    pid,
+                    marker_dir,
+                    session_id,
+                    operation_lease_dir=operation_lease_dir,
+                )
+            )
             if not active:
                 proc_log.debug("no_active_children_proceeding_to_kill")
                 break
@@ -129,6 +137,7 @@ async def execute_termination_action(
     pid: int | None = None,
     marker_dir: Path | None = None,
     session_id: str | None = None,
+    operation_lease_dir: Path | None = None,
     child_deferral_ceiling: float = 0.0,
     process_observation_snapshot: ProcessObservationSnapshot | None = None,
 ) -> tuple[KillReason, int | None, ProcessCleanupResult]:
@@ -162,6 +171,7 @@ async def execute_termination_action(
                 pid=pid,
                 marker_dir=marker_dir,
                 session_id=session_id,
+                operation_lease_dir=operation_lease_dir,
                 child_deferral_ceiling=child_deferral_ceiling,
             )
             if settled is not None:

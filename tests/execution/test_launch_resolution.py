@@ -137,7 +137,6 @@ def _adapter_result(preparation, **changes: object) -> LaunchAdapterResult:
                     for value in (preparation.command, *preparation.arguments)
                 ),
             ),
-            process_idle_timeout_ms=90_000,
             inherited_fds=(9, 11),
         ),
     }
@@ -799,20 +798,20 @@ def test_resolved_contract_rejects_malformed_command_origin_pairs(field: str) ->
         ResolvedLaunchContract.from_payload(payload)
 
 
-def test_launch_contract_schema_is_exactly_version_four() -> None:
+def test_launch_contract_schema_is_exactly_version_five() -> None:
     resolver = DefaultLaunchResolver()
     contract = resolver.finalize(resolver.prepare(_request()), _Adapter())
 
-    assert LAUNCH_CONTRACT_SCHEMA_VERSION == 4
-    assert contract.schema_version == 4
-    assert contract.canonical_payload["schema_version"] == 4
+    assert LAUNCH_CONTRACT_SCHEMA_VERSION == 5
+    assert contract.schema_version == 5
+    assert contract.canonical_payload["schema_version"] == 5
 
 
-def test_launch_contract_rejects_version_three_payload() -> None:
+def test_launch_contract_rejects_version_four_payload() -> None:
     resolver = DefaultLaunchResolver()
     contract = resolver.finalize(resolver.prepare(_request()), _Adapter())
     old_payload = dict(contract.canonical_payload)
-    old_payload["schema_version"] = 3
+    old_payload["schema_version"] = 4
 
     with pytest.raises(LaunchContractError, match="schema version"):
         ResolvedLaunchContract.from_payload(old_payload)

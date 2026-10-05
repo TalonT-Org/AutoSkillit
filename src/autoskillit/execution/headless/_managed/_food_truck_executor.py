@@ -72,7 +72,6 @@ def _merge_food_truck_extras(
     *,
     env_extras: Mapping[str, str] | None,
     requires_packs: Sequence[str],
-    idle_output_timeout: float | None,
     fleet_idle_output_timeout: float,
     run_skill_idle_output_timeout: float,
 ) -> dict[str, str]:
@@ -85,9 +84,7 @@ def _merge_food_truck_extras(
                 f"{FOOD_TRUCK_TOOL_TAGS_ENV_VAR} — use requires_packs exclusively"
             )
         merged_extras[FOOD_TRUCK_TOOL_TAGS_ENV_VAR] = ",".join(sorted(requires_packs))
-    if idle_output_timeout is not None:
-        merged_extras[AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR] = str(idle_output_timeout)
-    elif fleet_idle_output_timeout > 0:
+    if fleet_idle_output_timeout > 0:
         merged_extras.setdefault(
             AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR, str(fleet_idle_output_timeout)
         )
@@ -266,7 +263,6 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
         merged_extras = _merge_food_truck_extras(
             env_extras=env_extras,
             requires_packs=requires_packs,
-            idle_output_timeout=idle_output_timeout,
             fleet_idle_output_timeout=fleet_cfg.idle_output_timeout,
             run_skill_idle_output_timeout=cfg.run_skill.idle_output_timeout,
         )
@@ -407,13 +403,10 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
         effective_max_ext = float(fleet_cfg.max_extension_seconds)
         effective_ceiling_seconds = float(cfg.process_tether.orphan_ceiling_seconds)
         effective_systemd_scope_enabled = cfg.process_tether.systemd_scope_enabled
-        effective_idle_out: float | None = (
-            idle_output_timeout
-            if idle_output_timeout is not None
-            else float(fleet_idle)
-            if fleet_idle > 0
-            else None
+        selected_idle = (
+            idle_output_timeout if idle_output_timeout is not None else float(fleet_idle)
         )
+        effective_idle_out = max(float(selected_idle), float(cfg.run_skill.timeout))
         effective_natural_exit_grace_seconds: float = cfg.run_skill.natural_exit_grace_seconds
         effective_marker_dir: Path | None = marker_dir or (
             headless_facade._resolve_session_log_dir(

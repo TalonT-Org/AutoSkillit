@@ -769,6 +769,29 @@ async def test_recording_runner_forwards_marker_dir_and_session_id(tmp_path):
 
 
 @pytest.mark.anyio
+async def test_recording_runner_forwards_operation_lease_dir(tmp_path):
+    mock_recorder = Mock()
+    inner = MockSubprocessRunner()
+    inner.set_default(_make_result(returncode=0))
+    runner = RecordingSubprocessRunner(recorder=mock_recorder, inner=inner)
+    channel = tmp_path / "operation-leases"
+
+    await runner(
+        ["task", "test-check"],
+        cwd=tmp_path,
+        timeout=60,
+        env={"SCENARIO_STEP_NAME": "test-check"},
+        pty_mode=False,
+        marker_dir=tmp_path / "markers",
+        session_id="sess-abc",
+        operation_lease_dir=channel,
+    )
+
+    kwargs = inner.call_args_list[0][3]
+    assert kwargs["operation_lease_dir"] == channel
+
+
+@pytest.mark.anyio
 async def test_recording_runner_forwards_pass_fds_to_physical_inner(tmp_path):
     mock_recorder = Mock()
     inner = MockSubprocessRunner()
@@ -883,6 +906,24 @@ async def test_replaying_runner_accepts_marker_params(tmp_path):
 
     assert result.returncode == 0
     assert result.stdout == "ok"
+
+
+@pytest.mark.anyio
+async def test_replaying_runner_accepts_operation_lease_dir(tmp_path):
+    non_session = {"check": {"exit_code": 0, "stdout_head": "ok", "stderr": ""}}
+    runner = ReplayingSubprocessRunner({}, non_session)
+
+    result = await runner(
+        ["task", "test-check"],
+        cwd=tmp_path,
+        timeout=60,
+        env={"SCENARIO_STEP_NAME": "check"},
+        marker_dir=tmp_path / "markers",
+        session_id="sess-123",
+        operation_lease_dir=tmp_path / "operation-leases",
+    )
+
+    assert result.returncode == 0
 
 
 # --- T-DETECT-CODEX: _detect_backend_format returns 'codex' when sidecar exists ---

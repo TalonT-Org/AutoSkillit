@@ -632,7 +632,6 @@ class CmdSpec:
     cwd: str = ""
     origin: CmdOrigin | None = None
     is_resume: bool = False
-    process_idle_timeout_ms: int = 0
     inherited_fds: tuple[int, ...] = ()
     managed_skill_catalog: ValidatedAddDir | None = None
     projected_skill_entries: tuple[tuple[str, str], ...] = ()

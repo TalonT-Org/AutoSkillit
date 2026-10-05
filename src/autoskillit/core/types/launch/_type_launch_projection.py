@@ -346,7 +346,6 @@ class SkillProjectionBinding:
                 else None
             ),
             "nonsecret_env": cmd_spec.env,
-            "process_idle_timeout_ms": cmd_spec.process_idle_timeout_ms,
         }
         command_digest = sha256(
             json.dumps(

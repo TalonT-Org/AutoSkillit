@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import functools
 import subprocess
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any
@@ -11,12 +12,13 @@ from typing import IO, TYPE_CHECKING, Any
 import anyio
 import anyio.abc
 
-from autoskillit.core import InspectorEvidence, get_logger
+from autoskillit.core import InspectorEvidence, get_logger, read_active_operation_leases
 from autoskillit.execution.process._process_jsonl import fold_event_cursor
 from autoskillit.execution.process._process_monitor import (
     _has_active_api_connection,
     _has_active_child_processes,
     _has_active_execution_marker,
+    _OperationLeaseActivity,
 )
 from autoskillit.execution.process._process_race import RaceAccumulator
 
@@ -53,6 +55,7 @@ async def _watch_stdout_idle(
     *,
     marker_dir: Path | None = None,
     session_id: str | None = None,
+    operation_lease_dir: Path | None = None,
     max_suppression_seconds: float = 1800.0,
     inspector_callback: InspectorCallback | None = None,
     timeout_scope_ref: list[anyio.CancelScope | None] | None = None,
@@ -62,12 +65,23 @@ async def _watch_stdout_idle(
     import time as _time
 
     last_size: int = 0
-    last_growth_time: float = _time.monotonic()
+    last_liveness_evidence = _time.monotonic()
+    last_stdout_growth = last_liveness_evidence
     suppression_start_marker: float | None = None
+    operation_activity = _OperationLeaseActivity(
+        operation_lease_dir, "stdout_idle_deferred_to_operation", logger.info
+    )
     while True:
         await anyio.sleep(_poll_interval)
         if trigger.is_set():
             return
+        now = _time.monotonic()
+        last_liveness_evidence, suppression_start_marker = operation_activity.refresh(
+            now,
+            last_liveness_evidence,
+            suppression_start_marker,
+            silence_seconds=now - last_stdout_growth,
+        )
         try:
             current_size = stdout_path.stat().st_size
         except OSError:
@@ -75,9 +89,10 @@ async def _watch_stdout_idle(
             continue
         if current_size > last_size:
             last_size = current_size
-            last_growth_time = _time.monotonic()
+            last_liveness_evidence = now
+            last_stdout_growth = now
             suppression_start_marker = None
-        elif _time.monotonic() - last_growth_time >= idle_output_timeout:
+        elif now - last_liveness_evidence >= idle_output_timeout:
             authoritative_task_active = has_pending_tasks is not None and has_pending_tasks()
             marker_active = marker_dir is not None and _has_active_execution_marker(
                 marker_dir, session_id=session_id
@@ -110,12 +125,14 @@ async def _watch_stdout_idle(
                 ),
             )
             logger.warning(
-                "stdout idle for %ss — firing IDLE_STALL",
-                idle_output_timeout,
+                "stdout_idle_stall_firing",
+                silence_seconds=now - last_stdout_growth,
+                idle_threshold=idle_output_timeout,
+                operation_lease_dir=str(operation_lease_dir),
             )
             spared_at = await _inspect_stdout_idle(
                 stdout_path,
-                last_growth_time,
+                last_liveness_evidence,
                 acc,
                 inspector_callback,
                 timeout_scope_ref,
@@ -123,7 +140,7 @@ async def _watch_stdout_idle(
                 session_id=session_id,
             )
             if spared_at is not None:
-                last_growth_time = spared_at
+                last_liveness_evidence = spared_at
                 continue
 
             acc.idle_stall = True
@@ -133,7 +150,7 @@ async def _watch_stdout_idle(
 
 async def _inspect_stdout_idle(
     stdout_path: Path,
-    last_growth_time: float,
+    last_liveness_evidence: float,
     acc: RaceAccumulator,
     inspector_callback: InspectorCallback | None,
     timeout_scope_ref: list[anyio.CancelScope | None] | None,
@@ -165,7 +182,7 @@ async def _inspect_stdout_idle(
     )
     evidence = _package_evidence(
         stdout_path,
-        idle_seconds=_time.monotonic() - last_growth_time,
+        idle_seconds=_time.monotonic() - last_liveness_evidence,
         execution_marker_present=marker_present,
     )
     try:
@@ -197,6 +214,7 @@ async def _watch_child_activity(
     *,
     marker_dir: Path | None = None,
     session_id: str | None = None,
+    operation_lease_dir: Path | None = None,
     has_pending_tasks: Callable[[], bool] | None = None,
 ) -> None:
     """Extend the wall-clock deadline while managed child activity remains active."""
@@ -214,7 +232,13 @@ async def _watch_child_activity(
         if _first_observed_deadline is None:
             _first_observed_deadline = scope.deadline
 
-        active = (
+        operation_leases = (
+            read_active_operation_leases(operation_lease_dir, now_epoch=time.time())
+            if operation_lease_dir is not None
+            else ()
+        )
+        lease_active = bool(operation_leases)
+        active = lease_active or (
             (has_pending_tasks is not None and has_pending_tasks())
             or _has_active_child_processes(pid)
             or _has_active_api_connection(pid)
@@ -312,6 +336,7 @@ def _enroll_race_watchers(
     max_suppression_seconds: float | None,
     marker_dir: Path | None,
     session_id: str | None,
+    operation_lease_dir: Path | None = None,
     on_session_id_resolved: Callable[[str], None] | None,
     backend_resume_session_id: str,
     channel_b_selected: anyio.Event,
@@ -350,7 +375,10 @@ def _enroll_race_watchers(
             stdout_session_id_ready,
         )
         tg.start_soon(
-            _watch_session_log,
+            functools.partial(
+                _watch_session_log,
+                operation_lease_dir=operation_lease_dir,
+            ),
             session_log_dir,
             completion_marker,
             stale_threshold,
@@ -393,6 +421,7 @@ def _enroll_race_watchers(
                 trigger,
                 marker_dir=marker_dir,
                 session_id=session_id,
+                operation_lease_dir=operation_lease_dir,
                 max_suppression_seconds=max_suppression_seconds or 1800.0,
                 inspector_callback=inspector_callback,
                 timeout_scope_ref=timeout_scope_ref,
@@ -414,6 +443,7 @@ def _enroll_child_activity_watcher(
     trigger: anyio.Event,
     marker_dir: Path | None,
     session_id: str | None,
+    operation_lease_dir: Path | None = None,
     lifecycle_observation_enabled: bool,
     acc: RaceAccumulator,
 ) -> None:
@@ -427,6 +457,7 @@ def _enroll_child_activity_watcher(
                 trigger,
                 marker_dir=marker_dir,
                 session_id=session_id,
+                operation_lease_dir=operation_lease_dir,
                 has_pending_tasks=(
                     acc.has_unresolved_obligations if lifecycle_observation_enabled else None
                 ),
@@ -446,6 +477,7 @@ async def _await_race_and_drain(
     max_extension_seconds: float,
     marker_dir: Path | None,
     session_id: str | None,
+    operation_lease_dir: Path | None = None,
     lifecycle_observation_enabled: bool,
     acc: RaceAccumulator,
     session_log_dir: Path | None,
@@ -464,6 +496,7 @@ async def _await_race_and_drain(
         trigger=trigger,
         marker_dir=marker_dir,
         session_id=session_id,
+        operation_lease_dir=operation_lease_dir,
         lifecycle_observation_enabled=lifecycle_observation_enabled,
         acc=acc,
     )

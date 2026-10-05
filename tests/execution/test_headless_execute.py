@@ -578,86 +578,95 @@ async def test_managed_session_type_reaches_runner_and_session_index(
     assert entry["session_type"] == expected_session_type
 
 
-class TestProcessIdleTimeoutOverride:
-    """Tests for CmdSpec.process_idle_timeout_ms overriding effective_idle."""
+@pytest.mark.anyio
+@pytest.mark.parametrize("backend_name", ["claude-code", "codex"])
+async def test_real_backend_launches_keep_idle_policy_out_of_cmd_spec_and_pass_lease_channel(
+    minimal_ctx, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, backend_name: str
+) -> None:
+    import autoskillit.execution.headless._managed._attempt as managed_attempt
+    from autoskillit.execution.backends import CodexBackend
+    from autoskillit.execution.backends.claude import ClaudeCodeBackend
+    from autoskillit.execution.headless import run_headless_core
+    from tests.execution.conftest import _mock_backend
+    from tests.fakes import MockSubprocessRunner
 
-    @pytest.mark.anyio
-    async def test_spec_idle_used_when_caller_supplies_none(
-        self, minimal_ctx, tmp_path: Path, monkeypatch
-    ) -> None:
-        from autoskillit.execution.headless import run_headless_core
-        from tests.execution.conftest import _mock_backend
-        from tests.fakes import MockSubprocessRunner
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(managed_attempt, "default_log_dir", lambda: Path("relative-logs"))
+    monkeypatch.setenv("AUTOSKILLIT_OPERATION_LEASE_DIR", "/parent")
+    minimal_ctx.config.features.update({"fleet": True, "codex_backend": backend_name == "codex"})
+    minimal_ctx.config.agent_backend.backend = backend_name
+    minimal_ctx.config.linux_tracing.log_dir = str(tmp_path)
+    real_backend = CodexBackend() if backend_name == "codex" else ClaudeCodeBackend()
+    backend = _mock_backend(pty_required=True, channel_b_capable=True)
+    backend.name = backend_name
+    backend.capabilities = real_backend.capabilities
+    built_specs = []
 
-        monkeypatch.delenv("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", raising=False)
-        runner = MockSubprocessRunner()
-        runner.set_default(_success_result())
-        minimal_ctx.runner = runner
-        backend = _mock_backend(pty_required=True, channel_b_capable=True)
-        backend.build_skill_session_cmd.return_value = CmdSpec(
-            cmd=("claude", "-p", "test"),
-            env={},
-            process_idle_timeout_ms=30000,
+    def build_skill_session_spec(*args, **kwargs):
+        spec = real_backend.build_skill_session_cmd(*args, **kwargs)
+        built_specs.append(spec)
+        return spec
+
+    backend.build_skill_session_cmd.side_effect = build_skill_session_spec
+    minimal_ctx.backend = backend
+
+    runner_calls: list[tuple[Path, bool]] = []
+
+    class CapturingRunner(MockSubprocessRunner):
+        async def __call__(self, *args, **kwargs):
+            channel = kwargs["operation_lease_dir"]
+            runner_calls.append((channel, channel.is_dir()))
+            return await super().__call__(*args, **kwargs)
+
+    runner = CapturingRunner()
+    runner.set_default(_success_result())
+    minimal_ctx.runner = runner
+    attempt_specs = []
+    original_attempt = _patch_headless__headless_execute._run_headless_attempt
+
+    async def capture_attempt(*args, **kwargs):
+        result, spec = await original_attempt(*args, **kwargs)
+        attempt_specs.append(spec)
+        return result, spec
+
+    monkeypatch.setattr(
+        _patch_headless__headless_execute, "_run_headless_attempt", capture_attempt
+    )
+
+    await run_headless_core("/test foo", str(tmp_path), minimal_ctx, idle_output_timeout=45)
+    await run_headless_core("/test foo", str(tmp_path), minimal_ctx, idle_output_timeout=45)
+
+    assert len(runner.call_args_list) == 2
+    assert len(built_specs) == 2
+    assert len(attempt_specs) == 2
+    channels = []
+    for index, final_spec in enumerate(attempt_specs):
+        channel = runner.call_args_list[index][3]["operation_lease_dir"]
+        assert channel.is_absolute()
+        assert channel == Path(final_spec.env["AUTOSKILLIT_OPERATION_LEASE_DIR"])
+        assert (
+            runner.call_args_list[index][3]["env"]["AUTOSKILLIT_OPERATION_LEASE_DIR"] != "/parent"
         )
-        minimal_ctx.backend = backend
+        assert runner_calls[index] == (channel, True)
+        assert runner.call_args_list[index][3]["idle_output_timeout"] == 45
+        assert not channel.exists()
+        channels.append(channel)
+    assert channels[0] != channels[1]
 
-        await run_headless_core("/test foo", str(tmp_path), minimal_ctx)
 
-        assert runner.call_args_list, "runner was never called"
-        _cmd, _cwd, _timeout, kwargs = runner.call_args_list[0]
-        assert kwargs.get("idle_output_timeout") == 30.0
+def test_food_truck_env_extras_override_remains_authoritative() -> None:
+    from autoskillit.execution.headless._managed._food_truck_executor import (
+        _merge_food_truck_extras,
+    )
 
-    @pytest.mark.anyio
-    async def test_spec_idle_overrides_when_smaller(
-        self, minimal_ctx, tmp_path: Path, monkeypatch
-    ) -> None:
-        from autoskillit.execution.headless import run_headless_core
-        from tests.execution.conftest import _mock_backend
-        from tests.fakes import MockSubprocessRunner
+    merged = _merge_food_truck_extras(
+        env_extras={"AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT": "77"},
+        requires_packs=(),
+        fleet_idle_output_timeout=1800,
+        run_skill_idle_output_timeout=600,
+    )
 
-        monkeypatch.setenv("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", "45")
-        runner = MockSubprocessRunner()
-        runner.set_default(_success_result())
-        minimal_ctx.runner = runner
-        backend = _mock_backend(pty_required=True, channel_b_capable=True)
-        backend.build_skill_session_cmd.return_value = CmdSpec(
-            cmd=("claude", "-p", "test"),
-            env={},
-            process_idle_timeout_ms=15000,
-        )
-        minimal_ctx.backend = backend
-
-        await run_headless_core("/test foo", str(tmp_path), minimal_ctx)
-
-        assert runner.call_args_list, "runner was never called"
-        _cmd, _cwd, _timeout, kwargs = runner.call_args_list[0]
-        assert kwargs.get("idle_output_timeout") == 15.0
-
-    @pytest.mark.anyio
-    async def test_zero_spec_idle_leaves_effective_unaffected(
-        self, minimal_ctx, tmp_path: Path, monkeypatch
-    ) -> None:
-        from autoskillit.execution.headless import run_headless_core
-        from tests.execution.conftest import _mock_backend
-        from tests.fakes import MockSubprocessRunner
-
-        monkeypatch.setenv("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", "30")
-        runner = MockSubprocessRunner()
-        runner.set_default(_success_result())
-        minimal_ctx.runner = runner
-        backend = _mock_backend(pty_required=True, channel_b_capable=True)
-        backend.build_skill_session_cmd.return_value = CmdSpec(
-            cmd=("claude", "-p", "test"),
-            env={},
-            process_idle_timeout_ms=0,
-        )
-        minimal_ctx.backend = backend
-
-        await run_headless_core("/test foo", str(tmp_path), minimal_ctx)
-
-        assert runner.call_args_list, "runner was never called"
-        _cmd, _cwd, _timeout, kwargs = runner.call_args_list[0]
-        assert kwargs.get("idle_output_timeout") == 30.0
+    assert merged["AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT"] == "77"
 
 
 class TestPreSessionIndexSignaling:
@@ -681,7 +690,6 @@ class TestPreSessionIndexSignaling:
         backend.build_skill_session_cmd.return_value = CmdSpec(
             cmd=("claude", "-p", "test"),
             env={},
-            process_idle_timeout_ms=30000,
         )
         minimal_ctx.backend = backend
 
@@ -723,7 +731,6 @@ class TestPreSessionIndexSignaling:
         backend.build_skill_session_cmd.return_value = CmdSpec(
             cmd=("claude", "-p", "test"),
             env={},
-            process_idle_timeout_ms=30000,
         )
         minimal_ctx.backend = backend
 

@@ -156,6 +156,8 @@ class FleetTestRunner:
         self.call_count: int = 0
         self.last_pid: int = 0
         self.last_pass_fds: tuple[int, ...] = ()
+        self.last_kwargs: dict[str, Any] = {}
+        self.operation_lease_dir_exists_during_call = False
 
     async def __call__(
         self,
@@ -181,6 +183,11 @@ class FleetTestRunner:
 
         self.call_count += 1
         self.last_pass_fds = pass_fds
+        self.last_kwargs = {**kwargs, "env": env, "cwd": cwd, "timeout": timeout}
+        operation_lease_dir = kwargs.get("operation_lease_dir")
+        self.operation_lease_dir_exists_during_call = (
+            isinstance(operation_lease_dir, Path) and operation_lease_dir.is_dir()
+        )
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -278,6 +285,7 @@ class FleetRuntime:
         ingredients: dict[str, str] | None = None,
         dispatch_name: str | None = None,
         timeout_sec: int | None = None,
+        idle_output_timeout: int | None = None,
         shim_mode: str = "success",
         sleep_sec: float | None = None,
     ) -> dict[str, Any]:
@@ -292,6 +300,7 @@ class FleetRuntime:
             ingredients=ingredients,  # type: ignore[arg-type]
             dispatch_name=dispatch_name,
             timeout_sec=timeout_sec,
+            idle_output_timeout=idle_output_timeout,
             prompt_builder=_simple_prompt_builder,
             quota_refresher=_noop_quota_refresher,
         )
@@ -458,6 +467,40 @@ async def test_two_dispatch_happy_path(fleet_runtime: FleetRuntime) -> None:
         assert d.status == DispatchStatus.SUCCESS
         assert d.dispatched_pid > 0
         assert d.ended_at > d.started_at
+
+
+@pytest.mark.anyio
+async def test_food_truck_lease_channel_and_l2_idle_floor_on_claude(
+    fleet_runtime: FleetRuntime,
+) -> None:
+    runtime = fleet_runtime
+    runtime.add_recipe("lease-floor-recipe")
+    runtime.tool_ctx.config.run_skill.timeout = 3600
+    runtime.tool_ctx.config.fleet.idle_output_timeout = 1800
+    channels: list[Path] = []
+
+    for dispatch_name, override, expected_idle in (
+        ("below-floor", 1800, 3600),
+        ("above-floor", 4200, 4200),
+    ):
+        result = await runtime.dispatch(
+            "lease-floor-recipe",
+            dispatch_name=dispatch_name,
+            idle_output_timeout=override,
+        )
+        assert result["success"] is True
+
+        call = runtime.runner.last_kwargs
+        channel = call["operation_lease_dir"]
+        assert isinstance(channel, Path) and channel.is_absolute()
+        assert call["env"]["AUTOSKILLIT_OPERATION_LEASE_DIR"] == str(channel)
+        assert runtime.runner.operation_lease_dir_exists_during_call is True
+        assert call["idle_output_timeout"] == expected_idle
+        assert call["env"]["AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT"] == "1800"
+        assert not channel.exists()
+        channels.append(channel)
+
+    assert channels[0] != channels[1]
 
 
 @pytest.mark.anyio

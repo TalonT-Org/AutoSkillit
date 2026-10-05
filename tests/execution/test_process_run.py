@@ -19,6 +19,7 @@ from pathlib import Path
 import anyio
 import psutil
 import pytest
+import structlog.testing
 
 import autoskillit.execution.process._process_monitor as _patch_process__process_monitor
 from autoskillit.core.types import TerminationReason
@@ -491,6 +492,161 @@ class TestIdleStallWatchdog:
         assert result.termination == TerminationReason.IDLE_STALL
         assert elapsed < 12.0
         assert not psutil.pid_exists(result.pid)
+
+
+class TestOperationLeaseLiveness:
+    @pytest.mark.anyio
+    async def test_real_lease_keeps_silent_child_alive_past_idle_cap(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.core import OPERATION_LEASE_DIR_ENV_VAR
+
+        channel = tmp_path / "leases"
+        channel.mkdir()
+        script = tmp_path / "silent_with_lease.py"
+        script.write_text(
+            textwrap.dedent(
+                """\
+                import asyncio, json, os, sys, time
+                from pathlib import Path
+                from autoskillit.core import InFlightOperations, operation_lease
+                sys.stdout.write(json.dumps({"type": "assistant", "burst": True}) + "\\n")
+                sys.stdout.flush()
+                async def hold_lease():
+                    async with operation_lease(
+                        Path(os.environ["AUTOSKILLIT_OPERATION_LEASE_DIR"]),
+                        operation="run_skill",
+                        not_after_epoch=time.time() + 60,
+                        registry=InFlightOperations(),
+                    ):
+                        await asyncio.sleep(12)
+                asyncio.run(hold_lease())
+                print(json.dumps({"type": "result", "subtype": "success"}), flush=True)
+                """
+            )
+        )
+        monkeypatch.setattr(
+            _patch_process__process_monitor,
+            "_has_active_api_connection",
+            lambda _pid: False,
+        )
+
+        with structlog.testing.capture_logs() as logs:
+            with anyio.fail_after(25):
+                result = await run_managed_async(
+                    [sys.executable, str(script)],
+                    cwd=tmp_path,
+                    timeout=30,
+                    idle_output_timeout=2.0,
+                    max_suppression_seconds=2.0,
+                    operation_lease_dir=channel,
+                    env={**os.environ, OPERATION_LEASE_DIR_ENV_VAR: str(channel)},
+                )
+
+        assert result.termination == TerminationReason.NATURAL_EXIT
+        assert any(entry.get("event") == "stdout_idle_deferred_to_operation" for entry in logs)
+
+    @pytest.mark.parametrize("lease_mode", ["none", "expired", "mismatched", "dead"])
+    @pytest.mark.anyio
+    async def test_missing_expired_mismatched_or_dead_lease_does_not_suppress_idle_stall(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        lease_mode: str,
+    ) -> None:
+        from autoskillit.core import OPERATION_LEASE_DIR_ENV_VAR
+
+        channel = tmp_path / "leases"
+        channel.mkdir()
+        script = tmp_path / f"silent_{lease_mode}.py"
+        setup = {
+            "none": "pass",
+            "expired": """\
+async def hold_lease():
+    async with operation_lease(
+        channel,
+        operation="run_skill",
+        not_after_epoch=time.time() + 3,
+        registry=InFlightOperations(),
+    ):
+        await asyncio.sleep(30)
+asyncio.run(hold_lease())
+""",
+            "mismatched": """\
+wrong = channel / "different"
+wrong.mkdir()
+async def hold_lease():
+    async with operation_lease(
+        wrong,
+        operation="run_skill",
+        not_after_epoch=time.time() + 60,
+        registry=InFlightOperations(),
+    ):
+        await asyncio.sleep(30)
+asyncio.run(hold_lease())
+""",
+            "dead": """\
+import subprocess
+helper = '''import asyncio, os, time
+from pathlib import Path
+from autoskillit.core import InFlightOperations, operation_lease
+async def hold():
+    async with operation_lease(
+        Path(os.environ["AUTOSKILLIT_OPERATION_LEASE_DIR"]),
+        operation="run_skill",
+        not_after_epoch=time.time() + 60,
+        registry=InFlightOperations(),
+    ):
+        await asyncio.sleep(60)
+asyncio.run(hold())'''
+producer = subprocess.Popen([sys.executable, "-c", helper], env=os.environ.copy())
+deadline = time.monotonic() + 5
+while not list(channel.glob("*.lease.json")) and time.monotonic() < deadline:
+    time.sleep(0.01)
+producer.kill()
+producer.wait(timeout=3)
+lease_path = next(channel.glob("*.lease.json"))
+stale = time.time() - 91
+os.utime(lease_path, (stale, stale))
+time.sleep(30)
+""",
+        }[lease_mode]
+        script.write_text(
+            textwrap.dedent(
+                """\
+                """
+            )
+            + "import asyncio, json, os, sys, time\n"
+            + "from pathlib import Path\n"
+            + "from autoskillit.core import InFlightOperations, operation_lease\n"
+            + 'channel = Path(os.environ["AUTOSKILLIT_OPERATION_LEASE_DIR"])\n'
+            + 'print(json.dumps({"type": "assistant", "burst": True}), flush=True)\n'
+            + textwrap.dedent(setup)
+            + "\ntime.sleep(30)\n"
+        )
+        monkeypatch.setattr(
+            _patch_process__process_monitor,
+            "_has_active_api_connection",
+            lambda _pid: False,
+        )
+
+        started = time.monotonic()
+        with anyio.fail_after(20):
+            result = await run_managed_async(
+                [sys.executable, str(script)],
+                cwd=tmp_path,
+                timeout=30,
+                idle_output_timeout=2.0,
+                max_suppression_seconds=2.0,
+                operation_lease_dir=channel,
+                env={**os.environ, OPERATION_LEASE_DIR_ENV_VAR: str(channel)},
+            )
+
+        elapsed = time.monotonic() - started
+        assert result.termination == TerminationReason.IDLE_STALL
+        if lease_mode == "expired":
+            assert elapsed >= 2.5
+        assert elapsed < 15
 
 
 class TestCaptureMode:

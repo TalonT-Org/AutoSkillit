@@ -381,6 +381,7 @@ async def _watch_session_log(
     on_session_id_resolved: Callable[[str], None] | None = None,
     backend_resume_session_id: str = "",
     channel_b_selected: anyio.Event | None = None,
+    operation_lease_dir: Path | None = None,
 ) -> None:
     """Monitor the session JSONL log and deposit the Channel B signal.
 
@@ -416,6 +417,8 @@ async def _watch_session_log(
         _monitor_kwargs["max_suppression_seconds"] = max_suppression_seconds
     if marker_dir is not None:
         _monitor_kwargs["marker_dir"] = marker_dir
+    if operation_lease_dir is not None:
+        _monitor_kwargs["operation_lease_dir"] = operation_lease_dir
     if session_id is not None:
         _monitor_kwargs["caller_session_id"] = session_id
     monitor_result = await _session_log_monitor(

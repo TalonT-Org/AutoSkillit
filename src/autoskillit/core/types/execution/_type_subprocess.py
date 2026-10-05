@@ -241,6 +241,9 @@ class SubprocessRunner(Protocol):
         the originating session. Threaded from fleet dispatch / run_skill through
         headless execution to ``_session_log_monitor``'s ``caller_session_id`` parameter.
         Default ``None`` (match any marker).
+    operation_lease_dir : Path | None
+        Per-attempt directory containing the supervised child's in-flight tool leases.
+        The channel is shared with the child through its environment.
     max_combined_output_bytes : int | None
         Combined stdout/stderr byte ceiling. When set, managed capture terminates
         the owned process as soon as the aggregate output exceeds this value.
@@ -271,6 +274,7 @@ class SubprocessRunner(Protocol):
         max_extension_seconds: float = 7200,
         marker_dir: Path | None = None,
         session_id: str | None = None,
+        operation_lease_dir: Path | None = None,
         stream_parser: Any | None = None,
         completion_record_types: frozenset[str] = frozenset({"result"}),
         session_record_types: frozenset[str] = frozenset({"assistant"}),

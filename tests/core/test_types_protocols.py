@@ -193,6 +193,33 @@ def test_subprocess_runner_protocol_marker_params_are_keyword_only() -> None:
         )
 
 
+def test_subprocess_runner_protocol_operation_lease_dir_default_none() -> None:
+    import inspect
+
+    from autoskillit.core import SubprocessRunner
+
+    sig = inspect.signature(SubprocessRunner.__call__)
+    assert sig.parameters["operation_lease_dir"].default is None
+
+
+def test_subprocess_runner_protocol_operation_lease_dir_follows_session_id() -> None:
+    import inspect
+
+    from autoskillit.core import SubprocessRunner
+
+    params = list(inspect.signature(SubprocessRunner.__call__).parameters)
+    assert params.index("operation_lease_dir") == params.index("session_id") + 1
+
+
+def test_subprocess_runner_protocol_operation_lease_dir_is_keyword_only() -> None:
+    import inspect
+
+    from autoskillit.core import SubprocessRunner
+
+    param = inspect.signature(SubprocessRunner.__call__).parameters["operation_lease_dir"]
+    assert param.kind == inspect.Parameter.KEYWORD_ONLY
+
+
 # ---------------------------------------------------------------------------
 # CIRunScope event field
 # ---------------------------------------------------------------------------

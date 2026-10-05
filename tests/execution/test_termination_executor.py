@@ -151,7 +151,10 @@ async def test_active_child_deferral_runs_until_ceiling(
     liveness_checks = 0
 
     def has_active_signals(
-        _pid: int, _marker_dir: Path | None, _session_id: str | None
+        _pid: int,
+        _marker_dir: Path | None,
+        _session_id: str | None,
+        operation_lease_dir: Path | None = None,
     ) -> frozenset[str]:
         nonlocal liveness_checks
         liveness_checks += 1
@@ -185,7 +188,10 @@ async def test_zero_child_deferral_ceiling_skips_liveness_check(
     owner = await _spawn(30, tmp_path)
 
     def unexpected_liveness_check(
-        _pid: int, _marker_dir: Path | None, _session_id: str | None
+        _pid: int,
+        _marker_dir: Path | None,
+        _session_id: str | None,
+        operation_lease_dir: Path | None = None,
     ) -> frozenset[str]:
         pytest.fail("zero child deferral ceiling must skip liveness checks")
 
@@ -219,7 +225,7 @@ async def test_child_deferral_stops_when_children_become_inactive(
     monkeypatch.setattr(
         _patch_process__termination,
         "_active_liveness_signals",
-        lambda _pid, _marker_dir, _session_id: next(activity),
+        lambda _pid, _marker_dir, _session_id, operation_lease_dir=None: next(activity),
     )
 
     kill_reason, _returncode, cleanup = await execute_termination_action(

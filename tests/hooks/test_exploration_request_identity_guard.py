@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.hooks._runtime._exploration_request_record as records
 from autoskillit.hooks._runtime._exploration_request_record import (
     SUPPORTED_EXPLORATION_REQUEST_TOOLS,
     consume_exploration_request_record,
@@ -90,7 +91,7 @@ def _run(
     ],
 )
 def test_guard_preserves_input_and_injects_consumable_native_identity(
-    tmp_path: Path, runtime_name: str, short_name: str
+    tmp_path: Path, runtime_name: str, short_name: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _project(tmp_path)
     result = _run(
@@ -115,6 +116,16 @@ def test_guard_preserves_input_and_injects_consumable_native_identity(
     assert output["updatedInput"]["existing"] == "value"
     token = output["updatedInput"]["_autoskillit_exploration_request_token"]
     assert token != "model-value"
+    record_path = (
+        root
+        / ".autoskillit"
+        / "temp"
+        / "exploration-requests"
+        / f"exploration-request-{token}.json"
+    )
+    created_at = json.loads(record_path.read_text(encoding="utf-8"))["created_at"]
+    # TTL expiry is covered separately; scheduling delays must not alter this identity check.
+    monkeypatch.setattr(records, "_clock", lambda: created_at)
     assert consume_exploration_request_record(root, short_name, token) == "native-session"
     assert consume_exploration_request_record(root, short_name, token) is None
 

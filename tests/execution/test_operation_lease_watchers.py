@@ -20,6 +20,8 @@ import autoskillit.execution.process._race_watchers as race_watchers
 from autoskillit.core import (
     ChannelBStatus,
     InFlightOperations,
+    InspectorEvidence,
+    InspectorVerdict,
     operation_lease,
 )
 from autoskillit.execution.process._process_monitor import (
@@ -87,7 +89,9 @@ def _install_clock(
 ) -> None:
     monkeypatch.setattr(time, "monotonic", lambda: clock.elapsed)
     monkeypatch.setattr(time, "time", lambda: clock.epoch)
-    fake_anyio = SimpleNamespace(sleep=clock.sleep, current_time=clock.current_time)
+    fake_anyio = SimpleNamespace(
+        sleep=clock.sleep, current_time=clock.current_time, fail_after=anyio.fail_after
+    )
     for module in modules:
         monkeypatch.setattr(module, "anyio", fake_anyio)
 
@@ -160,6 +164,46 @@ async def test_stdout_growth_then_stall_reports_actual_silence_and_threshold(
     assert acc.idle_stall is True
     assert fire["idle_threshold"] == 2.0
     assert fire["silence_seconds"] >= 2.0
+
+
+@pytest.mark.anyio
+async def test_inspector_receives_stdout_silence_across_lease_activity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(lease_module, "_heartbeat", _blocked_heartbeat)
+    observed: list[InspectorEvidence] = []
+
+    async def inspect(evidence: InspectorEvidence) -> InspectorVerdict:
+        observed.append(evidence)
+        return InspectorVerdict(
+            action="KILL", reasoning="no output", confidence="high", elapsed_seconds=0.0
+        )
+
+    async with operation_lease(
+        tmp_path,
+        operation="tool",
+        not_after_epoch=time.time() + 3,
+        registry=InFlightOperations(),
+    ) as handle:
+        clock = _LeaseClock(handle.record.started_at_epoch, channel=tmp_path, stop_after=8)
+        _install_clock(monkeypatch, clock, race_watchers)
+        stdout = MagicMock()
+        stdout.stat.return_value = SimpleNamespace(st_size=0)
+        acc = RaceAccumulator()
+        await _watch_stdout_idle(
+            stdout,
+            2.0,
+            acc,
+            anyio.Event(),
+            1.0,
+            operation_lease_dir=tmp_path,
+            inspector_callback=inspect,
+        )
+
+        assert acc.idle_stall is True
+        assert len(observed) == 1
+        assert observed[0].idle_seconds == 4.0
+        assert observed[0].operation_lease_active is False
 
 
 @pytest.mark.anyio

@@ -117,7 +117,7 @@ async def _watch_stdout_idle(
             )
             spared_at = await _inspect_stdout_idle(
                 stdout_path,
-                last_liveness_evidence,
+                last_stdout_growth,
                 acc,
                 inspector_callback,
                 timeout_scope_ref,
@@ -134,7 +134,7 @@ async def _watch_stdout_idle(
 
 async def _inspect_stdout_idle(
     stdout_path: Path,
-    last_liveness_evidence: float,
+    last_stdout_growth: float,
     acc: RaceAccumulator,
     inspector_callback: InspectorCallback | None,
     timeout_scope_ref: list[anyio.CancelScope | None] | None,
@@ -167,7 +167,7 @@ async def _inspect_stdout_idle(
     )
     evidence = _package_evidence(
         stdout_path,
-        idle_seconds=_time.monotonic() - last_liveness_evidence,
+        idle_seconds=_time.monotonic() - last_stdout_growth,
         operation_lease_active=operation_lease_active,
     )
     try:

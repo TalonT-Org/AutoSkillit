@@ -26,6 +26,7 @@ def _run_guard(
     applicable_guards: str | None = None,
     agent_backend: str | None = None,
     project_root: Path | None = None,
+    create_project_marker: bool = True,
 ) -> str:
     """Run skill_load_guard.main(), return stdout."""
     from autoskillit.hooks.guards.skill_load_guard import main
@@ -70,6 +71,8 @@ def _run_guard(
     base_env.update(env_updates)
 
     isolated_project_root = project_root if project_root is not None else tmp_dir
+    if create_project_marker:
+        (isolated_project_root / ".autoskillit").mkdir(parents=True, exist_ok=True)
     base_env["AUTOSKILLIT_STATE_ROOT"] = str(isolated_project_root.resolve())
 
     with (
@@ -291,9 +294,17 @@ def test_flag_found_via_ancestor_walk_when_cwd_is_subdirectory(tmp_path):
     assert not out.strip()
 
 
-def test_denies_when_no_autoskillit_dir_in_ancestors(tmp_path):
+def test_denies_when_no_autoskillit_dir_in_ancestors(tmp_path, monkeypatch):
     """T2-14: Deny when no .autoskillit/ found in any ancestor (fallback to CWD)."""
     bare_dir = tmp_path / "bare" / "dir"
+    real_is_dir = Path.is_dir
+
+    def isolated_is_dir(path):
+        if path.name == ".autoskillit" and not path.is_relative_to(bare_dir):
+            return False
+        return real_is_dir(path)
+
+    monkeypatch.setattr(Path, "is_dir", isolated_is_dir)
     out = _run_guard(
         _make_event("Read"),
         tmp_dir=bare_dir,
@@ -301,6 +312,7 @@ def test_denies_when_no_autoskillit_dir_in_ancestors(tmp_path):
         headless=True,
         session_type="skill",
         applicable_guards="skill_load_guard",
+        create_project_marker=False,
     )
     response = json.loads(out)
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"

@@ -69,6 +69,7 @@ def managed_launch_case(
     use_bundled_catalog(monkeypatch, raw_catalog)
     project = tmp_path / "project"
     project.mkdir()
+    (project / ".autoskillit").mkdir()
     backend = CodexBackend(source_codex_home=source_home)
     context = prepare_managed_join_context(
         backend=backend,

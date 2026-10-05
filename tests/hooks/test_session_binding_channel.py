@@ -329,6 +329,7 @@ def test_binding_path_ignores_a_relative_payload_cwd(
 
     process_cwd = tmp_path / "process-cwd"
     process_cwd.mkdir()
+    (process_cwd / ".autoskillit").mkdir()
     monkeypatch.chdir(process_cwd)
 
     assert resolve_binding_path("relative/worktree", "session-1").parent == (

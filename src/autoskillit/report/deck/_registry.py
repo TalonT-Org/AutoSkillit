@@ -133,10 +133,11 @@ AVAILABILITY_VOCABULARY: Mapping[TokenMeasureState, tuple[str, str]] = MappingPr
         TokenMeasureState.NOT_APPLICABLE: ("n/a", "The field does not apply here"),
     }
 )
-LANDING_VIEW = "cohort"
+COHORT_VIEW = "cohort"
+LANDING_VIEW = COHORT_VIEW
 DECK_VIEWS: tuple[DeckViewDef, ...] = (
     DeckViewDef(
-        "cohort",
+        COHORT_VIEW,
         "Who is in this cohort?",
         "Whether the population on screen is the one you meant, "
         "before you read any number from it",

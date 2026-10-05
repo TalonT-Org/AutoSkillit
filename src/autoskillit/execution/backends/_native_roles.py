@@ -10,14 +10,17 @@ from autoskillit.core import (
 )
 
 __all__ = [
+    "CLAUDE_DELEGATED_WORKER_AGENT",
     "CLAUDE_SPAWNABLE_BUILT_IN_AGENT_NAMES",
     "claude_resolvable_agent_names",
     "map_declared_logical_roles",
 ]
 
+CLAUDE_DELEGATED_WORKER_AGENT = "general-purpose"
+
 # Common CLI/headless sessions share these; claude-code-guide is excluded from sdk-cli.
 CLAUDE_SPAWNABLE_BUILT_IN_AGENT_NAMES = (
-    "general-purpose",
+    CLAUDE_DELEGATED_WORKER_AGENT,
     "Explore",
     "Plan",
     "claude",

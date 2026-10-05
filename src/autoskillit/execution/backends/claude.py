@@ -105,6 +105,7 @@ from autoskillit.execution.backends._explorer_dispatch import (
     CLAUDE_EXPLORATION_DISPATCH_RENDERER,
 )
 from autoskillit.execution.backends._native_roles import (
+    CLAUDE_DELEGATED_WORKER_AGENT,
     CLAUDE_SPAWNABLE_BUILT_IN_AGENT_NAMES,
     claude_resolvable_agent_names,
     map_declared_logical_roles,
@@ -130,7 +131,7 @@ _CLAUDE_INTERACTIVE_VALUE_BEARING_FLAGS: frozenset[str] = frozenset(
 def _claude_logical_role_mapping(plan: SkillSemanticPlan) -> dict[str, str]:
     return map_declared_logical_roles(
         plan,
-        delegated_worker_agent="general-purpose",
+        delegated_worker_agent=CLAUDE_DELEGATED_WORKER_AGENT,
         agent_namespace=CLAUDE_PLUGIN_AGENT_NAMESPACE,
     )
 

@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from autoskillit.core import ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
+from autoskillit.core import ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS, dump_yaml_str
 from autoskillit.migration.adapters_skill import SkillMigrationAdapter
 from autoskillit.migration.engine import (
     DeterministicMigrationAdapter,
@@ -256,4 +256,47 @@ class TestSkillMigrationAdapter:
         assert result.success is False
         assert result.error == "cannot canonicalize logical role name 'Bad_Name'"
         assert skill_path.read_bytes() == original
+        assert not skill_path.with_suffix(".yaml.bak").exists()
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        ("collection", "declarations", "error"),
+        [
+            ("child_spawns", None, "semantic_requirements.child_spawns must be a list"),
+            (
+                "child_spawns",
+                ["invalid"],
+                "semantic_requirements.child_spawns entries must be mappings",
+            ),
+            ("child_spawns", [{}], "semantic_requirements.child_spawns.role must be a string"),
+            (
+                "child_spawns",
+                [{"role": None}],
+                "semantic_requirements.child_spawns.role must be a string",
+            ),
+        ],
+    )
+    async def test_migration_reports_invalid_role_declarations(
+        self, tmp_path: Path, collection: str, declarations: object, error: str
+    ) -> None:
+        workspace = importlib.import_module("autoskillit.workspace")
+        skill_path = tmp_path / ".claude" / "skills" / "role-migration" / "SKILL.md"
+        skill_path.parent.mkdir(parents=True)
+        skill_path.write_text(_skill_with_logical_role("autoskillit:web-evidence-researcher"))
+        parsed = workspace.read_skill_frontmatter(skill_path)
+        assert parsed.data is not None
+        parsed.data["semantic_requirements"][collection] = declarations
+        original = f"---\n{dump_yaml_str(parsed.data)}---\n{parsed.body}"
+        skill_path.write_text(original)
+        file = MigrationFile(
+            name="role-migration", path=skill_path, file_type="skill", current_version=None
+        )
+
+        result = await MigrationEngine([SkillMigrationAdapter()]).migrate_file(
+            file, run_headless=AsyncMock(), temp_dir=tmp_path / "temp"
+        )
+
+        assert result.success is False
+        assert result.error == error
+        assert skill_path.read_text() == original
         assert not skill_path.with_suffix(".yaml.bak").exists()

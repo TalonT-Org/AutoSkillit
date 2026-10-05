@@ -138,8 +138,16 @@ def _canonicalize_logical_role_names(data: dict[str, Any]) -> str | None:
         ("child_spawns", "role"),
         ("child_model_policies", "role"),
     ):
-        for declaration in requirements.get(collection, ()):
-            name = declaration[field].removeprefix(CLAUDE_PLUGIN_AGENT_NAMESPACE)
+        declarations = requirements.get(collection, [])
+        if not isinstance(declarations, list):
+            return f"semantic_requirements.{collection} must be a list"
+        for declaration in declarations:
+            if not isinstance(declaration, dict):
+                return f"semantic_requirements.{collection} entries must be mappings"
+            raw_name = declaration.get(field)
+            if not isinstance(raw_name, str):
+                return f"semantic_requirements.{collection}.{field} must be a string"
+            name = raw_name.removeprefix(CLAUDE_PLUGIN_AGENT_NAMESPACE)
             declaration[field] = name
             if collection == "logical_roles" and AGENT_NAME_PATTERN.fullmatch(name) is None:
                 return f"cannot canonicalize logical role name {name!r}"

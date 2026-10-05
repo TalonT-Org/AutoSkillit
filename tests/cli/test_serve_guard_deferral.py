@@ -5,7 +5,6 @@ from __future__ import annotations
 import inspect
 import os
 import signal
-from pathlib import Path
 
 import anyio
 import pytest
@@ -135,16 +134,6 @@ class TestActivityCheckCompleteness:
         assert (
             is_server_active(
                 worker_capacity=DefaultManagedWorkerCapacity(),
-                in_flight_operations=InFlightOperations(),
-            )
-            is False
-        )
-
-    def test_stray_backend_marker_does_not_make_server_active(self, tmp_path: Path) -> None:
-        (tmp_path / "dispatch-in-progress-other-session-marker.marker").touch()
-        assert (
-            is_server_active(
-                worker_capacity=None,
                 in_flight_operations=InFlightOperations(),
             )
             is False

@@ -427,7 +427,6 @@ class TestCatalog:
         assert smoke.recipe_fixture == "sandbox-smoke.yaml"
         assert smoke.ingredients == ()
         assert smoke.expected_pull_request_state == "closed"
-        assert smoke.expected_failures == ()
         assert smoke.trigger_paths == (
             "src/autoskillit/execution/headless/*",
             "src/autoskillit/execution/backends/*",

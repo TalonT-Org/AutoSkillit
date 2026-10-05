@@ -175,12 +175,11 @@ def _run_canary(tmp_path: Path, runner: FakeRunner, monkeypatch, env=None):
 def _smoke_case(expected_failures=None):
     catalog = e2e_catalog.load_catalog()
     test = catalog.get("headless-smoke")
-    if expected_failures is not None:
-        test = replace(test, expected_failures=tuple(expected_failures))
-        catalog = replace(
-            catalog,
-            tests=tuple(test if entry.name == test.name else entry for entry in catalog.tests),
-        )
+    test = replace(test, expected_failures=tuple(expected_failures or ()))
+    catalog = replace(
+        catalog,
+        tests=tuple(test if entry.name == test.name else entry for entry in catalog.tests),
+    )
     return catalog, test
 
 

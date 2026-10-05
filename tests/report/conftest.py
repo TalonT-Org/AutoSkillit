@@ -51,8 +51,6 @@ def _session_row(
             "cache_read_tokens": {"state": "unknown", "value": None},
         }
     )
-    if key == "s4":
-        row["cache_write_tokens"] = {"state": "unavailable", "value": None}
     return row
 
 

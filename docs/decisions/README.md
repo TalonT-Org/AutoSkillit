@@ -12,3 +12,4 @@
 - [0010-systemd-scope-defense-in-depth.md](0010-systemd-scope-defense-in-depth.md) — systemd scope wrapping is a best-effort kernel backstop on top of the tether sweep, never the ceiling of record
 - [0015-write-containment.md](0015-write-containment.md) — typed skill write scopes composed by union across interactive and headless sessions
 - [0016-owner-scope.md](0016-owner-scope.md) — a fleet dispatch settles every funnel-spawned descendant of its L2, selected by owner-scope registration, before it persists or returns
+- [0017-deck-renderer.md](0017-deck-renderer.md) — hand-written SVG, no chart library, for the self-contained observability deck

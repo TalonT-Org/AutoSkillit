@@ -2,35 +2,15 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
 from autoskillit.core import ArtifactLease
 from autoskillit.execution import REPORT_INDEX_SCHEMA_VERSION
+from tests.cli._sessions_helpers import _configure_log_root, _seed_session
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
-
-
-def _configure_log_root(monkeypatch: pytest.MonkeyPatch, log_root: Path) -> None:
-    monkeypatch.setattr(
-        "autoskillit.config.load_config",
-        lambda: SimpleNamespace(linux_tracing=SimpleNamespace(log_dir=str(log_root))),
-    )
-
-
-def _seed_session(log_root: Path) -> None:
-    log_root.mkdir(parents=True, exist_ok=True)
-    session = {
-        "dir_name": "session-1",
-        "session_id": "sid-1",
-        "backend": "claude-code",
-        "provider_used": "anthropic",
-        "timestamp": "2020-01-01T00:00:00Z",
-    }
-    (log_root / "sessions.jsonl").write_text(json.dumps(session) + "\n", encoding="utf-8")
 
 
 def test_sessions_index_reports_without_creating_rows(
@@ -102,6 +82,7 @@ def test_sessions_index_reports_lease_contention_without_summary(
     captured = capsys.readouterr()
     assert raised.value.code == 1
     assert captured.err.strip() == (
-        "report index: another operation holds a required index or source lease"
+        f"report index: another operation holds a required index or source lease: "
+        f"{index_dir / 'index.lock'}"
     )
     assert captured.out == ""

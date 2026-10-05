@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="<!--deck:csp-->">
+  <title>AutoSkillit observability deck</title>
+  <style><!--deck:css--></style>
+</head>
+<body>
+  <div class="shell">
+    <nav class="rail" aria-label="Questions">
+      <header class="brand">AutoSkillit <span>Observability deck</span></header>
+      <div id="deck-nav"></div>
+    </nav>
+    <main>
+      <section class="cohort" id="deck-cohort" aria-label="Cohort"></section>
+      <div id="deck-view"></div>
+      <footer class="foot" id="deck-foot"></footer>
+    </main>
+  </div>
+  <svg class="defs" aria-hidden="true" width="0" height="0">
+    <defs>
+      <pattern id="deck-hatch" patternUnits="userSpaceOnUse" width="6" height="6"
+               patternTransform="rotate(45)">
+        <line x1="0" y1="0" x2="0" y2="6" class="hatch-line"/>
+      </pattern>
+    </defs>
+  </svg>
+  <noscript>This deck needs JavaScript.</noscript>
+  <script type="application/json" id="deck-data"><!--deck:data--></script>
+  <!--deck:scripts-->
+</body>
+</html>

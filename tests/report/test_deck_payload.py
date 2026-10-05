@@ -16,33 +16,12 @@ from autoskillit.report.deck._registry import (
     SESSION_COLUMNS,
     SESSION_TABLE,
 )
+from tests.report._fixtures import session_row as _row
 
 pytestmark = [pytest.mark.small]
 GEN = datetime(2026, 10, 4, tzinfo=UTC)
 EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 GEN_MS = (GEN - EPOCH) // timedelta(milliseconds=1)
-
-
-def _row(key: str, **fields: Any) -> dict[str, Any]:
-    row: dict[str, Any] = dict.fromkeys(SESSION_COLUMNS)
-    row.update(
-        {
-            "schema_version": 1,
-            "kind": "session",
-            "key": key,
-            "session_id": key,
-            "harness": "claude-code",
-            "provider": "anthropic",
-            "level": None,
-            "time_ms": None,
-            "input_tokens": {"state": "unknown", "value": None},
-            "output_tokens": {"state": "unknown", "value": None},
-            "cache_write_tokens": {"state": "unknown", "value": None},
-            "cache_read_tokens": {"state": "unknown", "value": None},
-        }
-    )
-    row.update(fields)
-    return row
 
 
 def _payload(rows: list[dict[str, Any]]) -> dict[str, Any]:

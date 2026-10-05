@@ -70,9 +70,8 @@ def is_server_active(
     worker_capacity: ManagedWorkerCapacity | None,
     in_flight_operations: InFlightOperationsProtocol,
 ) -> bool:
-    return bool(
-        in_flight_operations.active_count > 0
-        or (worker_capacity is not None and worker_capacity.active_count > 0)
+    return in_flight_operations.active_count > 0 or (
+        worker_capacity is not None and worker_capacity.active_count > 0
     )
 
 

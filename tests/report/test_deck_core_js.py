@@ -267,44 +267,38 @@ def test_chip_presentation_covers_live_struck_absent_and_issue_reasons(
     )
 
 
+@pytest.mark.parametrize(
+    ("state", "value", "text"),
+    [
+        pytest.param("measured", 1234567, "1,234,567", id="measured"),
+        pytest.param("measured_zero", 0, "0", id="measured-zero"),
+        pytest.param("unavailable", None, None, id="unavailable"),
+        pytest.param("unknown", None, None, id="unknown"),
+        pytest.param("not_applicable", None, None, id="not-applicable"),
+    ],
+)
 def test_availability_presentation_uses_the_payload_vocabulary(
-    deck_js: Any, deck_model: dict[str, Any]
+    deck_js: Any, deck_model: dict[str, Any], state: str, value: int | None, text: str | None
 ) -> None:
     vocabulary = deck_model["availability"]
-    measured = deck_js.call(
-        "DeckCore.availabilityPresentation",
-        {"state": "measured", "value": 1234567},
-        vocabulary,
-    )
-    assert measured == {
-        "text": "1,234,567",
-        "className": "av av--measured",
-        "title": "Reported by the producer",
+    entry = next(item for item in vocabulary if item["state"] == state)
+    assert deck_js.call(
+        "DeckCore.availabilityPresentation", {"state": state, "value": value}, vocabulary
+    ) == {
+        "text": entry["label"] if text is None else text,
+        "className": f"av av--{state}",
+        "title": entry["description"],
     }
-    assert (
-        deck_js.call(
-            "DeckCore.availabilityPresentation",
-            {"state": "measured_zero", "value": 0},
-            vocabulary,
-        )["text"]
-        == "0"
-    )
 
-    for state in ("unavailable", "unknown", "not_applicable"):
-        entry = next(item for item in vocabulary if item["state"] == state)
-        assert deck_js.call(
-            "DeckCore.availabilityPresentation", {"state": state, "value": None}, vocabulary
-        ) == {
-            "text": entry["label"],
-            "className": f"av av--{state}",
-            "title": entry["description"],
-        }
 
+def test_availability_presentation_rejects_unknown_states(
+    deck_js: Any, deck_model: dict[str, Any]
+) -> None:
     with pytest.raises(Exception, match="unknown availability state: invalid"):
         deck_js.call(
             "DeckCore.availabilityPresentation",
             {"state": "invalid", "value": None},
-            vocabulary,
+            deck_model["availability"],
         )
 
 

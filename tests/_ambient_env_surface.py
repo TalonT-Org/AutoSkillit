@@ -1017,7 +1017,7 @@ FORWARDING_SITES: dict[str, str] = {
         "Unfiltered dict(os.environ) base for the global-Codex-home MCP-inventory validation"
         "probe subprocess, with CODEX_RESERVED_HOME_ENV_VARS overridden to the source home."
     ),
-    "execution/backends/claude.py:340": (
+    "execution/backends/claude.py:341": (
         "Excludes _INTERACTIVE_ENV_EXCLUSIONS (TERM/NO_COLOR headless-hardening keys) when"
         "building the interactive Claude Code base env."
     ),

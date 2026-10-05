@@ -587,7 +587,6 @@ async def test_real_backend_launches_keep_idle_policy_out_of_cmd_spec_and_pass_l
     from autoskillit.execution.backends import CodexBackend
     from autoskillit.execution.backends.claude import ClaudeCodeBackend
     from autoskillit.execution.headless import run_headless_core
-    from tests.execution.conftest import _mock_backend
     from tests.fakes import MockSubprocessRunner
 
     monkeypatch.chdir(tmp_path)
@@ -597,18 +596,16 @@ async def test_real_backend_launches_keep_idle_policy_out_of_cmd_spec_and_pass_l
     minimal_ctx.config.agent_backend.backend = backend_name
     minimal_ctx.config.linux_tracing.log_dir = str(tmp_path)
     real_backend = CodexBackend() if backend_name == "codex" else ClaudeCodeBackend()
-    backend = _mock_backend(pty_required=True, channel_b_capable=True)
-    backend.name = backend_name
-    backend.capabilities = real_backend.capabilities
     built_specs = []
+    original_builder = real_backend.build_skill_session_cmd
 
     def build_skill_session_spec(*args, **kwargs):
-        spec = real_backend.build_skill_session_cmd(*args, **kwargs)
+        spec = original_builder(*args, **kwargs)
         built_specs.append(spec)
         return spec
 
-    backend.build_skill_session_cmd.side_effect = build_skill_session_spec
-    minimal_ctx.backend = backend
+    monkeypatch.setattr(real_backend, "build_skill_session_cmd", build_skill_session_spec)
+    minimal_ctx.backend = real_backend
 
     runner_calls: list[tuple[Path, bool]] = []
 
@@ -633,10 +630,12 @@ async def test_real_backend_launches_keep_idle_policy_out_of_cmd_spec_and_pass_l
         _patch_headless__headless_execute, "_run_headless_attempt", capture_attempt
     )
 
-    await run_headless_core("/test foo", str(tmp_path), minimal_ctx, idle_output_timeout=45)
-    await run_headless_core("/test foo", str(tmp_path), minimal_ctx, idle_output_timeout=45)
+    outcomes = [
+        await run_headless_core("/test foo", str(tmp_path), minimal_ctx, idle_output_timeout=45),
+        await run_headless_core("/test foo", str(tmp_path), minimal_ctx, idle_output_timeout=45),
+    ]
 
-    assert len(runner.call_args_list) == 2
+    assert len(runner.call_args_list) == 2, [outcome.to_json() for outcome in outcomes]
     assert len(built_specs) == 2
     assert len(attempt_specs) == 2
     channels = []

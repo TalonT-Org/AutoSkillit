@@ -210,13 +210,15 @@ async def test_stdout_file_loss_during_lease_keeps_last_evidence_clock(
         _install_clock(monkeypatch, clock, race_watchers)
         stdout = MagicMock()
         stdout.stat.side_effect = [
+            SimpleNamespace(st_size=1),
             OSError("missing"),
             OSError("missing"),
             OSError("missing"),
             OSError("missing"),
-            SimpleNamespace(st_size=0),
-            SimpleNamespace(st_size=0),
-            SimpleNamespace(st_size=0),
+            SimpleNamespace(st_size=1),
+            SimpleNamespace(st_size=1),
+            SimpleNamespace(st_size=1),
+            SimpleNamespace(st_size=1),
         ]
         acc = RaceAccumulator()
         trigger = anyio.Event()
@@ -231,7 +233,7 @@ async def test_stdout_file_loss_during_lease_keeps_last_evidence_clock(
         )
 
     assert acc.idle_stall is True
-    assert clock.elapsed >= 8
+    assert clock.elapsed == 8
 
 
 @pytest.mark.anyio

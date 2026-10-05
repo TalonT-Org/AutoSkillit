@@ -28,6 +28,20 @@ The boundary is enforced three ways: FastMCP visibility, the
 `tools_execution/`. `run_skill` uses `_require_orchestrator_exact()`; `run_cmd` and
 `run_python` use `_require_orchestrator_or_higher()`. All three layers must agree.
 
+## Food-truck idle timeouts
+
+Food-truck supervision and the child tools use separate idle policies. The
+per-dispatch `idle_output_timeout` controls the outer supervisor. Its effective
+value is at least `run_skill.timeout`, so a zero idle setting still leaves that
+supervisor backstop enabled. Active operation leases refresh the supervisor's
+liveness clock until their deadlines expire.
+
+The child's `AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT` comes from `fleet.idle_output_timeout`,
+falling back to `run_skill.idle_output_timeout` when the Fleet value is zero.
+An explicit value in `env_extras` takes precedence. A per-dispatch idle override
+does not change this child policy. Setting both configured idle values to zero
+omits the child idle override while retaining the outer supervisor floor.
+
 ## Recipe as a program
 
 A recipe (`recipe/schema.py:Recipe`) is a sequenced list of `RecipeStep`

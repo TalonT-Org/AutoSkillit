@@ -240,6 +240,12 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
         on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
     ) -> SkillResult:
+        """Run a food truck under its configured supervisor deadline.
+
+        The per-call idle timeout controls the supervisor and is floored at
+        run_skill.timeout, including when the idle value is zero. Child tool
+        idle policy comes from fleet/run-skill configuration or env_extras.
+        """
         import autoskillit.execution.headless as headless_facade
 
         cwd = validated_dispatch_cwd(

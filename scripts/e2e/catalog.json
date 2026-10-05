@@ -50,6 +50,26 @@
           "issue": "https://github.com/TalonT-Org/AutoSkillit/issues/5244"
         }
       ]
+    },
+    {
+      "name": "headless-smoke",
+      "kind": "recipe",
+      "peak_sessions": 2,
+      "timeout_sec": 900,
+      "trigger_paths": [
+        "src/autoskillit/execution/headless/*",
+        "src/autoskillit/execution/backends/*",
+        "src/autoskillit/cli/fleet/*",
+        "src/autoskillit/fleet/dispatch/*",
+        "src/autoskillit/server/*",
+        "src/autoskillit/hooks/*",
+        "scripts/e2e/*",
+        ".github/workflows/e2e.yml"
+      ],
+      "recipe": "sandbox-smoke",
+      "recipe_fixture": "sandbox-smoke.yaml",
+      "ingredients": {},
+      "expected_pull_request_state": "closed"
     }
   ]
 }

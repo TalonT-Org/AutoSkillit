@@ -17,9 +17,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = REPO_ROOT / "scripts" / "e2e" / "e2e_select.py"
 REPOSITORY = "TalonT-Org/AutoSkillit"
 _CANARY_MATRIX = '{"include":[{"test":"canary","kind":"canary","timeout_minutes":37}]}'
-_BOTH_MATRIX = (
+_SHARED_HARNESS_MATRIX = (
     '{"include":[{"test":"canary","kind":"canary","timeout_minutes":37},'
-    '{"test":"clean-install","kind":"clean-install","timeout_minutes":37}]}'
+    '{"test":"headless-smoke","kind":"recipe","timeout_minutes":47}]}'
+)
+_HEADLESS_SMOKE_MATRIX = (
+    '{"include":[{"test":"headless-smoke","kind":"recipe","timeout_minutes":47}]}'
 )
 
 
@@ -69,7 +72,7 @@ def _select(tmp_path: Path, changed_paths: Path, event_name: str, payload: objec
     )
 
 
-def test_shared_harness_pull_request_selects_both_shipped_tests_deterministically(
+def test_shared_harness_pull_request_selection_is_deterministic(
     tmp_path: Path,
 ) -> None:
     changed = tmp_path / "changed-paths.txt"
@@ -79,11 +82,22 @@ def test_shared_harness_pull_request_selects_both_shipped_tests_deterministicall
     assert result.returncode == 0, result.stderr
     outputs = _outputs(result.stdout)
     assert outputs["selected"] == "true"
-    assert outputs["matrix"] == _BOTH_MATRIX
+    assert outputs["matrix"] == _SHARED_HARNESS_MATRIX
 
     repeated = _select(tmp_path, changed, "pull_request", payload)
     assert repeated.returncode == 0, repeated.stderr
     assert _outputs(repeated.stdout)["matrix"] == outputs["matrix"]
+
+
+def test_headless_source_pull_request_selects_smoke_recipe(tmp_path: Path) -> None:
+    changed = tmp_path / "changed-paths.txt"
+    changed.write_text("src/autoskillit/execution/headless/session.py\n", encoding="utf-8")
+    payload = _pull_request(changed_files=1, additions=5, labels=("e2e",))
+    result = _select(tmp_path, changed, "pull_request", payload)
+    assert result.returncode == 0, result.stderr
+    outputs = _outputs(result.stdout)
+    assert outputs["selected"] == "true"
+    assert outputs["matrix"] == _HEADLESS_SMOKE_MATRIX
 
 
 def test_small_unlabelled_pull_request_selects_nothing(tmp_path: Path) -> None:
@@ -113,6 +127,15 @@ def test_dispatch_selects_the_named_test(tmp_path: Path) -> None:
     outputs = _outputs(result.stdout)
     assert outputs["selected"] == "true"
     assert outputs["matrix"] == _CANARY_MATRIX
+
+
+def test_dispatch_selects_headless_smoke(tmp_path: Path) -> None:
+    payload = {"inputs": {"tests": "headless-smoke"}}
+    result = _select(tmp_path, tmp_path / "missing.txt", "workflow_dispatch", payload)
+    assert result.returncode == 0, result.stderr
+    outputs = _outputs(result.stdout)
+    assert outputs["selected"] == "true"
+    assert outputs["matrix"] == _HEADLESS_SMOKE_MATRIX
 
 
 def test_dispatch_selects_both_named_tests_in_request_order(tmp_path: Path) -> None:

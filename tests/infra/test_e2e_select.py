@@ -65,6 +65,16 @@ _CLEAN_INSTALL_TRIGGER_PATHS = (
     "scripts/e2e/*",
     ".github/workflows/e2e.yml",
 )
+_HEADLESS_SMOKE_TRIGGER_PATHS = (
+    "src/autoskillit/execution/headless/session.py",
+    "src/autoskillit/execution/backends/claude.py",
+    "src/autoskillit/cli/fleet/run.py",
+    "src/autoskillit/fleet/dispatch/worker.py",
+    "src/autoskillit/server/recipe.py",
+    "src/autoskillit/hooks/runner.py",
+    "scripts/e2e/e2e_harness.py",
+    ".github/workflows/e2e.yml",
+)
 
 
 def _clean_install_entry(**overrides) -> dict:
@@ -318,17 +328,27 @@ _INVALID_CATALOGS = {
     "recipe-unknown-state": _raw_catalog(
         _entry("a", kind="recipe", **{**_RECIPE_FIELDS, "expected_pull_request_state": "draft"})
     ),
+    "recipe-fixture-path": _raw_catalog(
+        _entry("a", kind="recipe", recipe_fixture="../sandbox-smoke.yaml", **_RECIPE_FIELDS)
+    ),
+    "recipe-fixture-extension": _raw_catalog(
+        _entry("a", kind="recipe", recipe_fixture="sandbox-smoke.yml", **_RECIPE_FIELDS)
+    ),
     "canary-with-recipe-fields": _raw_catalog(_entry("a", **_RECIPE_FIELDS)),
+    "canary-with-recipe-fixture": _raw_catalog(_entry("a", recipe_fixture="sandbox-smoke.yaml")),
     "clean-install-with-recipe-fields": _raw_catalog(_clean_install_entry(**_RECIPE_FIELDS)),
+    "clean-install-with-recipe-fixture": _raw_catalog(
+        _clean_install_entry(recipe_fixture="sandbox-smoke.yaml")
+    ),
     "clean-install-unknown-key": _raw_catalog(_clean_install_entry(extra=1)),
     "expected-failures-on-canary": _raw_catalog(
         _entry("a", expected_failures=[_EXPECTED_FAILURE])
     ),
-    "expected-failures-on-recipe": _raw_catalog(
+    "expected-failures-warning-on-recipe": _raw_catalog(
         _entry(
             "impl",
             kind="recipe",
-            expected_failures=[_EXPECTED_FAILURE],
+            expected_failures=[{**_EXPECTED_FAILURE, "severity": "warning"}],
             **_RECIPE_FIELDS,
         )
     ),
@@ -399,6 +419,26 @@ class TestCatalog:
         assert clean_install.trigger_paths == _CLEAN_INSTALL_TRIGGER_PATHS
         assert clean_install.recipe is None
 
+        smoke = catalog.get("headless-smoke")
+        assert smoke.kind == "recipe"
+        assert smoke.peak_sessions == 2
+        assert smoke.timeout_sec == 900
+        assert smoke.recipe == "sandbox-smoke"
+        assert smoke.recipe_fixture == "sandbox-smoke.yaml"
+        assert smoke.ingredients == ()
+        assert smoke.expected_pull_request_state == "closed"
+        assert smoke.expected_failures == ()
+        assert smoke.trigger_paths == (
+            "src/autoskillit/execution/headless/*",
+            "src/autoskillit/execution/backends/*",
+            "src/autoskillit/cli/fleet/*",
+            "src/autoskillit/fleet/dispatch/*",
+            "src/autoskillit/server/*",
+            "src/autoskillit/hooks/*",
+            "scripts/e2e/*",
+            ".github/workflows/e2e.yml",
+        )
+
     def test_clean_install_expected_failures_are_immutable_mapping_rows(self) -> None:
         rows = [{**_EXPECTED_FAILURE}, {**_EXPECTED_FAILURE, "severity": "warning"}]
         test = _catalog(_clean_install_entry(expected_failures=rows)).get("clean-install")
@@ -421,11 +461,57 @@ class TestCatalog:
         assert len(test.expected_failures) == 3
 
     def test_recipe_entry_parses(self) -> None:
-        catalog = _catalog(_entry("impl", kind="recipe", **_RECIPE_FIELDS))
+        catalog = _catalog(
+            _entry(
+                "impl",
+                kind="recipe",
+                recipe_fixture="sandbox-smoke.yaml",
+                **_RECIPE_FIELDS,
+            )
+        )
         test = catalog.get("impl")
         assert test.recipe == "implementation"
         assert test.ingredients == (("task", "Add a greeting"),)
         assert test.expected_pull_request_state == "merged"
+        assert test.recipe_fixture == "sandbox-smoke.yaml"
+
+    def test_recipe_without_fixture_defaults_to_none(self) -> None:
+        test = _catalog(_entry("impl", kind="recipe", **_RECIPE_FIELDS)).get("impl")
+        assert test.recipe_fixture is None
+
+    def test_recipe_expected_failure_keeps_exact_error_diagnostic(self) -> None:
+        row = {
+            **_EXPECTED_FAILURE,
+            "check": " exact-check ",
+            "message": " exact message ",
+        }
+        test = _catalog(
+            _entry(
+                "impl",
+                kind="recipe",
+                expected_failures=[row],
+                **_RECIPE_FIELDS,
+            )
+        ).get("impl")
+        assert dict(test.expected_failures[0]) == row
+
+    @pytest.mark.parametrize("changed_path", _HEADLESS_SMOKE_TRIGGER_PATHS)
+    def test_headless_smoke_trigger_paths_match(self, changed_path: str) -> None:
+        catalog = e2e_catalog.load_catalog()
+        smoke = catalog.get("headless-smoke")
+        assert select._touches(smoke, (changed_path,))
+
+    def test_headless_smoke_path_selects_shipped_recipe(self) -> None:
+        catalog = e2e_catalog.load_catalog()
+        assert select.pick_tests(
+            catalog,
+            ["src/autoskillit/execution/headless/session.py"],
+            f"5230:{SHA_ZERO}",
+        ) == ("headless-smoke",)
+
+    def test_dispatch_selects_headless_smoke(self) -> None:
+        catalog = e2e_catalog.load_catalog()
+        assert select.select_for_dispatch("headless-smoke", catalog).tests == ("headless-smoke",)
 
     def test_longest_timeout_within_the_job_limit_parses(self) -> None:
         catalog = _catalog(_entry("slow", timeout_sec=_MAX_TIMEOUT_SEC))

@@ -9,7 +9,7 @@ import stat
 import subprocess
 import tempfile
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
@@ -43,6 +43,12 @@ _CANARY_REPLY = json.dumps(
 )
 _SKILL_NOTICE = "2 skills unavailable on this backend (codex): a, b"
 _CLEAN_INSTALL_ISSUE = "https://github.com/TalonT-Org/AutoSkillit/issues/5231"
+_SMOKE_FAILURE = {
+    "severity": "error",
+    "check": "workflow_failed",
+    "message": "model reported failure",
+    "issue": "https://github.com/TalonT-Org/AutoSkillit/issues/5232",
+}
 
 
 @dataclass
@@ -164,6 +170,834 @@ def _run_canary(tmp_path: Path, runner: FakeRunner, monkeypatch, env=None):
         runner=runner,
     )
     return failures, json.loads((out / "result.json").read_text(encoding="utf-8"))
+
+
+def _smoke_case(expected_failures=None):
+    catalog = e2e_catalog.load_catalog()
+    test = catalog.get("headless-smoke")
+    if expected_failures is not None:
+        test = replace(test, expected_failures=tuple(expected_failures))
+        catalog = replace(
+            catalog,
+            tests=tuple(test if entry.name == test.name else entry for entry in catalog.tests),
+        )
+    return catalog, test
+
+
+def _run_git(cwd: Path, *argv: str, env: dict[str, str]) -> str:
+    result = subprocess.run(
+        ["git", *argv], cwd=cwd, env=env, capture_output=True, text=True, check=True
+    )
+    return result.stdout.strip()
+
+
+def _smoke_sources(*, valid_test: bool = True) -> tuple[str, str]:
+    code = '"""Sandbox smoke target."""\n\ndef smoke_canary() -> bool:\n    return True\n'
+    if valid_test:
+        test_code = (
+            "import unittest\n"
+            "from sandbox.text import smoke_canary\n\n"
+            "class SmokeCanaryTest(unittest.TestCase):\n"
+            "    def test_smoke_canary(self):\n"
+            "        self.assertTrue(smoke_canary())\n"
+        )
+    else:
+        test_code = "import unittest\n\nclass SmokeCanaryTest:\n    pass\n"
+    return code, test_code
+
+
+def _smoke_metadata(
+    argv: list[str], mode: str, state: dict[str, str], remote_url: str
+) -> subprocess.CompletedProcess[str]:
+    if argv[:2] == ["git", "remote"]:
+        assert argv == ["git", "remote", "get-url", "origin"]
+        return _completed(argv, remote_url + "\n")
+    if argv[:2] == ["git", "branch"]:
+        assert argv == ["git", "branch", "--show-current"]
+        return _completed(argv, "main\n")
+    assert argv[:2] == ["git", "ls-remote"]
+    state["branch_name"] = argv[-1].removeprefix("refs/heads/")
+    assert argv == [
+        "git",
+        "ls-remote",
+        "--exit-code",
+        "origin",
+        f"refs/heads/{state['branch_name']}",
+    ]
+    assert argv == [
+        "git",
+        "ls-remote",
+        "--exit-code",
+        "origin",
+        f"refs/heads/{state['branch_name']}",
+    ]
+    collision = mode == "branch-collision"
+    record = f"{'a' * 40}\trefs/heads/{state['branch_name']}\n" if collision else ""
+    return _completed(argv, record, returncode=0 if collision else 2)
+
+
+def _smoke_fleet(
+    argv: list[str],
+    call: RecordedCall,
+    clone: Path,
+    out: Path,
+    fleet: subprocess.CompletedProcess[str] | BaseException | None,
+    state: dict[str, str],
+) -> subprocess.CompletedProcess[str] | BaseException:
+    assert argv[:3] == ["autoskillit", "fleet", "run"] and call.cwd == clone
+    assert (clone / ".autoskillit" / "recipes" / "sandbox-smoke.yaml").is_file()
+    assert (out / "smoke-launched").is_file()
+    descriptor = json.loads((out / "smoke-lifecycle.json").read_text(encoding="utf-8"))
+    state.update(branch_name=descriptor["branch_name"], base_oid="b" * 40, head_oid="a" * 40)
+    fields = [
+        argv[index + 1].split("=", 1) for index, item in enumerate(argv[:-1]) if item == "-i"
+    ]
+    ingredients = dict(fields)
+    assert len(fields) == len(ingredients) == 5
+    assert ingredients == {
+        "source_dir": str(clone),
+        "repository": state["repository"],
+        "remote_url": state["remote_url"],
+        "base_branch": "main",
+        "branch_name": descriptor["branch_name"],
+    }
+    if isinstance(fleet, BaseException):
+        return fleet
+    if fleet is not None:
+        return _completed(
+            argv,
+            fleet.stdout or "",
+            returncode=fleet.returncode,
+            stderr=fleet.stderr or "",
+        )
+    return _completed(
+        argv,
+        json.dumps({"success": True, "kind": "completed", "dispatch_status": "success"}),
+    )
+
+
+def _smoke_pr_list(
+    argv: list[str], mode: str, state: dict[str, str]
+) -> subprocess.CompletedProcess[str]:
+    branch = argv[argv.index("--head") + 1]
+    assert branch == state["branch_name"]
+    assert argv[argv.index("--repo") + 1] == state["repository"]
+    fields = (
+        "number,state,headRefName,headRefOid,baseRefOid,additions,deletions,"
+        "headRepository,headRepositoryOwner"
+    )
+    assert argv == [
+        "gh",
+        "pr",
+        "list",
+        "--repo",
+        state["repository"],
+        "--state",
+        "all",
+        "--limit",
+        "100",
+        "--json",
+        fields,
+        "--head",
+        branch,
+    ]
+    if mode == "no-pr":
+        rows = []
+    else:
+        rows = [
+            {
+                "number": 8,
+                "state": "OPEN" if mode == "open-pr" else "CLOSED",
+                "headRefName": "other-branch" if mode == "wrong-pr-branch" else branch,
+                "headRefOid": "d" * 40 if mode == "wrong-pr-head" else state["head_oid"],
+                "baseRefOid": state["base_oid"],
+                "additions": 3,
+                "deletions": 0,
+                "headRepository": {"name": state["repository"].split("/", 1)[1]},
+                "headRepositoryOwner": {"login": state["repository"].split("/", 1)[0]},
+            }
+        ]
+    return _completed(argv, json.dumps(rows))
+
+
+def _smoke_ref(
+    argv: list[str], mode: str, state: dict[str, str]
+) -> subprocess.CompletedProcess[str]:
+    assert argv[argv.index("--method") + 1] == "GET"
+    branch = argv[-1].rsplit("/", 1)[-1]
+    assert branch == state["branch_name"]
+    assert argv == [
+        "gh",
+        "api",
+        "--include",
+        "--method",
+        "GET",
+        f"/repos/{state['repository']}/git/ref/heads/{branch}",
+    ]
+    if mode == "missing-ref":
+        return _completed(argv, "HTTP/2.0 404 Not Found\r\n\r\n", returncode=1)
+    ref_oid = "d" * 40 if mode == "wrong-ref" else state["head_oid"]
+    body = json.dumps({"ref": f"refs/heads/{branch}", "object": {"sha": ref_oid}})
+    return _completed(argv, f"HTTP/2.0 200 OK\r\n\r\n{body}")
+
+
+def _smoke_git_verification(
+    argv: list[str], mode: str, state: dict[str, str]
+) -> subprocess.CompletedProcess[str]:
+    if argv[1] == "fetch":
+        assert argv == [
+            "git",
+            "fetch",
+            "--no-tags",
+            "origin",
+            state["head_oid"],
+            state["base_oid"],
+        ]
+        return _completed(argv)
+    if argv[1] == "cat-file":
+        assert argv == ["git", "cat-file", "-t", state["head_oid"]]
+        return _completed(argv, "commit\n")
+    if argv[1] == "merge-base":
+        assert argv == ["git", "merge-base", state["base_oid"], state["head_oid"]]
+        return _completed(argv, state["base_oid"] + "\n")
+    if argv[1] == "diff":
+        assert argv == ["git", "diff", "--name-only", state["base_oid"], state["head_oid"], "--"]
+        paths = ["sandbox/text.py", "tests/test_smoke_canary.py"]
+        if mode == "earlier-unrelated-commit":
+            paths.append("sandbox/unrelated.py")
+        return _completed(argv, "\n".join(paths) + "\n")
+    prefix = state["head_oid"] + ":"
+    assert argv[1] == "show" and argv[2].startswith(prefix)
+    path = argv[2][len(prefix) :]
+    assert path in ("sandbox/text.py", "tests/test_smoke_canary.py")
+    code, test_code = _smoke_sources(valid_test=mode != "invalid-canary")
+    return _completed(argv, code if path == "sandbox/text.py" else test_code)
+
+
+def _smoke_unittest(argv: list[str], call: RecordedCall) -> subprocess.CompletedProcess[str]:
+    assert argv[0] == harness.sys.executable and argv[1:2] == ["-c"]
+    assert "unittest.defaultTestLoader.discover" in argv[2]
+    return subprocess.run(
+        argv,
+        cwd=call.cwd,
+        env=call.env,
+        capture_output=True,
+        text=True,
+        timeout=call.timeout,
+        check=False,
+    )
+
+
+def _smoke_setup(
+    argv: list[str], clone: Path, repository: str
+) -> subprocess.CompletedProcess[str]:
+    if argv[:3] == ["git", "config", "--global"]:
+        assert argv in (
+            ["git", "config", "--global", "user.name", "AutoSkillit E2E"],
+            [
+                "git",
+                "config",
+                "--global",
+                "user.email",
+                "autoskillit-e2e@users.noreply.github.com",
+            ],
+        )
+        return _completed(argv)
+    if argv[:2] == ["gh", "auth"]:
+        assert argv[2:] in (["login", "--hostname", "github.com", "--with-token"], ["setup-git"])
+        return _completed(argv)
+    assert argv == ["gh", "repo", "clone", repository, str(clone)]
+    return _completed(argv)
+
+
+def _smoke_runner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    mode: str = "success",
+    fleet: subprocess.CompletedProcess[str] | BaseException | None = None,
+) -> tuple[FakeRunner, Path]:
+    clone = tmp_path / "sandbox"
+    clone.mkdir()
+    monkeypatch.setattr(harness, "SANDBOX_CLONE", clone)
+    out = tmp_path / "out"
+    catalog, _test = _smoke_case()
+    repository = catalog.sandbox_repository
+    remote_url = f"https://github.com/{repository}.git"
+    state = {"repository": repository, "remote_url": remote_url}
+    routes = {
+        ("git", "config"): lambda argv, _call: _smoke_setup(argv, clone, repository),
+        ("gh", "auth"): lambda argv, _call: _smoke_setup(argv, clone, repository),
+        ("gh", "repo"): lambda argv, _call: _smoke_setup(argv, clone, repository),
+        ("git", "remote"): lambda argv, _call: _smoke_metadata(argv, mode, state, remote_url),
+        ("git", "branch"): lambda argv, _call: _smoke_metadata(argv, mode, state, remote_url),
+        ("git", "ls-remote"): lambda argv, _call: _smoke_metadata(argv, mode, state, remote_url),
+        ("autoskillit", "fleet"): lambda argv, call: _smoke_fleet(
+            argv, call, clone, out, fleet, state
+        ),
+        ("gh", "pr"): lambda argv, _call: _smoke_pr_list(argv, mode, state),
+        ("gh", "api"): lambda argv, _call: _smoke_ref(argv, mode, state),
+        ("git", "fetch"): lambda argv, _call: _smoke_git_verification(argv, mode, state),
+        ("git", "cat-file"): lambda argv, _call: _smoke_git_verification(argv, mode, state),
+        ("git", "merge-base"): lambda argv, _call: _smoke_git_verification(argv, mode, state),
+        ("git", "diff"): lambda argv, _call: _smoke_git_verification(argv, mode, state),
+        ("git", "show"): lambda argv, _call: _smoke_git_verification(argv, mode, state),
+        (harness.sys.executable, "-c"): _smoke_unittest,
+    }
+    runner: FakeRunner
+
+    def handle(argv: list[str]):
+        if len(argv) < 2:
+            raise AssertionError(f"unexpected smoke command: {argv!r}")
+        route = routes.get((argv[0], argv[1]))
+        if route is None:
+            raise AssertionError(f"unexpected smoke command: {argv!r}")
+        return route(argv, runner.calls[-1])
+
+    runner = FakeRunner(handle)
+    return runner, clone
+
+
+def _run_smoke(tmp_path: Path, runner: FakeRunner, monkeypatch: pytest.MonkeyPatch, env=None):
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    catalog, test = _smoke_case()
+    out = tmp_path / "out"
+    failures = harness.run_test(
+        test,
+        catalog,
+        out=out,
+        home=tmp_path / "home",
+        env=env if env is not None else _env(HOME=str(tmp_path / "home")),
+        runner=runner,
+    )
+    return failures, json.loads((out / "result.json").read_text(encoding="utf-8")), out, catalog
+
+
+class TestSandboxSmokeFixture:
+    def test_fixture_stages_discovers_and_passes_the_production_validator(self, tmp_path: Path):
+        from autoskillit.recipe.io import find_recipe_by_name, load_recipe
+        from autoskillit.recipe.validator import validate_recipe_structure
+
+        _catalog, test = _smoke_case()
+        assert test.recipe is not None and test.recipe_fixture is not None
+        project = tmp_path / "project"
+        target = project / ".autoskillit" / "recipes" / f"{test.recipe}.yaml"
+        target.parent.mkdir(parents=True)
+        source = Path(harness.__file__).with_name("recipes") / test.recipe_fixture
+        target.write_bytes(source.read_bytes())
+
+        discovered = find_recipe_by_name(str(test.recipe), project)
+        assert discovered is not None
+        assert discovered.path == target
+        recipe = load_recipe(discovered.path)
+        assert validate_recipe_structure(recipe) == []
+
+        skill_steps = [step for step in recipe.steps.values() if step.tool == "run_skill"]
+        assert len(skill_steps) == 1
+        worker = skill_steps[0]
+        assert worker.skill_name == "smoke-task"
+        prompt = worker.with_args["skill_command"].lower()
+        assert "one new commit" in prompt and "only sandbox/text.py" in prompt
+        discipline = " ".join(recipe.kitchen_rules).lower()
+        assert "child agents" in discipline and "replay" in discipline
+        assert recipe.steps["setup"].with_args["cwd"] == "${{ context.worktree_path }}"
+        assert worker.with_args["cwd"] == "${{ context.worktree_path }}"
+        assert recipe.steps["test"].tool == "test_check"
+        assert recipe.steps["test"].with_args["worktree_path"] == "${{ context.worktree_path }}"
+        assert recipe.steps["push"].with_args["clone_path"] == "${{ context.worktree_path }}"
+        assert recipe.steps["push"].on_success == "create_pull_request"
+        assert recipe.steps["create_pull_request"].on_success == "close_pull_request"
+        assert recipe.steps["close_pull_request"].on_success == "done"
+        assert "DO NOT MERGE" in recipe.steps["create_pull_request"].with_args["cmd"]
+        executable = [step for step in recipe.steps.values() if step.tool or step.python]
+        assert all(
+            step.retries == 0 and step.on_failure == "failed" and step.on_exhausted == "failed"
+            for step in executable
+        )
+        done = recipe.steps["done"]
+        failed = recipe.steps["failed"]
+        assert done.action == "stop" and '"success": true' in done.message
+        assert failed.action == "stop"
+        assert all(
+            word in failed.message.lower() for word in ("success", "false", "reason", "evidence")
+        )
+        assert "do not call any tools" in failed.message.lower()
+
+
+class TestSandboxSmokeFlow:
+    def test_success_verifies_exact_closed_pr_ref_complete_diff_and_canary(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        runner, clone = _smoke_runner(tmp_path, monkeypatch)
+        external_env = _env(HOME=str(tmp_path / "home"))
+        failures, result, out, _catalog = _run_smoke(
+            tmp_path, runner, monkeypatch, env=external_env
+        )
+
+        descriptor = json.loads((out / "smoke-lifecycle.json").read_text(encoding="utf-8"))
+        evidence = json.loads((out / "smoke-evidence.json").read_text(encoding="utf-8"))
+        settings = json.loads(
+            (tmp_path / "home" / ".claude" / "settings.json").read_text(encoding="utf-8")
+        )
+        assert failures == []
+        assert result["outcome"] == "passed"
+        assert result["expected_findings"] == []
+        assert descriptor == {
+            "repository": _catalog.sandbox_repository,
+            "base_branch": "main",
+            "branch_name": descriptor["branch_name"],
+            "test": "headless-smoke",
+        }
+        assert descriptor["branch_name"].startswith("e2e-smoke-")
+        assert len(descriptor["branch_name"]) == len("e2e-smoke-") + 32
+        assert (out / "smoke-launched").read_text(encoding="utf-8") == "headless-smoke\n"
+        assert (clone / ".autoskillit" / "recipes" / "sandbox-smoke.yaml").is_file()
+        assert evidence["branch_name"] == descriptor["branch_name"]
+        assert evidence["pre_cleanup_ref"]["object"]["sha"] == evidence["head_commit"]
+        assert evidence["canary_verified"] is True
+        assert settings["env"] == _EXPECTED_SETTINGS_ENV
+        assert not (clone / ".claude" / "settings.json").exists()
+        assert not (clone / ".autoskillit" / "config.yaml").exists()
+        assert all(
+            not any(name.startswith("ANTHROPIC_") or "OAUTH" in name for name in call.env)
+            for call in runner.calls
+            if call.env is not None
+        )
+        assert [call.input for call in runner.calls if call.input] == [SANDBOX_TOKEN]
+        assert MINIMAX_KEY not in (out / "smoke-lifecycle.json").read_text(encoding="utf-8")
+        assert SANDBOX_TOKEN not in (out / "smoke-evidence.json").read_text(encoding="utf-8")
+        assert sum(call.argv[:2] == ["git", "show"] for call in runner.calls) == 2
+        assert sum(call.argv[:3] == ["gh", "pr", "list"] for call in runner.calls) == 2
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "nonzero",
+            "timeout",
+            "exception",
+            "no-pr",
+            "open-pr",
+            "wrong-pr-branch",
+            "wrong-pr-head",
+            "wrong-ref",
+            "missing-ref",
+            "earlier-unrelated-commit",
+            "invalid-canary",
+        ],
+    )
+    def test_failed_launch_or_verification_keeps_lifecycle_evidence(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fault: str
+    ) -> None:
+        mode = fault if fault not in {"nonzero", "timeout", "exception"} else "success"
+        fleet = None
+        if fault == "nonzero":
+            fleet = _completed(
+                [],
+                json.dumps(
+                    {
+                        "success": False,
+                        "kind": "completed",
+                        "dispatch_status": "failed",
+                        "error": "workflow_failed",
+                        "user_visible_message": "model reported failure",
+                    }
+                ),
+                returncode=1,
+            )
+        elif fault == "timeout":
+            fleet = subprocess.TimeoutExpired(["autoskillit", "fleet", "run"], 600)
+        elif fault == "exception":
+            fleet = RuntimeError("fleet runner failed")
+        runner, _clone = _smoke_runner(tmp_path, monkeypatch, mode=mode, fleet=fleet)
+        failures, result, out, _catalog = _run_smoke(tmp_path, runner, monkeypatch)
+
+        assert failures
+        assert result["outcome"] == "failed"
+        assert (out / "smoke-lifecycle.json").is_file()
+        assert (out / "smoke-launched").is_file()
+        assert not any(call.argv[:2] == ["gh", "pr", "close"] for call in runner.calls)
+
+    def test_branch_collision_stops_before_launch_marker(self, tmp_path, monkeypatch):
+        runner, _clone = _smoke_runner(tmp_path, monkeypatch, mode="branch-collision")
+        failures, result, out, _catalog = _run_smoke(tmp_path, runner, monkeypatch)
+
+        assert failures
+        assert result["outcome"] == "failed"
+        assert (out / "smoke-lifecycle.json").exists() is False
+        assert (out / "smoke-launched").exists() is False
+        assert not any(call.argv[:3] == ["autoskillit", "fleet", "run"] for call in runner.calls)
+
+    def test_expected_failure_matches_only_the_exact_structured_envelope(
+        self, tmp_path, monkeypatch
+    ):
+        expected = _SMOKE_FAILURE
+        runner, _clone = _smoke_runner(
+            tmp_path,
+            monkeypatch,
+            fleet=_completed(
+                [],
+                json.dumps(
+                    {
+                        "success": False,
+                        "kind": "completed",
+                        "dispatch_status": "failed",
+                        "error": "workflow_failed",
+                        "user_visible_message": "model reported failure",
+                    }
+                ),
+                returncode=1,
+            ),
+        )
+        catalog, test = _smoke_case([expected])
+        out = tmp_path / "out"
+        failures = harness.run_test(
+            test,
+            catalog,
+            out=out,
+            home=tmp_path / "home",
+            env=_env(HOME=str(tmp_path / "home")),
+            runner=runner,
+        )
+        result = json.loads((out / "result.json").read_text(encoding="utf-8"))
+
+        assert failures == []
+        assert result["passed"] is False
+        assert result["outcome"] == "expected_failure"
+        assert result["expected_findings"] == [expected]
+
+    def test_recipe_matching_preserves_extra_errors_and_rejects_malformed_or_stale_rows(
+        self,
+    ) -> None:
+        expected = _SMOKE_FAILURE
+        _catalog, test = _smoke_case([expected])
+        matching = {
+            "success": False,
+            "kind": "completed",
+            "dispatch_status": "failed",
+            "error": "workflow_failed",
+            "user_visible_message": "model reported failure",
+        }
+        failures, findings = harness.match_recipe_failure(
+            test, ["cleanup: delete failed"], matching
+        )
+        assert failures == ["cleanup: delete failed"]
+        assert findings == [expected]
+
+        malformed = {**matching, "user_visible_message": " "}
+        failures, findings = harness.match_recipe_failure(test, ["fleet run failed"], malformed)
+        assert failures == ["fleet run failed"]
+        assert findings == []
+
+        failures, findings = harness.match_recipe_failure(test, [], {"success": True})
+        assert len(failures) == 1 and "remove stale expected failure" in failures[0]
+        assert findings == []
+
+    def test_expected_failure_console_outcome_comes_from_result_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        catalog, test = _smoke_case([_SMOKE_FAILURE])
+
+        def record_expected_failure(test_arg, _catalog, *, out, **_kwargs):
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "result.json").write_text(
+                json.dumps(
+                    {
+                        "test": test_arg.name,
+                        "passed": False,
+                        "failures": [],
+                        "outcome": "expected_failure",
+                        "expected_findings": [_SMOKE_FAILURE],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            return []
+
+        monkeypatch.setattr(harness.e2e_catalog, "load_catalog", lambda _path: catalog)
+        monkeypatch.setattr(harness, "run_test", record_expected_failure)
+        status = harness._run(test.name, tmp_path / "out", tmp_path / "catalog.json")
+
+        assert status == 0
+        assert capsys.readouterr().out.strip() == f"e2e_harness: {test.name} expected_failure"
+
+
+def _make_bare_remote(tmp_path: Path, branch: str) -> tuple[Path, dict[str, str], str]:
+    git_home = tmp_path / "git-home"
+    git_home.mkdir()
+    env = {
+        "HOME": str(git_home),
+        "PATH": os.environ.get("PATH", "/usr/bin"),
+        "GIT_CONFIG_GLOBAL": str(git_home / "config"),
+        "GIT_CONFIG_NOSYSTEM": "1",
+    }
+    (git_home / "config").write_text("", encoding="utf-8")
+    remote = tmp_path / "sandbox.git"
+    builder = tmp_path / "builder"
+    builder.mkdir()
+    _run_git(builder, "init", "--bare", "--initial-branch=main", str(remote), env=env)
+    clone = builder / "clone"
+    _run_git(builder, "init", "--initial-branch=main", str(clone), env=env)
+    _run_git(clone, "config", "user.name", "Harness test", env=env)
+    _run_git(clone, "config", "user.email", "harness-test@example.invalid", env=env)
+    (clone / "README.md").write_text("base\n", encoding="utf-8")
+    _run_git(clone, "add", "README.md", env=env)
+    _run_git(clone, "commit", "-m", "base", env=env)
+    _run_git(clone, "remote", "add", "origin", str(remote), env=env)
+    _run_git(clone, "push", "-u", "origin", "main", env=env)
+
+    _run_git(clone, "checkout", "-b", branch, env=env)
+    (clone / "smoke.txt").write_text("smoke\n", encoding="utf-8")
+    _run_git(clone, "add", "smoke.txt", env=env)
+    _run_git(clone, "commit", "-m", "smoke branch", env=env)
+    _run_git(clone, "push", "-u", "origin", branch, env=env)
+
+    _run_git(clone, "checkout", "main", env=env)
+    _run_git(clone, "checkout", "-b", "feature/unrelated", env=env)
+    (clone / "unrelated.txt").write_text("preserve\n", encoding="utf-8")
+    _run_git(clone, "add", "unrelated.txt", env=env)
+    _run_git(clone, "commit", "-m", "unrelated branch", env=env)
+    _run_git(clone, "push", "-u", "origin", "feature/unrelated", env=env)
+    unrelated_oid = _bare_ref(remote, "feature/unrelated")
+    assert unrelated_oid is not None
+    return remote, env, unrelated_oid
+
+
+def _bare_ref(remote: Path, branch: str) -> str | None:
+    result = subprocess.run(
+        ["git", "--git-dir", str(remote), "rev-parse", "--verify", f"refs/heads/{branch}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def _smoke_cleanup_runner(
+    remote: Path,
+    branch: str,
+    repository: str,
+    *,
+    fault: str | None = None,
+    with_pr: bool = True,
+) -> tuple[FakeRunner, dict[str, object]]:
+    state: dict[str, object] = {"pr_open": True, "unrelated_pr_open": True}
+    runner: FakeRunner
+
+    def handle(argv: list[str]):
+        if argv[:2] == ["gh", "auth"]:
+            return _completed(argv)
+        if argv[:2] == ["gh", "api"]:
+            method = argv[argv.index("--method") + 1]
+            endpoint = argv[-1]
+            requested = endpoint.rsplit("/heads/", 1)[-1]
+            assert endpoint.startswith(f"/repos/{repository}/git/")
+            if method == "GET":
+                oid = _bare_ref(remote, requested)
+                if oid is None:
+                    return _completed(argv, "HTTP/2.0 404 Not Found\r\n\r\n", returncode=1)
+                body = json.dumps(
+                    {
+                        "ref": f"refs/heads/{requested}",
+                        "object": {"sha": oid},
+                    }
+                )
+                return _completed(argv, f"HTTP/2.0 200 OK\r\n\r\n{body}")
+            assert method == "DELETE"
+            assert requested == branch
+            if fault == "delete":
+                return _completed(
+                    argv, "HTTP/2.0 500 Server Error\r\n\r\n", returncode=1, stderr="delete failed"
+                )
+            result = subprocess.run(
+                ["git", "--git-dir", str(remote), "update-ref", "-d", f"refs/heads/{branch}"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            return _completed(
+                argv,
+                "HTTP/2.0 204 No Content\r\n\r\n",
+                returncode=result.returncode,
+                stderr=result.stderr,
+            )
+        if argv[:3] == ["gh", "pr", "list"]:
+            assert argv[argv.index("--repo") + 1] == repository
+            assert argv[argv.index("--head") + 1] == branch
+            rows = (
+                []
+                if not with_pr
+                else [
+                    {
+                        "number": 8,
+                        "state": "OPEN" if state["pr_open"] else "CLOSED",
+                        "headRefName": branch,
+                        "headRepository": {"name": repository.split("/", 1)[1]},
+                        "headRepositoryOwner": {"login": repository.split("/", 1)[0]},
+                    }
+                ]
+            )
+            return _completed(argv, json.dumps(rows))
+        if argv[:3] == ["gh", "pr", "close"]:
+            assert argv[3:] == ["8", "--repo", repository]
+            state["close_attempts"] = int(state.get("close_attempts", 0)) + 1
+            if fault == "close":
+                return _completed(argv, returncode=1, stderr="close failed")
+            state["pr_open"] = False
+            return _completed(argv)
+        raise AssertionError(f"unexpected cleanup command: {argv!r}")
+
+    runner = FakeRunner(handle)
+    return runner, state
+
+
+def _write_cleanup_inputs(
+    out: Path, test: e2e_catalog.CatalogTest, repository: str, *, malformed_result: bool = False
+) -> str:
+    branch = "e2e-smoke-" + "a" * 32
+    out.mkdir(parents=True)
+    (out / "smoke-launched").write_text(test.name + "\n", encoding="utf-8")
+    (out / "smoke-lifecycle.json").write_text(
+        json.dumps(
+            {
+                "test": test.name,
+                "repository": repository,
+                "base_branch": "main",
+                "branch_name": branch,
+            }
+        ),
+        encoding="utf-8",
+    )
+    if malformed_result:
+        (out / "result.json").write_text("{broken", encoding="utf-8")
+    else:
+        (out / "result.json").write_text(
+            json.dumps(
+                {
+                    "test": test.name,
+                    "passed": False,
+                    "failures": [],
+                    "outcome": "expected_failure",
+                    "expected_findings": [_SMOKE_FAILURE],
+                }
+            ),
+            encoding="utf-8",
+        )
+    return branch
+
+
+class TestSmokeCleanup:
+    def test_real_bare_remote_cleanup_preserves_unrelated_branch_and_expected_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        catalog, test = _smoke_case()
+        branch = "e2e-smoke-" + "a" * 32
+        remote, git_env, unrelated_oid = _make_bare_remote(tmp_path, branch)
+        out = tmp_path / "out"
+        _write_cleanup_inputs(out, test, catalog.sandbox_repository)
+        runner, state = _smoke_cleanup_runner(remote, branch, catalog.sandbox_repository)
+        env = _env(HOME=git_env["HOME"], PATH=git_env["PATH"], E2E_SANDBOX_TOKEN=SANDBOX_TOKEN)
+        sleeps: list[float] = []
+        monkeypatch.setattr(harness.time, "sleep", sleeps.append)
+
+        status = harness.cleanup_test(catalog, test.name, runner, out, env)
+        result = json.loads((out / "result.json").read_text(encoding="utf-8"))
+        evidence = json.loads((out / "smoke-cleanup.json").read_text(encoding="utf-8"))
+
+        assert status == 0
+        assert result["outcome"] == "expected_failure"
+        assert result["expected_findings"] == [_SMOKE_FAILURE]
+        assert result["failures"] == []
+        assert _bare_ref(remote, branch) is None
+        assert _bare_ref(remote, "feature/unrelated") == unrelated_oid
+        assert state["pr_open"] is False and state["unrelated_pr_open"] is True
+        assert sleeps == [1, 1]
+        assert evidence["final_ref_status"] == 404
+        assert evidence["final_pull_requests"][0]["state"] == "CLOSED"
+        assert [call.input for call in runner.calls if call.input] == [SANDBOX_TOKEN]
+        assert all(
+            "E2E_SANDBOX_TOKEN" not in call.env for call in runner.calls if call.env is not None
+        )
+        close_calls = [
+            call.argv for call in runner.calls if call.argv[:3] == ["gh", "pr", "close"]
+        ]
+        assert close_calls == [["gh", "pr", "close", "8", "--repo", catalog.sandbox_repository]]
+
+    def test_cleanup_deletes_a_pushed_branch_even_without_a_pull_request(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        catalog, test = _smoke_case()
+        branch = "e2e-smoke-" + "a" * 32
+        remote, git_env, unrelated_oid = _make_bare_remote(tmp_path, branch)
+        out = tmp_path / "out"
+        _write_cleanup_inputs(out, test, catalog.sandbox_repository)
+        runner, _state = _smoke_cleanup_runner(
+            remote, branch, catalog.sandbox_repository, with_pr=False
+        )
+        env = _env(HOME=git_env["HOME"], PATH=git_env["PATH"], E2E_SANDBOX_TOKEN=SANDBOX_TOKEN)
+        sleeps: list[float] = []
+        monkeypatch.setattr(harness.time, "sleep", sleeps.append)
+
+        assert harness.cleanup_test(catalog, test.name, runner, out, env) == 0
+
+        evidence = json.loads((out / "smoke-cleanup.json").read_text(encoding="utf-8"))
+        assert _bare_ref(remote, branch) is None
+        assert _bare_ref(remote, "feature/unrelated") == unrelated_oid
+        assert evidence["final_pull_requests"] == []
+        assert evidence["final_ref_status"] == 404
+        assert sleeps == [1]
+        assert not any(call.argv[:3] == ["gh", "pr", "close"] for call in runner.calls)
+
+    @pytest.mark.parametrize("fault", ["close", "delete"])
+    def test_cleanup_errors_fail_and_attempt_the_other_resource_operation(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fault: str
+    ) -> None:
+        catalog, test = _smoke_case()
+        branch = "e2e-smoke-" + "a" * 32
+        remote, git_env, _unrelated_oid = _make_bare_remote(tmp_path, branch)
+        out = tmp_path / "out"
+        _write_cleanup_inputs(out, test, catalog.sandbox_repository)
+        runner, state = _smoke_cleanup_runner(
+            remote, branch, catalog.sandbox_repository, fault=fault
+        )
+        env = _env(HOME=git_env["HOME"], PATH=git_env["PATH"], E2E_SANDBOX_TOKEN=SANDBOX_TOKEN)
+        monkeypatch.setattr(harness.time, "sleep", lambda _duration: None)
+
+        status = harness.cleanup_test(catalog, test.name, runner, out, env)
+        result = json.loads((out / "result.json").read_text(encoding="utf-8"))
+        close_called = any(call.argv[:3] == ["gh", "pr", "close"] for call in runner.calls)
+        delete_called = any(
+            call.argv[:2] == ["gh", "api"] and "DELETE" in call.argv for call in runner.calls
+        )
+
+        assert status == 1
+        assert result["outcome"] == "failed"
+        assert result["expected_findings"] == [_SMOKE_FAILURE]
+        assert close_called and delete_called
+        assert state["pr_open"] is (fault == "close")
+        assert (_bare_ref(remote, branch) is not None) is (fault == "delete")
+
+    def test_missing_marker_is_a_noop_but_bad_descriptor_and_result_are_saved(
+        self, tmp_path: Path
+    ) -> None:
+        catalog, test = _smoke_case()
+        runner = FakeRunner(lambda argv: _completed(argv))
+        out = tmp_path / "not-launched"
+        assert harness.cleanup_test(catalog, test.name, runner, out, _env()) == 0
+        assert runner.calls == []
+        assert not out.exists()
+
+        bad = tmp_path / "bad-evidence"
+        bad.mkdir()
+        (bad / "smoke-launched").write_text(test.name + "\n", encoding="utf-8")
+        (bad / "smoke-lifecycle.json").write_text("{broken", encoding="utf-8")
+        (bad / "result.json").write_text("{also broken", encoding="utf-8")
+        assert harness.cleanup_test(catalog, test.name, runner, bad, _env()) == 1
+        assert (bad / "result-before-cleanup.json").read_text(encoding="utf-8") == "{also broken"
+        result = json.loads((bad / "result.json").read_text(encoding="utf-8"))
+        evidence = json.loads((bad / "smoke-cleanup.json").read_text(encoding="utf-8"))
+        assert result["outcome"] == "failed"
+        assert len(evidence["failures"]) == 2
+        assert runner.calls == []
 
 
 def _clean_install_catalog(expected_failures: list[dict[str, str]] | None = None):
@@ -311,12 +1145,12 @@ class TestCanaryOutput:
 
 class TestEnvelope:
     def test_success_envelope_passes(self) -> None:
-        assert harness.check_envelope(0, '{"success": true}\n') == []
+        assert harness.check_envelope(0, '{"success": true}\n') == ([], {"success": True})
 
     def test_envelope_is_the_last_line_after_plain_text(self) -> None:
         stdout = f'{_SKILL_NOTICE}\n{{"success": true}}\n\n'
         assert harness.last_line(stdout) == '{"success": true}'
-        assert harness.check_envelope(0, stdout) == []
+        assert harness.check_envelope(0, stdout) == ([], {"success": True})
 
     @pytest.mark.parametrize(
         ("returncode", "stdout"),
@@ -330,7 +1164,12 @@ class TestEnvelope:
         ids=["nonzero-exit", "unsuccessful", "list", "non-json-last-line", "empty"],
     )
     def test_bad_envelope_fails(self, returncode: int, stdout: str) -> None:
-        assert harness.check_envelope(returncode, stdout)
+        failures, envelope = harness.check_envelope(returncode, stdout)
+        assert failures
+        if stdout in ('{"success": true}', '{"success": false}'):
+            assert envelope is not None
+        else:
+            assert envelope is None
 
 
 class TestPullRequestAssertions:
@@ -352,7 +1191,13 @@ class TestRecipeFlow:
         failures, result = _run_recipe(tmp_path, runner)
 
         assert failures == []
-        assert result == {"test": "impl", "passed": True, "failures": []}
+        assert result == {
+            "test": "impl",
+            "passed": True,
+            "failures": [],
+            "outcome": "passed",
+            "expected_findings": [],
+        }
         assert [call.argv for call in runner.calls] == [
             ["git", "config", "--global", "user.name", "AutoSkillit E2E"],
             [
@@ -431,7 +1276,13 @@ class TestRecipeFlow:
         runner = FakeRunner(_recipe_handler(fleet=RuntimeError("unexpected fleet error")))
         failures, result = _run_recipe(tmp_path, runner)
         assert failures == ["harness error: unexpected fleet error"]
-        assert result == {"test": "impl", "passed": False, "failures": failures}
+        assert result == {
+            "test": "impl",
+            "passed": False,
+            "failures": failures,
+            "outcome": "failed",
+            "expected_findings": [],
+        }
         assert runner.calls[-1].argv[:4] == ["gh", "pr", "close", "8"]
 
     def test_missing_gh_is_a_failure_string(self, tmp_path: Path) -> None:
@@ -471,7 +1322,13 @@ class TestRecipeFlow:
         runner = FakeRunner(_recipe_handler(extra=malformed_listing))
         failures, result = _run_recipe(tmp_path, runner)
         assert "gh pr list: pull request number is missing or invalid" in failures
-        assert result == {"test": "impl", "passed": False, "failures": failures}
+        assert result == {
+            "test": "impl",
+            "passed": False,
+            "failures": failures,
+            "outcome": "failed",
+            "expected_findings": [],
+        }
         assert ("gh", "pr", "close") not in runner.argv_prefixes()
 
     def test_missing_sandbox_token_fails_before_any_launch(self, tmp_path: Path) -> None:
@@ -819,11 +1676,18 @@ class TestRedaction:
         (source / "result.json").write_text(f"key={MINIMAX_KEY}\n", encoding="utf-8")
         (source / "nested" / "blob.bin").write_bytes(b"\x00" + SANDBOX_TOKEN.encode() + b"\xff")
         (source / "nested" / "blob.bin").chmod(0o600)
+        (source / "smoke-lifecycle.json").write_text(
+            f'{{"credential":"{MINIMAX_KEY}","token":"{SANDBOX_TOKEN}"}}\n',
+            encoding="utf-8",
+        )
         dest = tmp_path / "upload"
 
         harness.redact_tree([source, tmp_path / "missing"], dest, [MINIMAX_KEY, SANDBOX_TOKEN, ""])
 
         assert (dest / "out" / "result.json").read_text(encoding="utf-8") == "key=[REDACTED]\n"
+        assert (dest / "out" / "smoke-lifecycle.json").read_text(encoding="utf-8") == (
+            '{"credential":"[REDACTED]","token":"[REDACTED]"}\n'
+        )
         assert (dest / "out" / "nested" / "blob.bin").read_bytes() == b"\x00[REDACTED]\xff"
         assert stat.S_IMODE((dest / "out" / "nested" / "blob.bin").stat().st_mode) == 0o644
         assert stat.S_IMODE((dest / "out" / "nested").stat().st_mode) == 0o755

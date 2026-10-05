@@ -629,10 +629,40 @@ async def test_real_backend_launches_keep_idle_policy_out_of_cmd_spec_and_pass_l
     monkeypatch.setattr(
         _patch_headless__headless_execute, "_run_headless_attempt", capture_attempt
     )
+    session_home = tmp_path / "session-home"
+    route = real_backend.conventions.managed_skill_discovery
+    assert route is not None
+    catalog_dir = route.catalog_dir(session_home)
+    skill_file = catalog_dir / "test" / "SKILL.md"
+    skill_file.parent.mkdir(parents=True)
+    skill_content = "---\nname: test\ndescription: Test session skill.\n---\n# Test\n"
+    skill_file.write_text(skill_content)
+
+    if route.entry_point_is_alias:
+        discovery_entry = route.discovery_root(session_home)
+        assert discovery_entry is not None
+        assert route.alias_target is not None
+        discovery_entry.symlink_to(route.alias_target, target_is_directory=True)
+
+    if backend_name == "codex":
+        from autoskillit.workspace.session_skills._materialization import (
+            _create_inert_rollout_paths,
+        )
+
+        auth_source = session_home / "auth-source.json"
+        auth_source.write_text("{}")
+        (session_home / "auth.json").symlink_to(auth_source)
+        (session_home / "config.toml").write_text(
+            "[mcp_servers.autoskillit]\nname = 'autoskillit'\n"
+        )
+        _create_inert_rollout_paths(session_home, real_backend)
+
+    assert real_backend.validate_skill_content(skill_content) == []
+    assert real_backend.validate_session_layout(session_home) == []
     add_dirs = (
         ValidatedAddDir(
-            path=str(tmp_path / "add-dir"),
-            session_home=str(tmp_path),
+            path=str(session_home / "add-dir"),
+            session_home=str(session_home),
             skill_entries=(("test", "test/SKILL.md"),),
         ),
     )

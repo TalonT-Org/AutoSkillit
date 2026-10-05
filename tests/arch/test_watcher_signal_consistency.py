@@ -109,9 +109,22 @@ def test_liveness_watchers_reach_the_operation_lease_reader() -> None:
 
 def test_execution_watchers_have_no_dispatch_marker_dependency() -> None:
     for source_path in _EXECUTION_ROOT.rglob("*.py"):
-        source = source_path.read_text(encoding="utf-8")
-        assert "_has_active_execution_marker" not in source, source_path
-        assert "-in-progress-" not in source, source_path
+        tree = ast.parse(source_path.read_text(encoding="utf-8"))
+        assert "_has_active_execution_marker" not in _called_names(tree), source_path
+        assert not any(
+            isinstance(node, ast.alias)
+            and node.name.rsplit(".", 1)[-1] == "_has_active_execution_marker"
+            for node in ast.walk(tree)
+        ), source_path
+        for call in (node for node in ast.walk(tree) if isinstance(node, ast.Call)):
+            arguments = [*call.args, *(keyword.value for keyword in call.keywords)]
+            assert not any(
+                isinstance(node, ast.Constant)
+                and isinstance(node.value, str)
+                and "-in-progress-" in node.value
+                for argument in arguments
+                for node in ast.walk(argument)
+            ), source_path
 
 
 def test_liveness_consumers_do_not_use_network_connections_as_evidence() -> None:

@@ -148,9 +148,9 @@ def _canonicalize_logical_role_names(data: dict[str, Any]) -> str | None:
             if not isinstance(raw_name, str):
                 return f"semantic_requirements.{collection}.{field} must be a string"
             name = raw_name.removeprefix(CLAUDE_PLUGIN_AGENT_NAMESPACE)
-            declaration[field] = name
-            if collection == "logical_roles" and AGENT_NAME_PATTERN.fullmatch(name) is None:
+            if AGENT_NAME_PATTERN.fullmatch(name) is None:
                 return f"cannot canonicalize logical role name {name!r}"
+            declaration[field] = name
     return None
 
 

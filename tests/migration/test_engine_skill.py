@@ -274,6 +274,16 @@ class TestSkillMigrationAdapter:
                 [{"role": None}],
                 "semantic_requirements.child_spawns.role must be a string",
             ),
+            (
+                "child_spawns",
+                [{"role": "autoskillit:Bad_Name", "count": 1}],
+                "cannot canonicalize logical role name 'Bad_Name'",
+            ),
+            (
+                "child_model_policies",
+                [{"role": "autoskillit:Bad_Name", "model_class": "opus"}],
+                "cannot canonicalize logical role name 'Bad_Name'",
+            ),
         ],
     )
     async def test_migration_reports_invalid_role_declarations(

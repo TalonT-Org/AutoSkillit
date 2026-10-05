@@ -12,6 +12,10 @@ from autoskillit.core import ChildTaskTranscript
 from autoskillit.execution.backends import CompositeSessionLocator
 from autoskillit.execution.backends._claude.child_task import parse_claude_child_task
 from autoskillit.execution.backends._codex.child_task import parse_codex_child_task
+from autoskillit.execution.backends._codex_parse import (
+    extract_codex_child_turn_usage,
+    extract_codex_turn_usage,
+)
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -56,6 +60,25 @@ def _codex_meta(child_id: str, **extra: object) -> dict[str, object]:
 
 def _write_codex(path: Path, child_id: str, events: list[dict[str, object]]) -> Path:
     return _write_jsonl(path, [_codex_meta(child_id), *events])
+
+
+def _codex_usage_snapshot(cumulative_total: int, timestamp: str) -> dict[str, object]:
+    return {
+        "type": "event_msg",
+        "timestamp": timestamp,
+        "payload": {
+            "type": "token_count",
+            "info": {
+                "last_token_usage": {
+                    "input_tokens": 10,
+                    "cached_input_tokens": 2,
+                    "output_tokens": 3,
+                    "total_tokens": 13,
+                },
+                "total_token_usage": {"total_tokens": cumulative_total},
+            },
+        },
+    }
 
 
 @pytest.mark.parametrize(
@@ -491,3 +514,50 @@ def test_composite_locator_preserves_transcript_read_errors() -> None:
 
     with pytest.raises(OSError, match="unreadable"):
         locator.read_child_task("child")
+
+
+def test_codex_child_usage_scans_whole_verified_rollout_and_deduplicates_snapshots(
+    tmp_path: Path,
+) -> None:
+    child_thread_id = "child-thread"
+    path = _write_codex(
+        tmp_path / "child-rollout.jsonl",
+        child_thread_id,
+        [
+            {"type": "turn_context", "payload": {"model": "codex-child-model"}},
+            _codex_usage_snapshot(13, "2026-09-01T10:00:01Z"),
+            _codex_usage_snapshot(13, "2026-09-01T10:00:02Z"),
+        ],
+    )
+    locator = SimpleNamespace(locate_session=lambda _thread_id: path)
+
+    dedicated = extract_codex_child_turn_usage(
+        path,
+        child_thread_id,
+        provider_used="codex",
+    )
+    interval = extract_codex_turn_usage(
+        locator,
+        child_thread_id,
+        "2026-09-01T10:00:00Z",
+        "2026-09-01T10:00:03Z",
+        provider_used="codex",
+    )
+
+    assert dedicated == interval
+    assert len(dedicated) == 1
+    assert dedicated[0]["model"] == "codex-child-model"
+    assert dedicated[0]["input_tokens"] == 10
+
+
+def test_codex_child_usage_rejects_mismatched_rollout_identity(tmp_path: Path) -> None:
+    path = _write_codex(tmp_path / "child-rollout.jsonl", "actual-child", [])
+
+    assert (
+        extract_codex_child_turn_usage(
+            path,
+            "different-child",
+            provider_used="codex",
+        )
+        == []
+    )

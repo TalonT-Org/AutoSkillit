@@ -20,12 +20,31 @@ from autoskillit.execution.session import (
     extract_token_usage,
     parse_session_result,
 )
+from autoskillit.execution.session.turn_usage import claude_inclusive_input_tokens
 from tests._helpers import UNKNOWN_MEASURE as _UNKNOWN
 from tests._helpers import _flush_structlog_proxy_caches as _flush_logger_proxy_caches
 from tests._helpers import observed_measure as _observed
 from tests.execution.conftest import _assistant_ndjson, _result_ndjson
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+
+@pytest.mark.parametrize(
+    ("raw_input", "cache_read", "cache_write", "expected"),
+    [
+        (10, 3, 2, 15),
+        (None, 3, 2, None),
+        (10, None, 2, None),
+        (10, 3, None, None),
+    ],
+)
+def test_claude_inclusive_input_requires_all_raw_components(
+    raw_input: int | None,
+    cache_read: int | None,
+    cache_write: int | None,
+    expected: int | None,
+) -> None:
+    assert claude_inclusive_input_tokens(raw_input, cache_read, cache_write) == expected
 
 
 def _make_session_result(

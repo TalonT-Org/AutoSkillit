@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 import zstandard
 
+import autoskillit.execution.evidence.report_walk as report_walk
 from autoskillit.core import iter_merged_assistant_turns
 from autoskillit.execution.evidence.report_walk import (
     SourceGapError,
@@ -126,6 +127,33 @@ def test_first_pass_emits_joinable_records_and_tolerates_old_index_rows(
     assert sessions["sid-old"]["row"] == old_schema
     assert sessions["sid-old"]["assistant_turn_count"] is None
     assert read_tolerant_session_index_rows(root / "sessions.jsonl") == [current, old_schema]
+
+
+def test_session_walk_reads_child_outcomes_by_native_parent_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "logs"
+    child = {"child_id": "native-child", "role": "audit-bugs"}
+    calls: list[tuple[str, str, Path]] = []
+
+    def collect(*, backend: str, parent_session_id: str, log_root: Path):
+        calls.append((backend, parent_session_id, log_root))
+        return (child,)
+
+    monkeypatch.setattr(report_walk, "collect_child_outcomes", collect, raising=False)
+    _write_jsonl(
+        root / "sessions.jsonl",
+        [_session("report-index-key", "native-parent-id", backend="claude-code")],
+    )
+
+    (item,) = [candidate for candidate in iter_report_walk(root) if candidate.kind == "session"]
+
+    assert calls == [("claude_code", "native-parent-id", root)]
+    assert item.source_id == "report-index-key"
+    assert item.session_id == "native-parent-id"
+    assert item.record is not None
+    assert item.record["child_outcomes"] == (child,)
+    assert item.watermark["projection"]["report-index-key"]
 
 
 @pytest.mark.parametrize("pause", ("before", "after"))

@@ -396,6 +396,17 @@ def test_older_version_rows_parse_without_error(tmp_path: Path) -> None:
             }
         )
     )
+    (rows_path.parent / "state.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "row_schema_version": REPORT_INDEX_SCHEMA_VERSION,
+                "walk": None,
+                "rows_bytes": rows_path.stat().st_size,
+            }
+        ),
+        encoding="utf-8",
+    )
 
     indexed = read_report_index(rows_path.parent)
 
@@ -408,6 +419,54 @@ def test_older_version_rows_parse_without_error(tmp_path: Path) -> None:
     assert old_request["cost_usd"] is None
     assert "future_field" not in indexed.sessions["future-session"]
     assert len(indexed.sessions) == 2
+
+
+@pytest.mark.parametrize(
+    "row_schema_marker",
+    [None, 1, REPORT_INDEX_SCHEMA_VERSION + 1],
+    ids=["absent", "mismatched", "future"],
+)
+def test_incompatible_row_schema_is_rejected_and_rebuilt(
+    tmp_path: Path,
+    row_schema_marker: int | None,
+) -> None:
+    assert not read_report_index(tmp_path / "absent-index").sessions
+
+    root = tmp_path / "logs"
+    _write_jsonl(root / "sessions.jsonl", [_basic_session("current", "sid-current")])
+    index_dir = tmp_path / "index"
+    update_report_index(root, index_dir)
+
+    state_path = index_dir / "state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    if row_schema_marker is None:
+        state.pop("row_schema_version", None)
+    else:
+        state["row_schema_version"] = row_schema_marker
+    rows_path = index_dir / "rows.jsonl"
+    with rows_path.open("ab") as handle:
+        handle.write(
+            _json_line(
+                {
+                    "schema_version": REPORT_INDEX_SCHEMA_VERSION,
+                    "kind": "session",
+                    "key": "stale-child-generation",
+                    "session_id": "sid-stale",
+                }
+            )
+        )
+    state["rows_bytes"] = rows_path.stat().st_size
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="row schema"):
+        read_report_index(index_dir)
+
+    update_report_index(root, index_dir)
+
+    indexed = read_report_index(index_dir)
+    committed = json.loads(state_path.read_text(encoding="utf-8"))
+    assert set(indexed.sessions) == {"current"}
+    assert committed["row_schema_version"] == REPORT_INDEX_SCHEMA_VERSION
 
 
 def test_lost_state_keeps_rows_whose_sources_rotated_away(tmp_path: Path) -> None:

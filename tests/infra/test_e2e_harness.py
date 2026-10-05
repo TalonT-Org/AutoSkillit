@@ -586,16 +586,22 @@ class TestCleanInstallFlow:
         assert result["expected_findings"] == [expected]
 
     @pytest.mark.parametrize(
-        "doctor_stdout",
+        ("doctor_stdout", "expected_failure"),
         [
-            "not json",
-            "[]",
-            "{}",
-            '{"results": {}}',
-            '{"results": []}',
-            '{"results": [null]}',
-            '{"results": [{"severity": "fatal", "check": "x", "message": "y"}]}',
-            '{"results": [{"severity": "warning", "check": "x", "message": 3}]}',
+            ("not json", "doctor: invalid JSON:"),
+            ("[]", "doctor: report must be an object"),
+            ("{}", "doctor: results must be a non-empty list"),
+            ('{"results": {}}', "doctor: results must be a non-empty list"),
+            ('{"results": []}', "doctor: results must be a non-empty list"),
+            ('{"results": [null]}', "doctor: invalid result at index 0"),
+            (
+                '{"results": [{"severity": "fatal", "check": "x", "message": "y"}]}',
+                "doctor: invalid result at index 0",
+            ),
+            (
+                '{"results": [{"severity": "warning", "check": "x", "message": 3}]}',
+                "doctor: invalid result at index 0",
+            ),
         ],
         ids=[
             "invalid-json",
@@ -608,11 +614,14 @@ class TestCleanInstallFlow:
             "bad-message",
         ],
     )
-    def test_invalid_doctor_output_fails(self, tmp_path, monkeypatch, doctor_stdout):
+    def test_invalid_doctor_output_fails(
+        self, tmp_path, monkeypatch, doctor_stdout, expected_failure
+    ):
         runner, _ = _clean_install_runner(doctor_stdout=doctor_stdout)
         failures, result, _out, _catalog = _run_clean_install(tmp_path, runner, monkeypatch)
 
-        assert failures
+        assert len(failures) == 1
+        assert failures[0].startswith(expected_failure)
         assert result["outcome"] == "failed"
 
     def test_unlisted_warning_and_zero_exit_error_fail(self, tmp_path, monkeypatch):

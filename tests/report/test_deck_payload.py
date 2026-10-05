@@ -1,7 +1,7 @@
 """Tests for encoding the report deck's index data contract."""
 
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 import pytest
@@ -20,8 +20,7 @@ from tests.report._fixtures import DECK_GENERATED_AT
 from tests.report._fixtures import session_row as _row
 
 pytestmark = [pytest.mark.small]
-EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
-GEN_MS = (DECK_GENERATED_AT - EPOCH) // timedelta(milliseconds=1)
+GEN_MS = 1_791_072_000_000
 
 
 def _payload(rows: list[dict[str, Any]]) -> dict[str, Any]:

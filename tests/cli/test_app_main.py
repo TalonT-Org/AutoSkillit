@@ -362,13 +362,15 @@ def test_serve_activity_check_uses_in_flight_registry_and_validates_channel(
     assert len(captured_activity_check) == 1, "serve_with_signal_guard was not called exactly once"
 
     seen_registries: list = []
+
+    def record_activity_check(worker_capacity, in_flight_operations):
+        seen_registries.append((worker_capacity, in_flight_operations))
+        return False
+
     monkeypatch.setattr(
         app_module,
         "is_server_active",
-        lambda worker_capacity, in_flight_operations: (
-            seen_registries.append((worker_capacity, in_flight_operations)),
-            False,
-        )[-1],
+        record_activity_check,
     )
 
     captured_activity_check[0]()

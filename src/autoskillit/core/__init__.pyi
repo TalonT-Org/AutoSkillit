@@ -1399,6 +1399,7 @@ from .types import extract_path_arg as extract_path_arg
 from .types import extract_positional_args as extract_positional_args
 from .types import extract_skill_name as extract_skill_name
 from .types import fleet_error as fleet_error
+from .types import food_truck_visibility_tags as food_truck_visibility_tags
 from .types import group_by_pair as group_by_pair
 from .types import hookdef_session_scope as hookdef_session_scope
 from .types import is_canonical_plugin_artifact_digest as is_canonical_plugin_artifact_digest

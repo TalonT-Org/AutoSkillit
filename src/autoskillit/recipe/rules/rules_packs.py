@@ -10,6 +10,7 @@ from autoskillit.core import (
     SKILL_TOOLS,
     TOOL_SUBSET_TAGS,
     Severity,
+    food_truck_visibility_tags,
 )
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._skill_helpers import _get_skill_category_map
@@ -44,13 +45,12 @@ def _check_unknown_required_pack(ctx: ValidationContext) -> list[RuleFinding]:
 def _food_truck_can_call(tool: str, declared_packs: frozenset[str]) -> bool:
     """Whether a food truck dispatched with *declared_packs* exposes *tool*.
 
-    Mirrors the headless-orchestrator branch of ``_apply_session_type_visibility``:
-    non-empty ``requires_packs`` enables ``kitchen-core`` plus each declared pack;
-    empty ``requires_packs`` falls back to the ``kitchen`` tag surface.
+    Uses the same ``food_truck_visibility_tags`` decision as the runtime dispatcher.
     """
-    if not declared_packs:
+    visible_tags = food_truck_visibility_tags(declared_packs or None)
+    if "kitchen" in visible_tags:
         return tool in KITCHEN_GATED_TOOLS | EXPLORATION_TOOLS
-    return bool(TOOL_SUBSET_TAGS[tool] & (declared_packs | {"kitchen-core"}))
+    return bool(TOOL_SUBSET_TAGS[tool] & visible_tags)
 
 
 @semantic_rule(

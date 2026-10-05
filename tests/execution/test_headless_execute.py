@@ -600,14 +600,6 @@ async def test_real_backend_launches_keep_idle_policy_out_of_cmd_spec_and_pass_l
     original_builder = type(real_backend).build_skill_session_cmd
 
     def build_skill_session_spec(self, *args, **kwargs):
-        if backend_name == "codex" and not kwargs.get("add_dirs"):
-            kwargs["add_dirs"] = (
-                ValidatedAddDir(
-                    path=str(tmp_path / "add-dir"),
-                    session_home=str(tmp_path),
-                    skill_entries=(("test", "test/SKILL.md"),),
-                ),
-            )
         spec = original_builder(self, *args, **kwargs)
         built_specs.append(spec)
         return spec
@@ -637,10 +629,29 @@ async def test_real_backend_launches_keep_idle_policy_out_of_cmd_spec_and_pass_l
     monkeypatch.setattr(
         _patch_headless__headless_execute, "_run_headless_attempt", capture_attempt
     )
+    add_dirs = (
+        ValidatedAddDir(
+            path=str(tmp_path / "add-dir"),
+            session_home=str(tmp_path),
+            skill_entries=(("test", "test/SKILL.md"),),
+        ),
+    )
 
     outcomes = [
-        await run_headless_core("/test foo", str(tmp_path), minimal_ctx, idle_output_timeout=45),
-        await run_headless_core("/test foo", str(tmp_path), minimal_ctx, idle_output_timeout=45),
+        await run_headless_core(
+            "/test foo",
+            str(tmp_path),
+            minimal_ctx,
+            add_dirs=add_dirs,
+            idle_output_timeout=45,
+        ),
+        await run_headless_core(
+            "/test foo",
+            str(tmp_path),
+            minimal_ctx,
+            add_dirs=add_dirs,
+            idle_output_timeout=45,
+        ),
     ]
 
     assert len(runner.call_args_list) == 2, [outcome.to_json() for outcome in outcomes]

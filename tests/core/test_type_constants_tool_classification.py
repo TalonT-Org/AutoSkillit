@@ -7,6 +7,13 @@ import pytest
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
+def test_review_tool_kitchen_classification() -> None:
+    from autoskillit.core import KITCHEN_GATED_TOOLS
+
+    assert "verify_review_receipt" in KITCHEN_GATED_TOOLS
+    assert "post_pr_review" not in KITCHEN_GATED_TOOLS
+
+
 def test_headless_tools_contains_expected_names() -> None:
     from autoskillit.core.types import HEADLESS_TOOLS
 

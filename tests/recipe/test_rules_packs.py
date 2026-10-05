@@ -6,7 +6,7 @@ from dataclasses import replace
 
 import pytest
 
-from autoskillit.core import KITCHEN_GATED_TOOLS, Severity
+from autoskillit.core import Severity
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep
@@ -258,8 +258,6 @@ class TestUndeclaredPackRequirementToolSteps:
         assert not self._run_rule(recipe)
 
     def test_empty_requires_packs_kitchen_gated_tool_passes(self):
-        assert "verify_review_receipt" in KITCHEN_GATED_TOOLS
-        assert "post_pr_review" not in KITCHEN_GATED_TOOLS
         recipe = _make_recipe_with_tool([], "verify_review_receipt")
         assert not self._run_rule(recipe)
 

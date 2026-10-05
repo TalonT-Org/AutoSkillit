@@ -623,7 +623,8 @@ while not list(channel.glob("*.lease.json")) and time.monotonic() < deadline:
     time.sleep(0.01)
 producer.kill()
 producer.wait(timeout=3)
-lease_path = next(channel.glob("*.lease.json"))
+lease_path = next(channel.glob("*.lease.json"), None)
+assert lease_path is not None, "lease producer did not publish its operation lease"
 stale = time.time() - 91
 os.utime(lease_path, (stale, stale))
 time.sleep(30)

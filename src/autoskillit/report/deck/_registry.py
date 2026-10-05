@@ -41,12 +41,6 @@ class WindowDef(NamedTuple):
     days: int | None
 
 
-class StrikeDef(NamedTuple):
-    facet_id: str
-    key: str
-    reason: ReasonDef
-
-
 class DeckViewDef(NamedTuple):
     view_id: str
     question: str
@@ -55,7 +49,6 @@ class DeckViewDef(NamedTuple):
     table: str | None
     script: str | None
     planned_issue: int | None
-    strikes: tuple[StrikeDef, ...] = ()
 
 
 SESSION_TABLE = "sessions"
@@ -238,26 +231,19 @@ DECK_VIEWS: tuple[DeckViewDef, ...] = (
 
 def _validate_deck_views(
     views: tuple[DeckViewDef, ...],
-    facets: tuple[FacetDef, ...],
     landing: str,
 ) -> None:
     ids = [v.view_id for v in views]
     if len(ids) != len(set(ids)):
         raise ValueError("duplicate view_id")
-    facet_ids = {f.facet_id for f in facets} | {WINDOW_FACET_ID}
     for view in views:
         if view.planned_issue is None:
             if not view.table or not view.script:
                 raise ValueError(f"built view {view.view_id} requires table and script")
         elif view.table is not None or view.script is not None:
             raise ValueError(f"planned view {view.view_id} must not have table or script")
-        for strike in view.strikes:
-            if strike.facet_id not in facet_ids:
-                raise ValueError(f"unknown strike facet {strike.facet_id}")
-            if strike.facet_id == WINDOW_FACET_ID and strike.key == "all":
-                raise ValueError("all history cannot be struck")
     if not any(v.view_id == landing and v.planned_issue is None for v in views):
         raise ValueError("landing must name a built view")
 
 
-_validate_deck_views(DECK_VIEWS, FACETS, LANDING_VIEW)
+_validate_deck_views(DECK_VIEWS, LANDING_VIEW)

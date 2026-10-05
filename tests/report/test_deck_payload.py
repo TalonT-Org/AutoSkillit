@@ -10,7 +10,6 @@ from autoskillit.core import TokenMeasureState
 from autoskillit.report.deck._payload import (
     build_deck_payload,
     encode_table,
-    resolve_view_chips,
 )
 from autoskillit.report.deck._registry import (
     AVAILABILITY_VOCABULARY,
@@ -18,9 +17,6 @@ from autoskillit.report.deck._registry import (
     LANDING_VIEW,
     SESSION_COLUMNS,
     SESSION_TABLE,
-    DeckViewDef,
-    ReasonDef,
-    StrikeDef,
 )
 
 pytestmark = [pytest.mark.small]
@@ -53,18 +49,6 @@ def _row(key: str, **fields: Any) -> dict[str, Any]:
 
 def _payload(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return build_deck_payload(rows, generated_at=GEN, index_schema_version=7)
-
-
-def _chips_for_view(
-    rows: list[dict[str, Any]], view: DeckViewDef
-) -> dict[str, list[dict[str, Any]]]:
-    payload = _payload(rows)
-    return resolve_view_chips(
-        view,
-        rows,
-        generated_at_ms=payload["generated_at_ms"],
-        history=payload["history"],
-    )
 
 
 def _chip(chips: dict[str, list[dict[str, Any]]], facet: str, key: str) -> dict[str, Any]:
@@ -138,27 +122,6 @@ def test_cohort_l0_chip_is_struck_with_its_registry_reason() -> None:
         == "L0 leaf agents write no session row; they exist only as subagent transcripts"
     )
     assert l0["issue"] is None
-
-
-def test_view_strike_marks_an_observed_chip_with_its_issue() -> None:
-    reason = ReasonDef("test reason", 9999)
-    view = DeckViewDef(
-        "test",
-        "question",
-        "decision",
-        "group",
-        SESSION_TABLE,
-        "views/test.js",
-        None,
-        (StrikeDef("harness", "codex", reason),),
-    )
-    chips = _chips_for_view([_row("cc"), _row("cx", harness="codex")], view)
-    codex = _chip(chips, "harness", "codex")
-
-    assert codex["state"] == "struck"
-    assert codex["count"] == 0
-    assert codex["reason"] == "test reason"
-    assert codex["issue"] == 9999
 
 
 def test_unrecorded_level_values_use_gap_reason_and_keep_null_bucket() -> None:

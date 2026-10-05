@@ -58,12 +58,9 @@ def _value_chips(
 ) -> list[dict[str, Any]]:
     counts = Counter(row.get(facet.column) for row in rows)
     recorded = any(v is not None for v in counts)
-    strikes = {(s.facet_id, s.key): s.reason for s in view.strikes}
     chips = []
     for value in facet.declared:
-        reason = (
-            dict(value.unresolvable_in).get(view.table) if view.table is not None else None
-        ) or strikes.get((facet.facet_id, value.key))
+        reason = dict(value.unresolvable_in).get(view.table) if view.table is not None else None
         count = counts.get(value.match, 0) if value.match is not None else 0
         if reason:
             state, count = ChipState.STRUCK, 0
@@ -89,14 +86,13 @@ def _value_chips(
             key = facet.null_label
         else:
             key = observed
-        reason = strikes.get((facet.facet_id, key))
         observed_chips.append(
             _chip(
                 key,
                 key,
-                ChipState.STRUCK if reason else ChipState.LIVE,
-                0 if reason else count,
-                reason,
+                ChipState.LIVE,
+                count,
+                None,
                 match=observed,
             )
         )
@@ -104,20 +100,16 @@ def _value_chips(
 
 
 def _window_chips(
-    view: DeckViewDef,
     rows: Sequence[Mapping[str, Any]],
     *,
     generated_at_ms: int,
     history: Mapping[str, Any],
 ) -> list[dict[str, Any]]:
-    strikes = {s.key: s.reason for s in view.strikes if s.facet_id == WINDOW_FACET_ID}
     chips = []
     for window in WINDOWS:
-        reason = strikes.get(window.key)
+        reason = None
         count = 0
-        if reason:
-            state = ChipState.STRUCK
-        elif window.days is None:
+        if window.days is None:
             state, count = ChipState.LIVE, len(rows)
         elif history["first_ms"] is None:
             state = ChipState.ABSENT
@@ -153,9 +145,7 @@ def resolve_view_chips(
     history: Mapping[str, Any],
 ) -> dict[str, list[dict[str, Any]]]:
     return {f.facet_id: _value_chips(view, f, rows) for f in FACETS} | {
-        WINDOW_FACET_ID: _window_chips(
-            view, rows, generated_at_ms=generated_at_ms, history=history
-        )
+        WINDOW_FACET_ID: _window_chips(rows, generated_at_ms=generated_at_ms, history=history)
     }
 
 

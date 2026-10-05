@@ -187,7 +187,10 @@ from autoskillit.server.response._run_skill_completion import (  # noqa: E402
     RunSkillCompletionMiddleware,
 )
 
-mcp.add_middleware(_OperationLeaseMiddleware())
+_lease_middleware = _OperationLeaseMiddleware()
+mcp.add_middleware(_lease_middleware)
+mcp.middleware.remove(_lease_middleware)
+mcp.middleware.insert(0, _lease_middleware)
 mcp.add_middleware(RunSkillCompletionMiddleware(mcp))
 
 from autoskillit.server._wire_compat import ClaudeCodeCompatMiddleware  # noqa: E402

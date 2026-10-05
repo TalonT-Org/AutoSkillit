@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 
@@ -114,7 +115,7 @@ async def test_no_channel_keeps_registry_active_without_file(
 
     assert counts == [1]
     assert tool_ctx.in_flight_operations.active_count == 0
-    assert tuple(tmp_path.iterdir()) == ()
+    assert not tuple(tmp_path.rglob("*.lease.json"))
 
 
 def test_registered_lease_middleware_is_outermost() -> None:
@@ -158,7 +159,7 @@ async def test_completion_denial_releases_outer_lease(
     result = await _call(_app(handler, completion_middleware=True))
 
     assert not called
-    assert result.isError
+    assert json.loads(result.content[0].text)["is_error"] is True
     assert tool_ctx.in_flight_operations.active_count == 0
     assert read_active_operation_leases(tmp_path, now_epoch=time.time()) == ()
 

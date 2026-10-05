@@ -618,17 +618,6 @@ async def test_real_backend_launches_keep_idle_policy_out_of_cmd_spec_and_pass_l
     runner = CapturingRunner()
     runner.set_default(_success_result())
     minimal_ctx.runner = runner
-    attempt_specs = []
-    original_attempt = _patch_headless__headless_execute._run_headless_attempt
-
-    async def capture_attempt(*args, **kwargs):
-        result, spec = await original_attempt(*args, **kwargs)
-        attempt_specs.append(spec)
-        return result, spec
-
-    monkeypatch.setattr(
-        _patch_headless__headless_execute, "_run_headless_attempt", capture_attempt
-    )
     session_home = tmp_path / "session-home"
     route = real_backend.conventions.managed_skill_discovery
     assert route is not None
@@ -645,17 +634,16 @@ async def test_real_backend_launches_keep_idle_policy_out_of_cmd_spec_and_pass_l
         discovery_entry.symlink_to(route.alias_target, target_is_directory=True)
 
     if backend_name == "codex":
-        from autoskillit.workspace.session_skills._materialization import (
-            _create_inert_rollout_paths,
-        )
-
         auth_source = session_home / "auth-source.json"
         auth_source.write_text("{}")
         (session_home / "auth.json").symlink_to(auth_source)
         (session_home / "config.toml").write_text(
             "[mcp_servers.autoskillit]\nname = 'autoskillit'\n"
         )
-        _create_inert_rollout_paths(session_home, real_backend)
+        for name in sorted(real_backend.capabilities.session_dir_symlinks):
+            inert_target = session_home / f".inert-{name}"
+            inert_target.mkdir(mode=0o700)
+            (session_home / name).symlink_to(inert_target.name, target_is_directory=True)
 
     assert real_backend.validate_skill_content(skill_content) == []
     assert real_backend.validate_session_layout(session_home) == []
@@ -686,17 +674,16 @@ async def test_real_backend_launches_keep_idle_policy_out_of_cmd_spec_and_pass_l
 
     assert len(runner.call_args_list) == 2, [outcome.to_json() for outcome in outcomes]
     assert len(built_specs) == 2
-    assert len(attempt_specs) == 2
+    assert all(not hasattr(spec, "process_idle_timeout_ms") for spec in built_specs)
     channels = []
-    for index, final_spec in enumerate(attempt_specs):
-        channel = runner.call_args_list[index][3]["operation_lease_dir"]
+    for index, call in enumerate(runner.call_args_list):
+        kwargs = call[3]
+        channel = kwargs["operation_lease_dir"]
         assert channel.is_absolute()
-        assert channel == Path(final_spec.env["AUTOSKILLIT_OPERATION_LEASE_DIR"])
-        assert (
-            runner.call_args_list[index][3]["env"]["AUTOSKILLIT_OPERATION_LEASE_DIR"] != "/parent"
-        )
+        assert kwargs["env"]["AUTOSKILLIT_OPERATION_LEASE_DIR"] == str(channel)
+        assert kwargs["env"]["AUTOSKILLIT_OPERATION_LEASE_DIR"] != "/parent"
         assert runner_calls[index] == (channel, True)
-        assert runner.call_args_list[index][3]["idle_output_timeout"] == 45
+        assert kwargs["idle_output_timeout"] == 45
         assert not channel.exists()
         channels.append(channel)
     assert channels[0] != channels[1]

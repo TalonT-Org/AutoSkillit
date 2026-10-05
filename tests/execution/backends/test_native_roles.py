@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.core import LogicalRoleSpec, SkillSemanticPlan
+from autoskillit.core import ChildSpawnSpec, LogicalRoleSpec, SkillSemanticPlan
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -40,6 +40,7 @@ def test_map_declared_logical_roles(
 
     plan = SkillSemanticPlan(
         schema_version=1,
+        child_spawns=(ChildSpawnSpec(role="evaluated-agent", count=1),),
         logical_roles=(
             LogicalRoleSpec(name="delegated-worker", purpose="perform general work"),
             LogicalRoleSpec(name="plan-foundation-auditor", purpose="audit a plan"),

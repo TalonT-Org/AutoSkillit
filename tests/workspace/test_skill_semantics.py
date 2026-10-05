@@ -545,7 +545,7 @@ def test_runtime_bound_spawns_have_no_static_native_target(tmp_path: Path) -> No
 
     claude = compile_session_skill_catalog(catalog, backends.ClaudeCodeBackend())
     assert tuple(skill.name for skill in claude.catalog.skills) == ("runtime-bound",)
-    assert claude.required_native_roles["runtime-bound"] == ("delegated-worker",)
+    assert claude.required_native_roles["runtime-bound"] == ("general-purpose",)
     assert "evaluated-agent" not in claude.required_native_roles["runtime-bound"]
 
     codex = compile_session_skill_catalog(catalog, backends.CodexBackend())

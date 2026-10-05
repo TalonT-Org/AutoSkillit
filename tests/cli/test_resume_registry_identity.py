@@ -9,7 +9,7 @@ import pytest
 
 import autoskillit.cli.session._session_order as _patch_session__session_order
 import autoskillit.cli.ui._menu as _patch_ui__menu
-import autoskillit.execution.backends._claude_session_locator as _locator_module
+import autoskillit.execution.backends._claude.session_locator as _locator_module
 from autoskillit import cli
 from autoskillit.cli.session._session_constants import SESSION_TYPE_COOK
 from autoskillit.cli.session._session_launch_intent import pick_session

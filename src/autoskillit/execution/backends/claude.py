@@ -3,7 +3,7 @@
 Owns the Claude Code env policy (`ClaudeEnvPolicy`), the host-attestation
 helper, and the `ClaudeCodeBackend` implementation. Public surface
 includes the session locator and result parsers re-exported from the
-sibling modules `_claude_session_locator` and `_claude_parse`.
+subpackage module `_claude/session_locator` and sibling `_claude_parse`.
 """
 
 from __future__ import annotations
@@ -88,6 +88,7 @@ from autoskillit.execution.backends._claude.environment import (
     neutralize_repository_agent_teams_settings,
 )
 from autoskillit.execution.backends._claude.session_commands import ClaudeSessionCommandMixin
+from autoskillit.execution.backends._claude.session_locator import ClaudeSessionLocator
 from autoskillit.execution.backends._claude_parse import (
     ClaudeResultParser,
     ClaudeStreamParser,
@@ -99,7 +100,6 @@ from autoskillit.execution.backends._claude_prompt import (
     _PROVIDER_EXTRAS_BASE_DENYLIST,
     _apply_output_format,
 )
-from autoskillit.execution.backends._claude_session_locator import ClaudeSessionLocator
 from autoskillit.execution.backends._cmd_builder import CmdBuilder
 from autoskillit.execution.backends._explorer_dispatch import (
     CLAUDE_EXPLORATION_DISPATCH_RENDERER,

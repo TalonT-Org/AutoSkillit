@@ -39,6 +39,7 @@ def native_spawn_target_universes() -> dict[str, frozenset[str]]:
     )
 
     backends = import_module("autoskillit.execution.backends")
+    codex_backend = import_module("autoskillit.execution.backends.codex")
     plugin_name = json.loads(
         (pkg_root() / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
     )["name"]
@@ -46,7 +47,8 @@ def native_spawn_target_universes() -> dict[str, frozenset[str]]:
     return {
         AGENT_BACKEND_CLAUDE_CODE: frozenset(backends.CLAUDE_SPAWNABLE_BUILT_IN_AGENT_NAMES)
         | {f"{plugin_name}:{name}" for name in bundled},
-        AGENT_BACKEND_CODEX: frozenset(backends.CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES) | bundled,
+        AGENT_BACKEND_CODEX: frozenset(codex_backend.CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES)
+        | bundled,
     }
 
 

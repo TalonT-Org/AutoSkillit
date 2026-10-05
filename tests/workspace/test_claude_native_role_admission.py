@@ -82,7 +82,7 @@ def test_claude_catalog_prunes_unresolvable_skill(
         backend=backend,
         names=frozenset({"unresolvable-target", "portable-review"}),
     ) as managed:
-        catalog_root = Path(managed.skills_dir.path) / "skills"
+        catalog_root = Path(managed.skills_dir.path) / backend.conventions.skills_subdir
         unavailable = {
             item["skill"]: item["operation"]
             for item in managed.unavailability_payload["unavailable"]

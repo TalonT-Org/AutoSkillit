@@ -503,6 +503,7 @@ def test_codex_required_join_refused_at_admission() -> None:
     assert adaptation.canonical_payload == {
         "instruction_fragments": (),
         "logical_role_mapping": {},
+        "runtime_bound_roles": [],
         "sibling_skill_targets": {},
         "model_effort_policy": {},
         "unsupported_operation": "required_join",

@@ -191,7 +191,13 @@ def _required_native_child_roles(
     if adaptation.adaptation_context_digest:
         return ()
     return tuple(
-        sorted({adaptation.logical_role_mapping[spawn.role] for spawn in plan.child_spawns})
+        sorted(
+            {
+                adaptation.logical_role_mapping[spawn.role]
+                for spawn in plan.child_spawns
+                if spawn.role not in plan.runtime_bound_role_names
+            }
+        )
     )
 
 

@@ -191,6 +191,7 @@ def _build_skill_semantic_plan(
         LogicalRoleSpec(
             name=str(item.get("name", "")),
             purpose=str(item.get("purpose", "")),
+            runtime_bound=item.get("runtime_bound", False),
         )
         for item in _mapping_list(raw_requirements.get("logical_roles", []), "logical_roles")
     )

@@ -10,7 +10,17 @@ from hashlib import sha256
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal, final
 
-from ..foundation._type_exceptions import ChildSpawnCardinalityError, SkillContractError
+from ..foundation._type_exceptions import SkillContractError
+from ._type_skill_plan_specs import (
+    DELEGATED_WORKER_ROLE,
+    SKILL_MODEL_CLASS_REGISTRY,
+    SKILL_REASONING_EFFORTS,
+    ChildModelPolicySpec,
+    ChildSpawnSpec,
+    LogicalRoleSpec,
+    SkillModelClassDef,
+    _require_nonempty,
+)
 
 if TYPE_CHECKING:
     from ..execution._type_backend import BackendCapabilities
@@ -23,6 +33,7 @@ __all__ = [
     "ChildModelPolicySpec",
     "ChildSpawnSpec",
     "ConcurrencySpec",
+    "DELEGATED_WORKER_ROLE",
     "EvidenceSpec",
     "GitMetadataWriteSpec",
     "JoinSpec",
@@ -47,29 +58,6 @@ __all__ = [
 ]
 
 
-@dataclass(frozen=True, slots=True)
-class SkillModelClassDef:
-    """Static definition of one backend-neutral logical model class."""
-
-    description: str
-
-
-SKILL_MODEL_CLASS_REGISTRY: Mapping[str, SkillModelClassDef] = MappingProxyType(
-    {
-        "haiku": SkillModelClassDef(
-            description="Lightweight logical class for focused delegated work",
-        ),
-        "sonnet": SkillModelClassDef(
-            description="Balanced logical class for general delegated work",
-        ),
-        "opus": SkillModelClassDef(
-            description="Highest-capability logical class for demanding delegated work",
-        ),
-    }
-)
-
-SKILL_REASONING_EFFORTS: frozenset[str] = frozenset({"medium", "high"})
-
 SKILL_SEMANTIC_SCHEMA_VERSION = 1
 MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION = 1
 
@@ -89,44 +77,9 @@ class SkillSemanticOperation(StrEnum):
     GIT_METADATA_WRITE = "git_metadata_write"
 
 
-def _require_nonempty(value: str, field_name: str) -> None:
-    if not value.strip():
-        raise SkillContractError(f"{field_name} must be non-empty")
-
-
 def _require_sha256(value: str, field_name: str) -> None:
     if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
         raise SkillContractError(f"{field_name} must be a lowercase SHA-256 digest")
-
-
-@dataclass(frozen=True, slots=True)
-class ChildSpawnSpec:
-    """Spawn one or more children that perform a named logical role."""
-
-    role: str
-    count: int | None = None
-    for_each: str | None = None
-
-    def __post_init__(self) -> None:
-        _require_nonempty(self.role, "child spawn role")
-        has_count = self.count is not None
-        has_for_each = self.for_each is not None
-        if has_count == has_for_each:
-            raise ChildSpawnCardinalityError(
-                "child spawn requires exactly one cardinality authority: "
-                "count: <positive integer> or for_each: <runtime collection>"
-            )
-        if self.count is not None:
-            if type(self.count) is not int or self.count <= 0:
-                raise ChildSpawnCardinalityError(
-                    "child spawn count must be a positive integer; use "
-                    "count: <positive integer> or for_each: <runtime collection>"
-                )
-        if has_for_each and (not isinstance(self.for_each, str) or not self.for_each.strip()):
-            raise ChildSpawnCardinalityError(
-                "child spawn for_each must be a non-empty runtime collection name; use "
-                "count: <positive integer> or for_each: <runtime collection>"
-            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -341,45 +294,6 @@ class EvidenceSpec:
 
 
 @dataclass(frozen=True, slots=True)
-class ChildModelPolicySpec:
-    """Semantic model-class and reasoning-effort policy for one logical role."""
-
-    role: str
-    model_class: str | None = None
-    reasoning_effort: str | None = None
-
-    def __post_init__(self) -> None:
-        _require_nonempty(self.role, "child model policy role")
-        if self.model_class is not None and self.model_class not in SKILL_MODEL_CLASS_REGISTRY:
-            raise SkillContractError(
-                f"unknown semantic model class {self.model_class!r}; "
-                f"expected one of {sorted(SKILL_MODEL_CLASS_REGISTRY)}"
-            )
-        if (
-            self.reasoning_effort is not None
-            and self.reasoning_effort not in SKILL_REASONING_EFFORTS
-        ):
-            raise SkillContractError(
-                f"unknown semantic reasoning effort {self.reasoning_effort!r}; "
-                f"expected one of {sorted(SKILL_REASONING_EFFORTS)}"
-            )
-        if self.model_class is None and self.reasoning_effort is None:
-            raise SkillContractError("child model policy must constrain model class or effort")
-
-
-@dataclass(frozen=True, slots=True)
-class LogicalRoleSpec:
-    """Backend-neutral name and purpose for delegated child work."""
-
-    name: str
-    purpose: str
-
-    def __post_init__(self) -> None:
-        _require_nonempty(self.name, "logical role name")
-        _require_nonempty(self.purpose, "logical role purpose")
-
-
-@dataclass(frozen=True, slots=True)
 class SiblingSkillSpec:
     """Invoke another logical skill through the selected backend's native sigil."""
 
@@ -432,6 +346,24 @@ class SkillSemanticPlan:
             raise SkillContractError(
                 f"semantic plan references unknown logical role: {sorted(unknown)}"
             )
+        runtime_bound_roles = self.runtime_bound_role_names
+        spawned_roles = {spawn.role for spawn in self.child_spawns}
+        unspawned_runtime_roles = runtime_bound_roles - spawned_roles
+        if unspawned_runtime_roles:
+            raise SkillContractError(
+                f"runtime-bound logical roles must be spawned: {sorted(unspawned_runtime_roles)}"
+            )
+        policy_roles = {policy.role for policy in self.child_model_policies}
+        runtime_policy_roles = runtime_bound_roles & policy_roles
+        if runtime_policy_roles:
+            raise SkillContractError(
+                "runtime-bound logical roles cannot have model policies: "
+                f"{sorted(runtime_policy_roles)}"
+            )
+
+    @property
+    def runtime_bound_role_names(self) -> frozenset[str]:
+        return frozenset(role.name for role in self.logical_roles if role.runtime_bound)
 
     @property
     def operations(self) -> frozenset[SkillSemanticOperation]:
@@ -486,7 +418,12 @@ class SkillSemanticPlan:
                 for item in self.child_model_policies
             ),
             "logical_roles": tuple(
-                {"name": item.name, "purpose": item.purpose} for item in self.logical_roles
+                {
+                    "name": item.name,
+                    "purpose": item.purpose,
+                    "runtime_bound": item.runtime_bound,
+                }
+                for item in self.logical_roles
             ),
             "sibling_skills": tuple({"name": item.name} for item in self.sibling_skills),
             "git_metadata_writes": tuple(
@@ -584,6 +521,8 @@ def adapt_session_invariant(
 def _validate_supported_adaptation(result: SkillSemanticAdaptationResult) -> None:
     if any(not fragment.strip() for fragment in result.instruction_fragments):
         raise SkillContractError("semantic adaptation instructions must be non-empty")
+    if any(not isinstance(role, str) or not role.strip() for role in result.runtime_bound_roles):
+        raise SkillContractError("runtime-bound roles must be non-empty strings")
     if result.adaptation_context_digest:
         _require_sha256(
             result.adaptation_context_digest,
@@ -616,11 +555,13 @@ class SkillSemanticAdaptationResult:
     unsupported_operation: SkillSemanticOperation | None = None
     diagnostic: str | None = None
     adaptation_context_digest: str = ""
+    runtime_bound_roles: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         object.__setattr__(
             self, "logical_role_mapping", MappingProxyType(dict(self.logical_role_mapping))
         )
+        object.__setattr__(self, "runtime_bound_roles", frozenset(self.runtime_bound_roles))
         object.__setattr__(
             self, "sibling_skill_targets", MappingProxyType(dict(self.sibling_skill_targets))
         )
@@ -634,6 +575,7 @@ class SkillSemanticAdaptationResult:
         if self.unsupported_operation is not None and (
             self.instruction_fragments
             or self.logical_role_mapping
+            or self.runtime_bound_roles
             or self.sibling_skill_targets
             or self.model_effort_policy
         ):
@@ -646,6 +588,7 @@ class SkillSemanticAdaptationResult:
             {
                 "instruction_fragments": self.instruction_fragments,
                 "logical_role_mapping": dict(sorted(self.logical_role_mapping.items())),
+                "runtime_bound_roles": sorted(self.runtime_bound_roles),
                 "sibling_skill_targets": dict(sorted(self.sibling_skill_targets.items())),
                 "model_effort_policy": {
                     key: value for key, value in sorted(self.model_effort_policy.items())
@@ -659,6 +602,10 @@ class SkillSemanticAdaptationResult:
                 "adaptation_context_digest": self.adaptation_context_digest,
             }
         )
+
+    @property
+    def adapted_logical_roles(self) -> frozenset[str]:
+        return frozenset(self.logical_role_mapping) | self.runtime_bound_roles
 
     @property
     def digest(self) -> str:
@@ -689,13 +636,18 @@ class SkillSemanticAdaptationResult:
             )
         return operation
 
+    def _validate_logical_role_bindings(self, plan: SkillSemanticPlan) -> None:
+        logical_names = {role.name for role in plan.logical_roles if not role.runtime_bound}
+        if set(self.logical_role_mapping) != logical_names:
+            raise SkillContractError("semantic adaptation logical role mapping is incomplete")
+        if self.runtime_bound_roles != plan.runtime_bound_role_names:
+            raise SkillContractError("semantic adaptation runtime agent binding is incomplete")
+
     def validate_for(self, plan: SkillSemanticPlan, *, backend: str) -> None:
         """Fail closed unless every declared semantic field has one observable adaptation."""
         if self.validate_refusal_for(plan, backend=backend) is not None:
             raise SkillContractError(self.diagnostic or "unsupported skill semantics")
-        logical_names = {role.name for role in plan.logical_roles}
-        if set(self.logical_role_mapping) != logical_names:
-            raise SkillContractError("semantic adaptation logical role mapping is incomplete")
+        self._validate_logical_role_bindings(plan)
         native_roles = tuple(self.logical_role_mapping.values())
         if len(native_roles) != len(set(native_roles)):
             raise SkillContractError("semantic adaptation maps multiple logical roles to one role")

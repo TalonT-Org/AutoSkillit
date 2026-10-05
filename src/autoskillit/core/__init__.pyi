@@ -275,6 +275,7 @@ from .plugins._plugin_artifact_retirement import (
 )
 from .plugins._plugin_ids import _AUTOSKILLIT_INSTALL_ROOT_KEY as _AUTOSKILLIT_INSTALL_ROOT_KEY
 from .plugins._plugin_ids import _AUTOSKILLIT_PLUGIN_KEY as _AUTOSKILLIT_PLUGIN_KEY
+from .plugins._plugin_ids import CLAUDE_PLUGIN_AGENT_NAMESPACE as CLAUDE_PLUGIN_AGENT_NAMESPACE
 from .plugins._plugin_ids import DIRECT_INSTALL_CACHE_SUBDIR as DIRECT_INSTALL_CACHE_SUBDIR
 from .plugins._plugin_ids import DIRECT_PREFIX as DIRECT_PREFIX
 from .plugins._plugin_ids import PLUGIN_PREFIX as PLUGIN_PREFIX
@@ -544,6 +545,7 @@ from .types import (
 from .types import CONTEXT_EXHAUSTION_MARKER as CONTEXT_EXHAUSTION_MARKER
 from .types import CORE_PACKS as CORE_PACKS
 from .types import DATA_MANIFEST_SOURCE_TYPES as DATA_MANIFEST_SOURCE_TYPES
+from .types import DELEGATED_WORKER_ROLE as DELEGATED_WORKER_ROLE
 from .types import DISPATCH_ID_ENV_VAR as DISPATCH_ID_ENV_VAR
 from .types import DRY_WALKTHROUGH_VERIFIED_MARKER as DRY_WALKTHROUGH_VERIFIED_MARKER
 from .types import DURABLE_ARTIFACT_WRITERS as DURABLE_ARTIFACT_WRITERS

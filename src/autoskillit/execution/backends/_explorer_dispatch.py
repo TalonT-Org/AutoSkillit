@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass
 
 from autoskillit.core import (
+    CLAUDE_PLUGIN_AGENT_NAMESPACE,
     PLUGINLESS_EXPLORER_ROLE,
     AgentDef,
     ExplorationDispatchConventions,
@@ -189,14 +190,15 @@ CLAUDE_EXPLORATION_DISPATCH_RENDERER = _NativeExplorationDispatchRenderer(
         role_argument="subagent_type",
         description_argument="description",
         message_argument="prompt",
-        role_prefix="autoskillit:",
+        role_prefix=CLAUDE_PLUGIN_AGENT_NAMESPACE,
         provisioning_preamble=(
             "Before dispatching explorer subagents, call enable_exploration() to "
             "establish session-scoped exploration authority. The broker tools "
             "(submit_exploration_query, get_exploration_page, resume_exploration_context) "
             "become visible only after enable_exploration succeeds.\n\n"
             f"{_EXPLORATION_FALLBACK_SENTENCE} Dispatch it as "
-            f'Agent(subagent_type="autoskillit:{PLUGINLESS_EXPLORER_ROLE}", prompt=...).'
+            f'Agent(subagent_type="{CLAUDE_PLUGIN_AGENT_NAMESPACE}'
+            f'{PLUGINLESS_EXPLORER_ROLE}", prompt=...).'
         ),
     )
 )

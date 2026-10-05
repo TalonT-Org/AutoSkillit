@@ -29,6 +29,7 @@ from autoskillit.core import (
     CLAUDE_MCP_CONNECT_TIMEOUT_ENV_VAR,
     CLAUDE_MCP_CONNECT_TIMEOUT_MS,
     CLAUDE_MCP_CONNECTION_NONBLOCKING,
+    CLAUDE_PLUGIN_AGENT_NAMESPACE,
     NON_VARIADIC_CLAUDE_FLAGS,
     SESSION_ADD_DIR_SUBDIR,
     VARIADIC_CLAUDE_FLAGS,
@@ -591,16 +592,44 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
                     "all capability-attested. Refuse the skill at admission."
                 ),
             )
-        role_mapping = {role.name: role.name for role in plan.logical_roles}
+        role_mapping = {
+            role.name: role.name for role in plan.logical_roles if not role.runtime_bound
+        }
         sibling_targets = {
             sibling.name: f"/autoskillit:{sibling.name}" for sibling in plan.sibling_skills
         }
         model_policy: dict[str, tuple[str, str | None]] = {}
-        fragments = [f"Logical role {role.name!r}: {role.purpose}." for role in plan.logical_roles]
+        fragments = [
+            (
+                f"Logical role {role.name!r} is bound at runtime to a bundled agent definition: "
+                f"{role.purpose}."
+                if role.runtime_bound
+                else f"Logical role {role.name!r}: {role.purpose}."
+            )
+            for role in plan.logical_roles
+        ]
         for policy in plan.child_model_policies:
             model_id = self.translate_model(policy.model_class) if policy.model_class else ""
             model_policy[policy.role] = (model_id, policy.reasoning_effort)
         for spawn in plan.child_spawns:
+            if spawn.role in plan.runtime_bound_role_names:
+                if spawn.for_each is not None:
+                    fragments.append(
+                        f"Issue one Agent call for logical role {spawn.role!r} with "
+                        f"subagent_type set to {CLAUDE_PLUGIN_AGENT_NAMESPACE!r} followed "
+                        "by the bundled agent definition name supplied at runtime per "
+                        f"runtime item in {spawn.for_each!r}."
+                    )
+                else:
+                    assert spawn.count is not None
+                    fragments.append(
+                        f"Issue {spawn.count} Agent call"
+                        f"{'s' if spawn.count != 1 else ''} for logical role "
+                        f"{spawn.role!r} with subagent_type set to "
+                        f"{CLAUDE_PLUGIN_AGENT_NAMESPACE!r} followed by the bundled agent "
+                        "definition name supplied at runtime."
+                    )
+                continue
             spawn_policy = next(
                 (
                     candidate
@@ -658,6 +687,7 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
             logical_role_mapping=role_mapping,
             sibling_skill_targets=sibling_targets,
             model_effort_policy=model_policy,
+            runtime_bound_roles=plan.runtime_bound_role_names,
         )
         result.validate_for(plan, backend=self.name)
         return result

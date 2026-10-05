@@ -77,6 +77,7 @@ from autoskillit.core.plugins._plugin_cache import (
 from autoskillit.core.plugins._plugin_ids import (
     _AUTOSKILLIT_INSTALL_ROOT_KEY,
     _AUTOSKILLIT_PLUGIN_KEY,
+    CLAUDE_PLUGIN_AGENT_NAMESPACE,
     DIRECT_INSTALL_CACHE_SUBDIR,
     DIRECT_PREFIX,
     PLUGIN_PREFIX,
@@ -126,6 +127,7 @@ __all__ = [
     "CODEX_DISABLED_WEB_SEARCH_POLICY",
     "CODEX_EXPLORER_IDENTITY",
     "CodexAgentProjectionDef",
+    "CLAUDE_PLUGIN_AGENT_NAMESPACE",
     "DIRECT_INSTALL_CACHE_SUBDIR",
     "DIRECT_PREFIX",
     "INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS",

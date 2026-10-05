@@ -4,15 +4,14 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from types import SimpleNamespace
 
 import anyio
-import psutil
 import pytest
 
 import autoskillit.execution.process._process_monitor as _patch_process__process_monitor
 from autoskillit.core.types import ChannelBStatus
 from autoskillit.execution.process import _session_log_monitor
+from tests.execution._process_helpers import ConnectedProcess
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -29,23 +28,6 @@ class TestSessionLogMonitorStaleSuppressionGate:
         spawn_time = time.time() - 10
         channel = tmp_path / "leases"
         channel.mkdir()
-
-        class ConnectedProcess:
-            def __init__(self, pid: int) -> None:
-                self.pid = pid
-
-            def children(self, recursive: bool = False) -> list[object]:
-                return []
-
-            def connections(self, kind: str | None = None) -> list[SimpleNamespace]:
-                return [
-                    SimpleNamespace(
-                        status=psutil.CONN_ESTABLISHED,
-                        raddr=SimpleNamespace(port=443),
-                    )
-                ]
-
-            net_connections = connections
 
         monkeypatch.setattr(_patch_process__process_monitor.psutil, "Process", ConnectedProcess)
         monkeypatch.setattr(

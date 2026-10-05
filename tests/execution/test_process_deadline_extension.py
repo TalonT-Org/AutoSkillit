@@ -5,7 +5,6 @@ from __future__ import annotations
 import functools
 import sys
 import time
-from types import SimpleNamespace
 
 import anyio
 import psutil
@@ -18,6 +17,7 @@ from autoskillit.execution.process._race_watchers import (
     _enroll_child_activity_watcher,
     _watch_child_activity,
 )
+from tests.execution._process_helpers import ConnectedProcess
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -161,25 +161,6 @@ async def test_network_connection_without_lease_does_not_extend_deadline(
     monkeypatch, tmp_path
 ) -> None:
     """An established port-443 connection does not extend a lease-free deadline."""
-
-    class ConnectedProcess:
-        def __init__(self, pid: int) -> None:
-            self.pid = pid
-
-        def children(self, recursive: bool = False) -> list[object]:
-            return []
-
-        def connections(self, kind: str | None = None) -> list[SimpleNamespace]:
-            import psutil
-
-            return [
-                SimpleNamespace(
-                    status=psutil.CONN_ESTABLISHED,
-                    raddr=SimpleNamespace(port=443),
-                )
-            ]
-
-        net_connections = connections
 
     channel = tmp_path / "leases"
     channel.mkdir()

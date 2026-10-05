@@ -251,6 +251,7 @@ _FMT_RUN_SKILL_SUPPRESSED: frozenset[str] = frozenset(
         "completion_required",
         "ndjson_unknown_event_count",
         "ndjson_unknown_item_count",
+        "session_errors",
         "execution_identity",
         "outcome_invariant_violated",
         "outcome_qualifier",

@@ -420,14 +420,19 @@ async def test_codex_backend_skill_result_through_classify_dispatch_outcome(
         log["event"] == "codex_ndjson_unknown_item_type" and log["log_level"] == "warning"
         for log in cap_logs
     )
-    assert skill_result.session_error.messages == ("tool call failed", "second tool failure")
+    expected_errors = (
+        (
+            "turn failed hard [E_TURN_FAILED]",
+            "tool call failed",
+            "second tool failure",
+        )
+        if case.expect_error_subtype
+        else ("tool call failed", "second tool failure")
+    )
+    assert skill_result.session_error.messages == expected_errors
     assert captured_sessions
     adapted_session = captured_sessions[-1]
-    if case.expect_error_subtype:
-        assert adapted_session.errors[0].startswith("turn failed hard")
-        assert adapted_session.errors[1:] == ["tool call failed", "second tool failure"]
-    else:
-        assert adapted_session.errors == ["tool call failed", "second tool failure"]
+    assert adapted_session.errors == list(expected_errors)
 
     log_root = Path(tool_ctx.config.linux_tracing.log_dir)
     summary = json.loads(
@@ -439,8 +444,8 @@ async def test_codex_backend_skill_result_through_classify_dispatch_outcome(
         if line.strip()
     ]
     index_row = next(row for row in index_rows if row["session_id"] == skill_result.session_id)
-    assert summary["session_errors"] == ["tool call failed", "second tool failure"]
-    assert index_row["session_errors"] == ["tool call failed", "second tool failure"]
+    assert summary["session_errors"] == list(expected_errors)
+    assert index_row["session_errors"] == list(expected_errors)
     if case.expect_error_subtype:
         assert skill_result.cli_subtype == "error_during_execution"
     else:

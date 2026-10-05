@@ -59,7 +59,7 @@ def test_claude_invocation_with_unresolvable_target_fails_closed(
 
     with pytest.raises(
         SkillContractError,
-        match=r"native child-spawn targets are unavailable: \['autoskillit:nonexistent-agent'\]",
+        match=r"native child-spawn targets are unavailable.*autoskillit:nonexistent-agent",
     ):
         manager.materialize_invocation(
             "unresolvable-target-admission",

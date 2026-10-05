@@ -350,20 +350,23 @@ def test_sort_rows_orders_numbers_strings_nulls_and_stable_ties(deck_js: Any) ->
         "upper",
     ]
 
-    fallback = {"key": "runs", "dir": "asc"}
-    assert deck_js.call("DeckCore.parseSort", "runs:desc", ["runs"], fallback) == {
-        "key": "runs",
-        "dir": "desc",
-    }
-    assert deck_js.call("DeckCore.parseSort", "bogus", ["runs"], fallback) == fallback
-    assert (
-        json.loads(
-            deck_js.eval(
-                'JSON.stringify(DeckCore.parseSort(undefined, ["runs"], {key:"runs", dir:"asc"}))'
-            )
+
+@pytest.mark.parametrize(
+    ("token", "direction"),
+    [
+        pytest.param('"runs:desc"', "desc", id="valid"),
+        pytest.param('"bogus"', "asc", id="invalid"),
+        pytest.param("undefined", "asc", id="missing"),
+    ],
+)
+def test_parse_sort_uses_valid_tokens_or_falls_back(
+    deck_js: Any, token: str, direction: str
+) -> None:
+    assert json.loads(
+        deck_js.eval(
+            f'JSON.stringify(DeckCore.parseSort({token}, ["runs"], {{key:"runs", dir:"asc"}}))'
         )
-        == fallback
-    )
+    ) == {"key": "runs", "dir": direction}
 
 
 def test_bar_layout_scales_values_and_handles_zero_and_null(

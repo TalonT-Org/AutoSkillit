@@ -21,7 +21,7 @@ _EXECUTION_ROOT = Path("src/autoskillit/execution")
 
 def _functions_calling_predicate(source_path: Path, predicate: str) -> set[str]:
     """Return names of top-level async functions in source_path that call predicate."""
-    tree = ast.parse(source_path.read_text())
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
     result: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
@@ -36,7 +36,7 @@ def _functions_calling_predicate(source_path: Path, predicate: str) -> set[str]:
 
 
 def _function(source_path: Path, name: str) -> ast.AsyncFunctionDef | ast.FunctionDef:
-    tree = ast.parse(source_path.read_text())
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
     return next(
         node
         for node in ast.walk(tree)
@@ -81,7 +81,7 @@ def test_liveness_watchers_reach_the_operation_lease_reader() -> None:
     """Watchers use the lease reader directly or through the shared lease helpers."""
     lease_activity = next(
         node
-        for node in ast.walk(ast.parse(_PROCESS_MONITOR.read_text()))
+        for node in ast.walk(ast.parse(_PROCESS_MONITOR.read_text(encoding="utf-8")))
         if isinstance(node, ast.ClassDef) and node.name == "_OperationLeaseActivity"
     )
     refresh = next(

@@ -1497,6 +1497,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_tools_exploration.py",
             # run_cmd write-boundary tests import the shared hooks scanner.
             "server/test_guards_module.py",
+            # file-level: run_skill attestation tests inspect the fabricated-completion guard.
+            "server/test_tools_execution_command.py",
             # file-level: formatter-renders-real-content test imports pretty_output_hook
             # directly to exercise the _fmt_open_kitchen contract — see #4399 criterion 4
             "server/test_tools_kitchen_envelope_failure.py",

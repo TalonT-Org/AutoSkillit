@@ -354,8 +354,6 @@ class HeadlessExecutor(Protocol):
         resume_checkpoint: SessionCheckpoint | None = None,
         resume_message: str | None = None,
         backend_authority: BackendAuthority | None = None,
-        marker_dir: Path | None = None,
-        caller_session_id: str | None = None,
         inspector_eligible: bool = False,
         inspector_model: str = "",
         network_access: bool = False,

@@ -385,6 +385,23 @@ def test_default_headless_executor_satisfies_headless_executor():
     assert isinstance(DefaultHeadlessExecutor(MagicMock()), HeadlessExecutor)
 
 
+def test_headless_executor_run_excludes_marker_watchdog_parameters() -> None:
+    from autoskillit.core import HeadlessExecutor
+    from autoskillit.execution.headless import DefaultHeadlessExecutor, run_headless_core
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    run_methods = (
+        HeadlessExecutor.run,
+        DefaultHeadlessExecutor.run,
+        run_headless_core,
+        InMemoryHeadlessExecutor.run,
+    )
+    for run_method in run_methods:
+        params = inspect.signature(run_method).parameters
+        assert "marker_dir" not in params
+        assert "caller_session_id" not in params
+
+
 def test_headless_executor_protocol_dispatch_has_marker_params():
     import inspect
 

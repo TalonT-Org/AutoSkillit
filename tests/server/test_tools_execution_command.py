@@ -362,7 +362,8 @@ class TestRunSkillExecutionMarker:
         _ack_direct_run_skill_result(tool_ctx_kitchen_open, payload)
 
         assert captured["session_id"] == "session-a"
-        assert executor.calls[0].caller_session_id == "session-a"
+        assert not hasattr(executor.calls[0], "marker_dir")
+        assert not hasattr(executor.calls[0], "caller_session_id")
 
     @pytest.mark.anyio
     @pytest.mark.parametrize(
@@ -446,7 +447,63 @@ class TestRunSkillExecutionMarker:
         _ack_direct_run_skill_result(tool_ctx_kitchen_open, payload)
 
         assert captured["session_id"] == "fallback-session"
-        assert executor.calls[0].caller_session_id == "fallback-session"
+        assert not hasattr(executor.calls[0], "marker_dir")
+        assert not hasattr(executor.calls[0], "caller_session_id")
+
+    @pytest.mark.anyio
+    async def test_run_skill_attestation_stays_live_without_l1_marker_key(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ):
+        from autoskillit.core import LAUNCH_ID_ENV_VAR
+        from autoskillit.core.pipeline._execution_marker import execution_marker
+        from autoskillit.hooks.guards.fabricated_completion_guard import (
+            _has_fresh_matching_marker,
+        )
+        from tests.fakes import MockSubprocessRunner
+
+        monkeypatch.delenv(LAUNCH_ID_ENV_VAR, raising=False)
+        monkeypatch.setattr(
+            tools_execution, "find_caller_session_id", lambda **_kwargs: "session-a"
+        )
+        marker_state: dict[str, object] = {}
+
+        @contextlib.asynccontextmanager
+        async def observe_marker(marker_dir, session_id, label):
+            async with execution_marker(marker_dir, session_id, label) as marker_path:
+                marker_state.update(path=marker_path, session_id=session_id, label=label)
+                yield marker_path
+
+        monkeypatch.setattr(tools_execution, "execution_marker", observe_marker)
+
+        runner = tool_ctx_kitchen_open.runner
+        assert isinstance(runner, MockSubprocessRunner)
+
+        async def check_marker_during_launch(cmd, **kwargs):
+            if Path(cmd[0]).name == "claude":
+                marker_path = marker_state.get("path")
+                session_id = marker_state.get("session_id")
+                assert isinstance(marker_path, Path)
+                assert session_id == "session-a"
+                assert marker_path.name.startswith(f"run-skill-in-progress-{session_id}-")
+                marker_payload = json.loads(marker_path.read_text(encoding="utf-8"))
+                assert marker_payload["label"] == "run-skill"
+                assert marker_payload["session_id"] == session_id
+                assert _has_fresh_matching_marker(marker_path, session_id)
+            return await runner(cmd, **kwargs)
+
+        monkeypatch.setattr(tool_ctx_kitchen_open, "runner", check_marker_during_launch)
+        runner.push(_make_result(returncode=1))  # clone guard snapshot
+        runner.push(_make_result(returncode=0, stdout=_SUCCESS_JSON))
+
+        payload = json.loads(await run_skill("/investigate marker attestation", cwd="/tmp"))
+        _ack_direct_run_skill_result(tool_ctx_kitchen_open, payload)
+
+        claude_calls = [
+            call for call in runner.call_args_list if Path(call[0][0]).name == "claude"
+        ]
+        assert len(claude_calls) == 1
+        assert claude_calls[0][3]["marker_dir"] is None
+        assert claude_calls[0][3]["session_id"] is None
 
     @pytest.mark.anyio
     async def test_marker_dir_routes_through_session_locator(

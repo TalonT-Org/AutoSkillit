@@ -697,8 +697,6 @@ class ExecutorCall:
     resume_message: str | None = None
     resume_launch_contract: ResolvedLaunchContract | None = None
     backend_authority: BackendAuthority | None = None
-    marker_dir: Path | None = None
-    caller_session_id: str | None = None
     inspector_eligible: bool = False
     inspector_model: str = ""
     network_access: bool = False
@@ -827,8 +825,6 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         resume_message: str | None = None,
         resume_launch_contract: ResolvedLaunchContract | None = None,
         backend_authority: BackendAuthority | None = None,
-        marker_dir: Path | None = None,
-        caller_session_id: str | None = None,
         inspector_eligible: bool = False,
         inspector_model: str = "",
         network_access: bool = False,
@@ -883,8 +879,6 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 resume_message=resume_message,
                 resume_launch_contract=resume_launch_contract,
                 backend_authority=backend_authority,
-                marker_dir=marker_dir,
-                caller_session_id=caller_session_id,
                 inspector_eligible=inspector_eligible,
                 inspector_model=inspector_model,
                 network_access=network_access,

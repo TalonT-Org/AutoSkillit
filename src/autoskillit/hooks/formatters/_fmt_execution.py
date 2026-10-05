@@ -282,7 +282,6 @@ _FMT_RUN_CMD_RENDERED: frozenset[str] = frozenset(
     }
 )
 _FMT_RUN_CMD_SUPPRESSED: frozenset[str] = frozenset()
-
 _FMT_TEST_CHECK_RENDERED: frozenset[str] = frozenset(
     {
         "passed",

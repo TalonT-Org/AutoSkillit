@@ -631,8 +631,8 @@ def test_poll_failures_do_not_escape_the_wait_loop(
     actual_lifetime = _session_process.InteractiveLifetime
 
     class AcceleratedLifetime(actual_lifetime):
-        def __init__(self, policy: ProcessTetherConfig) -> None:
-            super().__init__(policy, clock=lambda: clock_value[0])
+        def __init__(self, policy: ProcessTetherConfig, **kwargs) -> None:
+            super().__init__(policy, clock=lambda: clock_value[0], **kwargs)
 
         def poll(self):
             clock_value[0] += 1000.0

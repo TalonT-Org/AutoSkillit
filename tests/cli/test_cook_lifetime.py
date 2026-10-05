@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -13,7 +14,7 @@ import pytest
 import structlog
 
 from autoskillit.config import ProcessTetherConfig
-from autoskillit.core import TerminationReason
+from autoskillit.core import InFlightOperations, TerminationReason, operation_lease
 from autoskillit.execution.process._process_tether import TetherRecord, write_tether
 from tests.cli._cook_launch_helpers import lifetime_policy
 
@@ -142,6 +143,42 @@ def test_active_session_extends_past_soft_ceiling() -> None:
     extended = _events(logs, "cook_lifetime_extended")
     assert len(extended) == 1
     assert extended[0]["signals"] == ["terminal_io"]
+
+
+@pytest.mark.anyio
+async def test_default_probe_uses_attempt_operation_lease(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoskillit.execution.process._process_monitor as process_monitor
+
+    module = _lifetime_module()
+    monkeypatch.setattr(module, "_IDLE_WINDOW_SECONDS", 5.0)
+    monkeypatch.setattr(module, "_LIVENESS_PROBE_INTERVAL_SECONDS", 1.0)
+    monkeypatch.setattr(process_monitor, "_has_active_child_processes", lambda _pid: False)
+    clock = _Clock()
+    lifetime = module.InteractiveLifetime(
+        _policy(soft=6.0, extension=10.0),
+        clock=clock,
+        wall=_Clock(10_000.0),
+        operation_lease_dir=str(tmp_path),
+    )
+    lifetime.start(pid=os.getpid(), tether_path=None, terminal_fd=None, notice_path=None)
+
+    async with operation_lease(
+        tmp_path,
+        operation="tool",
+        not_after_epoch=time.time() + 60,
+        registry=InFlightOperations(),
+    ) as handle:
+        clock.advance(6.1)
+        with structlog.testing.capture_logs() as logs:
+            assert lifetime.poll() is None
+        assert _events(logs, "cook_lifetime_extended")[0]["signals"] == ["operation_lease"]
+
+        assert handle.path is not None
+        handle.path.unlink()
+        clock.advance(5.0)
+        assert lifetime.poll() is TerminationReason.IDLE_STALL
 
 
 def test_idle_session_ends_at_soft_ceiling_as_idle_stall(monkeypatch: pytest.MonkeyPatch) -> None:

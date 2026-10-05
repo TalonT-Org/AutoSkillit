@@ -202,6 +202,7 @@ class SkillInvalidityKind(StrEnum):
     SEMANTIC_MISSING_VERSION = "semantic_missing_version"
     SEMANTIC_VERSION_MISMATCH = "semantic_version_mismatch"
     SEMANTIC_CHILD_CARDINALITY_INVALID = "semantic_child_cardinality_invalid"
+    SEMANTIC_ROLE_NAME_NONCANONICAL = "semantic_role_name_noncanonical"
     SEMANTIC_PLAN_INVALID = "semantic_plan_invalid"
 
 

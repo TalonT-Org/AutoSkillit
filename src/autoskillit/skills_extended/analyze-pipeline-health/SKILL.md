@@ -17,10 +17,10 @@ hooks:
 semantic_version: 1
 semantic_requirements:
   logical_roles:
-  - name: autoskillit:session-log-reader
+  - name: session-log-reader
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
-  - role: autoskillit:session-log-reader
+  - role: session-log-reader
     for_each: reader_packets
   concurrency:
     required: true

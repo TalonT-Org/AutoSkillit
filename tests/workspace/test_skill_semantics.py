@@ -8,7 +8,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from autoskillit.core import CODEX_MODEL_ALIASES, SkillSemanticOperation, SkillSource
+from autoskillit.core import (
+    CODEX_MODEL_ALIASES,
+    SkillInvalidityKind,
+    SkillSemanticOperation,
+    SkillSource,
+)
 from autoskillit.core.paths import pkg_root
 from autoskillit.workspace.skills import (
     _skill_info_from_frontmatter,
@@ -187,6 +192,19 @@ def test_non_boolean_runtime_bound_is_plan_invalid(tmp_path: Path) -> None:
     assert plan is None
     assert len(diagnostics) == 1
     assert diagnostics[0][0].value == "semantic_plan_invalid"
+
+
+def test_namespaced_role_reports_noncanonical_invalidity(tmp_path: Path) -> None:
+    skill_md = tmp_path / "namespaced-role" / "SKILL.md"
+    declarations = _VALID_SEMANTICS.replace("reviewer", "autoskillit:session-log-reader")
+    _write_skill(skill_md, declarations=declarations)
+
+    plan, diagnostics = _parse_semantic_plan(skill_md)
+
+    assert plan is None
+    assert len(diagnostics) == 1
+    assert diagnostics[0][0] is not SkillInvalidityKind.SEMANTIC_PLAN_INVALID
+    assert diagnostics[0][0] is SkillInvalidityKind.SEMANTIC_ROLE_NAME_NONCANONICAL
 
 
 @pytest.mark.parametrize(

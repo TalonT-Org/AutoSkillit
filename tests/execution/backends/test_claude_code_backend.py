@@ -9,12 +9,16 @@ import pytest
 from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
     BackendConventions,
+    ChildModelPolicySpec,
+    ChildSpawnSpec,
     CmdSpec,
     CodingAgentBackend,
     EnvPolicy,
+    LogicalRoleSpec,
     OutputFormat,
     ResultParser,
     SessionLocator,
+    SkillSemanticPlan,
     StreamParser,
     load_bundled_agent_definitions,
 )
@@ -101,12 +105,92 @@ class TestClaudeCodeBackend:
         assert isinstance(result, BackendConventions)
         assert result.skills_subdir == Path(".claude/skills")
 
-    def test_setup_session_dir_returns_none(self, tmp_path: Path) -> None:
+    def test_claude_maps_logical_roles_to_registered_agent_types(self) -> None:
+        plan = SkillSemanticPlan(
+            schema_version=1,
+            logical_roles=(
+                LogicalRoleSpec(name="delegated-worker", purpose="review changes"),
+                LogicalRoleSpec(name="plan-foundation-auditor", purpose="audit a plan"),
+                LogicalRoleSpec(name="web-evidence-researcher", purpose="research topics"),
+            ),
+            child_spawns=(
+                ChildSpawnSpec(role="delegated-worker", count=2),
+                ChildSpawnSpec(role="plan-foundation-auditor", count=1),
+                ChildSpawnSpec(role="web-evidence-researcher", for_each="topics"),
+            ),
+            child_model_policies=(
+                ChildModelPolicySpec(role="delegated-worker", model_class="sonnet"),
+                ChildModelPolicySpec(
+                    role="plan-foundation-auditor",
+                    model_class="sonnet",
+                    reasoning_effort="high",
+                ),
+            ),
+        )
+
+        adaptation = ClaudeCodeBackend().adapt_skill_semantics(plan)
+        fragments = adaptation.instruction_fragments
+
+        assert adaptation.unsupported_operation is None
+        assert adaptation.logical_role_mapping == {
+            "delegated-worker": "general-purpose",
+            "plan-foundation-auditor": "autoskillit:plan-foundation-auditor",
+            "web-evidence-researcher": "autoskillit:web-evidence-researcher",
+        }
+        assert set(adaptation.model_effort_policy) == {
+            "general-purpose",
+            "autoskillit:plan-foundation-auditor",
+        }
+        assert any(
+            "Issue 2 Agent(subagent_type='general-purpose', model='sonnet') calls." in fragment
+            for fragment in fragments
+        )
+        assert any(
+            "subagent_type='autoskillit:plan-foundation-auditor'" in fragment
+            for fragment in fragments
+        )
+        assert any(
+            "Agent(subagent_type='autoskillit:web-evidence-researcher') call per runtime item "
+            "in 'topics'" in fragment
+            for fragment in fragments
+        )
+        assert not any(
+            needle in fragment
+            for fragment in fragments
+            for needle in (
+                "subagent_type='delegated-worker'",
+                "subagent_type='plan-foundation-auditor'",
+            )
+        )
+
+    def test_setup_session_dir_returns_resolvable_agent_universe(self, tmp_path: Path) -> None:
+        from autoskillit.core.plugins import CLAUDE_PLUGIN_AGENT_NAMESPACE
+        from autoskillit.execution.backends import (
+            CLAUDE_SPAWNABLE_BUILT_IN_AGENT_NAMES,
+            claude_resolvable_agent_names,
+        )
+
         result = ClaudeCodeBackend().setup_session_dir(
             tmp_path,
             agent_defs=(load_bundled_agent_definitions()[0],),
         )
-        assert result is None
+        expected = frozenset(CLAUDE_SPAWNABLE_BUILT_IN_AGENT_NAMES) | {
+            f"{CLAUDE_PLUGIN_AGENT_NAMESPACE}{definition.name}"
+            for definition in load_bundled_agent_definitions()
+        }
+
+        assert result == expected == claude_resolvable_agent_names()
+        assert isinstance(result, frozenset)
+        assert {"autoskillit:plan-foundation-auditor", "general-purpose", "Plan"} <= result
+        assert (
+            not {
+                "delegated-worker",
+                "plan-foundation-auditor",
+                "autoskillit:AGENTS",
+                "autoskillit:CLAUDE",
+            }
+            & result
+        )
 
     def test_setup_session_dir_does_not_raise_or_write(self, tmp_path: Path) -> None:
         before = list(tmp_path.iterdir())

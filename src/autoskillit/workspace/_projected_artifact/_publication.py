@@ -26,6 +26,7 @@ from autoskillit.core import (
     SkillSemanticAdaptationResult,
     atomic_write,
     destination_location,
+    is_agent_definition_file,
     load_agent_definition,
     project_agent_tool_name,
     read_claude_plugin_tool_prefix,
@@ -326,10 +327,8 @@ def _render_agent_definitions(plugin_root: Path) -> None:
         return
     resolve_prefix = functools.cache(lambda: _derive_plugin_tool_prefix(plugin_root))
     for entry in entries:
-        if not entry.name.endswith(".md") or entry.is_dir:
-            continue
         path = entry.path
-        if path.name in {"AGENTS.md", "CLAUDE.md"}:
+        if entry.is_dir or not is_agent_definition_file(path):
             continue
         try:
             _render_agent_definition(path, resolve_prefix)

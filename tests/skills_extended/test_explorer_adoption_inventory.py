@@ -1578,7 +1578,7 @@ def test_investigate_projects_adaptive_semantic_collections_and_guarded_candidat
     assert [(spawn.role, spawn.count, spawn.for_each) for spawn in spawns] == [
         ("delegated-worker", None, "selected_reasoning_responsibilities"),
         (
-            "autoskillit:web-evidence-researcher",
+            "web-evidence-researcher",
             None,
             "selected_web_research_topics",
         ),

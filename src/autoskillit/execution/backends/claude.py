@@ -104,6 +104,11 @@ from autoskillit.execution.backends._cmd_builder import CmdBuilder
 from autoskillit.execution.backends._explorer_dispatch import (
     CLAUDE_EXPLORATION_DISPATCH_RENDERER,
 )
+from autoskillit.execution.backends._native_roles import (
+    CLAUDE_SPAWNABLE_BUILT_IN_AGENT_NAMES,
+    claude_resolvable_agent_names,
+    map_declared_logical_roles,
+)
 
 log = logging.getLogger(__name__)  # noqa: TID251 — stdlib fallback: used before configure_logging(); structlog proxy would emit to stderr via import-time WriteLoggerFactory
 _EXPLORER_BINDING_REJECTION_MESSAGE = "Claude Code does not support explorer binding projection"
@@ -122,13 +127,23 @@ _CLAUDE_INTERACTIVE_VALUE_BEARING_FLAGS: frozenset[str] = frozenset(
 )
 
 
+def _claude_logical_role_mapping(plan: SkillSemanticPlan) -> dict[str, str]:
+    return map_declared_logical_roles(
+        plan,
+        delegated_worker_agent="general-purpose",
+        agent_namespace=CLAUDE_PLUGIN_AGENT_NAMESPACE,
+    )
+
+
 __all__ = [
     "CLAUDE_ADD_DIR_SKILLS_ROUTE",
+    "CLAUDE_SPAWNABLE_BUILT_IN_AGENT_NAMES",
     "ClaudeCodeBackend",
     "ClaudeEnvPolicy",
     "ClaudeResultParser",
     "ClaudeSessionLocator",
     "ClaudeStreamParser",
+    "claude_resolvable_agent_names",
     "detect_repository_agent_teams_setting",
     "find_malformed_agent_teams_settings",
 ]
@@ -196,11 +211,12 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
         agent_defs: tuple[AgentDef, ...] | None = None,
         explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
         execution_role: SkillExecutionRole = SkillExecutionRole.SESSION,
-    ) -> frozenset[str] | None:
+    ) -> frozenset[str]:
         del agent_defs, execution_role
         if explorer_binding_env:
             raise ValueError(_EXPLORER_BINDING_REJECTION_MESSAGE)
-        return None
+        # Claude publishes plugin agents/ statically, without per-session use of agent_defs.
+        return claude_resolvable_agent_names()
 
     def refresh_explorer_binding_env(
         self,
@@ -592,9 +608,7 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
                     "all capability-attested. Refuse the skill at admission."
                 ),
             )
-        role_mapping = {
-            role.name: role.name for role in plan.logical_roles if not role.runtime_bound
-        }
+        role_mapping = _claude_logical_role_mapping(plan)
         sibling_targets = {
             sibling.name: f"/autoskillit:{sibling.name}" for sibling in plan.sibling_skills
         }
@@ -604,13 +618,16 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
                 f"Logical role {role.name!r} is bound at runtime to a bundled agent definition: "
                 f"{role.purpose}."
                 if role.runtime_bound
-                else f"Logical role {role.name!r}: {role.purpose}."
+                else (
+                    f"Logical role {role.name!r} maps to Claude Code agent "
+                    f"{role_mapping[role.name]!r}: {role.purpose}."
+                )
             )
             for role in plan.logical_roles
         ]
         for policy in plan.child_model_policies:
             model_id = self.translate_model(policy.model_class) if policy.model_class else ""
-            model_policy[policy.role] = (model_id, policy.reasoning_effort)
+            model_policy[role_mapping[policy.role]] = (model_id, policy.reasoning_effort)
         for spawn in plan.child_spawns:
             if spawn.role in plan.runtime_bound_role_names:
                 if spawn.for_each is not None:
@@ -630,6 +647,7 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
                         "definition name supplied at runtime."
                     )
                 continue
+            native_role = role_mapping[spawn.role]
             spawn_policy = next(
                 (
                     candidate
@@ -650,13 +668,13 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
             )
             if spawn.for_each is not None:
                 fragments.append(
-                    f"Issue one Agent(subagent_type={spawn.role!r}{model_arg}) call per "
+                    f"Issue one Agent(subagent_type={native_role!r}{model_arg}) call per "
                     f"runtime item in {spawn.for_each!r}{effort_text}."
                 )
             else:
                 assert spawn.count is not None
                 fragments.append(
-                    f"Issue {spawn.count} Agent(subagent_type={spawn.role!r}{model_arg}) "
+                    f"Issue {spawn.count} Agent(subagent_type={native_role!r}{model_arg}) "
                     f"call{'s' if spawn.count != 1 else ''}{effort_text}."
                 )
         if plan.concurrency is not None and plan.concurrency.required:

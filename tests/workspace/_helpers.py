@@ -111,6 +111,7 @@ class _ReleaseFailure(Exception):
 
 
 def _make_codex_backend() -> MagicMock:
+    from autoskillit.core import load_bundled_agent_definitions
     from autoskillit.execution.backends import CodexBackend
 
     b = MagicMock()
@@ -118,11 +119,23 @@ def _make_codex_backend() -> MagicMock:
     b.capabilities = _CODEX_CAPABILITIES
     b.conventions = CodexBackend().conventions
     b.ensure_pre_launch.return_value = PreLaunchReadiness((), {})
-    b.setup_session_dir.return_value = None
+    b.setup_session_dir.return_value = frozenset(
+        {"default", "explorer", "worker"}
+        | {definition.name for definition in load_bundled_agent_definitions()}
+    )
     b.validate_session_layout.return_value = []
     b.adapt_skill_semantics.side_effect = CodexBackend().adapt_skill_semantics
     b.exploration_dispatch_renderer = CodexBackend().exploration_dispatch_renderer
     return b
+
+
+def _identity_test_agent_names() -> frozenset[str]:
+    from autoskillit.core import load_bundled_agent_definitions
+
+    return frozenset(
+        {"delegated-worker", "worker"}
+        | {definition.name for definition in load_bundled_agent_definitions()}
+    )
 
 
 def _stub_backend(

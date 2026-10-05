@@ -125,8 +125,9 @@ def test_registered_backends_adapt_every_skill_semantic_operation() -> None:
             assert result.sibling_skill_targets["investigate"].endswith("investigate"), (
                 backend_name
             )
-            assert result.model_effort_policy["reviewer"][0], backend_name
-            assert result.model_effort_policy["reviewer"][1] == "high", backend_name
+            native_reviewer = result.logical_role_mapping["reviewer"]
+            assert result.model_effort_policy[native_reviewer][0], backend_name
+            assert result.model_effort_policy[native_reviewer][1] == "high", backend_name
 
 
 def test_codex_protocol_admits_required_join_with_a_managed_context() -> None:
@@ -141,32 +142,6 @@ def test_codex_protocol_admits_required_join_with_a_managed_context() -> None:
 
     assert result.unsupported_operation is None
     assert "server-owned managed fixed-batch route" in "\n".join(result.instruction_fragments)
-
-
-def test_codex_adaptation_maps_namespaced_role_to_registered_agent() -> None:
-    from autoskillit.core import (
-        ChildModelPolicySpec,
-        ChildSpawnSpec,
-        LogicalRoleSpec,
-        SkillSemanticPlan,
-    )
-    from autoskillit.execution.backends import CodexBackend
-
-    logical_role = "autoskillit:pr-review-auditor-reachability"
-    plan = SkillSemanticPlan(
-        schema_version=1,
-        child_spawns=(ChildSpawnSpec(role=logical_role, count=1),),
-        child_model_policies=(ChildModelPolicySpec(role=logical_role, model_class="sonnet"),),
-        logical_roles=(LogicalRoleSpec(name=logical_role, purpose="prove reachability"),),
-    )
-
-    adaptation = CodexBackend().adapt_skill_semantics(plan)
-
-    native_role = "pr-review-auditor-reachability"
-    assert adaptation.logical_role_mapping[logical_role] == native_role
-    assert native_role in "\n".join(adaptation.instruction_fragments)
-    assert logical_role not in adaptation.model_effort_policy
-    assert adaptation.model_effort_policy[native_role][0]
 
 
 # -- isinstance conformance: ClaudeCodeBackend ------------------------------

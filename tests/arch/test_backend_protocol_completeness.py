@@ -262,6 +262,17 @@ def test_coding_agent_backend_protocol_includes_setup_session_dir():
     )
 
 
+def test_every_backend_finalizes_a_native_agent_universe() -> None:
+    from typing import get_type_hints
+
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+
+    for name, cls in BACKEND_REGISTRY.items():
+        assert get_type_hints(cls.setup_session_dir)["return"] == frozenset[str], (
+            f"{name} setup_session_dir must return a finalized native agent universe"
+        )
+
+
 def test_coding_agent_backend_protocol_includes_model_config_overrides():
     from autoskillit.core.types.protocols._type_protocols_backend import CodingAgentBackend
 

@@ -18,7 +18,6 @@ from autoskillit.core import (
     CODEX_MODEL_ALIASES,
     CODEX_SESSIONS_SUBDIR,
     CODEX_VALID_MODEL_IDS,
-    DELEGATED_WORKER_ROLE,
     RETIRED_CODEX_MODEL_BASE_IDS,
     RETIRED_CODEX_MODEL_PREFIXES,
     RETIRED_CODEX_MODEL_SUFFIXES,
@@ -106,6 +105,7 @@ from autoskillit.execution.backends._codex_session_storage import CodexSessionSt
 from autoskillit.execution.backends._explorer_dispatch import (
     CODEX_EXPLORATION_DISPATCH_RENDERER,
 )
+from autoskillit.execution.backends._native_roles import map_declared_logical_roles
 
 _CODEX_SQLITE_HOME_ENV_VAR = "CODEX_SQLITE_HOME"
 
@@ -159,17 +159,11 @@ _CODEX_INTERACTIVE_VALUE_BEARING_FLAGS: frozenset[str] = frozenset(
 
 
 def _codex_logical_role_mapping(plan: SkillSemanticPlan) -> dict[str, str]:
-    return {
-        role.name: (
-            role.name.removeprefix("autoskillit:")
-            if role.name.startswith("autoskillit:")
-            else "worker"
-            if role.name == DELEGATED_WORKER_ROLE
-            else role.name
-        )
-        for role in plan.logical_roles
-        if not role.runtime_bound
-    }
+    return map_declared_logical_roles(
+        plan,
+        delegated_worker_agent="worker",
+        agent_namespace="",
+    )
 
 
 def _codex_semantic_admission_refusal(

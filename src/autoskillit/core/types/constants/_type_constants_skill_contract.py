@@ -171,6 +171,16 @@ _SKILL_CONTRACT_REMEDIATION_DEFS = (
             "definition is effective"
         ),
     ),
+    SkillContractRemediationDef(
+        kind=SkillInvalidityKind.SEMANTIC_ROLE_NAME_NONCANONICAL,
+        introduced_in="0.10.1256",
+        action=RemediationAction.DETERMINISTIC,
+        hint=(
+            "logical role names are bare agent names matching `^[a-z][a-z0-9-]*$`; drop any "
+            "`autoskillit:` namespace, because each backend adds its own native namespace. "
+            "Migration strips it."
+        ),
+    ),
 )
 SKILL_CONTRACT_REMEDIATIONS: Mapping[SkillInvalidityKind, SkillContractRemediationDef] = (
     MappingProxyType(

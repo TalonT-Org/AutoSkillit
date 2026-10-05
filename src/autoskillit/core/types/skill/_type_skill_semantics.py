@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Literal, final
 
 from ..foundation._type_exceptions import SkillContractError
 from ._type_skill_plan_specs import (
+    AGENT_NAME_PATTERN,
     DELEGATED_WORKER_ROLE,
     SKILL_MODEL_CLASS_REGISTRY,
     SKILL_REASONING_EFFORTS,
@@ -27,6 +28,7 @@ if TYPE_CHECKING:
     from ..protocols._type_protocols_backend import CodingAgentBackend
 
 __all__ = [
+    "AGENT_NAME_PATTERN",
     "SKILL_MODEL_CLASS_REGISTRY",
     "SKILL_REASONING_EFFORTS",
     "SKILL_SEMANTIC_SCHEMA_VERSION",

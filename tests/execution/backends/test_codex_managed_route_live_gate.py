@@ -491,7 +491,7 @@ def test_live_codex_interactive_managed_route_gate(
         prompt = f"""
 Call open_kitchen with no arguments, then run_fixed_batch exactly once with
 skill_name "{skill_name}", idempotency_key "live-{run_id}", and one assignment:
-role "autoskillit:session-log-reader", label "live-worker", runtime_key "live-packet",
+role "session-log-reader", label "live-worker", runtime_key "live-packet",
 task_prompt "Use only this supplied evidence packet: the native gate reached its worker.
 Return LIVE_BATCH_CHILD followed by ---pipeline-health-result---.
 This is the complete leaf assignment; no filesystem access is needed."

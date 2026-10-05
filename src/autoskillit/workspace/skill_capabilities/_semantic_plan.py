@@ -21,6 +21,7 @@ from autoskillit.core import (
     EvidenceSpec,
     GitMetadataWriteSpec,
     JoinSpec,
+    LogicalRoleNameError,
     LogicalRoleSpec,
     SiblingSkillSpec,
     SkillContractError,
@@ -310,6 +311,19 @@ def parse_skill_semantic_plan(
                     path,
                     schema_version=schema_version,
                     offending="semantic_requirements.child_spawns cardinality",
+                    replacement=str(exc),
+                ),
+            )
+        )
+        return None, tuple(diagnostics)
+    except LogicalRoleNameError as exc:
+        diagnostics.append(
+            (
+                SkillInvalidityKind.SEMANTIC_ROLE_NAME_NONCANONICAL,
+                _semantic_error(
+                    path,
+                    schema_version=schema_version,
+                    offending="semantic_requirements.logical_roles name",
                     replacement=str(exc),
                 ),
             )

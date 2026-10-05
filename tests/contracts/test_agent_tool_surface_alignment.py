@@ -96,6 +96,61 @@ def test_projected_artifact_agent_tools_carry_plugin_namespace(tmp_path: Path) -
                 assert short in EXPLORATION_TOOLS
 
 
+def test_published_plugin_agents_are_exactly_the_loaded_definitions(tmp_path: Path) -> None:
+    from autoskillit.core import is_agent_definition_file
+    from autoskillit.workspace import SkillProjectionContext, materialize_sanitized_plugin_root
+    from autoskillit.workspace.skills import (
+        DefaultSkillResolver,
+        EffectiveSkillCatalog,
+        SkillCatalogEntry,
+    )
+
+    source_root = pkg_root()
+    source_agents_dir = source_root / "agents"
+    source_definitions = tuple(
+        path
+        for path in source_agents_dir.glob("*.md")
+        if path.is_file() and not path.is_symlink() and path.name not in {"AGENTS.md", "CLAUDE.md"}
+    )
+    expected_filenames = {path.name for path in source_definitions}
+    expected_names = {path.stem for path in source_definitions}
+    source_infos = tuple(
+        skill for skill in DefaultSkillResolver().list_all() if skill.source is SkillSource.BUNDLED
+    )
+    catalog = EffectiveSkillCatalog(
+        skills=tuple(SkillCatalogEntry.from_skill_info(skill) for skill in source_infos),
+        execution_role=SkillExecutionRole.SESSION,
+    )
+    destination = tmp_path / "plugins" / "autoskillit"
+    destination.parent.mkdir(parents=True)
+    materialize_sanitized_plugin_root(
+        source_root,
+        destination,
+        catalog,
+        SkillProjectionContext(cwd=tmp_path, catalog=catalog),
+    )
+
+    published_agents_dir = destination / "agents"
+    assert published_agents_dir.is_dir()
+    published_files = {
+        path.relative_to(published_agents_dir).as_posix()
+        for path in published_agents_dir.rglob("*")
+        if path.is_file() and not path.is_symlink()
+    }
+    assert published_files == expected_filenames
+
+    published_names = {
+        definition.name for definition in load_agent_definitions(published_agents_dir)
+    }
+    bundled_names = {definition.name for definition in load_bundled_agent_definitions()}
+    assert published_names == expected_names
+    assert bundled_names == expected_names
+    assert all(
+        is_agent_definition_file(published_agents_dir / filename)
+        for filename in expected_filenames
+    )
+
+
 def test_session_log_reader_has_one_inspection_tool_and_terminal_codex_policy() -> None:
     definition = next(
         item for item in load_bundled_agent_definitions() if item.name == "session-log-reader"

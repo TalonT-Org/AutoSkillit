@@ -18,12 +18,12 @@ semantic_requirements:
   logical_roles:
   - name: delegated-worker
     purpose: perform the named independent responsibility and return bounded evidence
-  - name: autoskillit:web-evidence-researcher
+  - name: web-evidence-researcher
     purpose: research one selected external evidence topic
   child_spawns:
   - role: delegated-worker
     for_each: selected_reasoning_responsibilities
-  - role: autoskillit:web-evidence-researcher
+  - role: web-evidence-researcher
     for_each: selected_web_research_topics
   concurrency:
     required: true

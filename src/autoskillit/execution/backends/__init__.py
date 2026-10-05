@@ -54,11 +54,13 @@ from ._codex_recipe_delivery import (
 )
 from ._composite_locator import CompositeSessionLocator
 from .claude import (
+    CLAUDE_SPAWNABLE_BUILT_IN_AGENT_NAMES,
     ClaudeCodeBackend,
     ClaudeEnvPolicy,
     ClaudeResultParser,
     ClaudeSessionLocator,
     ClaudeStreamParser,
+    claude_resolvable_agent_names,
 )
 from .codex import (
     CODEX_SKILL_DISCOVERY_CONTRACT,
@@ -121,11 +123,13 @@ __all__ = [
     "generate_codex_hooks_config",
     "iter_codex_hook_commands",
     "sync_hooks_to_codex_config",
+    "CLAUDE_SPAWNABLE_BUILT_IN_AGENT_NAMES",
     "ClaudeCodeBackend",
     "ClaudeEnvPolicy",
     "ClaudeResultParser",
     "ClaudeSessionLocator",
     "ClaudeStreamParser",
+    "claude_resolvable_agent_names",
     "CodexBackend",
     "CodexCatalogAcquisitionError",
     "CodexEnvPolicy",

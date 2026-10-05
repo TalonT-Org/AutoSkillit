@@ -110,6 +110,7 @@ def test_migration_adapter_covers_every_deterministic_remediation() -> None:
         SkillInvalidityKind.UNDECLARED_CAPABILITY,
         SkillInvalidityKind.SEMANTIC_CHILD_CARDINALITY_INVALID,
         SkillInvalidityKind.SEMANTIC_MISSING_VERSION,
+        SkillInvalidityKind.SEMANTIC_ROLE_NAME_NONCANONICAL,
         SkillInvalidityKind.SEMANTIC_UNDECLARED_TOKENS,
         SkillInvalidityKind.WRITE_BOUNDARY_UNDECLARED,
     }
@@ -182,6 +183,7 @@ _CORPUS_FIXTURES = (
     "missing_semantic_version.md",
     "legacy_spawner.md",
     "legacy_child_spawn_cardinality.md",
+    "legacy_namespaced_role.md",
     "resource_contract_invalid.md",
     "undeclared_write_scope.md",
 )
@@ -191,6 +193,7 @@ _CORPUS_SKILL_NAMES = {
     "missing_semantic_version.md": "research-helper",
     "legacy_spawner.md": "legacy-spawner",
     "legacy_child_spawn_cardinality.md": "legacy-child-spawn-cardinality",
+    "legacy_namespaced_role.md": "legacy-namespaced-role",
     "resource_contract_invalid.md": "resource-contract-invalid",
     "undeclared_write_scope.md": "undeclared-write-scope",
 }

@@ -57,10 +57,10 @@ _CODEX_JOIN_REFUSAL_DIAGNOSTIC = (
 # Reusable 4-child trace fixtures
 # ---------------------------------------------------------------------------
 
-_REVIEWER = "autoskillit:reviewer-a"
-_FACT_CHECKER = "autoskillit:fact-checker-b"
-_SUMMARIZER = "autoskillit:summarizer-c"
-_CRITIC = "autoskillit:critic-d"
+_REVIEWER = "reviewer-a"
+_FACT_CHECKER = "fact-checker-b"
+_SUMMARIZER = "summarizer-c"
+_CRITIC = "critic-d"
 
 
 def _four_child_plan() -> SkillSemanticPlan:

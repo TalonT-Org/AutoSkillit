@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -10,6 +12,7 @@ from autoskillit.core import ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
 from autoskillit.migration.adapters_skill import SkillMigrationAdapter
 from autoskillit.migration.engine import (
     DeterministicMigrationAdapter,
+    MigrationEngine,
     MigrationFile,
 )
 from autoskillit.migration.service import default_migration_engine
@@ -19,6 +22,29 @@ pytestmark = [pytest.mark.layer("migration"), pytest.mark.small]
 _SKILL_CORPUS_DIR: Path = (
     Path(__file__).resolve().parent.parent / "contracts" / "fixtures" / "skill_contract_corpus"
 )
+
+
+def _skill_with_logical_role(role: str) -> str:
+    return (
+        "---\n"
+        "name: role-migration\n"
+        "description: exercise logical role migration\n"
+        "write_paths: inherit\n"
+        "semantic_version: 1\n"
+        "semantic_requirements:\n"
+        "  logical_roles:\n"
+        f'    - name: "{role}"\n'
+        "      purpose: review one independent concern\n"
+        "  child_spawns:\n"
+        f'    - role: "{role}"\n'
+        "      count: 1\n"
+        "  child_model_policies:\n"
+        f'    - role: "{role}"\n'
+        "      model_class: opus\n"
+        "      reasoning_effort: high\n"
+        "---\n"
+        "Body.\n"
+    )
 
 
 def test_skill_validation_checks_deterministic_contract(tmp_path: Path) -> None:
@@ -169,3 +195,65 @@ class TestSkillMigrationAdapter:
 
         assert result.success
         assert result.migrated_content is None
+
+    @pytest.mark.anyio
+    async def test_migration_strips_plugin_namespace_from_logical_roles(
+        self, tmp_path: Path
+    ) -> None:
+        skill_name = "role-migration"
+        skill_path = tmp_path / ".claude" / "skills" / skill_name / "SKILL.md"
+        skill_path.parent.mkdir(parents=True)
+        skill_path.write_text(
+            _skill_with_logical_role("autoskillit:web-evidence-researcher"),
+            encoding="utf-8",
+        )
+        file = MigrationFile(
+            name=skill_name,
+            path=skill_path,
+            file_type="skill",
+            current_version=None,
+        )
+
+        result = await MigrationEngine([SkillMigrationAdapter()]).migrate_file(
+            file,
+            run_headless=AsyncMock(),
+            temp_dir=tmp_path / "temp",
+        )
+
+        assert result.success, result.error
+        workspace = importlib.import_module("autoskillit.workspace")
+        parsed = workspace.read_skill_frontmatter(skill_path)
+        assert parsed.data is not None
+        requirements = parsed.data["semantic_requirements"]
+        assert requirements["logical_roles"][0]["name"] == "web-evidence-researcher"
+        assert requirements["child_spawns"][0]["role"] == "web-evidence-researcher"
+        assert requirements["child_model_policies"][0]["role"] == "web-evidence-researcher"
+
+        info = workspace.default_skill_resolver().resolve_local_candidate(skill_name, tmp_path)
+        assert info is not None
+        assert not info.invalidities
+
+    @pytest.mark.anyio
+    async def test_migration_reports_uncanonicalizable_role_name(self, tmp_path: Path) -> None:
+        skill_name = "role-migration"
+        skill_path = tmp_path / ".claude" / "skills" / skill_name / "SKILL.md"
+        skill_path.parent.mkdir(parents=True)
+        original = _skill_with_logical_role("autoskillit:Bad_Name").encode("utf-8")
+        skill_path.write_bytes(original)
+        file = MigrationFile(
+            name=skill_name,
+            path=skill_path,
+            file_type="skill",
+            current_version=None,
+        )
+
+        result = await MigrationEngine([SkillMigrationAdapter()]).migrate_file(
+            file,
+            run_headless=AsyncMock(),
+            temp_dir=tmp_path / "temp",
+        )
+
+        assert result.success is False
+        assert result.error == "cannot canonicalize logical role name 'Bad_Name'"
+        assert skill_path.read_bytes() == original
+        assert not skill_path.with_suffix(".yaml.bak").exists()

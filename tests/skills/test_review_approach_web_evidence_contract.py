@@ -41,8 +41,8 @@ def test_every_topic_has_one_terminal_ledger_entry(skill_text: str) -> None:
 
 def test_named_web_role_receives_one_bounded_packet_per_topic(skill_text: str) -> None:
     frontmatter = skill_text.split("---", maxsplit=2)[1]
-    assert "name: autoskillit:web-evidence-researcher" in frontmatter
-    assert "role: autoskillit:web-evidence-researcher" in frontmatter
+    assert "name: web-evidence-researcher" in frontmatter
+    assert "role: web-evidence-researcher" in frontmatter
     assert "for_each: research_topics" in frontmatter
     assert "child_model_policies" not in frontmatter
     assert "why that topic matters to the reviewed plan" in skill_text

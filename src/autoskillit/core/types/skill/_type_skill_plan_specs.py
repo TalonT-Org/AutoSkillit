@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Final
 
-from ..foundation._type_exceptions import ChildSpawnCardinalityError, SkillContractError
+from ..foundation._type_exceptions import (
+    ChildSpawnCardinalityError,
+    LogicalRoleNameError,
+    SkillContractError,
+)
 
 __all__ = [
+    "AGENT_NAME_PATTERN",
     "SKILL_MODEL_CLASS_REGISTRY",
     "SKILL_REASONING_EFFORTS",
     "ChildModelPolicySpec",
@@ -43,6 +49,7 @@ SKILL_MODEL_CLASS_REGISTRY: Mapping[str, SkillModelClassDef] = MappingProxyType(
 
 SKILL_REASONING_EFFORTS: frozenset[str] = frozenset({"medium", "high"})
 DELEGATED_WORKER_ROLE: Final = "delegated-worker"
+AGENT_NAME_PATTERN: Final = re.compile(r"^[a-z][a-z0-9-]*$")
 
 
 def _require_nonempty(value: str, field_name: str) -> None:
@@ -120,5 +127,11 @@ class LogicalRoleSpec:
         _require_nonempty(self.purpose, "logical role purpose")
         if type(self.runtime_bound) is not bool:
             raise SkillContractError("logical role runtime_bound must be a boolean")
+        if AGENT_NAME_PATTERN.fullmatch(self.name) is None:
+            raise LogicalRoleNameError(
+                f"logical role name {self.name!r} must match {AGENT_NAME_PATTERN.pattern}; "
+                f"name the bare agent definition or {DELEGATED_WORKER_ROLE!r} and let the "
+                "backend add its native namespace"
+            )
         if self.runtime_bound and self.name == DELEGATED_WORKER_ROLE:
             raise SkillContractError("delegated worker role cannot be runtime-bound")

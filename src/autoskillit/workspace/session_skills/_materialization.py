@@ -170,7 +170,7 @@ def materialize_profile_skills(
     backend: CodingAgentBackend,
     projection_context: SkillProjectionContextAuthority,
     *,
-    finalized_native_roles: frozenset[str] | None,
+    finalized_native_roles: frozenset[str],
 ) -> CompiledSessionSkillCatalog:
     infos = _profile_skill_infos(profile_skills_source)
     admission_compilation = compile_session_skill_catalog(
@@ -178,9 +178,7 @@ def materialize_profile_skills(
         backend,
         adaptation_context=projection_context.adaptation_context,
     )
-    compilation = admission_compilation
-    if finalized_native_roles is not None:
-        compilation = admission_compilation.restrict_to_native_roles(finalized_native_roles)
+    compilation = admission_compilation.restrict_to_native_roles(finalized_native_roles)
     return _materialize_profile_skill_infos(
         catalog_dir,
         compilation,
@@ -324,7 +322,7 @@ def _configure_generated_home(
     projection_context: SkillProjectionContextAuthority,
     backend: CodingAgentBackend,
     setup_kwargs: _SessionSetupKwargs,
-) -> tuple[frozenset[str] | None, ManagedHomeProjection | None]:
+) -> tuple[frozenset[str], ManagedHomeProjection | None]:
     roles = backend.setup_session_dir(generated_home, **setup_kwargs)
     projection = _configure_managed_session_route(generated_home, projection_context, backend)
     return roles, projection

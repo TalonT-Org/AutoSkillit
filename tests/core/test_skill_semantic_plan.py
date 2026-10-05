@@ -374,3 +374,40 @@ def test_runtime_bound_roles_are_frozen() -> None:
     )
 
     assert result.runtime_bound_roles == frozenset({"worker", "auditor"})
+
+
+def test_namespaced_logical_role_name_is_unconstructible() -> None:
+    from autoskillit.core import LogicalRoleNameError, LogicalRoleSpec
+
+    with pytest.raises(LogicalRoleNameError):
+        LogicalRoleSpec(name="autoskillit:plan-foundation-auditor", purpose="p")
+
+
+@pytest.mark.parametrize(
+    ("name", "valid"),
+    [
+        ("Plan-Auditor", False),
+        ("plan_auditor", False),
+        ("-x", False),
+        ("delegated-worker", True),
+        ("plan-foundation-auditor", True),
+    ],
+)
+def test_logical_role_name_grammar(name: str, valid: bool) -> None:
+    from autoskillit.core import LogicalRoleNameError, LogicalRoleSpec, SkillContractError
+
+    assert issubclass(LogicalRoleNameError, SkillContractError)
+    if valid:
+        assert LogicalRoleSpec(name=name, purpose="p").name == name
+    else:
+        with pytest.raises(LogicalRoleNameError):
+            LogicalRoleSpec(name=name, purpose="p")
+
+
+def test_agent_definitions_and_logical_roles_share_one_grammar() -> None:
+    from autoskillit.core import AGENT_NAME_PATTERN
+    from autoskillit.core.plugins.agent_definition import (
+        AGENT_NAME_PATTERN as agent_definition_pattern,
+    )
+
+    assert agent_definition_pattern is AGENT_NAME_PATTERN

@@ -817,3 +817,45 @@ def test_definition_digest_is_domain_separated_and_content_bound() -> None:
     assert agent_definition_digest(changed_web_search) != agent_definition_digest(
         changed_live_web_search
     )
+
+
+@pytest.mark.parametrize("filename", ["AGENTS.md", "CLAUDE.md"])
+@pytest.mark.parametrize("has_frontmatter", [True, False])
+def test_agent_directory_guides_are_excluded_from_definition_loading(
+    tmp_path: Path, filename: str, has_frontmatter: bool
+) -> None:
+    from autoskillit.core.plugins import (
+        AGENT_DIRECTORY_GUIDE_FILES,
+        is_agent_definition_file,
+        load_agent_definitions,
+    )
+
+    guide_path = tmp_path / filename
+    guide_contents = (
+        "---\n"
+        "name: reserved-guide\n"
+        "description: A valid agent definition in a reserved guide file.\n"
+        "tools: [Read]\n"
+        "---\n\n"
+        "Return bounded evidence.\n"
+        if has_frontmatter
+        else "# Directory guide\n\nThis file contains plain documentation.\n"
+    )
+    guide_path.write_text(guide_contents, encoding="utf-8")
+    ordinary_path = tmp_path / "ordinary.md"
+    ordinary_path.write_text(
+        "---\n"
+        "name: ordinary-agent\n"
+        "description: An ordinary agent definition.\n"
+        "tools: [Read]\n"
+        "---\n\n"
+        "Return bounded evidence.\n",
+        encoding="utf-8",
+    )
+
+    definitions = load_agent_definitions(tmp_path)
+
+    assert [definition.name for definition in definitions] == ["ordinary-agent"]
+    assert AGENT_DIRECTORY_GUIDE_FILES == frozenset({"AGENTS.md", "CLAUDE.md"})
+    assert not is_agent_definition_file(guide_path)
+    assert is_agent_definition_file(ordinary_path)

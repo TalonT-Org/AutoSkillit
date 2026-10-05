@@ -761,10 +761,10 @@ def test_invocation_only_roles_are_forwarded_and_reachability_checked(
         "semantic_version: 1\n"
         "semantic_requirements:\n"
         "  logical_roles:\n"
-        "  - name: autoskillit:session-log-reader\n"
+        "  - name: session-log-reader\n"
         "    purpose: inspect one session log\n"
         "  child_spawns:\n"
-        "  - role: autoskillit:session-log-reader\n"
+        "  - role: session-log-reader\n"
         "    count: 1\n"
         "write_paths: inherit\n"
         "---\n"
@@ -895,7 +895,7 @@ def test_codex_orchestrator_profile_collision_raises_during_catalog_merge(
             profile_skills,
             backend,
             context,
-            finalized_native_roles=None,
+            finalized_native_roles=frozenset(),
         )
 
     assert {entry.name for entry in catalog_root.iterdir()} == {"sous-chef"}
@@ -909,10 +909,11 @@ def test_codex_managed_orchestrator_rejects_discovery_collision(
     route = codex_env.backend.conventions.managed_skill_discovery
     assert route is not None
 
-    def setup_session_dir(session_dir: Path, **_kwargs: object) -> None:
+    def setup_session_dir(session_dir: Path, **_kwargs: object) -> frozenset[str]:
         discovery_root = route.discovery_root(session_dir)
         assert discovery_root is not None
         discovery_root.mkdir(parents=True)
+        return frozenset({"default", "explorer", "worker", "pluginless-explorer"})
 
     codex_env.backend.setup_session_dir.side_effect = setup_session_dir
     with pytest.raises(SkillContractError, match="discovery entry point path already exists"):
@@ -1251,7 +1252,7 @@ def test_profile_skills_are_projected_from_the_declared_source(tmp_path: Path) -
         source_skills,
         backend,
         context,
-        finalized_native_roles=None,
+        finalized_native_roles=frozenset({"helper"}),
     )
 
     target = catalog_root / "my-skill"
@@ -1461,10 +1462,10 @@ def test_profile_native_role_is_provisioned_before_setup_and_remains_projected(
             "semantic_version: 1\n"
             "semantic_requirements:\n"
             "  logical_roles:\n"
-            "  - name: autoskillit:session-log-reader\n"
+            "  - name: session-log-reader\n"
             "    purpose: inspect one session log\n"
             "  child_spawns:\n"
-            "  - role: autoskillit:session-log-reader\n"
+            "  - role: session-log-reader\n"
             "    count: 1\n"
         ),
     )
@@ -1800,7 +1801,7 @@ def test_missing_declared_profile_skills_dir_returns_an_empty_compilation(tmp_pa
         source_skills,
         backend,
         context,
-        finalized_native_roles=None,
+        finalized_native_roles=frozenset(),
     )
 
     assert compilation.catalog.skills == ()

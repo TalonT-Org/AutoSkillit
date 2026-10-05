@@ -36,7 +36,7 @@ def embed_json(payload: Mapping[str, Any]) -> str:
     )
 
 
-def script_hash(source: str) -> str:
+def _script_hash(source: str) -> str:
     digest = hashlib.sha256(source.encode("utf-8")).digest()
     return "'sha256-" + base64.b64encode(digest).decode("ascii") + "'"
 
@@ -50,7 +50,7 @@ def render_deck_html(payload: Mapping[str, Any]) -> str:
         raise ValueError("CSS asset contains a closing style tag")
     csp = (
         "default-src 'none'; script-src "
-        + " ".join(script_hash(s) for s in scripts)
+        + " ".join(_script_hash(s) for s in scripts)
         + "; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"
     )
     values = {

@@ -12,7 +12,7 @@ from autoskillit.report import render_deck
 from autoskillit.report.deck import _html as deck_html
 from autoskillit.report.deck import build_deck_payload
 from autoskillit.report.deck import render_deck as render_deck_from_deck
-from autoskillit.report.deck._html import render_deck_html, script_hash
+from autoskillit.report.deck._html import _script_hash, render_deck_html
 from autoskillit.report.deck._registry import DECK_VIEWS
 from tests.report._fixtures import DECK_GENERATED_AT
 
@@ -107,7 +107,7 @@ def test_csp_hashes_each_executable_script(deck_payload: dict[str, Any]) -> None
         if directive.strip()
     }
     script_tokens = directives["script-src"]
-    expected = [script_hash(source) for attrs, source in collector.scripts if "type" not in attrs]
+    expected = [_script_hash(source) for attrs, source in collector.scripts if "type" not in attrs]
     assert sorted(script_tokens) == sorted(expected)
     assert "'unsafe-inline'" not in script_tokens
 

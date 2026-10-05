@@ -64,7 +64,7 @@ globalThis.DeckCore = (() => {
     if (selected == null) return {keys: live, dropped: [], widened: false};
     const keys = live.filter(k => selected.includes(k));
     const dropped = selected.filter(k => !live.includes(k));
-    return {keys: keys.length ? keys : live, dropped, widened: keys.length === 0};
+    return {keys, dropped, widened: false};
   }
 
   function toggleSelection(chips, selected, key) {
@@ -77,9 +77,66 @@ globalThis.DeckCore = (() => {
 
   function windowSelection(chips, selected) {
     const want = selected?.[0];
-    const chip = chips.find(c => c.state === "live" && c.key === want) ||
-      chips.find(c => c.key === "all");
-    return {chip, dropped: want && chip.key !== want ? [want] : []};
+    const chip = want == null ? chips.find(c => c.state === "live" && c.key === "all") :
+      chips.find(c => c.state === "live" && c.key === want);
+    return {chip: chip ?? null, dropped: want != null && !chip ? [want] : []};
+  }
+
+  function sameValues(left, right) {
+    return left.length === right.length && left.every(value => right.includes(value));
+  }
+
+  function selectPrepared(prepared, viewId, chips, route) {
+    prepared = prepared ?? {};
+    chips = chips ?? {};
+    const params = route.params ?? {};
+    const window = windowSelection(chips.window ?? [], params.window ?? null);
+    const level = effectiveSelection(chips.level ?? [], params.level ?? null);
+    const harness = effectiveSelection(chips.harness ?? [], params.harness ?? null);
+    const provider = effectiveSelection(chips.provider ?? [], params.provider ?? null);
+    const harnesses = new Set((chips.harness ?? [])
+      .filter(chip => harness.keys.includes(chip.key)).map(chip => chip.match));
+    const providers = new Set((chips.provider ?? [])
+      .filter(chip => provider.keys.includes(chip.key)).map(chip => chip.match));
+
+    function selectedRows(blocks) {
+      if (!window.chip) return [];
+      const inWindow = blocks.filter(block => block.window === window.chip.key);
+      const domain = [...new Set(inWindow.flatMap(block => block.levels))];
+      const requested = params.level == null ? domain : level.keys
+        .map(key => (chips.level ?? []).find(chip => chip.key === key)?.match)
+        .filter(value => domain.includes(value));
+      if (!requested.length) return [];
+      const block = inWindow.find(item => sameValues(item.levels, requested));
+      return block?.rows ?? [];
+    }
+
+    let skillRows = viewId === "role" ? [] : selectedRows(prepared.skills ?? []).filter(row =>
+      harnesses.has(row.harness) && providers.has(row.provider));
+    let roleRows = viewId === "skill" ? [] : selectedRows(prepared.roles ?? []).filter(row =>
+      providers.has(row.provider)).map(row => ({...row,
+      harnesses: (row.harnesses ?? []).filter(cell => harnesses.has(cell.harness))
+    })).filter(row => row.harnesses.length > 0);
+    if (viewId === "skill" && route.entity != null) {
+      skillRows = skillRows.filter(row => row.skill === route.entity);
+    }
+    if (viewId === "role" && route.entity != null) {
+      roleRows = roleRows.filter(row => row.role === route.entity);
+    }
+    const relationships = (prepared.relationships ?? []).filter(edge => {
+      if (viewId === "skill" && route.entity && edge.skill !== route.entity) return false;
+      if (viewId === "role" && route.entity && edge.role !== route.entity) return false;
+      return harnesses.has(edge.harness) && providers.has(edge.provider);
+    });
+
+    return {
+      skillRows,
+      roleRows,
+      relationships,
+      definitions: prepared.definitions ?? {},
+      viewHistory: prepared.view_histories?.[viewId] ?? null,
+      selection: {window, level, harness, provider}
+    };
   }
 
   function filterRows(model, rows, chips, route) {
@@ -91,7 +148,9 @@ globalThis.DeckCore = (() => {
     }
     let untimed = 0;
     const window = windowSelection(chips.window, route.params.window ?? null).chip;
-    if (window.days != null) {
+    if (!window) {
+      filtered = [];
+    } else if (window.days != null) {
       filtered = filtered.filter(row => {
         if (row.time_ms == null) { untimed += 1; return false; }
         return row.time_ms >= model.generated_at_ms - window.days * DAY_MS;
@@ -115,15 +174,16 @@ globalThis.DeckCore = (() => {
       const selection = effectiveSelection(values, route.params[facet.id] ?? null);
       const live = values.filter(c => c.state === "live");
       const labels = values.filter(c => selection.keys.includes(c.key)).map(c => c.label);
-      parts.push(facet.label + " " + (!live.length ? "none recorded" : labels.join(" + ") +
-        (selection.keys.length === live.length ? " (all)" : "")));
+      const selected = !live.length ? "none recorded" : !selection.keys.length ? "none selected" :
+        labels.join(" + ") + (selection.keys.length === live.length ? " (all)" : "");
+      parts.push(facet.label + " " + selected);
       notes.push(...selection.dropped.map(k => droppedNote(values, k)));
-      if (selection.widened) notes.push("no selected " + facet.label +
-        " is selectable here — showing every selectable " + facet.label);
     }
     const selection = windowSelection(chips.window, route.params.window ?? null);
     const window = selection.chip;
-    if (window.days != null) {
+    if (!window) {
+      parts.push("window unavailable");
+    } else if (window.days != null) {
       parts.push("window last " + window.label + " (" +
         formatDate(model.generated_at_ms - window.days * DAY_MS) + " → " +
         formatDate(model.generated_at_ms) + ")");
@@ -199,7 +259,7 @@ globalThis.DeckCore = (() => {
   }
 
   return Object.freeze({decodeTable, encodeRoute, decodeRoute, hrefFor, effectiveSelection,
-    toggleSelection, windowSelection, filterRows, populationSentence, summarizePairs, sortRows,
-    parseSort, chipPresentation, availabilityPresentation, barLayout, formatCount, formatDate,
-    CHIP_STATES, DAY_MS});
+    toggleSelection, windowSelection, selectPrepared, filterRows, populationSentence,
+    summarizePairs, sortRows, parseSort, chipPresentation, availabilityPresentation,
+    barLayout, formatCount, formatDate, CHIP_STATES, DAY_MS});
 })();

@@ -222,6 +222,23 @@ def test_prepared_selection_uses_exact_scope_and_keeps_metric_cells_distinct(
     assert selected["definitions"] == {"reviewer": definition}
     assert selected["viewHistory"] == history
 
+    route["params"]["window"] = ["missing-window"]
+    empty = deck_js.call("DeckCore.selectPrepared", prepared, "efficiency", chips, route)
+    assert empty["skillRows"] == empty["roleRows"] == []
+    assert empty["relationships"] == [relationship]
+    assert empty["definitions"] == {"reviewer": definition}
+
+    route["params"]["window"] = ["7d"]
+    prepared["skills"] = [{"window": "7d", "levels": ["skill"], "rows": [skill]}]
+    selected = deck_js.call("DeckCore.selectPrepared", prepared, "skill", chips, route)
+    assert selected["skillRows"] == [skill]
+    route["params"]["level"] = ["L2"]
+    selected = deck_js.call("DeckCore.selectPrepared", prepared, "skill", chips, route)
+    assert selected["skillRows"] == []
+    route["params"]["level"] = []
+    selected = deck_js.call("DeckCore.selectPrepared", prepared, "skill", chips, route)
+    assert selected["skillRows"] == [skill]
+
 
 def test_prepared_selection_returns_no_metrics_for_stale_scope(deck_js: Any) -> None:
     chips = {
@@ -302,29 +319,31 @@ def test_filter_rows_applies_facets_windows_and_untimed_count(
         ),
         pytest.param(
             _route(level=["L0"]),
-            "4 runs",
-            ALL_POPULATION_DETAIL,
+            "0 runs",
+            ALL_POPULATION_DETAIL.replace("level unrecorded (all)", "level none selected"),
             [
                 "L0 is not selectable on this view — L0 leaf agents write no session row; "
                 "they exist only as subagent transcripts",
-                "no selected level is selectable here — showing every selectable level",
             ],
             id="struck-level",
         ),
         pytest.param(
             _route(harness=["nope"]),
-            "4 runs",
-            ALL_POPULATION_DETAIL,
+            "0 runs",
+            ALL_POPULATION_DETAIL.replace(
+                "harness claude-code + codex (all)", "harness none selected"
+            ),
             [
                 "nope does not appear in this index",
-                "no selected harness is selectable here — showing every selectable harness",
             ],
             id="unknown-harness",
         ),
         pytest.param(
             _route(window=["28d"]),
-            "4 runs",
-            ALL_POPULATION_DETAIL,
+            "0 runs",
+            ALL_POPULATION_DETAIL.replace(
+                "window all history (2026-09-25 → 2026-10-04)", "window unavailable"
+            ),
             [
                 "28 days is not selectable on this view — index history begins 2026-09-25 — "
                 "9 days retained (#4621)"

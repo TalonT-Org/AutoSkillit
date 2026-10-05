@@ -7,10 +7,8 @@ from typing import Any
 import pytest
 
 from autoskillit.core import TokenMeasureState
-from autoskillit.report.deck._payload import (
-    build_deck_payload,
-    encode_table,
-)
+from autoskillit.report.deck import build_deck_payload
+from autoskillit.report.deck._payload import encode_table
 from autoskillit.report.deck._registry import (
     AVAILABILITY_VOCABULARY,
     DECK_VIEWS,

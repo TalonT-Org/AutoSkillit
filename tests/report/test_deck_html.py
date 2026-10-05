@@ -11,9 +11,9 @@ import pytest
 from autoskillit.core import pkg_root
 from autoskillit.report import render_deck
 from autoskillit.report.deck import _html as deck_html
+from autoskillit.report.deck import build_deck_payload
 from autoskillit.report.deck import render_deck as render_deck_from_deck
 from autoskillit.report.deck._html import render_deck_html, script_hash
-from autoskillit.report.deck._payload import build_deck_payload
 from autoskillit.report.deck._registry import DECK_VIEWS
 
 pytestmark = [pytest.mark.small]

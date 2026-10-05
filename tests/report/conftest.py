@@ -7,7 +7,7 @@ import pytest
 from py_mini_racer import MiniRacer
 
 from autoskillit.core import pkg_root
-from autoskillit.report.deck._payload import build_deck_payload
+from autoskillit.report.deck import build_deck_payload
 from autoskillit.report.deck._registry import SESSION_COLUMNS
 
 DECK_GENERATED_AT = datetime(2026, 10, 4, tzinfo=UTC)

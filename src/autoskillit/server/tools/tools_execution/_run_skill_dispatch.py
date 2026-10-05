@@ -24,6 +24,7 @@ from autoskillit.core import (
     RetryReason,
     SkillContractError,
     SkillResult,
+    current_operation_lease,
     get_logger,
     read_tracker_authority,
 )
@@ -55,6 +56,9 @@ from autoskillit.server.tools._execution_helpers import (
 from autoskillit.server.tools._execution_helpers import session_hook_root_scope
 from autoskillit.server.tools._execution_helpers import (
     validate_resumed_skill_contract as _validate_resumed_skill_contract,
+)
+from autoskillit.server.tools._execution_helpers._session_deadline import (
+    inherited_session_deadline_epoch,
 )
 from autoskillit.server.tools._types import deny_envelope
 from autoskillit.server.tools.tools_execution._gates import _authority_blocks_dependency_check
@@ -419,10 +423,7 @@ async def run_skill(
             started_epoch + run_config.timeout,
             started_epoch + run_config.mcp_tool_timeout_sec,
         )
-        try:
-            inherited_deadline = float(os.environ.get("AUTOSKILLIT_SESSION_DEADLINE", ""))
-        except ValueError:
-            inherited_deadline = 0.0
+        inherited_deadline = inherited_session_deadline_epoch()
         if 0 < inherited_deadline < deadline_epoch:
             deadline_epoch = inherited_deadline
         if resume_session_id and state.execution_selection is not None:
@@ -431,6 +432,8 @@ async def run_skill(
                 raise SkillContractError("Resume continuation deadline is unavailable or expired")
             deadline_epoch = min(deadline_epoch, float(original_deadline))
         state._invocation_deadline_epoch = deadline_epoch
+        if (lease := current_operation_lease()) is not None:
+            lease.narrow(state._invocation_deadline_epoch)
         state._invocation_deadline_monotonic = started_monotonic + (deadline_epoch - started_epoch)
         state._completion_invocation_id = _te_pkg._begin_run_skill_completion(
             state.tool_ctx,

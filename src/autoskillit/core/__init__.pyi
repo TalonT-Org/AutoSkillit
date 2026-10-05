@@ -188,6 +188,18 @@ from .logging import configure_logging as configure_logging
 from .logging import get_logger as get_logger
 from .logging import log_plugin_artifact_lifecycle as log_plugin_artifact_lifecycle
 from .pipeline._execution_marker import execution_marker as execution_marker
+from .pipeline._operation_lease import (
+    OPERATION_LEASE_FRESHNESS_SECONDS as OPERATION_LEASE_FRESHNESS_SECONDS,
+)
+from .pipeline._operation_lease import (
+    OPERATION_LEASE_HEARTBEAT_SECONDS as OPERATION_LEASE_HEARTBEAT_SECONDS,
+)
+from .pipeline._operation_lease import InFlightOperations as InFlightOperations
+from .pipeline._operation_lease import OperationLeaseHandle as OperationLeaseHandle
+from .pipeline._operation_lease import OperationLeaseRecord as OperationLeaseRecord
+from .pipeline._operation_lease import current_operation_lease as current_operation_lease
+from .pipeline._operation_lease import operation_lease as operation_lease
+from .pipeline._operation_lease import read_active_operation_leases as read_active_operation_leases
 from .pipeline._step_context import current_order_id as current_order_id
 from .pipeline._step_context import current_step_name as current_step_name
 from .pipeline.pipeline_tracker import TrackerAuthorityReadResult as TrackerAuthorityReadResult
@@ -613,6 +625,7 @@ from .types import MAXIMUM_FIELDS as MAXIMUM_FIELDS
 from .types import MCP_CLIENT_BACKEND_ENV_VAR as MCP_CLIENT_BACKEND_ENV_VAR
 from .types import NATIVE_SHELL_CAPTURE_MODE_ENV_VAR as NATIVE_SHELL_CAPTURE_MODE_ENV_VAR
 from .types import NON_VARIADIC_CLAUDE_FLAGS as NON_VARIADIC_CLAUDE_FLAGS
+from .types import OPERATION_LEASE_DIR_ENV_VAR as OPERATION_LEASE_DIR_ENV_VAR
 from .types import (
     ORCHESTRATOR_FACING_INSTRUCTION_SURFACES as ORCHESTRATOR_FACING_INSTRUCTION_SURFACES,
 )
@@ -1018,6 +1031,7 @@ from .types import HostClientAttestation as HostClientAttestation
 from .types import IdempotencyExpiredEffect as IdempotencyExpiredEffect
 from .types import IdempotencyNamespace as IdempotencyNamespace
 from .types import IdempotencyRecord as IdempotencyRecord
+from .types import InFlightOperationsProtocol as InFlightOperationsProtocol
 from .types import InfraExitCategory as InfraExitCategory
 from .types import InfraOutcome as InfraOutcome
 from .types import InfrastructureFaultError as InfrastructureFaultError

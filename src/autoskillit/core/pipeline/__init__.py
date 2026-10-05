@@ -12,6 +12,16 @@ import paths after the core/pipeline/ decomposition.
 from __future__ import annotations
 
 from autoskillit.core.pipeline._execution_marker import execution_marker
+from autoskillit.core.pipeline._operation_lease import (
+    OPERATION_LEASE_FRESHNESS_SECONDS,
+    OPERATION_LEASE_HEARTBEAT_SECONDS,
+    InFlightOperations,
+    OperationLeaseHandle,
+    OperationLeaseRecord,
+    current_operation_lease,
+    operation_lease,
+    read_active_operation_leases,
+)
 from autoskillit.core.pipeline._step_context import current_order_id, current_step_name
 from autoskillit.core.pipeline.pipeline_tracker import (
     TrackerAuthorityReadResult,
@@ -54,6 +64,11 @@ __all__ = [
     "AssistantTurn",
     "DFG",
     "GapStats",
+    "InFlightOperations",
+    "OPERATION_LEASE_FRESHNESS_SECONDS",
+    "OPERATION_LEASE_HEARTBEAT_SECONDS",
+    "OperationLeaseHandle",
+    "OperationLeaseRecord",
     "TrackerAuthorityReadResult",
     "TrackerAuthorityTarget",
     "TrackerParticipantKey",
@@ -62,6 +77,7 @@ __all__ = [
     "build_dfg_by_recipe",
     "compute_analysis",
     "compute_gap_stats",
+    "current_operation_lease",
     "current_order_id",
     "current_step_name",
     "execution_marker",
@@ -72,11 +88,13 @@ __all__ = [
     "initialize_manual_tracker",
     "iter_merged_assistant_turns",
     "mutate_tracker",
+    "operation_lease",
     "parse_raw_cc_jsonl",
     "parse_sessions_from_summary_dir",
     "pipeline_tracker_directory",
     "pipeline_tracker_path",
     "read_tracker_authority",
+    "read_active_operation_leases",
     "release_tracker_lease",
     "render_adjacency_table",
     "render_dot",

@@ -100,16 +100,12 @@ def test_watcher_calls_has_active_execution_marker(watcher: str) -> None:
     )
 
 
-_SIGNAL_GUARD_ACTIVITY_MUST_CHECK_MARKER = frozenset({"is_server_active"})
+def test_signal_guard_activity_check_uses_in_flight_registry() -> None:
+    function = _function(_CLI_APP, "is_server_active")
+    source = ast.unparse(function)
 
-
-@pytest.mark.parametrize("fn_name", sorted(_SIGNAL_GUARD_ACTIVITY_MUST_CHECK_MARKER))
-def test_signal_guard_activity_check_calls_has_active_execution_marker(fn_name: str) -> None:
-    callers = _functions_calling_predicate(_CLI_APP, "_has_active_execution_marker")
-    assert fn_name in callers, (
-        f"{fn_name} in cli/app.py does not call _has_active_execution_marker. "
-        f"Functions that do: {sorted(callers)}"
-    )
+    assert "in_flight_operations.active_count" in source
+    assert "_has_active_execution_marker" not in source
 
 
 _KILL_EXECUTORS_THAT_MUST_CHECK_CHILD_LIVENESS = frozenset(

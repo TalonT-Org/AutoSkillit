@@ -14,6 +14,7 @@ from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     FLEET_MODE_ENV_VAR,
     KITCHEN_SESSION_ID_ENV_VAR,
+    OPERATION_LEASE_DIR_ENV_VAR,
 )
 from tests._ambient_env_surface import (
     _PRODUCTION_SRC_ROOT,
@@ -99,3 +100,7 @@ def test_dispatch_identity_channel_regression() -> None:
     }
 
     assert dispatch_identity_vars <= CODEX_MCP_ENV_FORWARD_VARS
+
+
+def test_operation_lease_channel_reaches_codex_kitchens() -> None:
+    assert OPERATION_LEASE_DIR_ENV_VAR in CODEX_MCP_ENV_FORWARD_VARS

@@ -517,6 +517,53 @@ class TestRunSkillMcpTimeout:
     """run_skill wraps executor.run with anyio.fail_after(mcp_tool_timeout_sec)."""
 
     @pytest.mark.anyio
+    async def test_run_skill_narrows_current_operation_lease_to_invocation_deadline(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ):
+        import time
+
+        from autoskillit.core import current_operation_lease, operation_lease
+        from autoskillit.server.tools.tools_execution import _run_skill_dispatch
+
+        cfg = _command_config()
+        cfg.safety.require_dry_walkthrough = False
+        tool_ctx_kitchen_open.config = cfg
+        monkeypatch.delenv("AUTOSKILLIT_SESSION_DEADLINE", raising=False)
+        tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))  # clone guard
+
+        states = []
+        state_type = _run_skill_dispatch._RunSkillDispatchState
+
+        def capture_state(*args, **kwargs):
+            state = state_type(*args, **kwargs)
+            states.append(state)
+            return state
+
+        monkeypatch.setattr(_run_skill_dispatch, "_RunSkillDispatchState", capture_state)
+        observed = {}
+
+        async def capture_run(*args, **kwargs):
+            lease = current_operation_lease()
+            assert lease is not None
+            observed["lease_deadline"] = lease.record.not_after_epoch
+            observed["invocation_deadline"] = states[-1]._invocation_deadline_epoch
+            raise TimeoutError("stop after lease deadline inspection")
+
+        monkeypatch.setattr(tool_ctx_kitchen_open.executor, "run", capture_run)
+
+        async with operation_lease(
+            None,
+            operation="run_skill",
+            not_after_epoch=time.time() + 100_000,
+            registry=tool_ctx_kitchen_open.in_flight_operations,
+        ):
+            result_json = await run_skill("/investigate lease deadline", "/tmp")
+
+        assert observed["lease_deadline"] == observed["invocation_deadline"]
+        assert tool_ctx_kitchen_open.in_flight_operations.active_count == 0
+        assert json.loads(result_json)["subtype"] == "crashed"
+
+    @pytest.mark.anyio
     async def test_run_skill_returns_crashed_on_mcp_timeout(
         self, tool_ctx_kitchen_open, monkeypatch
     ):

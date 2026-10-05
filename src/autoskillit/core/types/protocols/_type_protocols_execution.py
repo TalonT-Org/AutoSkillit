@@ -40,6 +40,7 @@ from ._type_protocols_workspace import PluginArtifactAuthority, SkillProjectionC
 
 __all__ = [
     "CompletionRequiredResolver",
+    "InFlightOperationsProtocol",
     "InputContractResolver",
     "LaunchAdapter",
     "LaunchResolver",
@@ -52,6 +53,17 @@ __all__ = [
     "SkillSessionContractStore",
     "WriteExpectedResolver",
 ]
+
+
+class InFlightOperationsProtocol(Protocol):
+    """Minimal counter contract for active kitchen tool operations."""
+
+    @property
+    def active_count(self) -> int: ...
+
+    def _enter(self) -> None: ...
+
+    def _exit(self) -> None: ...
 
 
 @runtime_checkable

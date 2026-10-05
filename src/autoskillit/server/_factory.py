@@ -207,6 +207,7 @@ def make_context(
     plugin_authority: PluginArtifactAuthority = _UNSET,
     plugin_retirement_coordinator: PluginRetirementCoordinator | None = None,
     worker_capacity: ManagedWorkerCapacity | None = None,
+    operation_lease_channel: Path | None = None,
     project_dir: Path | None = None,
     audit_admission_store_authority: AuditAdmissionStoreAuthority | None = None,
 ) -> ToolContext:
@@ -231,6 +232,7 @@ def make_context(
         worker_capacity: ManagedWorkerCapacity implementation to inject. Defaults to
                         DefaultManagedWorkerCapacity(max_concurrent_dispatches) when None. Pass a
                         custom implementation in tests to substitute without monkey-patching.
+        operation_lease_channel: Per-attempt directory for publishing in-flight tool leases.
         project_dir: Explicit project root path. When supplied, used directly.
                      When None, resolve_project_dir() is called (git toplevel → cwd) —
                      the same helper `autoskillit cook` uses.
@@ -470,6 +472,7 @@ def make_context(
         ci_watcher=DefaultCIWatcher(token=token_factory, tracker=github_api_log),
         merge_queue_watcher=DefaultMergeQueueWatcher(token=token_factory, tracker=github_api_log),
         github_api_log=github_api_log,
+        operation_lease_channel=operation_lease_channel,
         session_skill_manager=session_mgr,
         skill_resolver=provider.resolver,
         skill_session_contract_store=DefaultSkillSessionContractStore(),

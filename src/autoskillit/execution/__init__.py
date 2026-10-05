@@ -165,7 +165,6 @@ from autoskillit.execution.process import (
     TetherSweepOutcome,
     TetherSweepReport,
     _active_liveness_signals,
-    _has_active_execution_marker,  # noqa: F401 — re-exported for cli/app.py signal guard
     async_kill_process_tree,
     default_tether_dir,
     dispatch_scope_tokens,

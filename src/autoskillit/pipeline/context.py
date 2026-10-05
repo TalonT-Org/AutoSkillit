@@ -40,6 +40,8 @@ from autoskillit.core import (
     GitHubReviewPosterProtocol,
     HeadlessExecutor,
     HostClientAttestation,
+    InFlightOperations,
+    InFlightOperationsProtocol,
     InputContractResolver,
     KitchenProcessIdentity,
     KitchenTransitionLock,
@@ -176,6 +178,10 @@ class ToolContext:
                           quota refresh background task.
     worker_capacity:      ManagedWorkerCapacity — shared owner-bound guard for fleet
                           dispatch and managed fixed-batch leaves.
+    in_flight_operations: InFlightOperationsProtocol — counts active MCP tool calls for
+                          kitchen shutdown and operation-lease production.
+    operation_lease_channel: Path | None — per-attempt directory where active tool-call
+                          leases are published for the supervising process.
     build_protected_campaign_ids: CampaignProtector — resolves campaign IDs exempt from
                           log retention purge.
     session_skill_manager: SessionSkillManager — manages per-session ephemeral skill dirs
@@ -317,6 +323,8 @@ class ToolContext:
     quota_refresh_task: QuotaRefreshTask | None = field(default=None)
     token_factory: TokenFactory | None = field(default=None)
     worker_capacity: ManagedWorkerCapacity | None = field(default=None)
+    in_flight_operations: InFlightOperationsProtocol = field(default_factory=InFlightOperations)
+    operation_lease_channel: Path | None = field(default=None)
     managed_fixed_batch_supervisor: ManagedFixedBatchSupervisor | None = field(
         default=None, repr=False
     )

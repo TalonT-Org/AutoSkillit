@@ -1532,6 +1532,15 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "of an unrelated lookup collection; never set as a real OS environment variable."
         ),
     ),
+    "AUTOSKILLIT_OPERATION_LEASE_DIR": AmbientEnvDisposition(
+        var="AUTOSKILLIT_OPERATION_LEASE_DIR",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "Attempt-scoped operation lease channel supplied to the child's kitchen server;"
+            " scrubbed so an unrelated child cannot inherit another attempt's liveness channel."
+        ),
+    ),
     "AUTOSKILLIT_KITCHEN_SESSION_ID": AmbientEnvDisposition(
         var="AUTOSKILLIT_KITCHEN_SESSION_ID",
         disposition="scrub",

@@ -17,6 +17,7 @@ from autoskillit.core import (
     CANONICAL_ACCOUNTING_FIELDS,
     SerializedTokenMeasure,
     TokenMeasure,
+    TurnTokenEntry,
     iter_merged_assistant_turns,
 )
 from autoskillit.execution.backends._codex_execution_identity import (
@@ -35,6 +36,7 @@ from autoskillit.execution.session import extract_token_usage
 from autoskillit.execution.session.turn_usage import (
     classify_token_measure,
     claude_inclusive_input_tokens,
+    merge_turn_usage,
 )
 
 
@@ -313,8 +315,9 @@ def _child_token_usage(
 
 
 def _codex_usage_measures(
-    rows: Sequence[Mapping[str, Any]], provider: str
+    rows: Sequence[TurnTokenEntry], provider: str
 ) -> dict[str, SerializedTokenMeasure]:
+    rows = merge_turn_usage(rows)
     measures: dict[str, SerializedTokenMeasure] = {}
     for field in CANONICAL_ACCOUNTING_FIELDS:
         values = [row.get(field) for row in rows]

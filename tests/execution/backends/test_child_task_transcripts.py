@@ -550,6 +550,48 @@ def test_codex_child_usage_scans_whole_verified_rollout_and_deduplicates_snapsho
     assert dedicated[0]["input_tokens"] == 10
 
 
+def test_codex_compaction_exclusion_is_preserved_for_both_extractors(tmp_path: Path) -> None:
+    child_id = "child-thread"
+    path = _write_codex(
+        tmp_path / "child.jsonl",
+        child_id,
+        [
+            _codex_usage_snapshot(13, "2026-09-01T10:00:01Z"),
+            {"type": "compacted"},
+            _codex_usage_snapshot(26, "2026-09-01T10:00:02Z"),
+            _codex_event("event_msg", {"type": "context_compacted"}),
+            _codex_usage_snapshot(39, "2026-09-01T10:00:03Z"),
+        ],
+    )
+    locator = SimpleNamespace(locate_session=lambda _thread_id: path)
+    dedicated = extract_codex_child_turn_usage(path, child_id, provider_used="codex")
+    interval = extract_codex_turn_usage(
+        locator, child_id, "2026-09-01T10:00:00Z", "2026-09-01T10:00:04Z", provider_used="codex"
+    )
+    assert dedicated == interval
+    assert len(dedicated) == 2
+
+
+def test_native_codex_usage_folds_advancing_snapshots_of_one_request(tmp_path: Path) -> None:
+    from autoskillit.execution.evidence._native_child_projection import _child_token_usage
+
+    snapshots = [
+        _codex_usage_snapshot(13, "2026-09-01T10:00:01Z"),
+        _codex_usage_snapshot(26, "2026-09-01T10:00:02Z"),
+    ]
+    for snapshot in snapshots:
+        payload = snapshot["payload"]
+        assert isinstance(payload, dict)
+        payload["request_id"] = "same-request"
+    path = _write_codex(tmp_path / "child.jsonl", "child-thread", snapshots)
+    usage, state = _child_token_usage(
+        "codex", "child-thread", path, path.read_text(encoding="utf-8"), "codex"
+    )
+    assert state == "observed"
+    assert usage["input_tokens"] == {"state": "measured", "value": 10}
+    assert usage["output_tokens"] == {"state": "measured", "value": 3}
+
+
 def test_codex_child_usage_rejects_mismatched_rollout_identity(tmp_path: Path) -> None:
     path = _write_codex(tmp_path / "child-rollout.jsonl", "actual-child", [])
 

@@ -329,7 +329,12 @@ def _codex_usage_records(reader: BinaryIO) -> Iterator[Mapping[str, Any]]:
             record = json.loads(raw_line)
         except (UnicodeDecodeError, json.JSONDecodeError):
             continue
-        if not isinstance(record, Mapping) or not isinstance(record.get("payload"), Mapping):
+        if not isinstance(record, Mapping):
+            continue
+        if record.get("type") == "compacted":
+            yield record
+            continue
+        if not isinstance(record.get("payload"), Mapping):
             continue
         payload = record["payload"]
         if record.get("type") == "event_msg" and payload.get("type") == "token_count":
@@ -349,7 +354,7 @@ def _extract_codex_turn_usage(
     end: datetime | None,
     provider_used: str,
 ) -> list[TurnTokenEntry]:
-    """Share rollout scanning and cumulative-snapshot handling across views."""
+    """Read advancing request snapshots within optional rollout time bounds."""
 
     rows: list[TurnTokenEntry] = []
     current_model: str | None = None
@@ -359,12 +364,12 @@ def _extract_codex_turn_usage(
         with _logical_rollout_reader(path) as reader:
             for record in _codex_usage_records(reader):
                 record_type = record.get("type")
+                if record_type == "compacted":
+                    compacting = True
+                    continue
                 payload: Mapping[str, Any] = record["payload"]
                 if record_type == "turn_context" and isinstance(payload, Mapping):
                     current_model = first_nonempty_string(payload.get("model"))
-                    continue
-                if record_type == "compacted":
-                    compacting = True
                     continue
                 payload_type = payload.get("type")
                 if record_type == "event_msg" and payload_type == "context_compacted":

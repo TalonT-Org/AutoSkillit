@@ -19,9 +19,9 @@ def _refresh_report_index(log_root: Path, index_dir: Path, *, rebuild: bool) -> 
             if rebuild
             else update_report_index(log_root, index_dir)
         )
-    except ArtifactLeaseContention:
+    except ArtifactLeaseContention as exc:
         print(
-            "report index: another operation holds a required index or source lease",
+            f"report index: another operation holds a required index or source lease: {exc.path}",
             file=sys.stderr,
         )
         raise SystemExit(1) from None

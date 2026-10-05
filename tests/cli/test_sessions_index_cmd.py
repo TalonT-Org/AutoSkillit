@@ -82,6 +82,7 @@ def test_sessions_index_reports_lease_contention_without_summary(
     captured = capsys.readouterr()
     assert raised.value.code == 1
     assert captured.err.strip() == (
-        "report index: another operation holds a required index or source lease"
+        f"report index: another operation holds a required index or source lease: "
+        f"{index_dir / 'index.lock'}"
     )
     assert captured.out == ""

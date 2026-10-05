@@ -34,7 +34,7 @@ from autoskillit.execution.evidence.otlp_tokens import (
 from autoskillit.execution.evidence.report_walk import OTLP_WALK_KIND, SESSION_WALK_KIND, WalkItem
 from autoskillit.execution.session.turn_usage import classify_token_measure
 
-REPORT_INDEX_SCHEMA_VERSION: Final[int] = 1
+REPORT_INDEX_SCHEMA_VERSION: Final[int] = 2
 SESSION_KIND: Final[str] = "session"
 REQUEST_KIND: Final[str] = "request"
 TOOL_KIND: Final[str] = "tool"
@@ -121,7 +121,7 @@ class ReportToolRow(ReportRowBase):
 
 
 class ReportSubagentRow(ReportRowBase):
-    """Subagent facts derived from a ``subagent_completed`` log record."""
+    """Native child or OTLP completion facts, kept in one subagent fact family."""
 
     harness: str
     agent_type: str | None
@@ -129,6 +129,20 @@ class ReportSubagentRow(ReportRowBase):
     final_model: str | None
     model_swapped: bool | None
     event_sequence: int | None
+    child_id: str | None
+    native_parent_session_id: str | None
+    parent_session_key: str | None
+    role: str | None
+    actor_level: str | None
+    provider: str
+    skill: str | None
+    recipe: str | None
+    step: str | None
+    level: str | None
+    token_usage: dict[str, SerializedTokenMeasure]
+    tool_counts: dict[str, int] | None
+    transcript_state: str | None
+    usage_state: str | None
 
 
 REPORT_ROW_TYPES: Mapping[str, type] = MappingProxyType(
@@ -174,6 +188,26 @@ def _count_map(value: object) -> dict[str, int] | None:
         if isinstance(key, str) and count is not None:
             counts[key] = count
     return counts
+
+
+def _token_usage_map(value: object) -> dict[str, SerializedTokenMeasure]:
+    mapping = value if isinstance(value, Mapping) else {}
+    measures: dict[str, SerializedTokenMeasure] = {}
+    for field in CANONICAL_ACCOUNTING_FIELDS:
+        raw = mapping.get(field)
+        try:
+            measures[field] = (
+                TokenMeasure.from_dict(raw).to_dict()
+                if isinstance(raw, dict)
+                else (
+                    TokenMeasure.observed(raw).to_dict()
+                    if isinstance(raw, int) and not isinstance(raw, bool) and raw >= 0
+                    else TokenMeasure.unknown().to_dict()
+                )
+            )
+        except ValueError:
+            measures[field] = TokenMeasure.unknown().to_dict()
+    return measures
 
 
 def _pair_text(value: object) -> str:
@@ -257,6 +291,20 @@ _ROW_FIELDS: dict[str, dict[str, Callable[[object], object]]] = {
         "final_model": _text,
         "model_swapped": _flag,
         "event_sequence": _count,
+        "child_id": _text,
+        "native_parent_session_id": _text,
+        "parent_session_key": _text,
+        "role": _text,
+        "actor_level": _text,
+        "provider": _pair_text,
+        "skill": _text,
+        "recipe": _text,
+        "step": _text,
+        "level": _text,
+        "token_usage": _token_usage_map,
+        "tool_counts": _count_map,
+        "transcript_state": _text,
+        "usage_state": _text,
     },
 }
 
@@ -294,7 +342,8 @@ def rows_for_walk_item(item: WalkItem) -> list[dict[str, Any]]:
     if item.record is None or item.source_id is None:
         return []
     if item.kind == SESSION_WALK_KIND:
-        return [_session_row(item.source_id, item.record)]
+        session = _session_row(item.source_id, item.record)
+        return [session, *_native_subagent_rows(item.source_id, item.record, session)]
     if item.kind == OTLP_WALK_KIND:
         return _otlp_rows(item.source_id, item.record)
     return []
@@ -375,6 +424,13 @@ def _skill_name(value: object) -> str | None:
     return extract_skill_name(command)
 
 
+def _attribution_skill(value: object) -> str | None:
+    skill = _text(value)
+    if skill is None:
+        return None
+    return _skill_name(skill) if skill.startswith(("/", "$")) else skill
+
+
 def _tool_counts(record: dict[str, Any]) -> dict[str, int] | None:
     if record.get("transcripts_available") is not True:
         return None
@@ -388,6 +444,108 @@ def _tool_counts(record: dict[str, Any]) -> dict[str, int] | None:
             if isinstance(names, list):
                 counts.update(name for name in names if isinstance(name, str))
     return dict(sorted(counts.items()))
+
+
+def _native_subagent_rows(
+    key: str,
+    record: dict[str, Any],
+    parent: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    source_row = record.get("row")
+    outcomes = record.get("child_outcomes")
+    if not isinstance(source_row, dict) or not isinstance(outcomes, (tuple, list)):
+        return []
+    native_parent_id = _text(source_row.get("session_id"))
+    parent_key = _text(source_row.get("dir_name")) or key
+    if native_parent_id is None:
+        return []
+
+    rows: list[dict[str, Any]] = []
+    seen_keys: set[str] = set()
+    for child in outcomes:
+        if not isinstance(child, Mapping):
+            continue
+        child_id = _text(child.get("child_id"))
+        role = _text(child.get("role"))
+        backend = _text(child.get("backend"))
+        expected_source = {
+            "claude_code": "transcript_metadata",
+            "codex": "codex_rollout_metadata",
+        }.get(backend or "")
+        if (
+            child_id is None
+            or role is None
+            or expected_source is None
+            or child.get("evidence_source") != expected_source
+            or child.get("parent_session_id") != native_parent_id
+            or child.get("parent_session_key") not in (None, parent_key)
+        ):
+            continue
+        child_key = f"{parent_key}:native:{backend}:{native_parent_id}:{child_id}"
+        if child_key in seen_keys:
+            continue
+        seen_keys.add(child_key)
+
+        effective_provider = _text(child.get("effective_provider"))
+        if effective_provider is not None and effective_provider.casefold() == UNKNOWN_SOURCE:
+            effective_provider = None
+        provider = _pair_text(effective_provider)
+        token_usage = (
+            _token_usage_map(child.get("token_usage"))
+            if effective_provider is not None
+            else _unknown_child_usage_map()
+        )
+        if child.get("usage_state") == "unknown":
+            token_usage = _unknown_child_usage_map()
+
+        parent_skill = parent["skill"]
+        attribution_skill = _attribution_skill(child.get("attribution_skill"))
+        skill = (
+            parent_skill
+            if parent["level"] in ("skill", "orchestrator")
+            and parent_skill is not None
+            and attribution_skill == parent_skill
+            else None
+        )
+        transcript_state = _text(child.get("transcript_state")) or "unknown"
+        tool_counts = (
+            _count_map(child.get("tool_counts")) if transcript_state == "observed" else None
+        )
+        rows.append(
+            {
+                "schema_version": REPORT_INDEX_SCHEMA_VERSION,
+                "kind": SUBAGENT_KIND,
+                "key": child_key,
+                "session_id": native_parent_id,
+                "time_ms": parent["time_ms"],
+                "harness": parent["harness"],
+                "agent_type": None,
+                "model": _text(child.get("effective_model")),
+                "final_model": None,
+                "model_swapped": None,
+                "event_sequence": None,
+                "child_id": child_id,
+                "native_parent_session_id": native_parent_id,
+                "parent_session_key": parent_key,
+                "role": role,
+                "actor_level": "L0",
+                "provider": provider,
+                "skill": skill,
+                "recipe": parent["recipe"],
+                "step": parent["step"],
+                "level": parent["level"],
+                "token_usage": token_usage,
+                "tool_counts": tool_counts,
+                "transcript_state": transcript_state,
+                "usage_state": _text(child.get("usage_state")) or "unknown",
+            }
+        )
+    rows.sort(key=lambda row: row["key"])
+    return rows
+
+
+def _unknown_child_usage_map() -> dict[str, SerializedTokenMeasure]:
+    return {field: TokenMeasure.unknown().to_dict() for field in CANONICAL_ACCOUNTING_FIELDS}
 
 
 def _otlp_rows(source_id: str, record: dict[str, Any]) -> list[dict[str, Any]]:

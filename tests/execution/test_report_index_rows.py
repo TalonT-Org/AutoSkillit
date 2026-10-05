@@ -151,7 +151,10 @@ def test_session_row_carries_facets_pair_and_resolved_measures() -> None:
     assert "private-turn-id" not in serialized
 
 
-def test_session_item_projects_verified_native_child_under_index_parent_key() -> None:
+@pytest.mark.parametrize("session_type", ["skill", "orchestrator"])
+def test_session_item_projects_verified_native_child_under_index_parent_key(
+    session_type: str,
+) -> None:
     token_usage = {
         "input_tokens": {"state": "measured", "value": 15},
         "output_tokens": {"state": "measured", "value": 4},
@@ -205,6 +208,20 @@ def test_session_item_projects_verified_native_child_under_index_parent_key() ->
         "transcript_state": "observed",
         "usage_state": "unknown",
     }
+    mismatched_skill_child = {
+        "child_id": "native-child-mismatched-skill",
+        "backend": "claude_code",
+        "parent_session_id": "native-parent-id",
+        "role": "audit-impl-slice-auditor",
+        "attribution_skill": "other-skill",
+        "effective_provider": "anthropic",
+        "effective_model": "claude-sonnet-child",
+        "evidence_source": "transcript_metadata",
+        "token_usage": token_usage,
+        "tool_counts": {},
+        "transcript_state": "observed",
+        "usage_state": "observed",
+    }
     parent = {
         "session_id": "native-parent-id",
         "timestamp": "2026-09-01T00:00:00Z",
@@ -214,18 +231,23 @@ def test_session_item_projects_verified_native_child_under_index_parent_key() ->
         "skill_command": "/autoskillit:make-plan",
         "recipe_name": "research",
         "step_name": "scope",
-        "session_type": "skill",
+        "session_type": session_type,
     }
 
     rows = rows_for_walk_item(
         _session_item(
             "report-index-key",
             parent,
-            child_outcomes=(child, managed_attempt, providerless_child),
+            child_outcomes=(child, managed_attempt, providerless_child, mismatched_skill_child),
         )
     )
 
-    assert [row["kind"] for row in rows] == ["session", "subagent", "subagent"]
+    assert [row["kind"] for row in rows] == [
+        "session",
+        "subagent",
+        "subagent",
+        "subagent",
+    ]
     projected_by_id = {row["child_id"]: row for row in rows if row["kind"] == "subagent"}
     projected = projected_by_id["native-child-1"]
     assert projected["key"].startswith("report-index-key:")
@@ -235,7 +257,7 @@ def test_session_item_projects_verified_native_child_under_index_parent_key() ->
     assert projected["role"] == "audit-impl-slice-auditor"
     assert projected["actor_level"] == "L0"
     assert projected["skill"] == "make-plan"
-    assert projected["level"] == "skill"
+    assert projected["level"] == session_type
     assert projected["recipe"] == "research"
     assert projected["step"] == "scope"
     assert projected["provider"] == "anthropic"
@@ -249,6 +271,10 @@ def test_session_item_projects_verified_native_child_under_index_parent_key() ->
     assert without_provider["model"] is None
     assert without_provider["token_usage"]["input_tokens"]["state"] == "unknown"
     assert without_provider["usage_state"] == "unknown"
+    mismatched = projected_by_id["native-child-mismatched-skill"]
+    assert mismatched["skill"] is None
+    assert mismatched["role"] == "audit-impl-slice-auditor"
+    assert mismatched["level"] == session_type
 
 
 def test_session_row_legacy_zero_and_codex_sigil() -> None:

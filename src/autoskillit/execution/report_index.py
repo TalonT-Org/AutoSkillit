@@ -7,9 +7,10 @@ to session attempts by session id and event time, and resolves token measures us
 the attributed harness/provider pair.
 
 For sources changed only in ways tracked by ``iter_report_walk``, an incremental
-build and a rebuild have the same rows. This assumes transcripts are not modified
-after their session row is walked; ``rebuild_report_index`` refreshes transcript
-counts when that assumption no longer holds.
+build and a rebuild have the same rows. Child snapshots and their dedicated
+transcripts are fingerprinted on each update. The parent transcript is assumed not
+to change after its session row is walked; ``rebuild_report_index`` refreshes its
+derived counts when that assumption no longer holds.
 """
 
 from __future__ import annotations
@@ -52,6 +53,7 @@ from autoskillit.execution.evidence.report_walk import (
     VALID_SOURCE_KEYS,
     SourceGapError,
     WalkItem,
+    child_evidence_fingerprint,
     iter_report_walk,
 )
 from autoskillit.execution.session_log.session_index import (
@@ -122,7 +124,20 @@ def _update(log_root: Path, index_dir: Path, *, rebuild: bool) -> ReportIndexUpd
         if rebuild:
             (index_dir / _ROWS_FILE).unlink(missing_ok=True)
             (index_dir / _STATE_FILE).unlink(missing_ok=True)
-        with _RowAppender.open(index_dir) as appender:
+        fingerprint = child_evidence_fingerprint(log_root)
+        state = read_versioned_json(index_dir / _STATE_FILE, _STATE_SCHEMA_VERSION)
+        row_schema_mismatch = (
+            state.get("row_schema_version") != REPORT_INDEX_SCHEMA_VERSION
+            if state is not None
+            else (index_dir / _ROWS_FILE).exists()
+        )
+        child_evidence_changed = (
+            state is not None and state.get("child_evidence_fingerprint") != fingerprint
+        )
+        if row_schema_mismatch or child_evidence_changed:
+            (index_dir / _ROWS_FILE).unlink(missing_ok=True)
+            (index_dir / _STATE_FILE).unlink(missing_ok=True)
+        with _RowAppender.open(index_dir, child_evidence_fingerprint=fingerprint) as appender:
             return _walk_into(log_root, appender)
 
 
@@ -271,10 +286,12 @@ class _RowAppender:
         index_dir: Path,
         handle: BinaryIO,
         watermark: dict[str, Any] | None,
+        child_evidence_fingerprint: str,
     ) -> None:
         self.index_dir = index_dir
         self.handle = handle
         self.watermark = watermark
+        self.child_evidence_fingerprint = child_evidence_fingerprint
         self._pending = bytearray()
         self._dirty = False
         self.items_walked = 0
@@ -282,7 +299,7 @@ class _RowAppender:
 
     @classmethod
     @contextmanager
-    def open(cls, index_dir: Path) -> Iterator[_RowAppender]:
+    def open(cls, index_dir: Path, *, child_evidence_fingerprint: str) -> Iterator[_RowAppender]:
         rows_path = index_dir / _ROWS_FILE
         watermark, committed = _committed_state(index_dir, rows_path)
         fd = os.open(
@@ -293,7 +310,7 @@ class _RowAppender:
         with os.fdopen(fd, "r+b") as handle:
             handle.truncate(committed)
             handle.seek(committed)
-            yield cls(index_dir, handle, watermark)
+            yield cls(index_dir, handle, watermark, child_evidence_fingerprint)
 
     def add(self, item: WalkItem) -> None:
         for row in rows_for_walk_item(item):
@@ -311,15 +328,20 @@ class _RowAppender:
         if item.kind == CHECKPOINT_WALK_KIND or len(self._pending) >= _COMMIT_BYTES:
             self.commit()
 
-    def commit(self) -> None:
-        if not self._dirty:
+    def commit(self, *, force: bool = False) -> None:
+        if not self._dirty and not force:
             return
         self.handle.write(bytes(self._pending))
         self.handle.flush()
         os.fsync(self.handle.fileno())
         write_versioned_json(
             self.index_dir / _STATE_FILE,
-            {"walk": self.watermark, "rows_bytes": self.handle.tell()},
+            {
+                "walk": self.watermark,
+                "rows_bytes": self.handle.tell(),
+                "row_schema_version": REPORT_INDEX_SCHEMA_VERSION,
+                "child_evidence_fingerprint": self.child_evidence_fingerprint,
+            },
             schema_version=_STATE_SCHEMA_VERSION,
         )
         self._pending.clear()
@@ -352,7 +374,7 @@ def _walk_into(log_root: Path, appender: _RowAppender) -> ReportIndexUpdate:
             logger.warning("report_index_source_gap", source=gap.source, detail=str(gap))
             appender.reset_source(gap.source)
             continue
-        appender.commit()
+        appender.commit(force=True)
         return ReportIndexUpdate(appender.items_walked, appender.rows_written, tuple(gaps))
 
 
@@ -449,8 +471,21 @@ def _sorted_rows(rows: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return dict(sorted(rows.items()))
 
 
+def _require_row_schema(index_dir: Path) -> None:
+    rows_path = index_dir / _ROWS_FILE
+    state_path = index_dir / _STATE_FILE
+    if not rows_path.exists() and not state_path.exists():
+        return
+    state = read_versioned_json(state_path, _STATE_SCHEMA_VERSION)
+    if state is None or state.get("row_schema_version") != REPORT_INDEX_SCHEMA_VERSION:
+        raise ValueError(
+            f"report index row schema mismatch: expected {REPORT_INDEX_SCHEMA_VERSION}"
+        )
+
+
 def read_report_index(index_dir: Path) -> ReportIndex:
     """Read the latest valid fact for each key and resolve its session join."""
+    _require_row_schema(index_dir)
     by_kind = _read_rows(index_dir / _ROWS_FILE)
     sessions = by_kind[SESSION_KIND]
     requests = by_kind[REQUEST_KIND]

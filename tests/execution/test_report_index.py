@@ -17,6 +17,7 @@ from autoskillit.execution import (
     update_report_index,
 )
 from autoskillit.execution.evidence.report_walk import WalkItem
+from autoskillit.hooks import _child_outcome_snapshot as child_snapshot
 from tests.execution._report_index_fixtures import (
     CLAUDE_SCOPE,
     basic_session_row,
@@ -67,6 +68,63 @@ def _session(dir_name: str, session_id: str, **fields: Any) -> dict[str, Any]:
 
 def _basic_session(dir_name: str, session_id: str, **fields: Any) -> dict[str, Any]:
     return basic_session_row(dir_name, session_id, **fields)
+
+
+def _write_native_child(log_root: Path, parent_id: str, child_id: str, *, model: str) -> Path:
+    snapshot_path = child_snapshot.resolve_snapshot_path(
+        log_root, backend="claude_code", parent_session_id=parent_id
+    )
+    child_snapshot.observe_child(
+        snapshot_path,
+        backend="claude_code",
+        parent_session_id=parent_id,
+        child_id=child_id,
+    )
+    child_snapshot.record_terminal_evidence(
+        snapshot_path,
+        backend="claude_code",
+        parent_session_id=parent_id,
+        child_id=child_id,
+        evidence_key=f"{child_id}:metadata",
+        evidence={
+            "role": "Explore",
+            "attribution_skill": "implement-worktree-no-merge",
+            "effective_provider": "openai",
+            "effective_model": model,
+            "evidence_source": "transcript_metadata",
+        },
+    )
+    transcript = log_root / parent_id / "subagents" / f"agent-{child_id}.jsonl"
+    transcript.parent.mkdir(parents=True, exist_ok=True)
+    transcript.write_text(
+        json.dumps(
+            {
+                "type": "assistant",
+                "agentId": child_id,
+                "attributionAgent": "Explore",
+                "attributionSkill": "implement-worktree-no-merge",
+                "message": {"id": f"message-{child_id}", "model": model},
+                "sessionId": parent_id,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return snapshot_path
+
+
+def _remove_native_child(snapshot_path: Path, child_id: str) -> None:
+    document = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    document["children"].pop(child_id)
+    snapshot_path.write_text(json.dumps(document, sort_keys=True), encoding="utf-8")
+
+
+def _indexed_native_children(index_dir: Path) -> dict[str, dict[str, Any]]:
+    return {
+        row["child_id"]: row
+        for row in read_report_index(index_dir).subagents.values()
+        if row["actor_level"] == "L0" and row["child_id"] is not None
+    }
 
 
 def test_update_then_read_joins_events_to_sessions(tmp_path: Path) -> None:
@@ -301,6 +359,57 @@ def test_rebuild_from_scratch_equals_incremental_build(tmp_path: Path) -> None:
     assert read_report_index(inc) == read_report_index(full)
 
 
+def test_child_only_changes_refresh_live_and_archive_rows_once(tmp_path: Path) -> None:
+    root = tmp_path / "logs"
+    index_dir = tmp_path / "index"
+    live_id, archive_id = "parent-live", "parent-archive"
+    live_transcript, archive_transcript = root / f"{live_id}.jsonl", root / f"{archive_id}.jsonl"
+    live_transcript.parent.mkdir(parents=True)
+    live_transcript.write_text("", encoding="utf-8")
+    archive_transcript.write_text("", encoding="utf-8")
+    _write_jsonl(
+        root / "sessions.jsonl",
+        [_basic_session("live", live_id, claude_code_log=str(live_transcript))],
+    )
+    _write_jsonl(
+        root / "sessions-archive.jsonl",
+        [_basic_session("archive", archive_id, claude_code_log=str(archive_transcript))],
+    )
+
+    live_snapshot = _write_native_child(root, live_id, "child-live", model="model-v1")
+    _write_native_child(root, live_id, "child-removed", model="model-removed")
+    _write_native_child(root, archive_id, "child-archive", model="model-v1")
+    update_report_index(root, index_dir)
+    assert set(_indexed_native_children(index_dir)) == {
+        "child-live",
+        "child-removed",
+        "child-archive",
+    }
+
+    _write_native_child(root, live_id, "child-live", model="model-v2")
+    _remove_native_child(live_snapshot, "child-removed")
+    (root / live_id / "subagents" / "agent-child-removed.jsonl").unlink()
+    _write_native_child(root, archive_id, "child-added", model="model-added")
+
+    update_report_index(root, index_dir)
+    children = _indexed_native_children(index_dir)
+    assert set(children) == {"child-live", "child-archive", "child-added"}
+    assert children["child-live"]["model"] == "model-v2"
+    assert children["child-live"]["provider"] == "openai"
+    assert children["child-added"]["model"] == "model-added"
+
+    rebuilt = tmp_path / "rebuilt"
+    rebuild_report_index(root, rebuilt)
+    expected = read_report_index(rebuilt)
+    assert read_report_index(index_dir) == expected
+    rows_path = index_dir / "rows.jsonl"
+    rows_size = rows_path.stat().st_size
+    repeated = update_report_index(root, index_dir)
+    assert repeated.rows_written == 0
+    assert rows_path.stat().st_size == rows_size
+    assert read_report_index(index_dir) == expected
+
+
 def test_interrupted_update_resumes_to_the_same_index(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -422,13 +531,14 @@ def test_older_version_rows_parse_without_error(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    "row_schema_marker",
-    [None, 1, REPORT_INDEX_SCHEMA_VERSION + 1],
+    ("row_schema_marker", "remove_rows"),
+    [(None, False), (1, False), (REPORT_INDEX_SCHEMA_VERSION + 1, True)],
     ids=["absent", "mismatched", "future"],
 )
 def test_incompatible_row_schema_is_rejected_and_rebuilt(
     tmp_path: Path,
     row_schema_marker: int | None,
+    remove_rows: bool,
 ) -> None:
     assert not read_report_index(tmp_path / "absent-index").sessions
 
@@ -457,6 +567,8 @@ def test_incompatible_row_schema_is_rejected_and_rebuilt(
         )
     state["rows_bytes"] = rows_path.stat().st_size
     state_path.write_text(json.dumps(state), encoding="utf-8")
+    if remove_rows:
+        rows_path.unlink()
 
     with pytest.raises(ValueError, match="row schema"):
         read_report_index(index_dir)
@@ -466,10 +578,11 @@ def test_incompatible_row_schema_is_rejected_and_rebuilt(
     indexed = read_report_index(index_dir)
     committed = json.loads(state_path.read_text(encoding="utf-8"))
     assert set(indexed.sessions) == {"current"}
+    assert committed["schema_version"] == report_index._STATE_SCHEMA_VERSION
     assert committed["row_schema_version"] == REPORT_INDEX_SCHEMA_VERSION
 
 
-def test_lost_state_keeps_rows_whose_sources_rotated_away(tmp_path: Path) -> None:
+def test_lost_state_rebuilds_rows_from_retained_sources(tmp_path: Path) -> None:
     root = tmp_path / "logs"
     _write_jsonl(root / "sessions.jsonl", [_basic_session("a", "sid-a")])
     (root / "otlp.jsonl").write_bytes(
@@ -481,11 +594,14 @@ def test_lost_state_keeps_rows_whose_sources_rotated_away(tmp_path: Path) -> Non
     (root / "otlp.jsonl").unlink()
     (index_dir / "state.json").unlink()
 
+    with pytest.raises(ValueError, match="row schema"):
+        read_report_index(index_dir)
+
     update_report_index(root, index_dir)
 
     indexed = read_report_index(index_dir)
     assert indexed.sessions == sessions_before
-    assert {row["request_id"] for row in indexed.requests.values()} == {"a"}
+    assert indexed.requests == {}
 
 
 def test_archive_gap_reindexes_archive_then_projection(tmp_path: Path) -> None:

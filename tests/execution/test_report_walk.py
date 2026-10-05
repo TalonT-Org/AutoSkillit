@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 import zstandard
 
-import autoskillit.execution.evidence.report_walk as report_walk
+import autoskillit.execution.evidence._native_child_projection as native_child_projection
 from autoskillit.core import iter_merged_assistant_turns
 from autoskillit.execution.evidence.report_walk import (
     SourceGapError,
@@ -133,14 +133,23 @@ def test_session_walk_reads_child_outcomes_by_native_parent_id(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = tmp_path / "logs"
-    child = {"child_id": "native-child", "role": "audit-bugs"}
+    child = {
+        "child_id": "native-child",
+        "backend": "claude_code",
+        "parent_session_id": "native-parent-id",
+        "role": "audit-bugs",
+        "attribution_skill": "make-plan",
+        "effective_provider": "",
+        "effective_model": "",
+        "evidence_source": "transcript_metadata",
+    }
     calls: list[tuple[str, str, Path]] = []
 
     def collect(*, backend: str, parent_session_id: str, log_root: Path):
         calls.append((backend, parent_session_id, log_root))
         return (child,)
 
-    monkeypatch.setattr(report_walk, "collect_child_outcomes", collect, raising=False)
+    monkeypatch.setattr(native_child_projection, "collect_child_outcomes", collect)
     _write_jsonl(
         root / "sessions.jsonl",
         [_session("report-index-key", "native-parent-id", backend="claude-code")],
@@ -152,8 +161,120 @@ def test_session_walk_reads_child_outcomes_by_native_parent_id(
     assert item.source_id == "report-index-key"
     assert item.session_id == "native-parent-id"
     assert item.record is not None
-    assert item.record["child_outcomes"] == (child,)
+    (projected_child,) = item.record["child_outcomes"]
+    assert projected_child["child_id"] == "native-child"
+    assert projected_child["native_parent_session_id"] == "native-parent-id"
+    assert projected_child["parent_session_key"] == "report-index-key"
+    assert projected_child["transcript_state"] == "unknown"
+    assert projected_child["usage_state"] == "unknown"
     assert item.watermark["projection"]["report-index-key"]
+
+
+def test_resumed_native_parent_owns_only_timestamp_matched_child(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "logs"
+    parent_log = tmp_path / "project" / "native-parent-id.jsonl"
+    parent_log.parent.mkdir(parents=True)
+    parent_log.write_text("{}\n", encoding="utf-8")
+    child_dir = parent_log.parent / "native-parent-id" / "subagents"
+    _write_jsonl(
+        child_dir / "agent-child-in-second-resume.jsonl",
+        [
+            {
+                "type": "assistant",
+                "timestamp": "2026-10-05T10:00:25Z",
+                "message": {"id": "m1", "content": []},
+            }
+        ],
+    )
+    _write_jsonl(
+        child_dir / "agent-child-without-time.jsonl",
+        [{"type": "assistant", "message": {"id": "m2", "content": []}}],
+    )
+    (child_dir / "agent-incomplete-child.jsonl").write_text(
+        json.dumps(
+            {
+                "type": "assistant",
+                "timestamp": "2026-10-05T10:00:26Z",
+                "message": {"id": "m3", "content": []},
+            }
+        ),
+        encoding="utf-8",
+    )
+    children = (
+        {
+            "child_id": "child-in-second-resume",
+            "backend": "claude_code",
+            "parent_session_id": "native-parent-id",
+            "role": "audit-bugs",
+            "attribution_skill": "make-plan",
+            "effective_provider": "anthropic",
+            "effective_model": "claude-child",
+            "evidence_source": "transcript_metadata",
+        },
+        {
+            "child_id": "child-without-time",
+            "backend": "claude_code",
+            "parent_session_id": "native-parent-id",
+            "role": "audit-bugs",
+            "attribution_skill": "make-plan",
+            "effective_provider": "anthropic",
+            "effective_model": "claude-child",
+            "evidence_source": "transcript_metadata",
+        },
+        {
+            "child_id": "incomplete-child",
+            "backend": "claude_code",
+            "parent_session_id": "native-parent-id",
+            "role": "audit-bugs",
+            "attribution_skill": "make-plan",
+            "effective_provider": "anthropic",
+            "effective_model": "claude-child",
+            "evidence_source": "transcript_metadata",
+        },
+    )
+    monkeypatch.setattr(
+        native_child_projection,
+        "collect_child_outcomes",
+        lambda **_kwargs: children,
+    )
+    _write_jsonl(
+        root / "sessions.jsonl",
+        [
+            _session(
+                "resume-a",
+                "native-parent-id",
+                backend="claude-code",
+                claude_code_log=str(parent_log),
+                timestamp="2026-10-05T10:00:00Z",
+                duration_seconds=10,
+            ),
+            _session(
+                "resume-b",
+                "native-parent-id",
+                backend="claude-code",
+                claude_code_log=str(parent_log),
+                timestamp="2026-10-05T10:00:20Z",
+                duration_seconds=10,
+            ),
+        ],
+    )
+
+    sessions = {
+        item.source_id: item.record for item in iter_report_walk(root) if item.kind == "session"
+    }
+
+    assert sessions["resume-a"]["child_outcomes"] == ()
+    owned_children = {child["child_id"]: child for child in sessions["resume-b"]["child_outcomes"]}
+    tool_free = owned_children["child-in-second-resume"]
+    assert tool_free["tool_counts"] == {}
+    assert tool_free["transcript_state"] == "observed"
+    assert tool_free["usage_state"] == "unknown"
+    incomplete = owned_children["incomplete-child"]
+    assert incomplete["tool_counts"] is None
+    assert incomplete["transcript_state"] == "unknown"
+    assert incomplete["usage_state"] == "unknown"
 
 
 @pytest.mark.parametrize("pause", ("before", "after"))

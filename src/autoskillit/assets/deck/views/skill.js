@@ -14,7 +14,8 @@ DeckShell.registerView("skill", ctx => {
     const value = DeckCore.formatRatio(ratio, percent);
     return ctx.el("div", {class: "view-measure"}, [
       value == null ? measureCell(ratio) : ctx.el("span", {}, value),
-      ctx.el("small", {class: "view-sample"}, DeckCore.ratioSample(ratio))
+      ctx.el("small", {class: "view-sample"}, DeckCore.ratioSample(ratio)),
+      DeckCore.reviewSignal(ctx, ratio)
     ]);
   }
 

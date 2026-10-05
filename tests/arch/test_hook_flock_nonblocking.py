@@ -105,6 +105,11 @@ _EXPECTED_ACQUISITIONS = (
     ),
     (
         "execution/evidence/report_walk.py",
+        "_retained_session_rows",
+        "ArtifactLease.acquire_shared",
+    ),
+    (
+        "execution/evidence/report_walk.py",
         "_walk_projection",
         "ArtifactLease.acquire_shared",
     ),

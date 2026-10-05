@@ -242,9 +242,9 @@ def _definition(name: str, body: str) -> SimpleNamespace:
         description="Canonical reviewer role.",
         body=body,
         tools=("Bash", "Read"),
-        model="sonnet",
+        model="test-claude-model",
         reader_tools=(),
-        codex=SimpleNamespace(model="gpt-5.6-sol"),
+        codex=SimpleNamespace(model="test-codex-model"),
     )
 
 
@@ -547,6 +547,10 @@ def test_prepared_metrics_keep_source_pairs_roles_and_shared_library_accounting(
     assert aggregate_calls and ratio_calls
     assert len(loader_calls) == 1
     prepared = payload["prepared"]
+    built_views = {view.view_id for view in DECK_VIEWS if view.planned_issue is None}
+    assert set(prepared["view_chips"]) == built_views
+    assert set(prepared["view_histories"]) == built_views
+    assert set(payload["tables"]) == {SESSION_TABLE, "skills", "roles"}
     levels: set[str | None] = {"orchestrator", "skill"}
     skill_block = _metric_row(prepared["skills"], window="all", levels=levels)
     planner = next(

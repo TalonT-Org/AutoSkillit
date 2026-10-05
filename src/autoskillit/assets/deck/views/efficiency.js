@@ -25,7 +25,8 @@ DeckShell.registerView("efficiency", ctx => {
     const value = text == null ? ctx.availabilityCell(ratio ?? {state: "unavailable"}) :
       ctx.el("span", {class: "view-measure"}, text);
     return ctx.el("div", {class: "view-measure"}, [value,
-      ctx.el("small", {class: "view-sample"}, DeckCore.ratioSample(ratio))]);
+      ctx.el("small", {class: "view-sample"}, DeckCore.ratioSample(ratio)),
+      DeckCore.reviewSignal(ctx, ratio)]);
   }
 
   function toolMix(ratios = {}) {
@@ -36,15 +37,11 @@ DeckShell.registerView("efficiency", ctx => {
         ctx.el("span", {}, tool),
         ctx.el("span", {}, " · "),
         value == null ? ctx.availabilityCell(ratio) : ctx.el("span", {}, value),
-        ctx.el("small", {class: "view-sample"}, DeckCore.ratioSample(ratio))
+        ctx.el("small", {class: "view-sample"}, DeckCore.ratioSample(ratio)),
+        DeckCore.reviewSignal(ctx, ratio)
       ]);
     })) :
       ctx.el("span", {class: "view-empty"}, "No observed tool calls");
-  }
-
-  function reviewable(ratios = {}) {
-    return ratioSignals(ratios).some(signal =>
-      DeckCore.reviewEligibility(signal.ratio, ctx.definitions).eligible);
   }
 
   const definitions = ctx.definitions ?? {};
@@ -71,39 +68,7 @@ DeckShell.registerView("efficiency", ctx => {
       available ? ctx.el("pre", {}, definition.body ?? "") : null
     ]);
   });
-  const signals = [...skillRows, ...roleRows].flatMap(row => ratioSignals(row.ratios));
-  const eligibility = signals.map(signal =>
-    DeckCore.reviewEligibility(signal.ratio, definitions));
-  const reviewEnabled = eligibility.some(status => status.eligible);
-  const disabledReason = eligibility.find(status => !status.eligible)?.reason ??
-    "No prepared measured review signals are available in this cohort.";
-  const reviewMode = ctx.route.params.review?.[0] === "eligible";
-  const toggle = ctx.el("button", {
-    type: "button",
-    "data-review-toggle": "true",
-    "aria-label": "Filter to reviewable signals",
-    "aria-pressed": String(reviewMode && reviewEnabled),
-    disabled: !reviewEnabled
-  }, reviewMode ? "Show all signals" : "Show reviewable signals");
-  if (reviewEnabled) {
-    toggle.addEventListener("click", () => {
-      const params = {...ctx.route.params, review: reviewMode ? [] : ["eligible"]};
-      location.hash = ctx.href({view: "efficiency", entity: ctx.route.entity, params});
-    });
-  }
-  const reviewControl = ctx.el("section", {class: "view-review"}, [
-    toggle,
-    reviewEnabled ? ctx.el("p", {class: "view-note"}, reviewMode ?
-      "Showing prepared review-eligible signals." :
-      "Review eligibility reflects prepared evidence and linked role definitions.") :
-      ctx.el("p", {class: "view-review__reason"}, disabledReason)
-  ]);
-
-  const shownSkills = reviewMode && reviewEnabled ? skillRows.filter(row => reviewable(row.ratios)) :
-    skillRows;
-  const shownRoles = reviewMode && reviewEnabled ? roleRows.filter(row => reviewable(row.ratios)) :
-    roleRows;
-  const skillTable = shownSkills.length ? ctx.sortableTable({
+  const skillTable = skillRows.length ? ctx.sortableTable({
     columns: [
       {key: "skill", label: "Skill", cell: row => ctx.entityLink(row.skill, {
         view: "skill", entity: row.skill
@@ -116,10 +81,10 @@ DeckShell.registerView("efficiency", ctx => {
         ratioCell(row.ratios?.cache_share, true)},
       {key: "tool_mix", label: "Observed tool mix", cell: row => toolMix(row.ratios)}
     ],
-    rows: shownSkills,
+    rows: skillRows,
     defaultSort: {key: "skill", dir: "asc"}
   }) : ctx.el("p", {class: "view-empty"}, "No skill-run ratios are available in this cohort.");
-  const roleTable = shownRoles.length ? ctx.sortableTable({
+  const roleTable = roleRows.length ? ctx.sortableTable({
     columns: [
       {key: "role", label: "Role", cell: row => ctx.entityLink(row.role, {
         view: "role", entity: row.role
@@ -132,7 +97,7 @@ DeckShell.registerView("efficiency", ctx => {
         ratioCell(row.ratios?.cache_share, true)},
       {key: "tool_mix", label: "Observed tool mix", cell: row => toolMix(row.ratios)}
     ],
-    rows: shownRoles,
+    rows: roleRows,
     defaultSort: {key: "role", dir: "asc"}
   }) : ctx.el("p", {class: "view-empty"}, "No child-invocation ratios are available in this cohort.");
 
@@ -144,8 +109,7 @@ DeckShell.registerView("efficiency", ctx => {
       ctx.el("h2", {}, "Contributor definitions"),
       ...(definitionCards.length ? definitionCards : [
         ctx.el("p", {class: "view-empty"}, "No contributor definitions are linked in this cohort.")
-      ]),
-      reviewControl
+      ])
     ]),
     ctx.el("section", {class: "card"}, [ctx.el("h2", {}, "Skill-run efficiency"), skillTable]),
     ctx.el("section", {class: "card"}, [ctx.el("h2", {}, "Child-invocation efficiency"), roleTable])

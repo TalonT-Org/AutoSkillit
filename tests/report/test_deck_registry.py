@@ -6,6 +6,7 @@ from autoskillit.core import SessionType, TokenMeasureState
 from autoskillit.execution._report_index_rows import ReportSessionRow
 from autoskillit.report.deck._registry import (
     AVAILABILITY_VOCABULARY,
+    DECK_VIEWS,
     FACETS,
     SESSION_COLUMNS,
     SESSION_TABLE,
@@ -91,6 +92,21 @@ def test_session_columns_follow_report_session_row_schema() -> None:
 
     assert set(SESSION_COLUMNS) == row_keys - {"schema_version", "kind"}
     assert len(SESSION_COLUMNS) == len(set(SESSION_COLUMNS))
+
+
+def test_reserved_measure_views_have_primary_tables_and_registered_scripts() -> None:
+    views = {view.view_id: view for view in DECK_VIEWS}
+    expected = {
+        "spend": ("skills", "views/spend.js"),
+        "efficiency": ("skills", "views/efficiency.js"),
+        "skill": ("skills", "views/skill.js"),
+        "role": ("roles", "views/role.js"),
+    }
+
+    assert {
+        view_id: (views[view_id].table, views[view_id].script) for view_id in expected
+    } == expected
+    assert all(views[view_id].planned_issue is None for view_id in expected)
 
 
 def test_availability_vocabulary_covers_every_token_measure_state() -> None:

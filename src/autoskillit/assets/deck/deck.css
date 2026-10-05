@@ -92,12 +92,17 @@ svg { display: block; max-width: 100%; height: auto; }
 .view-definition { border-top: 1px solid var(--rule); padding: 12px 0; }
 .view-definition h3 { font-size: 13px; margin: 0 0 6px; }
 .view-definition pre { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink-2); }
+.view-review-signal { display: grid; justify-items: start; gap: 4px; margin-top: 5px; }
+.view-review__definitions { display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; }
+.view-review__marker { color: var(--warn); font-size: 11px; font-weight: 600; }
 .view-review { border: 1px solid var(--rule); border-radius: 6px; padding: 12px; }
-.view-review button { border: 1px solid var(--rule-2); border-radius: 5px; padding: 7px 10px;
+.view-review button, .view-review-signal button { border: 1px solid var(--rule-2);
+  border-radius: 5px; padding: 5px 8px;
   color: var(--ink); background: var(--surface-2); cursor: pointer; }
-.view-review button:focus-visible, .view-links a:focus-visible { outline: 2px solid var(--s1);
+.view-review button:focus-visible, .view-review-signal button:focus-visible,
+.view-links a:focus-visible { outline: 2px solid var(--s1);
   outline-offset: 2px; }
-.view-review button:disabled { cursor: not-allowed; opacity: .6; }
+.view-review button:disabled, .view-review-signal button:disabled { cursor: not-allowed; opacity: .6; }
 .view-review__reason { color: var(--warn); font-size: 12px; }
 .view-actor { color: var(--ink-3); font: 11px var(--mono); }
 .foot { color: var(--ink-3); font: 10px/1.5 var(--mono); padding: 0 28px 24px; }
@@ -115,6 +120,6 @@ svg { display: block; max-width: 100%; height: auto; }
   .shell { display: block; }
   .cohort { position: static; }
   .card, table, svg, .view-definition, .view-review { break-inside: avoid; }
-  .view-review button { display: none; }
+  .view-review button, .view-review-signal button { display: none; }
   #deck-view { padding: 18px 0; }
 }

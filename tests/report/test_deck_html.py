@@ -280,9 +280,9 @@ def test_render_deck_forwards_child_facts_and_embeds_definitions_as_literal_json
         description="Inspect a committed slice.",
         body=hostile_body,
         tools=("Bash", "Read"),
-        model="sonnet",
+        model="test-claude-model",
         reader_tools=(),
-        codex=SimpleNamespace(model="gpt-5.6-sol"),
+        codex=SimpleNamespace(model="test-codex-model"),
     )
     monkeypatch.setattr(
         deck_payload_module,

@@ -18,9 +18,11 @@ globalThis.location = {hash: "#/cohort"};
 globalThis.window = {location, addEventListener() {}};
 
 function deckNode(tag, attrs = {}, children = null) {
-  const node = {tag, attrs: {...attrs}, children: [], events: {}};
+  const node = {tag, attrs: {...attrs}, children: [], events: {}, hidden: attrs.hidden === true,
+    textContent: ""};
   node.appendChild = child => { node.children.push(child); return child; };
   node.addEventListener = (name, callback) => { node.events[name] = callback; };
+  node.setAttribute = (name, value) => { node.attrs[name] = String(value); };
   if (Array.isArray(children)) node.children.push(...children);
   else if (children !== null && children !== undefined) node.children.push(children);
   return node;
@@ -58,6 +60,14 @@ function deckFind(node, predicate) {
   return null;
 }
 
+function deckFindAll(node, predicate) {
+  if (node === null || node === undefined) return [];
+  if (Array.isArray(node)) return node.flatMap(child => deckFindAll(child, predicate));
+  if (typeof node !== "object") return [];
+  return [...(predicate(node) ? [node] : []), ...node.children.flatMap(child =>
+    deckFindAll(child, predicate))];
+}
+
 function deckSnapshot(node) {
   if (node === null || node === undefined || typeof node !== "object") return node;
   return {
@@ -65,11 +75,22 @@ function deckSnapshot(node) {
     attrs: node.attrs,
     text: deckText(node),
     links: deckLinks(node),
-    review: (() => {
-      const control = deckFind(node, child =>
-        child.attrs && child.attrs["data-review-toggle"] !== undefined);
-      return control ? {attrs: control.attrs, text: deckText(control)} : null;
-    })()
+    reviews: deckFindAll(node, child =>
+      child.attrs && child.attrs["data-review-signal"] !== undefined).map(signal => {
+      const control = deckFind(signal, child =>
+        child.attrs && child.attrs["data-review-flag"] !== undefined);
+      const marker = deckFind(signal, child =>
+        child.attrs && child.attrs.class === "view-review__marker");
+      const definitions = deckFind(signal, child =>
+        child.attrs && child.attrs.class === "view-review__definitions");
+      return {
+        attrs: control.attrs,
+        markerHidden: marker.hidden,
+        markerText: deckText(marker),
+        linksBeforeFlag: definitions !== null && signal.children.indexOf(definitions) <
+          signal.children.indexOf(control)
+      };
+    })
   };
 }
 
@@ -103,13 +124,17 @@ globalThis.DeckTest = {
     globalThis.__deckLastTree = __deckViews[id](context);
     return deckSnapshot(__deckLastTree);
   },
-  clickReview() {
-    const control = deckFind(__deckLastTree,
-      child => child.attrs && child.attrs["data-review-toggle"] !== undefined);
-    if (!control || !control.events.click) throw new Error("review toggle has no click handler");
+  clickReview(index = 0) {
+    const signals = deckFindAll(__deckLastTree,
+      child => child.attrs && child.attrs["data-review-signal"] !== undefined);
+    const control = deckFind(signals[index],
+      child => child.attrs && child.attrs["data-review-flag"] !== undefined);
+    if (!control || !control.events.click) throw new Error("review flag has no click handler");
     control.events.click();
-    return location.hash;
-  }
+    return deckSnapshot(__deckLastTree).reviews[index];
+  },
+  snapshot() { return deckSnapshot(__deckLastTree); },
+  currentHash() { return location.hash; }
 };
 """
 
@@ -124,11 +149,10 @@ def _load_renderers(deck_asset: Any) -> MiniRacer:
 
 
 def _view_context(view_id: str, *, definitions_available: bool = True) -> dict[str, Any]:
-    definition_state = "available" if definitions_available else "unavailable"
     roles = ("reader", "reviewer")
     definitions = {
         role: {
-            "state": definition_state,
+            "state": "available" if definitions_available or role == "reader" else "unavailable",
             "description": f"Definition for {role}: definition-first marker",
             "body": f"{role} role instructions",
             "tools": ["read_file"],
@@ -226,54 +250,66 @@ def test_each_prepared_view_renders_its_population_and_cohort_links(deck_asset: 
             assert any(
                 "harness=codex" in href and "provider=openai" in href for href in rendered["links"]
             )
+            if view_id in {"efficiency", "skill", "role"}:
+                assert rendered["reviews"]
+                assert all(control["linksBeforeFlag"] for control in rendered["reviews"])
         role_view = context.call("DeckTest.render", "role", _view_context("role"))
         assert "L0" in role_view["text"]
         assert "spawning skill level" in role_view["text"].lower()
         assert "observed-model" in role_view["text"]
         assert "Claude Code declared tools" in role_view["text"]
         assert "Codex read-only tools" in role_view["text"]
+        efficiency_view = context.call(
+            "DeckTest.render", "efficiency", _view_context("efficiency")
+        )
+        assert "2 skill runs" in efficiency_view["text"]
+        assert "2 child invocations" in efficiency_view["text"]
     finally:
         context.close()
 
 
-def test_review_toggle_requires_every_contributor_definition_and_resets_route(
+def test_manual_review_flags_require_definitions_and_reset_on_rerender(
     deck_asset: Any,
 ) -> None:
     context = _load_renderers(deck_asset)
     try:
         available = context.call("DeckTest.render", "efficiency", _view_context("efficiency"))
-        assert available["review"] is not None
-        assert "disabled" not in available["review"]["attrs"]
-        assert available["text"].index("definition-first marker") < available["text"].index(
-            "Show reviewable signals"
+        assert len(available["reviews"]) >= 3
+        assert all(
+            control["attrs"].get("disabled") is not True for control in available["reviews"]
         )
+        assert all(
+            control["attrs"].get("aria-pressed") == "false" for control in available["reviews"]
+        )
+        assert all(control["markerHidden"] for control in available["reviews"])
+        assert all(control["linksBeforeFlag"] for control in available["reviews"])
+        assert available["text"].index("definition-first marker") < available["text"].index(
+            "Flag for review"
+        )
+        initial_hash = context.call("DeckTest.currentHash")
+
+        flagged = context.call("DeckTest.clickReview", 0)
+        after_one_flag = context.call("DeckTest.snapshot")["reviews"]
+        assert flagged["attrs"]["aria-pressed"] == "true"
+        assert flagged["markerHidden"] is False
+        assert flagged["markerText"] == "Flagged for review"
+        assert after_one_flag[1]["attrs"]["aria-pressed"] == "false"
+        assert context.call("DeckTest.currentHash") == initial_hash
 
         unavailable = context.call(
             "DeckTest.render",
             "efficiency",
             _view_context("efficiency", definitions_available=False),
         )
-        assert unavailable["review"] is not None
-        assert "disabled" in unavailable["review"]["attrs"]
-        assert "definition" in unavailable["text"].lower()
+        assert unavailable["reviews"]
+        assert all("disabled" in control["attrs"] for control in unavailable["reviews"])
+        assert all(control["linksBeforeFlag"] for control in unavailable["reviews"])
+        assert "Contributor definitions unavailable" in unavailable["text"]
 
-        context.call("DeckTest.render", "efficiency", _view_context("efficiency"))
-        enabled_hash = context.call("DeckTest.clickReview")
-        enabled_route = context.call("DeckCore.decodeRoute", enabled_hash, "cohort")
-        assert enabled_route["params"].get("review")
-        assert enabled_route["params"].get("harness") == ["codex"]
-        assert enabled_route["params"].get("provider") == ["openai"]
-
-        context.call(
-            "DeckTest.render",
-            "efficiency",
-            {**_view_context("efficiency"), "route": enabled_route},
-        )
-        reset_hash = context.call("DeckTest.clickReview")
-        reset_route = context.call("DeckCore.decodeRoute", reset_hash, "cohort")
-        assert "review" not in reset_route["params"]
-        assert reset_route["params"].get("harness") == ["codex"]
-        assert reset_route["params"].get("provider") == ["openai"]
+        reset = context.call("DeckTest.render", "efficiency", _view_context("efficiency"))
+        assert all(control["attrs"]["aria-pressed"] == "false" for control in reset["reviews"])
+        assert all(control["markerHidden"] for control in reset["reviews"])
+        assert "review" not in _view_context("efficiency")["route"]["params"]
     finally:
         context.close()
 

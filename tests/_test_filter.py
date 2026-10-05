@@ -606,7 +606,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_figure_spec": frozenset({"core", "report"}),
     "_type_session_shape": frozenset({"core", "cli", "fleet", "pipeline", "server"}),
     "_type_capture": frozenset({"core", "fleet", "recipe", "cli"}),
-    "_type_token": frozenset({"cli", "core", "execution", "fleet", "pipeline"}),
+    "_type_token": frozenset({"cli", "core", "execution", "fleet", "pipeline", "report"}),
     "_type_constants_env": frozenset(
         {
             "cli",
@@ -1507,6 +1507,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # file-level: exercises the hook-authored child-outcome snapshot module
             # directly (issue #4623) via autoskillit.hooks's public re-export.
             "execution/test_child_outcomes.py",
+            # file-level: report-index refresh tests seed native child snapshots through hooks.
+            "execution/test_report_index.py",
             # hook_registry imports from autoskillit.hooks at module scope
             # (HOOK_REGISTRY, generate_hooks_json) for the registry init wiring.
             "hook_registry",

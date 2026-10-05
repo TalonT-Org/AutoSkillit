@@ -42,6 +42,44 @@ globalThis.DeckCore = (() => {
     }
     return {eligible: true, reason: null, roles};
   }
+
+  function reviewSignal(ctx, ratio) {
+    const eligibility = reviewEligibility(ratio, ctx.definitions);
+    const links = eligibility.roles.map(role => ctx.entityLink(role, {
+      view: "role", entity: role
+    }));
+    const definitions = links.length ? ctx.el("div", {
+      class: "view-review__definitions",
+      "aria-label": "Contributor definitions"
+    }, links) : null;
+    const marker = ctx.el("span", {
+      class: "view-review__marker",
+      "aria-live": "polite",
+      hidden: true
+    }, "Flagged for review");
+    const button = ctx.el("button", {
+      type: "button",
+      class: "view-review__flag",
+      "data-review-flag": "true",
+      "aria-label": "Flag this signal for review",
+      "aria-pressed": "false",
+      disabled: !eligibility.eligible
+    }, "Flag for review");
+    let flagged = false;
+    if (eligibility.eligible) {
+      button.addEventListener("click", () => {
+        flagged = !flagged;
+        button.setAttribute("aria-pressed", String(flagged));
+        marker.hidden = !flagged;
+      });
+    }
+    return ctx.el("div", {class: "view-review-signal", "data-review-signal": "true"}, [
+      definitions,
+      button,
+      marker,
+      eligibility.reason ? ctx.el("p", {class: "view-review__reason"}, eligibility.reason) : null
+    ]);
+  }
   const decodeTable = ({columns, rows}) => rows.map(r =>
     Object.fromEntries(columns.map((c, i) => [c, r[i]])));
 
@@ -298,6 +336,6 @@ globalThis.DeckCore = (() => {
   return Object.freeze({decodeTable, encodeRoute, decodeRoute, hrefFor, effectiveSelection,
     toggleSelection, windowSelection, selectPrepared, filterRows, populationSentence,
     summarizePairs, sortRows, parseSort, chipPresentation, availabilityPresentation,
-    barLayout, formatCount, formatRatio, ratioSample, reviewEligibility, formatDate,
+    barLayout, formatCount, formatRatio, ratioSample, reviewEligibility, reviewSignal, formatDate,
     CHIP_STATES, DAY_MS});
 })();

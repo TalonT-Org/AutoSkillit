@@ -47,12 +47,21 @@ def _session(
     *,
     claude_code_log: object = ...,
     codex_log: object = ...,
+    backend: str | None = None,
+    timestamp: str | None = None,
+    duration_seconds: float | None = None,
 ) -> dict[str, Any]:
     row: dict[str, Any] = {"dir_name": dir_name, "session_id": session_id}
     if claude_code_log is not ...:
         row["claude_code_log"] = claude_code_log
     if codex_log is not ...:
         row["codex_log"] = codex_log
+    if backend is not None:
+        row["backend"] = backend
+    if timestamp is not None:
+        row["timestamp"] = timestamp
+    if duration_seconds is not None:
+        row["duration_seconds"] = duration_seconds
     return row
 
 

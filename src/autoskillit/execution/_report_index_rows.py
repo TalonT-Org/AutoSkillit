@@ -633,6 +633,20 @@ def _subagent_fields(
         "final_model": unique_string_attribute(attributes, "final_model"),
         "model_swapped": unique_flag_attribute(attributes, "model_swapped"),
         "event_sequence": unique_count_attribute(attributes, "event.sequence"),
+        "child_id": None,
+        "native_parent_session_id": None,
+        "parent_session_key": None,
+        "role": None,
+        "actor_level": None,
+        "provider": UNKNOWN_SOURCE,
+        "skill": None,
+        "recipe": None,
+        "step": None,
+        "level": None,
+        "token_usage": _unknown_child_usage_map(),
+        "tool_counts": None,
+        "transcript_state": None,
+        "usage_state": None,
     }
 
 

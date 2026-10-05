@@ -14,6 +14,8 @@ from typing import Any
 import zstandard
 
 from autoskillit.core import (
+    AGENT_BACKEND_CLAUDE_CODE,
+    AGENT_BACKEND_CODEX,
     CANONICAL_ACCOUNTING_FIELDS,
     SerializedTokenMeasure,
     TokenMeasure,
@@ -142,9 +144,9 @@ def _child_transcript_path(
     child_id = child.get("child_id")
     if not isinstance(child_id, str) or not child_id:
         return None, False
-    if backend == "claude_code":
+    if backend == normalize_backend_name(AGENT_BACKEND_CLAUDE_CODE):
         return _claude_child_transcript_path(row, child_id, parent_id)
-    if backend == "codex":
+    if backend == normalize_backend_name(AGENT_BACKEND_CODEX):
         return _codex_child_transcript_path(child, child_id, parent_id)
     return None, False
 
@@ -241,7 +243,7 @@ def _first_transcript_timestamp(text: str) -> float | None:
 
 def _read_child_transcript(path: Path, backend: str) -> str | None:
     try:
-        if backend == "codex":
+        if backend == normalize_backend_name(AGENT_BACKEND_CODEX):
             with _logical_rollout_reader(path) as handle:
                 return handle.read().decode("utf-8")
         return path.read_text(encoding="utf-8")
@@ -274,7 +276,9 @@ def _child_measurements(
 ) -> tuple[dict[str, int] | None, dict[str, SerializedTokenMeasure], str]:
     if not complete or text is None:
         return None, _unknown_usage(), "unknown"
-    parser_backend = "claude" if backend == "claude_code" else backend
+    parser_backend = (
+        "claude" if backend == normalize_backend_name(AGENT_BACKEND_CLAUDE_CODE) else backend
+    )
     turns = list(iter_merged_assistant_turns(text, backend=parser_backend))
     tool_counts = dict(Counter(name for turn in turns for name in turn.tool_names))
     token_usage, usage_state = _child_token_usage(backend, child_id, path, text, provider)
@@ -286,7 +290,7 @@ def _child_token_usage(
 ) -> tuple[dict[str, SerializedTokenMeasure], str]:
     if not provider:
         return _unknown_usage(), "unknown"
-    if backend == "claude_code":
+    if backend == normalize_backend_name(AGENT_BACKEND_CLAUDE_CODE):
         aggregate, _rows = extract_token_usage(text, provider_used=provider)
         if aggregate is not None:
             usage = {
@@ -307,7 +311,7 @@ def _child_token_usage(
                 "observed",
             )
         return _unknown_usage(), "unknown"
-    if backend == "codex" and path is not None:
+    if backend == normalize_backend_name(AGENT_BACKEND_CODEX) and path is not None:
         rows = extract_codex_child_turn_usage(path, child_id, provider_used=provider)
         if rows:
             return _codex_usage_measures(rows, provider), "observed"

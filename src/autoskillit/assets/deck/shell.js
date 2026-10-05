@@ -288,7 +288,7 @@ globalThis.DeckShell = (() => {
         DeckCore.formatDate(first) + " → " + DeckCore.formatDate(last);
       const generated = new Date(model.generated_at_ms).toISOString().slice(0, 16);
       document.getElementById("deck-foot").textContent = "report index v" +
-        model.index_schema_version + " · " + DeckCore.formatCount(table.length) +
+        model.index_schema_version + " · " + DeckCore.formatCount(model.tables.sessions.length) +
         " session rows · history " + history + " · generated " + generated + " UTC";
     }
 

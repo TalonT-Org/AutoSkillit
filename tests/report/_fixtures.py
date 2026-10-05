@@ -57,7 +57,7 @@ def subagent_row(
         "native_parent_session_id": parent["session_id"],
         "skill": skill,
         "provider": provider,
-        "model": "claude-sonnet",
+        "model": "test-child-model",
         "actor_level": "L0",
         "time_ms": parent["time_ms"],
         "level": parent["level"],

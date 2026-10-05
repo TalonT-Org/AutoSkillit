@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+import autoskillit.execution.child_outcomes as child_snapshot
 from autoskillit.core import ArtifactLease, ArtifactLeaseContention
 from autoskillit.execution import (
     REPORT_INDEX_SCHEMA_VERSION,
@@ -17,7 +18,6 @@ from autoskillit.execution import (
     update_report_index,
 )
 from autoskillit.execution.evidence.report_walk import WalkItem
-from autoskillit.hooks import _child_outcome_snapshot as child_snapshot
 from tests.execution._report_index_fixtures import (
     CLAUDE_SCOPE,
     basic_session_row,

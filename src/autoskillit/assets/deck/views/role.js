@@ -22,7 +22,8 @@ DeckShell.registerView("role", ctx => {
     const value = DeckCore.formatRatio(ratio, percent);
     return ctx.el("div", {class: "view-measure"}, [
       value == null ? measureCell(ratio) : ctx.el("span", {}, value),
-      ctx.el("small", {class: "view-sample"}, DeckCore.ratioSample(ratio))
+      ctx.el("small", {class: "view-sample"}, DeckCore.ratioSample(ratio)),
+      DeckCore.reviewSignal(ctx, ratio)
     ]);
   }
 
@@ -34,7 +35,8 @@ DeckShell.registerView("role", ctx => {
         ctx.el("span", {}, tool),
         ctx.el("span", {}, " · "),
         value == null ? ctx.availabilityCell(ratio) : ctx.el("span", {}, value),
-        ctx.el("small", {class: "view-sample"}, DeckCore.ratioSample(ratio))
+        ctx.el("small", {class: "view-sample"}, DeckCore.ratioSample(ratio)),
+        DeckCore.reviewSignal(ctx, ratio)
       ]);
     })) :
       ctx.el("span", {class: "view-empty"}, "No observed tool calls");

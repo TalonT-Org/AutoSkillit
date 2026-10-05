@@ -167,8 +167,12 @@ def select_for_event(
 
 def matrix_json(selection: Selection, catalog: e2e_catalog.Catalog) -> str:
     include = [
-        {"test": name, "timeout_minutes": e2e_catalog.job_timeout_minutes(catalog.get(name))}
-        for name in selection.tests
+        {
+            "test": test.name,
+            "kind": test.kind,
+            "timeout_minutes": e2e_catalog.job_timeout_minutes(test),
+        }
+        for test in (catalog.get(name) for name in selection.tests)
     ]
     return json.dumps({"include": include}, separators=(",", ":"))
 

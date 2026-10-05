@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import stat
 import subprocess
@@ -41,6 +42,7 @@ _CANARY_REPLY = json.dumps(
     {"type": "result", "is_error": False, "result": "AUTOSKILLIT-E2E-CANARY-OK"}
 )
 _SKILL_NOTICE = "2 skills unavailable on this backend (codex): a, b"
+_CLEAN_INSTALL_ISSUE = "https://github.com/TalonT-Org/AutoSkillit/issues/5231"
 
 
 @dataclass
@@ -162,6 +164,80 @@ def _run_canary(tmp_path: Path, runner: FakeRunner, monkeypatch, env=None):
         runner=runner,
     )
     return failures, json.loads((out / "result.json").read_text(encoding="utf-8"))
+
+
+def _clean_install_catalog(expected_failures: list[dict[str, str]] | None = None):
+    test = {
+        "name": "clean-install",
+        "kind": "clean-install",
+        "peak_sessions": 0,
+        "timeout_sec": 90,
+        "trigger_paths": ["src/*"],
+    }
+    if expected_failures is not None:
+        test["expected_failures"] = expected_failures
+    return e2e_catalog.parse_catalog({"sandbox_repository": SANDBOX, "tests": [test]})
+
+
+def _clean_install_runner(
+    *,
+    doctor_stdout: str = (
+        '{"results": [{"severity": "ok", "check": "install", "message": "ready"}, '
+        '{"severity": "info", "check": "backend_onboarding", "message": "optional setup"}]}'
+    ),
+    responses: dict[str, subprocess.CompletedProcess[str] | BaseException] | None = None,
+):
+    responses = responses or {}
+    observed: dict[str, object] = {}
+    runner: FakeRunner
+
+    def handle(argv: list[str]):
+        if argv[:2] == ["autoskillit", "install"]:
+            stage = "install"
+        elif argv == ["git", "init"]:
+            stage = "git-init"
+        elif argv[:2] == ["autoskillit", "init"]:
+            stage = "init"
+            call = runner.calls[-1]
+            observed["cwd"] = call.cwd
+            if call.cwd is not None:
+                observed["scanner_config"] = (call.cwd / ".pre-commit-config.yaml").read_text()
+        elif argv == ["autoskillit", "doctor", "--output-json"]:
+            stage = "doctor"
+        else:
+            return None
+        if stage in responses:
+            return responses[stage]
+        return _completed(argv, doctor_stdout if stage == "doctor" else f"{stage} ok\n")
+
+    runner = FakeRunner(handle)
+    return runner, observed
+
+
+def _run_clean_install(
+    tmp_path: Path,
+    runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    expected_failures: list[dict[str, str]] | None = None,
+    env: dict[str, str] | None = None,
+):
+    catalog = _clean_install_catalog(expected_failures)
+    out = tmp_path / "out"
+    failures = harness.run_test(
+        catalog.get("clean-install"),
+        catalog,
+        out=out,
+        home=tmp_path / "separate-home",
+        env=env if env is not None else {"HOME": str(tmp_path / "home"), "PATH": "/usr/bin"},
+        runner=runner,
+    )
+    result = json.loads((out / "result.json").read_text(encoding="utf-8"))
+    return failures, result, out, catalog
+
+
+def _diagnostic(severity: str, check: str, message: str) -> dict[str, str]:
+    return {"severity": severity, "check": check, "message": message}
 
 
 class TestProviderSetup:
@@ -426,6 +502,314 @@ class TestCanaryFlow:
         assert failures == ["MINIMAX_API_KEY is not set"]
         assert result["passed"] is False
         assert runner.calls == []
+
+
+class TestCleanInstallFlow:
+    @pytest.mark.parametrize("credentials", [False, True])
+    def test_clean_flow_uses_one_scratch_directory_and_keeps_evidence(
+        self, tmp_path, monkeypatch, credentials
+    ):
+        runner, observed = _clean_install_runner()
+        env = {
+            "HOME": str(tmp_path / "home"),
+            "PATH": "/usr/bin",
+            "XDG_CONFIG_HOME": str(tmp_path / "xdg"),
+        }
+        if credentials:
+            env.update(
+                _env(HOME=env["HOME"], OPENAI_API_KEY="openai-secret", OPENAI_ORG_ID="org-test")
+            )
+        failures, result, out, catalog = _run_clean_install(tmp_path, runner, monkeypatch, env=env)
+
+        assert failures == []
+        assert result["outcome"] == "passed"
+        assert result["expected_findings"] == []
+        assert [call.argv for call in runner.calls] == [
+            ["autoskillit", "install"],
+            ["git", "init"],
+            ["autoskillit", "init", "--test-command", "git diff --check"],
+            ["autoskillit", "doctor", "--output-json"],
+        ]
+        scratch = runner.calls[0].cwd
+        assert scratch is not None
+        assert all(call.cwd == scratch for call in runner.calls)
+        assert observed["cwd"] == scratch
+        assert observed["scanner_config"] == (
+            "repos:\n  - repo: https://github.com/gitleaks/gitleaks\n"
+            "    rev: v8.30.0\n    hooks:\n      - id: gitleaks\n"
+        )
+        assert all(call.env == runner.calls[0].env for call in runner.calls)
+        assert runner.calls[0].env["HOME"] == env["HOME"]
+        assert str(tmp_path / "separate-home") != runner.calls[0].env["HOME"]
+        assert not any(name.startswith("OPENAI_") for name in runner.calls[0].env)
+        assert not any(
+            name in runner.calls[0].env
+            for name in (
+                "ANTHROPIC_API_KEY",
+                "CLAUDE_CODE_OAUTH_TOKEN",
+                "MINIMAX_API_KEY",
+                "E2E_SANDBOX_TOKEN",
+            )
+        )
+        timeouts = [call.timeout for call in runner.calls]
+        assert all(
+            value is not None and math.isfinite(value) and 0 < value <= 90 for value in timeouts
+        )
+        assert all(later <= earlier for earlier, later in zip(timeouts, timeouts[1:]))
+        for stage in ("install", "git-init", "init", "doctor"):
+            assert (out / f"{stage}.stdout.txt").is_file()
+            assert (out / f"{stage}.stderr.txt").is_file()
+            assert (out / f"{stage}.command.json").is_file()
+        assert (out / "doctor.json").read_text() == (out / "doctor.stdout.txt").read_text()
+        assert not (tmp_path / "separate-home" / ".claude" / "settings.json").exists()
+        assert not (tmp_path / "separate-home" / ".autoskillit" / "config.yaml").exists()
+        assert catalog.get("clean-install").peak_sessions == 0
+        assert not scratch.exists()
+
+    @pytest.mark.parametrize("additional_finding", [False, True])
+    def test_expected_finding_admits_only_the_linked_diagnostic(
+        self, tmp_path, monkeypatch, additional_finding
+    ):
+        diagnostic = _diagnostic("error", "runtime", "known clean-install failure")
+        expected = {**diagnostic, "issue": _CLEAN_INSTALL_ISSUE}
+        rows = [diagnostic]
+        if additional_finding:
+            rows.append(_diagnostic("error", "another-check", "new defect"))
+        runner, _ = _clean_install_runner(doctor_stdout=json.dumps({"results": rows}))
+        failures, result, _out, _catalog = _run_clean_install(
+            tmp_path, runner, monkeypatch, expected_failures=[expected]
+        )
+
+        assert bool(failures) == additional_finding
+        assert result["outcome"] == ("failed" if additional_finding else "expected_failure")
+        assert result["passed"] is False
+        assert result["expected_findings"] == [expected]
+
+    @pytest.mark.parametrize(
+        ("doctor_stdout", "expected_failure"),
+        [
+            ("not json", "doctor: invalid JSON:"),
+            ("[]", "doctor: report must be an object"),
+            ("{}", "doctor: results must be a non-empty list"),
+            ('{"results": {}}', "doctor: results must be a non-empty list"),
+            ('{"results": []}', "doctor: results must be a non-empty list"),
+            ('{"results": [null]}', "doctor: invalid result at index 0"),
+            (
+                '{"results": [{"severity": "fatal", "check": "x", "message": "y"}]}',
+                "doctor: invalid result at index 0",
+            ),
+            (
+                '{"results": [{"severity": "warning", "check": "x", "message": 3}]}',
+                "doctor: invalid result at index 0",
+            ),
+        ],
+        ids=[
+            "invalid-json",
+            "not-object",
+            "missing-results",
+            "results-not-list",
+            "empty-results",
+            "row-not-object",
+            "bad-severity",
+            "bad-message",
+        ],
+    )
+    def test_invalid_doctor_output_fails(
+        self, tmp_path, monkeypatch, doctor_stdout, expected_failure
+    ):
+        runner, _ = _clean_install_runner(doctor_stdout=doctor_stdout)
+        failures, result, _out, _catalog = _run_clean_install(tmp_path, runner, monkeypatch)
+
+        assert len(failures) == 1
+        assert failures[0].startswith(expected_failure)
+        assert result["outcome"] == "failed"
+
+    def test_unlisted_warning_and_zero_exit_error_fail(self, tmp_path, monkeypatch):
+        for name, severity in (("warning", "warning"), ("error", "error")):
+            case = tmp_path / name
+            diagnostic = _diagnostic(severity, "new-check", "new diagnostic")
+            runner, _ = _clean_install_runner(doctor_stdout=json.dumps({"results": [diagnostic]}))
+            failures, result, _out, _catalog = _run_clean_install(case, runner, monkeypatch)
+            assert failures
+            assert result["outcome"] == "failed"
+
+    def test_warning_allowlist_requires_an_exact_check_and_message(self, tmp_path, monkeypatch):
+        assert all(reason.strip() for reason in harness.CLEAN_INSTALL_ALLOWED_WARNINGS.values())
+        key = ("environment", "known warning")
+        monkeypatch.setattr(harness, "CLEAN_INSTALL_ALLOWED_WARNINGS", {key: "tracked reason"})
+        for message, outcome in ((key[1], "passed"), ("changed warning", "failed")):
+            case = tmp_path / ("allowed" if outcome == "passed" else "changed")
+            diagnostic = _diagnostic("warning", key[0], message)
+            runner, _ = _clean_install_runner(doctor_stdout=json.dumps({"results": [diagnostic]}))
+            failures, result, _out, _catalog = _run_clean_install(case, runner, monkeypatch)
+            assert (not failures) == (outcome == "passed")
+            assert result["outcome"] == outcome
+
+    @pytest.mark.parametrize(
+        "check",
+        [
+            "mcp_server_registered",
+            "plugin_cache_exists",
+            "hook_registration",
+            "hook_registry_drift",
+        ],
+    )
+    def test_installation_diagnostic_warning_fails_and_is_saved(
+        self, tmp_path, monkeypatch, check
+    ):
+        stdout = json.dumps({"results": [_diagnostic("warning", check, "installation defect")]})
+        runner, _ = _clean_install_runner(doctor_stdout=stdout)
+        failures, result, out, _catalog = _run_clean_install(tmp_path, runner, monkeypatch)
+
+        assert failures
+        assert result["outcome"] == "failed"
+        assert check in failures[0]
+        assert (out / "doctor.json").read_text() == stdout
+
+    @pytest.mark.parametrize("stage", ["install", "init", "doctor"])
+    def test_nonzero_command_exit_is_recorded_and_stops_the_flow(
+        self, tmp_path, monkeypatch, stage
+    ):
+        command = {
+            "install": ["autoskillit", "install"],
+            "init": ["autoskillit", "init", "--test-command", "git diff --check"],
+            "doctor": ["autoskillit", "doctor", "--output-json"],
+        }[stage]
+        stdout = '{"results": []}' if stage == "doctor" else "partial output"
+        runner, _ = _clean_install_runner(
+            responses={stage: _completed(command, stdout, returncode=2, stderr="command failed")}
+        )
+        failures, result, out, _catalog = _run_clean_install(tmp_path, runner, monkeypatch)
+
+        assert failures
+        assert result["outcome"] == "failed"
+        assert (out / f"{stage}.command.json").is_file()
+        assert runner.calls[-1].argv == command
+        if stage == "doctor":
+            assert (out / "doctor.json").read_text(encoding="utf-8") == stdout
+
+    @pytest.mark.parametrize("stage", ["install", "init", "doctor"])
+    def test_timeout_saves_partial_byte_and_text_streams(self, tmp_path, monkeypatch, stage):
+        command = {
+            "install": ["autoskillit", "install"],
+            "init": ["autoskillit", "init", "--test-command", "git diff --check"],
+            "doctor": ["autoskillit", "doctor", "--output-json"],
+        }[stage]
+        timeout = subprocess.TimeoutExpired(
+            command, 1.0, output=b"partial stdout", stderr="partial stderr"
+        )
+        runner, _ = _clean_install_runner(responses={stage: timeout})
+        failures, result, out, _catalog = _run_clean_install(tmp_path, runner, monkeypatch)
+
+        assert failures
+        assert result["outcome"] == "failed"
+        assert (out / f"{stage}.stdout.txt").read_text(encoding="utf-8") == "partial stdout"
+        assert (out / f"{stage}.stderr.txt").read_text(encoding="utf-8") == "partial stderr"
+        if stage == "doctor":
+            assert (out / "doctor.json").read_bytes() == b"partial stdout"
+
+    def test_launch_error_is_explicitly_recorded(self, tmp_path, monkeypatch):
+        runner, _ = _clean_install_runner(
+            responses={"install": FileNotFoundError(2, "No such file or directory", "autoskillit")}
+        )
+        failures, result, out, _catalog = _run_clean_install(tmp_path, runner, monkeypatch)
+
+        assert failures
+        assert result["outcome"] == "failed"
+        evidence = (out / "install.command.json").read_text(encoding="utf-8")
+        assert "No such file or directory" in evidence
+
+    def test_exhausted_deadline_does_not_launch_another_command(self, tmp_path, monkeypatch):
+        ticks = iter([0, 1, 90])
+        monkeypatch.setattr(harness.time, "monotonic", lambda: next(ticks))
+        runner, _ = _clean_install_runner()
+        failures, result, _out, _catalog = _run_clean_install(tmp_path, runner, monkeypatch)
+
+        assert "budget exhausted before git-init" in failures[0]
+        assert result["outcome"] == "failed"
+        assert len(runner.calls) == 1
+        assert runner.calls[0].timeout == 89
+        assert not runner.calls[0].cwd.exists()
+
+    def test_stale_expectation_fails_and_unexpected_diagnostic_is_unlisted(
+        self, tmp_path, monkeypatch
+    ):
+        old = {**_diagnostic("error", "runtime", "old message"), "issue": _CLEAN_INSTALL_ISSUE}
+        current = _diagnostic("error", "runtime", "changed message")
+        runner, _ = _clean_install_runner(doctor_stdout=json.dumps({"results": [current]}))
+        failures, result, _out, _catalog = _run_clean_install(
+            tmp_path, runner, monkeypatch, expected_failures=[old]
+        )
+
+        assert failures
+        assert result["outcome"] == "failed"
+        assert result["expected_findings"] == []
+
+    def test_cli_names_expected_failure_and_run_test_handles_exceptions(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        diagnostic = _diagnostic("error", "runtime", "known clean-install failure")
+        expected = {**diagnostic, "issue": _CLEAN_INSTALL_ISSUE}
+        catalog_path = tmp_path / "catalog.json"
+        catalog_path.write_text(
+            json.dumps(
+                {
+                    "sandbox_repository": SANDBOX,
+                    "tests": [
+                        {
+                            "name": "clean-install",
+                            "kind": "clean-install",
+                            "peak_sessions": 0,
+                            "timeout_sec": 90,
+                            "trigger_paths": ["src/*"],
+                            "expected_failures": [expected],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        scratch_parent = tmp_path / "cli-scratch"
+        scratch_parent.mkdir()
+        monkeypatch.setattr(tempfile, "tempdir", str(scratch_parent))
+        runner, _ = _clean_install_runner(doctor_stdout=json.dumps({"results": [diagnostic]}))
+        monkeypatch.setattr(harness, "run_command", runner)
+
+        assert (
+            harness.main(
+                [
+                    "run",
+                    "--test",
+                    "clean-install",
+                    "--out",
+                    str(tmp_path / "cli-out"),
+                    "--catalog",
+                    str(catalog_path),
+                ]
+            )
+            == 0
+        )
+        assert "e2e_harness: clean-install expected_failure" in capsys.readouterr().out
+
+        def crash(*_args, **_kwargs):
+            raise RuntimeError("runner crashed")
+
+        monkeypatch.setattr(harness, "run_command", crash)
+        assert (
+            harness.main(
+                [
+                    "run",
+                    "--test",
+                    "clean-install",
+                    "--out",
+                    str(tmp_path / "crash-out"),
+                    "--catalog",
+                    str(catalog_path),
+                ]
+            )
+            == 1
+        )
+        assert "harness error: runner crashed" in capsys.readouterr().err
 
 
 class TestRedaction:

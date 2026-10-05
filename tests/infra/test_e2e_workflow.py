@@ -47,6 +47,17 @@ def _all_steps(workflow: dict):
         yield from job["steps"]
 
 
+def _model_branch(run: str) -> tuple[str, str]:
+    lines = run.splitlines()
+    start = next(
+        index
+        for index, line in enumerate(lines)
+        if line.strip() == "if [[ '${{ matrix.kind }}' != 'clean-install' ]]; then"
+    )
+    end = next(index for index in range(start + 1, len(lines)) if lines[index].strip() == "fi")
+    return "\n".join(lines[start + 1 : end]), "\n".join(lines[:start] + lines[end + 1 :])
+
+
 class TestTriggers:
     def test_pull_request_types_include_labeled(self, workflow: dict) -> None:
         types = _on(workflow)["pull_request"]["types"]
@@ -76,6 +87,18 @@ class TestSecrets:
         assert holders == {"e2e", "redact"}
         assert all("secrets." not in str(job.get("env", {})) for job in workflow["jobs"].values())
 
+    @pytest.mark.parametrize("step_id", ["e2e", "redact"])
+    def test_model_credentials_are_empty_for_clean_install(
+        self, workflow: dict, step_id: str
+    ) -> None:
+        env = _step(workflow, "run", step_id=step_id)["env"]
+        assert env["MINIMAX_API_KEY"] == (
+            "${{ matrix.kind != 'clean-install' && secrets.MINIMAX_API_KEY || '' }}"
+        )
+        assert env["E2E_SANDBOX_TOKEN"] == (
+            "${{ matrix.kind != 'clean-install' && secrets.E2E_SANDBOX_TOKEN || '' }}"
+        )
+
     def test_report_step_uses_only_the_workflow_token(self, workflow: dict) -> None:
         env = _step(workflow, "run", name="Report failure")["env"]
         assert env["GH_TOKEN"] == "${{ github.token }}"
@@ -84,8 +107,84 @@ class TestSecrets:
     @pytest.mark.parametrize("step_id", ["e2e", "redact"])
     def test_docker_run_forwards_secrets_by_name_only(self, workflow: dict, step_id: str) -> None:
         run = _step(workflow, "run", step_id=step_id)["run"]
-        forwarded = re.findall(r"--env (\S+)", run)
+        forwarded = re.findall(r"--env ([A-Z0-9_]+)", run)
         assert forwarded == ["MINIMAX_API_KEY", "E2E_SANDBOX_TOKEN"]
+
+    def test_redaction_keeps_required_secret_names(self, workflow: dict) -> None:
+        run = _step(workflow, "run", step_id="redact")["run"]
+        branch, outside = _model_branch(run)
+        assert re.findall(r"--secret-env (\S+)", outside) == [
+            "MINIMAX_API_KEY",
+            "E2E_SANDBOX_TOKEN",
+        ]
+        assert "--secret-env" not in branch
+
+
+@pytest.mark.parametrize(
+    ("step_id", "common_mounts"),
+    [
+        (
+            "e2e",
+            (
+                '--volume "$GITHUB_WORKSPACE/scripts/e2e:/opt/e2e:ro"',
+                '--volume "$RUNNER_TEMP/e2e/out:/artifacts"',
+            ),
+        ),
+        (
+            "redact",
+            (
+                '--volume "$GITHUB_WORKSPACE/scripts/e2e:/opt/e2e:ro"',
+                '--volume "$RUNNER_TEMP/e2e:/e2e"',
+            ),
+        ),
+    ],
+)
+def test_clean_install_uses_the_common_user_image_and_artifacts(
+    workflow: dict, step_id: str, common_mounts: tuple[str, ...]
+) -> None:
+    run = _step(workflow, "run", step_id=step_id)["run"]
+    branch, outside = _model_branch(run)
+
+    assert run.count("docker_args=()") == 1
+    assert '"${docker_args[@]}"' in outside
+    assert "docker run --rm" in outside
+    assert '"$IMAGE"' in outside
+    for mount in common_mounts:
+        assert mount in outside
+    assert not any(mount in branch for mount in common_mounts)
+
+    credential_lines = [
+        line.strip() for line in branch.splitlines() if "--env MINIMAX_API_KEY" in line
+    ]
+    assert len(credential_lines) == 1
+    assert credential_lines[0].startswith("docker_args+=(")
+    assert re.findall(r"--env ([A-Z0-9_]+)", credential_lines[0]) == [
+        "MINIMAX_API_KEY",
+        "E2E_SANDBOX_TOKEN",
+    ]
+    assert not re.search(r"--env (?:MINIMAX_API_KEY|E2E_SANDBOX_TOKEN)\b", outside)
+
+    data_mounts = re.findall(r'--volume "\$RUNNER_TEMP/e2e/data:[^"]+"', run)
+    if step_id == "e2e":
+        assert len(data_mounts) == 1
+        assert data_mounts[0] in branch
+        assert data_mounts[0] not in outside
+        assert any(
+            line.strip().startswith("docker_args+=(") and data_mounts[0] in line
+            for line in branch.splitlines()
+        )
+    else:
+        assert not data_mounts
+
+
+def test_user_image_is_built_for_the_matrix_run_and_workflow_does_not_install_or_init(
+    workflow: dict,
+) -> None:
+    build = _step(workflow, "run", name="Build the user image")
+    assert build["with"]["target"] == "user"
+    for step in _all_steps(workflow):
+        run = step.get("run", "")
+        assert not re.search(r"\bautoskillit\s+(?:install|init)\b", run)
 
 
 class TestRunJob:

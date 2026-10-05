@@ -8,6 +8,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 
 CATALOG_PATH = Path(__file__).with_name("catalog.json")
 # One step fans out to at most six subagents beside its orchestrator and step session, and one
@@ -19,13 +20,15 @@ HARNESS_GRACE_SEC = 120
 # Image build and load, redaction and artifact upload.
 JOB_OVERHEAD_MINUTES = 30
 MAX_JOB_MINUTES = 360
-KINDS = ("canary", "recipe")
+KINDS = ("canary", "recipe", "clean-install")
 PULL_REQUEST_STATES = ("open", "merged", "closed")
 
 _NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _CATALOG_KEYS = frozenset({"sandbox_repository", "tests"})
 _COMMON_KEYS = frozenset({"name", "kind", "peak_sessions", "timeout_sec", "trigger_paths"})
 _RECIPE_KEYS = frozenset({"recipe", "ingredients", "expected_pull_request_state"})
+_EXPECTED_FAILURE_KEYS = frozenset({"severity", "check", "message", "issue"})
+_BUG_URL_PATTERN = re.compile(r"https://github\.com/TalonT-Org/AutoSkillit/issues/[1-9][0-9]*")
 
 
 class CatalogError(ValueError):
@@ -34,7 +37,7 @@ class CatalogError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class CatalogTest:
-    """One live E2E test and the resources it is allowed to use."""
+    """One E2E test and the resources it is allowed to use."""
 
     name: str
     kind: str
@@ -44,6 +47,7 @@ class CatalogTest:
     recipe: str | None
     ingredients: tuple[tuple[str, str], ...]
     expected_pull_request_state: str | None
+    expected_failures: tuple[Mapping[str, str], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,6 +122,32 @@ def _parse_recipe_fields(
     return recipe, ingredients, state
 
 
+def _parse_expected_failures(value: object, where: str) -> tuple[Mapping[str, str], ...]:
+    where = f"{where}.expected_failures"
+    if not isinstance(value, list):
+        raise CatalogError(f"{where} must be a list")
+    rows: list[Mapping[str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for index, raw in enumerate(value):
+        location = f"{where}[{index}]"
+        if not isinstance(raw, dict):
+            raise CatalogError(f"{location} must be an object")
+        _require_keys(raw, _EXPECTED_FAILURE_KEYS, location)
+        row = {key: _require_str(raw[key], f"{location}.{key}") for key in _EXPECTED_FAILURE_KEYS}
+        if any(not item.strip() for item in row.values()):
+            raise CatalogError(f"{location} fields must be non-empty")
+        if row["severity"] not in ("error", "warning"):
+            raise CatalogError(f"{location}.severity must be error or warning")
+        if not _BUG_URL_PATTERN.fullmatch(row["issue"]):
+            raise CatalogError(f"{location}.issue must link to an AutoSkillit bug issue")
+        identity = (row["severity"], row["check"], row["message"])
+        if identity in seen:
+            raise CatalogError(f"{location}: duplicate diagnostic {identity}")
+        seen.add(identity)
+        rows.append(MappingProxyType(row))
+    return tuple(rows)
+
+
 def _parse_test(raw: object, index: int) -> CatalogTest:
     where = f"tests[{index}]"
     if not isinstance(raw, dict):
@@ -125,7 +155,10 @@ def _parse_test(raw: object, index: int) -> CatalogTest:
     kind = raw.get("kind")
     if kind not in KINDS:
         raise CatalogError(f"{where}.kind must be one of {KINDS}")
-    _require_keys(raw, _COMMON_KEYS | _RECIPE_KEYS if kind == "recipe" else _COMMON_KEYS, where)
+    keys = _COMMON_KEYS | _RECIPE_KEYS if kind == "recipe" else _COMMON_KEYS
+    if kind == "clean-install" and "expected_failures" in raw:
+        keys |= {"expected_failures"}
+    _require_keys(raw, keys, where)
     name = _require_str(raw["name"], f"{where}.name")
     if not _NAME_PATTERN.fullmatch(name):
         raise CatalogError(f"{where}.name must match {_NAME_PATTERN.pattern}")
@@ -136,13 +169,17 @@ def _parse_test(raw: object, index: int) -> CatalogTest:
         name=name,
         kind=kind,
         peak_sessions=_require_int(
-            raw["peak_sessions"], f"{where}.peak_sessions", low=1, high=MAX_PEAK_SESSIONS
+            raw["peak_sessions"],
+            f"{where}.peak_sessions",
+            low=0 if kind == "clean-install" else 1,
+            high=0 if kind == "clean-install" else MAX_PEAK_SESSIONS,
         ),
         timeout_sec=_require_int(raw["timeout_sec"], f"{where}.timeout_sec", low=1),
         trigger_paths=_parse_trigger_paths(raw["trigger_paths"], f"{where}.trigger_paths"),
         recipe=recipe,
         ingredients=ingredients,
         expected_pull_request_state=state,
+        expected_failures=_parse_expected_failures(raw.get("expected_failures", []), where),
     )
     if job_timeout_minutes(test) > MAX_JOB_MINUTES:
         raise CatalogError(f"{where}.timeout_sec exceeds the {MAX_JOB_MINUTES}-minute job limit")

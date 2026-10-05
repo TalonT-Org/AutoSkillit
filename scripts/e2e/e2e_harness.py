@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -33,6 +34,16 @@ SANDBOX_CLONE = Path("/workspace/sandbox")
 
 _SCRUBBED_ENV = frozenset({"CLAUDE_CODE_OAUTH_TOKEN", *SECRET_ENV})
 _STDERR_TAIL_CHARS = 2000
+CLEAN_INSTALL_ALLOWED_WARNINGS: dict[tuple[str, str], str] = {
+    (
+        "pytest_temp_capacity",
+        "/dev/shm: 67108864 bytes free of 67108864 total; 0 pytest generations under "
+        "/dev/shm/autoskillit-pytest-1000 (count unavailable: [Errno 2] No such file or "
+        "directory: '/dev/shm/autoskillit-pytest-1000') (below 2000000000-byte threshold); "
+        "run: task cleanup-shm",
+    ): "Docker's default shared-memory allocation is sufficient for this scenario, which "
+    "runs no pytest and creates no pytest generations.",
+}
 
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 CallResult = tuple[subprocess.CompletedProcess[str] | None, str | None]
@@ -58,18 +69,42 @@ def run_command(
     )
 
 
-def _call(runner: Runner, argv: Sequence[str], *, what: str, **kwargs: Any) -> CallResult:
+def _call(
+    runner: Runner, argv: Sequence[str], *, what: str, evidence: Path | None = None, **kwargs: Any
+) -> CallResult:
     """Run *argv*, turning a nonzero exit, a timeout or a launch error into a failure string."""
+    result = None
+    failure: str | None
+    stdout: str | bytes | None
+    stderr: str | bytes | None
     try:
         result = runner(argv, **kwargs)
     except subprocess.TimeoutExpired as exc:
-        return None, f"{what}: timed out after {exc.timeout}s"
+        failure = f"{what}: timed out after {exc.timeout}s"
+        stdout, stderr, outcome = exc.stdout, exc.stderr, "timeout"
     except OSError as exc:
-        return None, f"{what}: {exc}"
-    if result.returncode != 0:
-        stderr = (result.stderr or "").strip()[-_STDERR_TAIL_CHARS:]
-        return result, f"{what}: exit {result.returncode}: {stderr}"
-    return result, None
+        failure = f"{what}: {exc}"
+        stdout, stderr, outcome = "", str(exc), "launch_error"
+    else:
+        stdout, stderr, outcome = result.stdout, result.stderr, "completed"
+        failure = None
+        if result.returncode != 0:
+            detail = (result.stderr or "").strip()[-_STDERR_TAIL_CHARS:]
+            failure = f"{what}: exit {result.returncode}: {detail}"
+    if evidence is not None:
+        for stream, value in (("stdout", stdout), ("stderr", stderr)):
+            data = value if isinstance(value, bytes) else (value or "").encode("utf-8")
+            evidence.with_suffix(f".{stream}.txt").write_bytes(data)
+        record = {
+            "argv": list(argv),
+            "outcome": outcome,
+            "returncode": result.returncode if result is not None else None,
+            "failure": failure,
+        }
+        evidence.with_suffix(".command.json").write_text(
+            json.dumps(record, indent=2) + "\n", encoding="utf-8"
+        )
+    return result, failure
 
 
 def child_env(env: Mapping[str, str]) -> dict[str, str]:
@@ -339,6 +374,96 @@ def run_recipe(
     return failures
 
 
+def check_clean_install_doctor(
+    stdout: str, expected_failures: Sequence[Mapping[str, str]]
+) -> tuple[list[str], list[dict[str, str]]]:
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        return [f"doctor: invalid JSON: {exc}"], []
+    if not isinstance(payload, dict):
+        return ["doctor: report must be an object"], []
+    rows = payload.get("results")
+    if not isinstance(rows, list) or not rows:
+        return ["doctor: results must be a non-empty list"], []
+    expected = {(row["severity"], row["check"], row["message"]): row for row in expected_failures}
+    failures: list[str] = []
+    matched: dict[tuple[str, str, str], dict[str, str]] = {}
+    for index, row in enumerate(rows):
+        if (
+            not isinstance(row, dict)
+            or not isinstance(row.get("severity"), str)
+            or row["severity"] not in ("ok", "info", "warning", "error")
+            or not isinstance(row.get("check"), str)
+            or not isinstance(row.get("message"), str)
+        ):
+            failures.append(f"doctor: invalid result at index {index}")
+            continue
+        severity, check, message = row["severity"], row["check"], row["message"]
+        if severity in ("ok", "info") or (
+            severity == "warning" and CLEAN_INSTALL_ALLOWED_WARNINGS.get((check, message))
+        ):
+            continue
+        identity = (severity, check, message)
+        if identity in expected:
+            matched[identity] = dict(expected[identity])
+        else:
+            failures.append(f"doctor: unexpected {severity} {check}: {message}")
+    for identity, row in expected.items():
+        if identity not in matched:
+            failures.append(
+                f"doctor: expected diagnostic absent {identity}; remove stale expected failure "
+                f"for fixed bug {row['issue']}"
+            )
+    return failures, list(matched.values())
+
+
+def run_clean_install(
+    test: e2e_catalog.CatalogTest, out: Path, env: Mapping[str, str], runner: Runner
+) -> tuple[list[str], list[dict[str, str]]]:
+    deadline = time.monotonic() + test.timeout_sec
+    scrubbed = {
+        name: value for name, value in child_env(env).items() if not name.startswith("OPENAI_")
+    }
+    scratch_root = out / ".autoskillit" / "temp" / "clean-install"
+    scratch_root.mkdir(parents=True, exist_ok=True)
+    scratch = Path(tempfile.mkdtemp(dir=scratch_root))
+    commands = (
+        ("install", ["autoskillit", "install"]),
+        ("git-init", ["git", "init"]),
+        ("init", ["autoskillit", "init", "--test-command", "git diff --check"]),
+        ("doctor", ["autoskillit", "doctor", "--output-json"]),
+    )
+    try:
+        for stage, argv in commands:
+            if stage == "init":
+                (scratch / ".pre-commit-config.yaml").write_text(
+                    "repos:\n  - repo: https://github.com/gitleaks/gitleaks\n"
+                    "    rev: v8.30.0\n    hooks:\n      - id: gitleaks\n",
+                    encoding="utf-8",
+                )
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return [f"clean-install: timeout budget exhausted before {stage}"], []
+            result, failure = _call(
+                runner,
+                argv,
+                what=stage,
+                evidence=out / stage,
+                cwd=scratch,
+                env=scrubbed,
+                timeout=remaining,
+            )
+            if stage == "doctor":
+                shutil.copyfile(out / "doctor.stdout.txt", out / "doctor.json")
+            if failure is not None:
+                return [failure], []
+        assert result is not None
+        return check_clean_install_doctor(result.stdout, test.expected_failures)
+    finally:
+        shutil.rmtree(scratch)
+
+
 def _run_test(
     test: e2e_catalog.CatalogTest,
     catalog: e2e_catalog.Catalog,
@@ -347,18 +472,20 @@ def _run_test(
     home: Path,
     env: Mapping[str, str],
     runner: Runner,
-) -> list[str]:
+) -> tuple[list[str], list[dict[str, str]]]:
+    if test.kind == "clean-install":
+        return run_clean_install(test, out, env, runner)
     required = SECRET_ENV if test.kind == "recipe" else ("MINIMAX_API_KEY",)
     missing = [f"{name} is not set" for name in required if not env.get(name)]
     if missing:
-        return missing
+        return missing, []
     write_claude_settings(home, env["MINIMAX_API_KEY"])
     install_autoskillit_config(home)
     scrubbed = child_env(env)
     if test.kind == "canary":
-        return run_canary(test, out, scrubbed, runner)
+        return run_canary(test, out, scrubbed, runner), []
     token = env["E2E_SANDBOX_TOKEN"]
-    return run_recipe(test, catalog.sandbox_repository, token, out, scrubbed, runner)
+    return run_recipe(test, catalog.sandbox_repository, token, out, scrubbed, runner), []
 
 
 def run_test(
@@ -372,11 +499,19 @@ def run_test(
 ) -> list[str]:
     """Run *test* and always record ``out/result.json``; return the failures."""
     out.mkdir(parents=True, exist_ok=True)
+    matched_findings: list[dict[str, str]] = []
     try:
-        failures = _run_test(test, catalog, out=out, home=home, env=env, runner=runner)
+        failures, matched_findings = _run_test(
+            test, catalog, out=out, home=home, env=env, runner=runner
+        )
     except Exception as exc:
         failures = [f"harness error: {exc}"]
     result = {"test": test.name, "passed": not failures, "failures": failures}
+    if test.kind == "clean-install":
+        outcome = "failed" if failures else "expected_failure" if matched_findings else "passed"
+        result.update(
+            outcome=outcome, passed=outcome == "passed", expected_findings=matched_findings
+        )
     (out / "result.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     return failures
 
@@ -447,7 +582,10 @@ def _run(test_name: str, out: Path, catalog_path: Path) -> int:
     )
     for failure in failures:
         print(f"e2e_harness: FAIL {failure}", file=sys.stderr)
-    print(f"e2e_harness: {test.name} {'failed' if failures else 'passed'}")
+    outcome = "failed" if failures else "passed"
+    if test.kind == "clean-install":
+        outcome = json.loads((out / "result.json").read_text(encoding="utf-8"))["outcome"]
+    print(f"e2e_harness: {test.name} {outcome}")
     return 1 if failures else 0
 
 
@@ -462,7 +600,7 @@ def _redact_command(dest: Path, secret_env: Sequence[str], sources: Sequence[str
 
 
 def main(argv: Sequence[str]) -> int:
-    """``run`` exits 0 iff the test passed; ``redact`` exits 0 iff the redacted copy is clean."""
+    """``run`` accepts passes and expected failures; ``redact`` requires a clean copy."""
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     run = commands.add_parser("run", help="Run one catalog test.")

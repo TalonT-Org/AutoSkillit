@@ -15,10 +15,10 @@ hooks:
 semantic_version: 1
 semantic_requirements:
   logical_roles:
-  - name: autoskillit:web-evidence-researcher
+  - name: web-evidence-researcher
     purpose: collect bounded external web evidence for one runtime research topic
   child_spawns:
-  - role: autoskillit:web-evidence-researcher
+  - role: web-evidence-researcher
     for_each: research_topics
   concurrency:
     required: true

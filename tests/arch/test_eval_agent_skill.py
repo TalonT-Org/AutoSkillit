@@ -46,14 +46,21 @@ def test_eval_agent_has_critical_constraints():
 
 
 def test_eval_agent_delegates_to_named_agent():
-    """SKILL.md declares child delegation targeting the named autoskillit agent definition."""
+    from autoskillit.execution.backends import ClaudeCodeBackend
+    from autoskillit.workspace.skill_capabilities import parse_skill_semantic_plan
+
     source = _SKILL_FILE.read_text()
     parts = source.split("---", 2)
     fm = load_yaml(parts[1])
-    semantic = fm.get("semantic_requirements") or {}
-    roles = {spawn.get("role") for spawn in semantic.get("child_spawns") or []}
-    assert "evaluated-agent" in roles, "child_spawns must declare the evaluated-agent role"
-    assert "autoskillit:{agent_name}" in source
+    plan, diagnostics = parse_skill_semantic_plan(
+        fm, path=_SKILL_FILE, content=source, uses_capabilities=frozenset()
+    )
+    assert not diagnostics
+    assert plan is not None
+    assert plan.runtime_bound_role_names == frozenset({"evaluated-agent"})
+    assert tuple(spawn.role for spawn in plan.child_spawns) == ("evaluated-agent",)
+    assert ClaudeCodeBackend().adapt_skill_semantics(plan).unsupported_operation is None
+    assert "autoskillit:{agent_name}" not in source
 
 
 def test_eval_agent_uses_write_tool():

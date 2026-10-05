@@ -39,6 +39,7 @@ from autoskillit.server.tools.tools_execution._fixed_batch_handlers import (
 )
 from autoskillit.server.tools.tools_execution._managed_fixed_batch import ManagedLaunchBinding
 from autoskillit.server.tools.tools_execution._managed_leaf import (
+    ManagedLeafAssignmentIdentity,
     ManagedLeafAssignmentInput,
     ManagedLeafBinding,
     ManagedLeafProjection,
@@ -55,6 +56,91 @@ from tests.fakes import make_managed_codex_context
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 _SYNTHETIC_MODEL_ID = "gpt-synthetic"
+
+
+def _managed_leaf_binding_inputs(
+    role: str,
+    adaptation: SkillSemanticAdaptationResult,
+    *,
+    declared_role: str,
+) -> tuple[ManagedLeafAssignmentIdentity, LoadedSkillEntry, AgentSkillDocument]:
+    assignment = plan_managed_leaf_identities(
+        "request-1",
+        (ManagedLeafAssignmentInput(role, "assignment", "Inspect the requested work."),),
+    ).assignments[0]
+    selected_source = LoadedSkillEntry(
+        skill_name="membership-skill",
+        ts="2026-08-28T00:00:00Z",
+        join_required=True,
+        child_spawn_cardinality={declared_role: 1},
+        semantic_digest="semantic-source",
+        adaptation_digest=adaptation.digest,
+        projected_digest="projected-source",
+        canonical_digest="canonical-source",
+        source_artifact_digest="source-artifact",
+        source_artifact_incarnation_id="incarnation-1",
+        binding_valid=True,
+        binding_error=None,
+        origin=LoadedSkillOrigin.AUTOSKILLIT,
+    )
+    source_document = AgentSkillDocument(
+        content="Source contract.\n",
+        projected_digest="projected-source",
+        canonical_digest="canonical-source",
+        source_identity=SkillSourceIdentity(SkillSource.BUNDLED, "membership-skill"),
+        semantic_digest="semantic-source",
+        adaptation_digest=adaptation.digest,
+    )
+    return assignment, selected_source, source_document
+
+
+@pytest.mark.parametrize(
+    "role",
+    ["evaluated-agent", "unlisted-role"],
+)
+def test_managed_leaf_rejects_runtime_only_and_undeclared_roles(role: str) -> None:
+    adaptation = SkillSemanticAdaptationResult(
+        logical_role_mapping={},
+        runtime_bound_roles=frozenset({"evaluated-agent"}),
+    )
+    assignment, selected_source, source_document = _managed_leaf_binding_inputs(
+        role,
+        adaptation,
+        declared_role="evaluated-agent",
+    )
+
+    with pytest.raises(SkillContractError, match="is not declared by source"):
+        bind_managed_leaf(
+            assignment=assignment,
+            selected_source=selected_source,
+            source_document=source_document,
+            adaptation=adaptation,
+            default_model=_SYNTHETIC_MODEL_ID,
+            write_behavior=WriteBehaviorSpec(),
+            read_only=True,
+        )
+
+
+def test_managed_leaf_keeps_roleless_adaptation_permissive() -> None:
+    role = "legacy-role"
+    adaptation = SkillSemanticAdaptationResult()
+    assignment, selected_source, source_document = _managed_leaf_binding_inputs(
+        role,
+        adaptation,
+        declared_role=role,
+    )
+
+    binding = bind_managed_leaf(
+        assignment=assignment,
+        selected_source=selected_source,
+        source_document=source_document,
+        adaptation=adaptation,
+        default_model=_SYNTHETIC_MODEL_ID,
+        write_behavior=WriteBehaviorSpec(),
+        read_only=True,
+    )
+
+    assert binding.model == _SYNTHETIC_MODEL_ID
 
 
 def test_managed_leaf_planner_and_projection_bind_only_leaf_authority() -> None:

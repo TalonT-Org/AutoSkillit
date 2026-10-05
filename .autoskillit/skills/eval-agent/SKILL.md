@@ -12,6 +12,7 @@ semantic_requirements:
   logical_roles:
     - name: evaluated-agent
       purpose: run the named agent definition under evaluation against the prepared prompt and return its full output
+      runtime_bound: true
   child_spawns:
     - role: evaluated-agent
       count: 1
@@ -34,8 +35,8 @@ or evaluation. Runs one agent against one prompt and captures output.
 
 The skill receives its arguments as a single string. Parse these arguments:
 
-- `--agent-name {name}` — The agent definition name (without `autoskillit:` prefix).
-  The skill prepends `autoskillit:` when calling the Agent tool.
+- `--agent-name {name}` — The bundled agent definition name.
+  The backend-adapted contract determines the native agent type.
 - `--prompt-file {path}` — Absolute path to a file containing the prompt text.
 
 Example invocation:
@@ -57,7 +58,7 @@ Example invocation:
 **ALWAYS:**
 - Parse `--agent-name` and `--prompt-file` from the ARGUMENTS string
 - Read the prompt file using the Read tool
-- Invoke the agent via child delegation bound to the `evaluated-agent` logical role, targeting the named agent definition `autoskillit:{agent_name}` with the prompt file contents
+- Invoke the bundled agent definition named by `--agent-name` via child delegation bound to the `evaluated-agent` logical role, using the backend-adapted contract for its native agent type and the prompt file contents
 - Write output JSON to `{{AUTOSKILLIT_TEMP}}/eval-agent/{agent_name}_output.json` (relative to the current working directory) using the Write tool
 - Emit `agent_output_path = <absolute_path>` as a structured output token (plain text, no markdown formatting on the token name)
 - The absolute path in the structured output token must be constructed by prepending the current working directory to the relative output path
@@ -80,8 +81,9 @@ If the file cannot be read, proceed to Step 4 (error handling).
 ### Step 3: Invoke Agent and Capture Output
 
 Invoke the agent as a child delegation bound to the `evaluated-agent` logical role:
-delegate to the named agent definition `autoskillit:{agent_name}`, passing the prompt
-file contents verbatim as the delegation prompt.
+delegate to the bundled agent definition named by `--agent-name`, using the
+backend-adapted contract for its native agent type and passing the prompt file
+contents verbatim as the delegation prompt.
 
 Capture the agent's full response text.
 

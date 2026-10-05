@@ -132,6 +132,7 @@ class TestModuleCascadeCore:
             "_type_helpers",
             "_type_protocols_workspace",
             "_type_protocols_backend",
+            "_type_skill_plan_specs",
             "_type_skill_semantics",
             "_install_detect",
             "_release_identity",

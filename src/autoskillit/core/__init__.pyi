@@ -275,6 +275,7 @@ from .plugins._plugin_artifact_retirement import (
 )
 from .plugins._plugin_ids import _AUTOSKILLIT_INSTALL_ROOT_KEY as _AUTOSKILLIT_INSTALL_ROOT_KEY
 from .plugins._plugin_ids import _AUTOSKILLIT_PLUGIN_KEY as _AUTOSKILLIT_PLUGIN_KEY
+from .plugins._plugin_ids import CLAUDE_PLUGIN_AGENT_NAMESPACE as CLAUDE_PLUGIN_AGENT_NAMESPACE
 from .plugins._plugin_ids import DIRECT_INSTALL_CACHE_SUBDIR as DIRECT_INSTALL_CACHE_SUBDIR
 from .plugins._plugin_ids import DIRECT_PREFIX as DIRECT_PREFIX
 from .plugins._plugin_ids import PLUGIN_PREFIX as PLUGIN_PREFIX
@@ -307,6 +308,7 @@ from .plugins._retiring_cache import repair_corrupt_retiring_cache as repair_cor
 from .plugins.agent_definition import (
     AGENT_DEFINITION_DIGEST_DOMAIN as AGENT_DEFINITION_DIGEST_DOMAIN,
 )
+from .plugins.agent_definition import AGENT_DIRECTORY_GUIDE_FILES as AGENT_DIRECTORY_GUIDE_FILES
 from .plugins.agent_definition import AGENT_PROVISIONING_BASELINE as AGENT_PROVISIONING_BASELINE
 from .plugins.agent_definition import (
     AGENT_PROVISIONING_SKILL_DERIVED as AGENT_PROVISIONING_SKILL_DERIVED,
@@ -328,6 +330,7 @@ from .plugins.agent_definition import agent_definition_digest as agent_definitio
 from .plugins.agent_definition import (
     canonical_reader_tools_to_bare as canonical_reader_tools_to_bare,
 )
+from .plugins.agent_definition import is_agent_definition_file as is_agent_definition_file
 from .plugins.agent_definition import load_agent_definition as load_agent_definition
 from .plugins.agent_definition import load_agent_definitions as load_agent_definitions
 from .plugins.agent_definition import (
@@ -452,6 +455,7 @@ from .types import AGENT_BACKEND_CLAUDE_CODE as AGENT_BACKEND_CLAUDE_CODE
 from .types import AGENT_BACKEND_CODEX as AGENT_BACKEND_CODEX
 from .types import AGENT_BACKEND_DYNACONF_ENV_VAR as AGENT_BACKEND_DYNACONF_ENV_VAR
 from .types import AGENT_BACKEND_ENV_VAR as AGENT_BACKEND_ENV_VAR
+from .types import AGENT_NAME_PATTERN as AGENT_NAME_PATTERN
 from .types import AGENT_PACK_REGISTRY as AGENT_PACK_REGISTRY
 from .types import ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS as ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
 from .types import ALL_SESSION_SHAPES as ALL_SESSION_SHAPES
@@ -545,6 +549,7 @@ from .types import (
 from .types import CONTEXT_EXHAUSTION_MARKER as CONTEXT_EXHAUSTION_MARKER
 from .types import CORE_PACKS as CORE_PACKS
 from .types import DATA_MANIFEST_SOURCE_TYPES as DATA_MANIFEST_SOURCE_TYPES
+from .types import DELEGATED_WORKER_ROLE as DELEGATED_WORKER_ROLE
 from .types import DISPATCH_ID_ENV_VAR as DISPATCH_ID_ENV_VAR
 from .types import DRY_WALKTHROUGH_VERIFIED_MARKER as DRY_WALKTHROUGH_VERIFIED_MARKER
 from .types import DURABLE_ARTIFACT_WRITERS as DURABLE_ARTIFACT_WRITERS
@@ -1056,6 +1061,7 @@ from .types import LineDriver as LineDriver
 from .types import LineDriverError as LineDriverError
 from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult
+from .types import LogicalRoleNameError as LogicalRoleNameError
 from .types import LogicalRoleSpec as LogicalRoleSpec
 from .types import MaintenanceInstallArgv as MaintenanceInstallArgv
 from .types import ManagedCodexRoute as ManagedCodexRoute

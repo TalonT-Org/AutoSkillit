@@ -343,6 +343,7 @@ def _expected_native_roles(
     semantic_plan: SkillSemanticPlan | None,
     semantic_adaptation: SkillSemanticAdaptationResult | None,
     runtime_cardinalities: Mapping[str, int] | None,
+    runtime_native_roles: Mapping[str, str] | None,
 ) -> tuple[str, ...]:
     assert (semantic_plan is None) == (semantic_adaptation is None), (
         "semantic plan and adaptation must be supplied together"
@@ -360,9 +361,17 @@ def _expected_native_roles(
         else:
             assert spawn.count is not None
             cardinality = spawn.count
-        expected_roles.extend(
-            semantic_adaptation.logical_role_mapping[spawn.role] for _ in range(cardinality)
-        )
+        if spawn.role in semantic_adaptation.runtime_bound_roles:
+            native_role = (
+                runtime_native_roles.get(spawn.role) if runtime_native_roles is not None else None
+            )
+            assert isinstance(native_role, str) and native_role.strip(), (
+                f"runtime-bound role {spawn.role!r} requires an independently supplied "
+                "native role name"
+            )
+        else:
+            native_role = semantic_adaptation.logical_role_mapping[spawn.role]
+        expected_roles.extend(native_role for _ in range(cardinality))
     return tuple(expected_roles)
 
 
@@ -649,6 +658,7 @@ def assert_generated_child_delivery(
     semantic_plan: SkillSemanticPlan | None = None,
     semantic_adaptation: SkillSemanticAdaptationResult | None = None,
     runtime_cardinalities: Mapping[str, int] | None = None,
+    runtime_native_roles: Mapping[str, str] | None = None,
     child_terminal_sentinel: str | None = None,
     sibling_result_sentinel: str | None = None,
     parent_terminal_sentinel: str | None = None,
@@ -657,7 +667,8 @@ def assert_generated_child_delivery(
 
     This is the sole oracle for both deterministic adapter traces and the installed
     Codex native-subagent probe.  Raw backend events are normalized locally so the
-    semantic assertions remain backend-neutral.
+    semantic assertions remain backend-neutral. Runtime-bound native targets come from
+    ``runtime_native_roles``, independently of observed calls.
     """
 
     observed = _collect_observed_calls(parent_events)
@@ -668,6 +679,7 @@ def assert_generated_child_delivery(
         semantic_plan,
         semantic_adaptation,
         runtime_cardinalities,
+        runtime_native_roles,
     )
     spawn_calls, actual_roles = _assert_native_role_policies(
         observed,

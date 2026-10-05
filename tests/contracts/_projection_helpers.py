@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "STALE_VERSION",
+    "native_spawn_target_universes",
     "non_exploration_catalog",
     "plant_stale_snapshot",
     "projected_plugin_authority",
@@ -24,6 +25,31 @@ __all__ = [
 ]
 
 STALE_VERSION = "0.0.1-stale"
+
+
+def native_spawn_target_universes() -> dict[str, frozenset[str]]:
+    """Build expected native spawn targets from manifests, loaders, and built-in facts."""
+    from importlib import import_module
+
+    from autoskillit.core import (
+        AGENT_BACKEND_CLAUDE_CODE,
+        AGENT_BACKEND_CODEX,
+        load_bundled_agent_definitions,
+        pkg_root,
+    )
+
+    backends = import_module("autoskillit.execution.backends")
+    codex_backend = import_module("autoskillit.execution.backends.codex")
+    plugin_name = json.loads(
+        (pkg_root() / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
+    )["name"]
+    bundled = frozenset(definition.name for definition in load_bundled_agent_definitions())
+    return {
+        AGENT_BACKEND_CLAUDE_CODE: frozenset(backends.CLAUDE_SPAWNABLE_BUILT_IN_AGENT_NAMES)
+        | {f"{plugin_name}:{name}" for name in bundled},
+        AGENT_BACKEND_CODEX: frozenset(codex_backend.CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES)
+        | bundled,
+    }
 
 
 def non_exploration_catalog(

@@ -356,7 +356,7 @@ def bind_managed_leaf(
             )
     if adaptation.digest != document_adaptation:
         raise SkillContractError("managed leaf adaptation is not the selected source adaptation")
-    if adaptation.logical_role_mapping and assignment.role not in adaptation.logical_role_mapping:
+    if adaptation.adapted_logical_roles and assignment.role not in adaptation.logical_role_mapping:
         raise SkillContractError(
             f"managed leaf role {assignment.role!r} is not declared by source"
         )

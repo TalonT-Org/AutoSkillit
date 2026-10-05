@@ -39,7 +39,11 @@ from autoskillit.workspace import (
 )
 from autoskillit.workspace.skills import _skill_info_from_frontmatter
 from tests.fakes import adapt_test_skill_semantics
-from tests.workspace._helpers import _CODEX_CAPABILITIES, _write_project_skill_override
+from tests.workspace._helpers import (
+    _CODEX_CAPABILITIES,
+    _identity_test_agent_names,
+    _write_project_skill_override,
+)
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
@@ -91,7 +95,7 @@ def _codex_backend() -> MagicMock:
         profile_skills_source=None,
     )
     backend.ensure_pre_launch.return_value = PreLaunchReadiness((), {})
-    backend.setup_session_dir.return_value = None
+    backend.setup_session_dir.return_value = _identity_test_agent_names()
     backend.validate_session_layout.return_value = []
     backend.adapt_skill_semantics.side_effect = adapt_test_skill_semantics
     return backend

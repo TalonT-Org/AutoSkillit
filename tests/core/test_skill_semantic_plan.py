@@ -206,3 +206,208 @@ def test_managed_join_adaptation_context_is_immutable_and_digestible() -> None:
             managed_join_attestation=catalog_attestation,
             managed_codex_catalog=b"tampered",
         )
+
+
+def test_logical_role_is_not_runtime_bound_by_default() -> None:
+    from autoskillit.core import LogicalRoleSpec
+
+    assert LogicalRoleSpec(name="x", purpose="p").runtime_bound is False
+
+
+def test_runtime_bound_must_be_a_bool() -> None:
+    from autoskillit.core import LogicalRoleSpec, SkillContractError
+
+    with pytest.raises(SkillContractError):
+        LogicalRoleSpec(name="x", purpose="p", runtime_bound="yes")  # type: ignore[arg-type]
+
+
+def test_delegated_worker_cannot_be_runtime_bound() -> None:
+    from autoskillit.core import DELEGATED_WORKER_ROLE, LogicalRoleSpec, SkillContractError
+
+    with pytest.raises(SkillContractError):
+        LogicalRoleSpec(name=DELEGATED_WORKER_ROLE, purpose="p", runtime_bound=True)
+
+
+def test_runtime_bound_role_must_be_spawned() -> None:
+    from autoskillit.core import LogicalRoleSpec, SkillContractError, SkillSemanticPlan
+
+    with pytest.raises(SkillContractError):
+        SkillSemanticPlan(
+            schema_version=1,
+            logical_roles=(
+                LogicalRoleSpec(name="evaluated-agent", purpose="p", runtime_bound=True),
+            ),
+        )
+
+
+def test_runtime_bound_role_rejects_model_policy() -> None:
+    from autoskillit.core import (
+        ChildModelPolicySpec,
+        ChildSpawnSpec,
+        LogicalRoleSpec,
+        SkillContractError,
+        SkillSemanticPlan,
+    )
+
+    with pytest.raises(SkillContractError):
+        SkillSemanticPlan(
+            schema_version=1,
+            child_spawns=(ChildSpawnSpec(role="evaluated-agent", count=1),),
+            child_model_policies=(
+                ChildModelPolicySpec(role="evaluated-agent", model_class="opus"),
+            ),
+            logical_roles=(
+                LogicalRoleSpec(name="evaluated-agent", purpose="p", runtime_bound=True),
+            ),
+        )
+
+
+def test_plan_exposes_runtime_bound_role_names() -> None:
+    from autoskillit.core import ChildSpawnSpec, LogicalRoleSpec, SkillSemanticPlan
+
+    plan = SkillSemanticPlan(
+        schema_version=1,
+        child_spawns=(ChildSpawnSpec(role="evaluated-agent", count=1),),
+        logical_roles=(LogicalRoleSpec(name="evaluated-agent", purpose="p", runtime_bound=True),),
+    )
+
+    assert plan.runtime_bound_role_names == frozenset({"evaluated-agent"})
+
+
+def test_validate_for_requires_runtime_binding_coverage() -> None:
+    from autoskillit.core import (
+        ChildSpawnSpec,
+        LogicalRoleSpec,
+        SkillContractError,
+        SkillSemanticAdaptationResult,
+        SkillSemanticPlan,
+    )
+
+    plan = SkillSemanticPlan(
+        schema_version=1,
+        child_spawns=(ChildSpawnSpec(role="evaluated-agent", count=1),),
+        logical_roles=(LogicalRoleSpec(name="evaluated-agent", purpose="p", runtime_bound=True),),
+    )
+
+    with pytest.raises(SkillContractError, match="runtime agent binding is incomplete"):
+        SkillSemanticAdaptationResult(instruction_fragments=("x",)).validate_for(plan, backend="b")
+    with pytest.raises(SkillContractError, match="logical role mapping is incomplete"):
+        SkillSemanticAdaptationResult(
+            instruction_fragments=("x",),
+            logical_role_mapping={"evaluated-agent": "native-worker"},
+        ).validate_for(plan, backend="b")
+
+
+def test_unsupported_adaptation_cannot_carry_runtime_bindings() -> None:
+    from autoskillit.core import (
+        SkillContractError,
+        SkillSemanticAdaptationResult,
+        SkillSemanticOperation,
+    )
+
+    with pytest.raises(SkillContractError, match="cannot carry instructions"):
+        SkillSemanticAdaptationResult(
+            unsupported_operation=SkillSemanticOperation.CHILD_SPAWN,
+            diagnostic="unsupported",
+            runtime_bound_roles=frozenset({"evaluated-agent"}),
+        )
+
+
+def test_adapted_logical_roles_spans_both_bindings() -> None:
+    from autoskillit.core import SkillSemanticAdaptationResult
+
+    result = SkillSemanticAdaptationResult(
+        logical_role_mapping={"a": "native-a"},
+        runtime_bound_roles=frozenset({"b"}),
+    )
+
+    assert result.adapted_logical_roles == frozenset({"a", "b"})
+
+
+def test_canonical_payload_includes_runtime_bound_roles() -> None:
+    from autoskillit.core import SkillSemanticAdaptationResult
+
+    result = SkillSemanticAdaptationResult(runtime_bound_roles=frozenset({"z", "a"}))
+
+    assert result.canonical_payload["runtime_bound_roles"] == ["a", "z"]
+
+
+def test_runtime_bound_changes_plan_semantic_identity() -> None:
+    from autoskillit.core import ChildSpawnSpec, LogicalRoleSpec, SkillSemanticPlan
+
+    static_plan = SkillSemanticPlan(
+        schema_version=1,
+        child_spawns=(ChildSpawnSpec(role="evaluated-agent", count=1),),
+        logical_roles=(LogicalRoleSpec(name="evaluated-agent", purpose="p"),),
+    )
+    runtime_plan = SkillSemanticPlan(
+        schema_version=1,
+        child_spawns=(ChildSpawnSpec(role="evaluated-agent", count=1),),
+        logical_roles=(LogicalRoleSpec(name="evaluated-agent", purpose="p", runtime_bound=True),),
+    )
+
+    assert static_plan.canonical_payload["logical_roles"] == (
+        {"name": "evaluated-agent", "purpose": "p", "runtime_bound": False},
+    )
+    assert runtime_plan.canonical_payload["logical_roles"] == (
+        {"name": "evaluated-agent", "purpose": "p", "runtime_bound": True},
+    )
+    assert static_plan.digest != runtime_plan.digest
+
+
+@pytest.mark.parametrize("role", ["", 1])
+def test_runtime_bound_roles_are_nonempty_strings(role: object) -> None:
+    from autoskillit.core import SkillContractError, SkillSemanticAdaptationResult
+
+    with pytest.raises(SkillContractError):
+        SkillSemanticAdaptationResult(
+            instruction_fragments=("x",),
+            runtime_bound_roles=frozenset({role}),  # type: ignore[arg-type]
+        )
+
+
+def test_runtime_bound_roles_are_frozen() -> None:
+    from autoskillit.core import SkillSemanticAdaptationResult
+
+    result = SkillSemanticAdaptationResult(
+        runtime_bound_roles=["worker", "auditor"]  # type: ignore[arg-type]
+    )
+
+    assert result.runtime_bound_roles == frozenset({"worker", "auditor"})
+
+
+def test_namespaced_logical_role_name_is_unconstructible() -> None:
+    from autoskillit.core import LogicalRoleNameError, LogicalRoleSpec
+
+    with pytest.raises(LogicalRoleNameError):
+        LogicalRoleSpec(name="autoskillit:plan-foundation-auditor", purpose="p")
+
+
+@pytest.mark.parametrize(
+    ("name", "valid"),
+    [
+        ("Plan-Auditor", False),
+        ("plan_auditor", False),
+        ("-x", False),
+        ("delegated-worker", True),
+        ("plan-foundation-auditor", True),
+    ],
+)
+def test_logical_role_name_grammar(name: str, valid: bool) -> None:
+    from autoskillit.core import LogicalRoleNameError, LogicalRoleSpec, SkillContractError
+
+    assert issubclass(LogicalRoleNameError, SkillContractError)
+    if valid:
+        assert LogicalRoleSpec(name=name, purpose="p").name == name
+    else:
+        with pytest.raises(LogicalRoleNameError):
+            LogicalRoleSpec(name=name, purpose="p")
+
+
+def test_agent_definitions_and_logical_roles_share_one_grammar() -> None:
+    from autoskillit.core import AGENT_NAME_PATTERN
+    from autoskillit.core.plugins.agent_definition import (
+        AGENT_NAME_PATTERN as agent_definition_pattern,
+    )
+
+    assert agent_definition_pattern is AGENT_NAME_PATTERN

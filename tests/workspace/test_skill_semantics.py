@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+from importlib import import_module
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from autoskillit.core import CODEX_MODEL_ALIASES, SkillSemanticOperation, SkillSource
+from autoskillit.core import (
+    CODEX_MODEL_ALIASES,
+    SkillInvalidityKind,
+    SkillSemanticOperation,
+    SkillSource,
+)
 from autoskillit.core.paths import pkg_root
 from autoskillit.workspace.skills import (
     _skill_info_from_frontmatter,
@@ -41,6 +47,21 @@ semantic_requirements:
     - name: investigate
   git_metadata_writes:
     - purpose: create the requested commit
+"""
+
+_RUNTIME_BOUND_SEMANTICS = """semantic_version: 1
+semantic_requirements:
+  logical_roles:
+    - name: evaluated-agent
+      purpose: select a bundled evaluator at runtime
+      runtime_bound: true
+    - name: delegated-worker
+      purpose: perform one portable review
+  child_spawns:
+    - role: evaluated-agent
+      count: 1
+    - role: delegated-worker
+      count: 1
 """
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -133,6 +154,57 @@ def _write_skill(path: Path, *, declarations: str = _VALID_SEMANTICS, body: str 
         f"{declarations}write_paths: inherit\n---\n{body}\n",
         encoding="utf-8",
     )
+
+
+def _parse_semantic_plan(path: Path):
+    from autoskillit.workspace.skill_capabilities import parse_skill_semantic_plan
+
+    parsed = read_skill_frontmatter(path)
+    assert parsed.data is not None
+    return parse_skill_semantic_plan(
+        parsed.data,
+        path=path,
+        content=parsed.content,
+        uses_capabilities=frozenset(parsed.data.get("uses_capabilities", ())),
+    )
+
+
+def test_runtime_bound_role_parses(tmp_path: Path) -> None:
+    skill_md = tmp_path / "runtime-bound" / "SKILL.md"
+    _write_skill(skill_md, declarations=_RUNTIME_BOUND_SEMANTICS)
+
+    plan, diagnostics = _parse_semantic_plan(skill_md)
+
+    assert not diagnostics
+    assert plan is not None
+    assert plan.logical_roles[0].runtime_bound is True
+
+
+def test_non_boolean_runtime_bound_is_plan_invalid(tmp_path: Path) -> None:
+    skill_md = tmp_path / "invalid-runtime-bound" / "SKILL.md"
+    declarations = _RUNTIME_BOUND_SEMANTICS.replace(
+        "runtime_bound: true", "runtime_bound: sometimes"
+    )
+    _write_skill(skill_md, declarations=declarations)
+
+    plan, diagnostics = _parse_semantic_plan(skill_md)
+
+    assert plan is None
+    assert len(diagnostics) == 1
+    assert diagnostics[0][0].value == "semantic_plan_invalid"
+
+
+def test_namespaced_role_reports_noncanonical_invalidity(tmp_path: Path) -> None:
+    skill_md = tmp_path / "namespaced-role" / "SKILL.md"
+    declarations = _VALID_SEMANTICS.replace("reviewer", "autoskillit:session-log-reader")
+    _write_skill(skill_md, declarations=declarations)
+
+    plan, diagnostics = _parse_semantic_plan(skill_md)
+
+    assert plan is None
+    assert len(diagnostics) == 1
+    assert diagnostics[0][0] is not SkillInvalidityKind.SEMANTIC_PLAN_INVALID
+    assert diagnostics[0][0] is SkillInvalidityKind.SEMANTIC_ROLE_NAME_NONCANONICAL
 
 
 @pytest.mark.parametrize(
@@ -450,6 +522,37 @@ def test_session_catalog_filters_unsupported_semantics_with_exact_metadata(
             },
         ),
     }
+
+
+def test_runtime_bound_spawns_have_no_static_native_target(tmp_path: Path) -> None:
+    from autoskillit.core import SkillExecutionRole, SkillSemanticOperation
+    from autoskillit.workspace import (
+        EffectiveSkillCatalog,
+        SkillCatalogEntry,
+        compile_session_skill_catalog,
+    )
+
+    backends = import_module("autoskillit.execution.backends")
+    skill_path = tmp_path / "runtime-bound" / "SKILL.md"
+    _write_skill(skill_path, declarations=_RUNTIME_BOUND_SEMANTICS)
+    entry = SkillCatalogEntry.from_skill_info(
+        _skill_info_from_frontmatter("runtime-bound", SkillSource.PROJECT_LOCAL, skill_path)
+    )
+    catalog = EffectiveSkillCatalog(
+        skills=(entry,),
+        execution_role=SkillExecutionRole.SESSION,
+    )
+
+    claude = compile_session_skill_catalog(catalog, backends.ClaudeCodeBackend())
+    assert tuple(skill.name for skill in claude.catalog.skills) == ("runtime-bound",)
+    assert claude.required_native_roles["runtime-bound"] == ("general-purpose",)
+    assert "evaluated-agent" not in claude.required_native_roles["runtime-bound"]
+
+    codex = compile_session_skill_catalog(catalog, backends.CodexBackend())
+    assert not codex.catalog.skills
+    assert len(codex.unavailable) == 1
+    assert codex.unavailable[0].skill == "runtime-bound"
+    assert codex.unavailable[0].operation is SkillSemanticOperation.CHILD_SPAWN
 
 
 def test_session_catalog_propagates_unexpected_adapter_contract_error(

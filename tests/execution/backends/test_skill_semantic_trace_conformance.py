@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import tomllib
 from dataclasses import replace
 from pathlib import Path
@@ -45,7 +46,7 @@ _CODEX_JOIN_REFUSAL_DIAGNOSTIC = (
 )
 
 _DISCIPLINE_DIGEST = "sha256:portable-output-discipline"
-_REVIEW_ROLE = "autoskillit:pr-review-auditor-baseline"
+_REVIEW_ROLE = "pr-review-auditor-baseline"
 _WORKER_ROLE = "delegated-worker"
 
 
@@ -205,11 +206,19 @@ def _codex_trace(
     return parent_events, child_events
 
 
+def _rendered_claude_targets(adaptation: SkillSemanticAdaptationResult) -> list[str]:
+    target_pattern = re.compile(r"subagent_type='([^']+)'")
+    return [
+        target
+        for fragment in adaptation.instruction_fragments
+        for target in target_pattern.findall(fragment)
+    ]
+
+
 def _claude_trace(
     adaptation: SkillSemanticAdaptationResult,
 ) -> tuple[list[dict], list[dict]]:
-    reviewer = adaptation.logical_role_mapping[_REVIEW_ROLE]
-    worker = adaptation.logical_role_mapping[_WORKER_ROLE]
+    reviewer, worker = _rendered_claude_targets(adaptation)
     model, _effort = adaptation.model_effort_policy[reviewer]
     sibling = adaptation.sibling_skill_targets["smoke-task"]
     return (
@@ -443,7 +452,7 @@ def test_compose_pr_managed_codex_trace_uses_the_fixed_batch_route() -> None:
 
 
 def test_dynamic_child_spawn_adapters_preserve_runtime_cardinality() -> None:
-    role = "autoskillit:web-evidence-researcher"
+    role = "web-evidence-researcher"
     plan = SkillSemanticPlan(
         schema_version=1,
         logical_roles=(LogicalRoleSpec(name=role, purpose="research one topic"),),
@@ -472,7 +481,7 @@ def test_review_approach_projects_the_real_named_web_role() -> None:
     assert not info.invalidities
     assert info.semantic_plan is not None
     plan = info.semantic_plan
-    role = "autoskillit:web-evidence-researcher"
+    role = "web-evidence-researcher"
     assert tuple(item.name for item in plan.logical_roles) == (role,)
     assert plan.child_spawns == (ChildSpawnSpec(role=role, for_each="research_topics"),)
     assert not plan.child_model_policies
@@ -505,7 +514,7 @@ def test_analyze_pipeline_health_projects_the_real_terminal_reader() -> None:
     assert not info.invalidities
     assert info.semantic_plan is not None
     plan = info.semantic_plan
-    role = "autoskillit:session-log-reader"
+    role = "session-log-reader"
     assert tuple(item.name for item in plan.logical_roles) == (role,)
     assert plan.child_spawns == (ChildSpawnSpec(role=role, for_each="reader_packets"),)
     assert not plan.child_model_policies

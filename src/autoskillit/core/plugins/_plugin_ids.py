@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 __all__ = [
     "DIRECT_INSTALL_CACHE_SUBDIR",
     "DIRECT_PREFIX",
+    "CLAUDE_PLUGIN_AGENT_NAMESPACE",
     "PLUGIN_PREFIX",
     "claude_plugin_tool_prefix",
     "find_qualified_autoskillit_tool_names",
@@ -50,6 +51,8 @@ DIRECT_PREFIX = "mcp__autoskillit__"
 # session (--plugin-dir and marketplace alike):
 # mcp__plugin_<plugin.json name>_<.mcp.json server key>__
 PLUGIN_PREFIX = "mcp__plugin_autoskillit_autoskillit__"
+# Claude Code registers plugin agents as <plugin.json name>:<agent name>.
+CLAUDE_PLUGIN_AGENT_NAMESPACE = "autoskillit:"
 
 _CLAUDE_TOOL_SEGMENT_INVALID_CHARS = re.compile(r"[^A-Za-z0-9_-]")
 _QUALIFIED_AUTOSKILLIT_TOOL_RE = re.compile(

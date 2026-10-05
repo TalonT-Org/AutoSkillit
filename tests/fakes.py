@@ -95,12 +95,13 @@ def adapt_test_skill_semantics(
     adaptation_context: SemanticAdaptationContext | None = None,
 ) -> SkillSemanticAdaptationResult:
     """Return a deterministic protocol-complete adaptation for backend test doubles."""
-    logical_roles = {role.name: role.name for role in plan.logical_roles}
+    logical_roles = {role.name: role.name for role in plan.logical_roles if not role.runtime_bound}
     result = SkillSemanticAdaptationResult(
         instruction_fragments=("Use deterministic test-native skill semantics.",)
         if plan.operations
         else (),
         logical_role_mapping=logical_roles,
+        runtime_bound_roles=plan.runtime_bound_role_names,
         sibling_skill_targets={
             sibling.name: f"${sibling.name}" for sibling in plan.sibling_skills
         },

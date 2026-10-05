@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-import autoskillit.execution.backends._claude_session_locator as _locator_module
+import autoskillit.execution.backends._claude.session_locator as _locator_module
 from autoskillit.core import (
     SessionLocator,
     SessionSummary,

@@ -105,6 +105,7 @@ from autoskillit.execution.backends._codex_session_storage import CodexSessionSt
 from autoskillit.execution.backends._explorer_dispatch import (
     CODEX_EXPLORATION_DISPATCH_RENDERER,
 )
+from autoskillit.execution.backends._native_roles import map_declared_logical_roles
 
 _CODEX_SQLITE_HOME_ENV_VAR = "CODEX_SQLITE_HOME"
 
@@ -158,16 +159,38 @@ _CODEX_INTERACTIVE_VALUE_BEARING_FLAGS: frozenset[str] = frozenset(
 
 
 def _codex_logical_role_mapping(plan: SkillSemanticPlan) -> dict[str, str]:
-    return {
-        role.name: (
-            role.name.removeprefix("autoskillit:")
-            if role.name.startswith("autoskillit:")
-            else "worker"
-            if role.name == "delegated-worker"
-            else role.name
+    return map_declared_logical_roles(
+        plan,
+        delegated_worker_agent="worker",
+        agent_namespace="",
+    )
+
+
+def _codex_semantic_admission_refusal(
+    plan: SkillSemanticPlan,
+    capabilities: BackendCapabilities,
+    backend_name: str,
+    adaptation_context: SemanticAdaptationContext | None,
+) -> SkillSemanticAdaptationResult | None:
+    if required_join_is_unsupported(plan, capabilities, backend_name, adaptation_context):
+        return SkillSemanticAdaptationResult(
+            unsupported_operation=SkillSemanticOperation.REQUIRED_JOIN,
+            diagnostic=(
+                "Codex exposes wait-any/mailbox-activity semantics rather than fixed-set fan-in. "
+                "Skills declaring join.required=true cannot be honestly realized on this "
+                "backend and must be refused at admission."
+            ),
         )
-        for role in plan.logical_roles
-    }
+    if plan.runtime_bound_role_names:
+        return SkillSemanticAdaptationResult(
+            unsupported_operation=SkillSemanticOperation.CHILD_SPAWN,
+            diagnostic=(
+                "Codex provisions agents per session from statically declared roles; "
+                "a runtime-selected bundled agent cannot be provisioned. Refuse the "
+                "skill at admission."
+            ),
+        )
+    return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -458,20 +481,14 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
         adaptation_context: SemanticAdaptationContext | None = None,
     ) -> SkillSemanticAdaptationResult:
         """Adapt portable skill requirements to Codex collaboration instructions."""
-        if required_join_is_unsupported(
+        refusal = _codex_semantic_admission_refusal(
             plan,
             self.capabilities,
             self.name,
             adaptation_context,
-        ):
-            return SkillSemanticAdaptationResult(
-                unsupported_operation=SkillSemanticOperation.REQUIRED_JOIN,
-                diagnostic=(
-                    "Codex exposes wait-any/mailbox-activity semantics rather than "
-                    "fixed-set fan-in. Skills declaring join.required=true cannot be "
-                    "honestly realized on this backend and must be refused at admission."
-                ),
-            )
+        )
+        if refusal is not None:
+            return refusal
         role_mapping = _codex_logical_role_mapping(plan)
         managed_join = bool(plan.join and plan.join.required) and (
             adaptation_context is not None

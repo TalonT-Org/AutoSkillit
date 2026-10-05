@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 
-from autoskillit.core import is_python_bytecode_path
+from autoskillit.core import is_agent_definition_file, is_python_bytecode_path
 
 _CANONICAL_SKILL_DIRS = frozenset({"skills", "skills_extended"})
 _PUBLIC_PLUGIN_ASSET_NAMES = frozenset(
@@ -51,6 +51,8 @@ def is_projected_asset(entry: Path, *, top_level: bool) -> bool:
         return False
     if name in _CANONICAL_SKILL_DIRS:
         return False
+    if not top_level and entry.parent.name == "agents":
+        return is_agent_definition_file(entry)
     return not (top_level and name not in _PUBLIC_PLUGIN_ASSET_NAMES)
 
 

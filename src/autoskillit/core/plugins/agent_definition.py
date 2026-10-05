@@ -12,6 +12,7 @@ from typing import Any, Final, Literal, TypeAlias, get_args
 from ..io import load_yaml
 from ..io.paths import pkg_root
 from ..types import (
+    AGENT_NAME_PATTERN,
     CODEX_EFFORT_MAPPING,
     CODEX_MODEL_ALIASES,
     CODEX_VALID_MODEL_IDS,
@@ -27,6 +28,7 @@ from ._plugin_ids import (
 
 __all__ = [
     "AGENT_DEFINITION_DIGEST_DOMAIN",
+    "AGENT_DIRECTORY_GUIDE_FILES",
     "AGENT_PROVISIONING_BASELINE",
     "AGENT_PROVISIONING_SKILL_DERIVED",
     "BUNDLED_EXPLORER_ROLES",
@@ -40,6 +42,7 @@ __all__ = [
     "CodexAgentProjectionDef",
     "agent_definition_digest",
     "canonical_reader_tools_to_bare",
+    "is_agent_definition_file",
     "load_agent_definition",
     "load_agent_definitions",
     "load_bundled_agent_definitions",
@@ -48,6 +51,7 @@ __all__ = [
 
 
 AGENT_DEFINITION_DIGEST_DOMAIN = "autoskillit.agent-definition.v1"
+AGENT_DIRECTORY_GUIDE_FILES: Final = frozenset({"AGENTS.md", "CLAUDE.md"})
 AGENT_PROVISIONING_BASELINE: Final = "baseline"
 AGENT_PROVISIONING_SKILL_DERIVED: Final = "skill-derived"
 CODEX_DISABLED_WEB_SEARCH_POLICY: Literal["disabled"] = "disabled"
@@ -58,7 +62,6 @@ WEB_EVIDENCE_RESEARCHER_ROLE: str = "web-evidence-researcher"
 BUNDLED_EXPLORER_ROLES: frozenset[str] = frozenset(
     {SEMANTIC_CODE_NAVIGATOR_ROLE, REPOSITORY_IMPACT_PROFILER_ROLE}
 )
-_AGENT_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 _DIRECT_TOOL_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 _CODEX_CLI_VERSION_RE = re.compile(r"(?:codex-cli )?(?P<version>[0-9]+\.[0-9]+\.[0-9]+)")
 _READ_ONLY_AGENT_TOOLS = frozenset({"Read", "Grep", "Glob", "LSP"})
@@ -199,7 +202,7 @@ class AgentDef:
     provisioning: Literal["skill-derived", "baseline"] = AGENT_PROVISIONING_SKILL_DERIVED
 
     def __post_init__(self) -> None:
-        if not _AGENT_NAME_RE.fullmatch(self.name):
+        if not AGENT_NAME_PATTERN.fullmatch(self.name):
             raise AgentDefinitionError(f"invalid agent name: {self.name!r}")
         if not self.description.strip():
             raise AgentDefinitionError("agent description must be non-empty")
@@ -396,12 +399,17 @@ def load_agent_definition(path: Path) -> AgentDef:
     )
 
 
+def is_agent_definition_file(path: Path) -> bool:
+    """Return whether *path* is a Markdown agent definition rather than a guide."""
+    return path.is_file() and path.suffix == ".md" and path.name not in AGENT_DIRECTORY_GUIDE_FILES
+
+
 def load_agent_definitions(agents_dir: Path) -> tuple[AgentDef, ...]:
     """Load the complete agent catalog and reject duplicate registered names."""
     definitions = tuple(
         load_agent_definition(path)
         for path in sorted(agents_dir.glob("*.md"))
-        if path.name not in {"AGENTS.md", "CLAUDE.md"}
+        if is_agent_definition_file(path)
     )
     names = tuple(definition.name for definition in definitions)
     duplicates = sorted({name for name in names if names.count(name) > 1})

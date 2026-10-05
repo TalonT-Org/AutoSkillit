@@ -70,7 +70,7 @@ def test_analyze_pipeline_health_routes_bounded_reader_packets_without_paths():
 
     skill_path = pkg_root() / "skills_extended" / "analyze-pipeline-health" / "SKILL.md"
     content = skill_path.read_text()
-    assert "autoskillit:session-log-reader" in content
+    assert "session-log-reader" in content
     assert "ordered session IDs" in content
     assert "requested anomaly classes" in content
     assert "Verdict: answered | partial | blocked" in content

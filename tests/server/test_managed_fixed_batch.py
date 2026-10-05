@@ -18,6 +18,7 @@ from autoskillit.core import (
 from autoskillit.hooks._join_ledger import active_batch, aggregate_batch, can_release_stop
 from autoskillit.hooks._session_binding import LoadedSkillEntry, LoadedSkillOrigin
 from autoskillit.pipeline import DefaultBackgroundSupervisor
+from autoskillit.server.tools.tools_execution._fixed_batch_request import _validate_membership
 from autoskillit.server.tools.tools_execution._managed_fixed_batch import (
     DefaultManagedFixedBatchSupervisor,
     ManagedFixedBatchLaunchBinding,
@@ -93,6 +94,47 @@ def _binding(tmp_path, launch_leaf):
         write_behavior=WriteBehaviorSpec(),
         read_only=True,
         launch_leaf=launch_leaf,
+    )
+
+
+def _membership_source(role: str) -> LoadedSkillEntry:
+    return LoadedSkillEntry(
+        skill_name="fixed-batch-skill",
+        ts="2026-08-28T00:00:00Z",
+        join_required=True,
+        child_spawn_cardinality={role: 1},
+        semantic_digest="semantic-source",
+        adaptation_digest="source-adaptation",
+        projected_digest="projected-source",
+        canonical_digest="canonical-source",
+        source_artifact_digest="source-artifact",
+        source_artifact_incarnation_id="incarnation-1",
+        binding_valid=True,
+        binding_error=None,
+        origin=LoadedSkillOrigin.AUTOSKILLIT,
+    )
+
+
+def test_fixed_batch_membership_rejects_runtime_only_role() -> None:
+    role = "evaluated-agent"
+    assignments = (ManagedLeafAssignmentInput(role, "evaluation", "Evaluate the result."),)
+    adaptation = SkillSemanticAdaptationResult(
+        logical_role_mapping={},
+        runtime_bound_roles=frozenset({role}),
+    )
+
+    with pytest.raises(SkillContractError, match="roles absent from source adaptation"):
+        _validate_membership(assignments, _membership_source(role), adaptation)
+
+
+def test_fixed_batch_membership_keeps_roleless_adaptation_permissive() -> None:
+    role = "legacy-role"
+    assignments = (ManagedLeafAssignmentInput(role, "legacy", "Run the legacy assignment."),)
+
+    _validate_membership(
+        assignments,
+        _membership_source(role),
+        SkillSemanticAdaptationResult(),
     )
 
 

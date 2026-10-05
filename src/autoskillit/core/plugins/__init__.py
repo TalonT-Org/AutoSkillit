@@ -77,6 +77,7 @@ from autoskillit.core.plugins._plugin_cache import (
 from autoskillit.core.plugins._plugin_ids import (
     _AUTOSKILLIT_INSTALL_ROOT_KEY,
     _AUTOSKILLIT_PLUGIN_KEY,
+    CLAUDE_PLUGIN_AGENT_NAMESPACE,
     DIRECT_INSTALL_CACHE_SUBDIR,
     DIRECT_PREFIX,
     PLUGIN_PREFIX,
@@ -95,6 +96,7 @@ from autoskillit.core.plugins._plugin_ids import (
 )
 from autoskillit.core.plugins.agent_definition import (
     AGENT_DEFINITION_DIGEST_DOMAIN,
+    AGENT_DIRECTORY_GUIDE_FILES,
     AGENT_PROVISIONING_BASELINE,
     AGENT_PROVISIONING_SKILL_DERIVED,
     BUNDLED_EXPLORER_ROLES,
@@ -108,6 +110,7 @@ from autoskillit.core.plugins.agent_definition import (
     CodexAgentProjectionDef,
     agent_definition_digest,
     canonical_reader_tools_to_bare,
+    is_agent_definition_file,
     load_agent_definition,
     load_agent_definitions,
     load_bundled_agent_definitions,
@@ -116,6 +119,7 @@ from autoskillit.core.plugins.agent_definition import (
 
 __all__ = [
     "AGENT_DEFINITION_DIGEST_DOMAIN",
+    "AGENT_DIRECTORY_GUIDE_FILES",
     "AGENT_PROVISIONING_BASELINE",
     "AGENT_PROVISIONING_SKILL_DERIVED",
     "ActiveKitchensReadResult",
@@ -126,6 +130,7 @@ __all__ = [
     "CODEX_DISABLED_WEB_SEARCH_POLICY",
     "CODEX_EXPLORER_IDENTITY",
     "CodexAgentProjectionDef",
+    "CLAUDE_PLUGIN_AGENT_NAMESPACE",
     "DIRECT_INSTALL_CACHE_SUBDIR",
     "DIRECT_PREFIX",
     "INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS",
@@ -182,6 +187,7 @@ __all__ = [
     "installed_plugin_artifact_root",
     "installed_plugin_cache_dir",
     "installed_plugin_semantic_key",
+    "is_agent_definition_file",
     "is_marketplace_plugin_registered",
     "is_reclaimable_artifact_path",
     "kitchen_entry_alive",

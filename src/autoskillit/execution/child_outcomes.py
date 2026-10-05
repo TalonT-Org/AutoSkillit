@@ -396,7 +396,7 @@ def collect_codex_observed_children(
 
 
 def _resolve_claude_parent_transcript(parent_session_id: str) -> Path | None:
-    from autoskillit.execution.backends._claude_session_locator import ClaudeSessionLocator
+    from autoskillit.execution.backends._claude.session_locator import ClaudeSessionLocator
 
     return ClaudeSessionLocator().locate_session(parent_session_id)
 

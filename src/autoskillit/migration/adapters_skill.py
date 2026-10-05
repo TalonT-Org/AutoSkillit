@@ -6,7 +6,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
+    AGENT_NAME_PATTERN,
     ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS,
+    CLAUDE_PLUGIN_AGENT_NAMESPACE,
     SKILL_CONTRACT_REMEDIATIONS,
     SKILL_SEMANTIC_SCHEMA_VERSION,
     RemediationAction,
@@ -125,6 +127,33 @@ def _repair_retired_capability_frontmatter(
     return None
 
 
+def _canonicalize_logical_role_names(data: dict[str, Any]) -> str | None:
+    """Remove the Claude plugin prefix from backend-neutral role references."""
+    requirements = data.get("semantic_requirements")
+    if not isinstance(requirements, dict):
+        return "semantic_requirements must be a mapping"
+
+    for collection, field in (
+        ("logical_roles", "name"),
+        ("child_spawns", "role"),
+        ("child_model_policies", "role"),
+    ):
+        declarations = requirements.get(collection, [])
+        if not isinstance(declarations, list):
+            return f"semantic_requirements.{collection} must be a list"
+        for declaration in declarations:
+            if not isinstance(declaration, dict):
+                return f"semantic_requirements.{collection} entries must be mappings"
+            raw_name = declaration.get(field)
+            if not isinstance(raw_name, str):
+                return f"semantic_requirements.{collection}.{field} must be a string"
+            name = raw_name.removeprefix(CLAUDE_PLUGIN_AGENT_NAMESPACE)
+            if AGENT_NAME_PATTERN.fullmatch(name) is None:
+                return f"cannot canonicalize logical role name {name!r}"
+            declaration[field] = name
+    return None
+
+
 def _apply_deterministic_remediation(
     kind: SkillInvalidityKind,
     data: dict[str, Any],
@@ -141,6 +170,8 @@ def _apply_deterministic_remediation(
         return _repair_retired_capability_frontmatter(data, declared_caps)
     if kind is SkillInvalidityKind.SEMANTIC_CHILD_CARDINALITY_INVALID:
         return _normalize_legacy_child_spawn_cardinality(data)
+    if kind is SkillInvalidityKind.SEMANTIC_ROLE_NAME_NONCANONICAL:
+        return _canonicalize_logical_role_names(data)
     if kind is SkillInvalidityKind.WRITE_BOUNDARY_UNDECLARED:
         from autoskillit.hooks._write_scope import WRITE_SCOPE_INHERIT
 

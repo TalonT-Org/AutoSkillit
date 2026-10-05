@@ -427,7 +427,12 @@ class CodingAgentBackend(Protocol):
         agent_defs: tuple[AgentDef, ...] | None = None,
         explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
         execution_role: SkillExecutionRole = SkillExecutionRole.SESSION,
-    ) -> frozenset[str] | None: ...
+    ) -> frozenset[str]:
+        """Finalize the session and return the native agent names it can resolve;
+
+        admission prunes skills whose native spawn targets fall outside this set.
+        """
+        ...
 
     def refresh_explorer_binding_env(
         self,

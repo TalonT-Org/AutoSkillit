@@ -104,7 +104,7 @@ def test_coding_agent_backend_has_setup_session_dir_method():
         "agent_defs": tuple[AgentDef, ...] | None,
         "explorer_binding_env": Mapping[str, Mapping[str, str]] | None,
         "execution_role": SkillExecutionRole,
-        "return": frozenset[str] | None,
+        "return": frozenset[str],
     }
 
 
@@ -479,7 +479,7 @@ class _Backend:
         agent_defs: tuple[AgentDef, ...] | None = None,
         explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
         execution_role: SkillExecutionRole = SkillExecutionRole.SESSION,
-    ) -> frozenset[str] | None: ...
+    ) -> frozenset[str]: ...
 
     def refresh_explorer_binding_env(
         self,

@@ -14,6 +14,7 @@ __all__ = [
     "ExplorationBindingFailed",
     "InfrastructureFaultError",
     "LineDriverError",
+    "LogicalRoleNameError",
     "PluginArtifactContentionError",
     "PluginArtifactPublicationError",
     "PluginArtifactUnavailableError",
@@ -195,6 +196,10 @@ class CapabilityNotSupportedError(Exception):
 
 class SkillContractError(ValueError):
     """A skill machine contract is malformed or exceeds its execution role."""
+
+
+class LogicalRoleNameError(SkillContractError):
+    """A logical role name is not a bare canonical agent name."""
 
 
 class ChildSpawnCardinalityError(SkillContractError):

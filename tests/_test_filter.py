@@ -1431,8 +1431,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # file-level: fleet tests that import server tool handlers directly
             "fleet/test_resume_precondition.py",
             "fleet/test_headless_resume_max_attempts.py",
-            # file-level: sandbox smoke E2E covers fleet ingredient materialization
+            # file-level: infra tests that import fleet directly
             "infra/test_e2e_harness.py",
+            "infra/test_pretty_output_hook_infra.py",
         }
     ),
     # L3

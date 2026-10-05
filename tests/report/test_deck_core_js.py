@@ -10,6 +10,10 @@ from autoskillit.report.deck._registry import ChipState
 pytestmark = [pytest.mark.small]
 
 COHORT_KEYS = ["harness", "provider", "level", "window"]
+ALL_POPULATION_DETAIL = (
+    "harness claude-code + codex (all) · provider anthropic + codex (all) · "
+    "level unrecorded (all) · window all history (2026-09-25 → 2026-10-04)"
+)
 
 
 def _route(**params: list[str]) -> dict[str, object]:
@@ -144,77 +148,76 @@ def test_filter_rows_applies_facets_windows_and_untimed_count(
     assert result["untimed"] == untimed
 
 
-def test_population_sentence_explains_the_effective_population(
-    deck_js: Any, deck_model: dict[str, Any]
-) -> None:
-    model = deck_model
-    chips = model["chips"]["cohort"]
-    rows = model["tables"]["sessions"]
-
-    all_route = _route()
-    all_result = deck_js.call("DeckCore.filterRows", model, rows, chips, all_route)
-    sentence = deck_js.call("DeckCore.populationSentence", model, chips, all_route, all_result)
-    assert sentence == {
-        "headline": "4 runs",
-        "detail": (
-            "harness claude-code + codex (all) · provider anthropic + codex (all) · "
-            "level unrecorded (all) · window all history "
-            "(2026-09-25 → 2026-10-04)"
+@pytest.mark.parametrize(
+    ("route", "headline", "detail", "notes"),
+    [
+        pytest.param(_route(), "4 runs", ALL_POPULATION_DETAIL, [], id="all"),
+        pytest.param(
+            _route(harness=["codex"]),
+            "1 run",
+            "harness codex · provider anthropic + codex (all) · "
+            "level unrecorded (all) · window all history (2026-09-25 → 2026-10-04)",
+            [],
+            id="codex",
         ),
-        "notes": [],
+        pytest.param(
+            _route(window=["7d"]),
+            "2 runs",
+            "harness claude-code + codex (all) · provider anthropic + codex (all) · "
+            "level unrecorded (all) · window last 7 days (2026-09-27 → 2026-10-04)",
+            ["1 run without a timestamp falls outside every window"],
+            id="last-week",
+        ),
+        pytest.param(
+            _route(level=["L0"]),
+            "4 runs",
+            ALL_POPULATION_DETAIL,
+            [
+                "L0 is not selectable on this view — L0 leaf agents write no session row; "
+                "they exist only as subagent transcripts",
+                "no selected level is selectable here — showing every selectable level",
+            ],
+            id="struck-level",
+        ),
+        pytest.param(
+            _route(harness=["nope"]),
+            "4 runs",
+            ALL_POPULATION_DETAIL,
+            [
+                "nope does not appear in this index",
+                "no selected harness is selectable here — showing every selectable harness",
+            ],
+            id="unknown-harness",
+        ),
+        pytest.param(
+            _route(window=["28d"]),
+            "4 runs",
+            ALL_POPULATION_DETAIL,
+            [
+                "28 days is not selectable on this view — index history begins 2026-09-25 — "
+                "9 days retained (#4621)"
+            ],
+            id="absent-window",
+        ),
+    ],
+)
+def test_population_sentence_explains_the_effective_population(
+    deck_js: Any,
+    deck_model: dict[str, Any],
+    route: dict[str, object],
+    headline: str,
+    detail: str,
+    notes: list[str],
+) -> None:
+    chips = deck_model["chips"]["cohort"]
+    result = deck_js.call(
+        "DeckCore.filterRows", deck_model, deck_model["tables"]["sessions"], chips, route
+    )
+    assert deck_js.call("DeckCore.populationSentence", deck_model, chips, route, result) == {
+        "headline": headline,
+        "detail": detail,
+        "notes": notes,
     }
-
-    codex_route = _route(harness=["codex"])
-    codex_result = deck_js.call("DeckCore.filterRows", model, rows, chips, codex_route)
-    codex_sentence = deck_js.call(
-        "DeckCore.populationSentence", model, chips, codex_route, codex_result
-    )
-    assert codex_sentence["headline"] == "1 run"
-    assert codex_sentence["detail"].startswith("harness codex · ")
-
-    week_route = _route(window=["7d"])
-    week_result = deck_js.call("DeckCore.filterRows", model, rows, chips, week_route)
-    week_sentence = deck_js.call(
-        "DeckCore.populationSentence", model, chips, week_route, week_result
-    )
-    assert week_sentence["detail"].endswith("window last 7 days (2026-09-27 → 2026-10-04)")
-    assert "1 run without a timestamp falls outside every window" in week_sentence["notes"]
-
-    struck_route = _route(level=["L0"])
-    struck_result = deck_js.call("DeckCore.filterRows", model, rows, chips, struck_route)
-    struck_sentence = deck_js.call(
-        "DeckCore.populationSentence", model, chips, struck_route, struck_result
-    )
-    assert (
-        "L0 is not selectable on this view — L0 leaf agents write no session row; "
-        "they exist only as subagent transcripts"
-    ) in struck_sentence["notes"]
-    assert (
-        "no selected level is selectable here — showing every selectable level"
-        in struck_sentence["notes"]
-    )
-
-    unknown_route = _route(harness=["nope"])
-    unknown_result = deck_js.call("DeckCore.filterRows", model, rows, chips, unknown_route)
-    unknown_sentence = deck_js.call(
-        "DeckCore.populationSentence", model, chips, unknown_route, unknown_result
-    )
-    assert "nope does not appear in this index" in unknown_sentence["notes"]
-    assert (
-        "no selected harness is selectable here — showing every selectable harness"
-        in unknown_sentence["notes"]
-    )
-
-    old_window_route = _route(window=["28d"])
-    old_window_result = deck_js.call("DeckCore.filterRows", model, rows, chips, old_window_route)
-    old_window_sentence = deck_js.call(
-        "DeckCore.populationSentence", model, chips, old_window_route, old_window_result
-    )
-    assert (
-        "28 days is not selectable on this view — index history begins 2026-09-25 — "
-        "9 days retained (#4621)"
-    ) in old_window_sentence["notes"]
-    assert old_window_sentence["detail"].endswith("window all history (2026-09-25 → 2026-10-04)")
 
 
 def test_chip_presentation_covers_live_struck_absent_and_issue_reasons(

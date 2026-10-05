@@ -91,7 +91,7 @@ DeckShell.registerView("role", ctx => {
 
   const definition = roleName == null ? null : definitions[roleName];
   const available = definition?.state === "available";
-  const definitionCard = roleName == null ? null : ctx.el("section", {class: "card"}, [
+  const definitionCard = roleName == null ? null : ctx.el("section", {class: "card view-definition"}, [
     ctx.el("h2", {}, "Role definition · " + roleName),
     available ? ctx.el("p", {}, definition.description ?? "Role definition loaded.") :
       ctx.el("p", {class: "view-review__reason"}, "Definition unavailable for " + roleName + "."),

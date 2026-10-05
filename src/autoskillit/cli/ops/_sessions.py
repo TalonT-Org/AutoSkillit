@@ -79,6 +79,9 @@ def sessions_deck(output: str) -> None:
     report = read_report_index(index_dir)
     html = render_deck(
         report.sessions.values(),
+        request_rows=report.requests.values(),
+        tool_rows=report.tools.values(),
+        subagent_rows=report.subagents.values(),
         generated_at=datetime.now(UTC),
         index_schema_version=REPORT_INDEX_SCHEMA_VERSION,
     )

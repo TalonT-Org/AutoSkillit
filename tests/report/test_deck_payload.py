@@ -221,10 +221,11 @@ def _source_records(
 ) -> list[MeasureRecord]:
     if child and parents is None:
         raise ValueError("child records require their parent rows")
+    parent_rows = parents or {}
     records = []
     for row in rows:
         raw = row["token_usage"] if child else row
-        harness = parents[row["parent_session_key"]]["harness"] if child else row["harness"]
+        harness = parent_rows[row["parent_session_key"]]["harness"] if child else row["harness"]
         provider = row["provider"]
         records.append(
             MeasureRecord(
@@ -506,10 +507,15 @@ def test_prepared_metrics_keep_source_pairs_roles_and_shared_library_accounting(
     sessions, requests, tools, children = _full_index_facts()
     body = "Bash runs git show to inspect the committed slice."
     loader_calls: list[None] = []
+
+    def definition_loader() -> tuple[SimpleNamespace, ...]:
+        loader_calls.append(None)
+        return (_definition(_AUDITOR, body),)
+
     monkeypatch.setattr(
         deck_payload_module,
         "load_bundled_agent_definitions",
-        lambda: loader_calls.append(None) or (_definition(_AUDITOR, body),),
+        definition_loader,
         raising=False,
     )
     aggregate_calls: list[int] = []
@@ -541,7 +547,7 @@ def test_prepared_metrics_keep_source_pairs_roles_and_shared_library_accounting(
     assert aggregate_calls and ratio_calls
     assert len(loader_calls) == 1
     prepared = payload["prepared"]
-    levels = {"orchestrator", "skill"}
+    levels: set[str | None] = {"orchestrator", "skill"}
     skill_block = _metric_row(prepared["skills"], window="all", levels=levels)
     planner = next(
         row
@@ -560,6 +566,11 @@ def test_prepared_metrics_keep_source_pairs_roles_and_shared_library_accounting(
     planner_aggregate = aggregate_measures(_source_records(planner_runs), _TOKEN_FIELDS)
     planner_ratio = measure_ratio(_source_records(planner_runs), "input_tokens", "output_tokens")
     assert planner["measures"]["input_tokens"]["value"] == 30
+    assert planner["exact_retransmission"] == {"state": "unavailable", "value": None}
+    assert planner["recipe_steps"][0]["exact_retransmission"] == {
+        "state": "unavailable",
+        "value": None,
+    }
     _assert_serialized_measure(
         planner["measures"]["input_tokens"], planner_aggregate.fields["input_tokens"]
     )
@@ -659,3 +670,33 @@ def test_prepared_metrics_keep_source_pairs_roles_and_shared_library_accounting(
         < prepared["view_histories"]["skill"]["last_ms"]
     )
     json.dumps(payload, allow_nan=False)
+
+
+def test_observed_zero_ratio_can_be_flagged_with_complete_definitions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sessions, _, _, children = _full_index_facts()
+    for child in children:
+        if child.get("role") == _AUDITOR:
+            child["token_usage"]["cache_read_tokens"] = token_measure(0)
+    monkeypatch.setattr(
+        deck_payload_module,
+        "load_bundled_agent_definitions",
+        lambda: (_definition(_AUDITOR, "Inspect the slice with git show."),),
+    )
+    payload = build_deck_payload(
+        sessions,
+        subagent_rows=children,
+        generated_at=DECK_GENERATED_AT,
+        index_schema_version=7,
+    )
+    block = _metric_row(payload["prepared"]["roles"], window="all", levels={"skill"})
+    auditor = next(
+        row for row in block["rows"] if row["role"] == _AUDITOR and row["provider"] == "anthropic"
+    )
+    signal = auditor["harnesses"][0]["ratios"]["cache_share"]
+    assert (signal["state"], signal["value"]) == ("measured_zero", 0.0)
+    assert signal["sample_size"] > 0
+    assert signal["definition_roles"] == [_AUDITOR]
+    assert signal["review_eligible"] is True
+    assert signal["review_reason"] is None

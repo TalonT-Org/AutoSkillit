@@ -870,7 +870,7 @@ SUBPKG_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
 
 MODULE_CASCADE_CONFIG: dict[str, frozenset[str]] = {
     "_config_loader": frozenset({"config", "cli"}),
-    "ingredient_defaults": frozenset({"config", "recipe", "server"}),
+    "ingredient_defaults": frozenset({"config", "recipe", "server", "infra/test_e2e_harness.py"}),
 }
 
 _API_ORCHESTRATION_SHARD_CASCADE: frozenset[str] = frozenset(
@@ -975,9 +975,9 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
         }
     ),
     "rules_skill_write_path_alignment": frozenset({"recipe"}),
-    # --- Internal utility modules (no external src importers) ---
+    # --- Internal utility modules with narrow server/test consumers ---
     "_analysis": frozenset({"recipe"}),
-    "_binding": frozenset({"recipe", "server"}),
+    "_binding": frozenset({"recipe", "server", "infra/test_e2e_harness.py"}),
     "_binding_input": frozenset({"recipe", "server"}),
     "_analysis_bfs": frozenset({"recipe"}),
     "_analysis_blocks": frozenset({"recipe"}),
@@ -1431,6 +1431,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # file-level: fleet tests that import server tool handlers directly
             "fleet/test_resume_precondition.py",
             "fleet/test_headless_resume_max_attempts.py",
+            # file-level: sandbox smoke E2E covers fleet ingredient materialization
+            "infra/test_e2e_harness.py",
         }
     ),
     # L3

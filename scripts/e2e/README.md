@@ -228,8 +228,11 @@ harness lower-cases them. Its existing cleanup closes newly opened PRs with thei
 harness stages `sandbox-smoke.yaml` from the read-only `/opt/e2e` mount into the disposable
 sandbox clone's `.autoskillit/recipes/` directory before invoking fleet by recipe name. This
 lets the clone's project name resolve the staged recipe; the host scripts remain read-only.
-The worker changes only `sandbox/text.py` and `tests/test_smoke_canary.py`, pushes its assigned
-per-run branch, opens a PR and closes it. Before cleanup, the harness verifies the successful
+Fleet resolves `base_branch` from the sandbox project's existing
+`branching.default_base_branch` configuration, matching the clone's base branch.
+The worker changes and commits only `sandbox/text.py` and `tests/test_smoke_canary.py`.
+The orchestrator runs the sandbox test gate, pushes the assigned per-run branch, opens a PR
+and closes it. Before cleanup, the harness verifies the successful
 envelope, that exactly one PR for the assigned branch is closed, the complete PR diff contains
 only those prescribed paths, and the PR head, remote ref and fetched commit agree. The source
 and test must contain the requested sentinel and an executable assertion. It saves the PR,
@@ -240,8 +243,8 @@ the model process or a fleet result. The workflow wraps this test's model contai
 per-run Docker CID file. Its exit trap captures the model result, removes the recorded
 container by its exact ID, verifies that ID is absent, then launches a fresh user-image
 container for `e2e_harness.py cleanup`. That command uses only `E2E_SANDBOX_TOKEN`, closes any
-remaining PR for the assigned branch, deletes that exact remote branch and verifies both are
-gone. Cleanup runs after model success, failure or timeout, and its result is part of the step
+remaining PR for the assigned branch, deletes that exact remote branch and verifies no open
+PR remains and the ref is absent. Cleanup runs after model success, failure or timeout, and its result is part of the step
 status. The normal artifact redaction step then runs even when the test step failed. Recipes
 without this fixture keep their existing in-container cleanup path.
 

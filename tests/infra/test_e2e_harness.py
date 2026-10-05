@@ -523,6 +523,71 @@ class TestSandboxSmokeFixture:
         )
         assert "do not call any tools" in failed.message.lower()
 
+    def test_config_branch_survives_fleet_validation_and_binds_to_staged_recipe(
+        self, tmp_path: Path
+    ) -> None:
+        from typing import Any, cast
+
+        from autoskillit.config import (
+            build_config_authoritative_layer,
+            resolve_ingredient_defaults,
+            strip_server_authoritative_overrides,
+        )
+        from autoskillit.fleet.dispatch._lineage import _validate_and_materialize_ingredients
+        from autoskillit.recipe import bind_recipe
+        from autoskillit.recipe.io import load_recipe
+
+        catalog, test = _smoke_case()
+        assert test.recipe is not None and test.recipe_fixture is not None
+        project = tmp_path / "sandbox"
+        recipes = project / ".autoskillit" / "recipes"
+        recipes.mkdir(parents=True)
+        (project / ".autoskillit" / "config.yaml").write_text(
+            "branching:\n  default_base_branch: main\n", encoding="utf-8"
+        )
+        source = Path(harness.__file__).with_name("recipes") / test.recipe_fixture
+        staged = recipes / f"{test.recipe}.yaml"
+        staged.write_bytes(source.read_bytes())
+        recipe = load_recipe(staged)
+        base_branch = recipe.ingredients["base_branch"]
+        assert base_branch.default == "" and base_branch.authority == "config"
+        assert base_branch.required is False
+
+        caller_ingredients = {
+            "source_dir": str(project),
+            "repository": catalog.sandbox_repository,
+            "remote_url": f"https://github.com/{catalog.sandbox_repository}.git",
+            "branch_name": "e2e-smoke-" + "a" * 32,
+            "base_branch": "main",
+        }
+        stripped, stripped_names = strip_server_authoritative_overrides(caller_ingredients)
+        assert stripped_names == frozenset({"base_branch"})
+        defaults = resolve_ingredient_defaults(project)
+        config_layer = build_config_authoritative_layer(defaults)
+        assert config_layer["base_branch"] == "main"
+
+        materialized = _validate_and_materialize_ingredients(
+            effective_ingredients=stripped,
+            full_recipe=recipe,
+            dispatches_dir=tmp_path / "dispatches",
+            campaign_id="e2e-smoke",
+            dispatch_id="smoke-dispatch",
+            provenance=cast(Any, None),
+            state_path=project / ".autoskillit" / "state.json",
+            effective_name=test.recipe,
+            tool_ctx=cast(Any, None),
+        )
+        assert isinstance(materialized, dict)
+        assert "base_branch" not in materialized
+
+        projection = bind_recipe(recipe, ingredient_values={**materialized, **config_layer})
+        invocation = projection.invocations["create_pull_request"]
+        command = next(
+            value.effective_value for value in invocation.mcp_kwargs if value.name == "cmd"
+        )
+        assert invocation.is_valid
+        assert isinstance(command, str) and '--base "main"' in command
+
 
 class TestSandboxSmokeFlow:
     def test_success_verifies_exact_closed_pr_ref_complete_diff_and_canary(

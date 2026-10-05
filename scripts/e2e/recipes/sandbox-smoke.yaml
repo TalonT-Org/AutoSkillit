@@ -25,7 +25,8 @@ ingredients:
     hidden: true
   base_branch:
     description: Sandbox branch targeted by the smoke pull request.
-    required: true
+    default: ""
+    authority: config
     hidden: true
 
 kitchen_rules:

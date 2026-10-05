@@ -32,7 +32,10 @@ from autoskillit.execution.child_outcomes import (
     normalize_backend_name,
 )
 from autoskillit.execution.session import extract_token_usage
-from autoskillit.execution.session.turn_usage import classify_token_measure
+from autoskillit.execution.session.turn_usage import (
+    classify_token_measure,
+    claude_inclusive_input_tokens,
+)
 
 
 def project_child_outcomes(
@@ -284,11 +287,21 @@ def _child_token_usage(
     if backend == "claude_code":
         aggregate, _rows = extract_token_usage(text, provider_used=provider)
         if aggregate is not None:
+            usage = {
+                field: aggregate.get(field, TokenMeasure.unknown().to_dict())
+                for field in CANONICAL_ACCOUNTING_FIELDS
+            }
+            inclusive_input = claude_inclusive_input_tokens(
+                *(
+                    TokenMeasure.from_dict(usage[field]).value
+                    for field in ("input_tokens", "cache_read_tokens", "cache_write_tokens")
+                )
+            )
+            usage["input_tokens"] = classify_token_measure(
+                backend, provider, "input_tokens", inclusive_input
+            ).to_dict()
             return (
-                {
-                    field: aggregate.get(field, TokenMeasure.unknown().to_dict())
-                    for field in CANONICAL_ACCOUNTING_FIELDS
-                },
+                usage,
                 "observed",
             )
         return _unknown_usage(), "unknown"

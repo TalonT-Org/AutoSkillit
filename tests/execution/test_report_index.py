@@ -127,6 +127,81 @@ def _indexed_native_children(index_dir: Path) -> dict[str, dict[str, Any]]:
     }
 
 
+@pytest.mark.parametrize("cache_write", [0, None])
+def test_native_claude_input_is_inclusive_only_with_complete_components(
+    tmp_path: Path, cache_write: int | None
+) -> None:
+    root = tmp_path / "logs"
+    parent_id, child_id = "native-parent", "native-child"
+    root.mkdir()
+    parent_log = root / f"{parent_id}.jsonl"
+    parent_log.write_text("", encoding="utf-8")
+    _write_jsonl(
+        root / "sessions.jsonl",
+        [
+            _basic_session(
+                "parent-key",
+                parent_id,
+                claude_code_log=str(parent_log),
+                session_type="skill",
+                skill_command="/autoskillit:implement-worktree-no-merge",
+            )
+        ],
+    )
+    snapshot = _write_native_child(root, parent_id, child_id, model="child-model")
+    child_snapshot.record_terminal_evidence(
+        snapshot,
+        backend="claude_code",
+        parent_session_id=parent_id,
+        child_id=child_id,
+        evidence_key=f"{child_id}:metadata",
+        evidence={
+            "role": "Explore",
+            "attribution_skill": "implement-worktree-no-merge",
+            "effective_provider": "anthropic",
+            "effective_model": "child-model",
+            "evidence_source": "transcript_metadata",
+        },
+    )
+    usage = {"input_tokens": 12, "output_tokens": 4, "cache_read_input_tokens": 3}
+    if cache_write is not None:
+        usage["cache_creation_input_tokens"] = cache_write
+    line = (
+        json.dumps(
+            {
+                "type": "assistant",
+                "agentId": child_id,
+                "sessionId": parent_id,
+                "requestId": "request-1",
+                "message": {
+                    "id": "message-1",
+                    "model": "child-model",
+                    "content": [],
+                    "usage": usage,
+                },
+            }
+        )
+        + "\n"
+    )
+    (root / parent_id / "subagents" / f"agent-{child_id}.jsonl").write_text(line * 2)
+    index_dir = tmp_path / "index"
+
+    update_report_index(root, index_dir)
+
+    child = _indexed_native_children(index_dir)[child_id]
+    expected = (
+        {"state": "measured", "value": 15}
+        if cache_write is not None
+        else {
+            "state": "unknown",
+            "value": None,
+        }
+    )
+    assert child["token_usage"]["input_tokens"] == expected
+    assert child["token_usage"]["output_tokens"] == {"state": "measured", "value": 4}
+    assert child["token_usage"]["cache_read_tokens"] == {"state": "measured", "value": 3}
+
+
 def test_update_then_read_joins_events_to_sessions(tmp_path: Path) -> None:
     root = tmp_path / "logs"
     session_dir = "session-a"

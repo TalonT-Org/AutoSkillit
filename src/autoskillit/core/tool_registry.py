@@ -7,7 +7,7 @@ will expose that already-compiled channel on ``run_skill``.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from types import MappingProxyType
 
 from ._tool_registry_builders import (
@@ -34,11 +34,20 @@ __all__ = [
     "build_parameter_forwarding_rules",
     "compute_tool_contract_identity",
     "get_tool_def",
+    "food_truck_visibility_tags",
     "runtime_exempt_param_names",
     "unsupported_tool_params",
 ]
 
 _TOOL_CONTRACT_IDENTITY_DOMAIN = "autoskillit:tool-contract:v1:sha256"
+
+
+def food_truck_visibility_tags(packs: Collection[str] | None) -> tuple[str, ...]:
+    """Return kitchen for None; otherwise enable kitchen-core before the supplied packs."""
+    if packs is None:
+        return ("kitchen",)
+    return ("kitchen-core", *packs)
+
 
 # RecipeStep fallbacks for execution-tuning parameters left at their vacancy sentinel.
 # `_run_skill_prepare.py` keeps explicit branches because the sentinels differ by type.

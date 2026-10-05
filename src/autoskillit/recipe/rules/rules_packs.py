@@ -47,7 +47,7 @@ def _food_truck_can_call(tool: str, declared_packs: frozenset[str]) -> bool:
 
     Uses the same ``food_truck_visibility_tags`` decision as the runtime dispatcher.
     """
-    visible_tags = food_truck_visibility_tags(declared_packs or None)
+    visible_tags = frozenset(food_truck_visibility_tags(declared_packs or None))
     if "kitchen" in visible_tags:
         return tool in KITCHEN_GATED_TOOLS | EXPLORATION_TOOLS
     return bool(TOOL_SUBSET_TAGS[tool] & visible_tags)

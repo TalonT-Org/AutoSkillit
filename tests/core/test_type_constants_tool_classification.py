@@ -10,9 +10,9 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 @pytest.mark.parametrize(
     ("packs", "expected"),
     [
-        (None, {"kitchen"}),
-        (set(), {"kitchen-core"}),
-        ({"github"}, {"kitchen-core", "github"}),
+        (None, ("kitchen",)),
+        ([], ("kitchen-core",)),
+        (["github"], ("kitchen-core", "github")),
     ],
 )
 def test_food_truck_visibility_tags(packs, expected) -> None:

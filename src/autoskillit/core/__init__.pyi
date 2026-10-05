@@ -418,6 +418,7 @@ from .tool_registry import TOOL_REGISTRY as TOOL_REGISTRY
 from .tool_registry import all_tool_names as all_tool_names
 from .tool_registry import build_parameter_forwarding_rules as build_parameter_forwarding_rules
 from .tool_registry import compute_tool_contract_identity as compute_tool_contract_identity
+from .tool_registry import food_truck_visibility_tags as food_truck_visibility_tags
 from .tool_registry import get_tool_def as get_tool_def
 from .tool_registry import runtime_exempt_param_names as runtime_exempt_param_names
 from .tool_registry import unsupported_tool_params as unsupported_tool_params
@@ -1399,7 +1400,6 @@ from .types import extract_path_arg as extract_path_arg
 from .types import extract_positional_args as extract_positional_args
 from .types import extract_skill_name as extract_skill_name
 from .types import fleet_error as fleet_error
-from .types import food_truck_visibility_tags as food_truck_visibility_tags
 from .types import group_by_pair as group_by_pair
 from .types import hookdef_session_scope as hookdef_session_scope
 from .types import is_canonical_plugin_artifact_digest as is_canonical_plugin_artifact_digest

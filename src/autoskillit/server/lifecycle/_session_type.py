@@ -100,13 +100,10 @@ def _apply_session_type_visibility() -> None:
                 mcp.enable(tags={"fleet-dispatch"})
         case SessionType.ORCHESTRATOR if _headless:
             tool_tags = os.environ.get(FOOD_TRUCK_TOOL_TAGS_ENV_VAR, "")
-            packs: set[str] | None = None
+            packs: list[str] | None = None
             if tool_tags:
-                packs = set()
-                for pack in tool_tags.split(","):
-                    pack = pack.strip()
-                    if not pack:
-                        continue
+                packs = []
+                for pack in filter(None, map(str.strip, tool_tags.split(","))):
                     if pack not in CATEGORY_TAGS:
                         logger.warning(
                             "Unknown pack %r in AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS"
@@ -115,8 +112,9 @@ def _apply_session_type_visibility() -> None:
                             ", ".join(sorted(CATEGORY_TAGS)),
                         )
                         continue
-                    packs.add(pack)
-            mcp.enable(tags=set(food_truck_visibility_tags(packs)))
+                    packs.append(pack)
+            for tag in food_truck_visibility_tags(packs):
+                mcp.enable(tags={tag})
         case SessionType.SKILL if _headless:
             mcp.enable(tags={"headless"})
             if os.environ.get(HEADLESS_AUTO_GATE_ENV_VAR) == "1":

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Collection, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Literal, NamedTuple
@@ -71,7 +71,6 @@ __all__ = [
     "FLEET_MENU_TOOLS",
     "EXPLORATION_TOOLS",
     "KITCHEN_GATED_TOOLS",
-    "food_truck_visibility_tags",
     "FLEET_ERROR_CODES",
     "EXPLORATION_FAILURE_CODES",
     "BROKER_AUTHORITY_STATUSES",
@@ -617,17 +616,6 @@ EXPLORATION_TOOLS: frozenset[str] = frozenset(
 KITCHEN_GATED_TOOLS: frozenset[str] = (
     GATED_TOOLS - FLEET_TOOLS - EXPLORATION_TOOLS - EVIDENCE_READER_TOOLS
 )
-
-
-def food_truck_visibility_tags(packs: Collection[str] | None) -> frozenset[str]:
-    """Return tags enabled for a food-truck session's validated pack request.
-
-    None means no request and exposes the kitchen surface. An explicit request,
-    even when no valid packs remain, exposes kitchen-core plus the supplied packs.
-    """
-    if packs is None:
-        return frozenset({"kitchen"})
-    return frozenset({"kitchen-core", *packs})
 
 
 ALL_VISIBILITY_TAGS: frozenset[str] = frozenset(

@@ -138,59 +138,8 @@ def test_subprocess_runner_protocol_pty_mode_default_false() -> None:
 
 
 # ---------------------------------------------------------------------------
-# P2-A6 — SubprocessRunner marker_dir and session_id params
+# P2-A6 — SubprocessRunner operation lease parameter
 # ---------------------------------------------------------------------------
-
-
-def test_subprocess_runner_protocol_marker_dir_default_none() -> None:
-    import inspect
-
-    from autoskillit.core import SubprocessRunner
-
-    sig = inspect.signature(SubprocessRunner.__call__)
-    assert sig.parameters["marker_dir"].default is None
-
-
-def test_subprocess_runner_protocol_session_id_default_none() -> None:
-    import inspect
-
-    from autoskillit.core import SubprocessRunner
-
-    sig = inspect.signature(SubprocessRunner.__call__)
-    assert sig.parameters["session_id"].default is None
-
-
-def test_subprocess_runner_protocol_marker_params_after_max_extension() -> None:
-    import inspect
-
-    from autoskillit.core import SubprocessRunner
-
-    sig = inspect.signature(SubprocessRunner.__call__)
-    params = list(sig.parameters)
-    max_ext_idx = params.index("max_extension_seconds")
-    marker_idx = params.index("marker_dir")
-    session_idx = params.index("session_id")
-    assert marker_idx == max_ext_idx + 1, (
-        f"marker_dir must immediately follow max_extension_seconds, "
-        f"got indices {max_ext_idx} and {marker_idx}"
-    )
-    assert session_idx == marker_idx + 1, (
-        f"session_id must immediately follow marker_dir, "
-        f"got indices {marker_idx} and {session_idx}"
-    )
-
-
-def test_subprocess_runner_protocol_marker_params_are_keyword_only() -> None:
-    import inspect
-
-    from autoskillit.core import SubprocessRunner
-
-    sig = inspect.signature(SubprocessRunner.__call__)
-    for name in ("marker_dir", "session_id"):
-        param = sig.parameters[name]
-        assert param.kind == inspect.Parameter.KEYWORD_ONLY, (
-            f"{name} must be keyword-only, got {param.kind.name}"
-        )
 
 
 def test_subprocess_runner_protocol_operation_lease_dir_default_none() -> None:
@@ -202,13 +151,13 @@ def test_subprocess_runner_protocol_operation_lease_dir_default_none() -> None:
     assert sig.parameters["operation_lease_dir"].default is None
 
 
-def test_subprocess_runner_protocol_operation_lease_dir_follows_session_id() -> None:
+def test_subprocess_runner_protocol_operation_lease_dir_follows_max_extension() -> None:
     import inspect
 
     from autoskillit.core import SubprocessRunner
 
     params = list(inspect.signature(SubprocessRunner.__call__).parameters)
-    assert params.index("operation_lease_dir") == params.index("session_id") + 1
+    assert params.index("operation_lease_dir") == params.index("max_extension_seconds") + 1
 
 
 def test_subprocess_runner_protocol_operation_lease_dir_is_keyword_only() -> None:

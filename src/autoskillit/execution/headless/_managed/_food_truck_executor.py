@@ -8,7 +8,6 @@ import uuid
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import replace
-from pathlib import Path
 from typing import cast
 
 import anyio
@@ -233,8 +232,6 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
         provider_name: str = "",
         profile_name: str = "",
         sentinel_contract: str = "",
-        marker_dir: Path | None = None,
-        session_id: str | None = None,
         resume_message: str | None = None,
         backend_authority: BackendAuthority | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
@@ -408,13 +405,6 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
         )
         effective_idle_out = max(float(selected_idle), float(cfg.run_skill.timeout))
         effective_natural_exit_grace_seconds: float = cfg.run_skill.natural_exit_grace_seconds
-        effective_marker_dir: Path | None = marker_dir or (
-            headless_facade._resolve_session_log_dir(
-                cwd, cast(CodingAgentBackend, dispatch_backend)
-            )
-            if cwd
-            else None
-        )
         from autoskillit.execution.session_log.session_log import resolve_log_dir
 
         diagnostic_log_root = resolve_log_dir(cfg.linux_tracing.log_dir)
@@ -533,8 +523,6 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                             max_extension_seconds=effective_max_ext,
                             ceiling_seconds=effective_ceiling_seconds,
                             systemd_scope_enabled=effective_systemd_scope_enabled,
-                            marker_dir=effective_marker_dir,
-                            session_id=session_id,
                             model_identity=model_identity,
                             on_session_id_resolved=on_session_id_resolved,
                             launch_resolver=self._ctx.launch_resolver,

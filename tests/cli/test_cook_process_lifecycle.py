@@ -364,7 +364,7 @@ def test_active_child_extended_until_hard_cap(
     monkeypatch.setattr(
         _session_process,
         "_default_activity",
-        lambda *_args: {"api_connection"},
+        lambda *_args: {"child_processes"},
     )
 
     result = run_cook_attempt(
@@ -531,7 +531,7 @@ def test_lifetime_decision_wins_dispatch_even_when_a_failure_accumulated(
     monkeypatch.setattr(
         _session_process,
         "_default_activity",
-        lambda *_args: {"api_connection"},
+        lambda *_args: {"child_processes"},
     )
     grace_seconds = 0.5
     monkeypatch.setattr(

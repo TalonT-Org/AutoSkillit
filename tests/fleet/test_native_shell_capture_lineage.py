@@ -115,9 +115,9 @@ class TestFoodTruckManagedLineage:
         self, tool_ctx, monkeypatch, tmp_path: Path
     ) -> None:
         _setup_dispatch(tool_ctx, monkeypatch)
-        marker_dir = tmp_path / "markers"
-        marker_dir.mkdir()
-        tool_ctx.backend = _mock_backend_with_locator(project_log_dir=marker_dir)
+        project_log_dir = tmp_path / "project-logs"
+        project_log_dir.mkdir()
+        tool_ctx.backend = _mock_backend_with_locator(project_log_dir=project_log_dir)
 
         result = await _execute(tool_ctx, mode=NativeShellCaptureMode.DIRECT)
 

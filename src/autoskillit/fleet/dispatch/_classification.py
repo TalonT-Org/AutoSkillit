@@ -250,7 +250,7 @@ async def run_outcome_classification(
     prior_dispatched_session_id: str | None,
     resume_session_id: str | None,
     incoming_resume_checkpoint: SessionCheckpoint | None,
-    marker_dir: Path | None,
+    dispatched_log_dir: Path | None,
     effective_backend: CodingAgentBackend | None,
     recipe: str,
     dispatch_sidecar_path: str,
@@ -351,9 +351,8 @@ async def run_outcome_classification(
         provenance=provenance,
     )
 
-    # The orchestrator threads marker_dir through (resolved from
-    # `_locator.project_log_dir` inside run_execution), so we just stringify it.
-    project_log_dir = str(marker_dir) if marker_dir is not None else ""
+    # The orchestrator threads the dispatched backend's log directory through.
+    project_log_dir = str(dispatched_log_dir) if dispatched_log_dir is not None else ""
 
     if (
         resume_session_id

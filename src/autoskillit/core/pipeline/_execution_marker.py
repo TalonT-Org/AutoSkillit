@@ -1,9 +1,7 @@
-"""Markers for run-skill attestation and fleet-dispatch watchdog suppression.
+"""Run-skill invocation markers for fabricated-completion attestation.
 
 The run-skill marker attests a live invocation to the fabricated-completion guard,
-keyed by the exact caller hook session id. It is not a supervisor liveness key;
-run-skill watchdogs use operation leases. Fleet dispatch markers still suppress
-watchdog signals while a dispatch is active.
+keyed by the caller hook session id. Supervisor liveness uses operation leases.
 """
 
 from __future__ import annotations
@@ -45,12 +43,11 @@ async def execution_marker(
     label: str,
     heartbeat_interval: float = 30.0,
 ) -> AsyncGenerator[Path | None]:
-    """Write, heartbeat, and clean up a run-skill or dispatch marker.
+    """Write, heartbeat, and clean up a run-skill attestation marker.
 
     Yields the marker ``Path`` on success, or ``None`` when ``marker_dir`` is
-    ``None`` or the initial write fails. The run-skill marker attests the
-    invocation to the fabricated-completion guard and is not passed to its
-    watchdog. The dispatch marker continues to gate fleet watchdog signals.
+    ``None`` or the initial write fails. The marker attests the invocation to
+    the fabricated-completion guard; it does not signal supervisor liveness.
     """
     if marker_dir is None:
         yield None

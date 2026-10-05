@@ -57,7 +57,7 @@ _WARNING_LEADS: Final[tuple[tuple[float, str], ...]] = (
 
 def _default_activity(pid: int, fd: int | None) -> frozenset[str]:
     """Read process liveness and recent kernel TTY activity."""
-    signals = set(_active_liveness_signals(pid, None, None))
+    signals = set(_active_liveness_signals(pid, operation_lease_dir=None))
     if fd is not None:
         last_activity = terminal_last_activity(fd)
         if last_activity is not None and time.time() - last_activity <= _IDLE_WINDOW_SECONDS:

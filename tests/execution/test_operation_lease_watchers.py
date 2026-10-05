@@ -278,11 +278,16 @@ async def test_session_log_discovery_waits_for_lease_then_uses_timeout_from_loss
 
 
 @pytest.mark.anyio
-async def test_session_log_lease_defers_api_suppression_but_existing_cap_still_fires(
+async def test_session_log_lease_then_child_cpu_respects_heuristic_cap(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(lease_module, "_heartbeat", _blocked_heartbeat)
-    monkeypatch.setattr(process_monitor, "_has_active_api_connection", lambda _pid: True)
+    child_cpu_active = False
+    monkeypatch.setattr(
+        process_monitor,
+        "_has_active_child_processes",
+        lambda _pid: child_cpu_active,
+    )
     log_dir = tmp_path / "logs"
     log_dir.mkdir()
     session_file = log_dir / "child.jsonl"
@@ -297,8 +302,10 @@ async def test_session_log_lease_defers_api_suppression_but_existing_cap_still_f
         assert handle.path is not None
 
         def remove_after_three_ticks(clock: _LeaseClock) -> None:
+            nonlocal child_cpu_active
             if clock.ticks == 3:
                 handle.path.unlink()
+                child_cpu_active = True
 
         clock = _LeaseClock(
             handle.record.started_at_epoch,
@@ -325,13 +332,9 @@ async def test_session_log_lease_defers_api_suppression_but_existing_cap_still_f
         for index, entry in enumerate(logs)
         if entry.get("event") == "stale_deferred_to_operation"
     ]
-    api_events = [
-        index
-        for index, entry in enumerate(logs)
-        if "ESTABLISHED port-443 connection" in str(entry.get("event", ""))
-    ]
     assert operation_events
-    assert api_events and min(api_events) > min(operation_events)
+    assert clock.elapsed == 5
+    assert any("Suppression bounded" in str(entry.get("event", "")) for entry in logs)
 
 
 @pytest.mark.anyio
@@ -463,8 +466,6 @@ async def test_drain_liveness_signals_include_active_operation_lease(tmp_path: P
         registry=InFlightOperations(),
     ):
         assert "operation_lease" in _active_liveness_signals(
-            None,
-            None,
             None,
             operation_lease_dir=tmp_path,
         )

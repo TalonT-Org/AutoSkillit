@@ -32,7 +32,7 @@ Already defined in `core/types/execution/_type_inspector.py`:
 
 - **`InspectorEvidence`** (lines 15–24, frozen dataclass): `idle_seconds`, `stdout_path`,
   `jsonl_lines`, `cpu_trend`, `rss_trend`, `connection_summary`,
-  `execution_marker_present`, `dispatch_context`
+  `operation_lease_active`, `dispatch_context`
 - **`InspectorVerdict`** (lines 27–32, frozen dataclass): `action`, `reasoning`,
   `confidence`, `elapsed_seconds`
 - **`InspectorCallback`** (line 35): `Callable[[InspectorEvidence], Awaitable[InspectorVerdict]]`

@@ -116,6 +116,9 @@ class TestCodexFleetE2E:
         ctx = codex_runtime["tool_ctx"]
         recipes = codex_runtime["recipes"]
         runner: FleetTestRunner = codex_runtime["runner"]
+        runner.project_log_dir_to_check = ctx.backend.session_locator().project_log_dir(
+            str(ctx.project_dir)
+        )
         _add_recipe(recipes, "lease-floor-recipe")
         ctx.config.run_skill.timeout = 3600
         ctx.config.fleet.idle_output_timeout = 1800
@@ -138,6 +141,9 @@ class TestCodexFleetE2E:
             )
 
             call = runner.last_kwargs
+            assert "marker_dir" not in call
+            assert "session_id" not in call
+            assert runner.marker_files_during_call == ()
             channel = call["operation_lease_dir"]
             assert isinstance(channel, Path) and channel.is_absolute()
             assert call["env"]["AUTOSKILLIT_OPERATION_LEASE_DIR"] == str(channel)

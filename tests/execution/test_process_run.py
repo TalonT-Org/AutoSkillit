@@ -21,7 +21,6 @@ import psutil
 import pytest
 import structlog.testing
 
-import autoskillit.execution.process._process_monitor as _patch_process__process_monitor
 from autoskillit.core.types import TerminationReason
 from autoskillit.execution.process import (
     _normalize_pass_fds,
@@ -472,12 +471,6 @@ class TestIdleStallWatchdog:
             """)
         )
 
-        monkeypatch.setattr(
-            _patch_process__process_monitor,
-            "_has_active_api_connection",
-            lambda pid: True,
-        )
-
         start = time.monotonic()
         with anyio.fail_after(15.0):
             result = await run_managed_async(
@@ -495,6 +488,37 @@ class TestIdleStallWatchdog:
 
 
 class TestOperationLeaseLiveness:
+    @pytest.mark.anyio
+    async def test_silent_child_without_lease_stalls_before_suppression_cap(
+        self, tmp_path: Path
+    ) -> None:
+        from autoskillit.core import OPERATION_LEASE_DIR_ENV_VAR
+
+        channel = tmp_path / "leases"
+        channel.mkdir()
+        script = tmp_path / "silent_without_lease.py"
+        script.write_text(
+            "import json, time\n"
+            'print(json.dumps({"type": "assistant", "burst": True}), flush=True)\n'
+            "time.sleep(30)\n"
+        )
+
+        started = time.monotonic()
+        with anyio.fail_after(15):
+            result = await run_managed_async(
+                [sys.executable, str(script)],
+                cwd=tmp_path,
+                timeout=45,
+                idle_output_timeout=2.0,
+                max_suppression_seconds=30.0,
+                operation_lease_dir=channel,
+                env={**os.environ, OPERATION_LEASE_DIR_ENV_VAR: str(channel)},
+            )
+
+        elapsed = time.monotonic() - started
+        assert result.termination == TerminationReason.IDLE_STALL
+        assert elapsed < 12.0, f"IDLE_STALL waited {elapsed:.1f}s despite no active lease"
+
     @pytest.mark.anyio
     async def test_real_lease_keeps_silent_child_alive_past_idle_cap(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -525,12 +549,6 @@ class TestOperationLeaseLiveness:
                 """
             )
         )
-        monkeypatch.setattr(
-            _patch_process__process_monitor,
-            "_has_active_api_connection",
-            lambda _pid: False,
-        )
-
         with structlog.testing.capture_logs() as logs:
             with anyio.fail_after(25):
                 result = await run_managed_async(
@@ -624,12 +642,6 @@ time.sleep(30)
             + textwrap.dedent(setup)
             + "\ntime.sleep(30)\n"
         )
-        monkeypatch.setattr(
-            _patch_process__process_monitor,
-            "_has_active_api_connection",
-            lambda _pid: False,
-        )
-
         started = time.monotonic()
         with anyio.fail_after(20):
             result = await run_managed_async(

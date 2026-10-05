@@ -78,6 +78,8 @@ async def test_run_headless_core_uses_ctx_backend_for_command_construction(minim
     runner_kwargs = mock_runner.call_args.kwargs
     assert runner_kwargs["backend_resume_session_id"] == "backend-resume-id"
     assert runner_kwargs["lifecycle_observation_enabled"] is True
+    assert "marker_dir" not in runner_kwargs
+    assert "session_id" not in runner_kwargs
 
 
 class TestBackendDispatchRouting:

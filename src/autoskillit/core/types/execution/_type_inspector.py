@@ -20,7 +20,7 @@ class InspectorEvidence:
     cpu_trend: tuple[float, ...] = ()
     rss_trend: tuple[float, ...] = ()
     connection_summary: str = ""
-    execution_marker_present: bool = False
+    operation_lease_active: bool = False
     dispatch_context: str = ""
 
 

@@ -21,7 +21,7 @@ from autoskillit.fleet import (
     _write_pid,
     write_initial_state,
 )
-from tests.fleet._helpers import _mock_backend_with_locator, _setup_dispatch
+from tests.fleet._helpers import _setup_dispatch
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -523,140 +523,17 @@ class TestTouchMarker:
             marker_file.chmod(0o644)
 
 
-class TestDispatchMarkerLifecycle:
-    """Tests for marker lifecycle integration in _run_dispatch."""
+@pytest.mark.anyio
+async def test_run_dispatch_continues_when_project_log_dir_unavailable(
+    tool_ctx, monkeypatch
+) -> None:
+    """Dispatch completes when the backend has no session-log locator."""
+    _setup_dispatch(tool_ctx, monkeypatch)
+    tool_ctx.backend = None
 
-    @pytest.mark.anyio
-    async def test_run_dispatch_forwards_marker_dir_and_session_id_to_executor(
-        self, tool_ctx, monkeypatch, tmp_path: Path
-    ) -> None:
-        """dispatch_food_truck is called with marker_dir and session_id kwargs."""
-        _setup_dispatch(tool_ctx, monkeypatch)
-        marker_dir = tmp_path / "markers"
-        marker_dir.mkdir()
-        tool_ctx.backend = _mock_backend_with_locator(project_log_dir=marker_dir)
+    result = await _run(tool_ctx)
 
-        await _run(tool_ctx)
-
-        assert len(tool_ctx.executor.dispatch_calls) == 1
-        call = tool_ctx.executor.dispatch_calls[0]
-        assert call.marker_dir == marker_dir
-        assert call.session_id is not None
-
-    @pytest.mark.anyio
-    async def test_run_dispatch_continues_when_marker_dir_unavailable(
-        self, tool_ctx, monkeypatch
-    ) -> None:
-        """execute_dispatch succeeds even when backend's session_locator is unavailable."""
-        _setup_dispatch(tool_ctx, monkeypatch)
-        tool_ctx.backend = None
-
-        result = await _run(tool_ctx)
-
-        # Should complete without raising (returns DispatchCompleted or DispatchRejected)
-        assert result.get("success") is not None
-
-    @pytest.mark.anyio
-    async def test_run_dispatch_marker_cleaned_up_after_success(
-        self, tool_ctx, monkeypatch, tmp_path: Path
-    ) -> None:
-        """No .marker files remain after successful dispatch."""
-        _setup_dispatch(tool_ctx, monkeypatch)
-        marker_dir = tmp_path / "markers"
-        marker_dir.mkdir()
-        tool_ctx.backend = _mock_backend_with_locator(project_log_dir=marker_dir)
-
-        await _run(tool_ctx)
-
-        remaining = list(marker_dir.glob("*.marker"))
-        assert len(remaining) == 0, f"Expected no marker files, found {remaining}"
-
-    @pytest.mark.anyio
-    async def test_run_dispatch_marker_cleaned_up_after_failure(
-        self, tool_ctx, monkeypatch, tmp_path: Path
-    ) -> None:
-        """No .marker files remain after dispatch raises (caught as DispatchRejected)."""
-        from functools import wraps
-
-        _setup_dispatch(tool_ctx, monkeypatch)
-        marker_dir = tmp_path / "markers"
-        marker_dir.mkdir()
-        tool_ctx.backend = _mock_backend_with_locator(project_log_dir=marker_dir)
-
-        original_dispatch_food_truck = tool_ctx.executor.dispatch_food_truck
-
-        @wraps(original_dispatch_food_truck)
-        async def _raise_dispatch(*args, **kwargs):
-            await original_dispatch_food_truck(*args, **kwargs)
-            raise RuntimeError("dispatch failed")
-
-        tool_ctx.executor.dispatch_food_truck = _raise_dispatch
-
-        result = await _run(tool_ctx)
-
-        # execute_dispatch catches Exception and returns DispatchRejected
-        assert result.get("success") is False, "dispatch should be rejected on failure"
-        remaining = list(marker_dir.glob("*.marker"))
-        assert len(remaining) == 0, f"Expected no marker files after failure, found {remaining}"
-
-    @pytest.mark.anyio
-    async def test_run_dispatch_creates_marker_file(
-        self, tool_ctx, monkeypatch, tmp_path: Path
-    ) -> None:
-        """Marker file is created during dispatch execution."""
-        _setup_dispatch(tool_ctx, monkeypatch)
-        marker_dir = tmp_path / "markers"
-        marker_dir.mkdir()
-        tool_ctx.backend = _mock_backend_with_locator(project_log_dir=marker_dir)
-
-        marker_seen: list[bool] = []
-        original_dispatch = tool_ctx.executor.dispatch_food_truck
-
-        async def _capture_marker(*args, **kwargs):
-            markers_found = list(marker_dir.glob("*.marker"))
-            marker_seen.append(len(markers_found) > 0)
-            return await original_dispatch(*args, **kwargs)
-
-        tool_ctx.executor.dispatch_food_truck = _capture_marker
-
-        await _run(tool_ctx)
-
-        assert len(marker_seen) == 1, "dispatch_food_truck should be called once"
-        assert marker_seen[0] is True, "marker file should exist during dispatch execution"
-
-    @pytest.mark.anyio
-    async def test_run_dispatch_marker_contains_expected_json(
-        self, tool_ctx, monkeypatch, tmp_path: Path
-    ) -> None:
-        """Marker file JSON contains dispatch_id, orchestrator_pid, and session_id."""
-        _setup_dispatch(tool_ctx, monkeypatch)
-        marker_dir = tmp_path / "markers"
-        marker_dir.mkdir()
-        tool_ctx.backend = _mock_backend_with_locator(project_log_dir=marker_dir)
-
-        captured_json: list[dict] = []
-
-        original_dispatch = tool_ctx.executor.dispatch_food_truck
-
-        async def _capture_marker(*args, **kwargs):
-            markers = list(marker_dir.glob("*.marker"))
-            if markers:
-                content = markers[0].read_text()
-                captured_json.append(json.loads(content))
-            return await original_dispatch(*args, **kwargs)
-
-        tool_ctx.executor.dispatch_food_truck = _capture_marker
-
-        await _run(tool_ctx)
-
-        assert len(captured_json) == 1, "should have captured marker JSON"
-        data = captured_json[0]
-        assert "label" in data
-        assert "orchestrator_pid" in data
-        assert "session_id" in data
-        assert isinstance(data["orchestrator_pid"], int)
-        assert isinstance(data["session_id"], str)
-        assert data["label"] == "dispatch"
+    assert result.get("success") is not None
 
 
 class TestWriteDispatchToCampaignStateRefusal:

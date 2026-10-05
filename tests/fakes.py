@@ -747,8 +747,6 @@ class DispatchFoodTruckCall:
     sentinel_contract: str = ""
     profile_name: str = ""
     prior_completion_markers: Sequence[str] | None = None
-    marker_dir: Path | None = None
-    session_id: str | None = None
     resume_message: str | None = None
     on_session_id_resolved: Callable[[str], None] | None = None
     backend_authority: BackendAuthority | None = None
@@ -940,8 +938,6 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         profile_name: str = "",
         sentinel_contract: str = "",
         prior_completion_markers: Sequence[str] | None = None,
-        marker_dir: Path | None = None,
-        session_id: str | None = None,
         resume_message: str | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
         backend_authority: BackendAuthority | None = None,
@@ -978,8 +974,6 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 sentinel_contract=sentinel_contract,
                 profile_name=profile_name,
                 prior_completion_markers=prior_completion_markers,
-                marker_dir=marker_dir,
-                session_id=session_id,
                 resume_message=resume_message,
                 on_session_id_resolved=on_session_id_resolved,
                 backend_authority=backend_authority,

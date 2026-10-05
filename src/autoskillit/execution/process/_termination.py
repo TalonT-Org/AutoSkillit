@@ -86,8 +86,6 @@ async def _drain_before_escalation(
     grace_seconds: float,
     proc_log: structlog.BoundLogger,
     pid: int | None,
-    marker_dir: Path | None,
-    session_id: str | None,
     operation_lease_dir: Path | None = None,
     child_deferral_ceiling: float,
 ) -> tuple[int | None, ProcessCleanupResult] | None:
@@ -109,8 +107,6 @@ async def _drain_before_escalation(
             active = bool(
                 _active_liveness_signals(
                     pid,
-                    marker_dir,
-                    session_id,
                     operation_lease_dir=operation_lease_dir,
                 )
             )
@@ -135,8 +131,6 @@ async def execute_termination_action(
     proc_log: structlog.BoundLogger,
     termination: TerminationReason | None = None,
     pid: int | None = None,
-    marker_dir: Path | None = None,
-    session_id: str | None = None,
     operation_lease_dir: Path | None = None,
     child_deferral_ceiling: float = 0.0,
     process_observation_snapshot: ProcessObservationSnapshot | None = None,
@@ -147,7 +141,7 @@ async def execute_termination_action(
 
     On the DRAIN_THEN_KILL_IF_ALIVE path, when *pid* is provided and
     *child_deferral_ceiling* > 0, the kill is deferred (bounded by the ceiling)
-    while child processes, an API connection, or an execution marker indicate
+    while child processes or an active operation lease indicate
     the subagent is still doing active work — mirroring the stale-kill
     suppression pattern in _session_log_monitor.
 
@@ -169,8 +163,6 @@ async def execute_termination_action(
                 grace_seconds=grace_seconds,
                 proc_log=proc_log,
                 pid=pid,
-                marker_dir=marker_dir,
-                session_id=session_id,
                 operation_lease_dir=operation_lease_dir,
                 child_deferral_ceiling=child_deferral_ceiling,
             )

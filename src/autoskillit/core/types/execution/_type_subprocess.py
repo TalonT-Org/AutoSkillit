@@ -231,16 +231,6 @@ class SubprocessRunner(Protocol):
 
     Parameters
     ----------
-    marker_dir : Path | None
-        Directory containing ``*-in-progress-{session_id}-*.marker`` files.
-        When non-None, the session log monitor checks for active execution markers
-        before issuing stale-kill signals, suppressing kills while a fleet dispatch
-        or run_skill call is in progress. Default ``None`` (no suppression).
-    session_id : str | None
-        Caller's session identity, used to scope execution-marker glob patterns to
-        the originating session. Threaded from fleet dispatch / run_skill through
-        headless execution to ``_session_log_monitor``'s ``caller_session_id`` parameter.
-        Default ``None`` (match any marker).
     operation_lease_dir : Path | None
         Per-attempt directory containing the supervised child's in-flight tool leases.
         The channel is shared with the child through its environment.
@@ -272,8 +262,6 @@ class SubprocessRunner(Protocol):
         on_pid_resolved: Callable[[int, int], None] | None = None,
         enable_deadline_extension: bool = False,
         max_extension_seconds: float = 7200,
-        marker_dir: Path | None = None,
-        session_id: str | None = None,
         operation_lease_dir: Path | None = None,
         stream_parser: Any | None = None,
         completion_record_types: frozenset[str] = frozenset({"result"}),

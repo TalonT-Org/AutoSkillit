@@ -45,9 +45,7 @@ _EXPECTED_PROCESS_SYMBOLS: frozenset[str] = frozenset(
         "_resolve_session_id",
         "RaceAccumulator",
         "RaceSignals",
-        "_has_active_api_connection",
         "_has_active_child_processes",
-        "_has_active_execution_marker",
         "_heartbeat",
         "_jsonl_contains_marker",
         "_jsonl_has_record_type",
@@ -160,11 +158,8 @@ def test_process_io_exports():
 
 
 def test_process_monitor_exports():
-    """_heartbeat, _session_log_monitor, and _has_active_api_connection
-    are defined in _process_monitor submodule."""
+    """_heartbeat and _session_log_monitor are defined in _process_monitor submodule."""
     from autoskillit.execution.process._process_monitor import (
-        _has_active_api_connection,
-        _has_active_execution_marker,
         _heartbeat,
         _session_log_monitor,
     )
@@ -173,14 +168,6 @@ def test_process_monitor_exports():
     assert _heartbeat.__module__ == "autoskillit.execution.process._process_monitor"
     assert callable(_session_log_monitor)
     assert _session_log_monitor.__module__ == "autoskillit.execution.process._process_monitor"
-    assert callable(_has_active_api_connection)
-    assert (
-        _has_active_api_connection.__module__ == "autoskillit.execution.process._process_monitor"
-    )
-    assert callable(_has_active_execution_marker)
-    assert (
-        _has_active_execution_marker.__module__ == "autoskillit.execution.process._process_monitor"
-    )
 
 
 def test_process_race_exports():
@@ -338,8 +325,6 @@ def test_race_enrollment_uses_supplied_watchers(
         session_id_timeout=1.0,
         stdout_session_id_ready=stdout_session_id_ready,
         max_suppression_seconds=None,
-        marker_dir=None,
-        session_id=None,
         on_session_id_resolved=None,
         backend_resume_session_id="",
         channel_b_selected=channel_b_selected,

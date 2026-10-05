@@ -48,7 +48,7 @@ async def handle_cancellation(
     effective_name: str,
     managed_lineage_ref: ManagedHeadlessSessionLineageRef,
     provenance: DispatchProvenanceTracker,
-    marker_dir: Path | None,
+    dispatched_log_dir: Path | None,
     state_path: Path,
 ) -> NoReturn:
     """Phase D handler for asyncio.CancelledError.
@@ -125,7 +125,9 @@ async def handle_cancellation(
                     effective_name,
                     reason="signal_induced_cancellation",
                     dispatched_session_id=captured_session_id,
-                    dispatched_session_log_dir=str(marker_dir) if marker_dir is not None else "",
+                    dispatched_session_log_dir=(
+                        str(dispatched_log_dir) if dispatched_log_dir is not None else ""
+                    ),
                     effect_provenance=provenance.snapshot().to_dict(),
                 )
         except Exception:

@@ -153,29 +153,6 @@ async def _heartbeat(
             return "completion"
 
 
-def _has_active_api_connection(pid: int) -> bool:
-    """Return True if the process tree rooted at `pid` has an ESTABLISHED TCP
-    connection to port 443 (the Anthropic API endpoint).
-
-    Used by _session_log_monitor to suppress stale-kill when a long-running
-    API streaming call is in-flight.
-    """
-    try:
-        parent = psutil.Process(pid)
-        for proc in [parent] + parent.children(recursive=True):
-            try:
-                get_conns = getattr(proc, "net_connections", proc.connections)
-                conns = get_conns(kind="tcp")
-                for conn in conns:
-                    if conn.status == "ESTABLISHED" and conn.raddr and conn.raddr.port == 443:
-                        return True
-            except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
-                continue
-    except psutil.NoSuchProcess:
-        pass
-    return False
-
-
 _CPU_ACTIVE_THRESHOLD: float = 10.0  # percent; evidence of actual computational work
 
 # Cached Process objects keyed by PID so cpu_percent(interval=0) returns
@@ -225,31 +202,6 @@ def _has_active_child_processes(pid: int) -> bool:
         _child_process_cache.pop(stale_pid, None)
 
     return active
-
-
-def _has_active_execution_marker(
-    marker_dir: Path,
-    session_id: str | None = None,
-    max_marker_age: float = 60.0,
-) -> bool:
-    """Return True if any execution-in-progress marker was touched within max_marker_age secs."""
-    try:
-        now = time.time()
-        pattern = (
-            f"*-in-progress-{session_id}-*.marker"
-            if session_id is not None
-            else "*-in-progress-*.marker"
-        )
-        for p in marker_dir.glob(pattern):
-            try:
-                st = p.stat()
-                if now - st.st_mtime <= max_marker_age:
-                    return True
-            except OSError:
-                continue
-    except OSError:
-        pass
-    return False
 
 
 def _select_session_log_file(
@@ -345,29 +297,18 @@ async def _discover_session_log(
     return session_file
 
 
-StaleSuppressionReason = Literal[
-    "pending_tasks", "api_connection", "child_processes", "dispatch_marker"
-]
+StaleSuppressionReason = Literal["pending_tasks", "child_processes"]
 
 
 def _active_liveness_signals(
     pid: int | None,
-    marker_dir: Path | None,
-    session_id: str | None,
     *,
     operation_lease_dir: Path | None = None,
 ) -> frozenset[str]:
-    """Return active network, child, marker, and operation-lease signals.
-
-    The same evidence set is used by the termination drain and the session monitor.
-    """
+    """Return active child-CPU and operation-lease signals."""
     signals: set[str] = set()
-    if pid is not None and _has_active_api_connection(pid):
-        signals.add("api_connection")
     if pid is not None and _has_active_child_processes(pid):
         signals.add("child_processes")
-    if marker_dir is not None and _has_active_execution_marker(marker_dir, session_id=session_id):
-        signals.add("dispatch_marker")
     if operation_lease_dir is not None and read_active_operation_leases(
         operation_lease_dir, now_epoch=time.time()
     ):
@@ -378,19 +319,13 @@ def _active_liveness_signals(
 def _stale_suppression_reason(
     has_pending_tasks: Callable[[], bool] | None,
     pid: int | None,
-    marker_dir: Path | None,
-    caller_session_id: str | None,
 ) -> StaleSuppressionReason | None:
     """Return the first active stale-suppression cause in priority order."""
     if has_pending_tasks is not None and has_pending_tasks():
         return "pending_tasks"
-    active = _active_liveness_signals(pid, marker_dir, caller_session_id)
-    if "api_connection" in active:
-        return "api_connection"
+    active = _active_liveness_signals(pid)
     if "child_processes" in active:
         return "child_processes"
-    if "dispatch_marker" in active:
-        return "dispatch_marker"
     return None
 
 
@@ -400,24 +335,11 @@ def _continue_stale_suppression(
     max_suppression_seconds: float,
     elapsed: float,
     pid: int | None,
-    marker_dir: Path | None,
-    caller_session_id: str | None,
 ) -> tuple[float, float | None]:
     """Advance one active suppression window and log its cause-specific outcome."""
     if suppression_start is None:
         suppression_start = time.monotonic()
-    if reason == "dispatch_marker":
-        suppression_elapsed = time.monotonic() - suppression_start
-        if suppression_elapsed >= max_suppression_seconds:
-            logger.warning(
-                "Suppression bounded: stale kill after dispatch marker "
-                "suppression exceeded max_suppression_seconds",
-                suppression_elapsed=suppression_elapsed,
-                caller_session_id=caller_session_id,
-                marker_dir=str(marker_dir),
-            )
-            return suppression_start, None
-    elif time.monotonic() - suppression_start >= max_suppression_seconds:
+    if time.monotonic() - suppression_start >= max_suppression_seconds:
         if reason != "pending_tasks":
             logger.warning(
                 "Suppression bounded: stale kill after %.0fs consecutive "
@@ -428,26 +350,12 @@ def _continue_stale_suppression(
             )
         return suppression_start, None
     last_change = time.monotonic()
-    if reason == "api_connection":
-        logger.warning(
-            "JSONL silent for %.0fs but ESTABLISHED port-443 connection — "
-            "suppressing stale kill (pid=%d)",
-            elapsed,
-            pid,
-        )
-    elif reason == "child_processes":
+    if reason == "child_processes":
         logger.warning(
             "JSONL silent for %.0fs but child processes are CPU-active — "
             "suppressing stale kill (pid=%d)",
             elapsed,
             pid,
-        )
-    elif reason == "dispatch_marker":
-        logger.warning(
-            "JSONL silent but active dispatch marker found — suppressing stale kill",
-            stale_elapsed=elapsed,
-            caller_session_id=caller_session_id,
-            marker_dir=str(marker_dir),
         )
     return suppression_start, last_change
 
@@ -465,8 +373,6 @@ async def _session_log_monitor(
     _on_poll: Callable[[], None] | None = None,
     expected_session_id: str | None = None,
     max_suppression_seconds: float = 1800.0,
-    marker_dir: Path | None = None,
-    caller_session_id: str | None = None,
     resume_cursor: EventCursor | None = None,
     on_session_file_selected: Callable[[Path, EventCursor], None] | None = None,
     has_pending_tasks: Callable[[], bool] | None = None,
@@ -585,9 +491,7 @@ async def _session_log_monitor(
         else:
             elapsed = now - last_change
             if elapsed >= stale_threshold:
-                reason = _stale_suppression_reason(
-                    has_pending_tasks, pid, marker_dir, caller_session_id
-                )
+                reason = _stale_suppression_reason(has_pending_tasks, pid)
                 if reason is None:
                     return SessionMonitorResult(
                         ChannelBStatus.STALE,
@@ -601,8 +505,6 @@ async def _session_log_monitor(
                     max_suppression_seconds,
                     elapsed,
                     pid,
-                    marker_dir,
-                    caller_session_id,
                 )
                 if next_last_change is None:
                     return SessionMonitorResult(

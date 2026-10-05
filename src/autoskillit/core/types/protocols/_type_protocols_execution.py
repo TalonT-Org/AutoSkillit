@@ -406,8 +406,6 @@ class HeadlessExecutor(Protocol):
         provider_name: str = "",
         profile_name: str = "",
         sentinel_contract: str = "",
-        marker_dir: Path | None = None,
-        session_id: str | None = None,
         resume_message: str | None = None,
         backend_authority: BackendAuthority | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,

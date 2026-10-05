@@ -158,6 +158,8 @@ class FleetTestRunner:
         self.last_pass_fds: tuple[int, ...] = ()
         self.last_kwargs: dict[str, Any] = {}
         self.operation_lease_dir_exists_during_call = False
+        self.project_log_dir_to_check: Path | None = None
+        self.marker_files_during_call: tuple[Path, ...] = ()
 
     async def __call__(
         self,
@@ -184,6 +186,11 @@ class FleetTestRunner:
         self.call_count += 1
         self.last_pass_fds = pass_fds
         self.last_kwargs = {**kwargs, "env": env, "cwd": cwd, "timeout": timeout}
+        self.marker_files_during_call = (
+            tuple(sorted(self.project_log_dir_to_check.glob("*-in-progress-*.marker")))
+            if self.project_log_dir_to_check is not None
+            else ()
+        )
         operation_lease_dir = kwargs.get("operation_lease_dir")
         self.operation_lease_dir_exists_during_call = (
             isinstance(operation_lease_dir, Path) and operation_lease_dir.is_dir()
@@ -477,6 +484,10 @@ async def test_food_truck_lease_channel_and_l2_idle_floor_on_claude(
     runtime.add_recipe("lease-floor-recipe")
     runtime.tool_ctx.config.run_skill.timeout = 3600
     runtime.tool_ctx.config.fleet.idle_output_timeout = 1800
+    project_log_dir = runtime.tool_ctx.backend.session_locator().project_log_dir(
+        str(runtime.tool_ctx.project_dir)
+    )
+    runtime.runner.project_log_dir_to_check = project_log_dir
     channels: list[Path] = []
 
     for dispatch_name, override, expected_idle in (
@@ -491,6 +502,9 @@ async def test_food_truck_lease_channel_and_l2_idle_floor_on_claude(
         assert result["success"] is True
 
         call = runtime.runner.last_kwargs
+        assert "marker_dir" not in call
+        assert "session_id" not in call
+        assert runtime.runner.marker_files_during_call == ()
         channel = call["operation_lease_dir"]
         assert isinstance(channel, Path) and channel.is_absolute()
         assert call["env"]["AUTOSKILLIT_OPERATION_LEASE_DIR"] == str(channel)

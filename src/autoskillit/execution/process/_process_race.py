@@ -376,8 +376,6 @@ async def _watch_session_log(
     _session_id_timeout: float = 1.0,
     stdout_session_id_ready: anyio.Event | None = None,
     max_suppression_seconds: float | None = None,
-    marker_dir: Path | None = None,
-    session_id: str | None = None,
     on_session_id_resolved: Callable[[str], None] | None = None,
     backend_resume_session_id: str = "",
     channel_b_selected: anyio.Event | None = None,
@@ -415,12 +413,8 @@ async def _watch_session_log(
     _monitor_kwargs["on_session_file_selected"] = _selected
     if max_suppression_seconds is not None:
         _monitor_kwargs["max_suppression_seconds"] = max_suppression_seconds
-    if marker_dir is not None:
-        _monitor_kwargs["marker_dir"] = marker_dir
     if operation_lease_dir is not None:
         _monitor_kwargs["operation_lease_dir"] = operation_lease_dir
-    if session_id is not None:
-        _monitor_kwargs["caller_session_id"] = session_id
     monitor_result = await _session_log_monitor(
         session_log_dir,
         completion_marker,

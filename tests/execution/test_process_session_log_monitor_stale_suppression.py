@@ -1,12 +1,13 @@
-"""TCP/CPU stale suppression gate and bounded suppression tests for _session_log_monitor."""
+"""Lease and child-activity stale suppression tests for _session_log_monitor."""
 
 from __future__ import annotations
 
 import time
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
 
 import anyio
+import psutil
 import pytest
 
 import autoskillit.execution.process._process_monitor as _patch_process__process_monitor
@@ -17,41 +18,59 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
 class TestSessionLogMonitorStaleSuppressionGate:
-    """_session_log_monitor suppresses stale when process has an active port-443 connection."""
+    """Staleness is deferred only by operation leases or active child work."""
 
     @pytest.mark.anyio
-    async def test_suppresses_stale_when_port_443_connection_active(self, tmp_path):
+    async def test_network_connection_without_lease_does_not_suppress_stale(
+        self, tmp_path, monkeypatch
+    ):
         session_file = tmp_path / "session.jsonl"
         session_file.write_text("")
         spawn_time = time.time() - 10
+        channel = tmp_path / "leases"
+        channel.mkdir()
 
-        call_count = {"n": 0}
+        class ConnectedProcess:
+            def __init__(self, pid: int) -> None:
+                self.pid = pid
 
-        def side_effect(pid):
-            call_count["n"] += 1
-            return call_count["n"] == 1  # True on first call, False on second
+            def children(self, recursive: bool = False) -> list[object]:
+                return []
 
-        with patch.object(
-            _patch_process__process_monitor,
-            "_has_active_api_connection",
-            side_effect=side_effect,
-        ):
-            with anyio.fail_after(5.0):
-                result = await _session_log_monitor(
-                    tmp_path,
-                    "DONE",
-                    stale_threshold=0.05,
-                    spawn_time=spawn_time,
-                    pid=99999,
-                    _phase1_poll=0.01,
-                    _phase2_poll=0.05,
-                )
+            def connections(self, kind: str | None = None) -> list[SimpleNamespace]:
+                return [
+                    SimpleNamespace(
+                        status=psutil.CONN_ESTABLISHED,
+                        raddr=SimpleNamespace(port=443),
+                    )
+                ]
+
+            net_connections = connections
+
+        monkeypatch.setattr(_patch_process__process_monitor.psutil, "Process", ConnectedProcess)
+        monkeypatch.setattr(
+            _patch_process__process_monitor, "_has_active_child_processes", lambda _pid: False
+        )
+        started = time.monotonic()
+        with anyio.fail_after(2.0):
+            result = await _session_log_monitor(
+                tmp_path,
+                "DONE",
+                stale_threshold=0.05,
+                spawn_time=spawn_time,
+                pid=99999,
+                _phase1_poll=0.01,
+                _phase2_poll=0.05,
+                max_suppression_seconds=30.0,
+                operation_lease_dir=channel,
+            )
+        elapsed = time.monotonic() - started
         assert result.status == ChannelBStatus.STALE
-        assert call_count["n"] == 2
+        assert elapsed < 0.5
 
     @pytest.mark.anyio
-    async def test_fires_stale_immediately_when_no_api_connection(self, tmp_path):
-        """Standard stale: file silent, no pid provided, stale fires as before."""
+    async def test_fires_stale_without_an_operation_lease(self, tmp_path):
+        """A silent log with no process evidence fires stale."""
         session_file = tmp_path / "session.jsonl"
         session_file.write_text("")
         spawn_time = time.time() - 10
@@ -68,95 +87,17 @@ class TestSessionLogMonitorStaleSuppressionGate:
         assert result.status == ChannelBStatus.STALE
 
     @pytest.mark.anyio
-    async def test_fires_stale_when_pid_is_none_regardless_of_tcp(self, tmp_path):
-        """pid=None bypasses TCP check entirely — existing behavior preserved."""
-        session_file = tmp_path / "session.jsonl"
-        session_file.write_text("")
-        spawn_time = time.time() - 10
-
-        with patch.object(
-            _patch_process__process_monitor, "_has_active_api_connection"
-        ) as mock_tcp:
-            with anyio.fail_after(2.0):
-                result = await _session_log_monitor(
-                    tmp_path,
-                    "DONE",
-                    stale_threshold=0.05,
-                    spawn_time=spawn_time,
-                    pid=None,
-                    _phase1_poll=0.01,
-                    _phase2_poll=0.05,
-                )
-        assert result.status == ChannelBStatus.STALE
-        mock_tcp.assert_not_called()
-
-    @pytest.mark.anyio
-    async def test_suppression_emits_warning(self, tmp_path, capsys):
-        """A suppression event must log a warning with elapsed time."""
-        import structlog
-
-        session_file = tmp_path / "session.jsonl"
-        session_file.write_text("")
-        spawn_time = time.time() - 10
-
-        calls = {"n": 0}
-
-        def side_effect(pid):
-            calls["n"] += 1
-            return calls["n"] == 1
-
-        with patch.object(
-            _patch_process__process_monitor,
-            "_has_active_api_connection",
-            side_effect=side_effect,
-        ):
-            with structlog.testing.capture_logs() as logs:
-                with anyio.fail_after(5.0):
-                    await _session_log_monitor(
-                        tmp_path,
-                        "DONE",
-                        stale_threshold=0.05,
-                        spawn_time=spawn_time,
-                        pid=99999,
-                        _phase1_poll=0.01,
-                        _phase2_poll=0.05,
-                    )
-        # capture_logs() intercepts when structlog is in default state.
-        # In a parallel worker where configure_logging() ran in a prior test,
-        # bound loggers may use a stale processor reference and write to stdout.
-        _io = capsys.readouterr()
-        captured = _io.out + _io.err
-        warning_in_logs = any(
-            "port-443" in str(log.get("event", "")) or "ESTABLISHED" in str(log.get("event", ""))
-            for log in logs
-        )
-        warning_in_stdout = "port-443" in captured or "ESTABLISHED" in captured
-        assert warning_in_logs or warning_in_stdout, (
-            "Suppression warning must appear in structlog capture or stdout"
-        )
-
-    @pytest.mark.anyio
-    async def test_suppresses_stale_when_child_cpu_active_no_api_connection(
-        self, tmp_path, monkeypatch
-    ):
-        """Child CPU activity suppresses stale kill even when no port-443 connection."""
+    async def test_suppresses_stale_when_child_cpu_active(self, tmp_path, monkeypatch):
+        """Child CPU activity continues to suppress stale kill."""
         session_file = tmp_path / "session.jsonl"
         session_file.write_text("")
         spawn_time = time.time() - 10  # wall time — compared against st_ctime in phase 1
         call_count: dict[str, int] = {"cpu": 0}
 
-        def fake_api_conn(pid):
-            return False  # No port-443 connection
-
         def fake_child_cpu(pid):
             call_count["cpu"] += 1
             return call_count["cpu"] == 1  # True first, False second
 
-        monkeypatch.setattr(
-            _patch_process__process_monitor,
-            "_has_active_api_connection",
-            fake_api_conn,
-        )
         monkeypatch.setattr(
             _patch_process__process_monitor,
             "_has_active_child_processes",
@@ -175,21 +116,61 @@ class TestSessionLogMonitorStaleSuppressionGate:
         assert result.status == ChannelBStatus.STALE
         assert call_count["cpu"] == 2  # suppressed once, then fired
 
+    @pytest.mark.anyio
+    async def test_real_operation_lease_defers_stale_until_lease_ends(self, tmp_path):
+        import structlog.testing
+
+        from autoskillit.core import InFlightOperations, operation_lease
+
+        session_file = tmp_path / "session.jsonl"
+        session_file.write_text("")
+        channel = tmp_path / "leases"
+        channel.mkdir()
+        ticks = {"count": 0}
+
+        async with operation_lease(
+            channel,
+            operation="run_skill",
+            not_after_epoch=time.time() + 60,
+            registry=InFlightOperations(),
+            heartbeat_interval=10000,
+        ) as handle:
+
+            def end_lease_after_three_polls() -> None:
+                ticks["count"] += 1
+                if ticks["count"] == 3 and handle.path is not None:
+                    handle.path.unlink()
+
+            with structlog.testing.capture_logs() as logs:
+                with anyio.fail_after(2.0):
+                    result = await _session_log_monitor(
+                        tmp_path,
+                        "DONE",
+                        stale_threshold=0.05,
+                        spawn_time=time.time() - 10,
+                        _phase1_poll=0.01,
+                        _phase2_poll=0.01,
+                        _on_poll=end_lease_after_three_polls,
+                        max_suppression_seconds=30.0,
+                        operation_lease_dir=channel,
+                    )
+
+        assert result.status is ChannelBStatus.STALE
+        assert any(log.get("event") == "stale_deferred_to_operation" for log in logs)
+
 
 class TestStaleSuppressionBounded:
     """Bounded suppression: max_suppression_seconds caps stale deferral."""
 
     @pytest.mark.anyio
     async def test_stale_suppression_bounded_by_max_duration(self, tmp_path, monkeypatch):
-        """Stale fires after max_suppression_seconds despite ESTABLISHED connection."""
+        """The existing cap still bounds deferral for active child processes."""
         session_file = tmp_path / "session.jsonl"
         session_file.write_text("")
         spawn_time = time.time() - 10
 
         monkeypatch.setattr(
-            _patch_process__process_monitor,
-            "_has_active_api_connection",
-            lambda pid: True,
+            _patch_process__process_monitor, "_has_active_child_processes", lambda _pid: True
         )
 
         with anyio.fail_after(8.0):
@@ -211,12 +192,6 @@ class TestStaleSuppressionBounded:
         session_file = tmp_path / "session.jsonl"
         session_file.write_text("")
         spawn_time = time.time() - 10
-
-        monkeypatch.setattr(
-            _patch_process__process_monitor,
-            "_has_active_api_connection",
-            lambda pid: True,
-        )
 
         async def write_activity() -> None:
             import json as _json
@@ -256,9 +231,7 @@ class TestStaleSuppressionBounded:
         spawn_time = time.time() - 10
 
         monkeypatch.setattr(
-            _patch_process__process_monitor,
-            "_has_active_api_connection",
-            lambda pid: True,
+            _patch_process__process_monitor, "_has_active_child_processes", lambda _pid: True
         )
 
         with anyio.fail_after(8.0):
@@ -279,124 +252,6 @@ class TestStaleSuppressionBounded:
         bounded_in_logs = any("Suppression bounded" in str(log.get("event", "")) for log in logs)
         bounded_in_stdout = "Suppression bounded" in captured
         assert bounded_in_logs or bounded_in_stdout
-
-    @pytest.mark.anyio
-    async def test_shared_suppression_timer_prevents_chaining(self, tmp_path, monkeypatch):
-        """Switching suppression gates (API → marker) does not chain independent timers.
-
-        Keeping the API gate active until the shared deadline is nearly exhausted
-        makes an incorrectly restarted marker timer add the full suppression window.
-        """
-        session_file = tmp_path / "session.jsonl"
-        session_file.write_text("")
-        spawn_time = time.time() - 10
-
-        call_count = {"n": 0}
-
-        def _api_conn(pid):
-            call_count["n"] += 1
-            return call_count["n"] <= 6
-
-        monkeypatch.setattr(
-            _patch_process__process_monitor,
-            "_has_active_api_connection",
-            _api_conn,
-        )
-        monkeypatch.setattr(
-            _patch_process__process_monitor,
-            "_has_active_child_processes",
-            lambda pid: False,
-        )
-
-        (tmp_path / "dispatch-in-progress-some-uuid.marker").write_text("{}")
-
-        suppression_start = time.monotonic()
-        with anyio.fail_after(8.0):
-            result = await _session_log_monitor(
-                tmp_path,
-                "DONE",
-                stale_threshold=0.05,
-                spawn_time=spawn_time,
-                pid=9999,
-                _phase1_poll=0.01,
-                _phase2_poll=0.05,
-                max_suppression_seconds=0.3,
-                marker_dir=tmp_path,
-                caller_session_id=None,
-            )
-        elapsed = time.monotonic() - suppression_start
-
-        assert result.status == ChannelBStatus.STALE
-        assert elapsed <= 0.55, f"elapsed {elapsed:.2f}s exceeds 0.55s — timer may have chained"
-        assert elapsed >= 0.15, (
-            f"elapsed {elapsed:.2f}s below 0.15s — suppression may not have fired"
-        )
-
-
-class TestExecutionMarkerSuppression:
-    """Execution marker (run-skill-in-progress-*) suppression for _session_log_monitor.
-
-    Covers the run_skill MCP tool blind spot: markers named run-skill-in-progress-*
-    must suppress stale kills just like dispatch-in-progress-* markers.
-    """
-
-    @pytest.mark.anyio
-    async def test_execution_marker_suppression_bounded_by_max_suppression_seconds(self, tmp_path):
-        """Stale fires after max_suppression_seconds despite fresh run-skill marker.
-
-        Failing before implementation: run-skill-in-progress-* marker is invisible to
-        dispatch-in-progress-* glob, so STALE fires immediately (elapsed << max_suppression).
-        After fix: marker found, suppression active, fires only after max_suppression_seconds.
-        """
-        session_file = tmp_path / "abc123.jsonl"
-        session_file.write_text(
-            '{"type": "assistant", "message": {"role": "assistant", "content": "working"}}\n'
-        )
-        spawn_time = time.time() - 1
-
-        marker_dir = tmp_path / "marker_dir"
-        marker_dir.mkdir()
-        marker_path = marker_dir / "run-skill-in-progress-caller-session-step1.marker"
-        marker_path.write_text("{}")
-
-        max_suppression = 0.3
-
-        async def touch_marker() -> None:
-            for _ in range(200):
-                await anyio.sleep(0.02)
-                try:
-                    marker_path.touch()
-                except OSError:
-                    break
-
-        start = time.monotonic()
-        with anyio.fail_after(5.0):
-            async with anyio.create_task_group() as tg:
-                tg.start_soon(touch_marker)
-                result = await _session_log_monitor(
-                    tmp_path,
-                    "DONE",
-                    stale_threshold=0.05,
-                    spawn_time=spawn_time,
-                    marker_dir=marker_dir,
-                    caller_session_id="caller-session",
-                    _phase1_poll=0.01,
-                    _phase2_poll=0.05,
-                    max_suppression_seconds=max_suppression,
-                )
-                tg.cancel_scope.cancel()
-
-        elapsed = time.monotonic() - start
-        assert result.status == ChannelBStatus.STALE
-        assert elapsed >= max_suppression, (
-            f"STALE fired after {elapsed:.3f}s, expected >= {max_suppression}s. "
-            "run-skill execution marker suppression not working — "
-            "marker may not be matched by the glob pattern."
-        )
-        assert elapsed < 5.0, (
-            f"STALE fired after {elapsed:.3f}s — expected prompt firing after "
-            f"max_suppression={max_suppression}s, not near the 5s timeout ceiling."
-        )
 
 
 class TestExecutionMarkerLifecycle:

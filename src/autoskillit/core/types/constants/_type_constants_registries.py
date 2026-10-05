@@ -617,6 +617,7 @@ KITCHEN_GATED_TOOLS: frozenset[str] = (
     GATED_TOOLS - FLEET_TOOLS - EXPLORATION_TOOLS - EVIDENCE_READER_TOOLS
 )
 
+
 ALL_VISIBILITY_TAGS: frozenset[str] = frozenset(
     {
         "kitchen",

@@ -236,6 +236,7 @@ class TestValidateRecipeTool:
         script.write_text(
             "name: semantic-test\n"
             "description: Has model on non-skill step\n"
+            "requires_packs: [kitchen-core]\n"
             "kitchen_rules:\n"
             "  - test\n"
             "steps:\n"

@@ -104,26 +104,6 @@ EXEMPTIONS: dict[ExemptionKey, str] = {
         "batch_cleanup_clones",
         CatalogContext.INTERACTIVE_ORCHESTRATOR,
     ): "#5179: fleet mutation tool is hidden from interactive orchestrators",
-    (
-        "recipe:research:check_review_posted",
-        "verify_review_receipt",
-        CatalogContext.FOOD_TRUCK,
-    ): "#5178: recipe does not declare the github pack",
-    (
-        "recipe:research:check_audit_review_posted",
-        "verify_review_receipt",
-        CatalogContext.FOOD_TRUCK,
-    ): "#5178: recipe does not declare the github pack",
-    (
-        "recipe:research-review:check_review_posted",
-        "verify_review_receipt",
-        CatalogContext.FOOD_TRUCK,
-    ): "#5178: recipe does not declare the github pack",
-    (
-        "recipe:research-review:check_audit_review_posted",
-        "verify_review_receipt",
-        CatalogContext.FOOD_TRUCK,
-    ): "#5178: recipe does not declare the github pack",
 }
 
 

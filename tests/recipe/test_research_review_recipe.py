@@ -31,7 +31,7 @@ class TestResearchReviewRecipe:
         assert recipe.categories == ["research-family"]
 
     def test_requires_packs(self, recipe) -> None:
-        assert set(recipe.requires_packs) == {"research", "exp-lens", "vis-lens"}
+        assert set(recipe.requires_packs) == {"research", "exp-lens", "vis-lens", "github"}
 
     def test_no_autoskillit_version(self) -> None:
         path = builtin_recipes_dir() / "research-review.yaml"

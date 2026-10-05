@@ -6,7 +6,8 @@ from dataclasses import replace
 
 import pytest
 
-from autoskillit.core import Severity
+import autoskillit.recipe  # noqa: F401 -- triggers rule registration
+from autoskillit.core import TOOL_SUBSET_TAGS, Severity
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep
@@ -43,6 +44,18 @@ def _make_recipe_with_run_skill(
     )
 
 
+def _make_recipe_with_tool(
+    requires_packs: list[str], tool: str, step_name: str = "call_it"
+) -> Recipe:
+    return Recipe(
+        name="test",
+        description="test recipe",
+        version="0.7.2",
+        requires_packs=requires_packs,
+        steps={step_name: RecipeStep(tool=tool)},
+    )
+
+
 # ----------------------------------------------------------------------
 # unknown-required-pack tests
 # ----------------------------------------------------------------------
@@ -50,7 +63,6 @@ def _make_recipe_with_run_skill(
 
 def test_unknown_pack_produces_error():
     """Pack name not in PACK_REGISTRY produces an ERROR finding."""
-    import autoskillit.recipe  # noqa: F401 -- triggers rule registration
 
     recipe = _make_recipe(["nonexistent-pack"])
     findings = [f for f in run_semantic_rules(recipe) if f.rule == "unknown-required-pack"]
@@ -61,7 +73,6 @@ def test_unknown_pack_produces_error():
 
 def test_known_pack_produces_no_finding():
     """Known pack name (in PACK_REGISTRY) produces no finding."""
-    import autoskillit.recipe  # noqa: F401 -- triggers rule registration
 
     recipe = _make_recipe(["research"])
     findings = [f for f in run_semantic_rules(recipe) if f.rule == "unknown-required-pack"]
@@ -70,7 +81,6 @@ def test_known_pack_produces_no_finding():
 
 def test_mixed_packs_flags_only_unknown():
     """Only unknown packs are flagged; known packs pass silently."""
-    import autoskillit.recipe  # noqa: F401 -- triggers rule registration
 
     recipe = _make_recipe(["research", "bogus-pack"])
     findings = [f for f in run_semantic_rules(recipe) if f.rule == "unknown-required-pack"]
@@ -80,7 +90,6 @@ def test_mixed_packs_flags_only_unknown():
 
 def test_empty_requires_packs_produces_no_finding():
     """Recipes without requires_packs produce no finding."""
-    import autoskillit.recipe  # noqa: F401 -- triggers rule registration
 
     recipe = _make_recipe([])
     findings = [f for f in run_semantic_rules(recipe) if f.rule == "unknown-required-pack"]
@@ -89,7 +98,6 @@ def test_empty_requires_packs_produces_no_finding():
 
 def test_all_builtin_packs_pass():
     """Every pack in PACK_REGISTRY is a valid name (no self-flagging)."""
-    import autoskillit.recipe  # noqa: F401 -- triggers rule registration
     from autoskillit.core import PACK_REGISTRY
 
     recipe = _make_recipe(list(PACK_REGISTRY.keys()))
@@ -118,7 +126,6 @@ class TestUndeclaredPackRequirement:
         recipe: Recipe,
         skill_category_map: dict[str, frozenset[str]] | None = None,
     ) -> list:
-        import autoskillit.recipe  # noqa: F401 -- triggers rule registration
 
         if skill_category_map is not None:
             from autoskillit.recipe._analysis import make_validation_context
@@ -205,7 +212,6 @@ class TestUndeclaredPackRequirement:
 
     def test_research_design_yaml_triggers_error_without_vis_lens(self):
         """research-design.yaml with only [research] triggers vis-lens ERROR."""
-        import autoskillit.recipe  # noqa: F401 -- triggers rule registration
 
         base_recipe = load_recipe(builtin_recipes_dir() / "research-design.yaml")
         recipe = replace(base_recipe, requires_packs=["research"])
@@ -216,3 +222,75 @@ class TestUndeclaredPackRequirement:
         vis_lens_findings = [f for f in findings if "vis-lens" in f.message]
         assert len(vis_lens_findings) == 2
         assert all(f.severity == Severity.ERROR for f in vis_lens_findings)
+
+
+class TestUndeclaredPackRequirementToolSteps:
+    def _run_rule(self, recipe: Recipe) -> list:
+        return [f for f in run_semantic_rules(recipe) if f.rule == "undeclared-pack-requirement"]
+
+    def test_tool_needing_undeclared_enabled_pack_is_error(self):
+        recipe = _make_recipe_with_tool(["research"], "verify_review_receipt")
+        findings = self._run_rule(recipe)
+        assert len(findings) == 1
+        assert findings[0].severity == Severity.ERROR
+        assert findings[0].step_name == "call_it"
+        assert "github" in findings[0].message
+        assert "verify_review_receipt" in findings[0].message
+
+    def test_tool_with_declared_pack_passes(self):
+        recipe = _make_recipe_with_tool(["research", "github"], "verify_review_receipt")
+        assert not self._run_rule(recipe)
+
+    def test_kitchen_core_tool_needs_no_declaration(self):
+        recipe = _make_recipe_with_tool(["research"], "run_cmd")
+        assert not self._run_rule(recipe)
+
+    def test_kitchen_core_plus_category_tool_needs_no_declaration(self):
+        assert "research" not in TOOL_SUBSET_TAGS["write_telemetry_files"]
+        recipe = _make_recipe_with_tool(["research"], "write_telemetry_files")
+        assert not self._run_rule(recipe)
+
+    def test_empty_requires_packs_kitchen_gated_tool_passes(self):
+        recipe = _make_recipe_with_tool([], "verify_review_receipt")
+        assert not self._run_rule(recipe)
+
+    def test_empty_requires_packs_exploration_tool_passes(self):
+        recipe = _make_recipe_with_tool([], "submit_exploration_query")
+        assert not self._run_rule(recipe)
+
+    def test_empty_requires_packs_non_kitchen_tool_is_error(self):
+        recipe = _make_recipe_with_tool([], "post_pr_review")
+        findings = self._run_rule(recipe)
+        assert len(findings) == 1
+        assert findings[0].severity == Severity.ERROR
+        assert "github" in findings[0].message
+        assert "post_pr_review" in findings[0].message
+
+    def test_tool_less_and_unknown_tool_steps_are_skipped(self):
+        recipe = replace(
+            _make_recipe(["research"]),
+            steps={
+                "py": RecipeStep(python="m.f"),
+                "bogus": RecipeStep(tool="not_a_real_tool"),
+                "stop": RecipeStep(action="stop"),
+            },
+        )
+        assert not self._run_rule(recipe)
+
+    @pytest.mark.parametrize("name", ["research.yaml", "research-review.yaml"])
+    def test_research_recipes_without_github_trigger_error(self, name):
+        recipe = replace(
+            load_recipe(builtin_recipes_dir() / name),
+            requires_packs=["research", "exp-lens", "vis-lens"],
+        )
+        findings = self._run_rule(recipe)
+        assert {f.step_name for f in findings} == {
+            "check_review_posted",
+            "check_audit_review_posted",
+        }
+        assert all(f.severity == Severity.ERROR for f in findings)
+
+    @pytest.mark.parametrize("name", ["research.yaml", "research-review.yaml"])
+    def test_bundled_research_recipes_have_no_undeclared_packs(self, name):
+        recipe = load_recipe(builtin_recipes_dir() / name)
+        assert not self._run_rule(recipe)

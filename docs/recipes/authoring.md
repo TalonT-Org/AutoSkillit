@@ -85,7 +85,7 @@ The rule families live in `src/autoskillit/recipe/rules_*.py` (28 files):
 | `rules_inputs.py` | Ingredient/version validation — required ingredients are present, types are correct |
 | `rules_isolation.py` | Workspace isolation breaches: `source-isolation-violation` and `git-mutation-on-source` |
 | `rules_merge.py` | `merge_worktree` routing completeness — every `MergeFailedStep` value must have a route |
-| `rules_packs.py` | Unknown pack names referenced in `requires_packs` |
+| `rules_packs.py` | Unknown pack names in `requires_packs`; packs required by dispatched skill categories or by direct tool steps' food-truck visibility missing from `requires_packs` |
 | `rules_reachability.py` | Symbolic reachability: `capture-inversion-detection`, `event-scope-requires-upstream-capture` |
 | `rules_recipe.py` | Unknown sub-recipe references inside a `requires_packs` entry |
 | `rules_skill_content.py` | SKILL.md bash-block placeholder validation (`undefined-bash-placeholder`) |

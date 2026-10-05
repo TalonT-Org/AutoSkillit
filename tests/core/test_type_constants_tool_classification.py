@@ -7,6 +7,27 @@ import pytest
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
+@pytest.mark.parametrize(
+    ("packs", "expected"),
+    [
+        (None, ("kitchen",)),
+        ([], ("kitchen-core",)),
+        (["github"], ("kitchen-core", "github")),
+    ],
+)
+def test_food_truck_visibility_tags(packs, expected) -> None:
+    from autoskillit.core import food_truck_visibility_tags
+
+    assert food_truck_visibility_tags(packs) == expected
+
+
+def test_review_tool_kitchen_classification() -> None:
+    from autoskillit.core import KITCHEN_GATED_TOOLS
+
+    assert "verify_review_receipt" in KITCHEN_GATED_TOOLS
+    assert "post_pr_review" not in KITCHEN_GATED_TOOLS
+
+
 def test_headless_tools_contains_expected_names() -> None:
     from autoskillit.core.types import HEADLESS_TOOLS
 

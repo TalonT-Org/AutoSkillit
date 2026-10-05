@@ -965,15 +965,15 @@ DYNAMIC_READ_EXEMPTIONS: dict[str, str] = {
         "Dict-comprehension key bound by `for name in EVIDENCE_READER_ENV_FORWARD_VARS`; the three"
         "forwarded names are already captured directly via that collection's own R4 scan."
     ),
-    "server/lifecycle/_session_type.py:48": (
+    "server/lifecycle/_session_type.py:49": (
         "Set-comprehension key bound by `for key in EVIDENCE_READER_ENV_FORWARD_VARS`; the"
         "forwarded names are already captured directly via that collection's own R4 scan."
     ),
-    "server/lifecycle/_session_type.py:53": (
+    "server/lifecycle/_session_type.py:54": (
         "Generator-expression key bound by `for key in EVIDENCE_READER_ENV_FORWARD_VARS`; the"
         "forwarded names are already captured directly via that collection's own R4 scan."
     ),
-    "server/lifecycle/_session_type.py:60": (
+    "server/lifecycle/_session_type.py:61": (
         "Dict-comprehension key bound by `for key in _EXPLORER_BINDING_ENV_KEYS`; the four"
         "explorer-binding names are already captured directly via that collection's own R4 scan."
     ),

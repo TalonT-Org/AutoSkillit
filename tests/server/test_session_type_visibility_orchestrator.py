@@ -177,6 +177,8 @@ async def test_food_truck_without_tool_tags_sees_full_kitchen(monkeypatch):
 
     for name in KITCHEN_GATED_TOOLS:
         assert name in tool_names
+    assert "submit_exploration_query" in tool_names
+    assert "post_pr_review" not in tool_names
     assert tool_names.isdisjoint(EVIDENCE_READER_TOOLS)
 
 

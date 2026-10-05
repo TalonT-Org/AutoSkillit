@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 from py_mini_racer import MiniRacer
 
-from autoskillit.core.io.paths import pkg_root
+from autoskillit.core import pkg_root
 from autoskillit.report.deck._payload import build_deck_payload
 from autoskillit.report.deck._registry import SESSION_COLUMNS
 

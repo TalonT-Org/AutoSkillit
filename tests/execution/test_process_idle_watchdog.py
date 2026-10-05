@@ -319,7 +319,7 @@ async def test_watch_stdout_idle_handles_missing_file(tmp_path: anyio.Path) -> N
 
 
 @pytest.mark.anyio
-async def test_watch_stdout_idle_resets_size_after_stat_failure(
+async def test_watch_stdout_idle_restored_file_does_not_fabricate_growth(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     clock = [0.0]
@@ -334,7 +334,7 @@ async def test_watch_stdout_idle_resets_size_after_stat_failure(
             trigger.set()
 
     first_stat = MagicMock(st_size=10)
-    recreated_stat = MagicMock(st_size=2)
+    recreated_stat = MagicMock(st_size=10)
     stdout_path = MagicMock()
     stdout_path.stat.side_effect = [first_stat, OSError(), recreated_stat]
     monkeypatch.setattr(_patch_process__race_watchers.anyio, "sleep", advance_clock)
@@ -342,7 +342,8 @@ async def test_watch_stdout_idle_resets_size_after_stat_failure(
 
     await _watch_stdout_idle(stdout_path, 1.5, acc, trigger, 1.0)
 
-    assert acc.idle_stall is False
+    assert acc.idle_stall is True
+    assert clock[0] == 3.0
     assert stdout_path.stat.call_count == 3
 
 

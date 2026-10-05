@@ -597,14 +597,14 @@ async def test_real_backend_launches_keep_idle_policy_out_of_cmd_spec_and_pass_l
     minimal_ctx.config.linux_tracing.log_dir = str(tmp_path)
     real_backend = CodexBackend() if backend_name == "codex" else ClaudeCodeBackend()
     built_specs = []
-    original_builder = real_backend.build_skill_session_cmd
+    original_builder = type(real_backend).build_skill_session_cmd
 
-    def build_skill_session_spec(*args, **kwargs):
-        spec = original_builder(*args, **kwargs)
+    def build_skill_session_spec(self, *args, **kwargs):
+        spec = original_builder(self, *args, **kwargs)
         built_specs.append(spec)
         return spec
 
-    monkeypatch.setattr(real_backend, "build_skill_session_cmd", build_skill_session_spec)
+    monkeypatch.setattr(type(real_backend), "build_skill_session_cmd", build_skill_session_spec)
     minimal_ctx.backend = real_backend
 
     runner_calls: list[tuple[Path, bool]] = []

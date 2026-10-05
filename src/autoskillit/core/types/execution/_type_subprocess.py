@@ -229,6 +229,9 @@ class LineDriver(Protocol):
 class SubprocessRunner(Protocol):
     """Protocol for async subprocess execution. Matches run_managed_async signature.
 
+    This is an internal dependency-injection contract. Its signature evolves
+    with the built-in runners; the core export is not a stable external extension API.
+
     Parameters
     ----------
     operation_lease_dir : Path | None

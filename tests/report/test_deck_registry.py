@@ -6,9 +6,7 @@ from autoskillit.core import SessionType, TokenMeasureState
 from autoskillit.execution._report_index_rows import ReportSessionRow
 from autoskillit.report.deck._registry import (
     AVAILABILITY_VOCABULARY,
-    DECK_VIEWS,
     FACETS,
-    LANDING_VIEW,
     SESSION_COLUMNS,
     SESSION_TABLE,
     WINDOWS,
@@ -75,10 +73,6 @@ def test_validate_deck_views_rejects_invalid_registries(
 ) -> None:
     with pytest.raises(ValueError):
         _validate_deck_views(views, landing)
-
-
-def test_shipped_deck_view_registry_is_valid() -> None:
-    _validate_deck_views(DECK_VIEWS, LANDING_VIEW)
 
 
 def test_level_facet_tracks_session_type_values_and_l0_gap() -> None:

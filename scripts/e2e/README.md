@@ -10,7 +10,7 @@ This directory holds everything the workflow runs:
 | `catalog.json` | Registered E2E tests (the only source of test names, budgets and trigger paths) |
 | `e2e_catalog.py` | Stdlib loader and validator for the catalog |
 | `e2e_select.py` | Picks the tests an event runs (`select`) and judges the required check (`gate`) |
-| `e2e_harness.py` | Runs one test inside the image (`run`) and redacts its artifacts (`redact`) |
+| `e2e_harness.py` | Runs one test (`run`), performs exact sandbox teardown (`cleanup`) and redacts artifacts (`redact`) |
 | `autoskillit-config.yaml` | AutoSkillit user-layer config the harness installs |
 | `post-e2e-failure.sh` | Appends a failure to the test's tracking issue |
 
@@ -35,7 +35,9 @@ model tests:
    | Actions: read | `wait_for_ci` |
    | Commit statuses: read | `wait_for_ci` |
 
-   The canary needs only `MINIMAX_API_KEY`; no Anthropic credential is used anywhere.
+   The canary needs only `MINIMAX_API_KEY`; no Anthropic API key or Claude OAuth credential
+   is supplied. The harness writes MiniMax's key into the Claude-compatible settings file
+   because MiniMax serves the Anthropic Messages API.
 3. Create the `e2e` label in this repository.
 4. In branch protection, mark only `e2e-gate` as required — never `select` or `run (…)`.
 
@@ -216,12 +218,40 @@ requests. The test container never sees the workflow token.
 
 ## Recipe test assertions
 
-A recipe test passes when `fleet run` exits 0, its envelope — the last non-empty stdout
+Regular recipe tests pass when `fleet run` exits 0, its envelope — the last non-empty stdout
 line, since earlier lines can be plain-text notices — reports `"success": true`, and exactly
 one sandbox pull request numbered above the pre-run baseline exists in the catalog's
 `expected_pull_request_state` with a non-empty diff. `gh` reports states in upper case; the
-harness lower-cases them. Afterwards the harness closes, with `--delete-branch`, every new
-pull request still open — but only once it captured the baseline.
+harness lower-cases them. Its existing cleanup closes newly opened PRs with their branches.
+
+`headless-smoke` exercises one orchestrator and one recipe worker (`peak_sessions: 2`). The
+harness stages `sandbox-smoke.yaml` from the read-only `/opt/e2e` mount into the disposable
+sandbox clone's `.autoskillit/recipes/` directory before invoking fleet by recipe name. This
+lets the clone's project name resolve the staged recipe; the host scripts remain read-only.
+The worker changes only `sandbox/text.py` and `tests/test_smoke_canary.py`, pushes its assigned
+per-run branch, opens a PR and closes it. Before cleanup, the harness verifies the successful
+envelope, that exactly one PR for the assigned branch is closed, the complete PR diff contains
+only those prescribed paths, and the PR head, remote ref and fetched commit agree. The source
+and test must contain the requested sentinel and an executable assertion. It saves the PR,
+commit, diff and branch evidence for redaction and upload.
+
+The harness writes a lifecycle descriptor before fleet starts, so cleanup does not depend on
+the model process or a fleet result. The workflow wraps this test's model container in a
+per-run Docker CID file. Its exit trap captures the model result, removes the recorded
+container by its exact ID, verifies that ID is absent, then launches a fresh user-image
+container for `e2e_harness.py cleanup`. That command uses only `E2E_SANDBOX_TOKEN`, closes any
+remaining PR for the assigned branch, deletes that exact remote branch and verifies both are
+gone. Cleanup runs after model success, failure or timeout, and its result is part of the step
+status. The normal artifact redaction step then runs even when the test step failed. Recipes
+without this fixture keep their existing in-container cleanup path.
+
+Recipe `expected_failures` rows identify an individual, verified product defect by exact
+`severity: error`, `check` equal to the failed envelope's `error`, `message` equal to its
+`user_visible_message`, and an open bug issue URL. Only that exact failed envelope can be
+accepted; process timeouts, malformed results, other failures and cleanup failures remain
+fatal. An accepted defect is provisional until mandatory branch/PR cleanup succeeds. A clean
+run that observes a configured row makes it stale and fails with instructions to remove the
+row and close the bug. The smoke catalog starts without expected defects.
 
 ## Catalog schema
 
@@ -251,10 +281,12 @@ pull request still open — but only once it captured the baseline.
 ```
 
 `recipe`, `ingredients` and `expected_pull_request_state` are required for `recipe` tests
-and forbidden for `canary` and `clean-install` tests. `expected_failures` is optional only
-for `clean-install`: each row contains nonempty `severity` (`error` or `warning`), `check`,
-`message`, and `issue` (`https://github.com/TalonT-Org/AutoSkillit/issues/<number>`).
-Duplicate diagnostic identities and unknown keys are rejected. `peak_sessions` must be
+and forbidden for `canary` and `clean-install` tests. `expected_failures` is optional for
+`clean-install` and recipe tests. Clean-install rows use the exact doctor `severity`, `check`
+and `message`; recipe rows require `severity: error`, `check` and `message` matching the failed
+envelope. Every row includes an open bug issue URL
+(`https://github.com/TalonT-Org/AutoSkillit/issues/<number>`). Duplicate diagnostic identities
+and unknown keys are rejected. `peak_sessions` must be
 1–8 for model tests and exactly zero for clean-install. `timeout_sec` must keep the
 derived job timeout within 360 minutes.
 
@@ -292,3 +324,97 @@ docker run --rm \
   autoskillit-e2e:local \
   python3 /opt/e2e/e2e_harness.py run --test clean-install --out /artifacts
 ```
+
+### Sandbox smoke with teardown
+
+Set `MINIMAX_API_KEY` and `E2E_SANDBOX_TOKEN` in the local environment first. Build the same
+user image and run this wrapper from the repository root. It creates the `out`, `data` and
+`upload` directories used by CI. The model and cleanup containers see E2E scripts read-only;
+the cleanup container receives the sandbox token without the MiniMax key. The EXIT trap
+keeps the model's status, removes and verifies the exact container, runs remote cleanup, then
+runs redaction even if an earlier stage failed. It retains the CID file if container absence
+cannot be verified.
+
+```bash
+git archive HEAD | docker build --file scripts/docker/Dockerfile --target user \
+  --tag autoskillit-e2e:local -
+
+set -euo pipefail
+IMAGE=autoskillit-e2e:local
+TEST=headless-smoke
+E2E_DIR="$PWD/.autoskillit/temp/e2e"
+mkdir -p "$E2E_DIR"/{out,data,upload}
+chmod 0777 "$E2E_DIR"/{out,data,upload}
+RUN_ID="$(date +%s)-$$"
+CID_FILE="$E2E_DIR/out/${TEST}-${RUN_ID}.cid"
+[[ ! -e "$CID_FILE" ]]
+
+cleanup_smoke() {
+  model_status=$?
+  set +e
+  rm_status=1
+  verify_status=1
+  removal_status=0
+  cleanup_status=0
+  redact_status=0
+  lifecycle_file="$E2E_DIR/out/${TEST}-lifecycle.txt"
+
+  if [[ ! -s "$CID_FILE" ]]; then
+    echo "missing container ID evidence: $CID_FILE" >&2
+    removal_status=1
+  else
+    container_id="$(<"$CID_FILE")"
+    if [[ ! "$container_id" =~ ^[0-9a-f]{64}$ ]]; then
+      echo "invalid container ID evidence retained: $CID_FILE" >&2
+      removal_status=1
+    else
+      timeout --signal=TERM --kill-after=10s 60s docker rm -f "$container_id"
+      rm_status=$?
+      remaining="$(timeout --signal=TERM --kill-after=10s 60s \
+        docker container ls --all --quiet --no-trunc --filter "id=$container_id")"
+      verify_status=$?
+      if (( verify_status != 0 )) || [[ -n "$remaining" ]]; then
+        echo "container removal could not be verified; retaining $CID_FILE" >&2
+        removal_status=1
+      elif ! rm -f -- "$CID_FILE"; then
+        removal_status=1
+      fi
+    fi
+  fi
+
+  timeout --signal=TERM --kill-after=20s 300s docker run --rm \
+    --env E2E_SANDBOX_TOKEN \
+    --volume "$PWD/scripts/e2e:/opt/e2e:ro" \
+    --volume "$E2E_DIR/out:/artifacts" \
+    "$IMAGE" python3 /opt/e2e/e2e_harness.py cleanup \
+      --test "$TEST" --catalog /opt/e2e/catalog.json --out /artifacts
+  cleanup_status=$?
+
+  docker run --rm --env MINIMAX_API_KEY --env E2E_SANDBOX_TOKEN \
+    --volume "$PWD/scripts/e2e:/opt/e2e:ro" \
+    --volume "$E2E_DIR:/e2e" \
+    "$IMAGE" python3 /opt/e2e/e2e_harness.py redact --dest /e2e/upload \
+      --secret-env MINIMAX_API_KEY --secret-env E2E_SANDBOX_TOKEN \
+      /e2e/out /e2e/data/logs
+  redact_status=$?
+
+  printf 'model_exit=%s\ndocker_rm=%s\ncontainer_verify=%s\ncontainer_removal=%s\nremote_cleanup=%s\nredaction=%s\n' \
+    "$model_status" "$rm_status" "$verify_status" "$removal_status" \
+    "$cleanup_status" "$redact_status" > "$lifecycle_file"
+  trap - EXIT
+  if (( model_status != 0 || removal_status != 0 || cleanup_status != 0 || redact_status != 0 )); then
+    exit 1
+  fi
+  exit 0
+}
+trap cleanup_smoke EXIT
+
+timeout --signal=TERM --kill-after=30s 1020s docker run --rm --cidfile "$CID_FILE" \
+  --env MINIMAX_API_KEY --env E2E_SANDBOX_TOKEN \
+  --volume "$PWD/scripts/e2e:/opt/e2e:ro" \
+  --volume "$E2E_DIR/out:/artifacts" \
+  --volume "$E2E_DIR/data:/home/autoskillit/.local/share/autoskillit" \
+  "$IMAGE" python3 /opt/e2e/e2e_harness.py run --test "$TEST" --out /artifacts
+```
+
+Select it directly with workflow dispatch input `tests=headless-smoke`.

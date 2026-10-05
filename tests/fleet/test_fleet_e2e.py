@@ -25,6 +25,7 @@ import psutil
 import pytest
 
 from autoskillit.core import CLAUDE_CODE_CAPABILITIES
+from tests.fleet._helpers import assert_food_truck_lease_launch
 
 pytestmark = [
     pytest.mark.layer("fleet"),
@@ -501,18 +502,7 @@ async def test_food_truck_lease_channel_and_l2_idle_floor_on_claude(
         )
         assert result["success"] is True
 
-        call = runtime.runner.last_kwargs
-        assert "marker_dir" not in call
-        assert "session_id" not in call
-        assert runtime.runner.marker_files_during_call == ()
-        channel = call["operation_lease_dir"]
-        assert isinstance(channel, Path) and channel.is_absolute()
-        assert call["env"]["AUTOSKILLIT_OPERATION_LEASE_DIR"] == str(channel)
-        assert runtime.runner.operation_lease_dir_exists_during_call is True
-        assert call["idle_output_timeout"] == expected_idle
-        assert call["env"]["AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT"] == "1800"
-        assert not channel.exists()
-        channels.append(channel)
+        channels.append(assert_food_truck_lease_launch(runtime.runner, expected_idle))
 
     assert channels[0] != channels[1]
 

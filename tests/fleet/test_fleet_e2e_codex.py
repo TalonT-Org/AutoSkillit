@@ -26,6 +26,7 @@ from autoskillit.execution.backends import CodexBackend
 from autoskillit.execution.headless import DefaultHeadlessExecutor
 from autoskillit.fleet._api import execute_dispatch
 from tests.fakes import InMemoryRecipeRepository
+from tests.fleet._helpers import assert_food_truck_lease_launch
 from tests.fleet.test_fleet_e2e import FleetTestRunner
 
 pytestmark = [
@@ -140,18 +141,7 @@ class TestCodexFleetE2E:
                 quota_refresher=_noop_quota_refresher,
             )
 
-            call = runner.last_kwargs
-            assert "marker_dir" not in call
-            assert "session_id" not in call
-            assert runner.marker_files_during_call == ()
-            channel = call["operation_lease_dir"]
-            assert isinstance(channel, Path) and channel.is_absolute()
-            assert call["env"]["AUTOSKILLIT_OPERATION_LEASE_DIR"] == str(channel)
-            assert runner.operation_lease_dir_exists_during_call is True
-            assert call["idle_output_timeout"] == expected_idle
-            assert call["env"]["AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT"] == "1800"
-            assert not channel.exists()
-            channels.append(channel)
+            channels.append(assert_food_truck_lease_launch(runner, expected_idle))
 
         assert channels[0] != channels[1]
 

@@ -997,7 +997,7 @@ FORWARDING_SITES: dict[str, str] = {
         "install/publish subprocess env; intentional wholesale forward for a maintenance-style"
         "operation."
     ),
-    "cli/app.py:307": (
+    "cli/app.py:316": (
         "Bare os.environ passed as `child_env` to the maintenance installer, which itself applies"
         "an explicit allowlist (build_maintenance_env) before spawning; unfiltered by design here."
     ),
@@ -1202,6 +1202,15 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
         justification=(
             "R4 predicate-(b) false positive: an all-uppercase enum/status/regex-name/label member"
             "of an unrelated lookup collection; never set as a real OS environment variable."
+        ),
+    ),
+    "OPERATION_LEASE_DIR_ENV_VAR": AmbientEnvDisposition(
+        var="OPERATION_LEASE_DIR_ENV_VAR",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "R4 false positive: an exported constant name in __all__, "
+            "not an OS environment variable."
         ),
     ),
     "AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR": AmbientEnvDisposition(

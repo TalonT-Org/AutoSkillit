@@ -528,7 +528,6 @@ class TestRunSkillMcpTimeout:
         cfg = _command_config()
         cfg.safety.require_dry_walkthrough = False
         tool_ctx_kitchen_open.config = cfg
-        monkeypatch.delenv("AUTOSKILLIT_SESSION_DEADLINE", raising=False)
         tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))  # clone guard
 
         states = []

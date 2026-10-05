@@ -9,7 +9,7 @@ from pathlib import Path
 import anyio
 import pytest
 
-import autoskillit.core.pipeline._operation_lease as lease_module
+import autoskillit.core.plugins._operation_lease as lease_module
 from autoskillit.core import (
     OPERATION_LEASE_FRESHNESS_SECONDS,
     OPERATION_LEASE_HEARTBEAT_SECONDS,

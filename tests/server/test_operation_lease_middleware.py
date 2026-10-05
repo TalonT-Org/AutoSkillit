@@ -55,9 +55,7 @@ async def test_tool_call_writes_deadline_bounded_lease(
     tool_ctx.operation_lease_channel = tmp_path
     monkeypatch.setattr(_state, "_get_ctx_or_none", lambda: tool_ctx)
     inherited_epoch = time.time() + 10
-    if inherited is None:
-        monkeypatch.delenv("AUTOSKILLIT_SESSION_DEADLINE", raising=False)
-    else:
+    if inherited is not None:
         monkeypatch.setenv("AUTOSKILLIT_SESSION_DEADLINE", str(inherited_epoch))
 
     observed: list[tuple[float, int]] = []
@@ -191,7 +189,7 @@ async def test_expired_inherited_deadline_fails_before_lease_admission(
 def test_inherited_session_deadline_parser_rejects_invalid_values(
     monkeypatch: pytest.MonkeyPatch, value: str
 ) -> None:
-    from autoskillit.server.tools._execution_helpers._session_deadline import (
+    from autoskillit.server.tools._execution_helpers._dispatch_metadata import (
         inherited_session_deadline_epoch,
     )
 

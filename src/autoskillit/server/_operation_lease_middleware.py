@@ -9,7 +9,7 @@ from fastmcp.server.middleware import Middleware
 from fastmcp.tools.base import ToolResult
 
 from autoskillit.core import operation_lease
-from autoskillit.server.tools._execution_helpers._session_deadline import (
+from autoskillit.server.tools._execution_helpers._dispatch_metadata import (
     inherited_session_deadline_epoch,
 )
 

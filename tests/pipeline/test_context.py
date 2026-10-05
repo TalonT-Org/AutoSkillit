@@ -252,9 +252,11 @@ def test_toolcontext_optional_fields_all_have_protocol_annotations() -> None:
         and name != "Protocol"
     }
 
-    # All optional service fields — exactly those declared with field(default=None)
+    # The supervision-channel path is data; the remaining optional fields are services.
     optional_fields = {
-        name: f for name, f in ToolContext.__dataclass_fields__.items() if f.default is None
+        name: f
+        for name, f in ToolContext.__dataclass_fields__.items()
+        if f.default is None and name != "operation_lease_channel"
     }
 
     violations: list[str] = []

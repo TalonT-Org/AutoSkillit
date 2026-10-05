@@ -17,7 +17,7 @@ import time
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from contextvars import ContextVar, Token
+from contextvars import Token
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final
@@ -167,12 +167,9 @@ class OperationLeaseHandle:
             raise
 
 
-_CURRENT_LEASE: ContextVar[OperationLeaseHandle | None] = ContextVar(
-    "autoskillit_current_operation_lease", default=None
-)
-
-
 def current_operation_lease() -> OperationLeaseHandle | None:
+    from ..pipeline._step_context import _CURRENT_LEASE  # circular-break
+
     return _CURRENT_LEASE.get()
 
 
@@ -206,6 +203,8 @@ async def operation_lease(
         started_at_epoch=time.time(),
         not_after_epoch=not_after_epoch,
     )
+    from ..pipeline._step_context import _CURRENT_LEASE  # circular-break
+
     handle = OperationLeaseHandle(record, None)
     registry._enter()
     heartbeat_task: asyncio.Task[None] | None = None

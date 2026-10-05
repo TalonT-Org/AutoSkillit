@@ -57,7 +57,7 @@ from autoskillit.server.tools._execution_helpers import session_hook_root_scope
 from autoskillit.server.tools._execution_helpers import (
     validate_resumed_skill_contract as _validate_resumed_skill_contract,
 )
-from autoskillit.server.tools._execution_helpers._session_deadline import (
+from autoskillit.server.tools._execution_helpers._dispatch_metadata import (
     inherited_session_deadline_epoch,
 )
 from autoskillit.server.tools._types import deny_envelope

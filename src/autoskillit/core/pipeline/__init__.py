@@ -12,16 +12,6 @@ import paths after the core/pipeline/ decomposition.
 from __future__ import annotations
 
 from autoskillit.core.pipeline._execution_marker import execution_marker
-from autoskillit.core.pipeline._operation_lease import (
-    OPERATION_LEASE_FRESHNESS_SECONDS,
-    OPERATION_LEASE_HEARTBEAT_SECONDS,
-    InFlightOperations,
-    OperationLeaseHandle,
-    OperationLeaseRecord,
-    current_operation_lease,
-    operation_lease,
-    read_active_operation_leases,
-)
 from autoskillit.core.pipeline._step_context import current_order_id, current_step_name
 from autoskillit.core.pipeline.pipeline_tracker import (
     TrackerAuthorityReadResult,
@@ -57,6 +47,16 @@ from autoskillit.core.pipeline.tool_sequence_analysis import (
     render_adjacency_table,
     render_dot,
     render_mermaid,
+)
+from autoskillit.core.plugins._operation_lease import (
+    OPERATION_LEASE_FRESHNESS_SECONDS,
+    OPERATION_LEASE_HEARTBEAT_SECONDS,
+    InFlightOperations,
+    OperationLeaseHandle,
+    OperationLeaseRecord,
+    current_operation_lease,
+    operation_lease,
+    read_active_operation_leases,
 )
 
 __all__ = [

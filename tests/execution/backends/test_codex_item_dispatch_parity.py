@@ -8,13 +8,15 @@ from pathlib import Path
 import pytest
 from jsonschema import validate
 
-from autoskillit.core import BackendEventKind, CodexEventData
+from autoskillit.core import BackendEventKind, CodexEventData, SessionErrorOutcome
 from autoskillit.core.types.foundation._type_enums import CodexItemType
 from autoskillit.execution.backends._codex_parse import (
+    CodexResultParser,
     CodexStreamParser,
     _accumulate_codex_completed_item,
     _CodexParseAccumulator,
 )
+from autoskillit.execution.headless._headless_evidence import _adapt_agent_result
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -71,3 +73,31 @@ def test_error_item_messages_ignore_empty_and_non_string_values() -> None:
         )
 
     assert accumulator.item_error_messages == []
+
+
+@pytest.mark.parametrize("json_rpc", [False, True], ids=["exec", "app-server"])
+def test_error_items_reach_session_diagnostics_without_failing_the_turn(json_rpc: bool) -> None:
+    message = "recoverable item error"
+    items = [
+        {"type": "error", "message": message},
+        {"type": "agent_message", "text": "done"},
+    ]
+    if json_rpc:
+        records = [{"method": "item/completed", "params": {"item": item}} for item in items]
+        records.append({"method": "turn/completed", "params": {"turn": {"status": "completed"}}})
+    else:
+        records = [{"type": "item.completed", "item": item} for item in items]
+        records.append({"type": "turn.completed"})
+    lines = [json.dumps(record) for record in records]
+
+    live_error = CodexStreamParser().parse_line(lines[0])
+    assert live_error is not None
+    assert live_error.kind is BackendEventKind.IGNORED
+    assert live_error.is_terminal is False
+
+    parsed = CodexResultParser().parse_stdout("\n".join(lines))
+    assert parsed.success is True
+    assert parsed.raw["item_error_messages"] == [message]
+    adapted = _adapt_agent_result(parsed)
+    assert adapted.is_error is False
+    assert SessionErrorOutcome.from_errors(adapted.errors).messages == (message,)

@@ -153,7 +153,10 @@ async def test_stdout_growth_then_stall_reports_actual_silence_and_threshold(
     with structlog.testing.capture_logs() as logs:
         await _watch_stdout_idle(stdout, 2.0, acc, trigger, 1.0)
 
-    fire = next(entry for entry in logs if entry.get("event") == "stdout_idle_stall_firing")
+    fire = next(
+        (entry for entry in logs if entry.get("event") == "stdout_idle_stall_firing"), None
+    )
+    assert fire is not None, "stdout_idle_stall_firing was not logged"
     assert acc.idle_stall is True
     assert fire["idle_threshold"] == 2.0
     assert fire["silence_seconds"] >= 2.0

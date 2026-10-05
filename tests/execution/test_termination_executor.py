@@ -187,24 +187,16 @@ async def test_network_connection_without_lease_does_not_defer_termination(
 
     clock = _install_deferral_clock(monkeypatch)
 
-    class ConnectedProcess:
-        def __init__(self, pid: int) -> None:
-            self.pid = pid
+    def connections(_process, kind: str | None = None) -> list[SimpleNamespace]:
+        return [
+            SimpleNamespace(
+                status=psutil.CONN_ESTABLISHED,
+                raddr=SimpleNamespace(port=443),
+            )
+        ]
 
-        def children(self, recursive: bool = False) -> list[object]:
-            return []
-
-        def connections(self, kind: str | None = None) -> list[SimpleNamespace]:
-            return [
-                SimpleNamespace(
-                    status=psutil.CONN_ESTABLISHED,
-                    raddr=SimpleNamespace(port=443),
-                )
-            ]
-
-        net_connections = connections
-
-    monkeypatch.setattr(process_monitor.psutil, "Process", ConnectedProcess)
+    monkeypatch.setattr(process_monitor.psutil.Process, "connections", connections)
+    monkeypatch.setattr(process_monitor.psutil.Process, "net_connections", connections)
     monkeypatch.setattr(process_monitor, "_has_active_child_processes", lambda _pid: False)
     owner = await _spawn(30, tmp_path)
 

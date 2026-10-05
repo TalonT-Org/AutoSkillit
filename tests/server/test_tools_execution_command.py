@@ -502,8 +502,8 @@ class TestRunSkillExecutionMarker:
             call for call in runner.call_args_list if Path(call[0][0]).name == "claude"
         ]
         assert len(claude_calls) == 1
-        assert claude_calls[0][3]["marker_dir"] is None
-        assert claude_calls[0][3]["session_id"] is None
+        assert "marker_dir" not in claude_calls[0][3]
+        assert "session_id" not in claude_calls[0][3]
 
     @pytest.mark.anyio
     async def test_marker_dir_routes_through_session_locator(

@@ -30,7 +30,9 @@ _CORE_TYPES_GROUPS: dict[str, frozenset[str]] = {
         }
     ),
     "github": frozenset({"_type_github_review", "_type_github_review_anchor"}),
-    "skill": frozenset({"_type_skill_semantics", "_type_session_invariant_admission"}),
+    "skill": frozenset(
+        {"_type_skill_plan_specs", "_type_skill_semantics", "_type_session_invariant_admission"}
+    ),
     "audit": frozenset(
         {
             "_type_audit_admission",

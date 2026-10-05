@@ -512,6 +512,9 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
             "workspace",
         }
     ),
+    "_type_skill_plan_specs": frozenset(
+        {"cli", "core", "execution", "fleet", "migration", "pipeline", "server", "workspace"}
+    ),
     "_type_skill_semantics": frozenset(
         {"cli", "core", "execution", "fleet", "migration", "pipeline", "server", "workspace"}
     ),

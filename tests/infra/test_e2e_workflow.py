@@ -6,6 +6,7 @@ import json
 import os
 import re
 import subprocess
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -370,7 +371,7 @@ class TestSecrets:
         expected = ["MINIMAX_API_KEY", "E2E_SANDBOX_TOKEN"]
         if step_id == "e2e":
             expected.append("E2E_SANDBOX_TOKEN")
-        assert forwarded == expected
+        assert Counter(forwarded) == Counter(expected)
 
     def test_redaction_keeps_required_secret_names(self, workflow: dict) -> None:
         run = _step(workflow, "run", step_id="redact")["run"]

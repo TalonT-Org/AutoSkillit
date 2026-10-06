@@ -782,7 +782,7 @@ def _model_result(out: Path, test_name: str) -> tuple[dict[str, Any], list[str]]
         return result, [f"cleanup: missing or malformed model result: {exc}"]
 
 
-def cleanup_test(
+def cleanup_smoke_test(
     catalog: e2e_catalog.Catalog,
     test_name: str,
     runner: Runner,
@@ -1143,7 +1143,7 @@ def main(argv: Sequence[str]) -> int:
         return _run(args.test, Path(args.out), Path(args.catalog))
     if args.command == "cleanup":
         catalog = e2e_catalog.load_catalog(Path(args.catalog))
-        return cleanup_test(catalog, args.test, run_command, Path(args.out), os.environ)
+        return cleanup_smoke_test(catalog, args.test, run_command, Path(args.out), os.environ)
     return _redact_command(Path(args.dest), args.secret_env, args.sources)
 
 

@@ -956,7 +956,7 @@ class TestSmokeCleanup:
         sleeps: list[float] = []
         monkeypatch.setattr(harness.time, "sleep", sleeps.append)
 
-        status = harness.cleanup_test(catalog, test.name, runner, out, env)
+        status = harness.cleanup_smoke_test(catalog, test.name, runner, out, env)
         result = json.loads((out / "result.json").read_text(encoding="utf-8"))
         evidence = json.loads((out / "smoke-cleanup.json").read_text(encoding="utf-8"))
 
@@ -994,7 +994,7 @@ class TestSmokeCleanup:
         sleeps: list[float] = []
         monkeypatch.setattr(harness.time, "sleep", sleeps.append)
 
-        assert harness.cleanup_test(catalog, test.name, runner, out, env) == 0
+        assert harness.cleanup_smoke_test(catalog, test.name, runner, out, env) == 0
 
         evidence = json.loads((out / "smoke-cleanup.json").read_text(encoding="utf-8"))
         assert _bare_ref(remote, branch) is None
@@ -1019,7 +1019,7 @@ class TestSmokeCleanup:
         env = _env(HOME=git_env["HOME"], PATH=git_env["PATH"], E2E_SANDBOX_TOKEN=SANDBOX_TOKEN)
         monkeypatch.setattr(harness.time, "sleep", lambda _duration: None)
 
-        status = harness.cleanup_test(catalog, test.name, runner, out, env)
+        status = harness.cleanup_smoke_test(catalog, test.name, runner, out, env)
         result = json.loads((out / "result.json").read_text(encoding="utf-8"))
         close_called = any(call.argv[:3] == ["gh", "pr", "close"] for call in runner.calls)
         delete_called = any(
@@ -1046,7 +1046,7 @@ class TestSmokeCleanup:
 
         monkeypatch.setattr(harness, "_cleanup_smoke_resources", fail_cleanup)
 
-        assert harness.cleanup_test(catalog, test.name, runner, out, _env()) == 1
+        assert harness.cleanup_smoke_test(catalog, test.name, runner, out, _env()) == 1
         evidence = json.loads((out / "smoke-cleanup.json").read_text(encoding="utf-8"))
         result = json.loads((out / "result.json").read_text(encoding="utf-8"))
         failure = "cleanup error: RuntimeError: unexpected cleanup fault"
@@ -1063,7 +1063,7 @@ class TestSmokeCleanup:
         catalog, test = _smoke_case()
         runner = FakeRunner(lambda argv: _completed(argv))
         out = tmp_path / "not-launched"
-        assert harness.cleanup_test(catalog, test.name, runner, out, _env()) == 0
+        assert harness.cleanup_smoke_test(catalog, test.name, runner, out, _env()) == 0
         assert runner.calls == []
         assert not out.exists()
 
@@ -1072,7 +1072,7 @@ class TestSmokeCleanup:
         (bad / "smoke-launched").write_text(test.name + "\n", encoding="utf-8")
         (bad / "smoke-lifecycle.json").write_text("{broken", encoding="utf-8")
         (bad / "result.json").write_text("{also broken", encoding="utf-8")
-        assert harness.cleanup_test(catalog, test.name, runner, bad, _env()) == 1
+        assert harness.cleanup_smoke_test(catalog, test.name, runner, bad, _env()) == 1
         assert (bad / "result-before-cleanup.json").read_text(encoding="utf-8") == "{also broken"
         result = json.loads((bad / "result.json").read_text(encoding="utf-8"))
         evidence = json.loads((bad / "smoke-cleanup.json").read_text(encoding="utf-8"))

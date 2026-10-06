@@ -407,6 +407,8 @@ def prepare_smoke(
     env: Mapping[str, str],
     runner: Runner,
 ) -> tuple[list[str], dict[str, str] | None]:
+    if test.recipe is None or not re.fullmatch(r"[a-z0-9][a-z0-9-]*", test.recipe):
+        return ["smoke setup: recipe must be a basename"], None
     source = Path(__file__).with_name("recipes") / str(test.recipe_fixture)
     target = SANDBOX_CLONE / ".autoskillit" / "recipes" / f"{test.recipe}.yaml"
     target.parent.mkdir(parents=True, exist_ok=True)

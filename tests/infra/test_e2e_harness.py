@@ -582,6 +582,22 @@ class TestSandboxSmokeFixture:
 
 
 class TestSandboxSmokeFlow:
+    def test_recipe_path_traversal_is_rejected_before_staging(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        catalog, test = _smoke_case()
+        runner, clone = _smoke_runner(tmp_path, monkeypatch)
+        test = replace(test, recipe="../escaped")
+
+        failures, runtime = harness.prepare_smoke(
+            test, catalog.sandbox_repository, tmp_path / "out", _env(), runner
+        )
+
+        assert failures == ["smoke setup: recipe must be a basename"]
+        assert runtime is None
+        assert not (clone / ".autoskillit").exists()
+        assert runner.calls == []
+
     def test_success_verifies_exact_closed_pr_ref_complete_diff_and_canary(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

@@ -14,19 +14,6 @@ DeckShell.registerView("role", ctx => {
     hasMetrics: rows.some(row => row.role === role)
   })) : rows.filter(row => row.role === roleName);
 
-  function measureCell(measure) {
-    return ctx.availabilityCell(measure ?? {state: "unavailable"});
-  }
-
-  function ratioCell(ratio, percent = false) {
-    const value = DeckCore.formatRatio(ratio, percent);
-    return ctx.el("div", {class: "view-measure"}, [
-      value == null ? measureCell(ratio) : ctx.el("span", {}, value),
-      ctx.el("small", {class: "view-sample"}, DeckCore.ratioSample(ratio)),
-      DeckCore.reviewSignal(ctx, ratio)
-    ]);
-  }
-
   const spawningLevels = (ctx.selection?.level?.keys ?? []).map(key =>
     (ctx.chips?.level ?? []).find(chip => chip.key === key)?.label ?? key);
   const edges = ctx.relationships ?? [];
@@ -57,17 +44,17 @@ DeckShell.registerView("role", ctx => {
       {key: "models", label: "Observed models", cell: row =>
         (row.models ?? []).join(", ") || "No model recorded"},
       {key: "input_tokens", label: "Input tokens", numeric: true,
-        cell: row => measureCell(row.measures?.input_tokens)},
+        cell: row => DeckCore.measureCell(ctx, row.measures?.input_tokens)},
       {key: "output_tokens", label: "Output tokens", numeric: true,
-        cell: row => measureCell(row.measures?.output_tokens)},
+        cell: row => DeckCore.measureCell(ctx, row.measures?.output_tokens)},
       {key: "cache_read_tokens", label: "Cache-read tokens", numeric: true,
-        cell: row => measureCell(row.measures?.cache_read_tokens)},
+        cell: row => DeckCore.measureCell(ctx, row.measures?.cache_read_tokens)},
       {key: "cache_write_tokens", label: "Cache-write tokens", numeric: true,
-        cell: row => measureCell(row.measures?.cache_write_tokens)},
+        cell: row => DeckCore.measureCell(ctx, row.measures?.cache_write_tokens)},
       {key: "input_output", label: "Input / output", cell: row =>
-        ratioCell(row.ratios?.input_output)},
+        DeckCore.ratioCell(ctx, row.ratios?.input_output)},
       {key: "cache_share", label: "Cache-read share", cell: row =>
-        ratioCell(row.ratios?.cache_share, true)},
+        DeckCore.ratioCell(ctx, row.ratios?.cache_share, true)},
       {key: "tool_mix", label: "Observed tool mix", cell: row => DeckCore.toolMix(ctx, row.ratios)}
     ],
     rows: harnessRows,

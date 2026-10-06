@@ -80,6 +80,32 @@ globalThis.DeckCore = (() => {
       eligibility.reason ? ctx.el("p", {class: "view-review__reason"}, eligibility.reason) : null
     ]);
   }
+  function measureCell(ctx, measure) {
+    return ctx.availabilityCell(measure ?? {state: "unavailable"});
+  }
+
+  function ratioCell(ctx, ratio, percent = false) {
+    const value = formatRatio(ratio, percent);
+    return ctx.el("div", {class: "view-measure"}, [
+      value == null ? measureCell(ctx, ratio) : ctx.el("span", {}, value),
+      ctx.el("small", {class: "view-sample"}, ratioSample(ratio)),
+      reviewSignal(ctx, ratio)
+    ]);
+  }
+
+  function definitionCard(ctx, role) {
+    const definition = ctx.definitions?.[role];
+    const available = definition?.state === "available";
+    return ctx.el("article", {class: "view-definition"}, [
+      ctx.el("h3", {}, ctx.entityLink(role, {view: "role", entity: role})),
+      available ? ctx.el("p", {}, definition.description ?? "Role definition loaded.") :
+        ctx.el("p", {class: "view-review__reason"}, "Definition unavailable for " + role + "."),
+      available ? ctx.el("p", {}, "Declared tools: " +
+        ((definition.tools ?? []).join(", ") || "none recorded")) : null,
+      available ? ctx.el("pre", {}, definition.body ?? "") : null
+    ]);
+  }
+
   function toolMix(ctx, ratios = {}) {
     const tools = Object.entries(ratios.tool_mix ?? {});
     return tools.length ? ctx.el("div", {class: "view-pills"}, tools.map(([tool, ratio]) => {
@@ -353,6 +379,7 @@ globalThis.DeckCore = (() => {
   return Object.freeze({decodeTable, encodeRoute, decodeRoute, hrefFor, effectiveSelection,
     toggleSelection, windowSelection, selectPrepared, filterRows, populationSentence,
     summarizePairs, sortRows, parseSort, chipPresentation, availabilityPresentation,
-    barLayout, formatCount, formatRatio, ratioSample, reviewEligibility, reviewSignal, toolMix, formatDate,
+    barLayout, formatCount, formatRatio, ratioSample, reviewEligibility, reviewSignal,
+    measureCell, ratioCell, definitionCard, toolMix, formatDate,
     CHIP_STATES, DAY_MS});
 })();

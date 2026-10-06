@@ -6,39 +6,13 @@ DeckShell.registerView("skill", ctx => {
   const skillNames = [...new Set(selected.map(row => row.skill))];
   if (routeSkill != null && !skillNames.includes(routeSkill)) skillNames.unshift(routeSkill);
 
-  function measureCell(measure) {
-    return ctx.availabilityCell(measure ?? {state: "unavailable"});
-  }
-
-  function ratioCell(ratio, percent = false) {
-    const value = DeckCore.formatRatio(ratio, percent);
-    return ctx.el("div", {class: "view-measure"}, [
-      value == null ? measureCell(ratio) : ctx.el("span", {}, value),
-      ctx.el("small", {class: "view-sample"}, DeckCore.ratioSample(ratio)),
-      DeckCore.reviewSignal(ctx, ratio)
-    ]);
-  }
-
-  function definitionCard(role) {
-    const definition = ctx.definitions?.[role];
-    return ctx.el("article", {class: "view-definition"}, [
-      ctx.el("h3", {}, ctx.entityLink(role, {view: "role", entity: role})),
-      definition?.state === "available" ?
-        ctx.el("p", {}, definition.description ?? "Role definition loaded.") :
-        ctx.el("p", {class: "view-review__reason"}, "Definition unavailable for " + role + "."),
-      definition?.state === "available" ? ctx.el("p", {}, "Declared tools: " +
-        ((definition.tools ?? []).join(", ") || "none recorded")) : null,
-      definition?.state === "available" ? ctx.el("pre", {}, definition.body ?? "") : null
-    ]);
-  }
-
   const roleNames = new Set(relationships.map(edge => edge.role));
   for (const row of selected) {
     for (const child of row.child_roles ?? []) roleNames.add(child.role);
     for (const role of row.ratios?.input_output?.definition_roles ?? []) roleNames.add(role);
     for (const role of row.ratios?.cache_share?.definition_roles ?? []) roleNames.add(role);
   }
-  const definitions = [...roleNames].sort().map(definitionCard);
+  const definitions = [...roleNames].sort().map(role => DeckCore.definitionCard(ctx, role));
 
   const skillTable = rows.length ? ctx.sortableTable({
     columns: [
@@ -48,19 +22,19 @@ DeckShell.registerView("skill", ctx => {
       {key: "harness", label: "Harness"},
       {key: "provider", label: "Provider"},
       {key: "input_tokens", label: "Input tokens", numeric: true,
-        cell: row => measureCell(row.measures?.input_tokens)},
+        cell: row => DeckCore.measureCell(ctx, row.measures?.input_tokens)},
       {key: "output_tokens", label: "Output tokens", numeric: true,
-        cell: row => measureCell(row.measures?.output_tokens)},
+        cell: row => DeckCore.measureCell(ctx, row.measures?.output_tokens)},
       {key: "cache_read_tokens", label: "Cache-read tokens", numeric: true,
-        cell: row => measureCell(row.measures?.cache_read_tokens)},
+        cell: row => DeckCore.measureCell(ctx, row.measures?.cache_read_tokens)},
       {key: "cache_write_tokens", label: "Cache-write tokens", numeric: true,
-        cell: row => measureCell(row.measures?.cache_write_tokens)},
+        cell: row => DeckCore.measureCell(ctx, row.measures?.cache_write_tokens)},
       {key: "input_output", label: "Input / output", cell: row =>
-        ratioCell(row.ratios?.input_output)},
+        DeckCore.ratioCell(ctx, row.ratios?.input_output)},
       {key: "cache_share", label: "Cache-read share", cell: row =>
-        ratioCell(row.ratios?.cache_share, true)},
+        DeckCore.ratioCell(ctx, row.ratios?.cache_share, true)},
       {key: "exact_retransmission", label: "Exact prompt retransmission", cell: row =>
-        measureCell(row.exact_retransmission)}
+        DeckCore.measureCell(ctx, row.exact_retransmission)}
     ],
     rows,
     defaultSort: {key: "skill", dir: "asc"}
@@ -88,13 +62,13 @@ DeckShell.registerView("skill", ctx => {
       {key: "recipe", label: "Recipe"},
       {key: "step", label: "Step"},
       {key: "input_tokens", label: "Input tokens", cell: row =>
-        measureCell(row.measures?.input_tokens)},
+        DeckCore.measureCell(ctx, row.measures?.input_tokens)},
       {key: "output_tokens", label: "Output tokens", cell: row =>
-        measureCell(row.measures?.output_tokens)},
+        DeckCore.measureCell(ctx, row.measures?.output_tokens)},
       {key: "cache_read_tokens", label: "Cache-read tokens", cell: row =>
-        measureCell(row.measures?.cache_read_tokens)},
+        DeckCore.measureCell(ctx, row.measures?.cache_read_tokens)},
       {key: "exact_retransmission", label: "Exact prompt retransmission", cell: row =>
-        measureCell(row.exact_retransmission)}
+        DeckCore.measureCell(ctx, row.exact_retransmission)}
     ],
     rows: steps,
     defaultSort: {key: "recipe", dir: "asc"}
@@ -112,13 +86,13 @@ DeckShell.registerView("skill", ctx => {
       {key: "harness", label: "Harness"},
       {key: "provider", label: "Provider"},
       {key: "input_tokens", label: "Child input tokens", cell: row =>
-        measureCell(row.measures?.input_tokens)},
+        DeckCore.measureCell(ctx, row.measures?.input_tokens)},
       {key: "output_tokens", label: "Child output tokens", cell: row =>
-        measureCell(row.measures?.output_tokens)},
+        DeckCore.measureCell(ctx, row.measures?.output_tokens)},
       {key: "input_output", label: "Input / output", cell: row =>
-        ratioCell(row.ratios?.input_output)},
+        DeckCore.ratioCell(ctx, row.ratios?.input_output)},
       {key: "cache_share", label: "Cache-read share", cell: row =>
-        ratioCell(row.ratios?.cache_share, true)}
+        DeckCore.ratioCell(ctx, row.ratios?.cache_share, true)}
     ],
     rows: childRows,
     defaultSort: {key: "role", dir: "asc"}

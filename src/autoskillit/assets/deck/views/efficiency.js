@@ -20,16 +20,6 @@ DeckShell.registerView("efficiency", ctx => {
     return values;
   }
 
-  function ratioCell(ratio, percent = false) {
-    const text = DeckCore.formatRatio(ratio, percent);
-    const value = text == null ? ctx.availabilityCell(ratio ?? {state: "unavailable"}) :
-      ctx.el("span", {class: "view-measure"}, text);
-    return ctx.el("div", {class: "view-measure"}, [value,
-      ctx.el("small", {class: "view-sample"}, DeckCore.ratioSample(ratio)),
-      DeckCore.reviewSignal(ctx, ratio)]);
-  }
-
-  const definitions = ctx.definitions ?? {};
   const contributorRoles = new Set((ctx.relationships ?? []).map(edge => edge.role));
   for (const row of skillRows) {
     for (const signal of ratioSignals(row.ratios)) {
@@ -41,18 +31,8 @@ DeckShell.registerView("efficiency", ctx => {
       for (const role of signal.ratio.definition_roles ?? []) contributorRoles.add(role);
     }
   }
-  const definitionCards = [...contributorRoles].sort().map(role => {
-    const definition = definitions[role];
-    const available = definition?.state === "available";
-    return ctx.el("article", {class: "view-definition"}, [
-      ctx.el("h3", {}, ctx.entityLink(role, {view: "role", entity: role})),
-      available ? ctx.el("p", {}, definition.description ?? "Role definition loaded.") :
-        ctx.el("p", {class: "view-review__reason"}, "Definition unavailable for " + role + "."),
-      available ? ctx.el("p", {}, "Declared tools: " +
-        ((definition.tools ?? []).join(", ") || "none recorded")) : null,
-      available ? ctx.el("pre", {}, definition.body ?? "") : null
-    ]);
-  });
+  const definitionCards = [...contributorRoles].sort().map(role =>
+    DeckCore.definitionCard(ctx, role));
   const skillTable = skillRows.length ? ctx.sortableTable({
     columns: [
       {key: "skill", label: "Skill", cell: row => ctx.entityLink(row.skill, {
@@ -61,9 +41,9 @@ DeckShell.registerView("efficiency", ctx => {
       {key: "harness", label: "Harness"},
       {key: "provider", label: "Provider"},
       {key: "input_output", label: "Input / output", cell: row =>
-        ratioCell(row.ratios?.input_output)},
+        DeckCore.ratioCell(ctx, row.ratios?.input_output)},
       {key: "cache_share", label: "Cache-read share", cell: row =>
-        ratioCell(row.ratios?.cache_share, true)},
+        DeckCore.ratioCell(ctx, row.ratios?.cache_share, true)},
       {key: "tool_mix", label: "Observed tool mix", cell: row => DeckCore.toolMix(ctx, row.ratios)}
     ],
     rows: skillRows,
@@ -77,9 +57,9 @@ DeckShell.registerView("efficiency", ctx => {
       {key: "harness", label: "Harness"},
       {key: "provider", label: "Provider"},
       {key: "input_output", label: "Input / output", cell: row =>
-        ratioCell(row.ratios?.input_output)},
+        DeckCore.ratioCell(ctx, row.ratios?.input_output)},
       {key: "cache_share", label: "Cache-read share", cell: row =>
-        ratioCell(row.ratios?.cache_share, true)},
+        DeckCore.ratioCell(ctx, row.ratios?.cache_share, true)},
       {key: "tool_mix", label: "Observed tool mix", cell: row => DeckCore.toolMix(ctx, row.ratios)}
     ],
     rows: roleRows,

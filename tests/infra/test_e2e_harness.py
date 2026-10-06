@@ -185,7 +185,13 @@ def _smoke_case(expected_failures=None):
 
 def _run_git(cwd: Path, *argv: str, env: dict[str, str]) -> str:
     result = subprocess.run(
-        ["git", *argv], cwd=cwd, env=env, capture_output=True, text=True, check=True
+        ["git", *argv],
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=harness.SETUP_COMMAND_TIMEOUT_SEC,
     )
     return result.stdout.strip()
 

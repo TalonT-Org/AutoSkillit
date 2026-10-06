@@ -50,12 +50,12 @@ DESTINATION_RESOLVE_ALLOWLIST: dict[str, str] = {
 }
 
 PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
-    ("execution/report_index.py", "_update", "(index_dir / _ROWS_FILE).unlink"): (
-        2,
+    ("execution/report_index.py", "_clear_index_files", "(index_dir / _ROWS_FILE).unlink"): (
+        1,
         "Rebuilds and incompatible generations remove derived rows under the writer lease.",
     ),
-    ("execution/report_index.py", "_update", "(index_dir / _STATE_FILE).unlink"): (
-        2,
+    ("execution/report_index.py", "_clear_index_files", "(index_dir / _STATE_FILE).unlink"): (
+        1,
         "Rebuilds and incompatible generations remove the watermark under the writer lease.",
     ),
     (

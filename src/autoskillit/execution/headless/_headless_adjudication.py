@@ -24,6 +24,7 @@ from autoskillit.core import (
     ProviderOutcome,
     RateLimitWindow,
     RetryReason,
+    SessionErrorOutcome,
     SkillResult,
     TerminationReason,
     WriteBehaviorSpec,
@@ -242,6 +243,7 @@ def _make_terminated_result(
             unknown_event_count=session.seen_ndjson_unknown_event_count,
             unknown_item_count=session.seen_ndjson_unknown_item_count,
         ),
+        session_error=SessionErrorOutcome.from_errors(session.errors),
     )
 
 

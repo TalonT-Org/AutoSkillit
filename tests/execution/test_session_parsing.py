@@ -804,6 +804,7 @@ class TestSkillResult:
             "pre_contamination_subtype",
             "ndjson_unknown_event_count",
             "ndjson_unknown_item_count",
+            "session_errors",
             "execution_identity",
         }
         assert set(parsed.keys()) == expected

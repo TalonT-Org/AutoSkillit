@@ -609,41 +609,24 @@ def test_build_skill_result_provider_used_survives_budget_guard() -> None:
     assert sr.provider.provider_used == "bedrock"
 
 
-# ── marker_dir / session_id forwarding tests ───────────────────────────────────
+# ── dispatch caller identity forwarding tests ─────────────────────────────────
 
 
-def test_execute_claude_headless_accepts_marker_dir_and_session_id() -> None:
-    import inspect
-
-    from autoskillit.execution.headless import _execute_claude_headless
-
-    sig = inspect.signature(_execute_claude_headless)
-    params = sig.parameters
-    assert "marker_dir" in params
-    assert params["marker_dir"].default is None
-    assert params["marker_dir"].kind == inspect.Parameter.KEYWORD_ONLY
-    assert "session_id" in params
-    assert params["session_id"].default is None
-    assert params["session_id"].kind == inspect.Parameter.KEYWORD_ONLY
-
-
-def test_dispatch_food_truck_accepts_marker_dir_and_session_id() -> None:
+def test_dispatch_food_truck_keeps_caller_session_id_without_watchdog_arguments() -> None:
     import inspect
 
     from autoskillit.execution.headless import DefaultHeadlessExecutor
 
     sig = inspect.signature(DefaultHeadlessExecutor.dispatch_food_truck)
     params = sig.parameters
-    assert "marker_dir" in params
-    assert params["marker_dir"].default is None
-    assert params["marker_dir"].kind == inspect.Parameter.KEYWORD_ONLY
-    assert "session_id" in params
-    assert params["session_id"].default is None
-    assert params["session_id"].kind == inspect.Parameter.KEYWORD_ONLY
+    assert params["caller_session_id"].default == ""
+    assert params["caller_session_id"].kind == inspect.Parameter.KEYWORD_ONLY
+    assert "marker_dir" not in params
+    assert "session_id" not in params
 
 
 @pytest.mark.anyio
-async def test_dispatch_food_truck_forwards_marker_dir_and_session_id(
+async def test_dispatch_food_truck_forwards_caller_session_id(
     minimal_ctx, tmp_path, monkeypatch
 ) -> None:
 
@@ -676,17 +659,14 @@ async def test_dispatch_food_truck_forwards_marker_dir_and_session_id(
         food_truck_capable=True, pty_required=True, channel_b_capable=False
     )
     executor = DefaultHeadlessExecutor(minimal_ctx)
-    marker = tmp_path / "markers"
     await executor.dispatch_food_truck(
         "prompt",
         str(tmp_path),
         completion_marker="%%DONE%%",
-        marker_dir=marker,
-        session_id="dispatch-uuid-123",
+        caller_session_id="dispatch-caller-123",
     )
 
-    assert execute_kwargs["marker_dir"] == marker
-    assert execute_kwargs["session_id"] == "dispatch-uuid-123"
+    assert execute_kwargs["caller_session_id"] == "dispatch-caller-123"
 
 
 # ── readonly_skill forwarding tests ───────────────────────────────────────────
@@ -760,153 +740,6 @@ async def test_execute_forwards_readonly_skill_to_build_result(
     assert captured_readonly[0] is True, (
         "_execute_claude_headless must pass readonly_skill=True to _build_skill_result"
     )
-
-
-@pytest.mark.anyio
-async def test_dispatch_food_truck_derives_marker_dir_from_cwd(
-    minimal_ctx, tmp_path, monkeypatch
-) -> None:
-    from pathlib import Path
-
-    from autoskillit.execution.headless import DefaultHeadlessExecutor
-
-    execute_kwargs: dict = {}
-
-    async def fake_execute(spec, cwd, ctx, **kwargs):
-        execute_kwargs.update(kwargs)
-        return SkillResult(
-            success=True,
-            result="ok",
-            session_id="s1",
-            subtype="success",
-            is_error=False,
-            exit_code=0,
-            needs_retry=False,
-            retry_reason=RetryReason.NONE,
-            stderr="",
-        )
-
-    monkeypatch.setattr(_patch_execution_headless, "_execute_claude_headless", fake_execute)
-    monkeypatch.setattr(
-        _patch_execution_headless,
-        "_resolve_session_log_dir",
-        lambda cwd, backend: Path("/derived/project"),
-    )
-    monkeypatch.setattr(
-        _patch_headless__headless_execute,
-        "_compute_post_session_metrics",
-        lambda *a, **kw: object(),
-    )
-
-    minimal_ctx.backend = _mock_backend(
-        food_truck_capable=True, pty_required=True, channel_b_capable=True
-    )
-    executor = DefaultHeadlessExecutor(minimal_ctx)
-    await executor.dispatch_food_truck(
-        "prompt",
-        str(tmp_path),
-        completion_marker="%%DONE%%",
-    )
-
-    assert execute_kwargs["marker_dir"] == Path("/derived/project")
-
-
-@pytest.mark.anyio
-async def test_dispatch_food_truck_marker_dir_none_without_channel_b(
-    minimal_ctx, tmp_path, monkeypatch
-) -> None:
-    execute_kwargs: dict = {}
-
-    async def fake_execute(spec, cwd, ctx, **kwargs):
-        execute_kwargs.update(kwargs)
-        return SkillResult(
-            success=True,
-            result="ok",
-            session_id="s1",
-            subtype="success",
-            is_error=False,
-            exit_code=0,
-            needs_retry=False,
-            retry_reason=RetryReason.NONE,
-            stderr="",
-        )
-
-    monkeypatch.setattr(_patch_execution_headless, "_execute_claude_headless", fake_execute)
-    monkeypatch.setattr(
-        _patch_headless__headless_execute,
-        "_compute_post_session_metrics",
-        lambda *a, **kw: object(),
-    )
-
-    from autoskillit.execution.headless import DefaultHeadlessExecutor
-
-    minimal_ctx.backend = _mock_backend(
-        food_truck_capable=True, pty_required=True, channel_b_capable=False
-    )
-    executor = DefaultHeadlessExecutor(minimal_ctx)
-    await executor.dispatch_food_truck(
-        "prompt",
-        str(tmp_path),
-        completion_marker="%%DONE%%",
-    )
-
-    assert execute_kwargs["marker_dir"] is None
-
-
-@pytest.mark.anyio
-async def test_execute_claude_headless_forwards_marker_dir_to_runner(
-    minimal_ctx, tmp_path, monkeypatch
-) -> None:
-    from pathlib import Path
-
-    from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
-    from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
-    from tests.execution.conftest import _sr
-
-    spec = ClaudeHeadlessCmd(cmd=("echo", "test"), env={})
-    runner_kwargs: dict = {}
-
-    async def fake_runner(cmd, **kwargs):
-        runner_kwargs.update(kwargs)
-        return _sr()
-
-    minimal_ctx.runner = fake_runner
-    minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
-    monkeypatch.setattr(
-        _patch_headless__headless_execute,
-        "_build_skill_result",
-        lambda *a, **kw: SkillResult(
-            success=True,
-            result="ok",
-            session_id="s1",
-            subtype="success",
-            is_error=False,
-            exit_code=0,
-            needs_retry=False,
-            retry_reason=RetryReason.NONE,
-            stderr="",
-        ),
-    )
-    monkeypatch.setattr(
-        _patch_headless__headless_execute,
-        "_compute_post_session_metrics",
-        lambda *a, **kw: PostSessionMetrics(0, 0),
-    )
-
-    await _execute_claude_headless(
-        lambda _binding, _extras: spec,
-        str(tmp_path),
-        minimal_ctx,
-        timeout=60,
-        stale_threshold=30,
-        marker_dir=Path("/custom/markers"),
-        session_id="sess-abc",
-        launch_resolver=minimal_ctx.launch_resolver,
-        launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
-    )
-
-    assert runner_kwargs["marker_dir"] == Path("/custom/markers")
-    assert runner_kwargs["session_id"] == "sess-abc"
 
 
 # ── pty_mode / session_log_dir capability forwarding tests ───────────────────────
@@ -1017,47 +850,6 @@ async def test_execute_claude_headless_session_log_dir_none_when_no_channel_b(
     assert runner_kwargs["session_log_dir"] is None
 
 
-@pytest.mark.anyio
-async def test_dispatch_food_truck_marker_dir_none_when_no_channel_b(
-    minimal_ctx, tmp_path, monkeypatch
-) -> None:
-    execute_kwargs: dict = {}
-
-    async def fake_execute(spec, cwd, ctx, **kwargs):
-        execute_kwargs.update(kwargs)
-        return SkillResult(
-            success=True,
-            result="ok",
-            session_id="s1",
-            subtype="success",
-            is_error=False,
-            exit_code=0,
-            needs_retry=False,
-            retry_reason=RetryReason.NONE,
-            stderr="",
-        )
-
-    monkeypatch.setattr(_patch_execution_headless, "_execute_claude_headless", fake_execute)
-    monkeypatch.setattr(
-        _patch_headless__headless_execute,
-        "_compute_post_session_metrics",
-        lambda *a, **kw: object(),
-    )
-
-    minimal_ctx.backend = _mock_backend(food_truck_capable=True, channel_b_capable=False)
-
-    from autoskillit.execution.headless import DefaultHeadlessExecutor
-
-    executor = DefaultHeadlessExecutor(minimal_ctx)
-    await executor.dispatch_food_truck(
-        "prompt",
-        str(tmp_path),
-        completion_marker="%%DONE%%",
-    )
-
-    assert execute_kwargs["marker_dir"] is None
-
-
 # ── stream_parser injection tests ────────────────────────────────────────────
 
 
@@ -1151,89 +943,6 @@ async def test_execute_claude_headless_stream_parser_receives_completion_marker(
     )
 
     backend.stream_parser.assert_called_once_with(completion_marker="%%TEST_MARKER%%")
-
-
-@pytest.mark.anyio
-async def test_run_headless_core_forwards_marker_dir_and_caller_session_id(
-    minimal_ctx, tmp_path, monkeypatch
-) -> None:
-    """run_headless_core passes marker_dir + caller_session_id to _execute_claude_headless."""
-    from autoskillit.core import CmdSpec
-    from autoskillit.execution.headless import run_headless_core
-
-    execute_kwargs: dict = {}
-    marker_dir = tmp_path / "markers"
-    marker_dir.mkdir()
-
-    backend = _mock_backend(pty_required=True, channel_b_capable=True)
-    backend.build_skill_session_cmd.return_value = CmdSpec(
-        cmd=("claude", "--print", "test"), env={}
-    )
-    minimal_ctx.backend = backend
-
-    async def fake_execute(spec, cwd, ctx, **kwargs):
-        execute_kwargs.update(kwargs)
-        return _STUB_RESULT
-
-    monkeypatch.setattr(_patch_execution_headless, "_execute_claude_headless", fake_execute)
-
-    await run_headless_core(
-        "/autoskillit:probe",
-        str(tmp_path),
-        minimal_ctx,
-        marker_dir=marker_dir,
-        caller_session_id="orchestrator-session-abc",
-    )
-
-    assert execute_kwargs.get("marker_dir") == marker_dir
-    assert execute_kwargs.get("session_id") == "orchestrator-session-abc"
-
-
-@pytest.mark.anyio
-async def test_default_executor_run_forwards_marker_dir_and_caller_session_id(
-    minimal_ctx, tmp_path, monkeypatch
-) -> None:
-    """DefaultHeadlessExecutor.run() passes marker_dir + caller_session_id to run_headless_core."""
-    import autoskillit.execution.headless as _headless_mod
-    from autoskillit.execution.headless import DefaultHeadlessExecutor
-
-    captured: dict = {}
-    marker_dir = tmp_path / "markers"
-    marker_dir.mkdir()
-
-    async def fake_core(skill_command, cwd, ctx, **kwargs):
-        captured.update(kwargs)
-        return _STUB_RESULT
-
-    monkeypatch.setattr(_headless_mod, "run_headless_core", fake_core)
-
-    executor = DefaultHeadlessExecutor(minimal_ctx)
-    await executor.run(
-        "/autoskillit:probe",
-        str(tmp_path),
-        marker_dir=marker_dir,
-        caller_session_id="orchestrator-session-xyz",
-    )
-
-    assert captured.get("marker_dir") == marker_dir
-    assert captured.get("caller_session_id") == "orchestrator-session-xyz"
-
-
-def test_headless_executor_protocol_includes_marker_dir_params() -> None:
-    """HeadlessExecutor.run() Protocol includes marker_dir and caller_session_id."""
-    import inspect
-
-    from autoskillit.core.types import HeadlessExecutor
-
-    sig = inspect.signature(HeadlessExecutor.run)
-    assert "marker_dir" in sig.parameters, (
-        "marker_dir missing from HeadlessExecutor.run() signature"
-    )
-    assert "caller_session_id" in sig.parameters, (
-        "caller_session_id missing from HeadlessExecutor.run() signature"
-    )
-    assert sig.parameters["marker_dir"].default is None
-    assert sig.parameters["caller_session_id"].default is None
 
 
 @pytest.mark.anyio

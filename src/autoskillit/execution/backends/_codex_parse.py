@@ -438,6 +438,7 @@ def _preserves_rollout_prefix(prior: Path, candidate: Path) -> bool:
 class _CodexParseAccumulator:
     session_id: str = ""
     agent_messages: list[str] = field(default_factory=list)
+    item_error_messages: list[str] = field(default_factory=list)
     command_executions: list[dict[str, Any]] = field(default_factory=list)
     mcp_tool_calls: list[dict[str, Any]] = field(default_factory=list)
     file_changes: list[str] = field(default_factory=list)
@@ -496,16 +497,23 @@ def _accumulate_codex_completed_item(
     item_type = CodexItemType.from_ndjson(item.get("type", ""))
     if item_type in (CodexItemType.AGENT_MESSAGE, CodexItemType.MESSAGE):
         _accumulate_codex_message_item(acc, item, item_type)
-    elif item_type in (CodexItemType.COMMAND_EXECUTION, CodexItemType.FUNCTION_CALL):
+    elif item_type in (
+        CodexItemType.COMMAND_EXECUTION,
+        CodexItemType.FUNCTION_CALL,
+        CodexItemType.COLLAB_TOOL_CALL,
+        CodexItemType.WEB_SEARCH,
+    ):
         acc.command_executions.append(item)
     elif item_type == CodexItemType.MCP_TOOL_CALL:
         acc.mcp_tool_calls.append(item)
     elif item_type == CodexItemType.FILE_CHANGE:
         _accumulate_codex_file_changes(acc, item)
-    elif item_type in (CodexItemType.COLLAB_TOOL_CALL, CodexItemType.WEB_SEARCH):
-        acc.command_executions.append(item)
     elif item_type in (CodexItemType.REASONING, CodexItemType.TODO_LIST):
         logger.debug("codex_ndjson_informational_item", item_type=item_type.value)
+    elif item_type == CodexItemType.ERROR:
+        message = item.get("message")
+        if isinstance(message, str) and message:
+            acc.item_error_messages.append(message)
     elif item_type == CodexItemType.UNKNOWN:
         logger.warning("codex_ndjson_unknown_item_type", item_type=item.get("type", ""))
         acc.ndjson_unknown_item_count += 1
@@ -677,6 +685,7 @@ class CodexResultParser:
                 "canonical_token_usage": canonical_dict,
                 "cumulative_token_usage": acc.cumulative_token_usage,
                 "agent_messages": acc.agent_messages,
+                "item_error_messages": acc.item_error_messages,
                 "command_executions": acc.command_executions,
                 "mcp_tool_calls": acc.mcp_tool_calls,
                 "file_changes": acc.file_changes,

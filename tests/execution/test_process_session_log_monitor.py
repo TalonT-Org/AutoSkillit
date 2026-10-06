@@ -932,18 +932,13 @@ class TestSessionLogMonitorDirMissing:
 class TestResumeBoundary:
     """Phase 2 must not fire on completion markers that existed before monitoring began."""
 
-    @pytest.mark.parametrize("caller_session_id", [None, "session-abc"])
     @pytest.mark.anyio
-    async def test_monitor_skips_preexisting_completion_marker(
-        self,
-        tmp_path,
-        caller_session_id: str | None,
-    ):
+    async def test_monitor_skips_preexisting_completion_marker(self, tmp_path):
         """Phase 2 must NOT fire on a completion marker that existed before monitoring began.
 
         Reproduces the resume-boundary false-fire: on `claude --resume`, the JSONL
         file already contains the completion marker from the prior session. The
-        no-caller path must retain the same new-bytes-only boundary.
+        monitor must retain its new-bytes-only boundary.
         """
 
         log_dir = tmp_path / "session_logs"
@@ -998,7 +993,6 @@ class TestResumeBoundary:
                     _phase1_poll=0.01,
                     _phase2_poll=0.05,
                     _on_poll=count_polls,
-                    caller_session_id=caller_session_id,
                 )
             )
 
@@ -1098,113 +1092,16 @@ class TestResumeBoundary:
             spawn_time=spawn_time,
             _phase1_poll=0.01,
             _phase2_poll=0.05,
-            caller_session_id="session-ghi",
         )
 
         assert result.status == ChannelBStatus.STALE
 
 
 @pytest.mark.anyio
-async def test_stale_NOT_fired_when_execution_marker_active(tmp_path):
-    """Stale NOT fired when JSONL silent but a run-skill-in-progress marker is active and fresh.
-
-    This is a TDD guard for the execution marker blind spot: current code uses
-    dispatch-in-progress-* glob, so run-skill-in-progress-* markers are invisible.
-    After the fix (glob -> *-in-progress-*), this test must pass.
-    """
-    import json
-
-    session_file = tmp_path / "abc123.jsonl"
-    session_file.write_text(
-        json.dumps({"type": "assistant", "message": {"role": "assistant", "content": "working"}})
-        + "\n"
-    )
-    spawn_time = time.time() - 1
-
-    marker_dir = tmp_path / "marker_dir"
-    marker_dir.mkdir()
-    marker_path = marker_dir / "run-skill-in-progress-caller-session-step1.marker"
-    marker_path.write_text("{}")
-
-    monitor_returned = anyio.Event()
-    monitor_status: list[object] = []
-
-    async def run_monitor() -> None:
-        result = await _session_log_monitor(
-            tmp_path,
-            "DONE",
-            stale_threshold=0.05,
-            spawn_time=spawn_time,
-            marker_dir=marker_dir,
-            caller_session_id="caller-session",
-            _phase1_poll=0.01,
-            _phase2_poll=0.05,
-            max_suppression_seconds=10.0,
-        )
-        monitor_status.append(result.status)
-        monitor_returned.set()
-
-    async def touch_marker() -> None:
-        for _ in range(60):
-            await anyio.sleep(0.05)
-            try:
-                marker_path.touch()
-            except OSError:
-                break
-
-    with anyio.move_on_after(0.6):
-        async with anyio.create_task_group() as tg:
-            tg.start_soon(touch_marker)
-            tg.start_soon(run_monitor)
-
-    assert not monitor_returned.is_set(), (
-        f"Monitor returned early: stale fired with active run-skill execution marker. "
-        f"Status: {monitor_status}"
-    )
-    assert monitor_status == [], (
-        f"Monitor emitted a status despite not returning: {monitor_status}"
-    )
-
-
-@pytest.mark.anyio
-async def test_stale_fired_when_execution_marker_expired(tmp_path):
-    """Stale fires when JSONL is silent and the run-skill execution marker is expired."""
-    import json
-    import os
-
-    session_file = tmp_path / "abc123.jsonl"
-    session_file.write_text(
-        json.dumps({"type": "assistant", "message": {"role": "assistant", "content": "working"}})
-        + "\n"
-    )
-    spawn_time = time.time() - 1
-
-    marker_dir = tmp_path / "marker_dir"
-    marker_dir.mkdir()
-    marker_path = marker_dir / "run-skill-in-progress-caller-session-step1.marker"
-    marker_path.write_text("{}")
-    past = time.time() - 120  # 120s old — well beyond default max_marker_age=60s
-    os.utime(marker_path, (past, past))
-
-    with anyio.fail_after(3.0):
-        result = await _session_log_monitor(
-            tmp_path,
-            "DONE",
-            stale_threshold=0.05,
-            spawn_time=spawn_time,
-            marker_dir=marker_dir,
-            caller_session_id="caller-session",
-            _phase1_poll=0.01,
-            _phase2_poll=0.05,
-        )
-    assert result.status == ChannelBStatus.STALE
-
-
-@pytest.mark.anyio
-async def test_watch_session_log_passes_marker_dir_to_monitor_kwargs(
+async def test_watch_session_log_passes_operation_lease_dir_to_monitor_kwargs(
     tmp_path: anyio.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """marker_dir and session_id are injected into _monitor_kwargs."""
+    """The active operation lease channel reaches the session monitor."""
     captured_kwargs: dict[str, object] = {}
 
     async def fake_session_log_monitor(*args, **kwargs) -> SessionMonitorResult:
@@ -1239,19 +1136,17 @@ async def test_watch_session_log_passes_marker_dir_to_monitor_kwargs(
             _phase2_poll=0.05,
             _phase1_timeout=0.1,
             max_suppression_seconds=1800.0,
-            marker_dir=tmp_path,
-            session_id="parent-session",
+            operation_lease_dir=tmp_path,
         )
 
-    assert captured_kwargs["marker_dir"] == tmp_path
-    assert captured_kwargs["caller_session_id"] == "parent-session"
+    assert captured_kwargs["operation_lease_dir"] == tmp_path
 
 
 @pytest.mark.anyio
-async def test_watch_session_log_omits_marker_kwargs_when_none(
+async def test_watch_session_log_omits_operation_lease_dir_when_none(
     tmp_path: anyio.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """marker_dir=None and session_id=None — keys absent from _monitor_kwargs."""
+    """No lease channel is added when the watcher has no operation lease directory."""
     captured_kwargs: dict[str, object] = {}
 
     async def fake_session_log_monitor(*args, **kwargs) -> SessionMonitorResult:
@@ -1287,5 +1182,4 @@ async def test_watch_session_log_omits_marker_kwargs_when_none(
             _phase1_timeout=0.1,
         )
 
-    assert "marker_dir" not in captured_kwargs
-    assert "caller_session_id" not in captured_kwargs
+    assert "operation_lease_dir" not in captured_kwargs

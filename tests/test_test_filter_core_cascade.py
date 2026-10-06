@@ -199,6 +199,7 @@ class TestModuleCascadeCore:
             "_type_session_invariant_admission",
             "_step_context",
             "_execution_marker",
+            "_operation_lease",
             "git_refs",
             "git_remote",
             "fs_observation",

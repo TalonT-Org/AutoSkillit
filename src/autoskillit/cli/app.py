@@ -31,19 +31,17 @@ from autoskillit.cli.session import order
 from autoskillit.cli.session._session_order import _recipes_dir_for
 from autoskillit.core import (
     AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR,
+    OPERATION_LEASE_DIR_ENV_VAR,
     AuditAdmissionStoreAuthority,
     RecipeSource,
     atomic_write,
     get_logger,
 )
-from autoskillit.execution import _has_active_execution_marker
 
 if TYPE_CHECKING:
-    from autoskillit.core import ManagedWorkerCapacity, SkillResult
+    from autoskillit.core import InFlightOperationsProtocol, ManagedWorkerCapacity, SkillResult
     from autoskillit.migration import MigrationEngine, MigrationFile
     from autoskillit.workspace import SkillInfo
-
-logger = get_logger(__name__)
 
 logger = get_logger(__name__)
 
@@ -69,18 +67,30 @@ app.command(order)
 
 
 def is_server_active(
-    marker_dir: Path | None,
     worker_capacity: ManagedWorkerCapacity | None,
+    in_flight_operations: InFlightOperationsProtocol,
 ) -> bool:
-    if worker_capacity is not None and worker_capacity.active_count > 0:
-        return True
-    if marker_dir is not None and _has_active_execution_marker(marker_dir):
-        return True
-    return False
+    return in_flight_operations.active_count > 0 or (
+        worker_capacity is not None and worker_capacity.active_count > 0
+    )
 
 
 class CliError(Exception):
     """Raised by CLI helpers to signal a user-facing error that should abort the command."""
+
+
+def _operation_lease_channel_from_env() -> Path | None:
+    value = os.environ.get(OPERATION_LEASE_DIR_ENV_VAR)
+    if value is None:
+        return None
+    try:
+        candidate = Path(value)
+        if candidate.is_absolute() and candidate.is_dir():
+            return candidate
+    except (OSError, ValueError):
+        pass
+    logger.warning("operation_lease_channel_rejected", value=value)
+    return None
 
 
 @app.default
@@ -165,6 +175,7 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
         cfg,
         project_dir=_explicit_project_dir,
         audit_admission_store_authority=audit_admission_store_authority,
+        operation_lease_channel=_operation_lease_channel_from_env(),
         plugin_retirement_coordinator=default_plugin_retirement_coordinator(),
     )
     _initialize(ctx)
@@ -172,16 +183,13 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
     try:
         backend_options = {"use_uvloop": sys.platform != "win32"}
 
-        _marker_dir: Path | None = (
-            ctx.backend.session_locator().project_log_dir(str(ctx.project_dir))
-            if ctx.backend is not None
-            else None
-        )
-
         async def _guarded_serve() -> None:
             await serve_with_signal_guard(
                 mcp,
-                activity_check=lambda: is_server_active(_marker_dir, ctx.worker_capacity),
+                activity_check=lambda: is_server_active(
+                    ctx.worker_capacity,
+                    ctx.in_flight_operations,
+                ),
             )
 
         anyio.run(

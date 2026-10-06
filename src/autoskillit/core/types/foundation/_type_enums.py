@@ -721,6 +721,7 @@ class CodexItemType(StrEnum):
     AGENT_MESSAGE = "agent_message"
     COMMAND_EXECUTION = "command_execution"
     FILE_CHANGE = "file_change"
+    ERROR = "error"
     MCP_TOOL_CALL = "mcp_tool_call"
     COLLAB_TOOL_CALL = "collab_tool_call"
     WEB_SEARCH = "web_search"

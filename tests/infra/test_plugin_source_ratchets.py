@@ -50,6 +50,11 @@ DESTINATION_RESOLVE_ALLOWLIST: dict[str, str] = {
 }
 
 PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
+    ("execution/headless/_managed/_attempt.py", "_operation_lease_channel", "shutil.rmtree"): (
+        1,
+        "Removes only the unique physical-attempt directory created with exist_ok=False "
+        "when its supervision-channel context exits.",
+    ),
     ("execution/report_index.py", "_clear_index_files", "(index_dir / _ROWS_FILE).unlink"): (
         1,
         "Rebuilds and incompatible generations remove derived rows under the writer lease.",

@@ -40,6 +40,7 @@ from ._type_protocols_workspace import PluginArtifactAuthority, SkillProjectionC
 
 __all__ = [
     "CompletionRequiredResolver",
+    "InFlightOperationsProtocol",
     "InputContractResolver",
     "LaunchAdapter",
     "LaunchResolver",
@@ -52,6 +53,17 @@ __all__ = [
     "SkillSessionContractStore",
     "WriteExpectedResolver",
 ]
+
+
+class InFlightOperationsProtocol(Protocol):
+    """Minimal counter contract for active kitchen tool operations."""
+
+    @property
+    def active_count(self) -> int: ...
+
+    def _enter(self) -> None: ...
+
+    def _exit(self) -> None: ...
 
 
 @runtime_checkable
@@ -342,8 +354,6 @@ class HeadlessExecutor(Protocol):
         resume_checkpoint: SessionCheckpoint | None = None,
         resume_message: str | None = None,
         backend_authority: BackendAuthority | None = None,
-        marker_dir: Path | None = None,
-        caller_session_id: str | None = None,
         inspector_eligible: bool = False,
         inspector_model: str = "",
         network_access: bool = False,
@@ -396,8 +406,6 @@ class HeadlessExecutor(Protocol):
         provider_name: str = "",
         profile_name: str = "",
         sentinel_contract: str = "",
-        marker_dir: Path | None = None,
-        session_id: str | None = None,
         resume_message: str | None = None,
         backend_authority: BackendAuthority | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,

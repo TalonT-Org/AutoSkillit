@@ -174,7 +174,6 @@ autoskillit.core
 | 15 | `tests/execution/test_process_env_boundary.py` | `ClaudeHeadlessCmd` | Deferred (101) |
 | 16 | `tests/execution/backends/test_claude_code_backend.py` | `build_headless_cmd` | Deferred (47) |
 | 17 | `tests/execution/test_process_session_log_monitor_stale_suppression.py` | `_session_log_monitor`, `ChannelBStatus` | Module-level |
-| 18 | `tests/execution/test_process_session_log_monitor_dispatch_marker.py` | `_session_log_monitor`, `ChannelBStatus` | Module-level |
 
 **Additional indirect consumer:**
 - `tests/cli/test_cook_env_scrub.py` — imports `_MAX_MCP_OUTPUT_TOKENS_VALUE` from `autoskillit.execution` (package re-export path)

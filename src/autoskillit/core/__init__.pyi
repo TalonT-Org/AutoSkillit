@@ -226,6 +226,18 @@ from .plugins._active_kitchens import (
     sample_kitchen_process_identity as sample_kitchen_process_identity,
 )
 from .plugins._active_kitchens import unregister_active_kitchen as unregister_active_kitchen
+from .plugins._operation_lease import (
+    OPERATION_LEASE_FRESHNESS_SECONDS as OPERATION_LEASE_FRESHNESS_SECONDS,
+)
+from .plugins._operation_lease import (
+    OPERATION_LEASE_HEARTBEAT_SECONDS as OPERATION_LEASE_HEARTBEAT_SECONDS,
+)
+from .plugins._operation_lease import InFlightOperations as InFlightOperations
+from .plugins._operation_lease import OperationLeaseHandle as OperationLeaseHandle
+from .plugins._operation_lease import OperationLeaseRecord as OperationLeaseRecord
+from .plugins._operation_lease import current_operation_lease as current_operation_lease
+from .plugins._operation_lease import operation_lease as operation_lease
+from .plugins._operation_lease import read_active_operation_leases as read_active_operation_leases
 from .plugins._plugin_artifact_identity import (
     INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS as INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS,
 )
@@ -613,6 +625,7 @@ from .types import MAXIMUM_FIELDS as MAXIMUM_FIELDS
 from .types import MCP_CLIENT_BACKEND_ENV_VAR as MCP_CLIENT_BACKEND_ENV_VAR
 from .types import NATIVE_SHELL_CAPTURE_MODE_ENV_VAR as NATIVE_SHELL_CAPTURE_MODE_ENV_VAR
 from .types import NON_VARIADIC_CLAUDE_FLAGS as NON_VARIADIC_CLAUDE_FLAGS
+from .types import OPERATION_LEASE_DIR_ENV_VAR as OPERATION_LEASE_DIR_ENV_VAR
 from .types import (
     ORCHESTRATOR_FACING_INSTRUCTION_SURFACES as ORCHESTRATOR_FACING_INSTRUCTION_SURFACES,
 )
@@ -1018,6 +1031,7 @@ from .types import HostClientAttestation as HostClientAttestation
 from .types import IdempotencyExpiredEffect as IdempotencyExpiredEffect
 from .types import IdempotencyNamespace as IdempotencyNamespace
 from .types import IdempotencyRecord as IdempotencyRecord
+from .types import InFlightOperationsProtocol as InFlightOperationsProtocol
 from .types import InfraExitCategory as InfraExitCategory
 from .types import InfraOutcome as InfraOutcome
 from .types import InfrastructureFaultError as InfrastructureFaultError
@@ -1263,6 +1277,7 @@ from .types import SerializedTokenMeasure as SerializedTokenMeasure
 from .types import ServeOverridesSnapshot as ServeOverridesSnapshot
 from .types import SessionAttemptHandle as SessionAttemptHandle
 from .types import SessionCheckpoint as SessionCheckpoint
+from .types import SessionErrorOutcome as SessionErrorOutcome
 from .types import SessionEvent as SessionEvent
 from .types import SessionHookRoot as SessionHookRoot
 from .types import SessionInvariantAdaptationRefusal as SessionInvariantAdaptationRefusal

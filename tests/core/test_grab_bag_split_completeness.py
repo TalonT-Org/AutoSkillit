@@ -132,10 +132,6 @@ _PRE_SPLIT_TEST_TYPES_NAMES: frozenset[str] = frozenset(
         "test_github_fetcher_protocol_has_label_methods",
         "test_subprocess_result_has_elapsed_seconds_field",
         "test_subprocess_runner_protocol_pty_mode_default_false",
-        "test_subprocess_runner_protocol_marker_dir_default_none",
-        "test_subprocess_runner_protocol_session_id_default_none",
-        "test_subprocess_runner_protocol_marker_params_after_max_extension",
-        "test_subprocess_runner_protocol_marker_params_are_keyword_only",
         "test_ci_run_scope_event_field",
         "test_ci_run_scope_event_defaults_to_none",
         # test_types_infrastructure_faults.py
@@ -265,10 +261,6 @@ _SPLIT_TARGETS: dict[str, str] = {
     "test_github_fetcher_protocol_has_label_methods": "tests.core.test_types_protocols",
     "test_subprocess_result_has_elapsed_seconds_field": "tests.core.test_types_protocols",
     "test_subprocess_runner_protocol_pty_mode_default_false": "tests.core.test_types_protocols",
-    "test_subprocess_runner_protocol_marker_dir_default_none": "tests.core.test_types_protocols",
-    "test_subprocess_runner_protocol_session_id_default_none": "tests.core.test_types_protocols",
-    "test_subprocess_runner_protocol_marker_params_after_max_extension": "tests.core.test_types_protocols",  # noqa: E501
-    "test_subprocess_runner_protocol_marker_params_are_keyword_only": "tests.core.test_types_protocols",  # noqa: E501
     "test_ci_run_scope_event_field": "tests.core.test_types_protocols",
     "test_ci_run_scope_event_defaults_to_none": "tests.core.test_types_protocols",
     "test_skill_command_prefix_constant_exists": "tests.core.test_types_infrastructure_faults",
@@ -373,7 +365,7 @@ _SPLIT_TARGET_FILE_PATHS: tuple[str, ...] = (
 def test_pre_split_test_types_inventory_is_frozen() -> None:
     """The pre-split inventory must be a frozen set with no leading-dot or duplicate names."""
     assert isinstance(_PRE_SPLIT_TEST_TYPES_NAMES, frozenset)
-    assert len(_PRE_SPLIT_TEST_TYPES_NAMES) == 44
+    assert len(_PRE_SPLIT_TEST_TYPES_NAMES) == 40
     for name in _PRE_SPLIT_TEST_TYPES_NAMES:
         assert "." not in name, f"Invalid name with dot: {name}"
 
@@ -525,6 +517,7 @@ def test_no_unintended_new_test_files_under_tests_core() -> None:
             "test_label_lifecycle.py",
             "test_logging.py",
             "test_measure_aggregation.py",
+            "test_operation_lease.py",
             "test_parse_plan_paths.py",
             "test_path_containment.py",
             "test_paths.py",

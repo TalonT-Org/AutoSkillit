@@ -25,6 +25,7 @@ def test_execution_shard_all():
         "CompletionRequiredResolver",
         "SkillProjectionPreparation",
         "InputContractResolver",
+        "InFlightOperationsProtocol",
         "TestRunner",
         "HeadlessExecutor",
         "LaunchAdapter",

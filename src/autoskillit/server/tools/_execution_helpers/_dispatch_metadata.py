@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import math
 import os
 from collections.abc import Mapping
 from pathlib import Path
@@ -69,6 +70,20 @@ def check_review_approach_plan_path(step_name: str, skill_command: str) -> str |
             retriable=False,
         )
     )
+
+
+def inherited_session_deadline_epoch() -> float:
+    """Return this process's inherited session deadline, or zero when invalid."""
+    value = os.environ.get("AUTOSKILLIT_SESSION_DEADLINE")
+    if value is None:
+        return 0.0
+    try:
+        deadline = float(value)
+    except ValueError:
+        return 0.0
+    if not math.isfinite(deadline) or deadline <= 0:
+        return 0.0
+    return deadline
 
 
 def derive_run_cmd_write_prefixes() -> tuple[str, ...]:

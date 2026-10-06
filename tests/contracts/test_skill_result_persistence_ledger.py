@@ -124,6 +124,7 @@ SKILL_RESULT_PERSISTENCE: tuple[tuple[str, str, str], ...] = (
     ("provider.provider_used", "provider_used", "persisted"),
     ("result", "result", "live-only:size"),
     ("retry_reason", "retry_reason", "persisted"),
+    ("session_error.messages", "session_errors", "persisted"),
     ("session_id", "session_id", "persisted"),
     ("stderr", "stderr", "live-only:size"),
     ("subtype", "subtype", "persisted"),
@@ -272,6 +273,7 @@ def test_durable_ledger_rows_exist_in_real_flushed_artifacts(tmp_path) -> None:
         "provider_fallback": False,
         "provider_used": "",
         "session_id": "test-session-001",
+        "session_errors": [],
         "subtype": "completed",
         "write_path_warnings": [],
     }

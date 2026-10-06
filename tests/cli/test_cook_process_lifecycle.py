@@ -364,7 +364,7 @@ def test_active_child_extended_until_hard_cap(
     monkeypatch.setattr(
         _session_process,
         "_default_activity",
-        lambda *_args: {"api_connection"},
+        lambda *_args, **_kwargs: {"child_processes"},
     )
 
     result = run_cook_attempt(
@@ -392,7 +392,7 @@ def test_idle_child_ends_at_soft_ceiling(
         return
     monkeypatch.setattr(_session_process, "_LIVENESS_PROBE_INTERVAL_SECONDS", 0.2)
     monkeypatch.setattr(_session_process, "_IDLE_WINDOW_SECONDS", 0.5)
-    monkeypatch.setattr(_session_process, "_default_activity", lambda *_args: set())
+    monkeypatch.setattr(_session_process, "_default_activity", lambda *_args, **_kwargs: set())
 
     result = run_cook_attempt(
         _spec(tmp_path, "import time; time.sleep(30)"),
@@ -531,7 +531,7 @@ def test_lifetime_decision_wins_dispatch_even_when_a_failure_accumulated(
     monkeypatch.setattr(
         _session_process,
         "_default_activity",
-        lambda *_args: {"api_connection"},
+        lambda *_args, **_kwargs: {"child_processes"},
     )
     grace_seconds = 0.5
     monkeypatch.setattr(
@@ -620,7 +620,7 @@ def test_poll_failures_do_not_escape_the_wait_loop(
     monkeypatch.setattr(
         _session_process,
         "_default_activity",
-        lambda *_args: (_ for _ in ()).throw(OSError("activity probe failed")),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("activity probe failed")),
     )
     monkeypatch.setattr(
         _session_process,
@@ -631,8 +631,8 @@ def test_poll_failures_do_not_escape_the_wait_loop(
     actual_lifetime = _session_process.InteractiveLifetime
 
     class AcceleratedLifetime(actual_lifetime):
-        def __init__(self, policy: ProcessTetherConfig) -> None:
-            super().__init__(policy, clock=lambda: clock_value[0])
+        def __init__(self, policy: ProcessTetherConfig, **kwargs) -> None:
+            super().__init__(policy, clock=lambda: clock_value[0], **kwargs)
 
         def poll(self):
             clock_value[0] += 1000.0

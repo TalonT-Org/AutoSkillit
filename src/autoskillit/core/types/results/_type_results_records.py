@@ -51,7 +51,7 @@ __all__ = [
 
 T = TypeVar("T")
 
-SESSION_INDEX_SCHEMA_VERSION: Final[int] = 15
+SESSION_INDEX_SCHEMA_VERSION: Final[int] = 16
 TOKEN_USAGE_SCHEMA_VERSION: Final[int] = 4
 TURN_USAGE_SCHEMA_VERSION: Final[int] = 2
 
@@ -440,6 +440,7 @@ class SessionIndexEntry(TypedDict):
     api_retry_last_status: int | None
     ndjson_unknown_event_count: int
     ndjson_unknown_item_count: int
+    session_errors: list[str]
     outcome_fields: dict[str, int | str] | None
     outcome_invariant_violated: bool
     outcome_qualifier: str | None

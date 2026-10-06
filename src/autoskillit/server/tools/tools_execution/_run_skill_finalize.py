@@ -397,8 +397,6 @@ async def _execute_and_finalize_run_skill(
                             backend_authority=state._backend_authority,
                             resume_session_id=state.resume_session_id,
                             resume_launch_contract=state._resume_launch_contract,
-                            marker_dir=state._marker_dir,
-                            caller_session_id=state._caller_hook_session_id,
                             inspector_eligible=state._in_fleet_dispatch
                             and bool(state._inspector_model),
                             inspector_model=state._inspector_model,

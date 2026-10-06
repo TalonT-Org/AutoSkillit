@@ -54,6 +54,7 @@ EXPORT_MODULES: tuple[str, ...] = (
     ".io",
     ".logging",
     ".pipeline._execution_marker",
+    ".plugins._operation_lease",
     ".pipeline._step_context",
     ".pipeline.pipeline_tracker",
     ".planset",

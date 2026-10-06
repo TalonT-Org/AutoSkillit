@@ -128,6 +128,9 @@ class TestCodexEventTypeVocabulary:
 
 
 class TestCodexItemTypeVocabulary:
+    def test_error_item_type_is_recognized(self) -> None:
+        assert CodexItemType.from_ndjson("error") is CodexItemType.ERROR
+
     @pytest.mark.parametrize(
         "member",
         _NON_UNKNOWN_ITEM_TYPES,

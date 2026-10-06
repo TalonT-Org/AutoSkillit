@@ -1,4 +1,4 @@
-"""Structural guard: all process watchers must call _has_active_execution_marker."""
+"""Watchers use operation leases and child activity as liveness evidence."""
 
 from __future__ import annotations
 
@@ -11,24 +11,17 @@ from tests.arch._helpers import RACE_WATCHERS_PY
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
-_CLI_APP = Path("src/autoskillit/cli/app.py")
+_CLI_SESSION_PROCESS = Path("src/autoskillit/cli/session/_session_process.py")
 _PROCESS_RACE = Path("src/autoskillit/execution/process/_process_race.py")
 _PROCESS_MONITOR = Path("src/autoskillit/execution/process/_process_monitor.py")
 _PROCESS_INIT = Path("src/autoskillit/execution/process/__init__.py")
 _PROCESS_TERMINATION = Path("src/autoskillit/execution/process/_termination.py")
-
-_WATCHERS_THAT_MUST_CHECK_EXECUTION_MARKER = frozenset(
-    {
-        "_watch_child_activity",
-        "_session_log_monitor",
-        "_watch_stdout_idle",
-    }
-)
+_EXECUTION_ROOT = Path("src/autoskillit/execution")
 
 
 def _functions_calling_predicate(source_path: Path, predicate: str) -> set[str]:
     """Return names of top-level async functions in source_path that call predicate."""
-    tree = ast.parse(source_path.read_text())
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
     result: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
@@ -43,7 +36,7 @@ def _functions_calling_predicate(source_path: Path, predicate: str) -> set[str]:
 
 
 def _function(source_path: Path, name: str) -> ast.AsyncFunctionDef | ast.FunctionDef:
-    tree = ast.parse(source_path.read_text())
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
     return next(
         node
         for node in ast.walk(tree)
@@ -74,42 +67,84 @@ def _calls_trigger_set(node: ast.AST) -> bool:
     )
 
 
-@pytest.mark.parametrize("watcher", sorted(_WATCHERS_THAT_MUST_CHECK_EXECUTION_MARKER))
-def test_watcher_calls_has_active_execution_marker(watcher: str) -> None:
-    """Each watcher in the set must call _has_active_execution_marker."""
-    callers_race = _functions_calling_predicate(_PROCESS_RACE, "_has_active_execution_marker")
-    callers_watchers = _functions_calling_predicate(
-        RACE_WATCHERS_PY, "_has_active_execution_marker"
-    )
-    callers_monitor = _functions_calling_predicate(
-        _PROCESS_MONITOR, "_has_active_execution_marker"
-    )
-    if watcher == "_session_log_monitor":
-        assert watcher in _functions_calling_predicate(
-            _PROCESS_MONITOR, "_stale_suppression_reason"
-        )
-        assert "_stale_suppression_reason" in _functions_calling_predicate(
-            _PROCESS_MONITOR, "_active_liveness_signals"
-        )
-        assert "_active_liveness_signals" in callers_monitor
-        return
-    all_callers = callers_race | callers_watchers | callers_monitor
-    assert watcher in all_callers, (
-        f"{watcher} does not call _has_active_execution_marker. "
-        f"Functions that do: {sorted(all_callers)}"
-    )
+def _called_names(node: ast.AST) -> set[str]:
+    names: set[str] = set()
+    for call in (child for child in ast.walk(node) if isinstance(child, ast.Call)):
+        if isinstance(call.func, ast.Name):
+            names.add(call.func.id)
+        elif isinstance(call.func, ast.Attribute):
+            names.add(call.func.attr)
+    return names
 
 
-_SIGNAL_GUARD_ACTIVITY_MUST_CHECK_MARKER = frozenset({"is_server_active"})
-
-
-@pytest.mark.parametrize("fn_name", sorted(_SIGNAL_GUARD_ACTIVITY_MUST_CHECK_MARKER))
-def test_signal_guard_activity_check_calls_has_active_execution_marker(fn_name: str) -> None:
-    callers = _functions_calling_predicate(_CLI_APP, "_has_active_execution_marker")
-    assert fn_name in callers, (
-        f"{fn_name} in cli/app.py does not call _has_active_execution_marker. "
-        f"Functions that do: {sorted(callers)}"
+def test_liveness_watchers_reach_the_operation_lease_reader() -> None:
+    """Watchers use the lease reader directly or through the shared lease helpers."""
+    lease_activity = next(
+        node
+        for node in ast.walk(ast.parse(_PROCESS_MONITOR.read_text(encoding="utf-8")))
+        if isinstance(node, ast.ClassDef) and node.name == "_OperationLeaseActivity"
     )
+    refresh = next(
+        node
+        for node in lease_activity.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "refresh"
+    )
+    active_signals = _function(_PROCESS_MONITOR, "_active_liveness_signals")
+    assert "read_active_operation_leases" in _called_names(refresh)
+    assert "read_active_operation_leases" in _called_names(active_signals)
+
+    for source_path, function_name in (
+        (RACE_WATCHERS_PY, "_watch_child_activity"),
+        (RACE_WATCHERS_PY, "_watch_stdout_idle"),
+        (_PROCESS_MONITOR, "_session_log_monitor"),
+        (_PROCESS_TERMINATION, "_drain_before_escalation"),
+    ):
+        routes = _called_names(_function(source_path, function_name))
+        assert routes & {
+            "read_active_operation_leases",
+            "_active_liveness_signals",
+            "refresh",
+        }, f"{function_name} does not reach operation lease liveness"
+
+
+def test_execution_watchers_have_no_dispatch_marker_dependency() -> None:
+    for source_path in _EXECUTION_ROOT.rglob("*.py"):
+        tree = ast.parse(source_path.read_text(encoding="utf-8"))
+        assert "_has_active_execution_marker" not in _called_names(tree), source_path
+        assert not any(
+            isinstance(node, ast.alias)
+            and node.name.rsplit(".", 1)[-1] == "_has_active_execution_marker"
+            for node in ast.walk(tree)
+        ), source_path
+        for call in (node for node in ast.walk(tree) if isinstance(node, ast.Call)):
+            arguments = [*call.args, *(keyword.value for keyword in call.keywords)]
+            assert not any(
+                isinstance(node, ast.Constant)
+                and isinstance(node.value, str)
+                and "-in-progress-" in node.value
+                for argument in arguments
+                for node in ast.walk(argument)
+            ), source_path
+
+
+def test_liveness_consumers_do_not_use_network_connections_as_evidence() -> None:
+    consumers = (
+        (_PROCESS_MONITOR, "_active_liveness_signals"),
+        (_PROCESS_MONITOR, "_stale_suppression_reason"),
+        (_PROCESS_MONITOR, "_continue_stale_suppression"),
+        (_PROCESS_MONITOR, "_session_log_monitor"),
+        (RACE_WATCHERS_PY, "_watch_child_activity"),
+        (_PROCESS_TERMINATION, "_drain_before_escalation"),
+        (_CLI_SESSION_PROCESS, "_default_activity"),
+        (_CLI_SESSION_PROCESS, "_apply_activity_signals"),
+    )
+    for source_path, function_name in consumers:
+        function = _function(source_path, function_name)
+        assert "_has_active_api_connection" not in _called_names(function), function_name
+        assert all(
+            not isinstance(node, ast.Constant) or node.value != "api_connection"
+            for node in ast.walk(function)
+        ), function_name
 
 
 _KILL_EXECUTORS_THAT_MUST_CHECK_CHILD_LIVENESS = frozenset(

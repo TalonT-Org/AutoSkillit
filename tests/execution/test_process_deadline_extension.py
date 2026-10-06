@@ -17,6 +17,7 @@ from autoskillit.execution.process._race_watchers import (
     _enroll_child_activity_watcher,
     _watch_child_activity,
 )
+from tests.execution._process_helpers import ConnectedProcess
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -29,11 +30,6 @@ async def test_pending_task_extension_releases_on_terminal_and_respects_cap(
     monkeypatch.setattr(
         _patch_process__race_watchers,
         "_has_active_child_processes",
-        lambda pid: False,
-    )
-    monkeypatch.setattr(
-        _patch_process__race_watchers,
-        "_has_active_api_connection",
         lambda pid: False,
     )
     pending = [True]
@@ -74,11 +70,6 @@ async def test_extends_deadline_when_children_active(monkeypatch) -> None:
         "_has_active_child_processes",
         lambda pid: True,
     )
-    monkeypatch.setattr(
-        _patch_process__race_watchers,
-        "_has_active_api_connection",
-        lambda pid: False,
-    )
     trigger = anyio.Event()
     scope_ref: list[anyio.CancelScope | None] = [None]
     original_deadline_ref: list[float] = []
@@ -98,15 +89,10 @@ async def test_extends_deadline_when_children_active(monkeypatch) -> None:
 
 @pytest.mark.anyio
 async def test_no_extension_when_inactive(monkeypatch) -> None:
-    """Deadline is NOT extended when both probes return False."""
+    """Deadline is not extended when no lease or child process is active."""
     monkeypatch.setattr(
         _patch_process__race_watchers,
         "_has_active_child_processes",
-        lambda pid: False,
-    )
-    monkeypatch.setattr(
-        _patch_process__race_watchers,
-        "_has_active_api_connection",
         lambda pid: False,
     )
     trigger = anyio.Event()
@@ -115,9 +101,7 @@ async def test_no_extension_when_inactive(monkeypatch) -> None:
 
     async with anyio.create_task_group() as tg:
         tg.start_soon(
-            functools.partial(
-                _watch_child_activity, 1, scope_ref, 7200.0, trigger, 0.05, marker_dir=None
-            )
+            functools.partial(_watch_child_activity, 1, scope_ref, 7200.0, trigger, 0.05)
         )
         with anyio.move_on_after(2.0) as scope:
             scope_ref[0] = scope
@@ -137,11 +121,6 @@ async def test_max_extension_cap_enforced(monkeypatch) -> None:
         _patch_process__race_watchers,
         "_has_active_child_processes",
         lambda pid: True,
-    )
-    monkeypatch.setattr(
-        _patch_process__race_watchers,
-        "_has_active_api_connection",
-        lambda pid: False,
     )
     trigger = anyio.Event()
     scope_ref: list[anyio.CancelScope | None] = [None]
@@ -168,11 +147,6 @@ async def test_terminates_on_trigger(monkeypatch) -> None:
         "_has_active_child_processes",
         lambda pid: True,
     )
-    monkeypatch.setattr(
-        _patch_process__race_watchers,
-        "_has_active_api_connection",
-        lambda pid: True,
-    )
     trigger = anyio.Event()
     scope_ref: list[anyio.CancelScope | None] = [None]
 
@@ -183,30 +157,86 @@ async def test_terminates_on_trigger(monkeypatch) -> None:
 
 
 @pytest.mark.anyio
-async def test_api_connection_also_extends(monkeypatch) -> None:
-    """Deadline is extended when _has_active_api_connection returns True (children inactive)."""
+async def test_network_connection_without_lease_does_not_extend_deadline(
+    monkeypatch, tmp_path
+) -> None:
+    """An established port-443 connection does not extend a lease-free deadline."""
+
+    channel = tmp_path / "leases"
+    channel.mkdir()
+    import autoskillit.execution.process._process_monitor as process_monitor
+
+    monkeypatch.setattr(process_monitor.psutil, "Process", ConnectedProcess)
     monkeypatch.setattr(
         _patch_process__race_watchers,
         "_has_active_child_processes",
         lambda pid: False,
-    )
-    monkeypatch.setattr(
-        _patch_process__race_watchers,
-        "_has_active_api_connection",
-        lambda pid: True,
     )
     trigger = anyio.Event()
     scope_ref: list[anyio.CancelScope | None] = [None]
     original_deadline_ref: list[float] = []
 
     async with anyio.create_task_group() as tg:
-        tg.start_soon(_watch_child_activity, 1, scope_ref, 7200.0, trigger, 0.05)
+        tg.start_soon(
+            functools.partial(
+                _watch_child_activity,
+                1,
+                scope_ref,
+                7200.0,
+                trigger,
+                0.05,
+                operation_lease_dir=channel,
+            )
+        )
         with anyio.move_on_after(0.1) as scope:
             scope_ref[0] = scope
             original_deadline_ref.append(scope.deadline)
             await anyio.sleep(0.3)
             trigger.set()
         tg.cancel_scope.cancel()
+
+    assert scope_ref[0] is not None
+    assert scope_ref[0].deadline == original_deadline_ref[0]
+
+
+@pytest.mark.anyio
+async def test_operation_lease_extends_deadline(monkeypatch, tmp_path) -> None:
+    from autoskillit.core import InFlightOperations, operation_lease
+
+    monkeypatch.setattr(
+        _patch_process__race_watchers,
+        "_has_active_child_processes",
+        lambda _pid: False,
+    )
+    async with operation_lease(
+        tmp_path,
+        operation="run_skill",
+        not_after_epoch=time.time() + 60,
+        registry=InFlightOperations(),
+        heartbeat_interval=10000,
+    ):
+        trigger = anyio.Event()
+        scope_ref: list[anyio.CancelScope | None] = [None]
+        original_deadline_ref: list[float] = []
+
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(
+                functools.partial(
+                    _watch_child_activity,
+                    1,
+                    scope_ref,
+                    7200.0,
+                    trigger,
+                    0.05,
+                    operation_lease_dir=tmp_path,
+                )
+            )
+            with anyio.move_on_after(0.1) as scope:
+                scope_ref[0] = scope
+                original_deadline_ref.append(scope.deadline)
+                await anyio.sleep(0.3)
+                trigger.set()
+            tg.cancel_scope.cancel()
 
     assert scope_ref[0] is not None
     assert scope_ref[0].deadline > original_deadline_ref[0]
@@ -218,11 +248,6 @@ async def test_scope_ref_none_polling(monkeypatch) -> None:
     monkeypatch.setattr(
         _patch_process__race_watchers,
         "_has_active_child_processes",
-        lambda pid: True,
-    )
-    monkeypatch.setattr(
-        _patch_process__race_watchers,
-        "_has_active_api_connection",
         lambda pid: True,
     )
     trigger = anyio.Event()
@@ -237,98 +262,6 @@ async def test_scope_ref_none_polling(monkeypatch) -> None:
                 scope_ref[0] = scope
             trigger.set()
             tg.cancel_scope.cancel()
-
-
-@pytest.mark.anyio
-async def test_extends_deadline_when_dispatch_marker_active(monkeypatch, tmp_path) -> None:
-    """Deadline is extended when dispatch marker is active (other signals inactive)."""
-    monkeypatch.setattr(
-        _patch_process__race_watchers,
-        "_has_active_child_processes",
-        lambda pid: False,
-    )
-    monkeypatch.setattr(
-        _patch_process__race_watchers,
-        "_has_active_api_connection",
-        lambda pid: False,
-    )
-    monkeypatch.setattr(
-        _patch_process__race_watchers,
-        "_has_active_execution_marker",
-        lambda marker_dir, **kw: True,
-    )
-    trigger = anyio.Event()
-    scope_ref: list[anyio.CancelScope | None] = [None]
-    original_deadline_ref: list[float] = []
-
-    async with anyio.create_task_group() as tg:
-        tg.start_soon(
-            functools.partial(
-                _watch_child_activity,
-                1,
-                scope_ref,
-                7200.0,
-                trigger,
-                0.05,
-                marker_dir=tmp_path,
-                session_id="test-sid",
-            )
-        )
-        with anyio.move_on_after(0.1) as scope:
-            scope_ref[0] = scope
-            original_deadline_ref.append(scope.deadline)
-            await anyio.sleep(0.3)
-            trigger.set()
-        tg.cancel_scope.cancel()
-
-    assert scope_ref[0] is not None
-    assert scope_ref[0].deadline > original_deadline_ref[0]
-
-
-@pytest.mark.anyio
-async def test_no_extension_when_marker_inactive(monkeypatch, tmp_path) -> None:
-    """Deadline is NOT extended when all three signals are inactive (fleet context)."""
-    monkeypatch.setattr(
-        _patch_process__race_watchers,
-        "_has_active_child_processes",
-        lambda pid: False,
-    )
-    monkeypatch.setattr(
-        _patch_process__race_watchers,
-        "_has_active_api_connection",
-        lambda pid: False,
-    )
-    monkeypatch.setattr(
-        _patch_process__race_watchers,
-        "_has_active_execution_marker",
-        lambda marker_dir, **kw: False,
-    )
-    trigger = anyio.Event()
-    scope_ref: list[anyio.CancelScope | None] = [None]
-    original_deadline_ref: list[float] = []
-
-    async with anyio.create_task_group() as tg:
-        tg.start_soon(
-            functools.partial(
-                _watch_child_activity,
-                1,
-                scope_ref,
-                7200.0,
-                trigger,
-                0.05,
-                marker_dir=tmp_path,
-                session_id="test-sid",
-            )
-        )
-        with anyio.move_on_after(2.0) as scope:
-            scope_ref[0] = scope
-            original_deadline_ref.append(scope.deadline)
-            await anyio.sleep(0.5)
-            trigger.set()
-        tg.cancel_scope.cancel()
-
-    assert scope_ref[0] is not None
-    assert scope_ref[0].deadline == original_deadline_ref[0]
 
 
 @pytest.mark.parametrize(
@@ -361,8 +294,7 @@ def test_child_activity_watcher_enrollment(
         timeout_scope_ref=scope_ref,
         max_extension_seconds=90.0,
         trigger=trigger,
-        marker_dir=tmp_path,
-        session_id="test-sid",
+        operation_lease_dir=tmp_path,
         lifecycle_observation_enabled=lifecycle,
         acc=acc,
     )
@@ -377,8 +309,9 @@ def test_child_activity_watcher_enrollment(
     assert isinstance(scheduled, functools.partial)
     assert scheduled.func is watcher
     assert scheduled.args == (pid, scope_ref, 90.0, trigger)
-    assert scheduled.keywords["marker_dir"] == tmp_path
-    assert scheduled.keywords["session_id"] == "test-sid"
+    assert scheduled.keywords["operation_lease_dir"] == tmp_path
+    assert "marker_dir" not in scheduled.keywords
+    assert "session_id" not in scheduled.keywords
     callback = scheduled.keywords["has_pending_tasks"]
     if lifecycle:
         assert callback.__self__ is acc
@@ -387,8 +320,8 @@ def test_child_activity_watcher_enrollment(
         assert callback is None
 
 
-def test_marker_dir_threaded_from_race_watcher_wiring() -> None:
-    """Race watcher wiring forwards marker_dir and session_id to child activity."""
+def test_operation_lease_dir_threaded_from_race_watcher_wiring() -> None:
+    """Race watcher wiring forwards the lease channel to child activity."""
     import re
     from pathlib import Path
 
@@ -396,11 +329,11 @@ def test_marker_dir_threaded_from_race_watcher_wiring() -> None:
 
     pattern = (
         r"functools\.partial\(\s*_watch_child_activity,"
-        r".*?marker_dir=marker_dir.*?session_id=session_id"
+        r".*?operation_lease_dir=operation_lease_dir"
     )
     match = re.search(pattern, watcher_source, re.DOTALL)
     assert match is not None, (
-        "race watcher wiring does not thread marker_dir and session_id "
+        "race watcher wiring does not thread operation_lease_dir "
         "to _watch_child_activity via functools.partial"
     )
 

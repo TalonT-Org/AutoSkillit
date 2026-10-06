@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 from pathlib import Path
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -364,10 +365,27 @@ class TestDispatchBackendOverrideSessionLocatorUsesDispatchBackend:
         dispatch_be = _mock_backend("codex")
         dispatch_be.session_locator.return_value = dispatch_locator
 
+        from autoskillit.fleet.dispatch import _api
+
+        original_classify = _api.run_outcome_classification
+        classifications: list[Any] = []
+
+        async def capture_classification(**kwargs: Any) -> Any:
+            result = await original_classify(**kwargs)
+            classifications.append(result)
+            return result
+
+        monkeypatch.setattr(_api, "run_outcome_classification", capture_classification)
+
         await _run_with_backend(tool_ctx, dispatch_backend=dispatch_be)
 
         record = _read_dispatch_record(tool_ctx)
-        assert "codex-logs" in record["dispatched_session_log_dir"]
+        assert classifications[0].project_log_dir == str(
+            dispatch_locator.project_log_dir.return_value
+        )
+        assert record["dispatched_session_log_dir"] == str(
+            dispatch_locator.project_log_dir.return_value
+        )
 
 
 class TestDispatchBackendOverridePreservedAcrossRetry:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
 
 import anyio
@@ -150,9 +151,7 @@ async def test_active_child_deferral_runs_until_ceiling(
     clock = _install_deferral_clock(monkeypatch)
     liveness_checks = 0
 
-    def has_active_signals(
-        _pid: int, _marker_dir: Path | None, _session_id: str | None
-    ) -> frozenset[str]:
+    def has_active_signals(_pid: int, *, operation_lease_dir: Path | None) -> frozenset[str]:
         nonlocal liveness_checks
         liveness_checks += 1
         return frozenset({"child_processes"})
@@ -179,13 +178,52 @@ async def test_active_child_deferral_runs_until_ceiling(
 
 
 @pytest.mark.anyio
+async def test_network_connection_without_lease_does_not_defer_termination(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import psutil
+
+    import autoskillit.execution.process._process_monitor as process_monitor
+
+    clock = _install_deferral_clock(monkeypatch)
+
+    def connections(_process, kind: str | None = None) -> list[SimpleNamespace]:
+        return [
+            SimpleNamespace(
+                status=psutil.CONN_ESTABLISHED,
+                raddr=SimpleNamespace(port=443),
+            )
+        ]
+
+    monkeypatch.setattr(process_monitor.psutil.Process, "connections", connections)
+    monkeypatch.setattr(process_monitor.psutil.Process, "net_connections", connections)
+    monkeypatch.setattr(process_monitor, "_has_active_child_processes", lambda _pid: False)
+    owner = await _spawn(30, tmp_path)
+
+    kill_reason, _returncode, cleanup = await execute_termination_action(
+        TerminationAction.DRAIN_THEN_KILL_IF_ALIVE,
+        owner=owner,
+        process_exited_event=anyio.Event(),
+        grace_seconds=0,
+        proc_log=structlog.get_logger().bind(pid=owner.pid),
+        pid=owner.pid,
+        child_deferral_ceiling=30.0,
+        operation_lease_dir=tmp_path / "leases",
+    )
+
+    assert kill_reason is KillReason.KILL_AFTER_COMPLETION
+    assert cleanup.complete is True
+    assert clock == [0.0]
+
+
+@pytest.mark.anyio
 async def test_zero_child_deferral_ceiling_skips_liveness_check(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     owner = await _spawn(30, tmp_path)
 
     def unexpected_liveness_check(
-        _pid: int, _marker_dir: Path | None, _session_id: str | None
+        _pid: int, *, operation_lease_dir: Path | None
     ) -> frozenset[str]:
         pytest.fail("zero child deferral ceiling must skip liveness checks")
 
@@ -219,7 +257,7 @@ async def test_child_deferral_stops_when_children_become_inactive(
     monkeypatch.setattr(
         _patch_process__termination,
         "_active_liveness_signals",
-        lambda _pid, _marker_dir, _session_id: next(activity),
+        lambda _pid, *, operation_lease_dir: next(activity),
     )
 
     kill_reason, _returncode, cleanup = await execute_termination_action(

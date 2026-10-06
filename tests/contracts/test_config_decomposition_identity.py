@@ -64,8 +64,18 @@ def test_automation_config_imports_coherence_gate_with_identity() -> None:
     import autoskillit.config._coherence as coh_mod
     import autoskillit.config.settings as settings_mod
 
-    assert auto_mod._timeout_coherence_gate is coh_mod._timeout_coherence_gate
-    assert auto_mod._timeout_coherence_gate is settings_mod._timeout_coherence_gate
+    assert (
+        auto_mod._claude_mcp_timeout_coherence_gate is coh_mod._claude_mcp_timeout_coherence_gate
+    )
+    assert (
+        auto_mod._claude_mcp_timeout_coherence_gate
+        is settings_mod._claude_mcp_timeout_coherence_gate
+    )
+    assert auto_mod._codex_mcp_timeout_coherence_gate is coh_mod._codex_mcp_timeout_coherence_gate
+    assert (
+        auto_mod._codex_mcp_timeout_coherence_gate
+        is settings_mod._codex_mcp_timeout_coherence_gate
+    )
     assert auto_mod._process_tether_coherence_gate is coh_mod._process_tether_coherence_gate
     assert auto_mod._process_tether_coherence_gate is settings_mod._process_tether_coherence_gate
 

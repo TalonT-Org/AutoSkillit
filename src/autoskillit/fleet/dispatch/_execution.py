@@ -85,7 +85,7 @@ class ExecutionResult:
     started_at: float
     ended_at: float | None
     dispatch_completed_normally: bool
-    marker_dir: Path | None
+    dispatched_log_dir: Path | None
     dispatch_sidecar_path: str
     spawn_failure_dispatch_result: DispatchResult | None
     effective_resume_session_id: str | None
@@ -104,7 +104,7 @@ def _failed_execution_result(
     effective_name: str,
     tool_ctx: ToolContext,
     started_at: float,
-    marker_dir: Path | None,
+    dispatched_log_dir: Path | None,
     dispatch_sidecar_path: str,
     effective_resume_session_id: str | None,
 ) -> ExecutionResult:
@@ -114,7 +114,7 @@ def _failed_execution_result(
         started_at=started_at,
         ended_at=None,
         dispatch_completed_normally=False,
-        marker_dir=marker_dir,
+        dispatched_log_dir=dispatched_log_dir,
         dispatch_sidecar_path=dispatch_sidecar_path,
         spawn_failure_dispatch_result=complete_failure_with_state(
             error_code=error_code,
@@ -227,12 +227,12 @@ async def run_execution(
     # Derive the session locator for JSONL resolution.
     _locator = effective_backend.session_locator() if effective_backend is not None else None
 
-    # Resolve marker_dir before the early-return paths so any
+    # Resolve the dispatched log directory before early-return paths so any
     # ExecutionResult carrying a spawn failure can still report its path.
-    marker_dir: Path | None = None
+    dispatched_log_dir: Path | None = None
     if _locator is not None:
         try:
-            marker_dir = _locator.project_log_dir(str(tool_ctx.project_dir))
+            dispatched_log_dir = _locator.project_log_dir(str(tool_ctx.project_dir))
         except OSError:
             pass
 
@@ -277,7 +277,7 @@ async def run_execution(
             effective_name=effective_name,
             tool_ctx=tool_ctx,
             started_at=started_at,
-            marker_dir=marker_dir,
+            dispatched_log_dir=dispatched_log_dir,
             dispatch_sidecar_path=dispatch_sidecar_path,
             effective_resume_session_id=resume_session_id,
         )
@@ -299,7 +299,7 @@ async def run_execution(
             effective_name=effective_name,
             tool_ctx=tool_ctx,
             started_at=started_at,
-            marker_dir=marker_dir,
+            dispatched_log_dir=dispatched_log_dir,
             dispatch_sidecar_path=dispatch_sidecar_path,
             effective_resume_session_id=resume_session_id,
         ),
@@ -322,9 +322,6 @@ async def run_execution(
 
     skill_result: SkillResult | None = None
     ended_at: float | None = None
-
-    # execution_marker is needed by the spawn-context blocks further below.
-    from autoskillit.core import execution_marker
 
     # Closures captured by tool_ctx.executor.dispatch_food_truck. They mutate
     # spawn_ctx in place.
@@ -407,78 +404,71 @@ async def run_execution(
         DispatchEffectName.PROCESS_SPAWN,
         identities={"dispatch_id": dispatch_id},
     )
-    async with execution_marker(
-        marker_dir,
-        caller_session_id,
-        "dispatch",
+    async with _dispatch_heartbeat(
+        dispatches_dir or tool_ctx.temp_dir / "dispatches", dispatch_id
     ):
-        async with _dispatch_heartbeat(
-            dispatches_dir or tool_ctx.temp_dir / "dispatches", dispatch_id
-        ):
-            skill_result = await tool_ctx.executor.dispatch_food_truck(
-                orchestrator_prompt=prompt,
-                cwd=str(tool_ctx.project_dir),
-                completion_marker=completion_marker,
-                plugin_authority=plugin_authority,
-                capability_preparation=capability_preparation,
-                prior_completion_markers=(
-                    cast(
-                        "Sequence[str] | None",
-                        prior_completion_markers if prior_completion_markers else None,
-                    )
+        skill_result = await tool_ctx.executor.dispatch_food_truck(
+            orchestrator_prompt=prompt,
+            cwd=str(tool_ctx.project_dir),
+            completion_marker=completion_marker,
+            plugin_authority=plugin_authority,
+            capability_preparation=capability_preparation,
+            prior_completion_markers=(
+                cast(
+                    "Sequence[str] | None",
+                    prior_completion_markers if prior_completion_markers else None,
+                )
+            ),
+            resume_session_id=effective_resume_session_id,
+            resume_checkpoint=resume_checkpoint,
+            kitchen_id=tool_ctx.kitchen_id,
+            order_id=dispatch_id,
+            campaign_id=tool_ctx.kitchen_id,
+            dispatch_id=dispatch_id,
+            caller_session_id=caller_session_id,
+            project_dir=str(tool_ctx.project_dir),
+            on_session_id_resolved=_on_session_id,
+            timeout=resolved_timeout,
+            idle_output_timeout=float(idle_output_timeout)
+            if idle_output_timeout is not None
+            else None,
+            env_extras={
+                "AUTOSKILLIT_PROJECT_DIR": str(tool_ctx.project_dir),
+                "AUTOSKILLIT_CAMPAIGN_ID": tool_ctx.kitchen_id,
+                "AUTOSKILLIT_DISPATCH_ID": dispatch_id,
+                "AUTOSKILLIT_SESSION_DEADLINE": select_child_session_deadline(
+                    started_at + resolved_timeout,
+                    os.environ.get("AUTOSKILLIT_SESSION_DEADLINE", ""),
                 ),
-                resume_session_id=effective_resume_session_id,
-                resume_checkpoint=resume_checkpoint,
-                kitchen_id=tool_ctx.kitchen_id,
-                order_id=dispatch_id,
-                campaign_id=tool_ctx.kitchen_id,
-                dispatch_id=dispatch_id,
-                caller_session_id=caller_session_id,
-                project_dir=str(tool_ctx.project_dir),
-                marker_dir=marker_dir,
-                session_id=caller_session_id,
-                on_session_id_resolved=_on_session_id,
-                timeout=resolved_timeout,
-                idle_output_timeout=float(idle_output_timeout)
-                if idle_output_timeout is not None
-                else None,
-                env_extras={
-                    "AUTOSKILLIT_PROJECT_DIR": str(tool_ctx.project_dir),
-                    "AUTOSKILLIT_CAMPAIGN_ID": tool_ctx.kitchen_id,
-                    "AUTOSKILLIT_DISPATCH_ID": dispatch_id,
-                    "AUTOSKILLIT_SESSION_DEADLINE": select_child_session_deadline(
-                        started_at + resolved_timeout,
-                        os.environ.get("AUTOSKILLIT_SESSION_DEADLINE", ""),
-                    ),
-                    **(
-                        {FLEET_INSPECTOR_MODEL_ENV_VAR: (tool_ctx.config.fleet.inspector_model)}
-                        if tool_ctx.config.fleet.inspector_model
-                        else {}
-                    ),
-                    **(
-                        {MANAGED_JOIN_PARENT_ID_ENV_VAR: managed_join_parent_id}
-                        if managed_join_parent_id is not None
-                        else {}
-                    ),
-                },
-                requires_packs=list(full_recipe.requires_packs) or ["kitchen-core"],
-                on_spawn=_on_spawn,
-                sentinel_contract=sentinel_contract,
-                resume_message=resume_message,
-                backend_authority=(
-                    BackendAuthority(
-                        backend=dispatch_backend.name,
-                        kind=BackendAuthorityKind.CALLER,
-                        tier=BackendAuthorityTier.CALLER,
-                        key_path="dispatch.backend",
-                    )
-                    if dispatch_backend is not None
-                    else None
+                **(
+                    {FLEET_INSPECTOR_MODEL_ENV_VAR: (tool_ctx.config.fleet.inspector_model)}
+                    if tool_ctx.config.fleet.inspector_model
+                    else {}
                 ),
-                native_shell_capture_decision=capture_decision,
-                managed_lineage_ref=managed_lineage_ref,
-                on_launch_resolved=_on_launch_resolved,
-            )
+                **(
+                    {MANAGED_JOIN_PARENT_ID_ENV_VAR: managed_join_parent_id}
+                    if managed_join_parent_id is not None
+                    else {}
+                ),
+            },
+            requires_packs=list(full_recipe.requires_packs) or ["kitchen-core"],
+            on_spawn=_on_spawn,
+            sentinel_contract=sentinel_contract,
+            resume_message=resume_message,
+            backend_authority=(
+                BackendAuthority(
+                    backend=dispatch_backend.name,
+                    kind=BackendAuthorityKind.CALLER,
+                    tier=BackendAuthorityTier.CALLER,
+                    key_path="dispatch.backend",
+                )
+                if dispatch_backend is not None
+                else None
+            ),
+            native_shell_capture_decision=capture_decision,
+            managed_lineage_ref=managed_lineage_ref,
+            on_launch_resolved=_on_launch_resolved,
+        )
 
     # L2 fail-closed spawn gate: check closure-scoped error state.
     # If _on_spawn recorded a transition failure (and killed the child
@@ -499,7 +489,7 @@ async def run_execution(
             effective_name=effective_name,
             tool_ctx=tool_ctx,
             started_at=started_at,
-            marker_dir=marker_dir,
+            dispatched_log_dir=dispatched_log_dir,
             dispatch_sidecar_path=dispatch_sidecar_path,
             effective_resume_session_id=effective_resume_session_id,
         )
@@ -517,7 +507,7 @@ async def run_execution(
         started_at=started_at,
         ended_at=ended_at,
         dispatch_completed_normally=True,
-        marker_dir=marker_dir,
+        dispatched_log_dir=dispatched_log_dir,
         dispatch_sidecar_path=dispatch_sidecar_path,
         spawn_failure_dispatch_result=None,
         effective_resume_session_id=effective_resume_session_id,

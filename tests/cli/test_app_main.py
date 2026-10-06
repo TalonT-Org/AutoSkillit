@@ -279,24 +279,38 @@ def test_main_repair_classifies_missing_expected_version_as_incomplete(
     ]
 
 
-def test_serve_activity_check_uses_backend_derived_marker_dir(
+@pytest.mark.parametrize("channel_kind", ["existing", "relative", "missing"])
+def test_serve_activity_check_uses_in_flight_registry_and_validates_channel(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    channel_kind: str,
 ) -> None:
-    """serve() must derive _marker_dir via backend.session_locator().project_log_dir()."""
+    """serve() reads the channel env at the CLI boundary and guards on ToolContext state."""
     app_module = importlib.import_module("autoskillit.cli.app")
+    from autoskillit.core import InFlightOperations
 
     monkeypatch.chdir(tmp_path)
 
-    expected_dir = tmp_path / "backend-marker"
+    if channel_kind == "existing":
+        configured_path = tmp_path / "operation-leases"
+        configured_path.mkdir()
+        expected_channel = configured_path
+    elif channel_kind == "relative":
+        configured_path = "relative-channel"
+        expected_channel = None
+    else:
+        configured_path = str(tmp_path / "missing-channel")
+        expected_channel = None
+    monkeypatch.setenv("AUTOSKILLIT_OPERATION_LEASE_DIR", str(configured_path))
 
     mock_backend = MagicMock()
-    mock_backend.session_locator.return_value.project_log_dir.return_value = expected_dir
 
     mock_ctx = MagicMock()
     mock_ctx.project_dir = tmp_path
     mock_ctx.backend = mock_backend
     mock_ctx.worker_capacity = None
+    registry = InFlightOperations()
+    mock_ctx.in_flight_operations = registry
 
     mock_cfg = MagicMock()
     mock_cfg.logging.level = "INFO"
@@ -305,8 +319,21 @@ def test_serve_activity_check_uses_backend_derived_marker_dir(
 
     monkeypatch.setattr("autoskillit.config.load_config", lambda _: mock_cfg)
     monkeypatch.setattr("autoskillit.core.configure_logging", lambda **kw: None)
-    monkeypatch.setattr("autoskillit.server.make_context", lambda *a, **kw: mock_ctx)
+    make_context_kwargs: list[dict[str, object]] = []
+
+    def fake_make_context(*args, **kwargs):
+        make_context_kwargs.append(kwargs)
+        return mock_ctx
+
+    monkeypatch.setattr("autoskillit.server.make_context", fake_make_context)
     monkeypatch.setattr("autoskillit.server._initialize", lambda ctx: None)
+
+    warnings: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        app_module.logger,
+        "warning",
+        lambda event, **kwargs: warnings.append((event, kwargs)),
+    )
 
     captured_activity_check: list = []
 
@@ -320,21 +347,31 @@ def test_serve_activity_check_uses_backend_derived_marker_dir(
 
     serve()
 
-    mock_backend.session_locator.return_value.project_log_dir.assert_called_once_with(
-        str(tmp_path)
-    )
+    mock_backend.session_locator.assert_not_called()
+    assert make_context_kwargs[0]["operation_lease_channel"] == expected_channel
+    if expected_channel is None:
+        assert warnings == [
+            (
+                "operation_lease_channel_rejected",
+                {"value": str(configured_path)},
+            )
+        ]
+    else:
+        assert warnings == []
 
     assert len(captured_activity_check) == 1, "serve_with_signal_guard was not called exactly once"
 
-    seen_marker_dirs: list = []
+    seen_registries: list = []
+
+    def record_activity_check(worker_capacity, in_flight_operations):
+        seen_registries.append((worker_capacity, in_flight_operations))
+        return False
+
     monkeypatch.setattr(
         app_module,
         "is_server_active",
-        lambda md, fl: (seen_marker_dirs.append(md), False)[-1],
+        record_activity_check,
     )
 
     captured_activity_check[0]()
-    assert seen_marker_dirs == [expected_dir], (
-        f"activity_check should pass backend-derived marker_dir ({expected_dir}), "
-        f"got {seen_marker_dirs}"
-    )
+    assert seen_registries == [(None, registry)]

@@ -2,10 +2,9 @@
 
 Exercises the real Codex NDJSON parse path (``_scan_codex_ndjson`` ->
 ``_adapt_agent_result``) with an incident-shaped stream -- item-level ``error``
-items (which ``CodexItemType`` has no member for, so they fall through to
-``codex_ndjson_unknown_item_type``) plus a turn-level failure and no final
-agent message -- and verifies the resulting ``SkillResult`` classifies the
-same way through ``classify_dispatch_outcome`` whether called directly or
+items plus a turn-level failure and no final agent message. It verifies the
+resulting ``SkillResult`` classifies the same way through
+``classify_dispatch_outcome`` whether called directly or
 through the production ``execute_dispatch`` -> ``run_outcome_classification``
 call site.
 """
@@ -26,6 +25,7 @@ from uuid import uuid4
 import pytest
 import structlog.testing
 
+import autoskillit.execution.headless._headless_adjudication as headless_adjudication
 import autoskillit.fleet.dispatch._api as dispatch_api
 from autoskillit.core import (
     DefaultManagedWorkerCapacity,
@@ -60,10 +60,8 @@ pytestmark = [
 
 _RECIPE_NAME = "test-codex-incident-recipe"
 
-# Item-level ``error`` items have no CodexItemType member, so they fall through
-# to UNKNOWN (codex_ndjson_unknown_item_type). The command_execution item is
-# real tool-use evidence -- the same shape production uses to populate
-# SkillResult.lifespan_started -- not a substitute for it. No turn.completed
+# The command_execution item is real tool-use evidence of the same shape
+# production uses to populate SkillResult.lifespan_started. No turn.completed
 # ever follows, so the accumulator's success flag stays False.
 _CODEX_INCIDENT_SHIM = '''\
 #!/usr/bin/env python3
@@ -380,12 +378,22 @@ async def test_codex_backend_skill_result_through_classify_dispatch_outcome(
         _seed_tracker(tool_ctx, dispatch_id)
 
     captured: dict[str, Any] = {}
+    captured_sessions: list[Any] = []
+    real_adapt_agent_result = headless_adjudication._adapt_agent_result
     real_run_outcome_classification = dispatch_api.run_outcome_classification
+
+    def _capturing_adapt_agent_result(agent_result: Any) -> Any:
+        session = real_adapt_agent_result(agent_result)
+        captured_sessions.append(session)
+        return session
 
     async def _capturing_run_outcome_classification(**kwargs: Any) -> Any:
         captured["skill_result"] = kwargs["skill_result"]
         return await real_run_outcome_classification(**kwargs)
 
+    monkeypatch.setattr(
+        headless_adjudication, "_adapt_agent_result", _capturing_adapt_agent_result
+    )
     monkeypatch.setattr(
         dispatch_api, "run_outcome_classification", _capturing_run_outcome_classification
     )
@@ -408,10 +416,36 @@ async def test_codex_backend_skill_result_through_classify_dispatch_outcome(
     assert skill_result is not None, "run_outcome_classification was never invoked"
     assert skill_result.session_id, "codex shim did not surface a session id"
     assert skill_result.lifespan_started, "command_execution evidence did not register"
-    assert any(
+    assert not any(
         log["event"] == "codex_ndjson_unknown_item_type" and log["log_level"] == "warning"
         for log in cap_logs
     )
+    expected_errors = (
+        (
+            "turn failed hard [E_TURN_FAILED]",
+            "tool call failed",
+            "second tool failure",
+        )
+        if case.expect_error_subtype
+        else ("tool call failed", "second tool failure")
+    )
+    assert skill_result.session_error.messages == expected_errors
+    assert captured_sessions
+    adapted_session = captured_sessions[-1]
+    assert adapted_session.errors == list(expected_errors)
+
+    log_root = Path(tool_ctx.config.linux_tracing.log_dir)
+    summary = json.loads(
+        (log_root / "sessions" / skill_result.session_id / "summary.json").read_text()
+    )
+    index_rows = [
+        json.loads(line)
+        for line in (log_root / "sessions.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    index_row = next(row for row in index_rows if row["session_id"] == skill_result.session_id)
+    assert summary["session_errors"] == list(expected_errors)
+    assert index_row["session_errors"] == list(expected_errors)
     if case.expect_error_subtype:
         assert skill_result.cli_subtype == "error_during_execution"
     else:

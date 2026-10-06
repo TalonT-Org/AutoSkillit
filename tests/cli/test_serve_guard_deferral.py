@@ -5,15 +5,13 @@ from __future__ import annotations
 import inspect
 import os
 import signal
-import time
-import uuid
-from pathlib import Path
 
 import anyio
 import pytest
 
 from autoskillit.cli._serve_guard import serve_with_signal_guard
 from autoskillit.cli.app import is_server_active
+from autoskillit.core import InFlightOperations
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -109,10 +107,13 @@ class TestServeGuardDeferral:
 
 
 class TestActivityCheckCompleteness:
-    def test_activity_check_true_when_execution_marker_exists(self, tmp_path: Path) -> None:
-        marker_name = f"run-skill-in-progress-sess-{uuid.uuid4()}.marker"
-        (tmp_path / marker_name).touch()
-        assert is_server_active(marker_dir=tmp_path, worker_capacity=None) is True
+    def test_activity_check_true_when_operation_is_in_flight(self) -> None:
+        operations = InFlightOperations()
+        operations._enter()
+        try:
+            assert is_server_active(worker_capacity=None, in_flight_operations=operations) is True
+        finally:
+            operations._exit()
 
     @pytest.mark.anyio
     async def test_activity_check_true_when_worker_capacity_active(self) -> None:
@@ -121,29 +122,22 @@ class TestActivityCheckCompleteness:
         capacity = DefaultManagedWorkerCapacity()
         permit = await capacity.acquire("active-dispatch")
         try:
-            assert is_server_active(marker_dir=None, worker_capacity=capacity) is True
+            assert is_server_active(
+                worker_capacity=capacity, in_flight_operations=InFlightOperations()
+            )
         finally:
             capacity.release(permit)
 
-    def test_activity_check_false_when_both_idle(self, tmp_path: Path) -> None:
+    def test_activity_check_false_when_both_idle(self) -> None:
         from autoskillit.core import DefaultManagedWorkerCapacity
 
         assert (
-            is_server_active(marker_dir=tmp_path, worker_capacity=DefaultManagedWorkerCapacity())
+            is_server_active(
+                worker_capacity=DefaultManagedWorkerCapacity(),
+                in_flight_operations=InFlightOperations(),
+            )
             is False
         )
-
-    def test_activity_check_true_when_marker_within_age(self, tmp_path: Path) -> None:
-        marker = tmp_path / f"run-skill-in-progress-sess-{uuid.uuid4()}.marker"
-        marker.touch()
-        os.utime(marker, (time.time() - 50, time.time() - 50))
-        assert is_server_active(marker_dir=tmp_path, worker_capacity=None) is True
-
-    def test_activity_check_false_when_marker_expired(self, tmp_path: Path) -> None:
-        marker = tmp_path / f"run-skill-in-progress-sess-{uuid.uuid4()}.marker"
-        marker.touch()
-        os.utime(marker, (time.time() - 120, time.time() - 120))
-        assert is_server_active(marker_dir=tmp_path, worker_capacity=None) is False
 
 
 class TestParameterNaming:

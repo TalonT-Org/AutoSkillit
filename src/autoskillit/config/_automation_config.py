@@ -31,7 +31,6 @@ from autoskillit.config._coherence import (
     _claude_mcp_timeout_coherence_gate,
     _codex_mcp_timeout_coherence_gate,
     _process_tether_coherence_gate,
-    _timeout_coherence_gate,
 )
 from autoskillit.config._dataclasses_diagnostics import (
     DiagnosticsConfig,
@@ -307,7 +306,6 @@ class AutomationConfig:
             raise ValueError(
                 "providers.execution_candidates requires the providers feature to be enabled"
             )
-        _timeout_coherence_gate(result.run_skill)
         _codex_mcp_timeout_coherence_gate(
             result.run_skill, result.fleet, tool_timeout=result.run_skill.mcp_tool_timeout_sec
         )

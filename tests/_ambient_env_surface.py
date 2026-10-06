@@ -997,7 +997,7 @@ FORWARDING_SITES: dict[str, str] = {
         "install/publish subprocess env; intentional wholesale forward for a maintenance-style"
         "operation."
     ),
-    "cli/app.py:307": (
+    "cli/app.py:315": (
         "Bare os.environ passed as `child_env` to the maintenance installer, which itself applies"
         "an explicit allowlist (build_maintenance_env) before spawning; unfiltered by design here."
     ),
@@ -1033,19 +1033,19 @@ FORWARDING_SITES: dict[str, str] = {
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         " Codex generic-prompt launch; the finalized generated home is layered by the caller."
     ),
-    "execution/backends/_codex/session_commands.py:187": (
+    "execution/backends/_codex/session_commands.py:176": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex skill-session launch."
     ),
-    "execution/backends/_codex/session_commands.py:518": (
+    "execution/backends/_codex/session_commands.py:494": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex food-truck orchestrator-session launch."
     ),
-    "execution/backends/_codex/session_commands.py:205": (
+    "execution/backends/_codex/session_commands.py:194": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before extras merge for a Codex interactive-session"
         "launch base env."
     ),
-    "execution/backends/_codex/session_commands.py:732": (
+    "execution/backends/_codex/session_commands.py:707": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex resume-session launch."
     ),
@@ -1202,6 +1202,15 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
         justification=(
             "R4 predicate-(b) false positive: an all-uppercase enum/status/regex-name/label member"
             "of an unrelated lookup collection; never set as a real OS environment variable."
+        ),
+    ),
+    "OPERATION_LEASE_DIR_ENV_VAR": AmbientEnvDisposition(
+        var="OPERATION_LEASE_DIR_ENV_VAR",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "R4 false positive: an exported constant name in __all__, "
+            "not an OS environment variable."
         ),
     ),
     "AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR": AmbientEnvDisposition(
@@ -1518,9 +1527,8 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
         disposition="scrub",
         owner="autoskillit",
         justification=(
-            "Real AutoSkillit orchestration/session-control environment variable read by"
-            "production code; scrubbed as internal state that must not leak across test"
-            "boundaries."
+            "Produced by the L2 food-truck attempt and consumed by its kitchen for the"
+            "one-session L1 idle policy; private so nested launches cannot inherit it."
         ),
     ),
     "AUTOSKILLIT_INSTALLED_VERSION": AmbientEnvDisposition(
@@ -1530,6 +1538,15 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
         justification=(
             "R4 predicate-(b) false positive: an all-uppercase enum/status/regex-name/label member"
             "of an unrelated lookup collection; never set as a real OS environment variable."
+        ),
+    ),
+    "AUTOSKILLIT_OPERATION_LEASE_DIR": AmbientEnvDisposition(
+        var="AUTOSKILLIT_OPERATION_LEASE_DIR",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "Attempt-scoped operation lease channel supplied to the child's kitchen server;"
+            " scrubbed so an unrelated child cannot inherit another attempt's liveness channel."
         ),
     ),
     "AUTOSKILLIT_KITCHEN_SESSION_ID": AmbientEnvDisposition(

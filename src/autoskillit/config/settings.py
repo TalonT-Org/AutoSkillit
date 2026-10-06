@@ -42,15 +42,6 @@ from autoskillit.config._coercion import (
     _preprocess_agent_backend as _preprocess_agent_backend,
 )
 from autoskillit.config._coherence import (
-    _CI_WATCH_DEFAULT as _CI_WATCH_DEFAULT,
-)
-from autoskillit.config._coherence import (
-    _MERGE_QUEUE_DEFAULT as _MERGE_QUEUE_DEFAULT,
-)
-from autoskillit.config._coherence import (
-    _MERGE_QUEUE_RECIPE_MAX as _MERGE_QUEUE_RECIPE_MAX,
-)
-from autoskillit.config._coherence import (
     _claude_mcp_timeout_coherence_gate as _claude_mcp_timeout_coherence_gate,
 )
 from autoskillit.config._coherence import (
@@ -58,9 +49,6 @@ from autoskillit.config._coherence import (
 )
 from autoskillit.config._coherence import (
     _process_tether_coherence_gate as _process_tether_coherence_gate,
-)
-from autoskillit.config._coherence import (
-    _timeout_coherence_gate as _timeout_coherence_gate,
 )
 from autoskillit.config._coherence import (
     compute_codex_mcp_tool_timeout as compute_codex_mcp_tool_timeout,

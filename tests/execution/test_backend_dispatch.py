@@ -67,7 +67,6 @@ async def test_run_headless_core_uses_ctx_backend_for_command_construction(minim
             minimal_ctx,
             completion_marker="%%DONE%%",
             resume_session_id="backend-resume-id",
-            caller_session_id="caller-marker-id",
         )
 
     backend.build_skill_session_cmd.assert_called_once()
@@ -77,9 +76,10 @@ async def test_run_headless_core_uses_ctx_backend_for_command_construction(minim
     config = call_args.args[2]
     assert config.completion_marker == "%%DONE%%"
     runner_kwargs = mock_runner.call_args.kwargs
-    assert runner_kwargs["session_id"] == "caller-marker-id"
     assert runner_kwargs["backend_resume_session_id"] == "backend-resume-id"
     assert runner_kwargs["lifecycle_observation_enabled"] is True
+    assert "marker_dir" not in runner_kwargs
+    assert "session_id" not in runner_kwargs
 
 
 class TestBackendDispatchRouting:

@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import json
+import os
 import re
+import subprocess
+from collections import Counter
 from pathlib import Path
 
 import pytest
 
 from autoskillit.core.io import load_yaml
 
-pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _WORKFLOWS = REPO_ROOT / ".github" / "workflows"
@@ -56,6 +60,262 @@ def _model_branch(run: str) -> tuple[str, str]:
     )
     end = next(index for index in range(start + 1, len(lines)) if lines[index].strip() == "fi")
     return "\n".join(lines[start + 1 : end]), "\n".join(lines[:start] + lines[end + 1 :])
+
+
+def _inline_smoke_cleanup(run: str) -> str:
+    helper = REPO_ROOT / "scripts" / "e2e" / "smoke-cleanup.sh"
+    return run.replace(
+        'source "$GITHUB_WORKSPACE/scripts/e2e/smoke-cleanup.sh"',
+        helper.read_text(encoding="utf-8"),
+    )
+
+
+_DOCKER_STUB = r"""#!/usr/bin/env python3
+import json
+import os
+from pathlib import Path
+import sys
+
+args = sys.argv[1:]
+log = Path(os.environ["DOCKER_LOG"])
+state = Path(os.environ["DOCKER_STATE"])
+container_id = os.environ["CONTAINER_ID"]
+
+def record(operation):
+    with log.open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps({"operation": operation, "args": args}) + "\n")
+
+if args[0] == "run":
+    operation = "cleanup" if "cleanup" in args else "model"
+    record(operation)
+    if operation == "model":
+        cidfile = Path(args[args.index("--cidfile") + 1])
+        with cidfile.open("x", encoding="utf-8") as stream:
+            stream.write(container_id + "\n")
+        state.write_text(os.environ["MODEL_CONTAINER_STATE"], encoding="utf-8")
+        raise SystemExit(int(os.environ["MODEL_EXIT"]))
+    raise SystemExit(int(os.environ["CLEANUP_EXIT"]))
+
+if args[0] == "rm":
+    record("rm")
+    status = int(os.environ["RM_EXIT"])
+    if status == 0:
+        state.write_text("absent", encoding="utf-8")
+    raise SystemExit(status)
+
+if args[:2] == ["container", "ls"]:
+    record("list")
+    status = int(os.environ["LIST_EXIT"])
+    if status == 0 and state.read_text(encoding="utf-8") == "present":
+        print(container_id)
+    raise SystemExit(status)
+
+record("unexpected")
+raise SystemExit(99)
+"""
+
+
+def _run_smoke_workflow_shell(workflow: dict, tmp_path: Path, **scenario: str):
+    run = _step(workflow, "run", step_id="e2e")["run"].replace("${{ matrix.kind }}", "recipe")
+    runner_temp = tmp_path / "runner"
+    (runner_temp / "e2e" / "out").mkdir(parents=True)
+    (runner_temp / "e2e" / "data").mkdir()
+    workspace = tmp_path / "workspace"
+    (workspace / "scripts" / "e2e").mkdir(parents=True)
+    helper = REPO_ROOT / "scripts" / "e2e" / "smoke-cleanup.sh"
+    (workspace / "scripts" / "e2e" / helper.name).write_bytes(helper.read_bytes())
+    docker_bin = tmp_path / "bin"
+    docker_bin.mkdir()
+    docker = docker_bin / "docker"
+    docker.write_text(_DOCKER_STUB, encoding="utf-8")
+    docker.chmod(0o755)
+
+    log = tmp_path / "docker.jsonl"
+    state = tmp_path / "container-state"
+    state.write_text("absent", encoding="utf-8")
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{docker_bin}{os.pathsep}{env['PATH']}",
+            "RUNNER_TEMP": str(runner_temp),
+            "GITHUB_WORKSPACE": str(workspace),
+            "GITHUB_RUN_ID": "1234",
+            "GITHUB_RUN_ATTEMPT": "2",
+            "TEST": "headless-smoke",
+            "IMAGE": "autoskillit-e2e:test",
+            "MINIMAX_API_KEY": "model-secret",
+            "E2E_SANDBOX_TOKEN": "sandbox-secret",
+            "DOCKER_LOG": str(log),
+            "DOCKER_STATE": str(state),
+            "CONTAINER_ID": "a" * 64,
+            "MODEL_EXIT": "0",
+            "MODEL_CONTAINER_STATE": "present",
+            "RM_EXIT": "0",
+            "LIST_EXIT": "0",
+            "CLEANUP_EXIT": "0",
+            **scenario,
+        }
+    )
+    result = subprocess.run(
+        ["bash", "--noprofile", "--norc", "-c", run],
+        cwd=tmp_path,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    events = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+    cidfile = runner_temp / "e2e" / "out" / "headless-smoke-1234-2.cid"
+    lifecycle = runner_temp / "e2e" / "out" / "headless-smoke-lifecycle.txt"
+    statuses = dict(
+        line.split("=", maxsplit=1) for line in lifecycle.read_text(encoding="utf-8").splitlines()
+    )
+    return result, events, cidfile, statuses
+
+
+@pytest.mark.parametrize(
+    (
+        "scenario",
+        "expected_status",
+        "expected_events",
+        "expected_cidfile",
+        "expected_lifecycle",
+    ),
+    [
+        pytest.param(
+            {"MODEL_EXIT": "19", "MODEL_CONTAINER_STATE": "absent", "RM_EXIT": "1"},
+            1,
+            ["model", "rm", "list", "cleanup"],
+            False,
+            {
+                "model_exit": "19",
+                "docker_rm": "1",
+                "container_verify": "0",
+                "container_removal": "0",
+                "remote_cleanup": "0",
+            },
+            id="model-failure-still-cleans",
+        ),
+        pytest.param(
+            {"RM_EXIT": "23", "MODEL_CONTAINER_STATE": "present"},
+            1,
+            ["model", "rm", "list", "cleanup"],
+            True,
+            {
+                "model_exit": "0",
+                "docker_rm": "23",
+                "container_verify": "0",
+                "container_removal": "1",
+                "remote_cleanup": "0",
+            },
+            id="removal-failure-still-cleans",
+        ),
+        pytest.param(
+            {"CLEANUP_EXIT": "17"},
+            1,
+            ["model", "rm", "list", "cleanup"],
+            False,
+            {
+                "model_exit": "0",
+                "docker_rm": "0",
+                "container_verify": "0",
+                "container_removal": "0",
+                "remote_cleanup": "17",
+            },
+            id="cleanup-failure",
+        ),
+        pytest.param(
+            {"MODEL_CONTAINER_STATE": "absent", "RM_EXIT": "1"},
+            0,
+            ["model", "rm", "list", "cleanup"],
+            False,
+            {
+                "model_exit": "0",
+                "docker_rm": "1",
+                "container_verify": "0",
+                "container_removal": "0",
+                "remote_cleanup": "0",
+            },
+            id="already-absent-container",
+        ),
+    ],
+)
+def test_headless_smoke_exit_trap_removes_exact_container_then_runs_cleanup(
+    workflow: dict,
+    tmp_path: Path,
+    scenario: dict[str, str],
+    expected_status: int,
+    expected_events: list[str],
+    expected_cidfile: bool,
+    expected_lifecycle: dict[str, str],
+) -> None:
+    result, events, cidfile, statuses = _run_smoke_workflow_shell(workflow, tmp_path, **scenario)
+
+    assert result.returncode == expected_status, result.stderr
+    assert [event["operation"] for event in events] == expected_events
+    container_id = "a" * 64
+    model = events[0]["args"]
+    model_cidfile = Path(model[model.index("--cidfile") + 1])
+    assert model_cidfile == cidfile
+    model_mounts = [model[index + 1] for index, value in enumerate(model) if value == "--volume"]
+    assert any(mount.endswith("/scripts/e2e:/opt/e2e:ro") for mount in model_mounts)
+    assert any(mount.endswith(":/artifacts") for mount in model_mounts)
+    assert events[1]["args"] == ["rm", "-f", container_id]
+    assert events[2]["args"][2:5] == ["--all", "--quiet", "--no-trunc"]
+    assert events[2]["args"][-2:] == ["--filter", f"id={container_id}"]
+    cleanup = events[-1]["args"]
+    assert "--env" in cleanup
+    assert cleanup[cleanup.index("--env") + 1] == "E2E_SANDBOX_TOKEN"
+    assert "MINIMAX_API_KEY" not in cleanup
+    cleanup_mounts = [
+        cleanup[index + 1] for index, value in enumerate(cleanup) if value == "--volume"
+    ]
+    assert any(mount.endswith("/scripts/e2e:/opt/e2e:ro") for mount in cleanup_mounts)
+    assert any(mount.endswith(":/artifacts") for mount in cleanup_mounts)
+    assert cleanup[-7:] == [
+        "cleanup",
+        "--test",
+        "headless-smoke",
+        "--catalog",
+        "/opt/e2e/catalog.json",
+        "--out",
+        "/artifacts",
+    ]
+    assert cidfile.exists() is expected_cidfile
+    if expected_cidfile:
+        assert cidfile.read_text(encoding="utf-8") == container_id + "\n"
+    for key, value in expected_lifecycle.items():
+        assert statuses[key] == value
+
+
+@pytest.mark.parametrize("redact_status", [0, 1])
+def test_local_lifecycle_records_redaction_and_fails_when_redaction_fails(
+    tmp_path: Path, redact_status: int
+) -> None:
+    lifecycle = tmp_path / "lifecycle.txt"
+    result = subprocess.run(
+        [
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            'source "$1"; rm_status=0; verify_status=0; removal_status=0; '
+            'cleanup_status=0; finish_smoke_lifecycle "$2" 0 "$3"',
+            "bash",
+            str(REPO_ROOT / "scripts/e2e/smoke-cleanup.sh"),
+            str(lifecycle),
+            str(redact_status),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == redact_status, result.stderr
+    statuses = dict(line.split("=", 1) for line in lifecycle.read_text().splitlines())
+    assert statuses["redaction"] == str(redact_status)
+    assert statuses["model_exit"] == "0"
 
 
 class TestTriggers:
@@ -106,9 +366,12 @@ class TestSecrets:
 
     @pytest.mark.parametrize("step_id", ["e2e", "redact"])
     def test_docker_run_forwards_secrets_by_name_only(self, workflow: dict, step_id: str) -> None:
-        run = _step(workflow, "run", step_id=step_id)["run"]
+        run = _inline_smoke_cleanup(_step(workflow, "run", step_id=step_id)["run"])
         forwarded = re.findall(r"--env ([A-Z0-9_]+)", run)
-        assert forwarded == ["MINIMAX_API_KEY", "E2E_SANDBOX_TOKEN"]
+        expected = ["MINIMAX_API_KEY", "E2E_SANDBOX_TOKEN"]
+        if step_id == "e2e":
+            expected.append("E2E_SANDBOX_TOKEN")
+        assert Counter(forwarded) == Counter(expected)
 
     def test_redaction_keeps_required_secret_names(self, workflow: dict) -> None:
         run = _step(workflow, "run", step_id="redact")["run"]
@@ -142,7 +405,7 @@ class TestSecrets:
 def test_clean_install_uses_the_common_user_image_and_artifacts(
     workflow: dict, step_id: str, common_mounts: tuple[str, ...]
 ) -> None:
-    run = _step(workflow, "run", step_id=step_id)["run"]
+    run = _inline_smoke_cleanup(_step(workflow, "run", step_id=step_id)["run"])
     branch, outside = _model_branch(run)
 
     assert run.count("docker_args=()") == 1
@@ -162,7 +425,11 @@ def test_clean_install_uses_the_common_user_image_and_artifacts(
         "MINIMAX_API_KEY",
         "E2E_SANDBOX_TOKEN",
     ]
-    assert not re.search(r"--env (?:MINIMAX_API_KEY|E2E_SANDBOX_TOKEN)\b", outside)
+    if step_id == "e2e":
+        assert not re.search(r"--env MINIMAX_API_KEY\b", outside)
+        assert re.findall(r"--env ([A-Z0-9_]+)", outside) == ["E2E_SANDBOX_TOKEN"]
+    else:
+        assert not re.search(r"--env (?:MINIMAX_API_KEY|E2E_SANDBOX_TOKEN)\b", outside)
 
     data_mounts = re.findall(r'--volume "\$RUNNER_TEMP/e2e/data:[^"]+"', run)
     if step_id == "e2e":

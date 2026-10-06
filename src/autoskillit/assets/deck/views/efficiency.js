@@ -1,13 +1,6 @@
 DeckShell.registerView("efficiency", ctx => {
   const skillRows = ctx.skillMetrics ?? [];
-  const roleRows = (ctx.roleMetrics ?? []).flatMap(row => (row.harnesses ?? []).map(cell => ({
-    role: row.role,
-    provider: row.provider,
-    harness: cell.harness,
-    models: cell.models ?? [],
-    measures: cell.measures,
-    ratios: cell.ratios
-  })));
+  const roleRows = DeckCore.roleHarnessRows(ctx.roleMetrics ?? []);
 
   function ratioSignals(ratios = {}) {
     const values = [];

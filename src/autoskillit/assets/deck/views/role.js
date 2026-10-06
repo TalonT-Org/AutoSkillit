@@ -29,14 +29,7 @@ DeckShell.registerView("role", ctx => {
     defaultSort: {key: "skill", dir: "asc"}
   }) : ctx.el("p", {class: "view-empty"}, "No verified spawning-skill links are recorded.");
 
-  const harnessRows = roleRows.flatMap(row => (row.harnesses ?? []).map(cell => ({
-    role: row.role,
-    provider: row.provider,
-    harness: cell.harness,
-    models: cell.models ?? [],
-    measures: cell.measures,
-    ratios: cell.ratios
-  })));
+  const harnessRows = DeckCore.roleHarnessRows(roleRows);
   const usageTable = harnessRows.length ? ctx.sortableTable({
     columns: [
       {key: "harness", label: "Harness"},

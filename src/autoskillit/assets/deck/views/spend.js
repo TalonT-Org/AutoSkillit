@@ -8,12 +8,7 @@ DeckShell.registerView("spend", ctx => {
     value: amount(row.measures?.input_tokens),
     href: ctx.href({view: "skill", entity: row.skill})
   }));
-  const roleCells = roleRows.flatMap(row => (row.harnesses ?? []).map(cell => ({
-    role: row.role,
-    provider: row.provider,
-    harness: cell.harness,
-    measures: cell.measures
-  })));
+  const roleCells = DeckCore.roleHarnessRows(roleRows);
   const roleChart = roleCells.map(row => ({
     label: row.role + " · " + row.harness + " · " + row.provider,
     value: amount(row.measures?.input_tokens),

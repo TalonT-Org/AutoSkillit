@@ -120,6 +120,17 @@ globalThis.DeckCore = (() => {
     })) : ctx.el("span", {class: "view-empty"}, "No observed tool calls");
   }
 
+  function roleHarnessRows(rows) {
+    return rows.flatMap(row => (row.harnesses ?? []).map(cell => ({
+      role: row.role,
+      provider: row.provider,
+      harness: cell.harness,
+      models: cell.models ?? [],
+      measures: cell.measures,
+      ratios: cell.ratios
+    })));
+  }
+
   const decodeTable = ({columns, rows}) => rows.map(r =>
     Object.fromEntries(columns.map((c, i) => [c, r[i]])));
 
@@ -380,6 +391,6 @@ globalThis.DeckCore = (() => {
     toggleSelection, windowSelection, selectPrepared, filterRows, populationSentence,
     summarizePairs, sortRows, parseSort, chipPresentation, availabilityPresentation,
     barLayout, formatCount, formatRatio, ratioSample, reviewEligibility, reviewSignal,
-    measureCell, ratioCell, definitionCard, toolMix, formatDate,
+    measureCell, ratioCell, definitionCard, toolMix, roleHarnessRows, formatDate,
     CHIP_STATES, DAY_MS});
 })();

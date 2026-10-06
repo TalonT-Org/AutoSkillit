@@ -118,12 +118,16 @@ def rebuild_report_index(log_root: Path, index_dir: Path) -> ReportIndexUpdate:
     return _update(log_root, index_dir, rebuild=True)
 
 
+def _clear_index_files(index_dir: Path) -> None:
+    (index_dir / _ROWS_FILE).unlink(missing_ok=True)
+    (index_dir / _STATE_FILE).unlink(missing_ok=True)
+
+
 def _update(log_root: Path, index_dir: Path, *, rebuild: bool) -> ReportIndexUpdate:
     index_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     with ArtifactLease.acquire_exclusive(index_dir / _LOCK_FILE, timeout=_LEASE_TIMEOUT_SECONDS):
         if rebuild:
-            (index_dir / _ROWS_FILE).unlink(missing_ok=True)
-            (index_dir / _STATE_FILE).unlink(missing_ok=True)
+            _clear_index_files(index_dir)
         fingerprint = child_evidence_fingerprint(log_root)
         state = read_versioned_json(index_dir / _STATE_FILE, _STATE_SCHEMA_VERSION)
         row_schema_mismatch = (
@@ -135,8 +139,7 @@ def _update(log_root: Path, index_dir: Path, *, rebuild: bool) -> ReportIndexUpd
             state is not None and state.get("child_evidence_fingerprint") != fingerprint
         )
         if row_schema_mismatch or child_evidence_changed:
-            (index_dir / _ROWS_FILE).unlink(missing_ok=True)
-            (index_dir / _STATE_FILE).unlink(missing_ok=True)
+            _clear_index_files(index_dir)
         with _RowAppender.open(index_dir, child_evidence_fingerprint=fingerprint) as appender:
             return _walk_into(log_root, appender)
 

@@ -1033,6 +1033,30 @@ class TestSmokeCleanup:
         assert state["pr_open"] is (fault == "close")
         assert (_bare_ref(remote, branch) is not None) is (fault == "delete")
 
+    def test_unexpected_cleanup_exception_preserves_type_and_traceback(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        catalog, test = _smoke_case()
+        out = tmp_path / "out"
+        _write_cleanup_inputs(out, test, catalog.sandbox_repository)
+        runner = FakeRunner(lambda argv: _completed(argv))
+
+        def fail_cleanup(*_args: object) -> None:
+            raise RuntimeError("unexpected cleanup fault")
+
+        monkeypatch.setattr(harness, "_cleanup_smoke_resources", fail_cleanup)
+
+        assert harness.cleanup_test(catalog, test.name, runner, out, _env()) == 1
+        evidence = json.loads((out / "smoke-cleanup.json").read_text(encoding="utf-8"))
+        result = json.loads((out / "result.json").read_text(encoding="utf-8"))
+        failure = "cleanup error: RuntimeError: unexpected cleanup fault"
+        assert evidence["failures"] == [failure]
+        assert "Traceback (most recent call last)" in evidence["exception"]
+        assert "fail_cleanup" in evidence["exception"]
+        assert "RuntimeError: unexpected cleanup fault" in evidence["exception"]
+        assert result["failures"] == [failure]
+        assert result["outcome"] == "failed"
+
     def test_missing_marker_is_a_noop_but_bad_descriptor_and_result_are_saved(
         self, tmp_path: Path
     ) -> None:

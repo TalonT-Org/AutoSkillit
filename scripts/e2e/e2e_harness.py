@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -811,7 +812,8 @@ def cleanup_test(
             resource_failures, evidence = _cleanup_smoke_resources(descriptor, scrubbed, runner)
             failures += resource_failures
     except Exception as exc:
-        failures.append(f"cleanup error: {exc}")
+        failures.append(f"cleanup error: {type(exc).__name__}: {exc}")
+        evidence["exception"] = traceback.format_exc()
     evidence["failures"] = list(failures)
     _atomic_json(out / "smoke-cleanup.json", evidence)
     result["failures"] += failures

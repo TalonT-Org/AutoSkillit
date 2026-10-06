@@ -223,13 +223,6 @@ def _smoke_metadata(
         "origin",
         f"refs/heads/{state['branch_name']}",
     ]
-    assert argv == [
-        "git",
-        "ls-remote",
-        "--exit-code",
-        "origin",
-        f"refs/heads/{state['branch_name']}",
-    ]
     collision = mode == "branch-collision"
     record = f"{'a' * 40}\trefs/heads/{state['branch_name']}\n" if collision else ""
     return _completed(argv, record, returncode=0 if collision else 2)

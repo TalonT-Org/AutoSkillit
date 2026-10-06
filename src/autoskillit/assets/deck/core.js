@@ -136,7 +136,9 @@ globalThis.DeckCore = (() => {
 
   function effectiveSelection(chips, selected) {
     const live = chips.filter(c => c.state === "live").map(c => c.key);
-    if (selected == null) return {keys: live, dropped: [], widened: false};
+    if (selected == null || selected.length === 0) {
+      return {keys: live, dropped: [], widened: false};
+    }
     const keys = live.filter(k => selected.includes(k));
     const dropped = selected.filter(k => !live.includes(k));
     return {keys, dropped, widened: false};
@@ -178,9 +180,10 @@ globalThis.DeckCore = (() => {
       if (!window.chip) return [];
       const inWindow = blocks.filter(block => block.window === window.chip.key);
       const domain = [...new Set(inWindow.flatMap(block => block.levels))];
-      const requested = params.level == null ? domain : level.keys
+      const selectedLevels = new Set(level.keys
         .map(key => (chips.level ?? []).find(chip => chip.key === key)?.match)
-        .filter(value => domain.includes(value));
+      );
+      const requested = domain.filter(value => selectedLevels.has(value));
       if (!requested.length) return [];
       const block = inWindow.find(item => sameValues(item.levels, requested));
       return block?.rows ?? [];

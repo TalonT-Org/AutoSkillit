@@ -322,6 +322,29 @@ def _codex_usage_measures(
     rows: Sequence[TurnTokenEntry], provider: str
 ) -> dict[str, SerializedTokenMeasure]:
     rows = merge_turn_usage(rows)
+    request_positions: dict[tuple[str, str, str], int] = {}
+    folded_rows: list[TurnTokenEntry] = []
+    for row in rows:
+        request_id = row["request_id"]
+        identity = (row["backend"], row["provider_used"], request_id or "")
+        if not request_id or identity not in request_positions:
+            folded_rows.append(row.copy())
+            if request_id:
+                request_positions[identity] = len(folded_rows) - 1
+            continue
+
+        current = folded_rows[request_positions[identity]]
+        for field in (
+            "input_tokens",
+            "output_tokens",
+            "cache_read_tokens",
+            "cache_creation_tokens",
+            "context_window_tokens",
+        ):
+            if row[field] is not None:
+                current[field] = row[field]
+
+    rows = folded_rows
     measures: dict[str, SerializedTokenMeasure] = {}
     for field in CANONICAL_ACCOUNTING_FIELDS:
         values = [row.get(field) for row in rows]

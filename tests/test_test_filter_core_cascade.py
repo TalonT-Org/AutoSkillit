@@ -349,7 +349,7 @@ class TestModuleCascadeCore:
 
     def test_type_token_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_token"] == frozenset(
-            {"cli", "core", "execution", "fleet", "pipeline"}
+            {"cli", "core", "execution", "fleet", "pipeline", "report"}
         )
 
     def test_type_protocols_backend_cascade(self) -> None:

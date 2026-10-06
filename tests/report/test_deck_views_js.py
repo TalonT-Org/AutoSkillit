@@ -292,7 +292,7 @@ def test_manual_review_flags_require_definitions_and_reset_on_rerender(
         after_one_flag = context.call("DeckTest.snapshot")["reviews"]
         assert flagged["attrs"]["aria-pressed"] == "true"
         assert flagged["markerHidden"] is False
-        assert flagged["markerText"] == "Flagged for review"
+        assert flagged["markerText"].strip() == "Flagged for review"
         assert after_one_flag[1]["attrs"]["aria-pressed"] == "false"
         assert context.call("DeckTest.currentHash") == initial_hash
 

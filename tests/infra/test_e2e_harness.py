@@ -909,6 +909,7 @@ def _bare_ref(remote: Path, branch: str) -> str | None:
         capture_output=True,
         text=True,
         check=False,
+        timeout=harness.SETUP_COMMAND_TIMEOUT_SEC,
     )
     return result.stdout.strip() if result.returncode == 0 else None
 

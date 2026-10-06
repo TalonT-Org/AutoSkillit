@@ -430,7 +430,7 @@ def prepare_smoke(
         env,
         cwd=SANDBOX_CLONE,
     )
-    if result is None or result.returncode != 2 or result.stdout.strip():
+    if result is None or result.returncode != 2:
         return [failure or "smoke setup: assigned remote branch already exists"], None
     descriptor = {key: runtime[key] for key in ("repository", "base_branch", "branch_name")}
     descriptor["test"] = test.name

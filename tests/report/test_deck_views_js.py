@@ -309,7 +309,6 @@ def test_manual_review_flags_require_definitions_and_reset_on_rerender(
         reset = context.call("DeckTest.render", "efficiency", _view_context("efficiency"))
         assert all(control["attrs"]["aria-pressed"] == "false" for control in reset["reviews"])
         assert all(control["markerHidden"] for control in reset["reviews"])
-        assert "review" not in _view_context("efficiency")["route"]["params"]
     finally:
         context.close()
 

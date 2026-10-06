@@ -11,6 +11,7 @@ import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -1078,7 +1079,19 @@ class TestSmokeCleanup:
         runner, state = _smoke_cleanup_runner(remote, branch, catalog.sandbox_repository)
         env = _env(HOME=git_env["HOME"], PATH=git_env["PATH"], E2E_SANDBOX_TOKEN=SANDBOX_TOKEN)
         sleeps: list[float] = []
-        monkeypatch.setattr(harness.time, "sleep", sleeps.append)
+        monkeypatch.setattr(harness, "time", SimpleNamespace(sleep=sleeps.append))
+
+        with subprocess.Popen(
+            [harness.sys.executable, "-c", "import sys; sys.stdin.read()"],
+            stdin=subprocess.PIPE,
+        ) as process:
+            try:
+                with pytest.raises(subprocess.TimeoutExpired):
+                    process.wait(timeout=0.05)
+            finally:
+                process.kill()
+                process.wait(timeout=5)
+        assert len(sleeps) == 0
 
         status = harness.cleanup_smoke_test(catalog, test.name, runner, out, env)
         result = json.loads((out / "result.json").read_text(encoding="utf-8"))
@@ -1117,7 +1130,7 @@ class TestSmokeCleanup:
         )
         env = _env(HOME=git_env["HOME"], PATH=git_env["PATH"], E2E_SANDBOX_TOKEN=SANDBOX_TOKEN)
         sleeps: list[float] = []
-        monkeypatch.setattr(harness.time, "sleep", sleeps.append)
+        monkeypatch.setattr(harness, "time", SimpleNamespace(sleep=sleeps.append))
 
         assert harness.cleanup_smoke_test(catalog, test.name, runner, out, env) == 0
 
@@ -1142,7 +1155,7 @@ class TestSmokeCleanup:
             remote, branch, catalog.sandbox_repository, fault=fault
         )
         env = _env(HOME=git_env["HOME"], PATH=git_env["PATH"], E2E_SANDBOX_TOKEN=SANDBOX_TOKEN)
-        monkeypatch.setattr(harness.time, "sleep", lambda _duration: None)
+        monkeypatch.setattr(harness, "time", SimpleNamespace(sleep=lambda _duration: None))
 
         status = harness.cleanup_smoke_test(catalog, test.name, runner, out, env)
         result = json.loads((out / "result.json").read_text(encoding="utf-8"))

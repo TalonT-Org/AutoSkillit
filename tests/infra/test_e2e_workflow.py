@@ -113,6 +113,8 @@ def _run_smoke_workflow_shell(workflow: dict, tmp_path: Path, **scenario: str):
     (runner_temp / "e2e" / "data").mkdir()
     workspace = tmp_path / "workspace"
     (workspace / "scripts" / "e2e").mkdir(parents=True)
+    helper = REPO_ROOT / "scripts" / "e2e" / "smoke-cleanup.sh"
+    (workspace / "scripts" / "e2e" / helper.name).write_bytes(helper.read_bytes())
     docker_bin = tmp_path / "bin"
     docker_bin.mkdir()
     docker = docker_bin / "docker"

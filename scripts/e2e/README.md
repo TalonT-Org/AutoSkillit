@@ -352,46 +352,13 @@ RUN_ID="$(date +%s)-$$"
 CID_FILE="$E2E_DIR/out/${TEST}-${RUN_ID}.cid"
 [[ ! -e "$CID_FILE" ]]
 
+source "$PWD/scripts/e2e/smoke-cleanup.sh"
 cleanup_smoke() {
   model_status=$?
   set +e
-  rm_status=1
-  verify_status=1
-  removal_status=0
-  cleanup_status=0
   redact_status=0
   lifecycle_file="$E2E_DIR/out/${TEST}-lifecycle.txt"
-
-  if [[ ! -s "$CID_FILE" ]]; then
-    echo "missing container ID evidence: $CID_FILE" >&2
-    removal_status=1
-  else
-    container_id="$(<"$CID_FILE")"
-    if [[ ! "$container_id" =~ ^[0-9a-f]{64}$ ]]; then
-      echo "invalid container ID evidence retained: $CID_FILE" >&2
-      removal_status=1
-    else
-      timeout --signal=TERM --kill-after=10s 60s docker rm -f "$container_id"
-      rm_status=$?
-      remaining="$(timeout --signal=TERM --kill-after=10s 60s \
-        docker container ls --all --quiet --no-trunc --filter "id=$container_id")"
-      verify_status=$?
-      if (( verify_status != 0 )) || [[ -n "$remaining" ]]; then
-        echo "container removal could not be verified; retaining $CID_FILE" >&2
-        removal_status=1
-      elif ! rm -f -- "$CID_FILE"; then
-        removal_status=1
-      fi
-    fi
-  fi
-
-  timeout --signal=TERM --kill-after=20s 300s docker run --rm \
-    --env E2E_SANDBOX_TOKEN \
-    --volume "$PWD/scripts/e2e:/opt/e2e:ro" \
-    --volume "$E2E_DIR/out:/artifacts" \
-    "$IMAGE" python3 /opt/e2e/e2e_harness.py cleanup \
-      --test "$TEST" --catalog /opt/e2e/catalog.json --out /artifacts
-  cleanup_status=$?
+  cleanup_smoke_resources "$CID_FILE" "$PWD/scripts/e2e" "$E2E_DIR/out" "$IMAGE" "$TEST"
 
   docker run --rm --env MINIMAX_API_KEY --env E2E_SANDBOX_TOKEN \
     --volume "$PWD/scripts/e2e:/opt/e2e:ro" \

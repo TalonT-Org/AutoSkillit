@@ -119,51 +119,13 @@ jobs:
               exit 1
             fi
 
+            source "$GITHUB_WORKSPACE/scripts/e2e/smoke-cleanup.sh"
             cleanup_smoke() {
               model_status=$?
               set +e
-              removal_status=0
-              cleanup_status=0
-              rm_status=1
-              verify_status=1
               lifecycle_file="$RUNNER_TEMP/e2e/out/${TEST}-lifecycle.txt"
-
-              if [[ ! -s "$cid_file" ]]; then
-                echo "missing container ID evidence: $cid_file" >&2
-                removal_status=1
-              else
-                container_id="$(<"$cid_file")"
-                if [[ ! "$container_id" =~ ^[0-9a-f]{64}$ ]]; then
-                  echo "invalid container ID evidence retained: $cid_file" >&2
-                  removal_status=1
-                else
-                  timeout --signal=TERM --kill-after=10s 60s \
-                    docker rm -f "$container_id"
-                  rm_status=$?
-                  remaining="$(timeout --signal=TERM --kill-after=10s 60s \
-                    docker container ls --all --quiet --no-trunc \
-                      --filter "id=$container_id")"
-                  verify_status=$?
-                  if (( verify_status != 0 )) || [[ -n "$remaining" ]]; then
-                    echo "container removal could not be verified; retaining $cid_file" >&2
-                    removal_status=1
-                  elif ! rm -f -- "$cid_file"; then
-                    echo "could not remove verified container ID file: $cid_file" >&2
-                    removal_status=1
-                  elif (( rm_status != 0 )); then
-                    echo "container was already absent; exact-ID absence verified"
-                  fi
-                fi
-              fi
-
-              timeout --signal=TERM --kill-after=20s 300s docker run --rm \
-                --env E2E_SANDBOX_TOKEN \
-                --volume "$GITHUB_WORKSPACE/scripts/e2e:/opt/e2e:ro" \
-                --volume "$RUNNER_TEMP/e2e/out:/artifacts" \
-                "$IMAGE" \
-                python3 /opt/e2e/e2e_harness.py cleanup \
-                  --test "$TEST" --catalog /opt/e2e/catalog.json --out /artifacts
-              cleanup_status=$?
+              cleanup_smoke_resources "$cid_file" "$GITHUB_WORKSPACE/scripts/e2e" \
+                "$RUNNER_TEMP/e2e/out" "$IMAGE" "$TEST"
 
               printf 'model_exit=%s\ndocker_rm=%s\ncontainer_verify=%s\ncontainer_removal=%s\nremote_cleanup=%s\n' \
                 "$model_status" "$rm_status" "$verify_status" "$removal_status" "$cleanup_status" \

@@ -685,8 +685,38 @@ class TestSandboxSmokeFlow:
         assert [call.input for call in runner.calls if call.input] == [SANDBOX_TOKEN]
         assert MINIMAX_KEY not in (out / "smoke-lifecycle.json").read_text(encoding="utf-8")
         assert SANDBOX_TOKEN not in (out / "smoke-evidence.json").read_text(encoding="utf-8")
-        assert sum(call.argv[:2] == ["git", "show"] for call in runner.calls) == 2
-        assert sum(call.argv[:3] == ["gh", "pr", "list"] for call in runner.calls) == 2
+        verified_sources = {
+            call.argv[2] for call in runner.calls if call.argv[:2] == ["git", "show"]
+        }
+        assert verified_sources >= {
+            f"{evidence['head_commit']}:sandbox/text.py",
+            f"{evidence['head_commit']}:tests/test_smoke_canary.py",
+        }
+
+    def test_pr_head_changed_during_verification_is_rejected(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        runner, _clone = _smoke_runner(tmp_path, monkeypatch)
+        original_handler = runner.handler
+        listed = False
+
+        def changed_head(argv: list[str]):
+            nonlocal listed
+            response = original_handler(argv)
+            if argv[:3] == ["gh", "pr", "list"]:
+                assert isinstance(response, subprocess.CompletedProcess)
+                if listed:
+                    rows = json.loads(response.stdout)
+                    rows[0]["headRefOid"] = "d" * 40
+                    response = _completed(argv, json.dumps(rows))
+                listed = True
+            return response
+
+        monkeypatch.setattr(runner, "handler", changed_head)
+        failures, result, _out, _catalog = _run_smoke(tmp_path, runner, monkeypatch)
+
+        assert "smoke: PR head changed during verification" in failures
+        assert result["outcome"] == "failed"
 
     @pytest.mark.parametrize(
         "fault",

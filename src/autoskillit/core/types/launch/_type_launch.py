@@ -52,7 +52,7 @@ __all__ = [
 ]
 
 
-LAUNCH_CONTRACT_SCHEMA_VERSION = 4
+LAUNCH_CONTRACT_SCHEMA_VERSION = 5
 
 # Top-level field order is part of the persisted stable-digest schema. Runtime
 # observations, attempt counters, retry state, and resume state do not belong here.
@@ -424,7 +424,6 @@ class ResolvedLaunchContract:
             "command": {
                 "argv": self.cmd_spec.cmd,
                 "origin": origin_payload,
-                "process_idle_timeout_ms": self.cmd_spec.process_idle_timeout_ms,
                 "force_inactive_agent_teams": self.cmd_spec.force_inactive_agent_teams,
                 "sandbox_mode": self.sandbox_mode,
                 "network_access": self.network_access,
@@ -648,10 +647,6 @@ class ResolvedLaunchContract:
                     env=nonsecret_env,
                     cwd=cwd,
                     origin=origin,
-                    process_idle_timeout_ms=_require_payload_int(
-                        command["process_idle_timeout_ms"],
-                        "command process idle timeout",
-                    ),
                     force_inactive_agent_teams=bool(command["force_inactive_agent_teams"]),
                 ),
                 sandbox_mode=str(command["sandbox_mode"]),

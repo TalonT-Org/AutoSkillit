@@ -10,6 +10,7 @@ import sys
 import time
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Final, TextIO
 from uuid import uuid4
@@ -20,6 +21,7 @@ from autoskillit.cli.session.pty._observer import PtyObserver
 from autoskillit.cli.ui._terminal import terminal_guard, terminal_last_activity
 from autoskillit.config import ProcessTetherConfig
 from autoskillit.core import (
+    OPERATION_LEASE_DIR_ENV_VAR,
     SESSION_LIFETIME_NOTICE_ENV_VAR,
     CmdSpec,
     ProcessCleanupResult,
@@ -55,9 +57,11 @@ _WARNING_LEADS: Final[tuple[tuple[float, str], ...]] = (
 )
 
 
-def _default_activity(pid: int, fd: int | None) -> frozenset[str]:
+def _default_activity(
+    pid: int, fd: int | None, *, operation_lease_dir: Path | None = None
+) -> frozenset[str]:
     """Read process liveness and recent kernel TTY activity."""
-    signals = set(_active_liveness_signals(pid, None, None))
+    signals = set(_active_liveness_signals(pid, operation_lease_dir=operation_lease_dir))
     if fd is not None:
         last_activity = terminal_last_activity(fd)
         if last_activity is not None and time.time() - last_activity <= _IDLE_WINDOW_SECONDS:
@@ -75,6 +79,7 @@ class InteractiveLifetime:
         clock: Callable[[], float] = time.monotonic,
         wall: Callable[[], float] = time.time,
         activity_probe: Callable[[int, int | None], frozenset[str]] | None = None,
+        operation_lease_dir: str | None = None,
     ) -> None:
         policy.validate()
         soft_seconds = policy.cook_ceiling_seconds
@@ -92,7 +97,14 @@ class InteractiveLifetime:
         self._hard_cap_seconds = hard_cap_seconds
         self._clock = clock
         self._wall = wall
-        self._activity_probe = _default_activity if activity_probe is None else activity_probe
+        channel = Path(operation_lease_dir) if operation_lease_dir else None
+        if channel is not None and not channel.is_absolute():
+            channel = None
+        self._activity_probe = (
+            partial(_default_activity, operation_lease_dir=channel)
+            if activity_probe is None
+            else activity_probe
+        )
         self._started_at: float | None = None
         self._soft_deadline: float | None = None
         self._hard_deadline: float | None = None
@@ -342,7 +354,9 @@ def run_cook_attempt(
     _require_posix_process_ownership()
     cwd = _canonical_cwd(spec.cwd)
     inherited_fds = _normalize_pass_fds(pass_fds)
-    life = InteractiveLifetime(lifetime)
+    life = InteractiveLifetime(
+        lifetime, operation_lease_dir=spec.env.get(OPERATION_LEASE_DIR_ENV_VAR)
+    )
     terminal_fd = _interactive_terminal_fd()
     notice_path = ensure_project_temp(Path(cwd)) / "session_lifetime" / f"{uuid4().hex}.json"
 

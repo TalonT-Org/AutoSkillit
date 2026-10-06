@@ -38,6 +38,7 @@ __all__ = [
     "DISPATCH_ID_ENV_VAR",
     "OWNER_SCOPE_ENV_VAR",
     "OWNER_SCOPE_DIR_ENV_VAR",
+    "OPERATION_LEASE_DIR_ENV_VAR",
     "FLEET_INSPECTOR_MODEL_ENV_VAR",
     "KITCHEN_SESSION_ID_ENV_VAR",
     "LAUNCH_ID_ENV_VAR",
@@ -100,6 +101,8 @@ OWNER_SCOPE_ENV_VAR: str = "AUTOSKILLIT_OWNER_SCOPE"
 OWNER_SCOPE_DIR_ENV_VAR: str = "AUTOSKILLIT_OWNER_SCOPE_DIR"
 FLEET_INSPECTOR_MODEL_ENV_VAR: str = "AUTOSKILLIT_FLEET_INSPECTOR_MODEL"
 KITCHEN_SESSION_ID_ENV_VAR: str = "AUTOSKILLIT_KITCHEN_SESSION_ID"
+# Producer: supervisor attempt. Consumer: child's kitchen MCP server. Lifetime: one attempt.
+OPERATION_LEASE_DIR_ENV_VAR: str = "AUTOSKILLIT_OPERATION_LEASE_DIR"
 LAUNCH_ID_ENV_VAR: str = "AUTOSKILLIT_LAUNCH_ID"
 # One-attempt handoff from run_cook_attempt to the live session's hooks.
 SESSION_LIFETIME_NOTICE_ENV_VAR: str = "AUTOSKILLIT_SESSION_LIFETIME_NOTICE"
@@ -189,6 +192,7 @@ AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
         OWNER_SCOPE_DIR_ENV_VAR,
         FLEET_INSPECTOR_MODEL_ENV_VAR,
         KITCHEN_SESSION_ID_ENV_VAR,
+        OPERATION_LEASE_DIR_ENV_VAR,
         "AUTOSKILLIT_CAMPAIGN_STATE_PATH",
         "AUTOSKILLIT_PROJECT_DIR",
         FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
@@ -207,6 +211,12 @@ AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
         "AUTOSKILLIT_CWD",
         "MAX_MCP_OUTPUT_TOKENS",
         "AUTOSKILLIT_SESSION_DEADLINE",
+        # L2 producer: _merge_food_truck_extras; L1 consumer: _attempt; lifetime: one L2 session.
+        AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR,
+        # Backend launch producer; kitchen factory consumer; lifetime: one headless session.
+        "AUTOSKILLIT_CHILD_OUTCOME_LOG_DIR",
+        # Campaign session shape producer; fleet tool consumer; lifetime: one campaign session.
+        "AUTOSKILLIT_CONTINUE_ON_FAILURE",
         # Hook-script-only escape hatch (src/autoskillit/hooks/_runtime/_hook_settings.py) —
         # read directly via os.environ, bypassing Dynaconf/_CONFIG_SCHEMA entirely.
         # No quota_guard.disabled field exists; adding this name here (rather than

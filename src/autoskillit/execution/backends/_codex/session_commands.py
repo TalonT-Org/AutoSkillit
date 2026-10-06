@@ -12,7 +12,6 @@ from autoskillit.core import (
     AGENT_BACKEND_CODEX,
     AGENT_BACKEND_DYNACONF_ENV_VAR,
     AGENT_BACKEND_ENV_VAR,
-    AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR,
     AUTOSKILLIT_INSTALLED_VERSION,
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
     CODEX_INTERACTIVE_REQUIRED_ENV,
@@ -132,8 +131,6 @@ class CodexCommandMixin(BackendCmdBuilderBase):
         cwd: str,
         completion_marker: str,
         add_dirs: Sequence[ValidatedAddDir],
-        exit_after_stop_delay_ms: int,
-        stream_idle_timeout_ms: int,
         scenario_step_name: str,
         child_outcome_log_dir: str,
         allowed_write_prefix: str,
@@ -176,14 +173,6 @@ class CodexCommandMixin(BackendCmdBuilderBase):
         managed_catalog = add_dirs[0]
         for reserved_key in CODEX_RESERVED_HOME_ENV_VARS:
             extras[reserved_key] = managed_catalog.session_home
-        if exit_after_stop_delay_ms:
-            extras.setdefault(
-                AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR, str(exit_after_stop_delay_ms / 1000)
-            )
-        if stream_idle_timeout_ms:
-            extras.setdefault(
-                AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR, str(stream_idle_timeout_ms / 1000)
-            )
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         env = CodexEnvPolicy().build_env(
             filtered_base,
@@ -276,8 +265,6 @@ class CodexCommandMixin(BackendCmdBuilderBase):
             plugin_binding = cfg["plugin_binding"]
             output_format = cfg["output_format"]
             add_dirs = cfg["add_dirs"]
-            exit_after_stop_delay_ms = cfg["exit_after_stop_delay_ms"]
-            stream_idle_timeout_ms = cfg["stream_idle_timeout_ms"]
             scenario_step_name = cfg["scenario_step_name"]
             child_outcome_log_dir = cfg["child_outcome_log_dir"]
             temp_dir_relpath = cfg["temp_dir_relpath"]
@@ -342,8 +329,6 @@ class CodexCommandMixin(BackendCmdBuilderBase):
             cwd=cwd,
             completion_marker=completion_marker,
             add_dirs=add_dirs,
-            exit_after_stop_delay_ms=exit_after_stop_delay_ms,
-            stream_idle_timeout_ms=stream_idle_timeout_ms,
             scenario_step_name=scenario_step_name,
             child_outcome_log_dir=child_outcome_log_dir,
             allowed_write_prefix=allowed_write_prefix,
@@ -402,7 +387,6 @@ class CodexCommandMixin(BackendCmdBuilderBase):
             env=env,
             cwd=cwd,
             is_resume=bool(resume_session_id),
-            process_idle_timeout_ms=stream_idle_timeout_ms,
             inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
             managed_skill_catalog=managed_catalog,
             app_server_plan=app_server_plan,
@@ -507,14 +491,6 @@ class CodexCommandMixin(BackendCmdBuilderBase):
         )
         for reserved_key in CODEX_RESERVED_HOME_ENV_VARS:
             extras[reserved_key] = session_home
-        if exit_after_stop_delay_ms:
-            extras.setdefault(
-                AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR, str(exit_after_stop_delay_ms / 1000)
-            )
-        if stream_idle_timeout_ms:
-            extras.setdefault(
-                AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR, str(stream_idle_timeout_ms / 1000)
-            )
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         env = CodexEnvPolicy().build_env(
             filtered_base,
@@ -569,7 +545,6 @@ class CodexCommandMixin(BackendCmdBuilderBase):
             env=env,
             cwd=cwd,
             is_resume=bool(resume_session_id),
-            process_idle_timeout_ms=stream_idle_timeout_ms,
             inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
             managed_skill_catalog=managed_skill_catalog,
             app_server_plan=app_server_plan,

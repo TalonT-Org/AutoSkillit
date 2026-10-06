@@ -107,6 +107,7 @@ def _adapt_agent_result(agent_result: AgentSessionResult) -> ClaudeSessionResult
         or CODEX_CONTEXT_EXHAUSTION_MARKER in (agent_result.error or "")
     )
     errors: list[str] = [agent_result.error] if agent_result.error else []
+    errors.extend(raw.get("item_error_messages", []))
     api_error_status: int | None = _CODEX_ERROR_CODE_API_STATUS.get(error_code)
     token_usage = raw.get("canonical_token_usage") or raw.get("token_usage")
 

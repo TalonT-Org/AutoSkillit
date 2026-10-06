@@ -362,7 +362,8 @@ class TestRunSkillExecutionMarker:
         _ack_direct_run_skill_result(tool_ctx_kitchen_open, payload)
 
         assert captured["session_id"] == "session-a"
-        assert executor.calls[0].caller_session_id == "session-a"
+        assert not hasattr(executor.calls[0], "marker_dir")
+        assert not hasattr(executor.calls[0], "caller_session_id")
 
     @pytest.mark.anyio
     @pytest.mark.parametrize(
@@ -446,7 +447,63 @@ class TestRunSkillExecutionMarker:
         _ack_direct_run_skill_result(tool_ctx_kitchen_open, payload)
 
         assert captured["session_id"] == "fallback-session"
-        assert executor.calls[0].caller_session_id == "fallback-session"
+        assert not hasattr(executor.calls[0], "marker_dir")
+        assert not hasattr(executor.calls[0], "caller_session_id")
+
+    @pytest.mark.anyio
+    async def test_run_skill_attestation_stays_live_without_l1_marker_key(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ):
+        from autoskillit.core import LAUNCH_ID_ENV_VAR
+        from autoskillit.core.pipeline._execution_marker import execution_marker
+        from autoskillit.hooks.guards.fabricated_completion_guard import (
+            _has_fresh_matching_marker,
+        )
+        from tests.fakes import MockSubprocessRunner
+
+        monkeypatch.delenv(LAUNCH_ID_ENV_VAR, raising=False)
+        monkeypatch.setattr(
+            tools_execution, "find_caller_session_id", lambda **_kwargs: "session-a"
+        )
+        marker_state: dict[str, object] = {}
+
+        @contextlib.asynccontextmanager
+        async def observe_marker(marker_dir, session_id, label):
+            async with execution_marker(marker_dir, session_id, label) as marker_path:
+                marker_state.update(path=marker_path, session_id=session_id, label=label)
+                yield marker_path
+
+        monkeypatch.setattr(tools_execution, "execution_marker", observe_marker)
+
+        runner = tool_ctx_kitchen_open.runner
+        assert isinstance(runner, MockSubprocessRunner)
+
+        async def check_marker_during_launch(cmd, **kwargs):
+            if Path(cmd[0]).name == "claude":
+                marker_path = marker_state.get("path")
+                session_id = marker_state.get("session_id")
+                assert isinstance(marker_path, Path)
+                assert session_id == "session-a"
+                assert marker_path.name.startswith(f"run-skill-in-progress-{session_id}-")
+                marker_payload = json.loads(marker_path.read_text(encoding="utf-8"))
+                assert marker_payload["label"] == "run-skill"
+                assert marker_payload["session_id"] == session_id
+                assert _has_fresh_matching_marker(marker_path, session_id)
+            return await runner(cmd, **kwargs)
+
+        monkeypatch.setattr(tool_ctx_kitchen_open, "runner", check_marker_during_launch)
+        runner.push(_make_result(returncode=1))  # clone guard snapshot
+        runner.push(_make_result(returncode=0, stdout=_SUCCESS_JSON))
+
+        payload = json.loads(await run_skill("/investigate marker attestation", cwd="/tmp"))
+        _ack_direct_run_skill_result(tool_ctx_kitchen_open, payload)
+
+        claude_calls = [
+            call for call in runner.call_args_list if Path(call[0][0]).name == "claude"
+        ]
+        assert len(claude_calls) == 1
+        assert "marker_dir" not in claude_calls[0][3]
+        assert "session_id" not in claude_calls[0][3]
 
     @pytest.mark.anyio
     async def test_marker_dir_routes_through_session_locator(
@@ -515,6 +572,88 @@ class TestRunSkillExecutionMarker:
 
 class TestRunSkillMcpTimeout:
     """run_skill wraps executor.run with anyio.fail_after(mcp_tool_timeout_sec)."""
+
+    @pytest.mark.anyio
+    async def test_run_skill_sanitizes_lease_narrow_write_failure(
+        self, tool_ctx_kitchen_open, tmp_path, monkeypatch
+    ):
+        import time
+
+        import autoskillit.core.plugins._operation_lease as lease_module
+        from autoskillit.core import operation_lease
+
+        cfg = _command_config()
+        cfg.safety.require_dry_walkthrough = False
+        tool_ctx_kitchen_open.config = cfg
+        tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))
+
+        async with operation_lease(
+            tmp_path,
+            operation="run_skill",
+            not_after_epoch=time.time() + 100_000,
+            registry=tool_ctx_kitchen_open.in_flight_operations,
+        ) as handle:
+            path = handle.path
+            assert path is not None
+
+            def fail_write(*args, **kwargs):
+                raise OSError(f"permission denied: {path}")
+
+            monkeypatch.setattr(lease_module, "write_versioned_json", fail_write)
+            result_json = await run_skill("/investigate lease deadline", "/tmp")
+
+        result = json.loads(result_json)
+        assert result["subtype"] == "crashed"
+        assert "Operation lease deadline could not be persisted" in result["result"]
+        assert str(path) not in result_json
+        assert tool_ctx_kitchen_open.in_flight_operations.active_count == 0
+        assert not tuple(tmp_path.glob("*.lease.json"))
+
+    @pytest.mark.anyio
+    async def test_run_skill_narrows_current_operation_lease_to_invocation_deadline(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ):
+        import time
+
+        from autoskillit.core import current_operation_lease, operation_lease
+        from autoskillit.server.tools.tools_execution import _run_skill_dispatch
+
+        cfg = _command_config()
+        cfg.safety.require_dry_walkthrough = False
+        tool_ctx_kitchen_open.config = cfg
+        tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))  # clone guard
+
+        states = []
+        state_type = _run_skill_dispatch._RunSkillDispatchState
+
+        def capture_state(*args, **kwargs):
+            state = state_type(*args, **kwargs)
+            states.append(state)
+            return state
+
+        monkeypatch.setattr(_run_skill_dispatch, "_RunSkillDispatchState", capture_state)
+        observed = {}
+
+        async def capture_run(*args, **kwargs):
+            lease = current_operation_lease()
+            assert lease is not None
+            observed["lease_deadline"] = lease.record.not_after_epoch
+            observed["invocation_deadline"] = states[-1]._invocation_deadline_epoch
+            raise TimeoutError("stop after lease deadline inspection")
+
+        monkeypatch.setattr(tool_ctx_kitchen_open.executor, "run", capture_run)
+
+        async with operation_lease(
+            None,
+            operation="run_skill",
+            not_after_epoch=time.time() + 100_000,
+            registry=tool_ctx_kitchen_open.in_flight_operations,
+        ):
+            result_json = await run_skill("/investigate lease deadline", "/tmp")
+
+        assert observed["lease_deadline"] == observed["invocation_deadline"]
+        assert tool_ctx_kitchen_open.in_flight_operations.active_count == 0
+        assert json.loads(result_json)["subtype"] == "crashed"
 
     @pytest.mark.anyio
     async def test_run_skill_returns_crashed_on_mcp_timeout(

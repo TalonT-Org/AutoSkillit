@@ -1061,3 +1061,57 @@ def test_composed_prelaunch_uses_one_destination_lock_for_all_writes(
         "yield",
         "lock-exit",
     ]
+
+
+def test_prelaunch_transaction_forwards_lease_channel_and_preserves_user_config(
+    tmp_path: Path,
+) -> None:
+    import autoskillit.execution.backends._codex_prelaunch as prelaunch
+    from autoskillit.core import OPERATION_LEASE_DIR_ENV_VAR
+
+    source_home = tmp_path / "source-home"
+    source_home.mkdir()
+    source_config = source_home / "config.toml"
+    env_vars = json.dumps(sorted(CODEX_MCP_ENV_FORWARD_VARS - {OPERATION_LEASE_DIR_ENV_VAR}))
+    original_source = (
+        'model = "user-selected-model"\n'
+        'approval_policy = "never"\n'
+        "[mcp_servers.autoskillit]\n"
+        'command = "autoskillit"\n'
+        'args = ["serve"]\n'
+        f"env_vars = {env_vars}\n"
+        "[mcp_servers.user_owned]\n"
+        'command = "user-tool"\n'
+        'args = ["--keep"]\n'
+    ).encode()
+    source_config.write_bytes(original_source)
+    destination_home = tmp_path / "generated-home"
+    root = projection_shaped_hook_root(tmp_path)
+
+    with prelaunch.codex_prelaunch_transaction(
+        source_codex_home=source_home,
+        destination_home=destination_home,
+        runtime_spec=CodexRuntimeSpec(),
+        plugin_dir=root.plugin_dir,
+    ) as target:
+        first_config = target.read_bytes()
+
+    assert source_config.read_bytes() == original_source
+    parsed = tomllib.loads(first_config.decode("utf-8"))
+    assert OPERATION_LEASE_DIR_ENV_VAR in parsed["mcp_servers"]["autoskillit"]["env_vars"]
+    assert parsed["mcp_servers"]["user_owned"] == {
+        "command": "user-tool",
+        "args": ["--keep"],
+    }
+    assert parsed["model"] == "user-selected-model"
+    assert parsed["approval_policy"] == "never"
+
+    with prelaunch.codex_prelaunch_transaction(
+        source_codex_home=source_home,
+        destination_home=destination_home,
+        runtime_spec=CodexRuntimeSpec(),
+        plugin_dir=root.plugin_dir,
+    ) as target:
+        assert target.read_bytes() == first_config
+
+    assert source_config.read_bytes() == original_source

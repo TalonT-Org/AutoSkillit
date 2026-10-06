@@ -569,7 +569,7 @@ async def _run_dispatch(
             prior_dispatched_session_id=ready.prior_dispatched_session_id,
             resume_session_id=execution_result.effective_resume_session_id,
             incoming_resume_checkpoint=ready.resume_checkpoint,
-            marker_dir=execution_result.marker_dir,
+            dispatched_log_dir=execution_result.dispatched_log_dir,
             effective_backend=recipe_ctx.effective_backend,
             dispatch_sidecar_path=execution_result.dispatch_sidecar_path,
             prior_dispatch_ids=[prior_dispatch_id] if prior_dispatch_id else None,
@@ -601,7 +601,9 @@ async def _run_dispatch(
             effective_name=recipe_ctx.effective_name,
             managed_lineage_ref=ready.managed_lineage_ref,
             provenance=provenance,
-            marker_dir=execution_result.marker_dir if execution_result is not None else None,
+            dispatched_log_dir=(
+                execution_result.dispatched_log_dir if execution_result is not None else None
+            ),
             state_path=ready.state_path,
         )
         raise

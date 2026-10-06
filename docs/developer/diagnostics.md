@@ -65,7 +65,7 @@ Logs are stored in a **global** directory (not per-project), so they persist acr
 
 ### Session Summary Fields
 
-`summary.json` contains: `session_id`, `dir_name`, `pid`, `cwd`, `evidence_worktree_path`, `evidence_worktree_source`, `evidence_worktree_detail`, `skill_command`, `success`, `subtype`, `exit_code`, `start_ts`, `snapshot_count`, `anomaly_count`, `peak_rss_kb`, `peak_oom_score`, `peak_fd_ratio`, `session_type`, `child_outcomes` (see [Child Terminal Reasons](#child-terminal-reasons)).
+`summary.json` contains: `session_id`, `dir_name`, `pid`, `cwd`, `evidence_worktree_path`, `evidence_worktree_source`, `evidence_worktree_detail`, `skill_command`, `success`, `subtype`, `exit_code`, `start_ts`, `snapshot_count`, `anomaly_count`, `peak_rss_kb`, `peak_oom_score`, `peak_fd_ratio`, `session_type`, `session_errors`, `child_outcomes` (see [Child Terminal Reasons](#child-terminal-reasons)).
 
 ### Execution-candidate manifests
 
@@ -178,7 +178,7 @@ Completed sessions with per-request evidence publish `turn_usage.jsonl` before
 version-4 token descriptor carries `turn_usage_file`, `turn_usage_count`, and
 `turn_usage_schema_version`. The file reference is `null` with count zero when
 no series was observed. The JSONL row schema is version 2; the retained
-`sessions.jsonl` index uses schema version 15.
+`sessions.jsonl` index uses schema version 16.
 
 Each token-bearing row carries non-empty `backend` and `provider_used`, plus
 nullable source `message_id`, `request_id`, `timestamp`, and observed `model`.

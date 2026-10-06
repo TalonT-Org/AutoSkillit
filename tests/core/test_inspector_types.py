@@ -39,7 +39,7 @@ class TestInspectorEvidence:
             cpu_trend=(0.1, 0.2),
             rss_trend=(100.0, 200.0),
             connection_summary="ESTABLISHED=3, CLOSE_WAIT=47",
-            execution_marker_present=True,
+            operation_lease_active=True,
             dispatch_context="recipe=X, step=Y, elapsed=60s",
         )
         assert ev.idle_seconds == 120.0
@@ -47,7 +47,7 @@ class TestInspectorEvidence:
         assert ev.cpu_trend == (0.1, 0.2)
         assert ev.rss_trend == (100.0, 200.0)
         assert ev.connection_summary == "ESTABLISHED=3, CLOSE_WAIT=47"
-        assert ev.execution_marker_present is True
+        assert ev.operation_lease_active is True
         assert ev.dispatch_context == "recipe=X, step=Y, elapsed=60s"
 
     def test_frozen(self):
@@ -60,7 +60,7 @@ class TestInspectorEvidence:
         assert ev.cpu_trend == ()
         assert ev.rss_trend == ()
         assert ev.connection_summary == ""
-        assert ev.execution_marker_present is False
+        assert ev.operation_lease_active is False
         assert ev.dispatch_context == ""
 
 

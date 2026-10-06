@@ -53,6 +53,7 @@ _ENVELOPE_EXCLUDED_FIELDS = {
     "infra": "flattened into infra_* keys",
     "ndjson_drift": "flattened into ndjson_* keys",
     "provider": "flattened into provider_* keys",
+    "session_error": "flattened into session_errors",
     "turn_usage": "per-turn telemetry is not part of the run_skill envelope",
 }
 
@@ -103,6 +104,7 @@ _FLATTENED_ENVELOPE_FIELDS = {
         "provider_fallback": True,
         "provider_used": "anthropic",
     },
+    "session_error": {"session_errors": []},
 }
 
 
@@ -182,6 +184,28 @@ def test_run_skill_result_covers_skill_result_projection_bidirectionally() -> No
     assert hints["outcome_fields"] == dict[str, int | str] | None
     assert hints["outcome_invariant_violated"] is bool
     assert hints["outcome_qualifier"] == str | None
+    assert hints["session_errors"] == list[str]
+
+
+def test_session_error_bundle_is_flattened_into_the_wire_envelope() -> None:
+    from autoskillit.core import SessionErrorOutcome
+
+    result = replace(
+        _populated_skill_result(),
+        session_error=SessionErrorOutcome(messages=("item error",)),
+    )
+
+    assert json.loads(result.to_json())["session_errors"] == ["item error"]
+
+
+def test_session_error_outcome_keeps_five_truncated_messages() -> None:
+    from autoskillit.core import SessionErrorOutcome
+
+    errors = [f"message-{index}:" + "x" * 600 for index in range(7)]
+
+    outcome = SessionErrorOutcome.from_errors(errors)
+
+    assert outcome.messages == tuple(message[:500] for message in errors[:5])
 
 
 @pytest.mark.parametrize(

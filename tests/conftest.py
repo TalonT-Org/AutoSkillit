@@ -794,6 +794,7 @@ def make_tool_ctx(monkeypatch, tmp_path):
         config: AutomationConfig | None = None,
         *,
         runner: SubprocessRunner | None = None,
+        operation_lease_channel=None,
     ):
         subprocess_runner = runner if runner is not None else MockSubprocessRunner()
         plugin_authority = FakePluginArtifactAuthority(fake_projected_plugin_root(tmp_path))
@@ -803,6 +804,7 @@ def make_tool_ctx(monkeypatch, tmp_path):
             runner=subprocess_runner,
             plugin_authority=plugin_authority,
             project_dir=tmp_path,
+            operation_lease_channel=operation_lease_channel,
         )
         if config is None:
             # Generic server fixtures exercise dispatch without live OAuth authority.

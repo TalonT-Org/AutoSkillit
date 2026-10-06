@@ -1,9 +1,7 @@
-"""Unified execution marker protocol for stale-detector suppression.
+"""Run-skill invocation markers for fabricated-completion attestation.
 
-Async context manager that writes a ``{label}-in-progress-{session_id}-{uuid}.marker``
-file, heartbeats its mtime, and deletes it on exit.  Lives in ``core/`` (IL-0) so
-both ``fleet/_api.py`` (IL-2) and ``server/tools/`` (IL-3) can import it without
-violating layer constraints.
+The run-skill marker attests a live invocation to the fabricated-completion guard,
+keyed by the caller hook session id. Supervisor liveness uses operation leases.
 """
 
 from __future__ import annotations
@@ -45,11 +43,11 @@ async def execution_marker(
     label: str,
     heartbeat_interval: float = 30.0,
 ) -> AsyncGenerator[Path | None]:
-    """Write, heartbeat, and clean up an execution marker.
+    """Write, heartbeat, and clean up a run-skill attestation marker.
 
     Yields the marker ``Path`` on success, or ``None`` when ``marker_dir`` is
-    ``None`` or the initial write fails (suppression disabled, same semantics
-    as ``fleet/_api.py``'s dispatch marker).
+    ``None`` or the initial write fails. The marker attests the invocation to
+    the fabricated-completion guard; it does not signal supervisor liveness.
     """
     if marker_dir is None:
         yield None

@@ -275,7 +275,9 @@ class TestPostStartProviderSafety:
         )
 
         assert call_count[0] == 1
-        assert runner_envs == [sink_env]
+        assert len(runner_envs) == 1
+        assert {key: runner_envs[0][key] for key in sink_env} == sink_env
+        assert "AUTOSKILLIT_OPERATION_LEASE_DIR" in runner_envs[0]
         assert runner_pass_fds == [(77,)]
         assert len(authority.bindings) == 1
         assert all(binding.closed for binding in authority.bindings)

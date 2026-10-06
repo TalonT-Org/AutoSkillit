@@ -697,8 +697,6 @@ class ExecutorCall:
     resume_message: str | None = None
     resume_launch_contract: ResolvedLaunchContract | None = None
     backend_authority: BackendAuthority | None = None
-    marker_dir: Path | None = None
-    caller_session_id: str | None = None
     inspector_eligible: bool = False
     inspector_model: str = ""
     network_access: bool = False
@@ -749,8 +747,6 @@ class DispatchFoodTruckCall:
     sentinel_contract: str = ""
     profile_name: str = ""
     prior_completion_markers: Sequence[str] | None = None
-    marker_dir: Path | None = None
-    session_id: str | None = None
     resume_message: str | None = None
     on_session_id_resolved: Callable[[str], None] | None = None
     backend_authority: BackendAuthority | None = None
@@ -827,8 +823,6 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         resume_message: str | None = None,
         resume_launch_contract: ResolvedLaunchContract | None = None,
         backend_authority: BackendAuthority | None = None,
-        marker_dir: Path | None = None,
-        caller_session_id: str | None = None,
         inspector_eligible: bool = False,
         inspector_model: str = "",
         network_access: bool = False,
@@ -883,8 +877,6 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 resume_message=resume_message,
                 resume_launch_contract=resume_launch_contract,
                 backend_authority=backend_authority,
-                marker_dir=marker_dir,
-                caller_session_id=caller_session_id,
                 inspector_eligible=inspector_eligible,
                 inspector_model=inspector_model,
                 network_access=network_access,
@@ -946,8 +938,6 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         profile_name: str = "",
         sentinel_contract: str = "",
         prior_completion_markers: Sequence[str] | None = None,
-        marker_dir: Path | None = None,
-        session_id: str | None = None,
         resume_message: str | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
         backend_authority: BackendAuthority | None = None,
@@ -984,8 +974,6 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 sentinel_contract=sentinel_contract,
                 profile_name=profile_name,
                 prior_completion_markers=prior_completion_markers,
-                marker_dir=marker_dir,
-                session_id=session_id,
                 resume_message=resume_message,
                 on_session_id_resolved=on_session_id_resolved,
                 backend_authority=backend_authority,
@@ -1802,9 +1790,12 @@ class MockSubprocessRunner(SubprocessRunner):
         on_process_spawned: Callable[[int, int], None] | None = None,
         on_process_reaped: Callable[[int, int], None] | None = None,
         pass_fds: tuple[int, ...] = (),
+        operation_lease_dir: Path | None = None,
         **kwargs: object,
     ) -> SubprocessResult:
         kwargs["pass_fds"] = pass_fds
+        if operation_lease_dir is not None:
+            kwargs["operation_lease_dir"] = operation_lease_dir
         kwargs["on_process_spawned"] = on_process_spawned
         kwargs["on_process_reaped"] = on_process_reaped
         self.call_args_list.append((cmd, cwd, timeout, kwargs))

@@ -138,6 +138,7 @@ class RunSkillResult(_RunSkillResultBase, total=False):
     pre_contamination_subtype: str
     ndjson_unknown_event_count: int
     ndjson_unknown_item_count: int
+    session_errors: list[str]
     execution_identity: ExecutionIdentityDict
     pipeline_tracker: dict[str, str]
     receipt_id: str

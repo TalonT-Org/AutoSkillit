@@ -42,7 +42,10 @@ from autoskillit.execution.headless._managed import (
     _BuildSpec,
     _ManagedLineageObserver,
 )
-from autoskillit.execution.headless._managed._attempt import _generated_home_attempt
+from autoskillit.execution.headless._managed._attempt import (
+    _generated_home_attempt,
+    _operation_lease_channel,
+)
 from autoskillit.execution.headless._managed._launch_adapter import (
     _binding_identity,
     _HeadlessLaunchAdapter,
@@ -102,8 +105,6 @@ async def _run_headless_attempt(
     max_extension_seconds: float,
     ceiling_seconds: float = DEFAULT_TETHER_CEILING_SECONDS,
     systemd_scope_enabled: bool = False,
-    marker_dir: Path | None,
-    session_id: str | None,
     on_session_id_resolved: Callable[[str], None] | None,
     stream_parser: StreamParser,
     backend_resume_session_id: str,
@@ -166,11 +167,6 @@ async def _run_headless_attempt(
             adapter.secret_environment,
             inherited_fds=adapter.inherited_fds,
         )
-        effective_idle = idle_output_timeout
-        if spec.process_idle_timeout_ms > 0:
-            spec_idle = spec.process_idle_timeout_ms / 1000.0
-            if effective_idle is None or spec_idle < effective_idle:
-                effective_idle = spec_idle
         with _generated_home_attempt(
             backend,
             spec,
@@ -179,52 +175,54 @@ async def _run_headless_attempt(
             attempt=attempt,
             resume_session_id=backend_resume_session_id,
         ) as handle:
-            if handle is not None:
-                spec = dataclasses.replace(
-                    spec,
-                    inherited_fds=tuple(dict.fromkeys((*spec.inherited_fds, *handle.pass_fds))),
+            with _operation_lease_channel(spec) as (spec, channel):
+                if handle is not None:
+                    spec = dataclasses.replace(
+                        spec,
+                        inherited_fds=tuple(
+                            dict.fromkeys((*spec.inherited_fds, *handle.pass_fds))
+                        ),
+                    )
+                if on_spec_built is not None:
+                    on_spec_built(spec)
+                if mark_execution_started is not None:
+                    mark_execution_started()
+                result = await runner(
+                    list(spec.cmd),
+                    cwd=Path(spec.cwd),
+                    timeout=timeout,
+                    env=spec.env,
+                    pty_mode=(
+                        pty_override if pty_override is not None else _resolve_pty_mode(backend)
+                    ),
+                    session_log_dir=_resolve_session_log_dir(spec.cwd, backend),
+                    completion_marker=completion_marker,
+                    stale_threshold=stale_threshold,
+                    completion_drain_timeout=completion_drain_timeout,
+                    natural_exit_grace_seconds=natural_exit_grace_seconds,
+                    linux_tracing_config=linux_tracing_config,
+                    idle_output_timeout=idle_output_timeout,
+                    max_suppression_seconds=max_suppression_seconds,
+                    child_deferral_ceiling=child_deferral_ceiling,
+                    on_pid_resolved=on_spawn,
+                    on_process_spawned=handle.record_spawn if handle is not None else None,
+                    on_process_reaped=handle.record_reaped if handle is not None else None,
+                    enable_deadline_extension=enable_deadline_extension,
+                    max_extension_seconds=max_extension_seconds,
+                    ceiling_seconds=ceiling_seconds,
+                    systemd_scope_enabled=systemd_scope_enabled,
+                    operation_lease_dir=channel,
+                    on_session_id_resolved=on_session_id_resolved,
+                    stream_parser=stream_parser,
+                    completion_record_types=backend.capabilities.completion_record_types,
+                    session_record_types=backend.capabilities.session_record_types,
+                    inspector_callback=None,
+                    workload_basenames=backend.capabilities.process_name_aliases or None,
+                    pass_fds=spec.inherited_fds,
+                    backend_resume_session_id=backend_resume_session_id,
+                    line_driver=backend.line_driver(spec),
+                    lifecycle_observation_enabled=lifecycle_observation_enabled,
                 )
-            if on_spec_built is not None:
-                on_spec_built(spec)
-            if mark_execution_started is not None:
-                mark_execution_started()
-            result = await runner(
-                list(spec.cmd),
-                cwd=Path(spec.cwd),
-                timeout=timeout,
-                env=spec.env,
-                pty_mode=(
-                    pty_override if pty_override is not None else _resolve_pty_mode(backend)
-                ),
-                session_log_dir=_resolve_session_log_dir(spec.cwd, backend),
-                completion_marker=completion_marker,
-                stale_threshold=stale_threshold,
-                completion_drain_timeout=completion_drain_timeout,
-                natural_exit_grace_seconds=natural_exit_grace_seconds,
-                linux_tracing_config=linux_tracing_config,
-                idle_output_timeout=effective_idle,
-                max_suppression_seconds=max_suppression_seconds,
-                child_deferral_ceiling=child_deferral_ceiling,
-                on_pid_resolved=on_spawn,
-                on_process_spawned=handle.record_spawn if handle is not None else None,
-                on_process_reaped=handle.record_reaped if handle is not None else None,
-                enable_deadline_extension=enable_deadline_extension,
-                max_extension_seconds=max_extension_seconds,
-                ceiling_seconds=ceiling_seconds,
-                systemd_scope_enabled=systemd_scope_enabled,
-                marker_dir=marker_dir,
-                session_id=session_id,
-                on_session_id_resolved=on_session_id_resolved,
-                stream_parser=stream_parser,
-                completion_record_types=backend.capabilities.completion_record_types,
-                session_record_types=backend.capabilities.session_record_types,
-                inspector_callback=None,
-                workload_basenames=backend.capabilities.process_name_aliases or None,
-                pass_fds=spec.inherited_fds,
-                backend_resume_session_id=backend_resume_session_id,
-                line_driver=backend.line_driver(spec),
-                lifecycle_observation_enabled=lifecycle_observation_enabled,
-            )
         return result, spec
 
 

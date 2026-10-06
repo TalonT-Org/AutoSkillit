@@ -104,6 +104,7 @@ class TestBackendAuthorityInSessionsJsonl:
             "api_retry_last_status": None,
             "ndjson_unknown_event_count": 0,
             "ndjson_unknown_item_count": 0,
+            "session_errors": [],
             "outcome_fields": None,
             "outcome_invariant_violated": False,
             "outcome_qualifier": None,

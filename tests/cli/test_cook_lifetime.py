@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -13,7 +14,7 @@ import pytest
 import structlog
 
 from autoskillit.config import ProcessTetherConfig
-from autoskillit.core import TerminationReason
+from autoskillit.core import InFlightOperations, TerminationReason, operation_lease
 from autoskillit.execution.process._process_tether import TetherRecord, write_tether
 from tests.cli._cook_launch_helpers import lifetime_policy
 
@@ -144,6 +145,42 @@ def test_active_session_extends_past_soft_ceiling() -> None:
     assert extended[0]["signals"] == ["terminal_io"]
 
 
+@pytest.mark.anyio
+async def test_default_probe_uses_attempt_operation_lease(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoskillit.execution.process._process_monitor as process_monitor
+
+    module = _lifetime_module()
+    monkeypatch.setattr(module, "_IDLE_WINDOW_SECONDS", 5.0)
+    monkeypatch.setattr(module, "_LIVENESS_PROBE_INTERVAL_SECONDS", 1.0)
+    monkeypatch.setattr(process_monitor, "_has_active_child_processes", lambda _pid: False)
+    clock = _Clock()
+    lifetime = module.InteractiveLifetime(
+        _policy(soft=6.0, extension=10.0),
+        clock=clock,
+        wall=_Clock(10_000.0),
+        operation_lease_dir=str(tmp_path),
+    )
+    lifetime.start(pid=os.getpid(), tether_path=None, terminal_fd=None, notice_path=None)
+
+    async with operation_lease(
+        tmp_path,
+        operation="tool",
+        not_after_epoch=time.time() + 60,
+        registry=InFlightOperations(),
+    ) as handle:
+        clock.advance(6.1)
+        with structlog.testing.capture_logs() as logs:
+            assert lifetime.poll() is None
+        assert _events(logs, "cook_lifetime_extended")[0]["signals"] == ["operation_lease"]
+
+        assert handle.path is not None
+        handle.path.unlink()
+        clock.advance(5.0)
+        assert lifetime.poll() is TerminationReason.IDLE_STALL
+
+
 def test_idle_session_ends_at_soft_ceiling_as_idle_stall(monkeypatch: pytest.MonkeyPatch) -> None:
     lifetime_module = _lifetime_module()
     monkeypatch.setattr(lifetime_module, "_IDLE_WINDOW_SECONDS", 5.0)
@@ -210,7 +247,7 @@ def test_terminal_io_does_not_restart_idle_window_but_other_activity_does(
     active_signals = iter(
         [
             frozenset({"terminal_io"}),
-            frozenset({"api_connection"}),
+            frozenset({"child_processes"}),
             frozenset(),
             frozenset(),
         ]
@@ -237,7 +274,7 @@ def test_active_session_ends_at_hard_cap_as_timed_out(monkeypatch: pytest.Monkey
     lifetime = _start_lifetime(
         _policy(soft=2.0, extension=3.0),
         clock=clock,
-        activity_probe=lambda _pid, _fd: frozenset({"api_connection"}),
+        activity_probe=lambda _pid, _fd: frozenset({"child_processes"}),
     )
     clock.advance(2.1)
     assert lifetime.poll() is None
@@ -253,7 +290,7 @@ def test_zero_extension_is_hard_stop_at_soft_ceiling() -> None:
     lifetime = _start_lifetime(
         _policy(soft=2.0, extension=0.0),
         clock=clock,
-        activity_probe=lambda _pid, _fd: frozenset({"api_connection"}),
+        activity_probe=lambda _pid, _fd: frozenset({"child_processes"}),
     )
     clock.advance(1.9)
     assert lifetime.poll() is None
@@ -271,7 +308,7 @@ def test_probe_rate_limited_and_never_called_before_soft(monkeypatch: pytest.Mon
     def probe(_pid: int, _fd: int | None) -> frozenset[str]:
         nonlocal calls
         calls += 1
-        return frozenset({"api_connection"})
+        return frozenset({"child_processes"})
 
     lifetime = _start_lifetime(
         _policy(soft=2.0, extension=20.0), clock=clock, activity_probe=probe
@@ -348,7 +385,7 @@ def test_lease_renewed_ahead_of_expiry(tmp_path: Path) -> None:
         _policy(soft=20_000.0, extension=20_000.0),
         clock=clock,
         wall=wall,
-        activity_probe=lambda _pid, _fd: frozenset({"api_connection"}),
+        activity_probe=lambda _pid, _fd: frozenset({"child_processes"}),
         tether_path=path,
     )
 
@@ -382,7 +419,7 @@ def test_lease_capped_at_hard_cap_plus_margin(tmp_path: Path) -> None:
         _policy(soft=1.0, extension=10.0),
         clock=clock,
         wall=wall,
-        activity_probe=lambda _pid, _fd: frozenset({"api_connection"}),
+        activity_probe=lambda _pid, _fd: frozenset({"child_processes"}),
         tether_path=path,
     )
     clock.advance(10.75)
@@ -485,7 +522,7 @@ def test_warnings_written_at_t_minus_30_and_5_minutes_once_each(
         _policy(soft=3600.0, extension=0.0),
         clock=clock,
         wall=wall,
-        activity_probe=lambda _pid, _fd: frozenset({"api_connection"}),
+        activity_probe=lambda _pid, _fd: frozenset({"child_processes"}),
         notice_path=notice_path,
     )
 

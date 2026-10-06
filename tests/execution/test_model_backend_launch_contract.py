@@ -217,8 +217,6 @@ def _build_real_codex_attempt_kwargs_for_retired_model(
             "on_spawn": None,
             "enable_deadline_extension": False,
             "max_extension_seconds": 0,
-            "marker_dir": None,
-            "session_id": None,
             "on_session_id_resolved": None,
             "stream_parser": None,
             "backend_resume_session_id": "",

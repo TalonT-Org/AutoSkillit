@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import dataclasses
 import os
-from collections.abc import Callable, Mapping, Sequence
-from contextlib import AbstractContextManager, nullcontext
+import shutil
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
 
 from autoskillit.core import (
     AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR,
+    OPERATION_LEASE_DIR_ENV_VAR,
     SESSION_TYPE_ENV_VAR,
     BackendCapabilities,
     CmdSpec,
@@ -35,6 +37,7 @@ from autoskillit.core import (
     SkillResult,
     SubprocessResult,
     ValidatedAddDir,
+    default_log_dir,
     get_logger,
     new_managed_attempt_id,
 )
@@ -70,6 +73,25 @@ def _bind_effective_execution_identity(
                 exc_info=True,
             )
     return dataclasses.replace(skill_result, execution_identity=effective)
+
+
+@contextmanager
+def _operation_lease_channel(spec: CmdSpec) -> Iterator[tuple[CmdSpec, Path]]:
+    """Bind one spec to its own absolute supervision channel for this attempt.
+
+    A killed supervisor can leave an orphan directory. Later attempts neither
+    reuse that directory nor scan it for liveness.
+    """
+    path = default_log_dir().resolve() / "operation-leases" / uuid4().hex
+    path.mkdir(parents=True, exist_ok=False)
+    try:
+        values = {**spec.env, OPERATION_LEASE_DIR_ENV_VAR: str(path)}
+        env: Mapping[str, str] = values
+        if not isinstance(spec.env, dict):
+            env = cast(Any, type(spec.env))(values)
+        yield dataclasses.replace(spec, env=env), path
+    finally:
+        shutil.rmtree(path, ignore_errors=True)
 
 
 def _generated_home_attempt(

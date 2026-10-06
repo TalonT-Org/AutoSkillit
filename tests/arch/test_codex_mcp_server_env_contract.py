@@ -14,6 +14,7 @@ from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     FLEET_MODE_ENV_VAR,
     KITCHEN_SESSION_ID_ENV_VAR,
+    OPERATION_LEASE_DIR_ENV_VAR,
 )
 from tests._ambient_env_surface import (
     _PRODUCTION_SRC_ROOT,
@@ -34,6 +35,57 @@ _ADMITTED_ATTESTATION_READS: frozenset[tuple[str, str]] = frozenset(
             AUTOSKILLIT_ATTESTED_META_SUPPORT,
         ),
     }
+)
+
+
+_HOST_ONLY_READS: tuple[tuple[str, str, str], ...] = (
+    ("cli/app.py", "AUTOSKILLIT_PROTECTED_BRANCHES", "Host CLI seeds repository hook policy."),
+    (
+        "cli/update/_update_checks_fetch.py",
+        "AUTOSKILLIT_FETCH_CACHE_TTL_SECONDS",
+        "Operator control of the host update-check cache.",
+    ),
+    (
+        "cli/update/_update_checks_source.py",
+        "AUTOSKILLIT_SOURCE_REPO",
+        "Operator selection of the local update source.",
+    ),
+    ("core/io/paths.py", "AUTOSKILLIT_LOG_DIR", "Operator override of the host log root."),
+    (
+        "core/runtime/kitchen_state.py",
+        "AUTOSKILLIT_STATE_DIR",
+        "Override of this process's persistent state location.",
+    ),
+    (
+        "core/runtime/session_provenance.py",
+        "AUTOSKILLIT_STATE_DIR",
+        "Override of this process's persistent state location.",
+    ),
+    (
+        "execution/backends/_codex_recipe_delivery.py",
+        "AUTOSKILLIT_STATE_DIR",
+        "Override of the local recipe-delivery state location.",
+    ),
+    (
+        "pipeline/exploration_context_durable.py",
+        "AUTOSKILLIT_EXPLORATION_CAPABILITY",
+        "Sealed native terminal authority; not an ordinary MCP server input.",
+    ),
+    (
+        "pipeline/exploration_context_durable.py",
+        "AUTOSKILLIT_EXPLORATION_ROLE",
+        "Sealed native terminal authority; not an ordinary MCP server input.",
+    ),
+    (
+        "pipeline/exploration_context_durable.py",
+        "AUTOSKILLIT_EXPLORATION_SESSION_ID",
+        "Sealed native terminal authority; not an ordinary MCP server input.",
+    ),
+    (
+        "pipeline/exploration_context_durable.py",
+        "AUTOSKILLIT_EXPLORATION_AUTHORITY_PATH",
+        "Sealed native terminal authority; not an ordinary MCP server input.",
+    ),
 )
 
 
@@ -87,6 +139,29 @@ def test_every_server_process_private_read_is_forwarded() -> None:
     )
 
 
+def test_every_server_autoskillit_read_is_private() -> None:
+    reads = tuple(
+        read
+        for read in production_env_read_surface(_PRODUCTION_SRC_ROOT).reads
+        if read.rule in {"R1", "R2"}
+        and not read.file.startswith("hooks/")
+        and read.var.startswith("AUTOSKILLIT_")
+    )
+    host_only_pairs = {(file, var) for file, var, _reason in _HOST_ONLY_READS}
+    missing = tuple(
+        read
+        for read in reads
+        if read.var not in AUTOSKILLIT_PRIVATE_ENV_VARS
+        and (read.file, read.var) not in host_only_pairs
+    )
+
+    assert not missing, (
+        "Server-process AUTOSKILLIT environment reads must be private and therefore scrubbed/"
+        "forwarded deliberately:\n"
+        f"{_format_reads(missing)}"
+    )
+
+
 def test_dispatch_identity_channel_regression() -> None:
     dispatch_identity_vars = {
         DISPATCH_ID_ENV_VAR,
@@ -99,3 +174,7 @@ def test_dispatch_identity_channel_regression() -> None:
     }
 
     assert dispatch_identity_vars <= CODEX_MCP_ENV_FORWARD_VARS
+
+
+def test_operation_lease_channel_reaches_codex_kitchens() -> None:
+    assert OPERATION_LEASE_DIR_ENV_VAR in CODEX_MCP_ENV_FORWARD_VARS

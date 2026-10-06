@@ -25,6 +25,7 @@ import psutil
 import pytest
 
 from autoskillit.core import CLAUDE_CODE_CAPABILITIES
+from tests.fleet._helpers import assert_food_truck_lease_launch
 
 pytestmark = [
     pytest.mark.layer("fleet"),
@@ -156,6 +157,10 @@ class FleetTestRunner:
         self.call_count: int = 0
         self.last_pid: int = 0
         self.last_pass_fds: tuple[int, ...] = ()
+        self.last_kwargs: dict[str, Any] = {}
+        self.operation_lease_dir_exists_during_call = False
+        self.project_log_dir_to_check: Path | None = None
+        self.marker_files_during_call: tuple[Path, ...] = ()
 
     async def __call__(
         self,
@@ -181,6 +186,16 @@ class FleetTestRunner:
 
         self.call_count += 1
         self.last_pass_fds = pass_fds
+        self.last_kwargs = {**kwargs, "env": env, "cwd": cwd, "timeout": timeout}
+        self.marker_files_during_call = (
+            tuple(sorted(self.project_log_dir_to_check.glob("*-in-progress-*.marker")))
+            if self.project_log_dir_to_check is not None
+            else ()
+        )
+        operation_lease_dir = kwargs.get("operation_lease_dir")
+        self.operation_lease_dir_exists_during_call = (
+            isinstance(operation_lease_dir, Path) and operation_lease_dir.is_dir()
+        )
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -278,6 +293,7 @@ class FleetRuntime:
         ingredients: dict[str, str] | None = None,
         dispatch_name: str | None = None,
         timeout_sec: int | None = None,
+        idle_output_timeout: int | None = None,
         shim_mode: str = "success",
         sleep_sec: float | None = None,
     ) -> dict[str, Any]:
@@ -292,6 +308,7 @@ class FleetRuntime:
             ingredients=ingredients,  # type: ignore[arg-type]
             dispatch_name=dispatch_name,
             timeout_sec=timeout_sec,
+            idle_output_timeout=idle_output_timeout,
             prompt_builder=_simple_prompt_builder,
             quota_refresher=_noop_quota_refresher,
         )
@@ -458,6 +475,36 @@ async def test_two_dispatch_happy_path(fleet_runtime: FleetRuntime) -> None:
         assert d.status == DispatchStatus.SUCCESS
         assert d.dispatched_pid > 0
         assert d.ended_at > d.started_at
+
+
+@pytest.mark.anyio
+async def test_food_truck_lease_channel_and_l2_idle_floor_on_claude(
+    fleet_runtime: FleetRuntime,
+) -> None:
+    runtime = fleet_runtime
+    runtime.add_recipe("lease-floor-recipe")
+    runtime.tool_ctx.config.run_skill.timeout = 3600
+    runtime.tool_ctx.config.fleet.idle_output_timeout = 1800
+    project_log_dir = runtime.tool_ctx.backend.session_locator().project_log_dir(
+        str(runtime.tool_ctx.project_dir)
+    )
+    runtime.runner.project_log_dir_to_check = project_log_dir
+    channels: list[Path] = []
+
+    for dispatch_name, override, expected_idle in (
+        ("below-floor", 1800, 3600),
+        ("above-floor", 4200, 4200),
+    ):
+        result = await runtime.dispatch(
+            "lease-floor-recipe",
+            dispatch_name=dispatch_name,
+            idle_output_timeout=override,
+        )
+        assert result["success"] is True
+
+        channels.append(assert_food_truck_lease_launch(runtime.runner, expected_idle))
+
+    assert channels[0] != channels[1]
 
 
 @pytest.mark.anyio

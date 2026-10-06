@@ -8,7 +8,6 @@ import uuid
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import replace
-from pathlib import Path
 from typing import cast
 
 import anyio
@@ -72,7 +71,6 @@ def _merge_food_truck_extras(
     *,
     env_extras: Mapping[str, str] | None,
     requires_packs: Sequence[str],
-    idle_output_timeout: float | None,
     fleet_idle_output_timeout: float,
     run_skill_idle_output_timeout: float,
 ) -> dict[str, str]:
@@ -85,9 +83,7 @@ def _merge_food_truck_extras(
                 f"{FOOD_TRUCK_TOOL_TAGS_ENV_VAR} — use requires_packs exclusively"
             )
         merged_extras[FOOD_TRUCK_TOOL_TAGS_ENV_VAR] = ",".join(sorted(requires_packs))
-    if idle_output_timeout is not None:
-        merged_extras[AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR] = str(idle_output_timeout)
-    elif fleet_idle_output_timeout > 0:
+    if fleet_idle_output_timeout > 0:
         merged_extras.setdefault(
             AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT_ENV_VAR, str(fleet_idle_output_timeout)
         )
@@ -236,8 +232,6 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
         provider_name: str = "",
         profile_name: str = "",
         sentinel_contract: str = "",
-        marker_dir: Path | None = None,
-        session_id: str | None = None,
         resume_message: str | None = None,
         backend_authority: BackendAuthority | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
@@ -246,6 +240,12 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
         on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
     ) -> SkillResult:
+        """Run a food truck under its configured supervisor deadline.
+
+        The per-call idle timeout controls the supervisor and is floored at
+        run_skill.timeout, including when the idle value is zero. Child tool
+        idle policy comes from fleet/run-skill configuration or env_extras.
+        """
         import autoskillit.execution.headless as headless_facade
 
         cwd = validated_dispatch_cwd(
@@ -266,7 +266,6 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
         merged_extras = _merge_food_truck_extras(
             env_extras=env_extras,
             requires_packs=requires_packs,
-            idle_output_timeout=idle_output_timeout,
             fleet_idle_output_timeout=fleet_cfg.idle_output_timeout,
             run_skill_idle_output_timeout=cfg.run_skill.idle_output_timeout,
         )
@@ -407,21 +406,11 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
         effective_max_ext = float(fleet_cfg.max_extension_seconds)
         effective_ceiling_seconds = float(cfg.process_tether.orphan_ceiling_seconds)
         effective_systemd_scope_enabled = cfg.process_tether.systemd_scope_enabled
-        effective_idle_out: float | None = (
-            idle_output_timeout
-            if idle_output_timeout is not None
-            else float(fleet_idle)
-            if fleet_idle > 0
-            else None
+        selected_idle = (
+            idle_output_timeout if idle_output_timeout is not None else float(fleet_idle)
         )
+        effective_idle_out = max(float(selected_idle), float(cfg.run_skill.timeout))
         effective_natural_exit_grace_seconds: float = cfg.run_skill.natural_exit_grace_seconds
-        effective_marker_dir: Path | None = marker_dir or (
-            headless_facade._resolve_session_log_dir(
-                cwd, cast(CodingAgentBackend, dispatch_backend)
-            )
-            if cwd
-            else None
-        )
         from autoskillit.execution.session_log.session_log import resolve_log_dir
 
         diagnostic_log_root = resolve_log_dir(cfg.linux_tracing.log_dir)
@@ -540,8 +529,6 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                             max_extension_seconds=effective_max_ext,
                             ceiling_seconds=effective_ceiling_seconds,
                             systemd_scope_enabled=effective_systemd_scope_enabled,
-                            marker_dir=effective_marker_dir,
-                            session_id=session_id,
                             model_identity=model_identity,
                             on_session_id_resolved=on_session_id_resolved,
                             launch_resolver=self._ctx.launch_resolver,

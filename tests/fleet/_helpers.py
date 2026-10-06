@@ -27,6 +27,22 @@ TOOLS_BY_PACK: dict[str, frozenset[str]] = {k: frozenset(v) for k, v in _tools_b
 KITCHEN_CORE_TOOLS = TOOLS_BY_PACK["kitchen-core"]
 
 
+def assert_food_truck_lease_launch(runner: Any, expected_idle: int) -> Path:
+    """Check the attempt lease channel, timeout policy, and cleanup."""
+    call = runner.last_kwargs
+    assert "marker_dir" not in call
+    assert "session_id" not in call
+    assert runner.marker_files_during_call == ()
+    channel = call["operation_lease_dir"]
+    assert isinstance(channel, Path) and channel.is_absolute()
+    assert call["env"]["AUTOSKILLIT_OPERATION_LEASE_DIR"] == str(channel)
+    assert runner.operation_lease_dir_exists_during_call is True
+    assert call["idle_output_timeout"] == expected_idle
+    assert call["env"]["AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT"] == "1800"
+    assert not channel.exists()
+    return channel
+
+
 def compute_food_truck_tool_surface(recipe_name: str) -> frozenset[str]:
     """Compute the expected tool surface for a food truck running the given recipe."""
     from autoskillit.recipe.io import builtin_recipes_dir, load_recipe

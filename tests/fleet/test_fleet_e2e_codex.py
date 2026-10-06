@@ -26,6 +26,7 @@ from autoskillit.execution.backends import CodexBackend
 from autoskillit.execution.headless import DefaultHeadlessExecutor
 from autoskillit.fleet._api import execute_dispatch
 from tests.fakes import InMemoryRecipeRepository
+from tests.fleet._helpers import assert_food_truck_lease_launch
 from tests.fleet.test_fleet_e2e import FleetTestRunner
 
 pytestmark = [
@@ -108,6 +109,41 @@ def _add_recipe(recipes: InMemoryRecipeRepository, name: str) -> None:
 
 class TestCodexFleetE2E:
     """REQ-SHIM-001: codex shim dispatch through event-driven result path."""
+
+    @pytest.mark.anyio
+    async def test_food_truck_lease_channel_and_l2_idle_floor(
+        self, codex_runtime: dict[str, Any]
+    ) -> None:
+        ctx = codex_runtime["tool_ctx"]
+        recipes = codex_runtime["recipes"]
+        runner: FleetTestRunner = codex_runtime["runner"]
+        runner.project_log_dir_to_check = ctx.backend.session_locator().project_log_dir(
+            str(ctx.project_dir)
+        )
+        _add_recipe(recipes, "lease-floor-recipe")
+        ctx.config.run_skill.timeout = 3600
+        ctx.config.fleet.idle_output_timeout = 1800
+        channels: list[Path] = []
+
+        for dispatch_name, override, expected_idle in (
+            ("below-floor", 1800, 3600),
+            ("above-floor", 4200, 4200),
+        ):
+            await execute_dispatch(
+                tool_ctx=ctx,
+                recipe="lease-floor-recipe",
+                task="verify operation lease launch wiring",
+                ingredients=None,
+                dispatch_name=dispatch_name,
+                timeout_sec=None,
+                idle_output_timeout=override,
+                prompt_builder=_simple_prompt_builder,
+                quota_refresher=_noop_quota_refresher,
+            )
+
+            channels.append(assert_food_truck_lease_launch(runner, expected_idle))
+
+        assert channels[0] != channels[1]
 
     @pytest.fixture()
     def codex_runtime(

@@ -18,6 +18,7 @@ from autoskillit.core import (
     NdjsonDriftOutcome,
     ProviderOutcome,
     RetryReason,
+    SessionErrorOutcome,
     SessionOutcome,
     SkillResult,
     TerminationReason,
@@ -767,6 +768,7 @@ def _build_skill_result(
             unknown_event_count=session.seen_ndjson_unknown_event_count,
             unknown_item_count=session.seen_ndjson_unknown_item_count,
         ),
+        session_error=SessionErrorOutcome.from_errors(session.errors),
         completion_required=completion_required,
     )
     if is_path_contamination and not controlled_context_exhaustion:

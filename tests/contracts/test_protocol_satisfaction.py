@@ -385,7 +385,24 @@ def test_default_headless_executor_satisfies_headless_executor():
     assert isinstance(DefaultHeadlessExecutor(MagicMock()), HeadlessExecutor)
 
 
-def test_headless_executor_protocol_dispatch_has_marker_params():
+def test_headless_executor_run_excludes_marker_watchdog_parameters() -> None:
+    from autoskillit.core import HeadlessExecutor
+    from autoskillit.execution.headless import DefaultHeadlessExecutor, run_headless_core
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    run_methods = (
+        HeadlessExecutor.run,
+        DefaultHeadlessExecutor.run,
+        run_headless_core,
+        InMemoryHeadlessExecutor.run,
+    )
+    for run_method in run_methods:
+        params = inspect.signature(run_method).parameters
+        assert "marker_dir" not in params
+        assert "caller_session_id" not in params
+
+
+def test_headless_executor_dispatch_excludes_watchdog_marker_parameters():
     import inspect
 
     from autoskillit.core import HeadlessExecutor
@@ -394,10 +411,9 @@ def test_headless_executor_protocol_dispatch_has_marker_params():
     for cls in (HeadlessExecutor, DefaultHeadlessExecutor):
         sig = inspect.signature(cls.dispatch_food_truck)
         params = sig.parameters
-        assert "marker_dir" in params, f"{cls.__name__} missing marker_dir"
-        assert params["marker_dir"].default is None, f"{cls.__name__}.marker_dir default != None"
-        assert "session_id" in params, f"{cls.__name__} missing session_id"
-        assert params["session_id"].default is None, f"{cls.__name__}.session_id default != None"
+        assert "marker_dir" not in params
+        assert "session_id" not in params
+        assert "caller_session_id" in params
         assert "plugin_authority" in params, f"{cls.__name__} missing plugin_authority"
         assert params["plugin_authority"].default is None
         assert "capability_preparation" in params, f"{cls.__name__} missing capability_preparation"
@@ -505,8 +521,7 @@ class TestGroupDApiContractPreservation:
             "on_pid_resolved",
             "enable_deadline_extension",
             "max_extension_seconds",
-            "marker_dir",
-            "session_id",
+            "operation_lease_dir",
             "stream_parser",
             "inspector_callback",
             "workload_basenames",
@@ -587,8 +602,7 @@ class TestGroupDApiContractPreservation:
             "on_pid_resolved",
             "enable_deadline_extension",
             "max_extension_seconds",
-            "marker_dir",
-            "session_id",
+            "operation_lease_dir",
             "stream_parser",
             "completion_record_types",
             "session_record_types",
@@ -611,44 +625,34 @@ class TestGroupDApiContractPreservation:
             f"  Extra:   {actual - expected}"
         )
 
-    def test_run_managed_async_marker_dir_session_id_defaults(self):
-        """run_managed_async marker_dir and session_id default to None."""
+    def test_run_managed_async_operation_lease_dir_follows_session_id_timeout(self):
         sig = inspect.signature(run_managed_async)
-        assert sig.parameters["marker_dir"].default is None
-        assert sig.parameters["session_id"].default is None
+        timeout_idx = list(sig.parameters).index("_session_id_timeout")
+        assert sig.parameters["operation_lease_dir"].default is None
+        assert list(sig.parameters).index("operation_lease_dir") == (timeout_idx + 1)
 
-    def test_run_managed_async_marker_params_after_session_id_timeout(self):
-        """marker_dir and session_id appear after _session_id_timeout in run_managed_async."""
-        sig = inspect.signature(run_managed_async)
-        session_id_timeout_idx = list(sig.parameters).index("_session_id_timeout")
-        marker_dir_idx = list(sig.parameters).index("marker_dir")
-        session_id_idx = list(sig.parameters).index("session_id")
-        assert marker_dir_idx == session_id_timeout_idx + 1
-        assert session_id_idx == marker_dir_idx + 1
-
-    def test_default_subprocess_runner_marker_dir_session_id_defaults(self):
-        """DefaultSubprocessRunner.__call__ marker_dir and session_id default to None."""
+    def test_default_subprocess_runner_operation_lease_dir_follows_max_extension(self):
         sig = inspect.signature(DefaultSubprocessRunner.__call__)
-        assert sig.parameters["marker_dir"].default is None
-        assert sig.parameters["session_id"].default is None
+        extension_idx = list(sig.parameters).index("max_extension_seconds")
+        assert sig.parameters["operation_lease_dir"].default is None
+        assert list(sig.parameters).index("operation_lease_dir") == (extension_idx + 1)
 
-    def test_default_subprocess_runner_marker_params_after_max_extension(self):
-        """marker_dir/session_id appear after max_extension_seconds in DefaultSubprocessRunner."""
-        sig = inspect.signature(DefaultSubprocessRunner.__call__)
-        max_extension_idx = list(sig.parameters).index("max_extension_seconds")
-        marker_dir_idx = list(sig.parameters).index("marker_dir")
-        session_id_idx = list(sig.parameters).index("session_id")
-        assert marker_dir_idx == max_extension_idx + 1
-        assert session_id_idx == marker_dir_idx + 1
-
-    def test_default_subprocess_runner_satisfies_protocol_with_marker_params(self):
-        """DefaultSubprocessRunner() satisfies SubprocessRunner with marker_dir/session_id."""
+    def test_watchdog_marker_parameters_are_absent_from_dispatch_signatures(self):
+        from autoskillit.core import HeadlessExecutor
         from autoskillit.core.types import SubprocessRunner
+        from autoskillit.execution.headless._headless_execute import _execute_claude_headless
+        from autoskillit.execution.headless._headless_launch import _run_headless_attempt
 
-        runner = DefaultSubprocessRunner()
-        assert isinstance(runner, SubprocessRunner), (
-            "DefaultSubprocessRunner no longer satisfies the SubprocessRunner protocol"
-        )
+        for callable_ in (
+            SubprocessRunner.__call__,
+            DefaultSubprocessRunner.__call__,
+            HeadlessExecutor.dispatch_food_truck,
+            _execute_claude_headless,
+            _run_headless_attempt,
+        ):
+            params = inspect.signature(callable_).parameters
+            assert "marker_dir" not in params
+            assert "session_id" not in params
 
     # ------------------------------------------------------------------
     # REQ-API-003: run_managed_sync unchanged

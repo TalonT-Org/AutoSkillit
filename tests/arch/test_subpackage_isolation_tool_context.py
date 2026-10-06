@@ -75,6 +75,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
         "temp_dir",
         "project_dir",
         "ephemeral_root",
+        "operation_lease_channel",
         "_baseline_config",
         "_session_config_overrides",
     }

@@ -372,11 +372,15 @@ def match_recipe_failure(
 
 
 def _atomic_json(path: Path, payload: Mapping[str, Any]) -> None:
-    with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as stream:
-        json.dump(payload, stream, indent=2)
-        stream.write("\n")
-        staged = Path(stream.name)
-    staged.replace(path)
+    stream = tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False)
+    staged = Path(stream.name)
+    try:
+        with stream:
+            json.dump(payload, stream, indent=2)
+            stream.write("\n")
+        staged.replace(path)
+    finally:
+        staged.unlink(missing_ok=True)
 
 
 def _validate_smoke_descriptor(

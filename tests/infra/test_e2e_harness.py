@@ -465,6 +465,17 @@ def _run_smoke(tmp_path: Path, runner: FakeRunner, monkeypatch: pytest.MonkeyPat
     return failures, json.loads((out / "result.json").read_text(encoding="utf-8")), out, catalog
 
 
+def test_atomic_json_cleans_failed_write_without_replacing_target(tmp_path: Path) -> None:
+    target = tmp_path / "evidence.json"
+    target.write_text('{"existing": true}\n', encoding="utf-8")
+
+    with pytest.raises(TypeError):
+        harness._atomic_json(target, {"invalid": object()})
+
+    assert target.read_text(encoding="utf-8") == '{"existing": true}\n'
+    assert list(tmp_path.iterdir()) == [target]
+
+
 class TestSandboxSmokeFixture:
     @pytest.mark.parametrize(
         ("original", "replacement"),

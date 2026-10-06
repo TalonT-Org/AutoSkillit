@@ -55,13 +55,13 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Removes only the unique physical-attempt directory created with exist_ok=False "
         "when its supervision-channel context exits.",
     ),
-    ("execution/report_index.py", "_update", "(index_dir / _ROWS_FILE).unlink"): (
+    ("execution/report_index.py", "_clear_index_files", "(index_dir / _ROWS_FILE).unlink"): (
         1,
-        "Rebuild removes derived rows while holding the report-index writer lease.",
+        "Rebuilds and incompatible generations remove derived rows under the writer lease.",
     ),
-    ("execution/report_index.py", "_update", "(index_dir / _STATE_FILE).unlink"): (
+    ("execution/report_index.py", "_clear_index_files", "(index_dir / _STATE_FILE).unlink"): (
         1,
-        "Rebuild removes the derived watermark while holding the report-index writer lease.",
+        "Rebuilds and incompatible generations remove the watermark under the writer lease.",
     ),
     (
         "server/tools/tools_kitchen/_close_kitchen.py",

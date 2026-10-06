@@ -229,13 +229,17 @@ def _codex_turn_usage_entry(
     info: Mapping[str, Any],
     last_usage: Mapping[str, Any],
     effective_model: str | None,
-    start: datetime,
-    end: datetime,
+    start: datetime | None,
+    end: datetime | None,
     provider_used: str,
 ) -> TurnTokenEntry | None:
     timestamp = first_nonempty_string(record.get("timestamp"))
     event_time = _utc_datetime(timestamp)
-    if event_time is None or event_time < start or event_time > end:
+    if (
+        event_time is None
+        or (start is not None and event_time < start)
+        or (end is not None and event_time > end)
+    ):
         return None
 
     input_tokens = first_valid_token_count(last_usage, "input_tokens")
@@ -304,29 +308,68 @@ def extract_codex_turn_usage(
     if path is None:
         return []
 
+    return _extract_codex_turn_usage(path, start, end, provider_used)
+
+
+def extract_codex_child_turn_usage(
+    rollout_path: Path,
+    child_thread_id: str,
+    *,
+    provider_used: str = "codex",
+) -> list[TurnTokenEntry]:
+    """Extract snapshots from a dedicated Codex rollout after verifying its thread."""
+    if not child_thread_id or _thread_id(rollout_path) != child_thread_id:
+        return []
+    return _extract_codex_turn_usage(rollout_path, None, None, provider_used)
+
+
+def _codex_usage_records(reader: BinaryIO) -> Iterator[Mapping[str, Any]]:
+    for raw_line in reader:
+        try:
+            record = json.loads(raw_line)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        if not isinstance(record, Mapping):
+            continue
+        if record.get("type") == "compacted":
+            yield record
+            continue
+        if not isinstance(record.get("payload"), Mapping):
+            continue
+        payload = record["payload"]
+        if record.get("type") == "event_msg" and payload.get("type") == "token_count":
+            info = payload.get("info")
+            if not isinstance(info, Mapping):
+                continue
+            if not isinstance(info.get("total_token_usage"), Mapping) or not isinstance(
+                info.get("last_token_usage"), Mapping
+            ):
+                continue
+        yield record
+
+
+def _extract_codex_turn_usage(
+    path: Path,
+    start: datetime | None,
+    end: datetime | None,
+    provider_used: str,
+) -> list[TurnTokenEntry]:
+    """Read advancing request snapshots within optional rollout time bounds."""
+
     rows: list[TurnTokenEntry] = []
     current_model: str | None = None
     cumulative_high_water = 0
     compacting = False
     try:
         with _logical_rollout_reader(path) as reader:
-            while raw_line := reader.readline():
-                try:
-                    record = json.loads(raw_line)
-                except (UnicodeDecodeError, json.JSONDecodeError):
-                    continue
-                if not isinstance(record, Mapping):
-                    continue
-
+            for record in _codex_usage_records(reader):
                 record_type = record.get("type")
-                payload = record.get("payload")
-                if record_type == "turn_context" and isinstance(payload, Mapping):
-                    current_model = first_nonempty_string(payload.get("model"))
-                    continue
                 if record_type == "compacted":
                     compacting = True
                     continue
-                if not isinstance(payload, Mapping):
+                payload: Mapping[str, Any] = record["payload"]
+                if record_type == "turn_context" and isinstance(payload, Mapping):
+                    current_model = first_nonempty_string(payload.get("model"))
                     continue
                 payload_type = payload.get("type")
                 if record_type == "event_msg" and payload_type == "context_compacted":
@@ -335,13 +378,9 @@ def extract_codex_turn_usage(
                 if record_type != "event_msg" or payload_type != "token_count":
                     continue
 
-                info = payload.get("info")
-                if not isinstance(info, Mapping):
-                    continue
-                total_usage = info.get("total_token_usage")
-                last_usage = info.get("last_token_usage")
-                if not isinstance(total_usage, Mapping) or not isinstance(last_usage, Mapping):
-                    continue
+                info = payload["info"]
+                total_usage = info["total_token_usage"]
+                last_usage = info["last_token_usage"]
                 cumulative_total = valid_token_count(total_usage.get("total_tokens"))
                 if cumulative_total is None or cumulative_total <= cumulative_high_water:
                     continue

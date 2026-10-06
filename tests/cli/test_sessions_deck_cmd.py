@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -12,6 +14,41 @@ from autoskillit.core import ArtifactLease
 from tests.cli._sessions_helpers import _configure_log_root, _seed_session
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
+
+
+def test_sessions_deck_passes_all_fact_collections(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoskillit.execution as execution
+    import autoskillit.report as report
+    from autoskillit.cli.ops import _sessions
+
+    log_root = tmp_path / "logs"
+    _configure_log_root(monkeypatch, log_root)
+    facts = SimpleNamespace(
+        sessions={"parent": {"key": "parent"}},
+        requests={"request": {"key": "request"}},
+        tools={"tool": {"key": "tool"}},
+        subagents={"child": {"key": "child", "actor_level": "L0"}},
+    )
+    received: dict[str, Any] = {}
+
+    def capture_deck(session_rows: Any, **kwargs: Any) -> str:
+        received["session_rows"] = list(session_rows)
+        received.update(kwargs)
+        return "<!doctype html>"
+
+    monkeypatch.setattr(_sessions, "_refresh_report_index", lambda *a, **kw: None)
+    monkeypatch.setattr(execution, "read_report_index", lambda *a: facts)
+    monkeypatch.setattr(report, "render_deck", capture_deck)
+    out = tmp_path / "deck.html"
+
+    _sessions.sessions_deck(str(out))
+
+    assert received["session_rows"] == list(facts.sessions.values())
+    for name in ("request", "tool", "subagent"):
+        assert list(received[f"{name}_rows"]) == list(getattr(facts, f"{name}s").values())
+    assert out.read_text(encoding="utf-8") == "<!doctype html>"
 
 
 def test_sessions_deck_refreshes_index_and_writes_session_data(

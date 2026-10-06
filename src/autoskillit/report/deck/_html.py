@@ -67,10 +67,21 @@ def render_deck_html(payload: Mapping[str, Any]) -> str:
 
 
 def render_deck(
-    session_rows: Iterable[Mapping[str, Any]], *, generated_at: datetime, index_schema_version: int
+    session_rows: Iterable[Mapping[str, Any]],
+    *,
+    request_rows: Iterable[Mapping[str, Any]] = (),
+    tool_rows: Iterable[Mapping[str, Any]] = (),
+    subagent_rows: Iterable[Mapping[str, Any]] = (),
+    generated_at: datetime,
+    index_schema_version: int,
 ) -> str:
     return render_deck_html(
         build_deck_payload(
-            session_rows, generated_at=generated_at, index_schema_version=index_schema_version
+            session_rows,
+            request_rows=request_rows,
+            tool_rows=tool_rows,
+            subagent_rows=subagent_rows,
+            generated_at=generated_at,
+            index_schema_version=index_schema_version,
         )
     )

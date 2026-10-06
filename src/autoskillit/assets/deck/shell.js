@@ -155,7 +155,7 @@ globalThis.DeckShell = (() => {
       }
     }
 
-    function renderCohort(chips, result, sentence) {
+    function renderCohort(chips, result, sentence, facets = model.facets) {
       const cohort = document.getElementById("deck-cohort");
       cohort.replaceChildren();
       cohort.appendChild(el("div", {class: "cohort-sentence"}, [
@@ -164,10 +164,11 @@ globalThis.DeckShell = (() => {
       cohort.appendChild(el("ul", {class: "cohort-notes"}, sentence.notes.map(note =>
         el("li", {}, note))));
 
-      for (const facet of model.facets) {
+      for (const facet of facets) {
         const facetChips = facet.kind === "window" ? chips.window : chips[facet.id];
-        const selectedKeys = facet.kind === "window" ?
-          [DeckCore.windowSelection(chips.window, route.params.window ?? null).chip.key] :
+        const window = facet.kind === "window" ?
+          DeckCore.windowSelection(chips.window, route.params.window ?? null).chip : null;
+        const selectedKeys = facet.kind === "window" ? (window ? [window.key] : []) :
           DeckCore.effectiveSelection(chips[facet.id], route.params[facet.id] ?? null).keys;
         const group = el("div", {class: "cohort-group"}, [el("span", {}, facet.label)]);
         const unavailable = [];
@@ -236,10 +237,21 @@ globalThis.DeckShell = (() => {
         notice = "No view named " + route.view;
       }
 
-      const table = model.tables.sessions;
-      const result = DeckCore.filterRows(model, table, chips, route);
-      const sentence = DeckCore.populationSentence(model, chips, route, result);
-      renderCohort(chips, result, sentence);
+      const selected = renderer && view.id !== model.landing ?
+        DeckCore.selectPrepared(model.prepared, view.id, chips, route) : null;
+      const primary = view?.id === "role" ? selected?.roleRows : selected?.skillRows;
+      const result = selected ? {rows: primary, untimed: 0} :
+        DeckCore.filterRows(model, model.tables.sessions, chips, route);
+      const populationModel = selected ? {...model, history: selected.viewHistory,
+        facets: model.facets.map(facet => view.id === "role" && facet.id === "level" ?
+          {...facet, label: "Spawning skill level"} : facet)} : model;
+      const sentence = DeckCore.populationSentence(populationModel, chips, route, result);
+      if (selected) {
+        const noun = view.id === "role" ? "role/provider row" : "skill cell";
+        sentence.headline = DeckCore.formatCount(result.rows.length) + " " + noun +
+          (result.rows.length === 1 ? "" : "s");
+      }
+      renderCohort(chips, result, sentence, populationModel.facets);
 
       const content = document.getElementById("deck-view");
       content.replaceChildren();
@@ -247,6 +259,18 @@ globalThis.DeckShell = (() => {
         const ctx = {model, route, rows: result.rows, chips,
           href: target => DeckCore.hrefFor(route, target, cohortKeys),
           el, entityLink, sortableTable, availabilityCell, barChart};
+        if (view.id !== model.landing) {
+          ctx.prepared = model.prepared;
+          ctx.metrics = view.id === "role" ? selected.roleRows : selected.skillRows;
+          ctx.relationships = selected.relationships;
+          ctx.definitions = selected.definitions;
+          ctx.viewHistory = selected.viewHistory;
+          ctx.selection = selected.selection;
+          if (view.id === "spend" || view.id === "efficiency") {
+            ctx.skillMetrics = selected.skillRows;
+            ctx.roleMetrics = selected.roleRows;
+          }
+        }
         content.appendChild(renderer(ctx));
       } else {
         const noticeCard = el("section", {class: "card"}, [el("p", {}, notice)]);
@@ -264,7 +288,7 @@ globalThis.DeckShell = (() => {
         DeckCore.formatDate(first) + " → " + DeckCore.formatDate(last);
       const generated = new Date(model.generated_at_ms).toISOString().slice(0, 16);
       document.getElementById("deck-foot").textContent = "report index v" +
-        model.index_schema_version + " · " + DeckCore.formatCount(table.length) +
+        model.index_schema_version + " · " + DeckCore.formatCount(model.tables.sessions.length) +
         " session rows · history " + history + " · generated " + generated + " UTC";
     }
 

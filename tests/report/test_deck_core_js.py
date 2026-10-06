@@ -80,7 +80,7 @@ def test_href_for_keeps_cohort_params_and_applies_target_changes(deck_js: Any) -
     )
 
 
-def test_facet_selection_drops_struck_keys_and_preserves_one_live_key(
+def test_facet_selection_drops_stale_keys_without_widening_scope(
     deck_js: Any, deck_model: dict[str, Any]
 ) -> None:
     chips = deck_model["chips"]["cohort"]
@@ -97,9 +97,9 @@ def test_facet_selection_drops_struck_keys_and_preserves_one_live_key(
     assert mixed["dropped"] == ["L0"]
     assert mixed["widened"] is False
 
-    widened = deck_js.call("DeckCore.effectiveSelection", levels, ["L0"])
-    assert widened["keys"] == ["unrecorded"]
-    assert widened["widened"] is True
+    stale = deck_js.call("DeckCore.effectiveSelection", levels, ["L0"])
+    assert stale["keys"] == []
+    assert stale["dropped"] == ["L0"]
 
     selected = deck_js.call("DeckCore.toggleSelection", harness, None, "codex")
     assert selected == ["claude-code"]
@@ -109,15 +109,255 @@ def test_facet_selection_drops_struck_keys_and_preserves_one_live_key(
     assert deck_js.call("DeckCore.toggleSelection", harness, selected, "codex") is None
 
 
-def test_window_selection_falls_back_to_all_for_absent_window(
+def test_window_selection_does_not_fall_back_for_absent_window(
     deck_js: Any, deck_model: dict[str, Any]
 ) -> None:
     windows = deck_model["chips"]["cohort"]["window"]
     assert deck_js.call("DeckCore.windowSelection", windows, None)["chip"]["key"] == "all"
     absent = deck_js.call("DeckCore.windowSelection", windows, ["28d"])
-    assert absent["chip"]["key"] == "all"
+    assert absent["chip"] is None
     assert absent["dropped"] == ["28d"]
     assert deck_js.call("DeckCore.windowSelection", windows, ["7d"])["chip"]["key"] == "7d"
+
+
+def test_prepared_selection_uses_exact_scope_and_keeps_metric_cells_distinct(
+    deck_js: Any,
+) -> None:
+    skill = {
+        "skill": "review",
+        "harness": "codex",
+        "provider": "openai",
+        "measures": {"input_tokens": {"state": "measured", "value": 17}},
+    }
+    other_skill = {**skill, "harness": "claude-code", "provider": "anthropic"}
+    role = {
+        "role": "reviewer",
+        "provider": "openai",
+        "harnesses": [
+            {"harness": "codex", "measures": {"input_tokens": {"value": 5}}},
+            {"harness": "claude-code", "measures": {"input_tokens": {"value": 9}}},
+        ],
+    }
+    chips = {
+        "window": [
+            {"key": "7d", "match": "7d", "label": "7d", "state": "live", "days": 7},
+            {"key": "all", "match": "all", "label": "all", "state": "live", "days": None},
+        ],
+        "level": [
+            {"key": "L1", "match": "skill", "label": "L1", "state": "live"},
+            {"key": "L2", "match": "orchestrator", "label": "L2", "state": "live"},
+        ],
+        "harness": [
+            {"key": "codex", "match": "codex", "label": "codex", "state": "live"},
+            {
+                "key": "claude-code",
+                "match": "claude-code",
+                "label": "claude-code",
+                "state": "live",
+            },
+        ],
+        "provider": [
+            {"key": "openai", "match": "openai", "label": "openai", "state": "live"},
+            {
+                "key": "anthropic",
+                "match": "anthropic",
+                "label": "anthropic",
+                "state": "live",
+            },
+        ],
+    }
+    relationship = {
+        "skill": "review",
+        "role": "reviewer",
+        "harness": "codex",
+        "provider": "openai",
+    }
+    definition = {"state": "available", "description": "Reads code"}
+    history = {"first_ms": 1, "last_ms": 2, "untimed": 0}
+    prepared = {
+        "skills": [
+            {"window": "7d", "levels": ["skill"], "rows": [{**skill, "skill": "wrong-level"}]},
+            {
+                "window": "all",
+                "levels": ["orchestrator", "skill"],
+                "rows": [{**skill, "skill": "wrong-window"}],
+            },
+            {
+                "window": "7d",
+                "levels": ["orchestrator", "skill"],
+                "rows": [skill, other_skill],
+            },
+        ],
+        "roles": [
+            {
+                "window": "7d",
+                "levels": ["orchestrator", "skill"],
+                "rows": [role],
+            }
+        ],
+        "relationships": [relationship],
+        "definitions": {"reviewer": definition},
+        "view_chips": {"efficiency": chips},
+        "view_histories": {"efficiency": history},
+    }
+    route = {
+        "params": {
+            "window": ["7d"],
+            "level": ["L1", "L2"],
+            "harness": ["codex"],
+            "provider": ["openai"],
+        }
+    }
+
+    selected = deck_js.call("DeckCore.selectPrepared", prepared, "efficiency", chips, route)
+
+    assert selected["skillRows"] == [skill]
+    assert selected["roleRows"] == [
+        {
+            **role,
+            "harnesses": [role["harnesses"][0]],
+        }
+    ]
+    assert selected["relationships"] == [relationship]
+    assert selected["definitions"] == {"reviewer": definition}
+    assert selected["viewHistory"] == history
+
+    route["params"]["window"] = ["missing-window"]
+    empty = deck_js.call("DeckCore.selectPrepared", prepared, "efficiency", chips, route)
+    assert empty["skillRows"] == empty["roleRows"] == []
+    assert empty["relationships"] == [relationship]
+    assert empty["definitions"] == {"reviewer": definition}
+
+    route["params"]["window"] = ["7d"]
+    prepared["skills"] = [{"window": "7d", "levels": ["skill"], "rows": [skill]}]
+    selected = deck_js.call("DeckCore.selectPrepared", prepared, "skill", chips, route)
+    assert selected["skillRows"] == [skill]
+    route["params"]["level"] = ["L2"]
+    selected = deck_js.call("DeckCore.selectPrepared", prepared, "skill", chips, route)
+    assert selected["skillRows"] == []
+    route["params"]["level"] = []
+    selected = deck_js.call("DeckCore.selectPrepared", prepared, "skill", chips, route)
+    assert selected["skillRows"] == [skill]
+
+
+def test_prepared_selection_returns_no_metrics_for_stale_scope(deck_js: Any) -> None:
+    chips = {
+        "window": [{"key": "all", "match": "all", "label": "all", "state": "live", "days": None}],
+        "level": [{"key": "L1", "match": "skill", "label": "L1", "state": "live"}],
+        "harness": [{"key": "codex", "match": "codex", "label": "codex", "state": "live"}],
+        "provider": [{"key": "openai", "match": "openai", "label": "openai", "state": "live"}],
+    }
+    prepared = {
+        "skills": [{"window": "all", "levels": ["skill"], "rows": [{"skill": "review"}]}],
+        "roles": [{"window": "all", "levels": ["skill"], "rows": []}],
+        "relationships": [],
+        "definitions": {},
+        "view_chips": {"skill": chips},
+        "view_histories": {"skill": {"first_ms": 1, "last_ms": 1, "untimed": 0}},
+    }
+
+    selected = deck_js.call(
+        "DeckCore.selectPrepared",
+        prepared,
+        "skill",
+        chips,
+        {"params": {"window": ["deleted-window"], "level": ["L2"]}},
+    )
+
+    assert selected["skillRows"] == []
+    assert selected["roleRows"] == []
+
+
+@pytest.mark.parametrize(
+    ("levels", "expected"),
+    [
+        pytest.param(None, ["short-window-skill"], id="window-local-default"),
+        pytest.param(["L1", "L2"], ["short-window-skill"], id="mixed-levels-intersect"),
+        pytest.param(["L2"], [], id="unobserved-window-level-is-empty"),
+    ],
+)
+def test_prepared_selection_uses_the_selected_windows_level_domain(
+    deck_js: Any,
+    levels: list[str] | None,
+    expected: list[str],
+) -> None:
+    chips = {
+        "window": [
+            {"key": "7d", "match": "7d", "label": "7d", "state": "live", "days": 7},
+            {"key": "all", "match": "all", "label": "all", "state": "live", "days": None},
+        ],
+        "level": [
+            {"key": "L1", "match": "skill", "label": "L1", "state": "live"},
+            {"key": "L2", "match": "orchestrator", "label": "L2", "state": "live"},
+        ],
+        "harness": [{"key": "codex", "match": "codex", "label": "codex", "state": "live"}],
+        "provider": [{"key": "openai", "match": "openai", "label": "openai", "state": "live"}],
+    }
+    short_row = {"skill": "short-window-skill", "harness": "codex", "provider": "openai"}
+    all_row = {"skill": "older-orchestrator", "harness": "codex", "provider": "openai"}
+    prepared = {
+        "skills": [
+            {"window": "7d", "levels": ["skill"], "rows": [short_row]},
+            {"window": "all", "levels": ["orchestrator", "skill"], "rows": [all_row]},
+        ],
+        "roles": [],
+        "relationships": [],
+        "definitions": {},
+    }
+    params = {"window": ["7d"], "harness": ["codex"], "provider": ["openai"]}
+    if levels is not None:
+        params["level"] = levels
+
+    selected = deck_js.call(
+        "DeckCore.selectPrepared", prepared, "skill", chips, {"params": params}
+    )
+
+    assert [row["skill"] for row in selected["skillRows"]] == expected
+
+
+def test_prepared_selection_keeps_skill_edges_with_unknown_child_provider(
+    deck_js: Any,
+) -> None:
+    chips = {
+        "window": [{"key": "all", "match": "all", "label": "all", "state": "live", "days": None}],
+        "level": [{"key": "L1", "match": "skill", "label": "L1", "state": "live"}],
+        "harness": [{"key": "codex", "match": "codex", "label": "codex", "state": "live"}],
+        "provider": [{"key": "openai", "match": "openai", "label": "openai", "state": "live"}],
+    }
+    skill = {
+        "skill": "parent-skill",
+        "harness": "codex",
+        "provider": "openai",
+        "measures": {"input_tokens": {"state": "measured", "value": 42}},
+    }
+    edge = {
+        "skill": "parent-skill",
+        "role": "native-reader",
+        "harness": "codex",
+        "provider": "unknown",
+    }
+    prepared = {
+        "skills": [{"window": "all", "levels": ["skill"], "rows": [skill]}],
+        "roles": [],
+        "relationships": [edge, {**edge, "skill": "another-skill"}],
+        "definitions": {"native-reader": {"state": "available"}},
+        "view_histories": {"skill": {"first_ms": 1, "last_ms": 1, "untimed": 0}},
+    }
+    route = {
+        "view": "skill",
+        "entity": "parent-skill",
+        "params": {
+            "window": ["all"],
+            "level": ["L1"],
+            "harness": ["codex"],
+            "provider": ["openai"],
+        },
+    }
+
+    selected = deck_js.call("DeckCore.selectPrepared", prepared, "skill", chips, route)
+
+    assert selected["skillRows"] == [skill]
+    assert selected["relationships"] == [edge]
 
 
 @pytest.mark.parametrize(
@@ -127,7 +367,8 @@ def test_window_selection_falls_back_to_all_for_absent_window(
         pytest.param({"harness": ["codex"]}, ["s4"], 0, id="codex"),
         pytest.param({"window": ["7d"]}, ["s1", "s2"], 1, id="last-week"),
         pytest.param({"harness": ["codex"], "window": ["7d"]}, [], 1, id="untimed-codex"),
-        pytest.param({"window": ["28d"]}, ["s1", "s2", "s3", "s4"], 0, id="absent-window"),
+        pytest.param({"window": ["28d"]}, [], 0, id="absent-window"),
+        pytest.param({"harness": ["retired"]}, [], 0, id="stale-harness"),
     ],
 )
 def test_filter_rows_applies_facets_windows_and_untimed_count(
@@ -170,29 +411,31 @@ def test_filter_rows_applies_facets_windows_and_untimed_count(
         ),
         pytest.param(
             _route(level=["L0"]),
-            "4 runs",
-            ALL_POPULATION_DETAIL,
+            "0 runs",
+            ALL_POPULATION_DETAIL.replace("level unrecorded (all)", "level none selected"),
             [
                 "L0 is not selectable on this view — L0 leaf agents write no session row; "
                 "they exist only as subagent transcripts",
-                "no selected level is selectable here — showing every selectable level",
             ],
             id="struck-level",
         ),
         pytest.param(
             _route(harness=["nope"]),
-            "4 runs",
-            ALL_POPULATION_DETAIL,
+            "0 runs",
+            ALL_POPULATION_DETAIL.replace(
+                "harness claude-code + codex (all)", "harness none selected"
+            ),
             [
                 "nope does not appear in this index",
-                "no selected harness is selectable here — showing every selectable harness",
             ],
             id="unknown-harness",
         ),
         pytest.param(
             _route(window=["28d"]),
-            "4 runs",
-            ALL_POPULATION_DETAIL,
+            "0 runs",
+            ALL_POPULATION_DETAIL.replace(
+                "window all history (2026-09-25 → 2026-10-04)", "window unavailable"
+            ),
             [
                 "28 days is not selectable on this view — index history begins 2026-09-25 — "
                 "9 days retained (#4621)"

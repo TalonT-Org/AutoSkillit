@@ -5,6 +5,132 @@ globalThis.DeckCore = (() => {
   const enc = encodeURIComponent;
   const formatCount = n => new Intl.NumberFormat("en-US").format(n);
   const formatDate = ms => new Date(ms).toISOString().slice(0, 10);
+
+  function formatRatio(ratio, percent = false) {
+    if (!ratio || (ratio.state !== "measured" && ratio.state !== "measured_zero")) return null;
+    if (ratio.state === "measured_zero") return percent ? "0%" : "0";
+    if (typeof ratio.value !== "number" || !Number.isFinite(ratio.value)) return null;
+    const value = Math.round(ratio.value * (percent ? 100 : 1) * 100) / 100;
+    return String(value) + (percent ? "%" : "");
+  }
+
+  function ratioSample(ratio) {
+    if (ratio?.sample_size == null) return "sample size unavailable";
+    const unit = ratio.sample_unit === "skill-run" ? "skill run" :
+      ratio.sample_unit === "child-invocation" ? "child invocation" : ratio.sample_unit;
+    return formatCount(ratio.sample_size) + " " + unit + (ratio.sample_size === 1 ? "" : "s");
+  }
+
+  function reviewEligibility(ratio, definitions) {
+    const roles = [...new Set(ratio?.definition_roles ?? [])];
+    if (!ratio || (ratio.state !== "measured" && ratio.state !== "measured_zero")) {
+      return {eligible: false,
+        reason: ratio?.review_reason || "No measured review signal is available.", roles};
+    }
+    if (ratio.review_eligible !== true || !(ratio.sample_size > 0)) {
+      return {eligible: false,
+        reason: ratio.review_reason || "This signal is not eligible for review.", roles};
+    }
+    if (!roles.length) {
+      return {eligible: false,
+        reason: "No contributor definitions are linked to this signal.", roles};
+    }
+    const unavailable = roles.filter(role => definitions?.[role]?.state !== "available");
+    if (unavailable.length) {
+      return {eligible: false,
+        reason: "Contributor definitions unavailable: " + unavailable.join(", ") + ".", roles};
+    }
+    return {eligible: true, reason: null, roles};
+  }
+
+  function reviewSignal(ctx, ratio) {
+    const eligibility = reviewEligibility(ratio, ctx.definitions);
+    const links = eligibility.roles.map(role => ctx.entityLink(role, {
+      view: "role", entity: role
+    }));
+    const definitions = links.length ? ctx.el("div", {
+      class: "view-review__definitions",
+      "aria-label": "Contributor definitions"
+    }, links) : null;
+    const marker = ctx.el("span", {
+      class: "view-review__marker",
+      "aria-live": "polite",
+      hidden: true
+    }, "Flagged for review");
+    const button = ctx.el("button", {
+      type: "button",
+      class: "view-review__flag",
+      "data-review-flag": "true",
+      "aria-label": "Flag this signal for review",
+      "aria-pressed": "false",
+      disabled: !eligibility.eligible
+    }, "Flag for review");
+    let flagged = false;
+    if (eligibility.eligible) {
+      button.addEventListener("click", () => {
+        flagged = !flagged;
+        button.setAttribute("aria-pressed", String(flagged));
+        marker.hidden = !flagged;
+      });
+    }
+    return ctx.el("div", {class: "view-review-signal", "data-review-signal": "true"}, [
+      definitions,
+      button,
+      marker,
+      eligibility.reason ? ctx.el("p", {class: "view-review__reason"}, eligibility.reason) : null
+    ]);
+  }
+  function measureCell(ctx, measure) {
+    return ctx.availabilityCell(measure ?? {state: "unavailable"});
+  }
+
+  function ratioCell(ctx, ratio, percent = false) {
+    const value = formatRatio(ratio, percent);
+    return ctx.el("div", {class: "view-measure"}, [
+      value == null ? measureCell(ctx, ratio) : ctx.el("span", {}, value),
+      ctx.el("small", {class: "view-sample"}, ratioSample(ratio)),
+      reviewSignal(ctx, ratio)
+    ]);
+  }
+
+  function definitionCard(ctx, role) {
+    const definition = ctx.definitions?.[role];
+    const available = definition?.state === "available";
+    return ctx.el("article", {class: "view-definition"}, [
+      ctx.el("h3", {}, ctx.entityLink(role, {view: "role", entity: role})),
+      available ? ctx.el("p", {}, definition.description ?? "Role definition loaded.") :
+        ctx.el("p", {class: "view-review__reason"}, "Definition unavailable for " + role + "."),
+      available ? ctx.el("p", {}, "Declared tools: " +
+        ((definition.tools ?? []).join(", ") || "none recorded")) : null,
+      available ? ctx.el("pre", {}, definition.body ?? "") : null
+    ]);
+  }
+
+  function toolMix(ctx, ratios = {}) {
+    const tools = Object.entries(ratios.tool_mix ?? {});
+    return tools.length ? ctx.el("div", {class: "view-pills"}, tools.map(([tool, ratio]) => {
+      const value = formatRatio(ratio, true);
+      return ctx.el("span", {}, [
+        ctx.el("span", {}, tool),
+        ctx.el("span", {}, " · "),
+        value == null ? ctx.availabilityCell(ratio) : ctx.el("span", {}, value),
+        ctx.el("small", {class: "view-sample"}, ratioSample(ratio)),
+        reviewSignal(ctx, ratio)
+      ]);
+    })) : ctx.el("span", {class: "view-empty"}, "No observed tool calls");
+  }
+
+  function roleHarnessRows(rows) {
+    return rows.flatMap(row => (row.harnesses ?? []).map(cell => ({
+      role: row.role,
+      provider: row.provider,
+      harness: cell.harness,
+      models: cell.models ?? [],
+      measures: cell.measures,
+      ratios: cell.ratios
+    })));
+  }
+
   const decodeTable = ({columns, rows}) => rows.map(r =>
     Object.fromEntries(columns.map((c, i) => [c, r[i]])));
 
@@ -61,10 +187,12 @@ globalThis.DeckCore = (() => {
 
   function effectiveSelection(chips, selected) {
     const live = chips.filter(c => c.state === "live").map(c => c.key);
-    if (selected == null) return {keys: live, dropped: [], widened: false};
+    if (selected == null || selected.length === 0) {
+      return {keys: live, dropped: [], widened: false};
+    }
     const keys = live.filter(k => selected.includes(k));
     const dropped = selected.filter(k => !live.includes(k));
-    return {keys: keys.length ? keys : live, dropped, widened: keys.length === 0};
+    return {keys, dropped, widened: false};
   }
 
   function toggleSelection(chips, selected, key) {
@@ -77,9 +205,67 @@ globalThis.DeckCore = (() => {
 
   function windowSelection(chips, selected) {
     const want = selected?.[0];
-    const chip = chips.find(c => c.state === "live" && c.key === want) ||
-      chips.find(c => c.key === "all");
-    return {chip, dropped: want && chip.key !== want ? [want] : []};
+    const chip = want == null ? chips.find(c => c.state === "live" && c.key === "all") :
+      chips.find(c => c.state === "live" && c.key === want);
+    return {chip: chip ?? null, dropped: want != null && !chip ? [want] : []};
+  }
+
+  function sameValues(left, right) {
+    return left.length === right.length && left.every(value => right.includes(value));
+  }
+
+  function selectPrepared(prepared, viewId, chips, route) {
+    prepared = prepared ?? {};
+    chips = chips ?? {};
+    const params = route.params ?? {};
+    const window = windowSelection(chips.window ?? [], params.window ?? null);
+    const level = effectiveSelection(chips.level ?? [], params.level ?? null);
+    const harness = effectiveSelection(chips.harness ?? [], params.harness ?? null);
+    const provider = effectiveSelection(chips.provider ?? [], params.provider ?? null);
+    const harnesses = new Set((chips.harness ?? [])
+      .filter(chip => harness.keys.includes(chip.key)).map(chip => chip.match));
+    const providers = new Set((chips.provider ?? [])
+      .filter(chip => provider.keys.includes(chip.key)).map(chip => chip.match));
+
+    function selectedRows(blocks) {
+      if (!window.chip) return [];
+      const inWindow = blocks.filter(block => block.window === window.chip.key);
+      const domain = [...new Set(inWindow.flatMap(block => block.levels))];
+      const selectedLevels = new Set(level.keys
+        .map(key => (chips.level ?? []).find(chip => chip.key === key)?.match)
+      );
+      const requested = domain.filter(value => selectedLevels.has(value));
+      if (!requested.length) return [];
+      const block = inWindow.find(item => sameValues(item.levels, requested));
+      return block?.rows ?? [];
+    }
+
+    let skillRows = viewId === "role" ? [] : selectedRows(prepared.skills ?? []).filter(row =>
+      harnesses.has(row.harness) && providers.has(row.provider));
+    let roleRows = viewId === "skill" ? [] : selectedRows(prepared.roles ?? []).filter(row =>
+      providers.has(row.provider)).map(row => ({...row,
+      harnesses: (row.harnesses ?? []).filter(cell => harnesses.has(cell.harness))
+    })).filter(row => row.harnesses.length > 0);
+    if (viewId === "skill" && route.entity != null) {
+      skillRows = skillRows.filter(row => row.skill === route.entity);
+    }
+    if (viewId === "role" && route.entity != null) {
+      roleRows = roleRows.filter(row => row.role === route.entity);
+    }
+    const relationships = (prepared.relationships ?? []).filter(edge => {
+      if (viewId === "skill" && route.entity != null) return edge.skill === route.entity;
+      if (viewId === "role" && route.entity != null) return edge.role === route.entity;
+      return true;
+    });
+
+    return {
+      skillRows,
+      roleRows,
+      relationships,
+      definitions: prepared.definitions ?? {},
+      viewHistory: prepared.view_histories?.[viewId] ?? null,
+      selection: {window, level, harness, provider}
+    };
   }
 
   function filterRows(model, rows, chips, route) {
@@ -91,7 +277,9 @@ globalThis.DeckCore = (() => {
     }
     let untimed = 0;
     const window = windowSelection(chips.window, route.params.window ?? null).chip;
-    if (window.days != null) {
+    if (!window) {
+      filtered = [];
+    } else if (window.days != null) {
       filtered = filtered.filter(row => {
         if (row.time_ms == null) { untimed += 1; return false; }
         return row.time_ms >= model.generated_at_ms - window.days * DAY_MS;
@@ -115,15 +303,16 @@ globalThis.DeckCore = (() => {
       const selection = effectiveSelection(values, route.params[facet.id] ?? null);
       const live = values.filter(c => c.state === "live");
       const labels = values.filter(c => selection.keys.includes(c.key)).map(c => c.label);
-      parts.push(facet.label + " " + (!live.length ? "none recorded" : labels.join(" + ") +
-        (selection.keys.length === live.length ? " (all)" : "")));
+      const selected = !live.length ? "none recorded" : !selection.keys.length ? "none selected" :
+        labels.join(" + ") + (selection.keys.length === live.length ? " (all)" : "");
+      parts.push(facet.label + " " + selected);
       notes.push(...selection.dropped.map(k => droppedNote(values, k)));
-      if (selection.widened) notes.push("no selected " + facet.label +
-        " is selectable here — showing every selectable " + facet.label);
     }
     const selection = windowSelection(chips.window, route.params.window ?? null);
     const window = selection.chip;
-    if (window.days != null) {
+    if (!window) {
+      parts.push("window unavailable");
+    } else if (window.days != null) {
       parts.push("window last " + window.label + " (" +
         formatDate(model.generated_at_ms - window.days * DAY_MS) + " → " +
         formatDate(model.generated_at_ms) + ")");
@@ -199,7 +388,9 @@ globalThis.DeckCore = (() => {
   }
 
   return Object.freeze({decodeTable, encodeRoute, decodeRoute, hrefFor, effectiveSelection,
-    toggleSelection, windowSelection, filterRows, populationSentence, summarizePairs, sortRows,
-    parseSort, chipPresentation, availabilityPresentation, barLayout, formatCount, formatDate,
+    toggleSelection, windowSelection, selectPrepared, filterRows, populationSentence,
+    summarizePairs, sortRows, parseSort, chipPresentation, availabilityPresentation,
+    barLayout, formatCount, formatRatio, ratioSample, reviewEligibility, reviewSignal,
+    measureCell, ratioCell, definitionCard, toolMix, roleHarnessRows, formatDate,
     CHIP_STATES, DAY_MS});
 })();

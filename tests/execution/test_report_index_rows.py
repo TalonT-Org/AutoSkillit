@@ -55,6 +55,7 @@ def _session_item(
     *,
     turns: tuple[tuple[str, ...], ...] = (),
     available: bool = True,
+    child_outcomes: tuple[dict[str, Any], ...] = (),
 ) -> WalkItem:
     return WalkItem(
         "session",
@@ -67,6 +68,7 @@ def _session_item(
                 {"turn_id": "private-turn-id", "timestamp": None, "tool_names": list(names)}
                 for names in turns
             ],
+            "child_outcomes": child_outcomes,
             "transcripts_available": available,
             "transcript_unavailable_reasons": [],
         },
@@ -147,6 +149,132 @@ def test_session_row_carries_facets_pair_and_resolved_measures() -> None:
     assert "/private/workspace/project" not in serialized
     assert "/private/transcripts/session.jsonl" not in serialized
     assert "private-turn-id" not in serialized
+
+
+@pytest.mark.parametrize("session_type", ["skill", "orchestrator"])
+def test_session_item_projects_verified_native_child_under_index_parent_key(
+    session_type: str,
+) -> None:
+    token_usage = {
+        "input_tokens": {"state": "measured", "value": 15},
+        "output_tokens": {"state": "measured", "value": 4},
+        "cache_read_tokens": {"state": "measured", "value": 3},
+        "cache_write_tokens": {"state": "measured_zero", "value": 0},
+    }
+    child = {
+        "child_id": "native-child-1",
+        "backend": "claude_code",
+        "parent_session_id": "native-parent-id",
+        "role": "audit-impl-slice-auditor",
+        "attribution_skill": "make-plan",
+        "effective_provider": "anthropic",
+        "effective_model": "claude-sonnet-child",
+        "evidence_source": "transcript_metadata",
+        "transcript_locator": "/private/logs/agent-native-child-1.jsonl",
+        "token_usage": token_usage,
+        "tool_counts": {"Bash": 1, "Read": 2},
+        "transcript_state": "observed",
+        "usage_state": "observed",
+    }
+    managed_attempt = {
+        "child_id": "managed-attempt-1",
+        "launch_alias": "claude-managed-attempt",
+        "backend": "claude_code",
+        "parent_session_id": "native-parent-id",
+        "role": "audit-bugs",
+        "attribution_skill": "make-plan",
+        "evidence_source": "managed_attempt_reservation",
+    }
+    providerless_child = {
+        "child_id": "native-child-providerless",
+        "backend": "claude_code",
+        "parent_session_id": "native-parent-id",
+        "role": "audit-impl-slice-auditor",
+        "attribution_skill": "make-plan",
+        "effective_provider": "",
+        "effective_model": "",
+        "evidence_source": "transcript_metadata",
+        "transcript_locator": "/private/logs/agent-native-child-providerless.jsonl",
+        "token_usage": {
+            field: {"state": "unknown", "value": None}
+            for field in (
+                "input_tokens",
+                "output_tokens",
+                "cache_read_tokens",
+                "cache_write_tokens",
+            )
+        },
+        "tool_counts": {"Read": 1},
+        "transcript_state": "observed",
+        "usage_state": "unknown",
+    }
+    mismatched_skill_child = {
+        "child_id": "native-child-mismatched-skill",
+        "backend": "claude_code",
+        "parent_session_id": "native-parent-id",
+        "role": "audit-impl-slice-auditor",
+        "attribution_skill": "other-skill",
+        "effective_provider": "anthropic",
+        "effective_model": "claude-sonnet-child",
+        "evidence_source": "transcript_metadata",
+        "token_usage": token_usage,
+        "tool_counts": {},
+        "transcript_state": "observed",
+        "usage_state": "observed",
+    }
+    parent = {
+        "session_id": "native-parent-id",
+        "timestamp": "2026-09-01T00:00:00Z",
+        "backend": "claude-code",
+        "provider_used": "openai",
+        "model_identifier": "parent-model",
+        "skill_command": "/autoskillit:make-plan",
+        "recipe_name": "research",
+        "step_name": "scope",
+        "session_type": session_type,
+    }
+
+    rows = rows_for_walk_item(
+        _session_item(
+            "report-index-key",
+            parent,
+            child_outcomes=(child, managed_attempt, providerless_child, mismatched_skill_child),
+        )
+    )
+
+    assert [row["kind"] for row in rows] == [
+        "session",
+        "subagent",
+        "subagent",
+        "subagent",
+    ]
+    projected_by_id = {row["child_id"]: row for row in rows if row["kind"] == "subagent"}
+    projected = projected_by_id["native-child-1"]
+    assert projected["key"].startswith("report-index-key:")
+    assert projected["child_id"] == "native-child-1"
+    assert projected["parent_session_key"] == "report-index-key"
+    assert projected["native_parent_session_id"] == "native-parent-id"
+    assert projected["role"] == "audit-impl-slice-auditor"
+    assert projected["actor_level"] == "L0"
+    assert projected["skill"] == "make-plan"
+    assert projected["level"] == session_type
+    assert projected["recipe"] == "research"
+    assert projected["step"] == "scope"
+    assert projected["provider"] == "anthropic"
+    assert projected["model"] == "claude-sonnet-child"
+    assert projected["time_ms"] == rows[0]["time_ms"]
+    assert projected["token_usage"] == token_usage
+    assert projected["tool_counts"] == {"Bash": 1, "Read": 2}
+    assert projected["transcript_state"] == projected["usage_state"] == "observed"
+    without_provider = projected_by_id["native-child-providerless"]
+    assert without_provider["provider"] == "unknown"
+    assert without_provider["model"] is None
+    assert without_provider["token_usage"]["input_tokens"]["state"] == "unknown"
+    assert without_provider["usage_state"] == "unknown"
+    mismatched = projected_by_id["native-child-mismatched-skill"]
+    assert mismatched["skill"] is None
+    assert mismatched["role"] == "audit-impl-slice-auditor"
+    assert mismatched["level"] == session_type
 
 
 def test_session_row_legacy_zero_and_codex_sigil() -> None:

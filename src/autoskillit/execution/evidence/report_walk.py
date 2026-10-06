@@ -11,7 +11,7 @@ import copy
 import hashlib
 import json
 import os
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,7 +19,16 @@ from typing import Any, BinaryIO, Final
 
 from autoskillit.core import ArtifactLease, get_logger, iter_merged_assistant_turns
 from autoskillit.execution.backends._codex_parse import _logical_rollout_reader
-from autoskillit.execution.child_outcomes import enumerate_claude_subagent_transcripts
+from autoskillit.execution.child_outcomes import (
+    enumerate_claude_subagent_transcripts,
+    normalize_backend_name,
+)
+from autoskillit.execution.evidence._native_child_projection import (
+    child_evidence_fingerprint as _native_child_evidence_fingerprint,
+)
+from autoskillit.execution.evidence._native_child_projection import (
+    project_child_outcomes,
+)
 from autoskillit.execution.session_log.session_index import (
     iter_tolerant_session_index_lines,
     read_tolerant_session_index_rows,
@@ -269,11 +278,53 @@ def _transcript_turns(path: Path, backend: str) -> list[dict[str, Any]]:
     ]
 
 
-def _session_record(row: dict[str, Any]) -> dict[str, Any]:
+def _native_parent_rows(
+    rows: Sequence[dict[str, Any]],
+) -> dict[tuple[str, str], list[dict[str, Any]]]:
+    by_key: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        key = row.get("dir_name")
+        if isinstance(key, str) and key:
+            by_key[key] = row
+    parents: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for row in by_key.values():
+        backend = row.get("backend")
+        session_id = row.get("session_id")
+        if not isinstance(backend, str) or not isinstance(session_id, str) or not session_id:
+            continue
+        identity = normalize_backend_name(backend), session_id
+        parents.setdefault(identity, []).append(row)
+    for candidates in parents.values():
+        candidates.sort(key=lambda candidate: str(candidate.get("dir_name", "")))
+    return parents
+
+
+def _retained_session_rows(log_root: Path) -> list[dict[str, Any]]:
+    rows_by_key: dict[str, dict[str, Any]] = {}
+    for row in read_tolerant_session_index_rows(log_root / "sessions-archive.jsonl"):
+        key = row.get("dir_name")
+        if isinstance(key, str) and key:
+            rows_by_key[key] = row
+    with ArtifactLease.acquire_shared(
+        session_index_lock_path(log_root), timeout=_LEASE_TIMEOUT_SECONDS
+    ):
+        for row in read_tolerant_session_index_rows(log_root / "sessions.jsonl"):
+            key = row.get("dir_name")
+            if isinstance(key, str) and key:
+                rows_by_key[key] = row
+    return [rows_by_key[key] for key in sorted(rows_by_key)]
+
+
+def _session_record(
+    row: dict[str, Any],
+    *,
+    log_root: Path,
+    parent_rows: Mapping[tuple[str, str], Sequence[dict[str, Any]]],
+) -> dict[str, Any]:
     turns: list[dict[str, Any]] = []
     unavailable_reasons: list[str] = []
     has_transcript = False
-    for field, backend in (("claude_code_log", "claude"), ("codex_log", "codex")):
+    for field, transcript_backend in (("claude_code_log", "claude"), ("codex_log", "codex")):
         raw = row.get(field)
         if raw is None:
             if field in row:
@@ -287,14 +338,16 @@ def _session_record(row: dict[str, Any]) -> dict[str, Any]:
         paths: tuple[Path, ...]
         try:
             paths = (path,) + (
-                enumerate_claude_subagent_transcripts(path) if backend == "claude" else ()
+                enumerate_claude_subagent_transcripts(path)
+                if transcript_backend == "claude"
+                else ()
             )
         except OSError as exc:
             unavailable_reasons.append(f"{field}:enumerate:{exc}")
             continue
         for transcript in paths:
             try:
-                turns.extend(_transcript_turns(transcript, backend))
+                turns.extend(_transcript_turns(transcript, transcript_backend))
             except (OSError, UnicodeError, ValueError) as exc:
                 unavailable_reasons.append(f"{transcript}:{exc}")
             except RuntimeError as exc:
@@ -303,16 +356,24 @@ def _session_record(row: dict[str, Any]) -> dict[str, Any]:
                 # rather than masking the caller's intent.
                 unavailable_reasons.append(f"{transcript}:runtime:{exc}")
     unavailable = not has_transcript or bool(unavailable_reasons)
-    return {
+    record: dict[str, Any] = {
         "row": row,
         "assistant_turn_count": None if unavailable else len(turns),
         "assistant_turns": turns,
         "transcripts_available": not unavailable,
         "transcript_unavailable_reasons": unavailable_reasons,
     }
+    record["child_outcomes"] = project_child_outcomes(
+        row, log_root=log_root, parent_rows=parent_rows
+    )
+    return record
 
 
-def _walk_archive(root: Path, state: dict[str, Any]) -> Iterator[WalkItem]:
+def _walk_archive(
+    root: Path,
+    state: dict[str, Any],
+    parent_rows: Mapping[tuple[str, str], Sequence[dict[str, Any]]],
+) -> Iterator[WalkItem]:
     # The session archive is an append-only retention file with no concurrent
     # writers in the live session workflow, so an ArtifactLease is not
     # required; the file handle is closed promptly and identity is captured
@@ -350,12 +411,16 @@ def _walk_archive(root: Path, state: dict[str, Any]) -> Iterator[WalkItem]:
                 SESSION_WALK_KIND,
                 row["dir_name"],
                 session_id,
-                _session_record(row),
+                _session_record(row, log_root=root, parent_rows=parent_rows),
                 _copy(state),
             )
 
 
-def _walk_projection(root: Path, state: dict[str, Any]) -> Iterator[WalkItem]:
+def _walk_projection(
+    root: Path,
+    state: dict[str, Any],
+    parent_rows: Mapping[tuple[str, str], Sequence[dict[str, Any]]],
+) -> Iterator[WalkItem]:
     path = root / "sessions.jsonl"
     with ArtifactLease.acquire_shared(
         session_index_lock_path(root), timeout=_LEASE_TIMEOUT_SECONDS
@@ -389,7 +454,13 @@ def _walk_projection(root: Path, state: dict[str, Any]) -> Iterator[WalkItem]:
         session_id = row.get("session_id")
         if session_id is not None and not isinstance(session_id, str):
             session_id = None
-        yield WalkItem(SESSION_WALK_KIND, name, session_id, _session_record(row), _copy(state))
+        yield WalkItem(
+            SESSION_WALK_KIND,
+            name,
+            session_id,
+            _session_record(row, log_root=root, parent_rows=parent_rows),
+            _copy(state),
+        )
     state["projection"] = current
     state["projection_identity"] = identity
     yield WalkItem(CHECKPOINT_WALK_KIND, None, None, None, _copy(state))
@@ -407,5 +478,14 @@ def iter_report_walk(
     should not assume one from ``_walk_otlp`` or ``_walk_archive``.
     """
     state = _copy(watermark or {})
-    for walk in (_walk_otlp, _walk_archive, _walk_projection):
-        yield from walk(log_root, state)
+    parent_rows = _native_parent_rows(_retained_session_rows(log_root))
+    yield from _walk_otlp(log_root, state)
+    yield from _walk_archive(log_root, state, parent_rows)
+    yield from _walk_projection(log_root, state, parent_rows)
+
+
+def child_evidence_fingerprint(log_root: Path) -> str:
+    """Return the current fingerprint of owner-attributed native child evidence."""
+    rows = _retained_session_rows(log_root)
+    parent_rows = _native_parent_rows(rows)
+    return _native_child_evidence_fingerprint(log_root, rows, parent_rows)

@@ -303,18 +303,37 @@ its rotated `otlp.jsonl.1` generation.
 It stores report facts separately from the retained `sessions.jsonl`
 projection.
 
-Every v1 row carries `schema_version`, `kind`, `key`, `session_id`, and
+Every v2 row carries `schema_version`, `kind`, `key`, `session_id`, and
 `time_ms`. `time_ms` is epoch milliseconds: session rows use the source
 session timestamp; OTLP rows use `timeUnixNano`, falling back to
 `observedTimeUnixNano`. Rows are append-only upserts keyed by `(kind, key)`;
 when a key is written again, readers keep its last row.
 
-| Kind | Key | Additional v1 fields |
+| Kind | Key | Additional fields |
 |---|---|---|
 | `session` | The session directory name (`dir_name`) | `harness`, `provider`, `model`, `skill`, `recipe`, `step`, `level`, `kitchen_id`, `order_id`, `dispatch_id`, `campaign_id`, `caller_session_id`, `parent_session_id`, `success`, `subtype`, `adjudication_reason`, `adjudication_subtype`, `duration_seconds`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `assistant_turn_count`, `tool_counts` |
 | `request` | `{session_id}:{request_id}` | `harness`, `request_id`, `agent_name`, `query_source`, `model`, `event_sequence`, the four token fields, `cost_usd`, `duration_ms` |
 | `tool` | `{session_id}:{tool_use_id}`, or `{source_id}#{ordinal}` when there is no tool-use ID | `harness`, `agent_name`, `tool_name`, `tool_use_id`, `error_type`, `success`, `duration_ms`, `tool_input_size_bytes`, `tool_result_size_bytes`, `event_sequence` |
 | `subagent` | `{source_id}#{ordinal}` | `harness`, `agent_type`, `model`, `final_model`, `model_swapped`, `event_sequence` |
+
+Native child `subagent` rows use
+`{parent_session_key}:native:{backend}:{native_parent_session_id}:{child_id}`.
+They additionally carry `child_id`, `native_parent_session_id`, `parent_session_key`,
+canonical `role`, `actor_level` (`L0`), child `provider` and `model`, attribution `skill`,
+spawning `recipe`, `step`, `level` and `time_ms`, canonical `token_usage`, `tool_counts`,
+`transcript_state`, and `usage_state`. OTLP completion events remain separate from these
+invocation observations. A managed attempt or launch alias alone cannot establish a
+native actor. Resumed parents sharing a native session ID require unique invocation
+ownership; ambiguous children remain unattributed.
+
+Native child tokens and tools come from that child's verified dedicated transcript,
+with native message/request snapshots deduplicated. Tokens require the child's own
+effective provider; missing provider/model identities never inherit parent values.
+Claude's raw-exclusive input becomes inclusive through the shared conversion of input,
+cache-read and cache-write counts, only when every component is observed. Codex input
+and serialized canonical input already include cache and are not expanded again.
+Raw OTLP request counters do not establish this convention through their transport or
+field names, and uncorrelated request/tool facts do not become role usage.
 
 Session token fields are serialized structured measures. Request rows persist
 raw token-counter observations as `int | None`; the reader resolves them to
@@ -327,7 +346,10 @@ measures remain `unavailable` or `unknown` according to that pair; they are
 never treated as zero. Session rows do not copy `cwd`, transcript paths, or
 turn IDs.
 
-The reader tolerates older or partial rows. Blank, malformed, non-object,
+An existing generation must carry the current `row_schema_version` in its committed
+state before read admission. An absent index remains empty; absent, old, or future
+row-schema markers require an update/rebuild. Within an admitted generation, the row
+decoder tolerates partial rows. Blank, malformed, non-object,
 unknown-kind, and empty-key rows are skipped; unknown fields are ignored, and
 missing or wrongly typed fields are treated as absent. Invalid entries in a
 tool-count map are dropped. The reader adds `session_key` to event rows in
@@ -343,10 +365,18 @@ is attributed only when its session ID has exactly one attempt; otherwise
 
 The writer holds an exclusive lease for the report index. Each commit appends
 and fsyncs `rows.jsonl` before atomically replacing the versioned `state.json`
-with the committed walk watermark and byte offset. On the next open, bytes past
-that offset are truncated. If state is missing or invalid, recovery preserves
-complete row lines, drops an incomplete final line, and walks sources from the
-beginning; last-row-wins upserts repair rows re-derived by that walk.
+with the committed walk watermark, byte offset, `row_schema_version`, and
+`child_evidence_fingerprint`. On the next open, bytes past that offset are truncated.
+The row-schema marker is an application-controlled compatibility boundary, distinct
+from the state envelope version. Missing/incompatible row-schema evidence resets the
+generation before append admission. Recoverable byte/watermark corruption within a
+known current schema retains the existing complete-line recovery behavior.
+
+The child-evidence fingerprint covers canonical native child facts and dedicated
+transcript dependencies, including changes, additions and removals. Drift selects a
+full replay under the existing exclusive index lease before unchanged live or consumed
+archive parents can be skipped. Markers commit with the successful row/watermark state;
+this reset does not preserve rows whose original sources are no longer retained.
 
 An incremental walk whose archive or OTLP cursor is no longer retained resets
 that source cursor and re-walks the retained data. An archive reset also resets
@@ -359,9 +389,8 @@ Rebuilding reads only the sources still retained on disk. Rows from OTLP data
 that has rotated out survive through incremental updates, but a rebuild cannot
 re-derive those older facts. A rebuild equals an incremental index when source
 changes are limited to those tracked by the walk: appended OTLP, OTLP rotation,
-and changed, added, or evicted session rows. This assumes transcripts have not
-changed since their session row was walked. `--rebuild` refreshes
-transcript-derived counts.
+and changed, added, or evicted session rows, plus native child evidence changes.
+Parent transcript changes still require `--rebuild` when their session row is unchanged.
 
 Codex OTLP token events are not projected: they do not carry a stable request
 identity for deduplication. Codex token measures enter the report index through
@@ -371,25 +400,52 @@ the session rows.
 
 `autoskillit sessions deck <output>` incrementally refreshes the report index and writes
 one self-contained HTML deck. It can be opened from `file://` without a server or network
-connection. The deck embeds the index's session rows and filters them in the browser.
+connection. It receives all four index fact collections as mapping iterables; the
+report layer imports core types and helpers rather than the execution index type.
+The cohort view retains its session table. Spend, efficiency, skill and role views
+select metric blocks prepared by the shared aggregation library, without browser
+aggregation of measures.
 ADR-0017 records why charts use first-party SVG.
 
 ### Payload contract
 
 The payload keys are `generated_at_ms`, `index_schema_version`, `landing`, and `history`;
-`tables.sessions{columns,rows}`; `facets[{id,label,column,kind}]`;
+column tables `tables.sessions`, `tables.skills`, and `tables.roles`; `facets[{id,label,column,kind}]`;
 `views[{id,question,decision,group,status,issue}]`;
 `chips{view:{facet:[{key,label,state,count,reason,issue,match|days}]}}`; and
 `availability[{state,label,description}]`. `match` is used for value facets and `days`
 for windows. `views[].issue` tracks the issue for building a planned view; a chip's
 `issue` identifies why that choice is unavailable. These fields have separate meanings.
 
+`prepared.skills` and `prepared.roles` contain fixed-window, exact stored-level subset
+blocks; `prepared.relationships`, `definitions`, `view_chips` and `view_histories` carry
+the independent relationship graph, bundled agent definitions and population metadata.
+Skill cells are `(skill, harness, provider)` and represent recorded L1/L2 skill runs.
+Role rows are `(role, provider)` with separate harness-scoped metrics for terminal L0
+child invocations. Providers and token source pairs are not pooled. Role usage is an
+attribution population and is not added to or subtracted from session spend.
+
+Token measures retain their availability states. Input/output exposure, cache-read/input
+share and tool/total-tool ratios are eligible sums with explicit sample sizes, units,
+excluded and unknown counts. Cache annotations overlap inclusive input; cache evidence
+is a reuse proxy, while unobserved exact prompt retransmission remains not reported.
+Role level selections mean the spawning skill level, while the actor remains L0.
+Identity details, definitions and known cross-references remain available in empty
+usage cohorts. A stale explicit window or facet selection yields no measurements.
+
+Canonical role routes provide offline definition links. The artifact preserves Claude
+tools/model separately from Codex reader tools/model and renders original definition
+body text literally. Manual ratio/tool-mix review controls require observed eligible
+signals and all contributor definition links; missing evidence has an inline reason.
+Flags reset on rerender and do not diagnose a configuration or recommend a downgrade.
+
 ### Chip states
 
 Each cohort choice is `live`, `struck`, or `absent`. Live choices filter the rows.
 Struck choices remain visible with a reason and cannot be selected. Absent choices have
 no matching rows. L0 is struck because L0 leaf agents write no session row and exist
-only as subagent transcripts. On a legacy index, unavailable orchestration levels cite
+only as subagent transcripts in the cohort's session population. Role views use the
+spawning skill's level facet. On a legacy source, unavailable orchestration levels cite
 [#4622](https://github.com/TalonT-Org/AutoSkillit/issues/4622); windows extending before
 the retained history cite [#4621](https://github.com/TalonT-Org/AutoSkillit/issues/4621).
 

@@ -753,32 +753,54 @@ class TestSandboxSmokeFlow:
         assert result["outcome"] == "expected_failure"
         assert result["expected_findings"] == [expected]
 
+    @pytest.mark.parametrize(
+        ("envelope_overrides", "initial_failures", "expected_failures", "expected_findings"),
+        [
+            pytest.param(
+                {},
+                ["cleanup: delete failed"],
+                ["cleanup: delete failed"],
+                [_SMOKE_FAILURE],
+                id="matched-with-extra-errors",
+            ),
+            pytest.param(
+                {"user_visible_message": " "},
+                ["fleet run failed"],
+                ["fleet run failed"],
+                [],
+                id="malformed-envelope",
+            ),
+            pytest.param(
+                {"success": True},
+                [],
+                [
+                    "fleet run: remove stale expected failure for fixed bug "
+                    f"{_SMOKE_FAILURE['issue']}"
+                ],
+                [],
+                id="stale-expectation",
+            ),
+        ],
+    )
     def test_recipe_matching_preserves_extra_errors_and_rejects_malformed_or_stale_rows(
         self,
+        envelope_overrides,
+        initial_failures,
+        expected_failures,
+        expected_findings,
     ) -> None:
-        expected = _SMOKE_FAILURE
-        _catalog, test = _smoke_case([expected])
+        _catalog, test = _smoke_case([_SMOKE_FAILURE])
         matching = {
             "success": False,
             "kind": "completed",
             "dispatch_status": "failed",
             "error": "workflow_failed",
             "user_visible_message": "model reported failure",
+            **envelope_overrides,
         }
-        failures, findings = harness.match_recipe_failure(
-            test, ["cleanup: delete failed"], matching
-        )
-        assert failures == ["cleanup: delete failed"]
-        assert findings == [expected]
-
-        malformed = {**matching, "user_visible_message": " "}
-        failures, findings = harness.match_recipe_failure(test, ["fleet run failed"], malformed)
-        assert failures == ["fleet run failed"]
-        assert findings == []
-
-        failures, findings = harness.match_recipe_failure(test, [], {"success": True})
-        assert len(failures) == 1 and "remove stale expected failure" in failures[0]
-        assert findings == []
+        failures, findings = harness.match_recipe_failure(test, initial_failures, matching)
+        assert failures == expected_failures
+        assert findings == expected_findings
 
     def test_expected_failure_console_outcome_comes_from_result_file(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]

@@ -501,9 +501,10 @@ def test_empty_index_has_absent_declared_values_and_empty_observed_facets() -> N
     assert (chips["window"][-1]["key"], chips["window"][-1]["state"]) == ("all", "live")
 
 
-def test_prepared_metrics_keep_source_pairs_roles_and_shared_library_accounting(
+@pytest.fixture
+def prepared_metrics(
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+) -> SimpleNamespace:
     sessions, requests, tools, children = _full_index_facts()
     body = "Bash runs git show to inspect the committed slice."
     loader_calls: list[None] = []
@@ -544,13 +545,26 @@ def test_prepared_metrics_keep_source_pairs_roles_and_shared_library_accounting(
         index_schema_version=7,
     )
 
-    assert aggregate_calls and ratio_calls
-    assert len(loader_calls) == 1
+    return SimpleNamespace(
+        payload=payload,
+        sessions=sessions,
+        children=children,
+        definition_body=body,
+        aggregate_calls=aggregate_calls,
+        ratio_calls=ratio_calls,
+        loader_calls=loader_calls,
+    )
+
+
+def test_prepared_skill_and_child_metrics_use_shared_accounting(
+    prepared_metrics: SimpleNamespace,
+) -> None:
+    payload = prepared_metrics.payload
+    sessions = prepared_metrics.sessions
+    children = prepared_metrics.children
+    assert prepared_metrics.aggregate_calls and prepared_metrics.ratio_calls
+    assert len(prepared_metrics.loader_calls) == 1
     prepared = payload["prepared"]
-    built_views = {view.view_id for view in DECK_VIEWS if view.planned_issue is None}
-    assert set(prepared["view_chips"]) == built_views
-    assert set(prepared["view_histories"]) == built_views
-    assert set(payload["tables"]) == {SESSION_TABLE, "skills", "roles"}
     levels: set[str | None] = {"orchestrator", "skill"}
     skill_block = _metric_row(prepared["skills"], window="all", levels=levels)
     planner = next(
@@ -616,6 +630,12 @@ def test_prepared_metrics_keep_source_pairs_roles_and_shared_library_accounting(
     assert claude_metrics["ratios"]["tool_mix"]["Bash"]["review_eligible"] is True
     assert claude_metrics["ratios"]["tool_mix"]["Bash"]["definition_roles"] == [_AUDITOR]
 
+
+def test_prepared_ratio_states_and_definition_availability(
+    prepared_metrics: SimpleNamespace,
+) -> None:
+    prepared = prepared_metrics.payload["prepared"]
+    role_block = _metric_row(prepared["roles"], window="all", levels={"orchestrator", "skill"})
     zero_skill_block = _metric_row(prepared["skills"], window="all", levels={"skill"})
     maintenance = next(row for row in zero_skill_block["rows"] if row["skill"] == "maintenance")
     zero_ratio = maintenance["ratios"]["input_output"]
@@ -631,7 +651,7 @@ def test_prepared_metrics_keep_source_pairs_roles_and_shared_library_accounting(
     assert unresolved_ratio["review_eligible"] is False
     assert unresolved_ratio["review_reason"]
     assert prepared["definitions"][_AUDITOR]["state"] == "available"
-    assert prepared["definitions"][_AUDITOR]["body"] == body
+    assert prepared["definitions"][_AUDITOR]["body"] == prepared_metrics.definition_body
     assert prepared["definitions"]["unresolved-observer"]["state"] == "unavailable"
 
     zero_denominator = next(row for row in role_block["rows"] if row["role"] == "zero-denominator")
@@ -643,6 +663,16 @@ def test_prepared_metrics_keep_source_pairs_roles_and_shared_library_accounting(
     codex = next(row for row in role_block["rows"] if row["role"] == "codex-reviewer")
     codex_cache = codex["harnesses"][0]["ratios"]["cache_share"]
     assert (codex_cache["state"], codex_cache["excluded_runs"]) == ("unavailable", 1)
+
+
+def test_prepared_identity_tables_and_view_projections(prepared_metrics: SimpleNamespace) -> None:
+    payload = prepared_metrics.payload
+    sessions = prepared_metrics.sessions
+    prepared = payload["prepared"]
+    built_views = {view.view_id for view in DECK_VIEWS if view.planned_issue is None}
+    assert set(prepared["view_chips"]) == built_views
+    assert set(prepared["view_histories"]) == built_views
+    assert set(payload["tables"]) == {SESSION_TABLE, "skills", "roles"}
 
     def table_rows(table: dict[str, Any]) -> list[dict[str, Any]]:
         return [dict(zip(table["columns"], row, strict=True)) for row in table["rows"]]

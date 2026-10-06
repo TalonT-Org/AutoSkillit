@@ -61,6 +61,14 @@ def _model_branch(run: str) -> tuple[str, str]:
     return "\n".join(lines[start + 1 : end]), "\n".join(lines[:start] + lines[end + 1 :])
 
 
+def _inline_smoke_cleanup(run: str) -> str:
+    helper = REPO_ROOT / "scripts" / "e2e" / "smoke-cleanup.sh"
+    return run.replace(
+        'source "$GITHUB_WORKSPACE/scripts/e2e/smoke-cleanup.sh"',
+        helper.read_text(encoding="utf-8"),
+    )
+
+
 _DOCKER_STUB = r"""#!/usr/bin/env python3
 import json
 import os
@@ -328,7 +336,7 @@ class TestSecrets:
 
     @pytest.mark.parametrize("step_id", ["e2e", "redact"])
     def test_docker_run_forwards_secrets_by_name_only(self, workflow: dict, step_id: str) -> None:
-        run = _step(workflow, "run", step_id=step_id)["run"]
+        run = _inline_smoke_cleanup(_step(workflow, "run", step_id=step_id)["run"])
         forwarded = re.findall(r"--env ([A-Z0-9_]+)", run)
         expected = ["MINIMAX_API_KEY", "E2E_SANDBOX_TOKEN"]
         if step_id == "e2e":
@@ -367,7 +375,7 @@ class TestSecrets:
 def test_clean_install_uses_the_common_user_image_and_artifacts(
     workflow: dict, step_id: str, common_mounts: tuple[str, ...]
 ) -> None:
-    run = _step(workflow, "run", step_id=step_id)["run"]
+    run = _inline_smoke_cleanup(_step(workflow, "run", step_id=step_id)["run"])
     branch, outside = _model_branch(run)
 
     assert run.count("docker_args=()") == 1

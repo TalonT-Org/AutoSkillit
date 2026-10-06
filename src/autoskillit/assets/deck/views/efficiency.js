@@ -29,21 +29,6 @@ DeckShell.registerView("efficiency", ctx => {
       DeckCore.reviewSignal(ctx, ratio)]);
   }
 
-  function toolMix(ratios = {}) {
-    const entries = Object.entries(ratios.tool_mix ?? {});
-    return entries.length ? ctx.el("div", {class: "view-pills"}, entries.map(([tool, ratio]) => {
-      const value = DeckCore.formatRatio(ratio, true);
-      return ctx.el("span", {}, [
-        ctx.el("span", {}, tool),
-        ctx.el("span", {}, " · "),
-        value == null ? ctx.availabilityCell(ratio) : ctx.el("span", {}, value),
-        ctx.el("small", {class: "view-sample"}, DeckCore.ratioSample(ratio)),
-        DeckCore.reviewSignal(ctx, ratio)
-      ]);
-    })) :
-      ctx.el("span", {class: "view-empty"}, "No observed tool calls");
-  }
-
   const definitions = ctx.definitions ?? {};
   const contributorRoles = new Set((ctx.relationships ?? []).map(edge => edge.role));
   for (const row of skillRows) {
@@ -79,7 +64,7 @@ DeckShell.registerView("efficiency", ctx => {
         ratioCell(row.ratios?.input_output)},
       {key: "cache_share", label: "Cache-read share", cell: row =>
         ratioCell(row.ratios?.cache_share, true)},
-      {key: "tool_mix", label: "Observed tool mix", cell: row => toolMix(row.ratios)}
+      {key: "tool_mix", label: "Observed tool mix", cell: row => DeckCore.toolMix(ctx, row.ratios)}
     ],
     rows: skillRows,
     defaultSort: {key: "skill", dir: "asc"}
@@ -95,7 +80,7 @@ DeckShell.registerView("efficiency", ctx => {
         ratioCell(row.ratios?.input_output)},
       {key: "cache_share", label: "Cache-read share", cell: row =>
         ratioCell(row.ratios?.cache_share, true)},
-      {key: "tool_mix", label: "Observed tool mix", cell: row => toolMix(row.ratios)}
+      {key: "tool_mix", label: "Observed tool mix", cell: row => DeckCore.toolMix(ctx, row.ratios)}
     ],
     rows: roleRows,
     defaultSort: {key: "role", dir: "asc"}

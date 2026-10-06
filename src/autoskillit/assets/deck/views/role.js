@@ -27,21 +27,6 @@ DeckShell.registerView("role", ctx => {
     ]);
   }
 
-  function toolMix(ratios = {}) {
-    const tools = Object.entries(ratios.tool_mix ?? {});
-    return tools.length ? ctx.el("div", {class: "view-pills"}, tools.map(([tool, ratio]) => {
-      const value = DeckCore.formatRatio(ratio, true);
-      return ctx.el("span", {}, [
-        ctx.el("span", {}, tool),
-        ctx.el("span", {}, " · "),
-        value == null ? ctx.availabilityCell(ratio) : ctx.el("span", {}, value),
-        ctx.el("small", {class: "view-sample"}, DeckCore.ratioSample(ratio)),
-        DeckCore.reviewSignal(ctx, ratio)
-      ]);
-    })) :
-      ctx.el("span", {class: "view-empty"}, "No observed tool calls");
-  }
-
   const spawningLevels = (ctx.selection?.level?.keys ?? []).map(key =>
     (ctx.chips?.level ?? []).find(chip => chip.key === key)?.label ?? key);
   const edges = ctx.relationships ?? [];
@@ -83,7 +68,7 @@ DeckShell.registerView("role", ctx => {
         ratioCell(row.ratios?.input_output)},
       {key: "cache_share", label: "Cache-read share", cell: row =>
         ratioCell(row.ratios?.cache_share, true)},
-      {key: "tool_mix", label: "Observed tool mix", cell: row => toolMix(row.ratios)}
+      {key: "tool_mix", label: "Observed tool mix", cell: row => DeckCore.toolMix(ctx, row.ratios)}
     ],
     rows: harnessRows,
     defaultSort: {key: "harness", dir: "asc"}

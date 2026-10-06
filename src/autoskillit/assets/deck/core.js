@@ -80,6 +80,20 @@ globalThis.DeckCore = (() => {
       eligibility.reason ? ctx.el("p", {class: "view-review__reason"}, eligibility.reason) : null
     ]);
   }
+  function toolMix(ctx, ratios = {}) {
+    const tools = Object.entries(ratios.tool_mix ?? {});
+    return tools.length ? ctx.el("div", {class: "view-pills"}, tools.map(([tool, ratio]) => {
+      const value = formatRatio(ratio, true);
+      return ctx.el("span", {}, [
+        ctx.el("span", {}, tool),
+        ctx.el("span", {}, " · "),
+        value == null ? ctx.availabilityCell(ratio) : ctx.el("span", {}, value),
+        ctx.el("small", {class: "view-sample"}, ratioSample(ratio)),
+        reviewSignal(ctx, ratio)
+      ]);
+    })) : ctx.el("span", {class: "view-empty"}, "No observed tool calls");
+  }
+
   const decodeTable = ({columns, rows}) => rows.map(r =>
     Object.fromEntries(columns.map((c, i) => [c, r[i]])));
 
@@ -339,6 +353,6 @@ globalThis.DeckCore = (() => {
   return Object.freeze({decodeTable, encodeRoute, decodeRoute, hrefFor, effectiveSelection,
     toggleSelection, windowSelection, selectPrepared, filterRows, populationSentence,
     summarizePairs, sortRows, parseSort, chipPresentation, availabilityPresentation,
-    barLayout, formatCount, formatRatio, ratioSample, reviewEligibility, reviewSignal, formatDate,
+    barLayout, formatCount, formatRatio, ratioSample, reviewEligibility, reviewSignal, toolMix, formatDate,
     CHIP_STATES, DAY_MS});
 })();

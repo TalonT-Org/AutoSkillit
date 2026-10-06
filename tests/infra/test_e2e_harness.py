@@ -466,6 +466,21 @@ def _run_smoke(tmp_path: Path, runner: FakeRunner, monkeypatch: pytest.MonkeyPat
 
 
 class TestSandboxSmokeFixture:
+    def test_lifecycle_descriptor_returns_only_validated_fields(self):
+        catalog, test = _smoke_case()
+        expected = {
+            "test": test.name,
+            "repository": catalog.sandbox_repository,
+            "branch_name": "e2e-smoke-" + "a" * 32,
+            "base_branch": "main",
+        }
+        descriptor = {**expected, "extra": {"unvalidated": True}}
+
+        assert (
+            harness._validate_smoke_descriptor(descriptor, test, catalog.sandbox_repository)
+            == expected
+        )
+
     def test_fixture_stages_discovers_and_passes_the_production_validator(self, tmp_path: Path):
         from autoskillit.recipe.io import find_recipe_by_name, load_recipe
         from autoskillit.recipe.validator import validate_recipe_structure

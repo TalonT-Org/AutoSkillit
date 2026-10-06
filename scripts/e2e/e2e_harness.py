@@ -397,7 +397,7 @@ def _validate_smoke_descriptor(
         raise ValueError("invalid smoke lifecycle base branch")
     if base == descriptor["branch_name"]:
         raise ValueError("smoke lifecycle branch equals base")
-    return descriptor
+    return {key: descriptor[key] for key in ("test", "repository", "branch_name", "base_branch")}
 
 
 def prepare_smoke(

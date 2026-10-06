@@ -4,13 +4,17 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import time
+import traceback
+import uuid
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -217,10 +221,18 @@ def clone_sandbox(repository: str, env: Mapping[str, str], runner: Runner) -> st
 
 
 def _list_pull_requests(
-    repository: str, limit: int, fields: str, env: Mapping[str, str], runner: Runner
+    repository: str,
+    limit: int,
+    fields: str,
+    env: Mapping[str, str],
+    runner: Runner,
+    *,
+    head: str | None = None,
 ) -> tuple[list[dict[str, Any]] | None, str | None]:
     argv = ["gh", "pr", "list", "--repo", repository, "--state", "all"]
     argv += ["--limit", str(limit), "--json", fields]
+    if head is not None:
+        argv += ["--head", head]
     result, failure = _setup_call(runner, argv, env)
     if failure is not None or result is None:
         return None, failure
@@ -255,8 +267,12 @@ def new_pull_requests(
     return [row for row in rows if int(row["number"]) > baseline], None
 
 
-def fleet_run_argv(test: e2e_catalog.CatalogTest) -> list[str]:
-    ingredients = [arg for key, value in test.ingredients for arg in ("-i", f"{key}={value}")]
+def fleet_run_argv(
+    test: e2e_catalog.CatalogTest, runtime_ingredients: Mapping[str, str] | None = None
+) -> list[str]:
+    effective = dict(test.ingredients)
+    effective.update(runtime_ingredients or {})
+    ingredients = [arg for key, value in effective.items() for arg in ("-i", f"{key}={value}")]
     return [
         "autoskillit",
         "fleet",
@@ -274,37 +290,545 @@ def last_line(stdout: str) -> str:
     return lines[-1] if lines else ""
 
 
-def check_envelope(returncode: int, stdout: str) -> list[str]:
+def check_envelope(returncode: int, stdout: str) -> tuple[list[str], dict[str, Any] | None]:
     failures = [] if returncode == 0 else [f"fleet run: exit {returncode}"]
     line = last_line(stdout)
     try:
         envelope = json.loads(line)
     except json.JSONDecodeError:
-        return [*failures, "fleet run: the last stdout line is not a JSON envelope"]
+        return [*failures, "fleet run: the last stdout line is not a JSON envelope"], None
     if not isinstance(envelope, dict):
         failures.append("fleet run: the envelope is not a JSON object")
+        return failures, None
     elif envelope.get("success") is not True:
         failures.append("fleet run: the envelope does not report success")
-    return failures
+    return failures, envelope
 
 
 def run_fleet(
-    test: e2e_catalog.CatalogTest, out: Path, env: Mapping[str, str], runner: Runner
-) -> list[str]:
+    test: e2e_catalog.CatalogTest,
+    out: Path,
+    env: Mapping[str, str],
+    runner: Runner,
+    runtime_ingredients: Mapping[str, str] | None = None,
+) -> tuple[list[str], dict[str, Any] | None]:
     result, failure = _call(
         runner,
-        fleet_run_argv(test),
+        fleet_run_argv(test, runtime_ingredients),
         what="fleet run",
         cwd=SANDBOX_CLONE,
         env=env,
         timeout=test.timeout_sec + e2e_catalog.HARNESS_GRACE_SEC,
+        evidence=out / "fleet-run",
     )
     if result is None:
-        return [str(failure)]
+        return [str(failure)], None
     (out / "fleet-run.stdout.log").write_text(result.stdout, encoding="utf-8")
     (out / "fleet-run.stderr.log").write_text(result.stderr, encoding="utf-8")
     (out / "envelope.json").write_text(last_line(result.stdout) + "\n", encoding="utf-8")
     return check_envelope(result.returncode, result.stdout)
+
+
+def match_recipe_failure(
+    test: e2e_catalog.CatalogTest,
+    failures: list[str],
+    envelope: Mapping[str, Any] | None,
+) -> tuple[list[str], list[dict[str, str]]]:
+    if envelope is None:
+        return failures, []
+    if envelope.get("success") is True:
+        stale = [
+            f"fleet run: remove stale expected failure for fixed bug {row['issue']}"
+            for row in test.expected_failures
+        ]
+        return [*failures, *stale], []
+    valid = (
+        envelope.get("success") is False
+        and envelope.get("kind") in ("completed", "rejected")
+        and (
+            envelope.get("kind") == "rejected"
+            or isinstance(envelope.get("dispatch_status"), str)
+            and bool(envelope["dispatch_status"].strip())
+        )
+        and all(
+            isinstance(envelope.get(k), str) and envelope[k].strip()
+            for k in ("error", "user_visible_message")
+        )
+    )
+    if not valid:
+        return failures, []
+    matched = [
+        dict(row)
+        for row in test.expected_failures
+        if row["check"] == envelope["error"] and row["message"] == envelope["user_visible_message"]
+    ]
+    if not matched:
+        return failures, []
+    consumed = {
+        "fleet run: the envelope does not report success",
+        *(f"fleet run: exit {code}" for code in (1, 2, 3)),
+    }
+    return [failure for failure in failures if failure not in consumed], matched
+
+
+def _atomic_json(path: Path, payload: Mapping[str, Any]) -> None:
+    stream = tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False)
+    staged = Path(stream.name)
+    try:
+        with stream:
+            json.dump(payload, stream, indent=2)
+            stream.write("\n")
+        staged.replace(path)
+    finally:
+        staged.unlink(missing_ok=True)
+
+
+def _validate_smoke_descriptor(
+    descriptor: Any, test: e2e_catalog.CatalogTest, repository: str
+) -> dict[str, str]:
+    if not isinstance(descriptor, dict) or descriptor.get("test") != test.name:
+        raise ValueError("invalid smoke lifecycle test")
+    if descriptor.get("repository") != repository:
+        raise ValueError("invalid smoke lifecycle repository")
+    if not re.fullmatch(r"e2e-smoke-[0-9a-f]{32}", str(descriptor.get("branch_name", ""))):
+        raise ValueError("invalid smoke lifecycle branch")
+    base = descriptor.get("base_branch")
+    if (
+        not isinstance(base, str)
+        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]*", base)
+        or ".." in base
+    ):
+        raise ValueError("invalid smoke lifecycle base branch")
+    if base == descriptor["branch_name"]:
+        raise ValueError("smoke lifecycle branch equals base")
+    return {key: descriptor[key] for key in ("test", "repository", "branch_name", "base_branch")}
+
+
+def prepare_smoke(
+    test: e2e_catalog.CatalogTest,
+    repository: str,
+    out: Path,
+    env: Mapping[str, str],
+    runner: Runner,
+) -> tuple[list[str], dict[str, str] | None]:
+    if test.recipe is None or not re.fullmatch(r"[a-z0-9][a-z0-9-]*", test.recipe):
+        return ["smoke setup: recipe must be a basename"], None
+    source = Path(__file__).with_name("recipes") / str(test.recipe_fixture)
+    target = SANDBOX_CLONE / ".autoskillit" / "recipes" / f"{test.recipe}.yaml"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, target)
+    runtime = {
+        "source_dir": str(SANDBOX_CLONE),
+        "repository": repository,
+        "branch_name": f"e2e-smoke-{uuid.uuid4().hex}",
+    }
+    for key, argv in (
+        ("remote_url", ["git", "remote", "get-url", "origin"]),
+        ("base_branch", ["git", "branch", "--show-current"]),
+    ):
+        result, failure = _setup_call(runner, argv, env, cwd=SANDBOX_CLONE)
+        if failure or result is None or not result.stdout.strip():
+            return [failure or f"smoke setup: empty {key}"], None
+        runtime[key] = result.stdout.strip()
+    result, failure = _setup_call(
+        runner,
+        ["git", "ls-remote", "--exit-code", "origin", f"refs/heads/{runtime['branch_name']}"],
+        env,
+        cwd=SANDBOX_CLONE,
+    )
+    if result is None or result.returncode != 2:
+        return [failure or "smoke setup: assigned remote branch already exists"], None
+    descriptor = {key: runtime[key] for key in ("repository", "base_branch", "branch_name")}
+    descriptor["test"] = test.name
+    _validate_smoke_descriptor(descriptor, test, repository)
+    _atomic_json(out / "smoke-lifecycle.json", descriptor)
+    return [], runtime
+
+
+def run_smoke_recipe(
+    test: e2e_catalog.CatalogTest,
+    repository: str,
+    out: Path,
+    env: Mapping[str, str],
+    runner: Runner,
+) -> tuple[list[str], list[dict[str, str]]]:
+    failures, runtime = prepare_smoke(test, repository, out, env, runner)
+    if runtime is None:
+        return failures, []
+    (out / "smoke-launched").write_text(test.name + "\n", encoding="utf-8")
+    fleet_failures, envelope = run_fleet(test, out, env, runner, runtime)
+    fleet_failures, matched = match_recipe_failure(test, fleet_failures, envelope)
+    failures += fleet_failures
+    if (
+        envelope is not None
+        and envelope.get("success") is True
+        and (envelope.get("kind") != "completed" or envelope.get("dispatch_status") != "success")
+    ):
+        failures.append("smoke: invalid successful fleet envelope")
+    if not matched and envelope is not None and envelope.get("success") is True:
+        failures += verify_smoke(test, runtime, out, env, runner)
+    return failures, matched
+
+
+def _smoke_pull_requests(
+    descriptor: Mapping[str, str], env: Mapping[str, str], runner: Runner
+) -> tuple[list[dict[str, Any]] | None, str | None]:
+    return _list_pull_requests(
+        descriptor["repository"],
+        100,
+        "number,state,headRefName,headRefOid,baseRefOid,additions,deletions,headRepository,headRepositoryOwner",
+        env,
+        runner,
+        head=descriptor["branch_name"],
+    )
+
+
+def _smoke_pr_matches(pr: Mapping[str, Any], descriptor: Mapping[str, str]) -> bool:
+    owner, repository = pr.get("headRepositoryOwner"), pr.get("headRepository")
+    identity = (
+        f"{owner.get('login')}/{repository.get('name')}"
+        if isinstance(owner, dict) and isinstance(repository, dict)
+        else ""
+    )
+    return (
+        pr.get("headRefName") == descriptor["branch_name"]
+        and identity.lower() == descriptor["repository"].lower()
+    )
+
+
+def _ref_request(
+    descriptor: Mapping[str, str],
+    branch: str,
+    env: Mapping[str, str],
+    runner: Runner,
+    *,
+    method: str = "GET",
+) -> tuple[int | None, dict[str, Any] | None, str | None]:
+    plural = "refs" if method == "DELETE" else "ref"
+    endpoint = f"/repos/{descriptor['repository']}/git/{plural}/heads/{branch}"
+    result, failure = _setup_call(
+        runner, ["gh", "api", "--include", "--method", method, endpoint], env
+    )
+    if result is None:
+        return None, None, failure
+    header, _, body = result.stdout.replace("\r\n", "\n").partition("\n\n")
+    match = re.search(r"^HTTP/\S+ (\d{3})\b", header)
+    status = int(match[1]) if match else None
+    if method == "DELETE" and status == 204 and not failure:
+        return status, None, None
+    if method in ("GET", "DELETE") and status == 404:
+        return status, None, None
+    if status != 200 or failure:
+        return status, None, failure or f"gh api: unexpected HTTP status {status}"
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        return status, None, "gh api: invalid ref JSON"
+    if (
+        not isinstance(payload, dict)
+        or payload.get("ref") != f"refs/heads/{branch}"
+        or not isinstance(payload.get("object"), dict)
+        or not re.fullmatch(
+            r"(?:[0-9a-f]{40}|[0-9a-f]{64})", str(payload["object"].get("sha", ""))
+        )
+    ):
+        return status, None, "gh api: ref or commit OID does not match the request"
+    return status, payload, None
+
+
+def _canary_sources_valid(code: str, test_code: str) -> bool:
+    try:
+        tree = ast.parse(test_code)
+        ast.parse(code)
+    except SyntaxError:
+        return False
+    imports = any(
+        isinstance(node, ast.ImportFrom)
+        and node.module == "sandbox.text"
+        and any(alias.name == "smoke_canary" for alias in node.names)
+        for node in ast.walk(tree)
+    )
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef):
+            continue
+        is_case = any(
+            isinstance(base, ast.Attribute)
+            and base.attr == "TestCase"
+            or isinstance(base, ast.Name)
+            and base.id == "TestCase"
+            for base in node.bases
+        )
+        for method in node.body:
+            if (
+                not is_case
+                or not isinstance(method, ast.FunctionDef)
+                or not method.name.startswith("test")
+            ):
+                continue
+            for call in ast.walk(method):
+                if (
+                    isinstance(call, ast.Call)
+                    and isinstance(call.func, ast.Attribute)
+                    and call.func.attr.startswith("assert")
+                    and any(
+                        isinstance(inner, ast.Call)
+                        and isinstance(inner.func, ast.Name)
+                        and inner.func.id == "smoke_canary"
+                        for inner in ast.walk(call)
+                    )
+                ):
+                    return imports
+    return False
+
+
+def _verify_smoke_commit(
+    head: str, base: str, out: Path, env: Mapping[str, str], runner: Runner
+) -> tuple[list[str], str | None]:
+    results: dict[str, str] = {}
+    for name, args in (
+        ("fetch", ["fetch", "--no-tags", "origin", head, base]),
+        ("type", ["cat-file", "-t", head]),
+        ("base", ["merge-base", base, head]),
+    ):
+        result, failure = _setup_call(runner, ["git", *args], env, cwd=SANDBOX_CLONE)
+        if failure or result is None:
+            return [failure or f"smoke: missing {name} result"], None
+        results[name] = result.stdout.strip()
+    if results["type"] != "commit" or not re.fullmatch(
+        r"[0-9a-f]{40}|[0-9a-f]{64}", results["base"]
+    ):
+        return ["smoke: fetched immutable commit or comparison base is invalid"], None
+    result, failure = _setup_call(
+        runner,
+        ["git", "diff", "--name-only", results["base"], head, "--"],
+        env,
+        cwd=SANDBOX_CLONE,
+    )
+    paths = ("sandbox/text.py", "tests/test_smoke_canary.py")
+    if failure or result is None:
+        return [failure or "smoke: missing complete diff"], None
+    if set(result.stdout.splitlines()) != set(paths):
+        return [
+            "smoke: complete PR diff must change only "
+            "sandbox/text.py and tests/test_smoke_canary.py"
+        ], None
+    sources = []
+    for path in paths:
+        result, failure = _setup_call(
+            runner, ["git", "show", f"{head}:{path}"], env, cwd=SANDBOX_CLONE
+        )
+        if failure or result is None:
+            return [failure or f"smoke: missing {path}"], None
+        sources.append(result.stdout)
+    if not _canary_sources_valid(*sources):
+        return ["smoke: missing executable unittest canary assertion"], None
+    with tempfile.TemporaryDirectory(dir=out) as directory:
+        root = Path(directory)
+        for path, source in zip(paths, sources, strict=True):
+            target = root / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(source, encoding="utf-8")
+        script = (
+            "import unittest; from sandbox.text import smoke_canary; "
+            "assert smoke_canary() is True; "
+            "suite=unittest.defaultTestLoader.discover('tests'); "
+            "assert suite.countTestCases()>0; "
+            "result=unittest.TextTestRunner().run(suite); "
+            "raise SystemExit(0 if result.wasSuccessful() else 1)"
+        )
+        _, failure = _setup_call(
+            runner, [sys.executable, "-c", script], env, cwd=root, evidence=out / "smoke-canary"
+        )
+    return ([failure] if failure else []), results["base"]
+
+
+def verify_smoke(
+    test: e2e_catalog.CatalogTest,
+    runtime: Mapping[str, str],
+    out: Path,
+    env: Mapping[str, str],
+    runner: Runner,
+) -> list[str]:
+    rows, failure = _smoke_pull_requests(runtime, env, runner)
+    if rows is None:
+        return [str(failure)]
+    failures = check_pull_requests(rows, test.expected_pull_request_state)
+    if failures:
+        return failures
+    pr = rows[0]
+    if not _smoke_pr_matches(pr, runtime):
+        return ["smoke: PR head branch or repository does not match the sandbox"]
+    head, base = pr.get("headRefOid"), pr.get("baseRefOid")
+    if not isinstance(head, str) or not isinstance(base, str):
+        return ["smoke: invalid PR commit OIDs"]
+    if not all(re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", oid) for oid in (head, base)):
+        return ["smoke: invalid PR commit OIDs"]
+    status, ref, failure = _ref_request(runtime, runtime["branch_name"], env, runner)
+    if failure or status != 200 or ref is None or ref["object"]["sha"] != head:
+        return [failure or "smoke: remote branch missing or does not match the PR head"]
+    failures, comparison_base = _verify_smoke_commit(head, base, out, env, runner)
+    latest, failure = _smoke_pull_requests(runtime, env, runner)
+    if failure or latest is None or len(latest) != 1 or latest[0].get("headRefOid") != head:
+        failures.append(failure or "smoke: PR head changed during verification")
+    _atomic_json(
+        out / "smoke-evidence.json",
+        {
+            "number": pr["number"],
+            "branch_name": runtime["branch_name"],
+            "head_commit": head,
+            "comparison_base": comparison_base,
+            "pull_request": pr,
+            "pre_cleanup_ref": ref,
+            "canary_verified": not failures,
+        },
+    )
+    return failures
+
+
+def _close_smoke_pull_requests(
+    descriptor: Mapping[str, str], env: Mapping[str, str], runner: Runner
+) -> list[str]:
+    failures: list[str] = []
+    rows, failure = _smoke_pull_requests(descriptor, env, runner)
+    if failure:
+        failures.append(failure)
+    for pr in rows or []:
+        if not _smoke_pr_matches(pr, descriptor):
+            failures.append("cleanup: PR does not match assigned branch")
+            continue
+        if str(pr.get("state", "")).lower() == "open":
+            time.sleep(1)
+            _, failure = _setup_call(
+                runner,
+                ["gh", "pr", "close", str(pr["number"]), "--repo", descriptor["repository"]],
+                env,
+            )
+            if failure:
+                failures.append(failure)
+    return failures
+
+
+def _cleanup_smoke_resources(
+    descriptor: Mapping[str, str], env: Mapping[str, str], runner: Runner
+) -> tuple[list[str], dict[str, Any]]:
+    failures: list[str] = []
+    base_status, _, failure = _ref_request(descriptor, descriptor["base_branch"], env, runner)
+    access_verified = base_status == 200 and failure is None
+    if not access_verified:
+        failures.append(failure or "cleanup: base ref read access could not be verified")
+    failures += _close_smoke_pull_requests(descriptor, env, runner)
+    status, ref, failure = _ref_request(descriptor, descriptor["branch_name"], env, runner)
+    if failure:
+        failures.append(failure)
+    elif status == 200:
+        time.sleep(1)
+        _, _, failure = _ref_request(
+            descriptor, descriptor["branch_name"], env, runner, method="DELETE"
+        )
+        if failure:
+            failures.append(failure)
+    elif status != 404 or not access_verified:
+        failures.append("cleanup: assigned ref absence could not be verified")
+    final_rows, failure = _smoke_pull_requests(descriptor, env, runner)
+    if failure:
+        failures.append(failure)
+    elif final_rows is None or any(
+        not _smoke_pr_matches(pr, descriptor)
+        or str(pr.get("state", "")).lower() not in ("closed", "merged")
+        for pr in final_rows
+    ):
+        failures.append("cleanup: assigned branch still has an open or invalid PR")
+    final_status, _, failure = _ref_request(descriptor, descriptor["branch_name"], env, runner)
+    if failure:
+        failures.append(failure)
+    elif final_status != 404 or not access_verified:
+        failures.append("cleanup: assigned remote ref is not verified absent")
+    return failures, {
+        "branch_name": descriptor["branch_name"],
+        "pre_cleanup_ref": ref,
+        "final_pull_requests": final_rows,
+        "final_ref_status": final_status,
+        "access_verified": access_verified,
+        "failures": failures,
+    }
+
+
+def _model_result(out: Path, test_name: str) -> tuple[dict[str, Any], list[str]]:
+    path = out / "result.json"
+    try:
+        raw = path.read_bytes()
+        payload = json.loads(raw)
+        if (
+            not isinstance(payload, dict)
+            or payload.get("test") != test_name
+            or not isinstance(payload.get("passed"), bool)
+            or not isinstance(payload.get("failures"), list)
+            or not all(isinstance(failure, str) for failure in payload["failures"])
+            or payload.get("outcome") not in ("passed", "expected_failure", "failed")
+            or not isinstance(payload.get("expected_findings"), list)
+        ):
+            raise ValueError("invalid model result fields")
+        if payload["passed"] != (payload["outcome"] == "passed"):
+            raise ValueError("model result passed/outcome disagree")
+        if bool(payload["failures"]) != (payload["outcome"] == "failed"):
+            raise ValueError("model result failures/outcome disagree")
+        if payload["outcome"] == "expected_failure" and not payload["expected_findings"]:
+            raise ValueError("model result has no matched expected finding")
+        return payload, []
+    except (OSError, ValueError) as exc:
+        if path.is_file():
+            shutil.copyfile(path, out / "result-before-cleanup.json")
+        result = {
+            "test": test_name,
+            "passed": False,
+            "outcome": "failed",
+            "failures": [],
+            "expected_findings": [],
+        }
+        return result, [f"cleanup: missing or malformed model result: {exc}"]
+
+
+def cleanup_smoke_test(
+    catalog: e2e_catalog.Catalog,
+    test_name: str,
+    runner: Runner,
+    out: Path,
+    env: Mapping[str, str],
+) -> int:
+    test = catalog.get(test_name)
+    if test.recipe_fixture is None or not (out / "smoke-launched").exists():
+        return 0
+    out.mkdir(parents=True, exist_ok=True)
+    result, failures = _model_result(out, test_name)
+    evidence: dict[str, Any] = {}
+    try:
+        descriptor = _validate_smoke_descriptor(
+            json.loads((out / "smoke-lifecycle.json").read_text(encoding="utf-8")),
+            test,
+            catalog.sandbox_repository,
+        )
+        token = env.get("E2E_SANDBOX_TOKEN", "")
+        if not token:
+            failures.append("cleanup: E2E_SANDBOX_TOKEN is not set")
+        else:
+            scrubbed = child_env(env)
+            failure = authenticate_gh(token, scrubbed, runner)
+            if failure:
+                failures.append(failure)
+            resource_failures, evidence = _cleanup_smoke_resources(descriptor, scrubbed, runner)
+            failures += resource_failures
+    except Exception as exc:
+        failures.append(f"cleanup error: {type(exc).__name__}: {exc}")
+        evidence["exception"] = traceback.format_exc()
+    evidence["failures"] = list(failures)
+    _atomic_json(out / "smoke-cleanup.json", evidence)
+    result["failures"] += failures
+    if result["failures"]:
+        result.update(passed=False, outcome="failed")
+    _atomic_json(out / "result.json", result)
+    for failure in failures:
+        print(f"e2e_harness: FAIL {failure}", file=sys.stderr)
+    return 1 if result["outcome"] == "failed" else 0
 
 
 def check_pull_requests(prs: Sequence[Mapping[str, Any]], expected_state: str | None) -> list[str]:
@@ -349,29 +873,34 @@ def run_recipe(
     out: Path,
     env: Mapping[str, str],
     runner: Runner,
-) -> list[str]:
+) -> tuple[list[str], list[dict[str, str]]]:
     failure = (
         configure_git(env, runner)
         or authenticate_gh(token, env, runner)
         or clone_sandbox(repository, env, runner)
     )
     if failure is not None:
-        return [failure]
+        return [failure], []
+    if test.recipe_fixture is not None:
+        return run_smoke_recipe(test, repository, out, env, runner)
     baseline, failure = latest_pull_request_number(repository, env, runner)
     if baseline is None:
-        return [str(failure)]
+        return [str(failure)], []
     failures: list[str] = []
     listed: list[dict[str, Any]] | None = None
     try:
-        failures += run_fleet(test, out, env, runner)
-        listed, failure = new_pull_requests(repository, baseline, env, runner)
-        if listed is None:
-            failures.append(str(failure))
-        else:
-            failures += check_pull_requests(listed, test.expected_pull_request_state)
+        fleet_failures, envelope = run_fleet(test, out, env, runner)
+        fleet_failures, matched = match_recipe_failure(test, fleet_failures, envelope)
+        failures += fleet_failures
+        if not matched:
+            listed, failure = new_pull_requests(repository, baseline, env, runner)
+            if listed is None:
+                failures.append(str(failure))
+            else:
+                failures += check_pull_requests(listed, test.expected_pull_request_state)
     finally:
         failures += close_open_pull_requests(repository, baseline, listed, env, runner)
-    return failures
+    return failures, matched
 
 
 def check_clean_install_doctor(
@@ -485,7 +1014,7 @@ def _run_test(
     if test.kind == "canary":
         return run_canary(test, out, scrubbed, runner), []
     token = env["E2E_SANDBOX_TOKEN"]
-    return run_recipe(test, catalog.sandbox_repository, token, out, scrubbed, runner), []
+    return run_recipe(test, catalog.sandbox_repository, token, out, scrubbed, runner)
 
 
 def run_test(
@@ -507,7 +1036,7 @@ def run_test(
     except Exception as exc:
         failures = [f"harness error: {exc}"]
     result = {"test": test.name, "passed": not failures, "failures": failures}
-    if test.kind == "clean-install":
+    if test.kind in ("clean-install", "recipe"):
         outcome = "failed" if failures else "expected_failure" if matched_findings else "passed"
         result.update(
             outcome=outcome, passed=outcome == "passed", expected_findings=matched_findings
@@ -583,7 +1112,7 @@ def _run(test_name: str, out: Path, catalog_path: Path) -> int:
     for failure in failures:
         print(f"e2e_harness: FAIL {failure}", file=sys.stderr)
     outcome = "failed" if failures else "passed"
-    if test.kind == "clean-install":
+    if test.kind in ("clean-install", "recipe"):
         outcome = json.loads((out / "result.json").read_text(encoding="utf-8"))["outcome"]
     print(f"e2e_harness: {test.name} {outcome}")
     return 1 if failures else 0
@@ -607,6 +1136,10 @@ def main(argv: Sequence[str]) -> int:
     run.add_argument("--test", required=True)
     run.add_argument("--out", required=True)
     run.add_argument("--catalog", default=str(e2e_catalog.CATALOG_PATH))
+    cleanup = commands.add_parser("cleanup", help="Verify exact smoke resource cleanup.")
+    cleanup.add_argument("--test", required=True)
+    cleanup.add_argument("--out", required=True)
+    cleanup.add_argument("--catalog", default=str(e2e_catalog.CATALOG_PATH))
     redact = commands.add_parser("redact", help="Copy artifacts with every secret redacted.")
     redact.add_argument("--dest", required=True)
     redact.add_argument("--secret-env", action="append", required=True)
@@ -614,6 +1147,9 @@ def main(argv: Sequence[str]) -> int:
     args = parser.parse_args(argv)
     if args.command == "run":
         return _run(args.test, Path(args.out), Path(args.catalog))
+    if args.command == "cleanup":
+        catalog = e2e_catalog.load_catalog(Path(args.catalog))
+        return cleanup_smoke_test(catalog, args.test, run_command, Path(args.out), os.environ)
     return _redact_command(Path(args.dest), args.secret_env, args.sources)
 
 

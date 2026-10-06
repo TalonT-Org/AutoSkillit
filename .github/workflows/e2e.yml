@@ -106,16 +106,48 @@ jobs:
           E2E_SANDBOX_TOKEN: ${{ matrix.kind != 'clean-install' && secrets.E2E_SANDBOX_TOKEN || '' }}
           TEST: ${{ matrix.test }}
         run: |
+          set -euo pipefail
           docker_args=()
           if [[ '${{ matrix.kind }}' != 'clean-install' ]]; then
             docker_args+=(--env MINIMAX_API_KEY --env E2E_SANDBOX_TOKEN)
             docker_args+=(--volume "$RUNNER_TEMP/e2e/data:/home/autoskillit/.local/share/autoskillit")
           fi
-          docker run --rm "${docker_args[@]}" \
-            --volume "$GITHUB_WORKSPACE/scripts/e2e:/opt/e2e:ro" \
-            --volume "$RUNNER_TEMP/e2e/out:/artifacts" \
-            "$IMAGE" \
-            python3 /opt/e2e/e2e_harness.py run --test "$TEST" --out /artifacts
+          if [[ "$TEST" == 'headless-smoke' ]]; then
+            cid_file="$RUNNER_TEMP/e2e/out/${TEST}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.cid"
+            if [[ -e "$cid_file" ]]; then
+              echo "refusing to reuse existing container ID file: $cid_file" >&2
+              exit 1
+            fi
+
+            source "$GITHUB_WORKSPACE/scripts/e2e/smoke-cleanup.sh"
+            cleanup_smoke() {
+              model_status=$?
+              set +e
+              lifecycle_file="$RUNNER_TEMP/e2e/out/${TEST}-lifecycle.txt"
+              cleanup_smoke_resources "$cid_file" "$GITHUB_WORKSPACE/scripts/e2e" \
+                "$RUNNER_TEMP/e2e/out" "$IMAGE" "$TEST"
+
+              trap - EXIT
+              finish_smoke_lifecycle "$lifecycle_file" "$model_status"
+              exit $?
+            }
+            trap cleanup_smoke EXIT
+
+            # The harness budget is 900 seconds plus 120 seconds of grace. The job
+            # timeout reserves the catalog's remaining overhead for teardown and upload.
+            timeout --signal=TERM --kill-after=30s 1020s docker run --rm \
+              --cidfile "$cid_file" "${docker_args[@]}" \
+              --volume "$GITHUB_WORKSPACE/scripts/e2e:/opt/e2e:ro" \
+              --volume "$RUNNER_TEMP/e2e/out:/artifacts" \
+              "$IMAGE" \
+              python3 /opt/e2e/e2e_harness.py run --test "$TEST" --out /artifacts
+          else
+            docker run --rm "${docker_args[@]}" \
+              --volume "$GITHUB_WORKSPACE/scripts/e2e:/opt/e2e:ro" \
+              --volume "$RUNNER_TEMP/e2e/out:/artifacts" \
+              "$IMAGE" \
+              python3 /opt/e2e/e2e_harness.py run --test "$TEST" --out /artifacts
+          fi
 
       - name: Redact secrets from the artifacts
         id: redact

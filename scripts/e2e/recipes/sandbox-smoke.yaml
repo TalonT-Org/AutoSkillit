@@ -1,0 +1,169 @@
+name: sandbox-smoke
+recipe_version: "1.0.0"
+description: >-
+  Run one headless smoke worker in a sandbox worktree, verify its canary,
+  publish a pull request, then close it without merging or deleting the branch.
+summary: worktree > setup > implement > commit > test > push > open PR > close PR
+requires_packs: [kitchen-core, github]
+
+ingredients:
+  source_dir:
+    description: Path to the sandbox clone used as the worktree source.
+    required: true
+    hidden: true
+  repository:
+    description: Owner and repository where the smoke pull request is opened.
+    required: true
+    hidden: true
+  branch_name:
+    description: Exact UUID branch name assigned by the E2E harness.
+    required: true
+    hidden: true
+  remote_url:
+    description: Sandbox repository URL used to push the smoke branch.
+    required: true
+    hidden: true
+  base_branch:
+    description: Sandbox branch targeted by the smoke pull request.
+    default: ""
+    authority: config
+    hidden: true
+
+kitchen_rules:
+  - >-
+    Run exactly one smoke-task worker. Do not spawn child agents, replay the
+    worker call, or dispatch tools to additional workers. Do not resume or
+    replay the task, even if continuation data is returned. The worker makes
+    the only new commit, containing only the two requested files.
+  - >-
+    Preserve the exact branch_name supplied by the harness. Create its genuine
+    git worktree from source_dir with the bundled create_impl_worktree.sh script.
+  - >-
+    Create and close one pull request in repository. Never merge it, post a
+    comment, or delete the remote branch.
+  - >-
+    The orchestrator must not use native Claude Code tools (Read, Grep, Glob,
+    Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit).
+
+steps:
+  create_worktree:
+    tool: run_cmd
+    with:
+      cmd: >-
+        bash {{AUTOSKILLIT_SCRIPTS}}/create_impl_worktree.sh
+        "${{ inputs.branch_name }}" "{{AUTOSKILLIT_TEMP}}"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: create_worktree
+    capture:
+      worktree_path: "${{ result.worktree_path }}"
+      branch_name: "${{ result.branch_name }}"
+    on_success: setup
+    on_failure: failed
+    retries: 0
+    on_exhausted: failed
+
+  setup:
+    tool: run_cmd
+    with:
+      cmd: task install-worktree
+      cwd: "${{ context.worktree_path }}"
+      step_name: setup
+    on_success: implement
+    on_failure: failed
+    retries: 0
+    on_exhausted: failed
+
+  implement:
+    tool: run_skill
+    with:
+      skill_command: >-
+        /autoskillit:smoke-task In ${{ context.worktree_path }}, append this
+        function to sandbox/text.py: `def smoke_canary() -> bool:` followed by
+        `    return True`. Create tests/test_smoke_canary.py as a unittest
+        module importing unittest and smoke_canary from sandbox.text, with a
+        unittest.TestCase method using `self.assertIs(smoke_canary(), True)`. Change
+        only those two files, then create one new commit containing only
+        sandbox/text.py and tests/test_smoke_canary.py with message
+        `smoke: add sandbox canary`. Do not run a test command or call tools
+        that dispatch work to another worker.
+      cwd: "${{ context.worktree_path }}"
+      step_name: implement
+    on_success: test
+    on_failure: failed
+    on_context_limit: failed
+    on_rate_limit: failed
+    retries: 0
+    on_exhausted: failed
+
+  test:
+    tool: test_check
+    with:
+      worktree_path: "${{ context.worktree_path }}"
+    on_success: push
+    on_failure: failed
+    retries: 0
+    on_exhausted: failed
+
+  push:
+    tool: push_to_remote
+    with:
+      clone_path: "${{ context.worktree_path }}"
+      branch: "${{ context.branch_name }}"
+      remote_url: "${{ inputs.remote_url }}"
+      step_name: push
+    on_success: create_pull_request
+    on_failure: failed
+    retries: 0
+    on_exhausted: failed
+
+  create_pull_request:
+    tool: run_cmd
+    with:
+      cmd: >-
+        body_file="{{AUTOSKILLIT_TEMP}}/sandbox-smoke-pr-body.md" &&
+        mkdir -p "{{AUTOSKILLIT_TEMP}}" &&
+        printf '%s\n' 'Headless sandbox smoke canary.' > "$body_file" &&
+        gh pr create --repo "${{ inputs.repository }}"
+        --head "${{ context.branch_name }}"
+        --base "${{ inputs.base_branch }}"
+        --title 'Automated smoke test (DO NOT MERGE)'
+        --body-file "$body_file"
+      cwd: "${{ context.worktree_path }}"
+      step_name: create_pull_request
+    on_success: close_pull_request
+    on_failure: failed
+    retries: 0
+    on_exhausted: failed
+
+  close_pull_request:
+    tool: run_cmd
+    with:
+      cmd: >-
+        pull_request_number="$(gh pr view "${{ context.branch_name }}"
+        --repo "${{ inputs.repository }}" --json number --jq .number)" &&
+        sleep 1 &&
+        gh pr close "$pull_request_number"
+        --repo "${{ inputs.repository }}"
+      cwd: "${{ context.worktree_path }}"
+      step_name: close_pull_request
+    on_success: done
+    on_failure: failed
+    retries: 0
+    on_exhausted: failed
+
+  done:
+    action: stop
+    message: >-
+      The headless sandbox smoke completed and its pull request was closed.
+      Emit the L3 result sentinel JSON block with
+      {"success": true, "reason": "sandbox smoke completed"}.
+
+  failed:
+    action: stop
+    message: >-
+      The headless sandbox smoke failed. Emit the L3 result sentinel JSON block
+      with success=false, preserving the observed failed step, its exact reason,
+      and the relevant evidence already in context. Do not invent details. For
+      example: {"success": false, "failed_step": "<observed step>",
+      "reason": "<exact observed reason>", "evidence": "<observed evidence>"}.
+      Do not call any tools, retry, recover, resume, or replay this task.

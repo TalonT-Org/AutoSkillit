@@ -24,6 +24,7 @@ KINDS = ("canary", "recipe", "clean-install")
 PULL_REQUEST_STATES = ("open", "merged", "closed")
 
 _NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+_RECIPE_FIXTURE_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*\.yaml$")
 _CATALOG_KEYS = frozenset({"sandbox_repository", "tests"})
 _COMMON_KEYS = frozenset({"name", "kind", "peak_sessions", "timeout_sec", "trigger_paths"})
 _RECIPE_KEYS = frozenset({"recipe", "ingredients", "expected_pull_request_state"})
@@ -48,6 +49,7 @@ class CatalogTest:
     ingredients: tuple[tuple[str, str], ...]
     expected_pull_request_state: str | None
     expected_failures: tuple[Mapping[str, str], ...] = ()
+    recipe_fixture: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,7 +158,9 @@ def _parse_test(raw: object, index: int) -> CatalogTest:
     if kind not in KINDS:
         raise CatalogError(f"{where}.kind must be one of {KINDS}")
     keys = _COMMON_KEYS | _RECIPE_KEYS if kind == "recipe" else _COMMON_KEYS
-    if kind == "clean-install" and "expected_failures" in raw:
+    if kind == "recipe" and "recipe_fixture" in raw:
+        keys |= {"recipe_fixture"}
+    if kind in ("recipe", "clean-install") and "expected_failures" in raw:
         keys |= {"expected_failures"}
     _require_keys(raw, keys, where)
     name = _require_str(raw["name"], f"{where}.name")
@@ -165,6 +169,14 @@ def _parse_test(raw: object, index: int) -> CatalogTest:
     recipe, ingredients, state = (
         _parse_recipe_fields(raw, where) if kind == "recipe" else (None, (), None)
     )
+    recipe_fixture = None
+    if kind == "recipe" and "recipe_fixture" in raw:
+        recipe_fixture = _require_str(raw["recipe_fixture"], f"{where}.recipe_fixture")
+        if not _RECIPE_FIXTURE_PATTERN.fullmatch(recipe_fixture):
+            raise CatalogError(f"{where}.recipe_fixture must be a .yaml basename")
+    expected_failures = _parse_expected_failures(raw.get("expected_failures", []), where)
+    if kind == "recipe" and any(row["severity"] != "error" for row in expected_failures):
+        raise CatalogError(f"{where}.expected_failures severity must be error for recipe tests")
     test = CatalogTest(
         name=name,
         kind=kind,
@@ -179,7 +191,8 @@ def _parse_test(raw: object, index: int) -> CatalogTest:
         recipe=recipe,
         ingredients=ingredients,
         expected_pull_request_state=state,
-        expected_failures=_parse_expected_failures(raw.get("expected_failures", []), where),
+        expected_failures=expected_failures,
+        recipe_fixture=recipe_fixture,
     )
     if job_timeout_minutes(test) > MAX_JOB_MINUTES:
         raise CatalogError(f"{where}.timeout_sec exceeds the {MAX_JOB_MINUTES}-minute job limit")

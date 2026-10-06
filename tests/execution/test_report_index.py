@@ -645,8 +645,12 @@ def test_incompatible_row_schema_is_rejected_and_rebuilt(
     if remove_rows:
         rows_path.unlink()
 
-    with pytest.raises(ValueError, match="row schema"):
+    with pytest.raises(ValueError, match="row schema") as exc_info:
         read_report_index(index_dir)
+    assert str(exc_info.value) == (
+        f"report index row schema mismatch: expected {REPORT_INDEX_SCHEMA_VERSION}, "
+        f"found {row_schema_marker!r}"
+    )
 
     update_report_index(root, index_dir)
 

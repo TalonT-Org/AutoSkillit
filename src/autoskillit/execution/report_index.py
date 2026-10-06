@@ -477,9 +477,11 @@ def _require_row_schema(index_dir: Path) -> None:
     if not rows_path.exists() and not state_path.exists():
         return
     state = read_versioned_json(state_path, _STATE_SCHEMA_VERSION)
-    if state is None or state.get("row_schema_version") != REPORT_INDEX_SCHEMA_VERSION:
+    found = state.get("row_schema_version") if state is not None else None
+    if found != REPORT_INDEX_SCHEMA_VERSION:
         raise ValueError(
-            f"report index row schema mismatch: expected {REPORT_INDEX_SCHEMA_VERSION}"
+            f"report index row schema mismatch: expected {REPORT_INDEX_SCHEMA_VERSION}, "
+            f"found {found!r}"
         )
 
 

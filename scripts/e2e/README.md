@@ -373,14 +373,9 @@ cleanup_smoke() {
       /e2e/out /e2e/data/logs
   redact_status=$?
 
-  printf 'model_exit=%s\ndocker_rm=%s\ncontainer_verify=%s\ncontainer_removal=%s\nremote_cleanup=%s\nredaction=%s\n' \
-    "$model_status" "$rm_status" "$verify_status" "$removal_status" \
-    "$cleanup_status" "$redact_status" > "$lifecycle_file"
   trap - EXIT
-  if (( model_status != 0 || removal_status != 0 || cleanup_status != 0 || redact_status != 0 )); then
-    exit 1
-  fi
-  exit 0
+  finish_smoke_lifecycle "$lifecycle_file" "$model_status" "$redact_status"
+  exit $?
 }
 trap cleanup_smoke EXIT
 

@@ -127,14 +127,9 @@ jobs:
               cleanup_smoke_resources "$cid_file" "$GITHUB_WORKSPACE/scripts/e2e" \
                 "$RUNNER_TEMP/e2e/out" "$IMAGE" "$TEST"
 
-              printf 'model_exit=%s\ndocker_rm=%s\ncontainer_verify=%s\ncontainer_removal=%s\nremote_cleanup=%s\n' \
-                "$model_status" "$rm_status" "$verify_status" "$removal_status" "$cleanup_status" \
-                > "$lifecycle_file"
               trap - EXIT
-              if (( model_status != 0 || removal_status != 0 || cleanup_status != 0 )); then
-                exit 1
-              fi
-              exit 0
+              finish_smoke_lifecycle "$lifecycle_file" "$model_status"
+              exit $?
             }
             trap cleanup_smoke EXIT
 

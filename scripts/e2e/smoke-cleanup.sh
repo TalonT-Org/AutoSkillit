@@ -41,3 +41,15 @@ cleanup_smoke_resources() {
       --test "$test" --catalog /opt/e2e/catalog.json --out /artifacts
   cleanup_status=$?
 }
+
+finish_smoke_lifecycle() {
+  local lifecycle_file=$1 model_status=$2 redact_status=${3:-0}
+  {
+    printf 'model_exit=%s\ndocker_rm=%s\ncontainer_verify=%s\ncontainer_removal=%s\nremote_cleanup=%s\n' \
+      "$model_status" "$rm_status" "$verify_status" "$removal_status" "$cleanup_status"
+    if (( $# == 3 )); then
+      printf 'redaction=%s\n' "$redact_status"
+    fi
+  } > "$lifecycle_file" || return 1
+  (( model_status == 0 && removal_status == 0 && cleanup_status == 0 && redact_status == 0 ))
+}

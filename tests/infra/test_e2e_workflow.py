@@ -288,6 +288,35 @@ def test_headless_smoke_exit_trap_removes_exact_container_then_runs_cleanup(
         assert statuses[key] == value
 
 
+@pytest.mark.parametrize("redact_status", [0, 1])
+def test_local_lifecycle_records_redaction_and_fails_when_redaction_fails(
+    tmp_path: Path, redact_status: int
+) -> None:
+    lifecycle = tmp_path / "lifecycle.txt"
+    result = subprocess.run(
+        [
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            'source "$1"; rm_status=0; verify_status=0; removal_status=0; '
+            'cleanup_status=0; finish_smoke_lifecycle "$2" 0 "$3"',
+            "bash",
+            str(REPO_ROOT / "scripts/e2e/smoke-cleanup.sh"),
+            str(lifecycle),
+            str(redact_status),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == redact_status, result.stderr
+    statuses = dict(line.split("=", 1) for line in lifecycle.read_text().splitlines())
+    assert statuses["redaction"] == str(redact_status)
+    assert statuses["model_exit"] == "0"
+
+
 class TestTriggers:
     def test_pull_request_types_include_labeled(self, workflow: dict) -> None:
         types = _on(workflow)["pull_request"]["types"]

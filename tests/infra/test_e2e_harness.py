@@ -887,10 +887,13 @@ def _smoke_cleanup_runner(
                 text=True,
                 check=False,
             )
+            http_status, returncode = {
+                "already-deleted": ("HTTP/2.0 404 Not Found", 1),
+            }.get(fault, ("HTTP/2.0 204 No Content", result.returncode))
             return _completed(
                 argv,
-                "HTTP/2.0 204 No Content\r\n\r\n",
-                returncode=result.returncode,
+                f"{http_status}\r\n\r\n",
+                returncode=returncode,
                 stderr=result.stderr,
             )
         if argv[:3] == ["gh", "pr", "list"]:
@@ -995,8 +998,9 @@ class TestSmokeCleanup:
         ]
         assert close_calls == [["gh", "pr", "close", "8", "--repo", catalog.sandbox_repository]]
 
+    @pytest.mark.parametrize("fault", [None, "already-deleted"])
     def test_cleanup_deletes_a_pushed_branch_even_without_a_pull_request(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fault: str | None
     ) -> None:
         catalog, test = _smoke_case()
         branch = "e2e-smoke-" + "a" * 32
@@ -1004,7 +1008,7 @@ class TestSmokeCleanup:
         out = tmp_path / "out"
         _write_cleanup_inputs(out, test, catalog.sandbox_repository)
         runner, _state = _smoke_cleanup_runner(
-            remote, branch, catalog.sandbox_repository, with_pr=False
+            remote, branch, catalog.sandbox_repository, with_pr=False, fault=fault
         )
         env = _env(HOME=git_env["HOME"], PATH=git_env["PATH"], E2E_SANDBOX_TOKEN=SANDBOX_TOKEN)
         sleeps: list[float] = []

@@ -512,7 +512,7 @@ def _ref_request(
     status = int(match[1]) if match else None
     if method == "DELETE" and status == 204 and not failure:
         return status, None, None
-    if method == "GET" and status == 404:
+    if method in ("GET", "DELETE") and status == 404:
         return status, None, None
     if status != 200 or failure:
         return status, None, failure or f"gh api: unexpected HTTP status {status}"

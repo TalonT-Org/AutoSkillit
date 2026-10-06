@@ -466,6 +466,26 @@ def _run_smoke(tmp_path: Path, runner: FakeRunner, monkeypatch: pytest.MonkeyPat
 
 
 class TestSandboxSmokeFixture:
+    @pytest.mark.parametrize(
+        ("original", "replacement"),
+        [
+            pytest.param("from sandbox.text import smoke_canary\n", "", id="missing-import"),
+            pytest.param("unittest.TestCase", "object", id="wrong-base-class"),
+            pytest.param("def test_smoke_canary", "def helper_smoke_canary", id="no-test-method"),
+            pytest.param("self.assertTrue", "print", id="no-assert-call"),
+            pytest.param(
+                "self.assertTrue(smoke_canary())",
+                "self.assertIs(True, True)",
+                id="constant-assertion",
+            ),
+            pytest.param("self.assertTrue(smoke_canary())", "(", id="invalid-syntax"),
+        ],
+    )
+    def test_canary_sources_reject_each_missing_requirement(self, original, replacement):
+        code, test_code = _smoke_sources()
+        assert harness._canary_sources_valid(code, test_code)
+        assert not harness._canary_sources_valid(code, test_code.replace(original, replacement))
+
     def test_lifecycle_descriptor_returns_only_validated_fields(self):
         catalog, test = _smoke_case()
         expected = {

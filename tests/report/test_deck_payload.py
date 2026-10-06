@@ -601,7 +601,6 @@ def test_prepared_metrics_keep_source_pairs_roles_and_shared_library_accounting(
     tool_records = _tool_records(auditor_runs, parents)
     bash_ratio = measure_ratio(tool_records, "tool:Bash", "tool_calls")
     assert claude_metrics["measures"]["input_tokens"]["value"] == 105
-    assert claude_metrics["measures"]["input_tokens"]["value"] != 999_999
     _assert_serialized_measure(
         claude_metrics["measures"]["input_tokens"], child_aggregate.fields["input_tokens"]
     )

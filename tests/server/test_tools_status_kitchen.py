@@ -25,7 +25,7 @@ from autoskillit.server.tools.tools_status import (
     get_token_summary,
     kitchen_status,
 )
-from tests.conftest import _make_result
+from tests.conftest import _make_result, bind_test_kitchen_identity
 from tests.server._helpers import _make_finalized_projection_from_recipe_steps
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -181,7 +181,7 @@ class TestKitchenStatus:
         self, tool_ctx_kitchen_open, monkeypatch, tmp_path
     ):
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.kitchen_id = "kitchen-status"
+        bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="kitchen-status")
         _set_active_recipe_steps(tool_ctx_kitchen_open, _dependency_recipe_steps())
         dispatch_path = (
             tmp_path / ".autoskillit" / "temp" / "pipeline_tracker" / "dispatch-status.json"
@@ -202,7 +202,7 @@ class TestKitchenStatus:
         self, tool_ctx_kitchen_open, tmp_path
     ):
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.kitchen_id = "kitchen-status"
+        bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="kitchen-status")
         _set_active_recipe_steps(
             tool_ctx_kitchen_open,
             {"review": RecipeStep(name="review")},
@@ -227,7 +227,7 @@ class TestKitchenStatus:
         self, tool_ctx_kitchen_open, tmp_path
     ):
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.kitchen_id = "kitchen-status"
+        bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="kitchen-status")
         _set_active_recipe_steps(tool_ctx_kitchen_open, _dependency_recipe_steps())
         tracker_path = (
             tmp_path / ".autoskillit" / "temp" / "pipeline_tracker" / "kitchen-status.json"

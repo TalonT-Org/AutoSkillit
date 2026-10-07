@@ -162,11 +162,14 @@ def sweep_stale_markers(ttl_hours: int = 24) -> int:
 
 
 def resolve_kitchen_id() -> str:
-    """Resolve kitchen identity: inherit campaign ID from environment, or mint fresh.
+    """Return a stable kitchen identity for this process.
 
-    This is the sole mint source used by bootstrap/request transition construction.
-    Later ``ToolContext.kitchen_id`` assignments consume the stored transition value;
-    request handling must never call this function after bootstrap identity exists.
+    It is called only by ``establish_kitchen_identity`` (``autoskillit.server``),
+    the sole owner of the ``CLOSED -> INFRASTRUCTURE_READY`` edge, when no
+    explicit resume campaign id was supplied. All other code reads identity
+    through ``ToolContext.kitchen_id``.
+
+    Empty values are treated as unset per OpenTelemetry's documented convention.
     """
     return os.environ.get("AUTOSKILLIT_CAMPAIGN_ID") or str(uuid4())
 

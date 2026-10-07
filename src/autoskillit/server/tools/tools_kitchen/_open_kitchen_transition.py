@@ -34,22 +34,10 @@ from autoskillit.pipeline import (
 # "autoskillit.server.tools.tools_kitchen.<name>" (the package facade), so
 # cross-submodule helpers must be resolved via attribute access on the
 # package at call time rather than imported by name into this submodule.
+from autoskillit.server.lifecycle._kitchen_identity import establish_kitchen_identity
 from autoskillit.server.tools import tools_kitchen as _tk_pkg
 
 _OPEN_KITCHEN_REQUEST_CTX: ContextVar[ToolContext] = ContextVar("open_kitchen_request_context")
-
-
-def _ensure_kitchen_transition(tool_ctx: ToolContext) -> None:
-    """Create infrastructure identity once, before request arguments are bound."""
-    with tool_ctx.kitchen_transition_lock:
-        state = tool_ctx.kitchen_open_state
-        if state.phase is KitchenOpenPhase.CLOSED:
-            state = new_kitchen_open_state(
-                kitchen_id=_tk_pkg.resolve_kitchen_id(),
-                context_id=state.context_id,
-            )
-            tool_ctx.kitchen_open_state = state
-        tool_ctx.kitchen_id = state.kitchen_id
 
 
 def _transition_start(tool_ctx: ToolContext, name: str) -> bool:
@@ -221,7 +209,7 @@ def _bind_open_kitchen_transition(
                 getattr(fn, "__wrapped__", fn),
             )
             return await unshielded(*args, **kwargs)
-        _ensure_kitchen_transition(tool_ctx)
+        establish_kitchen_identity(tool_ctx)
         bound = signature.bind_partial(*args, **kwargs)
         name = bound.arguments.get("name")
         overrides = bound.arguments.get("overrides")

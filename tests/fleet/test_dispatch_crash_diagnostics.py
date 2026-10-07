@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import bind_test_kitchen_identity
 from tests.fleet._helpers import (
     _noop_quota_refresher,
     _setup_dispatch,
@@ -243,7 +244,7 @@ class TestCrashPathDiagnosticPersistence:
         )
 
         _setup_dispatch(tool_ctx, monkeypatch)
-        tool_ctx.kitchen_id = "cmp-reject"
+        bind_test_kitchen_identity(tool_ctx, kitchen_id="cmp-reject")
 
         from autoskillit.fleet._api import execute_dispatch
         from autoskillit.server.tools.tools_fleet_dispatch import _write_dispatch_to_campaign_state

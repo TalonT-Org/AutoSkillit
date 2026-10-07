@@ -97,7 +97,7 @@ class TestOpenKitchenAutoInitTracker:
 
         ctx = _make_mock_ctx()
         ctx.project_dir = tmp_path
-        ctx.kitchen_id = "kitchen-error"
+        _set_mock_kitchen_transition(ctx, kitchen_id="kitchen-error")
         _install_active_recipe_projection(
             ctx,
             {
@@ -126,7 +126,7 @@ class TestOpenKitchenAutoInitTracker:
 
         ctx = _make_mock_ctx()
         ctx.project_dir = tmp_path
-        ctx.kitchen_id = "kitchen-corrupt"
+        _set_mock_kitchen_transition(ctx, kitchen_id="kitchen-corrupt")
         _install_active_recipe_projection(
             ctx,
             {
@@ -168,7 +168,7 @@ class TestOpenKitchenAutoInitTracker:
         ctx.gate.enabled = True
         ctx.gate_infrastructure_ready = True
         ctx.recipe_name = ""
-        ctx.kitchen_id = "kitchen-abc"
+        _set_mock_kitchen_transition(ctx, kitchen_id="kitchen-abc")
         _set_mock_kitchen_transition(ctx, kitchen_id=ctx.kitchen_id)
         _configure_open_kitchen_mock(ctx, steps, tmp_path)
         track_and_release(ctx)
@@ -205,7 +205,7 @@ class TestOpenKitchenAutoInitTracker:
         ctx1.gate.enabled = True
         ctx1.gate_infrastructure_ready = True
         ctx1.recipe_name = ""
-        ctx1.kitchen_id = "kitchen-abc"
+        _set_mock_kitchen_transition(ctx1, kitchen_id="kitchen-abc")
         _set_mock_kitchen_transition(ctx1, kitchen_id=ctx1.kitchen_id)
         _configure_open_kitchen_mock(ctx1, steps, tmp_path)
         track_and_release(ctx1)
@@ -223,7 +223,7 @@ class TestOpenKitchenAutoInitTracker:
         ctx2.gate.enabled = True
         ctx2.gate_infrastructure_ready = True
         ctx2.recipe_name = "remediation"
-        ctx2.kitchen_id = "kitchen-abc"
+        _set_mock_kitchen_transition(ctx2, kitchen_id="kitchen-abc")
         _set_mock_kitchen_transition(ctx2, kitchen_id=ctx2.kitchen_id)
         _configure_open_kitchen_mock(ctx2, steps, tmp_path)
         track_and_release(ctx2)
@@ -257,7 +257,7 @@ class TestOpenKitchenAutoInitTracker:
         first_ctx = _make_mock_ctx()
         first_ctx.gate.enabled = True
         first_ctx.gate_infrastructure_ready = True
-        first_ctx.kitchen_id = kitchen_id
+        _set_mock_kitchen_transition(first_ctx, kitchen_id=kitchen_id)
         _set_mock_kitchen_transition(first_ctx, kitchen_id=kitchen_id)
         _configure_open_kitchen_mock(first_ctx, initial_steps, tmp_path)
         track_and_release(first_ctx)
@@ -275,7 +275,7 @@ class TestOpenKitchenAutoInitTracker:
         second_ctx.gate.enabled = True
         second_ctx.gate_infrastructure_ready = True
         second_ctx.recipe_name = "remediation"
-        second_ctx.kitchen_id = kitchen_id
+        _set_mock_kitchen_transition(second_ctx, kitchen_id=kitchen_id)
         _set_mock_kitchen_transition(second_ctx, kitchen_id=kitchen_id)
         _configure_open_kitchen_mock(second_ctx, no_dependency_steps, tmp_path)
         track_and_release(second_ctx)
@@ -309,7 +309,7 @@ class TestOpenKitchenAutoInitTracker:
         ctx.gate.enabled = True
         ctx.gate_infrastructure_ready = True
         ctx.recipe_name = ""
-        ctx.kitchen_id = "kitchen-multi"
+        _set_mock_kitchen_transition(ctx, kitchen_id="kitchen-multi")
         _set_mock_kitchen_transition(ctx, kitchen_id=ctx.kitchen_id)
         _configure_open_kitchen_mock(ctx, steps, tmp_path)
         track_and_release(ctx)

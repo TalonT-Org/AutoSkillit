@@ -46,6 +46,11 @@ _REQUIRED_BOOT_STEPS: list[tuple[str, tuple[str, ...]]] = [
 
 _BOOT_STEP_ORDERING: list[tuple[str, str, tuple[str, ...]]] = [
     (
+        "establish_kitchen_identity",
+        "register_active_kitchen",
+        ("_fleet_auto_gate_boot", "_food_truck_auto_gate_boot", "_skill_auto_gate_boot"),
+    ),
+    (
         "reap_stale_dispatches_async",
         "sweep_stale_dispatch_labels",
         ("_fleet_auto_gate_boot", "_food_truck_auto_gate_boot"),
@@ -107,6 +112,20 @@ def _function_checks_false_result(tree: ast.Module, func_name: str, symbol: str)
 
 
 class TestBootStepSymmetry:
+    def test_identity_ordering_covers_registered_boots(self) -> None:
+        from autoskillit.server.lifecycle._lifespan import _LIFESPAN_BOOT_REGISTRY
+
+        identity_boots = next(
+            boot_functions
+            for before, after, boot_functions in _BOOT_STEP_ORDERING
+            if (before, after) == ("establish_kitchen_identity", "register_active_kitchen")
+        )
+        registered_boots = {
+            fn.__name__ for fn in _LIFESPAN_BOOT_REGISTRY.values() if fn is not None
+        }
+
+        assert set(identity_boots) == registered_boots
+
     @pytest.mark.parametrize("symbol,boot_functions", _REQUIRED_BOOT_STEPS)
     def test_boot_functions_contain_required_step(
         self, symbol: str, boot_functions: tuple[str, ...]

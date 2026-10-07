@@ -114,7 +114,9 @@ class TerminalRecipeResponseCacheEntry:
 
 
 class _KitchenIdentityContext(Protocol):
-    kitchen_id: str
+    @property
+    def kitchen_id(self) -> str: ...
+
     kitchen_process_identity: KitchenProcessIdentity | None
     project_dir: Path
 
@@ -196,8 +198,8 @@ class ToolContext:
                           context accounting and recovery service.
     workspace_outcome_ledger: WorkspaceOutcomeLedger — durable shared authority for
                           terminal workspace outcomes across parent and child sessions.
-    kitchen_id:           UUID string assigned when open_kitchen fires; scopes token telemetry
-                          to the current kitchen session lifetime.
+    kitchen_id:           Read-only identity derived from kitchen_open_state; set only through
+                          establish_kitchen_identity and empty while the state is CLOSED.
     kitchen_open_state:   Immutable process-local open-operation lifecycle and effect journal
                           retained for the ToolContext lifetime. Fleet dispatch provenance
                           instead uses request/task-scoped ContextVars; the different owners
@@ -293,7 +295,6 @@ class ToolContext:
     recipe_composite_hash: str = field(default="")
     recipe_version: str = field(default="")
     gate_infrastructure_ready: bool = field(default=False)
-    kitchen_id: str = field(default="")
     kitchen_process_identity: KitchenProcessIdentity | None = field(default_factory=lambda: None)
     kitchen_tracker_key: TrackerParticipantKey | None = field(default_factory=lambda: None)
     tracker_leases: dict[TrackerParticipantKey, ArtifactLease] = field(
@@ -407,6 +408,11 @@ class ToolContext:
                 raise TypeError(error_message)
         if self.background is None:
             self.background = DefaultBackgroundSupervisor(audit=self.audit)
+
+    @property
+    def kitchen_id(self) -> str:
+        """Return the identity derived from the current lifecycle state."""
+        return self.kitchen_open_state.kitchen_id
 
     @property
     def host_client_attestation(self) -> HostClientAttestation | None:

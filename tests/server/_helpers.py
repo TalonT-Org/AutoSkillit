@@ -245,9 +245,8 @@ async def _open_kitchen_patched(
     with patch.object(tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
         with patch.object(tools_kitchen, "_write_hook_config"):
             with patch.object(tools_kitchen, "create_background_task"):
-                with patch.object(
-                    tools_kitchen,
-                    "resolve_kitchen_id",
+                with patch(
+                    "autoskillit.server.lifecycle._kitchen_identity.resolve_kitchen_id",
                     return_value="test-kitchen",
                 ):
                     raw_response = await open_kitchen(name=name, overrides=overrides, ctx=fmcp_ctx)

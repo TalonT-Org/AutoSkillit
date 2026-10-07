@@ -7,6 +7,7 @@ import json
 import pytest
 
 from autoskillit.server.tools.tools_pipeline_tracker import record_pipeline_step
+from tests.conftest import bind_test_kitchen_identity
 from tests.server._pipeline_test_helpers import _grant_success_credit, _write_tracker
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -16,7 +17,6 @@ class TestRecordPipelineStepComplete:
     @pytest.mark.anyio
     async def test_marks_step_complete(self, tool_ctx_kitchen_open, tmp_path):
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
         _write_tracker(tmp_path, "test-kitchen", {"rectify": {"status": "pending"}}, {})
         _grant_success_credit(tool_ctx_kitchen_open, tmp_path, "rectify")
         result = json.loads(
@@ -40,7 +40,6 @@ class TestRecordPipelineStepComplete:
     @pytest.mark.anyio
     async def test_canonicalizes_suffix(self, tool_ctx_kitchen_open, tmp_path):
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
         _write_tracker(tmp_path, "test-kitchen", {"rectify": {"status": "pending"}}, {})
         _grant_success_credit(tool_ctx_kitchen_open, tmp_path, "rectify-2")
         result = json.loads(
@@ -54,7 +53,6 @@ class TestRecordPipelineStepComplete:
     @pytest.mark.anyio
     async def test_errors_on_unknown_step(self, tool_ctx_kitchen_open, tmp_path):
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
         _write_tracker(tmp_path, "test-kitchen", {"rectify": {"status": "pending"}}, {})
         _grant_success_credit(tool_ctx_kitchen_open, tmp_path, "nonexistent")
         result = json.loads(
@@ -70,7 +68,6 @@ class TestRecordPipelineStepComplete:
         self, tool_ctx_kitchen_open, tmp_path
     ):
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
         _write_tracker(tmp_path, "test-kitchen", {"rectify": {"status": "pending"}}, {})
 
         result = json.loads(
@@ -85,7 +82,6 @@ class TestRecordPipelineStepComplete:
     @pytest.mark.anyio
     async def test_errors_on_missing_step_name(self, tool_ctx_kitchen_open, tmp_path):
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
         _write_tracker(tmp_path, "test-kitchen", {"rectify": {"status": "pending"}}, {})
         result = json.loads(
             await record_pipeline_step(pipeline_id="test-kitchen", op="complete", step_name="")
@@ -99,7 +95,7 @@ class TestRecordPipelineStepComplete:
     ):
         monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.kitchen_id = ""
+        bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="")
         result = json.loads(
             await record_pipeline_step(pipeline_id="", op="complete", step_name="rectify")
         )
@@ -109,7 +105,6 @@ class TestRecordPipelineStepComplete:
     @pytest.mark.anyio
     async def test_malformed_tracker_is_not_retriable(self, tool_ctx_kitchen_open, tmp_path):
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
         _write_tracker(tmp_path, "test-kitchen", {"rectify": {"status": "pending"}}, {})
         tracker_path = (
             tmp_path / ".autoskillit" / "temp" / "pipeline_tracker" / "test-kitchen.json"

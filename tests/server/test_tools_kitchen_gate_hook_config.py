@@ -11,7 +11,7 @@ import autoskillit.server.tools.tools_kitchen as _patch_tools_tools_kitchen
 from autoskillit.config.settings import OutputBudgetConfig, QuotaGuardConfig
 from autoskillit.hooks.formatters._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 from tests.server._helpers import _HOOK_CONFIG_OVERLAY_RELPATH
-from tests.server.conftest import _make_mock_ctx
+from tests.server.conftest import _make_mock_ctx, _set_mock_kitchen_transition
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -345,7 +345,7 @@ async def test_update_hook_config_with_recipe_includes_recipe_allows_pr_create(
     mock_ctx = _make_mock_ctx()
     mock_ctx.project_dir = tmp_path
     mock_ctx.recipe_name = "merge-prs"
-    mock_ctx.kitchen_id = "test-kitchen-id"
+    _set_mock_kitchen_transition(mock_ctx, kitchen_id="test-kitchen-id")
     mock_ctx.config.quota_guard.cache_max_age = 300
     mock_ctx.config.quota_guard.cache_path = "/p/q.json"
     mock_ctx.config.quota_guard.buffer_seconds = 60
@@ -377,7 +377,7 @@ async def test_update_hook_config_with_recipe_excludes_pr_create_for_non_pr_reci
     mock_ctx = _make_mock_ctx()
     mock_ctx.project_dir = tmp_path
     mock_ctx.recipe_name = "smoke-test"
-    mock_ctx.kitchen_id = "test-kitchen-id"
+    _set_mock_kitchen_transition(mock_ctx, kitchen_id="test-kitchen-id")
     mock_ctx.config.quota_guard.cache_max_age = 300
     mock_ctx.config.quota_guard.cache_path = "/p/q.json"
     mock_ctx.config.quota_guard.buffer_seconds = 60
@@ -517,7 +517,7 @@ def test_write_hook_config_does_not_touch_overlay(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.project_dir = tmp_path
-    mock_ctx.kitchen_id = "test-kitchen-id"
+    _set_mock_kitchen_transition(mock_ctx, kitchen_id="test-kitchen-id")
     mock_ctx.config.quota_guard.cache_max_age = 300
     mock_ctx.config.quota_guard.cache_path = "/p/q.json"
     mock_ctx.config.quota_guard.buffer_seconds = 60

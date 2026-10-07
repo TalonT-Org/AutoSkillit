@@ -1,7 +1,8 @@
 """Gate-enablement/transition handler extracted for testability.
 
-Cross-submodule helpers are imported directly from their submodules
-(``.._open_kitchen_transition``, ``.._open_kitchen_errors``,
+Cross-submodule helpers are imported directly from their defining modules
+(``autoskillit.server.lifecycle._kitchen_identity``,
+``.._open_kitchen_transition``, ``.._open_kitchen_errors``,
 ``.._recipe_serve``) to avoid a circular-import hazard through the
 package facade.
 """
@@ -20,6 +21,7 @@ from autoskillit.server._tracker_authority import (
     _retain_kitchen_tracker_authority,
 )
 from autoskillit.server.lifecycle._guards import _backend_supports_quota
+from autoskillit.server.lifecycle._kitchen_identity import establish_kitchen_identity
 from autoskillit.server.tools import tools_kitchen as _tk_pkg
 from autoskillit.server.tools.tools_kitchen._open_kitchen._tracker_auto_init import (
     prune_stale_kitchen_state,
@@ -27,10 +29,7 @@ from autoskillit.server.tools.tools_kitchen._open_kitchen._tracker_auto_init imp
 from autoskillit.server.tools.tools_kitchen._open_kitchen_errors import (
     _kitchen_failure_envelope,
 )
-from autoskillit.server.tools.tools_kitchen._open_kitchen_transition import (
-    _ensure_kitchen_transition,
-    _transition_start,
-)
+from autoskillit.server.tools.tools_kitchen._open_kitchen_transition import _transition_start
 
 logger = get_logger(__name__)
 
@@ -142,7 +141,7 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
     from autoskillit.server import _get_ctx  # circular-break
 
     ctx = _get_ctx()
-    _ensure_kitchen_transition(ctx)
+    establish_kitchen_identity(ctx)
     if _transition_start(ctx, "gate_enablement"):
         ctx.gate.enable()
         transition_confirm(
@@ -168,9 +167,6 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
         try:
             _retain_kitchen_tracker_authority(ctx)
             identity = _register_active_kitchen(ctx)
-            from autoskillit.server.recipe import _recipe_generation  # circular-break
-
-            _recipe_generation.activate_kitchen(identity.kitchen_id)
         except Exception as exc:
             transition_degraded(ctx, "registry_update", exc)
             logger.warning("open_kitchen_registry_failed", exc_info=True)
@@ -179,7 +175,7 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
                 ctx,
                 "registry_update",
                 receipt="registry:kitchen_registered",
-                downstream_identity=ctx.kitchen_id,
+                downstream_identity=identity.kitchen_id,
             )
 
     if _transition_start(ctx, "tracker_prune"):

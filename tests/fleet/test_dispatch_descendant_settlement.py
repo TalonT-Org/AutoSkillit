@@ -33,6 +33,7 @@ import pytest
 
 from autoskillit.core import CLAUDE_CODE_CAPABILITIES
 from autoskillit.execution.process import default_tether_dir
+from tests.conftest import bind_test_kitchen_identity
 from tests.fleet._descendant_worker import (
     is_identity_alive,
     kill_identity_fenced,
@@ -358,7 +359,7 @@ def descendant_runtime(
     tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
     recipes = InMemoryRecipeRepository()
     tool_ctx.recipes = recipes
-    tool_ctx.kitchen_id = uuid4().hex[:16]
+    bind_test_kitchen_identity(tool_ctx, kitchen_id=uuid4().hex[:16])
     tool_ctx.project_dir = tmp_path
     tool_ctx.managed_headless_session_lineage_store = DefaultManagedHeadlessSessionLineageStore()
 

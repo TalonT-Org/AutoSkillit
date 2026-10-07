@@ -11,7 +11,7 @@ import autoskillit.server as server
 import autoskillit.server.tools.tools_kitchen as tools_kitchen
 from autoskillit.core import FinalizedRecipeStep, RecipeFlowEdge
 from tests.server._helpers import _make_finalized_projection
-from tests.server.conftest import _make_mock_ctx
+from tests.server.conftest import _make_mock_ctx, _set_mock_kitchen_transition
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -460,7 +460,7 @@ class TestAuthorityFeedbackConsistency:
             mock_ctx.enable_components = AsyncMock()
             mock_ctx.recipes = MagicMock()
             mock_ctx.config.migration.suppressed = []
-            mock_ctx.kitchen_id = "test-kitchen"
+            _set_mock_kitchen_transition(mock_ctx, kitchen_id="test-kitchen")
             mock_ctx.config.linux_tracing.log_dir = ""
 
             with patch.object(server, "_get_ctx", return_value=mock_ctx):
@@ -471,9 +471,8 @@ class TestAuthorityFeedbackConsistency:
                         new=AsyncMock(),
                     ):
                         with patch.object(tools_kitchen, "_write_hook_config"):
-                            with patch.object(
-                                tools_kitchen,
-                                "resolve_kitchen_id",
+                            with patch(
+                                "autoskillit.server.lifecycle._kitchen_identity.resolve_kitchen_id",
                                 return_value="test-kitchen",
                             ):
                                 with patch.object(

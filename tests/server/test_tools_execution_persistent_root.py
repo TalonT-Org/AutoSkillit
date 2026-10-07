@@ -19,6 +19,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import autoskillit.server.tools.tools_execution as _patch_tools_tools_execution
+from tests.conftest import bind_test_kitchen_identity
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -54,7 +55,7 @@ async def test_recipe_pin_to_persistent_backend_resolves_root_when_global_backen
     )
     ctx = make_tool_ctx(config)
     ctx.gate = DefaultGateState(enabled=True)
-    ctx.kitchen_id = "test-kitchen"
+    bind_test_kitchen_identity(ctx, kitchen_id="test-kitchen")
     ctx.recipe_name = "remediation"
 
     executor = InMemoryHeadlessExecutor()

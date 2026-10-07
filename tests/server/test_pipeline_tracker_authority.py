@@ -6,6 +6,8 @@ import json
 
 import pytest
 
+from tests.conftest import bind_test_kitchen_identity
+
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
@@ -17,7 +19,7 @@ class TestCheckPipelineDepsImmutableTarget:
         from autoskillit.server.tools.tools_execution import _check_pipeline_deps
 
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.kitchen_id = "kitchen-xyz"
+        bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="kitchen-xyz")
 
         tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
         tracker_dir.mkdir(parents=True)
@@ -60,7 +62,7 @@ class TestSelectTrackerAuthority:
         from autoskillit.server import _tracker_authority
 
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.kitchen_id = "kitchen-xyz"
+        bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="kitchen-xyz")
         retained = {}
 
         def fail_read(_target, lease):
@@ -90,7 +92,7 @@ class TestSelectTrackerAuthority:
         )
 
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.kitchen_id = "kitchen-xyz"
+        bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="kitchen-xyz")
         kitchen_key, kitchen_lease = _retain_kitchen_tracker_authority(tool_ctx_kitchen_open)
 
         _target, _authority, scoped_key, scoped_lease = _select_tracker_authority(
@@ -143,7 +145,7 @@ class TestRestoreReservedTrackerAuthority:
         )
 
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.kitchen_id = "kitchen-xyz"
+        bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="kitchen-xyz")
         target = TrackerAuthorityTarget.for_project(tmp_path, "AB", expected=True)
         key, lease = _retain_context_tracker(
             tool_ctx_kitchen_open,
@@ -180,7 +182,7 @@ class TestRestoreReservedTrackerAuthority:
         from autoskillit.server import _tracker_authority
 
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.kitchen_id = "kitchen-xyz"
+        bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="kitchen-xyz")
         current_target = TrackerAuthorityTarget.for_project(tmp_path, "AB", expected=True)
         current_key, current_lease = _tracker_authority._retain_context_tracker(
             tool_ctx_kitchen_open,
@@ -218,7 +220,7 @@ class TestSelectTrackerTarget:
         from autoskillit.server._tracker_authority import select_tracker_target
 
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.kitchen_id = "kitchen-xyz"
+        bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="kitchen-xyz")
 
         tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
         tracker_dir.mkdir(parents=True)

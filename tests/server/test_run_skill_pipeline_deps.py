@@ -8,6 +8,7 @@ import pytest
 
 import autoskillit.server.tools.tools_execution as _patch_tools_tools_execution
 from autoskillit.server.tools.tools_execution import run_skill
+from tests.conftest import bind_test_kitchen_identity
 from tests.server._pipeline_test_helpers import _setup_project as _shared_setup_project
 from tests.server._pipeline_test_helpers import _write_tracker
 
@@ -174,7 +175,7 @@ class TestPipelineDepsKitchenScopedFallback:
     @pytest.mark.anyio
     async def test_run_skill_denies_out_of_order_step(self, tool_ctx_kitchen_open, tmp_path):
         _setup_project(tmp_path, tool_ctx_kitchen_open)
-        tool_ctx_kitchen_open.kitchen_id = "kitchen-1"
+        bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="kitchen-1")
         _write_tracker(
             tmp_path,
             "kitchen-1",
@@ -194,7 +195,7 @@ class TestPipelineDepsKitchenScopedFallback:
     @pytest.mark.anyio
     async def test_run_skill_allows_in_order_step(self, tool_ctx_kitchen_open, tmp_path):
         _setup_project(tmp_path, tool_ctx_kitchen_open)
-        tool_ctx_kitchen_open.kitchen_id = "kitchen-1"
+        bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="kitchen-1")
         _write_tracker(
             tmp_path,
             "kitchen-1",
@@ -224,7 +225,7 @@ class TestPipelineDepsKitchenScopedFallback:
         from autoskillit.server.tools.tools_execution import _check_pipeline_deps
 
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.kitchen_id = "kitchen-2"
+        bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="kitchen-2")
         _write_tracker(
             tmp_path,
             "kitchen-2",
@@ -288,7 +289,7 @@ class TestPipelineDepsEmptyStepNameBypass:
         from types import SimpleNamespace
 
         _setup_project(tmp_path, tool_ctx_kitchen_open)
-        tool_ctx_kitchen_open.kitchen_id = "kitchen-3"
+        bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="kitchen-3")
         tool_ctx_kitchen_open.active_recipe_steps = {
             "some_other_step": SimpleNamespace(with_args={"skill_command": "/other-skill"}),
         }
@@ -315,7 +316,7 @@ class TestPipelineDepsEmptyStepNameBypass:
         from types import SimpleNamespace
 
         _setup_project(tmp_path, tool_ctx_kitchen_open)
-        tool_ctx_kitchen_open.kitchen_id = "kitchen-4"
+        bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="kitchen-4")
         tool_ctx_kitchen_open.active_recipe_steps = {
             "investigate_a": SimpleNamespace(
                 with_args={"skill_command": "/autoskillit:investigate a"}

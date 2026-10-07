@@ -47,6 +47,7 @@ from autoskillit.server.recipe._recipe_initialization import (
     replay_terminal_section_response,
     stage_recipe_initialization,
 )
+from tests.conftest import bind_test_kitchen_identity
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -56,7 +57,7 @@ def _hash(seed: str) -> str:
 
 
 def _stage(tool_ctx, tmp_path) -> InitializingRecipe:
-    tool_ctx.kitchen_id = "kitchen"
+    bind_test_kitchen_identity(tool_ctx, kitchen_id="kitchen")
     snapshot = build_recipe_execution_snapshot(
         recipe_name="recipe",
         content_hash=_hash("content"),

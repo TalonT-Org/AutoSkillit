@@ -78,13 +78,6 @@ def run_startup_drift_check() -> None:
         logger.exception("startup_drift_check_failed")
 
 
-def _activate_recipe_kitchen(kitchen_id: str) -> None:
-    """Publish one kitchen to the recipe-generation lifecycle."""
-    from autoskillit.server.recipe._recipe_generation import activate_kitchen  # circular-break
-
-    activate_kitchen(kitchen_id)
-
-
 def _log_hook_repair_outcome(outcome: PluginHookRepairOutcome, artifact_scope: str) -> None:
     """Record one cache or projection hook repair result."""
     match outcome.status:

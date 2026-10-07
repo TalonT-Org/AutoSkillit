@@ -15,6 +15,7 @@ import autoskillit.recipe.contracts as _patch_recipe_contracts
 from autoskillit.core import SkillResolver
 from autoskillit.recipe.schema import RecipeIngredient
 from autoskillit.server.tools.tools_recipe import load_recipe
+from tests.server.conftest import _set_mock_kitchen_transition
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -81,7 +82,7 @@ class TestLoadRecipeAuthorityClobber:
         mock_ctx.enable_components = AsyncMock()
         mock_ctx.recipes = MagicMock()
         mock_ctx.config.migration.suppressed = []
-        mock_ctx.kitchen_id = "test-kitchen"
+        _set_mock_kitchen_transition(mock_ctx, kitchen_id="test-kitchen")
         mock_ctx.config.linux_tracing.log_dir = ""
         from autoskillit.server.tools import tools_recipe
 
@@ -132,7 +133,7 @@ class TestLoadRecipeTypeGate:
         mock_ctx.enable_components = AsyncMock()
         mock_ctx.recipes = MagicMock()
         mock_ctx.config.migration.suppressed = []
-        mock_ctx.kitchen_id = "test-kitchen-type"
+        _set_mock_kitchen_transition(mock_ctx, kitchen_id="test-kitchen-type")
         mock_ctx.config.linux_tracing.log_dir = ""
         typed_recipe = SimpleNamespace(
             ingredients={"count": RecipeIngredient(description="Count", type="integer")},
@@ -185,7 +186,7 @@ class TestLoadRecipeTypeGate:
         mock_ctx.enable_components = AsyncMock()
         mock_ctx.recipes = MagicMock()
         mock_ctx.config.migration.suppressed = []
-        mock_ctx.kitchen_id = "test-kitchen-fail-closed"
+        _set_mock_kitchen_transition(mock_ctx, kitchen_id="test-kitchen-fail-closed")
         mock_ctx.config.linux_tracing.log_dir = ""
         mock_ctx.recipes.load.return_value = None
         mock_recipe_info = MagicMock()

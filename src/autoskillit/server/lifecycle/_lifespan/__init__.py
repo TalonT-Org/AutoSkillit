@@ -9,7 +9,6 @@ startup checks:
   (``run_startup_drift_check``, ``run_startup_hook_health_check``,
   ``run_startup_install_state_check``, ``run_startup_fix_required_coverage_check``,
   ``run_startup_join_guard_coverage_check``,
-  ``_activate_recipe_kitchen``,
   ``_finalize_recorder``).
 - :mod:`_session_boots` — per-session-type async auto-gate boots and the
   ``_LIFESPAN_BOOT_REGISTRY`` dispatch table.
@@ -27,7 +26,6 @@ from autoskillit.core import (  # noqa: F401  (mock.patch reachability)
     _collect_disabled_feature_tags,
     cleanup_readiness_sentinel,
     register_active_kitchen,
-    resolve_kitchen_id,
     write_readiness_sentinel,
 )
 from autoskillit.execution import (
@@ -65,7 +63,6 @@ from autoskillit.server.lifecycle._lifespan._session_boots import (
     _skill_auto_gate_boot,
 )
 from autoskillit.server.lifecycle._lifespan._startup_checks import (
-    _activate_recipe_kitchen,
     _finalize_recorder,
     run_startup_drift_check,
     run_startup_fix_required_coverage_check,
@@ -80,7 +77,6 @@ from autoskillit.workspace import repair_broken_plugin_cache_hooks  # noqa: F401
 
 __all__ = [
     "_LIFESPAN_BOOT_REGISTRY",
-    "_activate_recipe_kitchen",
     "_autoskillit_lifespan",
     "_cleanup_stale_loop",
     "_evidence_reader_auto_gate_boot",

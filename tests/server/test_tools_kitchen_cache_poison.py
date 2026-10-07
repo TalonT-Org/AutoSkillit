@@ -30,9 +30,8 @@ async def test_open_kitchen_ingredients_only_does_not_poison_load_recipe(
     with patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
         with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
             with patch.object(_patch_tools_tools_kitchen, "create_background_task"):
-                with patch.object(
-                    _patch_tools_tools_kitchen,
-                    "resolve_kitchen_id",
+                with patch(
+                    "autoskillit.server.lifecycle._kitchen_identity.resolve_kitchen_id",
                     return_value="test-kitchen",
                 ):
                     ok_result = json.loads(

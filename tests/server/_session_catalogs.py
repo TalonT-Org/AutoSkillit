@@ -131,7 +131,6 @@ async def build_session_catalog(
     monkeypatch.setattr(_misc, "_prime_quota_cache", AsyncMock())
     monkeypatch.setattr(_session_boots, "_retain_kitchen_tracker_authority", MagicMock())
     monkeypatch.setattr(_session_boots, "register_active_kitchen", MagicMock(return_value=True))
-    monkeypatch.setattr(_session_boots, "_activate_recipe_kitchen", MagicMock())
     monkeypatch.setattr(_lifespan, "create_background_task", MagicMock(return_value=MagicMock()))
     monkeypatch.setattr(_lifespan, "discover_campaign_state_files", MagicMock(return_value=[]))
     monkeypatch.setattr(_lifespan, "sweep_orphaned_tethers_async", AsyncMock())

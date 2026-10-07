@@ -1482,7 +1482,7 @@ class TestRecipeFlow:
     ) -> None:
         runner = FakeRunner(_recipe_handler(fleet=RuntimeError("unexpected fleet error")))
         failures, result = _run_recipe(tmp_path, runner)
-        assert failures == ["harness error: unexpected fleet error"]
+        assert failures == ["harness error: RuntimeError: unexpected fleet error"]
         exception = result.pop("exception")
         assert "Traceback (most recent call last)" in exception
         assert "_run_test" in exception
@@ -1878,7 +1878,7 @@ class TestCleanInstallFlow:
             == 1
         )
         stderr = capsys.readouterr().err
-        assert "harness error: runner crashed" in stderr
+        assert "harness error: RuntimeError: runner crashed" in stderr
         assert "Traceback" not in stderr
         assert SANDBOX_TOKEN not in stderr
         crash_out = tmp_path / "crash-out"

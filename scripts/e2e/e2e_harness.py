@@ -1035,7 +1035,7 @@ def run_test(
             test, catalog, out=out, home=home, env=env, runner=runner
         )
     except Exception as exc:
-        failures = [f"harness error: {exc}"]
+        failures = [f"harness error: {type(exc).__name__}: {exc}"]
         result["exception"] = traceback.format_exc()
     result.update(passed=not failures, failures=failures)
     if test.kind in ("clean-install", "recipe"):

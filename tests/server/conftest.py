@@ -143,18 +143,11 @@ def _set_mock_kitchen_transition(ctx: MagicMock, *, kitchen_id: str = "") -> Non
     """Give a mock context the typed transition state guaranteed by make_context()."""
     from threading import RLock
 
-    from autoskillit.pipeline import closed_kitchen_open_state, new_kitchen_open_state
+    from autoskillit.pipeline import closed_kitchen_open_state
 
-    closed_state = closed_kitchen_open_state()
     ctx.kitchen_transition_lock = RLock()
-    ctx.kitchen_open_state = (
-        new_kitchen_open_state(
-            kitchen_id=kitchen_id,
-            context_id=closed_state.context_id,
-        )
-        if kitchen_id
-        else closed_state
-    )
+    ctx.kitchen_open_state = closed_kitchen_open_state()
+    bind_test_kitchen_identity(ctx, kitchen_id)
     type(ctx).kitchen_id = property(lambda self: self.kitchen_open_state.kitchen_id)
 
 

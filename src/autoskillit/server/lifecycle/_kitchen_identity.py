@@ -9,7 +9,10 @@ from autoskillit.pipeline import (
 
 
 def establish_kitchen_identity(ctx: ToolContext, *, campaign_id: str | None = None) -> str:
-    """Return the lifecycle kitchen id, minting and activating it at most once."""
+    """Return the lifecycle kitchen id, minting and activating it at most once.
+
+    Callers may already hold the context's reentrant transition lock.
+    """
     with ctx.kitchen_transition_lock:
         state = ctx.kitchen_open_state
         if state.phase is KitchenOpenPhase.CLOSED:

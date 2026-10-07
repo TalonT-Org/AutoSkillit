@@ -185,7 +185,7 @@ class ManagedWorkerCapacity(Protocol):
 
 @runtime_checkable
 class KitchenTransitionLock(Protocol):
-    """Synchronous lock protecting one ToolContext kitchen transition snapshot."""
+    """Reentrant synchronous lock protecting one ToolContext kitchen transition snapshot."""
 
     def __enter__(self) -> Any: ...
 

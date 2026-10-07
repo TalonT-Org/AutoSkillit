@@ -351,6 +351,35 @@ def test_retirement_callback_removes_kitchen_and_permanently_rejects_writes(
         store.put(record)
 
 
+@pytest.mark.parametrize("write", ("put", "bind_surface"))
+def test_authoritative_store_rejects_never_activated_kitchen(
+    write: str,
+) -> None:
+    from autoskillit.server.recipe._recipe_generation import (
+        RecipeGenerationKitchenNotActiveError,
+    )
+
+    store = RecipeGenerationStore()
+    active = _record(kitchen_id="A")
+    store.activate_kitchen(active.kitchen_id)
+    store.put(active)
+
+    with pytest.raises(RecipeGenerationKitchenNotActiveError, match="B") as error:
+        if write == "put":
+            store.put(_record(kitchen_id="B"))
+        else:
+            store.bind_surface(
+                "B",
+                active.normalized_compile_key,
+                "open_kitchen",
+                _generation("never-active"),
+            )
+
+    message = str(error.value)
+    assert "not active" in message
+    assert "retired" not in message
+
+
 def test_lifecycle_authority_bounds_retirement_history_without_stale_reactivation() -> None:
     store = RecipeGenerationStore(max_retired_kitchens=1)
     first = _record(kitchen_id="first-kitchen", compile_key="first")
@@ -359,13 +388,20 @@ def test_lifecycle_authority_bounds_retirement_history_without_stale_reactivatio
     store.activate_kitchen(first.kitchen_id)
     store.put(first)
     store.retire_kitchen(first.kitchen_id)
+    with pytest.raises(RecipeGenerationRetiredError):
+        store.put(first)
     store.activate_kitchen(second.kitchen_id)
     store.put(second)
     store.retire_kitchen(second.kitchen_id)
 
     assert store.retired_kitchen_count == 1
-    with pytest.raises(RecipeGenerationRetiredError):
+    from autoskillit.server.recipe._recipe_generation import (
+        RecipeGenerationKitchenNotActiveError,
+    )
+
+    with pytest.raises(RecipeGenerationKitchenNotActiveError, match="not active") as error:
         store.put(first)
+    assert "retired" not in str(error.value)
 
     store.activate_kitchen(first.kitchen_id)
     assert store.put(first).kitchen_id == first.kitchen_id

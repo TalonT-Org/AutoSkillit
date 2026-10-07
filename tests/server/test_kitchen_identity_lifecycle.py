@@ -146,6 +146,29 @@ def test_establish_kitchen_identity_activates_and_resets_owner_cache(tool_ctx):
     assert stored.kitchen_id == kitchen_id
 
 
+@pytest.mark.parametrize("source", ["campaign", "resolver"])
+def test_establish_kitchen_identity_rejects_whitespace_before_activation(
+    tool_ctx, monkeypatch, source
+):
+    from autoskillit.server.lifecycle import _kitchen_identity
+    from autoskillit.server.recipe import _recipe_generation
+
+    activate = Mock()
+    monkeypatch.setattr(_recipe_generation, "activate_kitchen", activate)
+    monkeypatch.setattr(_kitchen_identity, "resolve_kitchen_id", lambda: " \t\n")
+    state = tool_ctx.kitchen_open_state
+    cached_identity = tool_ctx.kitchen_process_identity
+
+    with pytest.raises(ValueError, match="non-whitespace"):
+        _kitchen_identity.establish_kitchen_identity(
+            tool_ctx, campaign_id=" \t\n" if source == "campaign" else None
+        )
+
+    activate.assert_not_called()
+    assert tool_ctx.kitchen_open_state is state
+    assert tool_ctx.kitchen_process_identity is cached_identity
+
+
 def test_establish_kitchen_identity_is_idempotent_and_preserves_current_cache(
     tool_ctx, monkeypatch
 ):

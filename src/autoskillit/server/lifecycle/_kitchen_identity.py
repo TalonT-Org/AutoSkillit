@@ -18,6 +18,8 @@ def establish_kitchen_identity(ctx: ToolContext, *, campaign_id: str | None = No
             )
 
             kitchen_id = campaign_id or resolve_kitchen_id()
+            if not kitchen_id.strip():
+                raise ValueError("kitchen_id must contain non-whitespace characters")
             activate_kitchen(kitchen_id)
             ctx.kitchen_process_identity = None
             state = new_kitchen_open_state(

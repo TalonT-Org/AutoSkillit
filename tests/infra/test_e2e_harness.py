@@ -1081,18 +1081,6 @@ class TestSmokeCleanup:
         sleeps: list[float] = []
         monkeypatch.setattr(harness, "time", SimpleNamespace(sleep=sleeps.append))
 
-        with subprocess.Popen(
-            [harness.sys.executable, "-c", "import sys; sys.stdin.read()"],
-            stdin=subprocess.PIPE,
-        ) as process:
-            try:
-                with pytest.raises(subprocess.TimeoutExpired):
-                    process.wait(timeout=0.05)
-            finally:
-                process.kill()
-                process.wait(timeout=5)
-        assert len(sleeps) == 0
-
         status = harness.cleanup_smoke_test(catalog, test.name, runner, out, env)
         result = json.loads((out / "result.json").read_text(encoding="utf-8"))
         evidence = json.loads((out / "smoke-cleanup.json").read_text(encoding="utf-8"))

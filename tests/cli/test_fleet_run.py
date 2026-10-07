@@ -95,6 +95,39 @@ def _mock_backend() -> MagicMock:
     return backend
 
 
+def _configure_fleet_run_identity_capture(monkeypatch, make_tool_ctx):
+    from autoskillit.pipeline import ToolContext
+    from autoskillit.server.recipe import _recipe_generation
+
+    monkeypatch.setattr(
+        _recipe_generation,
+        "_RECIPE_GENERATION_STORE",
+        _recipe_generation.RecipeGenerationStore(),
+    )
+    ctx = make_tool_ctx()
+    ctx.backend = _mock_backend()
+    ctx.skill_resolver = None
+    ctx.recipes = None
+    monkeypatch.setattr(
+        "autoskillit.server.make_context",
+        lambda cfg, **kwargs: ctx,
+    )
+    monkeypatch.setattr(
+        "autoskillit.config.load_config",
+        lambda path=None: _make_test_config(fleet=True, fleet_headless_run=True),
+    )
+
+    captured: dict[str, object] = {}
+
+    async def fake_execute_dispatch(*, tool_ctx: ToolContext, **kwargs: object) -> DispatchResult:
+        captured["kitchen_id"] = tool_ctx.kitchen_open_state.kitchen_id
+        captured["phase"] = tool_ctx.kitchen_open_state.phase
+        return _mock_success_result()
+
+    monkeypatch.setattr("autoskillit.fleet.execute_dispatch", fake_execute_dispatch)
+    return ctx, captured
+
+
 class TestFleetRunGates:
     def test_fleet_run_blocks_in_leaf_session(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
@@ -517,6 +550,84 @@ class TestFleetRunDispatch:
                 )
         assert captured_args["resume_session_id"] == "sess-123"
         assert captured_args["prior_dispatch_id"] == "disp-456"
+
+    @pytest.mark.parametrize(
+        "ambient_campaign_id",
+        [None, "ambient-campaign"],
+        ids=["without-ambient", "with-ambient"],
+    )
+    def test_fleet_run_establishes_kitchen_identity_before_dispatch(
+        self, monkeypatch: pytest.MonkeyPatch, make_tool_ctx, ambient_campaign_id
+    ) -> None:
+        from autoskillit.core import CAMPAIGN_ID_ENV_VAR
+        from autoskillit.pipeline import KitchenOpenPhase
+
+        if ambient_campaign_id is None:
+            monkeypatch.delenv(CAMPAIGN_ID_ENV_VAR, raising=False)
+        else:
+            monkeypatch.setenv(CAMPAIGN_ID_ENV_VAR, ambient_campaign_id)
+
+        _ctx, captured = _configure_fleet_run_identity_capture(monkeypatch, make_tool_ctx)
+
+        from autoskillit.cli.fleet import fleet_run
+
+        with pytest.raises(SystemExit) as exit_info:
+            fleet_run("test-recipe", task="test")
+
+        assert exit_info.value.code == 0
+        kitchen_id = captured["kitchen_id"]
+        assert isinstance(kitchen_id, str)
+        assert kitchen_id
+        if ambient_campaign_id is not None:
+            assert kitchen_id == ambient_campaign_id
+        assert captured["phase"] is KitchenOpenPhase.INFRASTRUCTURE_READY
+
+    def test_fleet_run_resume_preserves_recorded_campaign_id(
+        self, monkeypatch: pytest.MonkeyPatch, make_tool_ctx
+    ) -> None:
+        from autoskillit.core import CAMPAIGN_ID_ENV_VAR
+        from autoskillit.pipeline import KitchenOpenPhase
+
+        monkeypatch.setenv(CAMPAIGN_ID_ENV_VAR, "ambient-campaign")
+        ctx, captured = _configure_fleet_run_identity_capture(monkeypatch, make_tool_ctx)
+
+        prior_dispatch_id = "prior-dispatch"
+        dispatches_dir = ctx.temp_dir / "dispatches"
+        dispatches_dir.mkdir(parents=True, exist_ok=True)
+        (dispatches_dir / f"{prior_dispatch_id}.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 9,
+                    "campaign_id": "recorded-campaign",
+                    "campaign_name": "test",
+                    "manifest_path": "/m.yaml",
+                    "started_at": 0.0,
+                    "dispatches": [
+                        {
+                            "name": "test-recipe",
+                            "status": "failure",
+                            "reason": "fleet_l3_timeout",
+                            "session_chain": ["sess-A", "sess-B"],
+                            "dispatched_session_id": "sess-B",
+                        }
+                    ],
+                }
+            )
+        )
+
+        from autoskillit.cli.fleet import fleet_run
+
+        with pytest.raises(SystemExit) as exit_info:
+            fleet_run(
+                "test-recipe",
+                task="test",
+                resume_session_id="sess-B",
+                prior_dispatch_id=prior_dispatch_id,
+            )
+
+        assert exit_info.value.code == 0
+        assert captured["kitchen_id"] == "recorded-campaign"
+        assert captured["phase"] is KitchenOpenPhase.INFRASTRUCTURE_READY
 
     def test_fleet_run_uses_shared_worker_capacity(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """ToolContext is constructed via make_context with shared capacity wired."""

@@ -1,10 +1,7 @@
 """Gate-enablement/transition handler extracted for testability.
 
-Cross-submodule helpers are imported directly from their defining modules
-(``autoskillit.server.lifecycle._kitchen_identity``,
-``.._open_kitchen_transition``, ``.._open_kitchen_errors``,
-``.._recipe_serve``) to avoid a circular-import hazard through the
-package facade.
+Helpers are imported from their defining modules to avoid a circular import
+through the package facade.
 """
 
 from __future__ import annotations

@@ -17,10 +17,10 @@ from autoskillit.core import (
     HEADLESS_ENV_VAR,
     SESSION_TYPE_ENV_VAR,
     SESSION_TYPE_ORCHESTRATOR,
+    load_yaml,
 )
 from tests.conftest import production_interpreter_env
 from tests.integration.test_codex_mcp_tracker_dispatch_identity import (
-    _RECIPE,
     _tool_json,
     _write_project_config,
 )
@@ -46,6 +46,25 @@ async def test_headless_food_truck_reuses_its_kitchen_identity(
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     _write_project_config(project_dir)
+    recipe_dir = project_dir / ".autoskillit" / "recipes"
+    recipe_dir.mkdir()
+    (recipe_dir / "kitchen-identity-probe.yaml").write_text(
+        """\
+name: kitchen-identity-probe
+description: Expose the session kitchen identity in rendered recipe content.
+recipe_version: "1.0.0"
+ingredients:
+  kitchen_id:
+    description: Session kitchen identity
+    default: ""
+    hidden: true
+steps:
+  done:
+    action: stop
+    message: ${{ inputs.kitchen_id }}
+""",
+        encoding="utf-8",
+    )
 
     env = {
         **production_interpreter_env(),
@@ -69,17 +88,25 @@ async def test_headless_food_truck_reuses_its_kitchen_identity(
             open_payload = _tool_json(
                 await client.call_tool(
                     "open_kitchen",
-                    {"name": _RECIPE, "overrides": {"source_dir": str(project_dir)}},
+                    {"name": "kitchen-identity-probe"},
                 )
             )
             assert open_payload["success"] is True, open_payload
             assert open_payload["valid"] is True, open_payload
             assert open_payload["phase"] == "committed", open_payload
+            opened_recipe = load_yaml(str(open_payload["content"]))
+            opened_kitchen_id = opened_recipe["steps"]["done"]["message"]
+            assert opened_kitchen_id
+            assert "${{" not in opened_kitchen_id
+            if campaign_id:
+                assert opened_kitchen_id == campaign_id
 
             load_payload = _tool_json(
                 await client.call_tool(
                     "load_recipe",
-                    {"name": _RECIPE, "overrides": {"source_dir": str(project_dir)}},
+                    {"name": "kitchen-identity-probe"},
                 )
             )
             assert load_payload["success"] is True, load_payload
+            loaded_recipe = load_yaml(str(load_payload["content"]))
+            assert loaded_recipe["steps"]["done"]["message"] == opened_kitchen_id

@@ -175,9 +175,16 @@ globalThis.DeckCore = (() => {
   }
 
   function hrefFor(route, target, cohortKeys) {
-    const params = Object.fromEntries(cohortKeys.filter(k =>
+    const sessionViews = ["context", "gaps", "parity"];
+    const preserve = [...cohortKeys, "skill", "recipe", "step", "model"];
+    if (sessionViews.includes(target.view)) preserve.push("session");
+    const params = Object.fromEntries(preserve.filter(k =>
       Object.hasOwn(route.params, k)).map(k => [k, [...route.params[k]]]));
     for (const [key, value] of Object.entries(target.params || {})) {
+      if (key === "session" && !sessionViews.includes(target.view)) {
+        delete params[key];
+        continue;
+      }
       if (value === null) delete params[key];
       else Object.defineProperty(params, key, {value, enumerable: true,
         writable: true, configurable: true});
@@ -227,17 +234,20 @@ globalThis.DeckCore = (() => {
     const providers = new Set((chips.provider ?? [])
       .filter(chip => provider.keys.includes(chip.key)).map(chip => chip.match));
 
-    function selectedRows(blocks) {
-      if (!window.chip) return [];
+    function selectedBlock(blocks) {
+      if (!window.chip) return null;
       const inWindow = blocks.filter(block => block.window === window.chip.key);
       const domain = [...new Set(inWindow.flatMap(block => block.levels))];
       const selectedLevels = new Set(level.keys
         .map(key => (chips.level ?? []).find(chip => chip.key === key)?.match)
       );
       const requested = domain.filter(value => selectedLevels.has(value));
-      if (!requested.length) return [];
-      const block = inWindow.find(item => sameValues(item.levels, requested));
-      return block?.rows ?? [];
+      if (!requested.length) return null;
+      return inWindow.find(item => sameValues(item.levels, requested)) ?? null;
+    }
+
+    function selectedRows(blocks) {
+      return selectedBlock(blocks)?.rows ?? [];
     }
 
     let skillRows = viewId === "role" ? [] : selectedRows(prepared.skills ?? []).filter(row =>
@@ -252,6 +262,31 @@ globalThis.DeckCore = (() => {
     if (viewId === "role" && route.entity != null) {
       roleRows = roleRows.filter(row => row.role === route.entity);
     }
+    const viewData = prepared[viewId];
+    const hasPreparedPopulation = viewData !== null && typeof viewData === "object";
+    const block = Array.isArray(viewData?.blocks) ? selectedBlock(viewData.blocks) : null;
+    let rows = hasPreparedPopulation ? [] : viewId === "role" ? roleRows : skillRows;
+    let metrics = rows;
+    if (Array.isArray(viewData?.blocks)) {
+      const sessionKey = ["context", "gaps", "parity"].includes(viewId) ?
+        params.session?.[0] ?? null : null;
+      const sessionBlock = sessionKey == null ? null :
+        (block?.sessions && Object.hasOwn(block.sessions, sessionKey) ?
+          block.sessions[sessionKey] : null);
+      const sourceRows = sessionKey == null ? block?.rows : sessionBlock?.rows;
+      const sourceMetrics = sessionKey == null ? block?.metrics : sessionBlock?.metrics;
+      const identityKeys = ["skill", "recipe", "step", "model"];
+      const matchesSelection = row =>
+        (row.harness == null || harnesses.has(row.harness)) &&
+        (row.provider == null || providers.has(row.provider)) &&
+        identityKeys.every(key => !Array.isArray(params[key]) || params[key].length === 0 ||
+          row[key] == null || params[key].includes(row[key]));
+      rows = (sourceRows ?? []).filter(matchesSelection);
+      const filterMetricRows = value => Array.isArray(value) ? value.filter(matchesSelection) :
+        value && typeof value === "object" ? Object.fromEntries(Object.entries(value).map(
+          ([key, rows]) => [key, Array.isArray(rows) ? rows.filter(matchesSelection) : rows])) : value;
+      metrics = filterMetricRows(sourceMetrics) ?? [];
+    }
     const relationships = (prepared.relationships ?? []).filter(edge => {
       if (viewId === "skill" && route.entity != null) return edge.skill === route.entity;
       if (viewId === "role" && route.entity != null) return edge.role === route.entity;
@@ -259,12 +294,15 @@ globalThis.DeckCore = (() => {
     });
 
     return {
+      rows,
+      metrics,
       skillRows,
       roleRows,
       relationships,
       definitions: prepared.definitions ?? {},
       viewHistory: prepared.view_histories?.[viewId] ?? null,
-      selection: {window, level, harness, provider}
+      selection: {window, level, harness, provider,
+        session: ["context", "gaps", "parity"].includes(viewId) ? params.session?.[0] ?? null : null}
     };
   }
 

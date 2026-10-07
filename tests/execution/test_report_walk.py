@@ -11,7 +11,12 @@ import pytest
 import zstandard
 
 import autoskillit.execution.evidence._native_child_projection as native_child_projection
-from autoskillit.core import iter_merged_assistant_turns
+from autoskillit.core import (
+    TOKEN_USAGE_SCHEMA_VERSION,
+    TURN_USAGE_SCHEMA_VERSION,
+    TokenMeasure,
+    iter_merged_assistant_turns,
+)
 from autoskillit.execution.evidence.report_walk import (
     SourceGapError,
     WalkItem,
@@ -63,6 +68,59 @@ def _session(
     if duration_seconds is not None:
         row["duration_seconds"] = duration_seconds
     return row
+
+
+def _turn_usage_row(
+    *,
+    backend: str,
+    provider: str,
+    model: str,
+    timestamp: str | None,
+) -> dict[str, Any]:
+    return {
+        "backend": backend,
+        "provider_used": provider,
+        "message_id": "message-1",
+        "request_id": "request-1",
+        "timestamp": timestamp,
+        "model": model,
+        "input_tokens": {"state": "measured_zero", "value": 0},
+        "output_tokens": {"state": "unknown", "value": None},
+        "cache_read_tokens": {"state": "measured", "value": 12},
+        "cache_write_tokens": {"state": "unavailable", "value": None},
+        "peak_context": {"state": "measured", "value": 12},
+        "context_window_tokens": 100,
+        "context_fraction": 0.12,
+    }
+
+
+def _turn_usage_descriptor(
+    *,
+    count: int,
+    filename: str | None = "turn_usage.jsonl",
+    version: int = TURN_USAGE_SCHEMA_VERSION,
+) -> dict[str, Any]:
+    return {
+        "schema_version": TOKEN_USAGE_SCHEMA_VERSION,
+        "turn_usage_file": filename,
+        "turn_usage_count": count,
+        "turn_usage_schema_version": version,
+    }
+
+
+def _write_turn_usage(
+    root: Path,
+    dir_name: str,
+    *,
+    descriptor: dict[str, Any] | None,
+    ledger: bytes | None,
+) -> None:
+    session_dir = root / "sessions" / dir_name
+    session_dir.mkdir(parents=True, exist_ok=True)
+    if descriptor is not None:
+        (session_dir / "token_usage.json").write_text(json.dumps(descriptor), encoding="utf-8")
+    if ledger is not None:
+        (session_dir / "turn_usage.jsonl").write_bytes(ledger)
 
 
 def _consume(
@@ -136,6 +194,130 @@ def test_first_pass_emits_joinable_records_and_tolerates_old_index_rows(
     assert sessions["sid-old"]["row"] == old_schema
     assert sessions["sid-old"]["assistant_turn_count"] is None
     assert read_tolerant_session_index_rows(root / "sessions.jsonl") == [current, old_schema]
+
+
+def test_turn_ledgers_are_admitted_for_live_and_archived_sessions(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "logs"
+    archived = _session("archived-attempt", "same-session-id", backend="claude-code")
+    live = _session("live-attempt", "same-session-id", backend="codex")
+    _write_jsonl(root / "sessions-archive.jsonl", [archived])
+    _write_jsonl(root / "sessions.jsonl", [live])
+    _write_turn_usage(
+        root,
+        "archived-attempt",
+        descriptor=_turn_usage_descriptor(count=1),
+        ledger=_json_line(
+            _turn_usage_row(
+                backend="claude-code",
+                provider="anthropic",
+                model="claude-resolved",
+                timestamp="2026-10-01T00:00:00Z",
+            )
+        ),
+    )
+    _write_turn_usage(
+        root,
+        "live-attempt",
+        descriptor=_turn_usage_descriptor(count=1),
+        ledger=_json_line(
+            {
+                **_turn_usage_row(
+                    backend="codex",
+                    provider="openai",
+                    model="gpt-resolved",
+                    timestamp=None,
+                ),
+                "model": None,
+                "context_window_tokens": None,
+                "context_fraction": None,
+            }
+        ),
+    )
+
+    records = {
+        item.source_id: item.record
+        for item in iter_report_walk(root)
+        if item.kind == "session" and item.record is not None
+    }
+
+    for source_id, provider, model in (
+        ("archived-attempt", "anthropic", "claude-resolved"),
+        ("live-attempt", "openai", None),
+    ):
+        assert records[source_id] is not None
+        assert records[source_id]["turn_usage_state"] == "observed"
+        assert records[source_id]["turn_usage_reason"] is None
+        (turn,) = records[source_id]["turn_usage_rows"]
+        assert turn["provider_used"] == provider
+        assert turn["model"] == model
+        assert turn["input_tokens"] == TokenMeasure.observed(0)
+        assert turn["output_tokens"] == TokenMeasure.unknown()
+    assert records["live-attempt"]["turn_usage_rows"][0]["timestamp"] is None
+    assert records["live-attempt"]["turn_usage_rows"][0]["context_window_tokens"] is None
+    assert records["live-attempt"]["turn_usage_rows"][0]["context_fraction"] is None
+
+
+@pytest.mark.parametrize(
+    ("descriptor", "ledger", "reason"),
+    [
+        (None, None, "descriptor-missing"),
+        (_turn_usage_descriptor(count=0), None, "ledger-not-published"),
+        (
+            {
+                **_turn_usage_descriptor(count=1),
+                "schema_version": TOKEN_USAGE_SCHEMA_VERSION + 1,
+            },
+            None,
+            "descriptor-unsupported-version",
+        ),
+        (
+            _turn_usage_descriptor(count=1, version=TURN_USAGE_SCHEMA_VERSION + 1),
+            None,
+            "ledger-unsupported-version",
+        ),
+        (
+            _turn_usage_descriptor(count=2),
+            _json_line(
+                _turn_usage_row(
+                    backend="codex",
+                    provider="openai",
+                    model="gpt-resolved",
+                    timestamp=None,
+                )
+            ),
+            "ledger-count-mismatch",
+        ),
+        (_turn_usage_descriptor(count=1), None, "ledger-missing"),
+        (
+            _turn_usage_descriptor(count=2),
+            b'{"input_tokens":{"state":"measured","value":1}}\nnot-json',
+            "ledger-malformed",
+        ),
+        (
+            _turn_usage_descriptor(count=1, filename="../turn_usage.jsonl"),
+            None,
+            "descriptor-invalid-ledger-file",
+        ),
+    ],
+)
+def test_invalid_or_absent_turn_ledgers_have_explicit_coverage(
+    tmp_path: Path,
+    descriptor: dict[str, Any] | None,
+    ledger: bytes | None,
+    reason: str,
+) -> None:
+    root = tmp_path / "logs"
+    _write_jsonl(root / "sessions.jsonl", [_session("attempt", "sid")])
+    _write_turn_usage(root, "attempt", descriptor=descriptor, ledger=ledger)
+
+    (item,) = [candidate for candidate in iter_report_walk(root) if candidate.kind == "session"]
+
+    assert item.record is not None
+    assert item.record["turn_usage_state"] == "unavailable"
+    assert item.record["turn_usage_reason"] == reason
+    assert item.record["turn_usage_rows"] == []
 
 
 def test_session_walk_reads_child_outcomes_by_native_parent_id(

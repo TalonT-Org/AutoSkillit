@@ -3,13 +3,20 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 import autoskillit.execution.child_outcomes as child_snapshot
-from autoskillit.core import ArtifactLease, ArtifactLeaseContention
+import autoskillit.execution.evidence._native_child_projection as native_projection
+from autoskillit.core import (
+    TOKEN_USAGE_SCHEMA_VERSION,
+    TURN_USAGE_SCHEMA_VERSION,
+    ArtifactLease,
+    ArtifactLeaseContention,
+)
 from autoskillit.execution import (
     REPORT_INDEX_SCHEMA_VERSION,
     read_report_index,
@@ -24,6 +31,14 @@ from tests.execution._report_index_fixtures import (
 )
 from tests.execution._report_index_fixtures import (
     otlp_log_record as _log,
+)
+from tests.execution.test_parent_context_spans import (
+    _claude_call,
+    _claude_result,
+    _encoding,
+)
+from tests.execution.test_parent_context_spans import (
+    _jsonl as _parent_jsonl,
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -68,6 +83,49 @@ def _session(dir_name: str, session_id: str, **fields: Any) -> dict[str, Any]:
 
 def _basic_session(dir_name: str, session_id: str, **fields: Any) -> dict[str, Any]:
     return basic_session_row(dir_name, session_id, **fields)
+
+
+def _turn_usage_row(
+    *, backend: str, provider: str, model: str, value: int, timestamp: str | None
+) -> dict[str, Any]:
+    return {
+        "backend": backend,
+        "provider_used": provider,
+        "message_id": f"message-{value}",
+        "request_id": f"request-{value}",
+        "timestamp": timestamp,
+        "model": model,
+        "input_tokens": {"state": "measured", "value": value},
+        "output_tokens": {"state": "measured_zero", "value": 0},
+        "cache_read_tokens": {"state": "unknown", "value": None},
+        "cache_write_tokens": {"state": "unavailable", "value": None},
+        "peak_context": {"state": "unknown", "value": None},
+        "context_window_tokens": 100,
+        "context_fraction": None,
+    }
+
+
+def _write_turn_ledger(
+    root: Path,
+    dir_name: str,
+    rows: list[dict[str, Any]],
+    *,
+    published: bool = True,
+) -> None:
+    session_dir = root / "sessions" / dir_name
+    session_dir.mkdir(parents=True, exist_ok=True)
+    descriptor = {
+        "schema_version": TOKEN_USAGE_SCHEMA_VERSION,
+        "turn_usage_file": "turn_usage.jsonl" if published else None,
+        "turn_usage_count": len(rows) if published else 0,
+        "turn_usage_schema_version": TURN_USAGE_SCHEMA_VERSION,
+    }
+    (session_dir / "token_usage.json").write_bytes(_json_line(descriptor))
+    sidecar = session_dir / "turn_usage.jsonl"
+    if published:
+        sidecar.write_bytes(b"".join(_json_line(row) for row in rows))
+    else:
+        sidecar.unlink(missing_ok=True)
 
 
 def _write_native_child(log_root: Path, parent_id: str, child_id: str, *, model: str) -> Path:
@@ -125,6 +183,83 @@ def _indexed_native_children(index_dir: Path) -> dict[str, dict[str, Any]]:
         for row in read_report_index(index_dir).subagents.values()
         if row["actor_level"] == "L0" and row["child_id"] is not None
     }
+
+
+def test_parent_context_spans_refresh_through_the_report_index(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import tiktoken
+
+    encoding = _encoding("local-index-span", merge_ab=True)
+    monkeypatch.setattr(tiktoken, "encoding_for_model", lambda _model: encoding)
+    tokenizer_version = ["test-tokenizer-v1"]
+    monkeypatch.setattr(native_projection, "_tokenizer_version", lambda: tokenizer_version[0])
+
+    root = tmp_path / "logs"
+    parent_id = "parent-span-session"
+    child_id = "child-span-agent"
+    parent_transcript = root / f"{parent_id}.jsonl"
+    call = _claude_call(child_id=child_id, tool_id="tool-span-1", prompt="ab")
+    first_result = _claude_result(tool_id="tool-span-1", record_id="result-1", text="ab")
+    parent_transcript.parent.mkdir(parents=True, exist_ok=True)
+    parent_transcript.write_text(_parent_jsonl(call, first_result), encoding="utf-8")
+    _write_jsonl(
+        root / "sessions.jsonl",
+        [
+            _basic_session(
+                "parent-attempt",
+                parent_id,
+                backend="claude-code",
+                provider_used="openai",
+                model_identifier="gpt-known",
+                claude_code_log=str(parent_transcript),
+            )
+        ],
+    )
+    _write_native_child(root, parent_id, child_id, model="gpt-known")
+    index_dir = tmp_path / "index"
+
+    update_report_index(root, index_dir)
+    first = _indexed_native_children(index_dir)[child_id]["parent_context_spans"]
+    prompt_span = next(span for span in first if span["field"] == "parent_prompt_tokens")
+    first_return = next(span for span in first if span["field"] == "subagent_return_tokens")
+    old_return_source = first_return["source_id"]
+    assert prompt_span["measure"] == {"state": "measured", "value": 1}
+    assert first_return["measure"] == {"state": "measured", "value": 1}
+    assert prompt_span["timestamp"]
+    assert first_return["timestamp"]
+    assert prompt_span["invocation_id"] == "tool-span-1"
+    assert first_return["invocation_id"] == "tool-span-1"
+    assert prompt_span["turn_id"] == "turn-tool-span-1"
+    assert prompt_span["harness"] == "claude-code"
+    assert prompt_span["provider"] == "openai"
+    assert prompt_span["model"] == "gpt-known"
+    assert prompt_span["tokenizer_version"] == "test-tokenizer-v1"
+    assert prompt_span["encoding"] == "local-index-span"
+    assert prompt_span["source_id"] != old_return_source
+
+    replacement_result = _claude_result(tool_id="tool-span-1", record_id="result-2", text="aa")
+    parent_transcript.write_text(_parent_jsonl(call, replacement_result), encoding="utf-8")
+    update_report_index(root, index_dir)
+    replaced = _indexed_native_children(index_dir)[child_id]["parent_context_spans"]
+    replaced_returns = [span for span in replaced if span["field"] == "subagent_return_tokens"]
+    assert len(replaced_returns) == 1
+    assert replaced_returns[0]["source_id"] != old_return_source
+    assert replaced_returns[0]["measure"] == {"state": "measured", "value": 2}
+
+    tokenizer_version[0] = "test-tokenizer-v2"
+    update_report_index(root, index_dir)
+    reencoded = _indexed_native_children(index_dir)[child_id]["parent_context_spans"]
+    assert {span["tokenizer_version"] for span in reencoded} == {"test-tokenizer-v2"}
+    assert next(span for span in reencoded if span["field"] == "subagent_return_tokens")[
+        "measure"
+    ] == {"state": "measured", "value": 2}
+
+    parent_transcript.unlink()
+    update_report_index(root, index_dir)
+    unavailable = _indexed_native_children(index_dir)[child_id]["parent_context_spans"]
+    assert {span["measure"]["state"] for span in unavailable} == {"unavailable"}
+    assert {span["reason"] for span in unavailable} == {"parent_transcript_missing"}
 
 
 @pytest.mark.parametrize("cache_write", [0, None])
@@ -365,13 +500,95 @@ def test_resume_attempts_attribute_events_by_time(tmp_path: Path) -> None:
     }
 
     assert [by_id[name]["session_key"] for name in ("before", "between", "after")] == [
-        "sid",
+        None,
         "sid",
         "sid_2020-01-01T00-00-01Z",
     ]
     assert by_id["equal-start"]["session_key"] == "equal-z"
     assert by_id["ambiguous"]["session_key"] is None
     assert by_id["ambiguous"]["cache_write_tokens"]["state"] == "unknown"
+
+
+def test_turn_index_tracks_live_and_archive_sidecar_replacements_and_deletions(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "logs"
+    live = _basic_session("live-attempt", "reused-session-id")
+    archived = _basic_session("archived-attempt", "reused-session-id")
+    _write_jsonl(root / "sessions.jsonl", [live])
+    _write_jsonl(root / "sessions-archive.jsonl", [archived])
+    initial_live = [
+        _turn_usage_row(
+            backend="codex",
+            provider="openai",
+            model="gpt-old",
+            value=value,
+            timestamp=None,
+        )
+        for value in (2, 3)
+    ]
+    archived_turn = _turn_usage_row(
+        backend="claude-code",
+        provider="anthropic",
+        model="claude-resolved",
+        value=7,
+        timestamp="2026-10-01T00:00:00Z",
+    )
+    _write_turn_ledger(root, "live-attempt", initial_live)
+    _write_turn_ledger(root, "archived-attempt", [archived_turn])
+    index_dir = tmp_path / "index"
+
+    update_report_index(root, index_dir)
+    indexed = read_report_index(index_dir)
+    assert set(indexed.turns) == {
+        "archived-attempt:turn:0",
+        "live-attempt:turn:0",
+        "live-attempt:turn:1",
+    }
+    assert indexed.turns["live-attempt:turn:0"]["session_key"] == "live-attempt"
+    assert indexed.turns["archived-attempt:turn:0"]["session_key"] == "archived-attempt"
+    assert indexed.turns["live-attempt:turn:0"]["model"] == "gpt-old"
+    assert indexed.turns["archived-attempt:turn:0"]["model"] == "claude-resolved"
+
+    descriptor_path = root / "sessions" / "live-attempt" / "token_usage.json"
+    descriptor_stat = descriptor_path.stat()
+    os.utime(
+        descriptor_path,
+        ns=(descriptor_stat.st_atime_ns, descriptor_stat.st_mtime_ns + 1_000_000),
+    )
+    assert update_report_index(root, index_dir).rows_written > 0
+
+    replaced_live = [
+        _turn_usage_row(
+            backend="codex",
+            provider="openai",
+            model="gpt-new",
+            value=value,
+            timestamp=None,
+        )
+        for value in (20, 30)
+    ]
+    _write_turn_ledger(root, "live-attempt", replaced_live)
+    update_report_index(root, index_dir)
+    indexed = read_report_index(index_dir)
+    assert indexed.turns["live-attempt:turn:0"]["model"] == "gpt-new"
+    assert indexed.turns["live-attempt:turn:0"]["input_tokens"]["value"] == 20
+
+    _write_turn_ledger(root, "live-attempt", replaced_live[:1])
+    update_report_index(root, index_dir)
+    indexed = read_report_index(index_dir)
+    assert "live-attempt:turn:0" in indexed.turns
+    assert "live-attempt:turn:1" not in indexed.turns
+
+    archived_dir = root / "sessions" / "archived-attempt"
+    (archived_dir / "token_usage.json").unlink()
+    (archived_dir / "turn_usage.jsonl").unlink()
+    update_report_index(root, index_dir)
+    indexed = read_report_index(index_dir)
+    assert not any(turn["session_key"] == "archived-attempt" for turn in indexed.turns.values())
+    assert indexed.sessions["archived-attempt"]["turn_usage_state"] == "unavailable"
+    assert indexed.sessions["archived-attempt"]["turn_usage_reason"] == "descriptor-missing"
+    assert update_report_index(root, index_dir).rows_written == 0
 
 
 def test_rebuild_from_scratch_equals_incremental_build(tmp_path: Path) -> None:

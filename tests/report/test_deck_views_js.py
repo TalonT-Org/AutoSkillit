@@ -1,13 +1,18 @@
 """Browser-free renderer contracts for the observability deck's prepared views."""
 
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
 from py_mini_racer import MiniRacer
 
+from autoskillit.report.deck import build_deck_payload
+from tests.report._fixtures import session_row, subagent_row, token_measure
+
 pytestmark = [pytest.mark.small]
 
 VIEW_IDS = ("spend", "efficiency", "skill", "role")
+NEW_VIEW_IDS = ("context", "errors", "trend", "gaps", "parity")
 
 _RENDERER_HARNESS = r"""
 globalThis.__deckViews = {};
@@ -20,11 +25,21 @@ globalThis.window = {location, addEventListener() {}};
 function deckNode(tag, attrs = {}, children = null) {
   const node = {tag, attrs: {...attrs}, children: [], events: {}, hidden: attrs.hidden === true,
     textContent: ""};
-  node.appendChild = child => { node.children.push(child); return child; };
+  node.appendChild = child => {
+    if (!child || typeof child !== "object" || typeof child.tag !== "string") {
+      throw new TypeError("appendChild requires a node");
+    }
+    node.children.push(child);
+    return child;
+  };
   node.addEventListener = (name, callback) => { node.events[name] = callback; };
   node.setAttribute = (name, value) => { node.attrs[name] = String(value); };
-  if (Array.isArray(children)) node.children.push(...children);
-  else if (children !== null && children !== undefined) node.children.push(children);
+  if (Array.isArray(children)) {
+    for (const child of children) node.appendChild(child);
+  } else if (children !== null && children !== undefined) {
+    if (typeof children === "object") node.appendChild(children);
+    else node.textContent = String(children);
+  }
   return node;
 }
 
@@ -115,14 +130,28 @@ globalThis.DeckTest = {
         href: DeckCore.hrefFor(route, target, cohortKeys)
       }, text),
       sortableTable: deckTable,
-      availabilityCell: measure => deckNode("span", {"data-state": measure.state},
-        measure.state === "measured" ? String(measure.value) : measure.state),
+      availabilityCell: measure => {
+        if (!["measured", "measured_zero", "unknown", "unavailable", "not_applicable"]
+          .includes(measure.state)) {
+          throw new Error("unknown availability state: " + measure.state);
+        }
+        return deckNode("span", {"data-state": measure.state},
+          measure.state === "measured" ? String(measure.value) :
+            measure.state === "measured_zero" ? "0" : measure.state);
+      },
+      svgElement: (tag, attrs, children) => deckNode(tag, attrs, children),
       barChart: (items, options) => deckNode("svg", {"aria-label": options.label},
         JSON.stringify(items))
     };
     location.hash = DeckCore.encodeRoute(route, cohortKeys);
     globalThis.__deckLastTree = __deckViews[id](context);
     return deckSnapshot(__deckLastTree);
+  },
+  renderPrepared(id, payload, route) {
+    const chips = payload.chips[id];
+    const selected = DeckCore.selectPrepared(payload.prepared, id, chips, route);
+    return this.render(id, {prepared: payload.prepared, rows: selected.rows,
+      metrics: selected.metrics, chips, selection: selected.selection, route});
   },
   clickReview(index = 0) {
     const signals = deckFindAll(__deckLastTree,
@@ -132,6 +161,18 @@ globalThis.DeckTest = {
     if (!control || !control.events.click) throw new Error("review flag has no click handler");
     control.events.click();
     return deckSnapshot(__deckLastTree).reviews[index];
+  },
+  clickContextInput() {
+    const button = deckFind(__deckLastTree, node =>
+      node.attrs && node.attrs.class === "context-input-toggle");
+    const chart = deckFind(__deckLastTree, node => node.tag === "svg" &&
+      node.attrs && node.attrs["aria-label"] === "Inclusive input tokens by turn");
+    if (!button || !button.events.click || !chart) {
+      throw new Error("context input toggle is missing");
+    }
+    const initial = {pressed: button.attrs["aria-pressed"], style: chart.attrs.style};
+    button.events.click();
+    return {initial, pressed: button.attrs["aria-pressed"], style: chart.attrs.style};
   },
   snapshot() { return deckSnapshot(__deckLastTree); },
   currentHash() { return location.hash; }
@@ -143,7 +184,7 @@ def _load_renderers(deck_asset: Any) -> MiniRacer:
     context = MiniRacer()
     context.eval(deck_asset("core.js"))
     context.eval(_RENDERER_HARNESS)
-    for view_id in VIEW_IDS:
+    for view_id in (*VIEW_IDS, *NEW_VIEW_IDS):
         context.eval(deck_asset(f"views/{view_id}.js"))
     return context
 
@@ -162,6 +203,7 @@ def _view_context(view_id: str, *, definitions_available: bool = True) -> dict[s
         }
         for role in roles
     }
+
     ratio = {
         "state": "measured",
         "value": 2.5,
@@ -239,6 +281,207 @@ def _view_context(view_id: str, *, definitions_available: bool = True) -> dict[s
     }
 
 
+def _new_view_context(view_id: str) -> dict[str, Any]:
+    def measured(value: int | float) -> dict[str, Any]:
+        return {"state": "measured", "value": value}
+
+    measured_zero = {"state": "measured_zero", "value": 0}
+    unknown = {"state": "unknown"}
+    unavailable = {"state": "unavailable"}
+    common = {
+        "harness": "codex",
+        "provider": "openai",
+        "skill": "summarizer",
+        "recipe": "daily",
+        "step": "draft",
+        "level": "orchestrator",
+        "session_key": "owner-key-1",
+    }
+    turn = {
+        **common,
+        "key": "turn-1",
+        "kind": "turn",
+        "ordinal": 1,
+        "time_ms": 1791235200000,
+        "model": "gpt-test",
+        "input_tokens": measured(75),
+        "output_tokens": measured_zero,
+        "cache_read_tokens": measured(50),
+        "cache_write_tokens": unavailable,
+        "context_window_tokens": 100,
+        "context_fraction_percent": measured(50),
+        "turn_usage_state": "observed",
+        "turn_usage_reason": None,
+        "fraction_disagreement": False,
+    }
+    coverage = {
+        **common,
+        "key": "coverage-1",
+        "kind": "coverage",
+        "turn_usage_state": "unavailable",
+        "turn_usage_reason": "turn ledger is missing",
+        "request_model": "gpt-test",
+    }
+    error = {
+        **common,
+        "key": "error-1",
+        "population": "session_failure",
+        "symptom": "unknown symptom",
+        "failures": {**measured(1), "state_counts": {"measured": 1}},
+        "failure_rate": {**measured(0.25), "sample_size": 4},
+        "eligible_count": 4,
+        "observed_count": 3,
+        "unknown_count": 1,
+        "tool_result_event_count": 2,
+        "tool_event_coverage": unknown,
+        "attribution_state": "owner indexed",
+    }
+    trend = {
+        **common,
+        "key": "trend-1",
+        "day": "2026-10-05",
+        "time_ms": 1791158400000,
+        "model": "gpt-test",
+        "measures": {
+            field: {
+                **measured(value),
+                "observed_sessions": 1,
+                "eligible_sessions": 2,
+                "state_counts": {"measured": 1, "unknown": 1},
+            }
+            for field, value in {
+                "input_tokens": 75,
+                "output_tokens": 0,
+                "cache_read_tokens": 50,
+                "cache_write_tokens": 0,
+            }.items()
+        },
+        "failure_share": {**measured_zero, "sample_size": 1},
+        "eligible_sessions": 2,
+        "untimed_sessions": 1,
+        "future_sessions": 0,
+        "retained_from_ms": 1791158400000,
+        "window_start_ms": 1790553600000,
+        "window_end_ms": 1791763200000,
+    }
+    gap = {
+        **common,
+        "key": "gap-1",
+        "population": "session_turn",
+        "field": "context_window_tokens",
+        "state": "unavailable",
+        "measure": unavailable,
+        "state_counts": {"unavailable": 1},
+        "eligible_count": 1,
+        "observation_count": 0,
+        "reason": "resolved model window is absent",
+        "question": "Which resolved window is needed?",
+        "prerequisite": "Resolve the turn model window",
+        "source": "turn usage ledger",
+    }
+    parity = [
+        {
+            **gap,
+            "key": "parity-1",
+            "field": "input_tokens",
+            "state": "measured_zero",
+            "measure": measured_zero,
+            "state_counts": {"measured_zero": 1},
+            "observation_count": 1,
+        },
+        {**gap, "key": "parity-2", "field": "context_window_tokens"},
+    ]
+    populations = {
+        "context": (
+            [turn, coverage],
+            {
+                "parent_context": [
+                    {
+                        **common,
+                        "model": "gpt-test",
+                        "prompt": {
+                            **measured(12),
+                            "state_counts": {"measured": 1},
+                            "eligible_count": 1,
+                            "observation_count": 1,
+                        },
+                        "returned": unavailable,
+                        "comparison": {
+                            "state": "no_observations",
+                            "reason": "no matched invocation",
+                        },
+                        "eligible_invocations": 1,
+                        "matched_invocations": 0,
+                        "provenance": ["parent transcript"],
+                        "source_basis": "recorded text at parent model",
+                    }
+                ]
+            },
+        ),
+        "errors": ([error], {}),
+        "trend": (
+            [trend],
+            {
+                "comparisons": [
+                    {
+                        **common,
+                        "model": "gpt-test",
+                        "earlier": {
+                            "start_ms": 1,
+                            "end_ms": 2,
+                            "covered_start_ms": 1,
+                            "covered_end_ms": 2,
+                            "measures": {"input_tokens": measured(50)},
+                            "failure_share": measured_zero,
+                        },
+                        "later": {
+                            "start_ms": 3,
+                            "end_ms": 4,
+                            "covered_start_ms": 3,
+                            "covered_end_ms": 4,
+                            "measures": {"input_tokens": measured(75)},
+                            "failure_share": measured_zero,
+                        },
+                        "deltas": {
+                            "input_tokens": {
+                                **measured(25),
+                                "unit": "tokens/session",
+                                "earlier_samples": 1,
+                                "later_samples": 1,
+                            },
+                            "failure_share": {
+                                **measured_zero,
+                                "unit": "percentage_points",
+                                "earlier_samples": 1,
+                                "later_samples": 1,
+                            },
+                        },
+                    }
+                ]
+            },
+        ),
+        "gaps": ([gap], {}),
+        "parity": (parity, {}),
+    }
+    rows, metrics = populations[view_id]
+    params = {
+        "window": ["all"],
+        "level": ["L2"],
+        "harness": ["codex"],
+        "provider": ["openai"],
+    }
+    if view_id in {"context", "gaps", "parity"}:
+        params["session"] = ["owner-key-1"]
+    return {
+        "prepared": {},
+        "rows": rows,
+        "metrics": metrics,
+        "chips": {},
+        "selection": {},
+        "route": {"view": view_id, "entity": None, "params": params},
+    }
+
+
 def test_each_prepared_view_renders_its_population_and_cohort_links(deck_asset: Any) -> None:
     context = _load_renderers(deck_asset)
     try:
@@ -264,6 +507,160 @@ def test_each_prepared_view_renders_its_population_and_cohort_links(deck_asset: 
         )
         assert "2 skill runs" in efficiency_view["text"]
         assert "2 child invocations" in efficiency_view["text"]
+    finally:
+        context.close()
+
+
+def test_new_view_renderers_keep_prepared_populations_and_filter_links(deck_asset: Any) -> None:
+    context = _load_renderers(deck_asset)
+    try:
+        markers = {
+            "context": "Cache-read proxy",
+            "errors": "unknown symptom",
+            "trend": "failure share",
+            "gaps": "Which resolved window is needed?",
+            "parity": "coverage parity",
+        }
+        for view_id, marker in markers.items():
+            rendered = context.call("DeckTest.render", view_id, _new_view_context(view_id))
+            assert marker.lower() in rendered["text"].lower()
+            assert rendered["links"]
+            assert any(
+                "harness=codex" in href and "provider=openai" in href for href in rendered["links"]
+            )
+            if view_id in {"context", "gaps", "parity"}:
+                assert any("session=owner-key-1" in href for href in rendered["links"])
+        context.call("DeckTest.render", "context", _new_view_context("context"))
+        input_toggle = context.call("DeckTest.clickContextInput")
+        assert input_toggle["initial"] == {"pressed": "false", "style": "display:none"}
+        assert input_toggle["pressed"] == "true"
+        assert input_toggle["style"] == "display:block"
+    finally:
+        context.close()
+
+
+def test_python_prepared_payload_renders_all_new_views(deck_asset: Any) -> None:
+    generated_at = datetime(2026, 10, 7, tzinfo=UTC)
+    event_at = generated_at - timedelta(seconds=5)
+    event_ms = int(event_at.timestamp() * 1000)
+    owner = session_row(
+        "s1",
+        session_id="native-s1",
+        time_ms=event_ms,
+        harness="codex",
+        provider="openai",
+        level="skill",
+        skill="demo",
+        recipe="recipe-demo",
+        step="run",
+        success=False,
+        subtype="ToolError",
+        input_tokens=token_measure(75),
+        output_tokens=token_measure(0),
+        cache_read_tokens=token_measure(50),
+        cache_write_tokens=token_measure(None, state="unavailable"),
+    )
+    turn = {
+        "key": "s1:turn:0",
+        "kind": "turn",
+        "session_key": "s1",
+        "session_id": "native-s1",
+        "source_id": "s1",
+        "ordinal": 0,
+        "time_ms": event_ms,
+        "harness": "codex",
+        "provider": "openai",
+        "model": "gpt-known",
+        "skill": "demo",
+        "recipe": "recipe-demo",
+        "step": "run",
+        "level": "skill",
+        "input_tokens": token_measure(75),
+        "output_tokens": token_measure(0),
+        "cache_read_tokens": token_measure(50),
+        "cache_write_tokens": token_measure(None, state="unavailable"),
+        "context_window_tokens": 100,
+        "context_fraction": 0.5,
+        "request_id": "req-1",
+    }
+    request = {
+        "key": "s1:req-1",
+        "kind": "request",
+        "session_key": "s1",
+        "request_id": "req-1",
+        "time_ms": event_ms,
+        "model": "gpt-known",
+    }
+    tool = {
+        "key": "s1:tool-1",
+        "kind": "tool",
+        "session_key": "s1",
+        "time_ms": event_ms,
+        "success": False,
+        "error_type": "ToolError",
+    }
+    child = subagent_row(
+        "child-1",
+        parent=owner,
+        role="reviewer",
+        skill="demo",
+        provider="openai",
+        input_tokens=11,
+        output_tokens=7,
+        cache_read_tokens=0,
+        cache_write_tokens=None,
+        tool_counts={"read_file": 1},
+    )
+    child["parent_context_spans"] = [
+        {
+            "field": "parent_prompt_tokens",
+            "measure": {"state": "measured", "value": 13},
+            "invocation_id": "invocation-1",
+            "turn_id": "turn-1",
+            "source_id": "parent-transcript-1",
+            "timestamp": event_at.isoformat(),
+            "harness": "codex",
+            "provider": "openai",
+            "model": "gpt-known",
+            "tokenizer_version": "0.14.0",
+            "encoding": "cl100k_base",
+            "reason": None,
+        },
+        {
+            "field": "subagent_return_tokens",
+            "measure": {"state": "measured", "value": 9},
+            "invocation_id": "invocation-1",
+            "turn_id": "turn-1",
+            "source_id": "parent-transcript-2",
+            "timestamp": event_at.isoformat(),
+            "harness": "codex",
+            "provider": "openai",
+            "model": "gpt-known",
+            "tokenizer_version": "0.14.0",
+            "encoding": "cl100k_base",
+            "reason": None,
+        },
+    ]
+    payload = build_deck_payload(
+        [owner],
+        request_rows=[request],
+        tool_rows=[tool],
+        subagent_rows=[child],
+        turn_rows=[turn],
+        generated_at=generated_at,
+        index_schema_version=3,
+    )
+    context = _load_renderers(deck_asset)
+    try:
+        for view_id in NEW_VIEW_IDS:
+            rendered = context.call(
+                "DeckTest.renderPrepared",
+                view_id,
+                payload,
+                {"view": view_id, "entity": None, "params": {}},
+            )
+            assert rendered["tag"] in {"div", "section"}
+            assert rendered["text"]
     finally:
         context.close()
 

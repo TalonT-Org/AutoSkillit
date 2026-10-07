@@ -10,12 +10,11 @@ from typing import Any
 import pytest
 
 from autoskillit.execution._report_index_rows import (
-    REPORT_ROW_TYPES,
-    ReportSessionRow,
     normalize_report_row,
     resolve_token_measure,
     rows_for_walk_item,
 )
+from autoskillit.execution._report_index_types import REPORT_ROW_TYPES, ReportSessionRow
 from autoskillit.execution.evidence.report_walk import WalkItem
 from tests.execution._report_index_fixtures import otlp_log_record as _log
 
@@ -56,6 +55,9 @@ def _session_item(
     turns: tuple[tuple[str, ...], ...] = (),
     available: bool = True,
     child_outcomes: tuple[dict[str, Any], ...] = (),
+    turn_usage_rows: tuple[dict[str, Any], ...] = (),
+    turn_usage_state: str = "unavailable",
+    turn_usage_reason: str | None = "descriptor-missing",
 ) -> WalkItem:
     return WalkItem(
         "session",
@@ -71,6 +73,9 @@ def _session_item(
             "child_outcomes": child_outcomes,
             "transcripts_available": available,
             "transcript_unavailable_reasons": [],
+            "turn_usage_rows": list(turn_usage_rows),
+            "turn_usage_state": turn_usage_state,
+            "turn_usage_reason": turn_usage_reason,
         },
         {},
     )
@@ -149,6 +154,111 @@ def test_session_row_carries_facets_pair_and_resolved_measures() -> None:
     assert "/private/workspace/project" not in serialized
     assert "/private/transcripts/session.jsonl" not in serialized
     assert "private-turn-id" not in serialized
+
+
+def test_turn_rows_keep_owner_and_ordinal_identity_with_measure_states() -> None:
+    turn = {
+        "backend": "codex",
+        "provider_used": "openai",
+        "message_id": "message-1",
+        "request_id": "request-1",
+        "timestamp": None,
+        "model": "gpt-resolved",
+        "input_tokens": {"state": "measured_zero", "value": 0},
+        "output_tokens": {"state": "unknown", "value": None},
+        "cache_read_tokens": {"state": "measured", "value": 12},
+        "cache_write_tokens": {"state": "unavailable", "value": None},
+        "context_window_tokens": 100,
+        "context_fraction": 0.12,
+    }
+    first, second = (
+        rows_for_walk_item(
+            _session_item(
+                owner,
+                {
+                    "session_id": "reused-id",
+                    "backend": "codex",
+                    "provider_used": "openai",
+                },
+                turn_usage_rows=(turn,),
+                turn_usage_state="observed",
+                turn_usage_reason=None,
+            )
+        )
+        for owner in ("attempt-a", "attempt-b")
+    )
+
+    assert first[0]["turn_usage_state"] == "observed"
+    assert first[0]["turn_usage_reason"] is None
+    first_turn, second_turn = first[1], second[1]
+    assert first_turn["kind"] == "turn"
+    assert first_turn["source_id"] == first_turn["session_key"] == "attempt-a"
+    assert second_turn["source_id"] == second_turn["session_key"] == "attempt-b"
+    assert first_turn["key"] != second_turn["key"]
+    assert first_turn["ordinal"] == second_turn["ordinal"] == 0
+    assert first_turn["session_id"] == "reused-id"
+    assert first_turn["time_ms"] is None
+    assert first_turn["request_id"] == "request-1"
+    assert first_turn["message_id"] == "message-1"
+    assert first_turn["harness"] == "codex"
+    assert first_turn["provider"] == "openai"
+    assert first_turn["model"] == "gpt-resolved"
+    assert first_turn["input_tokens"] == {"state": "measured_zero", "value": 0}
+    assert first_turn["output_tokens"] == {"state": "unknown", "value": None}
+    assert first_turn["context_window_tokens"] == 100
+    assert first_turn["context_fraction"] == 0.12
+    assert set(first_turn) == set(REPORT_ROW_TYPES["turn"].__annotations__)
+
+
+def test_session_row_keeps_missing_turn_ledger_coverage() -> None:
+    (row,) = rows_for_walk_item(
+        _session_item(
+            "no-ledger",
+            {
+                "session_id": "sid",
+                "backend": "claude-code",
+                "provider_used": "anthropic",
+            },
+            turn_usage_state="unavailable",
+            turn_usage_reason="ledger-not-published",
+        )
+    )
+
+    assert row["turn_usage_state"] == "unavailable"
+    assert row["turn_usage_reason"] == "ledger-not-published"
+
+
+def test_turn_measure_decoders_preserve_unknown_for_invalid_shapes() -> None:
+    turn = {
+        "backend": "codex",
+        "provider_used": "openai",
+        "message_id": None,
+        "request_id": None,
+        "timestamp": None,
+        "model": "gpt-resolved",
+        "input_tokens": {"state": "future-state", "value": 9},
+        "output_tokens": {"state": "measured", "value": 4},
+        "cache_read_tokens": {"state": "unknown", "value": None},
+        "cache_write_tokens": {"state": "unavailable", "value": None},
+        "context_window_tokens": None,
+        "context_fraction": None,
+    }
+    _, row = rows_for_walk_item(
+        _session_item(
+            "attempt",
+            {"session_id": "sid"},
+            turn_usage_rows=(turn,),
+            turn_usage_state="observed",
+            turn_usage_reason=None,
+        )
+    )
+
+    assert row["input_tokens"] == {"state": "unknown", "value": None}
+    invalid_serialized = normalize_report_row(
+        {**row, "input_tokens": {"state": "measured", "value": True}}
+    )
+    assert invalid_serialized is not None
+    assert invalid_serialized["input_tokens"] == {"state": "unknown", "value": None}
 
 
 @pytest.mark.parametrize("session_type", ["skill", "orchestrator"])
@@ -386,6 +496,23 @@ def test_otlp_item_projects_request_tool_and_subagent_rows() -> None:
     assert positional_tool["key"] == f"{source_id}#3"
     assert subagent["key"] == f"{source_id}#4"
     assert subagent["model_swapped"] is False
+    spans = subagent["parent_context_spans"]
+    assert [span["field"] for span in spans] == [
+        "parent_prompt_tokens",
+        "subagent_return_tokens",
+    ]
+    assert all(span["measure"] == {"state": "unavailable", "value": None} for span in spans)
+    assert all(span["reason"] == "parent_invocation_unverified" for span in spans)
+    assert all(span["source_id"] == f"{source_id}#4" for span in spans)
+    assert all(span["invocation_id"] is None and span["turn_id"] is None for span in spans)
+    assert all(span["harness"] == "claude-code" for span in spans)
+    assert all(span["provider"] is None and span["model"] is None for span in spans)
+    assert all(
+        span["timestamp"] is None
+        and span["tokenizer_version"] is None
+        and span["encoding"] is None
+        for span in spans
+    )
     assert rows_for_walk_item(_otlp_item(source_id, _log("api_request", sid))) == []
     assert (
         rows_for_walk_item(

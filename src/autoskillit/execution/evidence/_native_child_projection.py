@@ -34,6 +34,13 @@ from autoskillit.execution.child_outcomes import (
     enumerate_claude_subagent_transcripts,
     normalize_backend_name,
 )
+from autoskillit.execution.evidence._native_parent_context import (
+    parent_context_spans,
+    parent_transcript_records,
+)
+from autoskillit.execution.evidence._native_parent_context import (
+    tokenizer_version as _tokenizer_version,
+)
 from autoskillit.execution.session import extract_token_usage
 from autoskillit.execution.session.turn_usage import (
     classify_token_measure,
@@ -59,6 +66,18 @@ def project_child_outcomes(
         parent_session_id=parent_id,
         log_root=log_root,
     )
+    if not outcomes:
+        return ()
+    parent_path = _parent_transcript_path(row, normalized_backend)
+    parent_text = (
+        _read_child_transcript(parent_path, normalized_backend)
+        if parent_path is not None and parent_path.is_file()
+        else None
+    )
+    parent_records = parent_transcript_records(parent_text, normalized_backend)
+    parent_complete = _complete_jsonl(parent_text)
+    parent_fingerprint = _transcript_fingerprint(parent_path, parent_text)
+    tokenizer_version = _tokenizer_version()
     projected = []
     for outcome in outcomes:
         child = _project_child_outcome(
@@ -67,6 +86,11 @@ def project_child_outcomes(
             parent_id=parent_id,
             backend=normalized_backend,
             candidates=candidates,
+            parent_records=parent_records,
+            parent_complete=parent_complete,
+            parent_transcript_reason=_parent_transcript_reason(parent_path, parent_text),
+            parent_fingerprint=parent_fingerprint,
+            tokenizer_version=tokenizer_version,
         )
         if child is not None:
             projected.append(child)
@@ -80,6 +104,11 @@ def _project_child_outcome(
     parent_id: str,
     backend: str,
     candidates: Sequence[dict[str, Any]],
+    parent_records: Sequence[dict[str, Any]],
+    parent_complete: bool,
+    parent_transcript_reason: str | None,
+    parent_fingerprint: str | None,
+    tokenizer_version: str | None,
 ) -> dict[str, Any] | None:
     if not _is_native_child(child, backend, parent_id):
         return None
@@ -114,11 +143,42 @@ def _project_child_outcome(
             "usage_state": usage_state,
             "tool_counts": tool_counts,
             "token_usage": token_usage,
+            "parent_context_spans": parent_context_spans(
+                row,
+                child["child_id"],
+                backend,
+                parent_records,
+                parent_complete=parent_complete,
+                parent_transcript_reason=parent_transcript_reason,
+                tokenizer_version=tokenizer_version,
+            ),
             "_child_timestamp": child_timestamp,
             "_transcript_fingerprint": _transcript_fingerprint(path, text),
+            "_parent_transcript_fingerprint": parent_fingerprint,
+            "_tokenizer_version": tokenizer_version,
         }
     )
     return child
+
+
+def _parent_transcript_path(row: Mapping[str, Any], backend: str) -> Path | None:
+    field = "claude_code_log" if backend == "claude_code" else "codex_log"
+    raw_path = row.get(field)
+    if not isinstance(raw_path, str) or not raw_path or not Path(raw_path).is_absolute():
+        return None
+    return Path(raw_path)
+
+
+def _parent_transcript_reason(path: Path | None, text: str | None) -> str | None:
+    if path is None:
+        return "parent_transcript_path_unavailable"
+    if not path.is_file():
+        return "parent_transcript_missing"
+    if text is None:
+        return "parent_transcript_unreadable"
+    if not text:
+        return "parent_transcript_empty"
+    return None
 
 
 def _is_native_child(child: Mapping[str, Any], backend: str, parent_id: str) -> bool:
@@ -421,6 +481,8 @@ def _child_dependency(row: dict[str, Any], child: Mapping[str, Any]) -> dict[str
         "tool_counts": child.get("tool_counts"),
         "token_usage": child.get("token_usage"),
         "transcript_fingerprint": child.get("_transcript_fingerprint"),
+        "parent_transcript_fingerprint": child.get("_parent_transcript_fingerprint"),
+        "tokenizer_version": child.get("_tokenizer_version"),
     }
 
 

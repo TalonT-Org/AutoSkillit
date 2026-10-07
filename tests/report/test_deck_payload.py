@@ -15,15 +15,21 @@ from autoskillit.core import (
     aggregate_measures,
     measure_ratio,
 )
+from autoskillit.report.deck import _measure_helpers as deck_measure_helpers
 from autoskillit.report.deck import _payload as deck_payload_module
 from autoskillit.report.deck import build_deck_payload
 from autoskillit.report.deck._payload import encode_table
 from autoskillit.report.deck._registry import (
     AVAILABILITY_VOCABULARY,
     DECK_VIEWS,
+    ERROR_TABLE,
+    GAP_TABLE,
     LANDING_VIEW,
+    PARITY_TABLE,
     SESSION_COLUMNS,
     SESSION_TABLE,
+    TREND_TABLE,
+    TURN_TABLE,
 )
 from tests.report._fixtures import DECK_GENERATED_AT, subagent_row, token_measure
 from tests.report._fixtures import session_row as _row
@@ -521,8 +527,8 @@ def prepared_metrics(
     )
     aggregate_calls: list[int] = []
     ratio_calls: list[int] = []
-    original_aggregate = getattr(deck_payload_module, "aggregate_measures", aggregate_measures)
-    original_ratio = getattr(deck_payload_module, "measure_ratio", measure_ratio)
+    original_aggregate = deck_measure_helpers.aggregate_measures
+    original_ratio = deck_measure_helpers.measure_ratio
 
     def aggregate_spy(records: Any, fields: Any, **kwargs: Any) -> Any:
         rows = list(records)
@@ -534,8 +540,8 @@ def prepared_metrics(
         ratio_calls.append(len(rows))
         return original_ratio(rows, numerator, denominator, **kwargs)
 
-    monkeypatch.setattr(deck_payload_module, "aggregate_measures", aggregate_spy, raising=False)
-    monkeypatch.setattr(deck_payload_module, "measure_ratio", ratio_spy, raising=False)
+    monkeypatch.setattr(deck_measure_helpers, "aggregate_measures", aggregate_spy)
+    monkeypatch.setattr(deck_measure_helpers, "measure_ratio", ratio_spy)
     payload = build_deck_payload(
         sessions,
         request_rows=requests,
@@ -672,7 +678,16 @@ def test_prepared_identity_tables_and_view_projections(prepared_metrics: SimpleN
     built_views = {view.view_id for view in DECK_VIEWS if view.planned_issue is None}
     assert set(prepared["view_chips"]) == built_views
     assert set(prepared["view_histories"]) == built_views
-    assert set(payload["tables"]) == {SESSION_TABLE, "skills", "roles"}
+    assert set(payload["tables"]) == {
+        SESSION_TABLE,
+        "skills",
+        "roles",
+        TURN_TABLE,
+        ERROR_TABLE,
+        TREND_TABLE,
+        GAP_TABLE,
+        PARITY_TABLE,
+    }
 
     def table_rows(table: dict[str, Any]) -> list[dict[str, Any]]:
         return [dict(zip(table["columns"], row, strict=True)) for row in table["rows"]]
@@ -733,3 +748,365 @@ def test_observed_zero_ratio_can_be_flagged_with_complete_definitions(
     assert signal["definition_roles"] == [_AUDITOR]
     assert signal["review_eligible"] is True
     assert signal["review_reason"] is None
+
+
+def _view_block(payload: dict[str, Any], view: str, window: str = "all") -> dict[str, Any]:
+    return next(
+        block
+        for block in payload["prepared"][view]["blocks"]
+        if block["window"] == window and block["levels"] == ["skill"]
+    )
+
+
+def _turn_fact(
+    session: dict[str, Any],
+    *,
+    time_ms: int,
+    model: str = "claude-opus-4-1-20250805",
+) -> dict[str, Any]:
+    return {
+        "key": f"{session['key']}:turn:0",
+        "kind": "turn",
+        "session_key": session["key"],
+        "source_id": session["key"],
+        "session_id": session["session_id"],
+        "ordinal": 0,
+        "request_id": "req-1",
+        "message_id": "message-1",
+        "time_ms": time_ms,
+        "harness": session["harness"],
+        "provider": session["provider"],
+        "model": model,
+        "skill": session["skill"],
+        "recipe": session["recipe"],
+        "step": session["step"],
+        "level": session["level"],
+        "input_tokens": token_measure(75),
+        "output_tokens": token_measure(0),
+        "cache_read_tokens": token_measure(50),
+        "cache_write_tokens": token_measure(None, state="unavailable"),
+        "context_window_tokens": 100,
+        "context_fraction": 0.5,
+    }
+
+
+def test_context_rows_keep_exact_turn_owner_model_states_and_ratio() -> None:
+    owner = _row(
+        "owner",
+        session_id="native-owner",
+        time_ms=GEN_MS - 1_000,
+        level="skill",
+        skill="demo",
+        recipe="recipe-demo",
+        step="run",
+        turn_usage_state="observed",
+        turn_usage_reason=None,
+    )
+    turn = _turn_fact(owner, time_ms=GEN_MS - 900)
+    payload = build_deck_payload(
+        [owner],
+        request_rows=[
+            {
+                "key": "native-owner:req-1",
+                "session_key": "owner",
+                "request_id": "req-1",
+                "model": "claude-opus-4-1-20250805",
+            }
+        ],
+        turn_rows=(row for row in [turn]),
+        generated_at=DECK_GENERATED_AT,
+        index_schema_version=7,
+    )
+
+    turns_table = payload["tables"][TURN_TABLE]
+    turn_row = dict(zip(turns_table["columns"], turns_table["rows"][0], strict=True))
+    assert turn_row["session_key"] == "owner"
+    assert turn_row["model"] == "claude-opus-4-1-20250805"
+    assert turn_row["output_tokens"] == token_measure(0)
+    assert turn_row["cache_write_tokens"] == token_measure(None, state="unavailable")
+
+    context = _view_block(payload, "context")
+    prepared_turn = next(row for row in context["rows"] if row["kind"] == "turn")
+    assert prepared_turn["session_key"] == "owner"
+    assert prepared_turn["context_fraction_percent"] == {
+        "state": "measured",
+        "value": 50.0,
+        "sample_size": 1,
+        "excluded_runs": 0,
+        "unknown_runs": 0,
+    }
+    assert prepared_turn["fraction_disagreement"] is False
+    assert prepared_turn["request_recorded"] is True
+    assert context["sessions"]["owner"]["rows"] == [prepared_turn]
+
+
+def test_context_keeps_ordinal_order_across_an_untimed_missing_window_turn() -> None:
+    owner = _row(
+        "ordered-owner",
+        time_ms=GEN_MS - 1_000,
+        level="skill",
+        skill="demo",
+        recipe="recipe-demo",
+        step="run",
+        turn_usage_state="observed",
+    )
+    turns = [
+        _turn_fact(owner, time_ms=GEN_MS - 900),
+        _turn_fact(owner, time_ms=None),
+        _turn_fact(owner, time_ms=GEN_MS - 700),
+    ]
+    for ordinal, turn in enumerate(turns):
+        turn["ordinal"] = ordinal
+        turn["key"] = f"ordered-owner:turn:{ordinal}"
+        turn["context_window_tokens"] = None if ordinal == 1 else 100
+        turn["context_fraction"] = None if ordinal == 1 else 0.5
+    payload = build_deck_payload(
+        [owner],
+        turn_rows=turns,
+        generated_at=DECK_GENERATED_AT,
+        index_schema_version=7,
+    )
+
+    rows = _view_block(payload, "context")["rows"]
+    assert [row["ordinal"] for row in rows] == [0, 1, 2]
+    assert rows[1]["time_ms"] is None
+    assert rows[1]["context_fraction_percent"]["state"] == "unknown"
+    assert rows[1]["context_fraction_percent"]["value"] is None
+
+
+def test_parent_span_provenance_is_json_safe_after_measure_aggregation() -> None:
+    owner = _row(
+        "span-owner",
+        session_id="native-span-owner",
+        time_ms=GEN_MS - 1_000,
+        level="skill",
+        skill="demo",
+        recipe="recipe-demo",
+        step="run",
+    )
+    spans = [
+        {
+            "field": "parent_prompt_tokens",
+            "measure": TokenMeasure.observed(6).to_dict(),
+            "invocation_id": "call-1",
+            "turn_id": "turn-1",
+            "source_id": "parent-prompt",
+            "timestamp": DECK_GENERATED_AT.isoformat(),
+            "harness": "claude-code",
+            "provider": "anthropic",
+            "model": "model-x",
+            "tokenizer_version": "test",
+            "encoding": "test",
+            "reason": None,
+        },
+        {
+            "field": "subagent_return_tokens",
+            "measure": TokenMeasure.observed(4).to_dict(),
+            "invocation_id": "call-1",
+            "turn_id": "turn-1",
+            "source_id": "parent-return",
+            "timestamp": DECK_GENERATED_AT.isoformat(),
+            "harness": "claude-code",
+            "provider": "anthropic",
+            "model": "model-x",
+            "tokenizer_version": "test",
+            "encoding": "test",
+            "reason": None,
+        },
+    ]
+    child = {
+        "key": "span-owner:child-1",
+        "child_id": "child-1",
+        "role": _AUDITOR,
+        "actor_level": "L0",
+        "parent_session_key": owner["key"],
+        "native_parent_session_id": owner["session_id"],
+        "provider": "anthropic",
+        "parent_context_spans": spans,
+    }
+    payload = build_deck_payload(
+        [owner],
+        subagent_rows=[child],
+        generated_at=DECK_GENERATED_AT,
+        index_schema_version=7,
+    )
+
+    encoded = json.dumps(payload, allow_nan=False)
+    context = _view_block(payload, "context")
+    model_row = next(
+        row for row in context["metrics"]["parent_context"] if row["model"] == "model-x"
+    )
+    assert len(encoded) > 0
+    assert model_row["provenance"][0]["measure"] == {"state": "measured", "value": 6}
+    assert model_row["provenance"][1]["measure"] == {"state": "measured", "value": 4}
+
+
+def test_errors_keep_session_and_tool_failures_separate_with_known_denominators() -> None:
+    common = {
+        "time_ms": GEN_MS - 1_000,
+        "level": "skill",
+        "skill": "demo",
+        "recipe": "recipe-demo",
+        "step": "run",
+    }
+    sessions = [
+        _row("failed", **common, success=False, adjudication_reason="timeout"),
+        _row("passed", **common, success=True),
+        _row("unknown", **common, success=None),
+    ]
+    tools = [
+        {
+            "key": "failed:tool-1",
+            "session_key": "failed",
+            "time_ms": GEN_MS - 900,
+            "success": False,
+            "error_type": "ToolError",
+        },
+        {
+            "key": "unknown:tool-2",
+            "session_key": "unknown",
+            "time_ms": GEN_MS - 800,
+            "success": None,
+            "error_type": "ToolOutcomeUnknown",
+        },
+        {
+            "key": "orphan:tool-3",
+            "session_key": None,
+            "time_ms": GEN_MS - 700,
+            "success": False,
+            "error_type": "OrphanError",
+        },
+    ]
+    payload = build_deck_payload(
+        sessions,
+        tool_rows=tools,
+        generated_at=DECK_GENERATED_AT,
+        index_schema_version=7,
+    )
+    rows = _view_block(payload, "errors")["rows"]
+    session_error = next(row for row in rows if row["population"] == "session_failure")
+    assert session_error["symptom"] == "timeout"
+    assert session_error["failures"]["value"] == 1
+    assert session_error["failure_rate"]["value"] == 0.5
+    assert session_error["eligible_count"] == 3
+    assert session_error["observed_count"] == 2
+    assert session_error["unknown_count"] == 1
+
+    tool_error = next(row for row in rows if row["symptom"] == "ToolError")
+    unknown_tool = next(row for row in rows if row["symptom"] == "ToolOutcomeUnknown")
+    orphan = next(row for row in rows if row["population"] == "unattributed_tool")
+    assert tool_error["population"] == "tool_failure"
+    assert tool_error["failures"]["value"] == 1
+    assert unknown_tool["failures"]["state"] == "unknown"
+    assert orphan["harness"] is None and orphan["provider"] is None
+    assert orphan["attribution_state"] == "unattributed"
+
+
+def test_trends_use_utc_days_and_disclose_future_untimed_and_interval_samples() -> None:
+    day_ms = 86_400_000
+    sessions = [
+        _row(
+            "earlier",
+            time_ms=GEN_MS - 5 * day_ms,
+            level="skill",
+            skill="demo",
+            recipe="recipe-demo",
+            step="run",
+            model="model-a",
+            success=True,
+            input_tokens=token_measure(10),
+        ),
+        _row(
+            "later",
+            time_ms=GEN_MS - day_ms,
+            level="skill",
+            skill="demo",
+            recipe="recipe-demo",
+            step="run",
+            model="model-a",
+            success=False,
+            input_tokens=token_measure(30),
+        ),
+        _row(
+            "future",
+            time_ms=GEN_MS + 1,
+            level="skill",
+            skill="demo",
+            recipe="recipe-demo",
+            step="run",
+            model="model-a",
+            success=False,
+            input_tokens=token_measure(999),
+        ),
+        _row(
+            "untimed",
+            level="skill",
+            skill="demo",
+            recipe="recipe-demo",
+            step="run",
+            model="model-a",
+            success=None,
+            input_tokens=token_measure(100),
+        ),
+    ]
+    payload = build_deck_payload(
+        sessions,
+        generated_at=DECK_GENERATED_AT,
+        index_schema_version=7,
+    )
+    trend = _view_block(payload, "trend", "7d")
+    assert trend["metrics"]["future_sessions"] == 1
+    assert trend["metrics"]["untimed_sessions"] == 1
+    assert all(row["time_ms"] <= GEN_MS for row in trend["rows"])
+    comparison = trend["metrics"]["comparisons"][0]
+    assert comparison["earlier"]["measures"]["input_tokens"]["value"] == 10.0
+    assert comparison["later"]["measures"]["input_tokens"]["value"] == 30.0
+    assert comparison["deltas"]["input_tokens"]["value"] == 20.0
+    assert comparison["deltas"]["failure_share"]["value"] == 100.0
+    assert any(
+        row["eligible_sessions"] == 0
+        and row["measures"]["input_tokens"]["state"] == "no_observations"
+        for row in trend["rows"]
+    )
+
+
+def test_gap_and_parity_share_missing_evidence_states_and_session_selection() -> None:
+    owner = _row(
+        "empty-ledger",
+        time_ms=GEN_MS - 1_000,
+        level="skill",
+        skill="demo",
+        recipe="recipe-demo",
+        step="run",
+        turn_usage_state="unavailable",
+        turn_usage_reason="turn_usage_ledger_missing",
+    )
+    payload = build_deck_payload(
+        [owner],
+        generated_at=DECK_GENERATED_AT,
+        index_schema_version=7,
+    )
+    gaps = _view_block(payload, "gaps")
+    parity = _view_block(payload, "parity")
+    parity_by_key = {row["key"]: row for row in parity["rows"]}
+    assert all(parity_by_key[row["key"]]["state"] == row["state"] for row in gaps["rows"])
+    turn_series = next(
+        row
+        for row in parity["rows"]
+        if row["field"] == "turn_series_coverage" and row["population"] == "turn"
+    )
+    missing_tools = next(
+        row
+        for row in parity["rows"]
+        if row["field"] == "tool_errors" and row["population"] == "tool_result"
+    )
+    prompt = next(
+        row
+        for row in parity["rows"]
+        if row["field"] == "parent_prompt_tokens" and row["population"] == "parent_context"
+    )
+    assert turn_series["state"] == "unavailable"
+    assert "turn_usage_ledger_missing" in turn_series["reason"]
+    assert missing_tools["state"] == "no_observations"
+    assert prompt["state"] == "no_observations"
+    assert gaps["sessions"]["empty-ledger"]["rows"]

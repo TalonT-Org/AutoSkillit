@@ -29,6 +29,23 @@ globalThis.DeckShell = (() => {
     return Array.from(renderers.keys());
   }
 
+  function svgElement(tag, attrs = {}, children = null) {
+    const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for (const [name, value] of Object.entries(attrs)) {
+      if (value === null || value === undefined || value === false) continue;
+      node.setAttribute(name, value === true ? "" : String(value));
+    }
+    if (Array.isArray(children)) {
+      for (const child of children) {
+        if (child !== null && child !== undefined) node.appendChild(child);
+      }
+    } else if (children !== null && children !== undefined) {
+      if (typeof children === "object") node.appendChild(children);
+      else node.textContent = String(children);
+    }
+    return node;
+  }
+
   function boot(payload) {
     const model = {...payload, tables: Object.fromEntries(
       Object.entries(payload.tables).map(([key, table]) => [key, DeckCore.decodeTable(table)]))};
@@ -211,7 +228,8 @@ globalThis.DeckShell = (() => {
         }
       }
 
-      const resetParams = Object.fromEntries(cohortKeys.map(key => [key, null]));
+      const resetParams = Object.fromEntries([...cohortKeys, "skill", "recipe", "step", "model"]
+        .map(key => [key, null]));
       cohort.appendChild(el("a", {
         class: "cohort-reset",
         href: DeckCore.hrefFor(route, {
@@ -239,15 +257,24 @@ globalThis.DeckShell = (() => {
 
       const selected = renderer && view.id !== model.landing ?
         DeckCore.selectPrepared(model.prepared, view.id, chips, route) : null;
-      const primary = view?.id === "role" ? selected?.roleRows : selected?.skillRows;
+      const primary = selected?.rows;
       const result = selected ? {rows: primary, untimed: 0} :
         DeckCore.filterRows(model, model.tables.sessions, chips, route);
-      const populationModel = selected ? {...model, history: selected.viewHistory,
+      const populationModel = selected ? {...model, history: selected.viewHistory ?? model.history,
         facets: model.facets.map(facet => view.id === "role" && facet.id === "level" ?
           {...facet, label: "Spawning skill level"} : facet)} : model;
       const sentence = DeckCore.populationSentence(populationModel, chips, route, result);
       if (selected) {
-        const noun = view.id === "role" ? "role/provider row" : "skill cell";
+        const labels = {skill: "skill", recipe: "recipe", step: "step", model: "model"};
+        const identityFilters = Object.entries(labels).flatMap(([key, label]) =>
+          (route.params[key] ?? []).map(value => label + " " + value));
+        if (selected.selection.session != null) {
+          identityFilters.push("session " + selected.selection.session);
+        }
+        if (identityFilters.length) sentence.detail += " · " + identityFilters.join(" · ");
+        const noun = ({context: "context record", errors: "symptom group", trend: "daily observation",
+          gaps: "gap", parity: "coverage cell"})[view.id] ??
+          (view.id === "role" ? "role/provider row" : "skill cell");
         sentence.headline = DeckCore.formatCount(result.rows.length) + " " + noun +
           (result.rows.length === 1 ? "" : "s");
       }
@@ -258,10 +285,10 @@ globalThis.DeckShell = (() => {
       if (renderer) {
         const ctx = {model, route, rows: result.rows, chips,
           href: target => DeckCore.hrefFor(route, target, cohortKeys),
-          el, entityLink, sortableTable, availabilityCell, barChart};
+          el, entityLink, sortableTable, availabilityCell, barChart, svgElement};
         if (view.id !== model.landing) {
           ctx.prepared = model.prepared;
-          ctx.metrics = view.id === "role" ? selected.roleRows : selected.skillRows;
+          ctx.metrics = selected.metrics;
           ctx.relationships = selected.relationships;
           ctx.definitions = selected.definitions;
           ctx.viewHistory = selected.viewHistory;

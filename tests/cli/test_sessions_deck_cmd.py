@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 from autoskillit.core import ArtifactLease
-from tests.cli._sessions_helpers import _configure_log_root, _seed_session
+from tests.cli._sessions_helpers import _configure_log_root, _seed_session, _seed_turn_ledger
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -30,6 +30,7 @@ def test_sessions_deck_passes_all_fact_collections(
         requests={"request": {"key": "request"}},
         tools={"tool": {"key": "tool"}},
         subagents={"child": {"key": "child", "actor_level": "L0"}},
+        turns={"turn": {"key": "turn", "session_key": "parent"}},
     )
     received: dict[str, Any] = {}
 
@@ -46,7 +47,7 @@ def test_sessions_deck_passes_all_fact_collections(
     _sessions.sessions_deck(str(out))
 
     assert received["session_rows"] == list(facts.sessions.values())
-    for name in ("request", "tool", "subagent"):
+    for name in ("request", "tool", "subagent", "turn"):
         assert list(received[f"{name}_rows"]) == list(getattr(facts, f"{name}s").values())
     assert out.read_text(encoding="utf-8") == "<!doctype html>"
 
@@ -60,13 +61,24 @@ def test_sessions_deck_refreshes_index_and_writes_session_data(
 
     log_root = tmp_path / "logs"
     _seed_session(log_root)
+    _seed_turn_ledger(log_root)
+    session_path = log_root / "sessions.jsonl"
+    session = json.loads(session_path.read_text(encoding="utf-8"))
+    session.update(
+        success=False,
+        skill_command="/autoskillit:implement",
+        session_type="skill",
+        recipe_name="implementation",
+        step_name="build",
+    )
+    session_path.write_text(json.dumps(session) + "\n", encoding="utf-8")
     _configure_log_root(monkeypatch, log_root)
     out = tmp_path / "deck.html"
 
     sessions_deck(str(out))
 
     assert capsys.readouterr().out == (
-        f"report index: walked 2 items, wrote 1 rows\ndeck: wrote {out} (1 session rows)\n"
+        f"report index: walked 2 items, wrote 2 rows\ndeck: wrote {out} (1 session rows)\n"
     )
     html = out.read_text(encoding="utf-8")
     match = re.search(r'<script[^>]*id="deck-data"[^>]*>(.*?)</script>', html, re.DOTALL)
@@ -75,6 +87,18 @@ def test_sessions_deck_refreshes_index_and_writes_session_data(
     sessions = data["tables"]["sessions"]
     assert len(sessions["rows"]) == 1
     assert sessions["rows"][0][sessions["columns"].index("harness")] == "claude-code"
+    turns = data["tables"]["turns"]
+    assert len(turns["rows"]) == 1
+    turn = dict(zip(turns["columns"], turns["rows"][0], strict=True))
+    assert turn["session_key"] == "session-1"
+    assert turn["model"] == "claude-opus-4-1-20250805"
+    assert turn["output_tokens"] == {"state": "measured_zero", "value": 0}
+    assert turn["cache_write_tokens"] == {"state": "unavailable", "value": None}
+    assert all(
+        view["status"] == "built"
+        for view in data["views"]
+        if view["id"] in {"context", "errors", "trend", "gaps", "parity"}
+    )
 
 
 def test_sessions_deck_reports_lease_contention_without_writing_output(

@@ -303,7 +303,7 @@ its rotated `otlp.jsonl.1` generation.
 It stores report facts separately from the retained `sessions.jsonl`
 projection.
 
-Every v2 row carries `schema_version`, `kind`, `key`, `session_id`, and
+Every v3 row carries `schema_version`, `kind`, `key`, `session_id`, and
 `time_ms`. `time_ms` is epoch milliseconds: session rows use the source
 session timestamp; OTLP rows use `timeUnixNano`, falling back to
 `observedTimeUnixNano`. Rows are append-only upserts keyed by `(kind, key)`;
@@ -315,6 +315,16 @@ when a key is written again, readers keep its last row.
 | `request` | `{session_id}:{request_id}` | `harness`, `request_id`, `agent_name`, `query_source`, `model`, `event_sequence`, the four token fields, `cost_usd`, `duration_ms` |
 | `tool` | `{session_id}:{tool_use_id}`, or `{source_id}#{ordinal}` when there is no tool-use ID | `harness`, `agent_name`, `tool_name`, `tool_use_id`, `error_type`, `success`, `duration_ms`, `tool_input_size_bytes`, `tool_result_size_bytes`, `event_sequence` |
 | `subagent` | `{source_id}#{ordinal}` | `harness`, `agent_type`, `model`, `final_model`, `model_swapped`, `event_sequence` |
+| `turn` | `{source_id}:turn:{ordinal}` | Exact owning `session_key`, source identity and ordinal, request/message IDs, timestamp, harness/provider/resolved model, four structured token measures, `context_window_tokens`, `context_fraction` |
+
+Completed sessions admit turns through their versioned `token_usage.json` descriptor.
+The descriptor declares the ledger schema, basename and row count; ledger rows do not
+repeat that schema marker. Only a complete, validated `turn_usage.jsonl` is admitted.
+Session rows retain `turn_usage_state` and `turn_usage_reason`, including when no turn
+rows exist. A null ledger reference with count zero means no published ledger, not
+measured-zero counters. Missing, malformed or unsupported descriptors and ledgers
+retain explicit coverage reasons. Turns keep their emitting attempt's exact key;
+untimed turns and reused session IDs never require temporal attribution.
 
 Native child `subagent` rows use
 `{parent_session_key}:native:{backend}:{native_parent_session_id}:{child_id}`.
@@ -325,6 +335,17 @@ spawning `recipe`, `step`, `level` and `time_ms`, canonical `token_usage`, `tool
 invocation observations. A managed attempt or launch alias alone cannot establish a
 native actor. Resumed parents sharing a native session ID require unique invocation
 ownership; ambiguous children remain unattributed.
+
+`parent_context_spans` retains counts of exact linked parent-visible invocation prompts
+and returned text, with source-record/turn identity, timestamps, the resolved parent
+invocation model and tokenizer provenance. These counts exclude hidden instructions,
+message framing and unrelated parent work; child billing and final transcript text do
+not establish what the parent received. Verified OpenAI parent models recognized by
+`tiktoken` use that model's encoder for both sides. Missing links, incomplete text,
+unresolved models, unsupported providers and encoder initialization failures retain
+explicit unavailable reasons. Explicit empty text is a measured zero. Raw prompt and
+result text are not copied into the derived index. After resolving tokenizer asset
+initialization failures, use `sessions index --rebuild` to refresh unavailable counts.
 
 Native child tokens and tools come from that child's verified dedicated transcript,
 with native message/request snapshots deduplicated. Tokens require the child's own
@@ -357,7 +378,7 @@ memory; it is not persisted.
 
 Events join to session attempts by `session_id` and `time_ms`. With a timestamp,
 an event is attributed to the attempt running at that time: if it predates all
-attempts, the earliest attempt is used; otherwise the latest attempt that began
+attempts, the event remains unattributed; otherwise the latest attempt that began
 by that time is used. Equal starts are resolved by the lexicographically greater
 session key, which gives a deterministic attempt order. An event without a time
 is attributed only when its session ID has exactly one attempt; otherwise
@@ -366,14 +387,15 @@ is attributed only when its session ID has exactly one attempt; otherwise
 The writer holds an exclusive lease for the report index. Each commit appends
 and fsyncs `rows.jsonl` before atomically replacing the versioned `state.json`
 with the committed walk watermark, byte offset, `row_schema_version`, and
-`child_evidence_fingerprint`. On the next open, bytes past that offset are truncated.
+`report_evidence_fingerprint`. On the next open, bytes past that offset are truncated.
 The row-schema marker is an application-controlled compatibility boundary, distinct
 from the state envelope version. Missing/incompatible row-schema evidence resets the
 generation before append admission. Recoverable byte/watermark corruption within a
 known current schema retains the existing complete-line recovery behavior.
 
-The child-evidence fingerprint covers canonical native child facts and dedicated
-transcript dependencies, including changes, additions and removals. Drift selects a
+The report-evidence fingerprint covers canonical native child facts, child and parent
+transcript dependencies, tokenizer version, and retained turn descriptors and ledgers,
+including changes, additions and removals. Drift selects a
 full replay under the existing exclusive index lease before unchanged live or consumed
 archive parents can be skipped. Markers commit with the successful row/watermark state;
 this reset does not preserve rows whose original sources are no longer retained.
@@ -389,28 +411,31 @@ Rebuilding reads only the sources still retained on disk. Rows from OTLP data
 that has rotated out survive through incremental updates, but a rebuild cannot
 re-derive those older facts. A rebuild equals an incremental index when source
 changes are limited to those tracked by the walk: appended OTLP, OTLP rotation,
-and changed, added, or evicted session rows, plus native child evidence changes.
-Parent transcript changes still require `--rebuild` when their session row is unchanged.
+and changed, added, or evicted session rows, plus report-evidence dependency changes.
+Changed parent transcripts, turn descriptors and ledgers refresh the index even when
+their session projection is unchanged.
 
 Codex OTLP token events are not projected: they do not carry a stable request
 identity for deduplication. Codex token measures enter the report index through
-the session rows.
+the session rows and admitted turn ledgers.
 
 ## Observability deck
 
 `autoskillit sessions deck <output>` incrementally refreshes the report index and writes
 one self-contained HTML deck. It can be opened from `file://` without a server or network
-connection. It receives all four index fact collections as mapping iterables; the
+connection. It receives sessions, requests, tools, subagents and turns as mapping iterables; the
 report layer imports core types and helpers rather than the execution index type.
 The cohort view retains its session table. Spend, efficiency, skill and role views
 select metric blocks prepared by the shared aggregation library, without browser
-aggregation of measures.
+aggregation of measures. Context, errors, trend, gaps and parity also select prepared
+populations with their own availability coverage, history and cohort filters.
 ADR-0017 records why charts use first-party SVG.
 
 ### Payload contract
 
 The payload keys are `generated_at_ms`, `index_schema_version`, `landing`, and `history`;
-column tables `tables.sessions`, `tables.skills`, and `tables.roles`; `facets[{id,label,column,kind}]`;
+column tables for sessions, skills, roles, turns, errors, trends, gaps and parity;
+`facets[{id,label,column,kind}]`;
 `views[{id,question,decision,group,status,issue}]`;
 `chips{view:{facet:[{key,label,state,count,reason,issue,match|days}]}}`; and
 `availability[{state,label,description}]`. `match` is used for value facets and `days`
@@ -433,6 +458,27 @@ Role level selections mean the spawning skill level, while the actor remains L0.
 Identity details, definitions and known cross-references remain available in empty
 usage cohorts. A stale explicit window or facet selection yields no measurements.
 
+Context shows each turn's cache-read occupancy proxy as a percentage of its resolved
+model window. Missing windows or counters leave gaps in the series. Cache read, cache
+write and output are visible by default; inclusive input is an optional separate
+series. Claude's ledger input already includes cache read and cache creation, so adding
+it to that stack would double count. Parent prompting and returned text are a separate
+comparison of recorded spans tokenized at the parent invocation model, with matched
+sample counts and explicit missing-source coverage.
+
+Errors distinguish session failures from failed indexed tool events and identify
+symptom, skill and recipe step. Session failure rates use known outcomes; missing tool
+events do not establish zero errors or a complete tool history. Trends use UTC daily
+buckets and compare the earlier and later halves of the selected interval, retaining
+model, skill, step and source-pair identity. Sample counts, missing buckets and untimed
+exclusions accompany the descriptive changes; absent observations establish no trend.
+
+Gaps describe unanswered questions and their missing prerequisites. Parity compares
+observed harness/provider fields against the deck's target fields. Both derive coverage
+from selected eligible records, including absent ledgers, unknown windows, unattributed
+tools and missing or unsupported parent spans. Mixed coverage and no observations are
+derived labels, not additional primitive token states; measured zero remains distinct.
+
 Canonical role routes provide offline definition links. The artifact preserves Claude
 tools/model separately from Codex reader tools/model and renders original definition
 body text literally. Manual ratio/tool-mix review controls require observed eligible
@@ -453,7 +499,9 @@ the retained history cite [#4621](https://github.com/TalonT-Org/AutoSkillit/issu
 
 Routes use `#/<view>[/<entity>][?k=v1,v2]`. Cohort selections survive navigation between
 views and entities; the `sort` choice applies only to its view. Every state change is a
-hash navigation, so browser back and forward restore prior selections. Planned views
+hash navigation, so browser back and forward restore prior selections. Context, gaps
+and parity preserve an optional exact owning-session key in the `session` parameter.
+Planned views
 show a notice while keeping the cohort bar available.
 
 ### Offline rendering and client code
@@ -491,8 +539,9 @@ assistive technology.
 4. Confirm L0 is struck with its reason. On a legacy index, L1–L3 should show ✕ with
    #4622; windows longer than retained history should show ✕ with #4621.
 5. Follow a harness link, then use back and forward; confirm the cohort remains selected.
-6. Open a planned route such as `#/spend`; confirm its notice appears and the cohort bar
-   remains visible.
+6. Visit context, errors, trend, gaps and parity; change windows and cohort filters.
+   Confirm unavailable counters remain missing, observed zeros are labeled, input is
+   initially hidden, and session links preserve the selection across context/gaps/parity.
 7. Emulate `prefers-color-scheme: dark`, then `light`; confirm both palettes render.
 8. In print preview, confirm the light palette, vector bars, printed cohort sentence, and
    hidden navigation rail.

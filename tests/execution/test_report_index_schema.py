@@ -10,12 +10,12 @@ import pytest
 from autoskillit.execution._report_index_rows import (
     _ROW_FIELDS,
     REPORT_INDEX_SCHEMA_VERSION,
-    REPORT_ROW_TYPES,
 )
+from autoskillit.execution._report_index_types import REPORT_ROW_TYPES
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
-_EXPECTED = (2, "e574d4e83971be001c1c92d29e807a421edbf705acbe5e72a03e7e513d43c4ba")
+_EXPECTED = (3, "ce6665e9b25e6c0ea3d578271a782cec2b922899b055e9e81f7d74ad2360a6d2")
 # Locked snapshot of per-kind field name orderings that produced ``_EXPECTED``.
 # Bump ``_EXPECTED[0]`` and refresh this dict in lockstep when row fields change;
 # ``test_report_index_schema_version_matches_field_digest`` is what fails first
@@ -71,6 +71,8 @@ _EXPECTED_FIELDS: dict[str, list[str]] = {
         "success",
         "time_ms",
         "tool_counts",
+        "turn_usage_reason",
+        "turn_usage_state",
     ],
     "subagent": [
         "actor_level",
@@ -85,6 +87,7 @@ _EXPECTED_FIELDS: dict[str, list[str]] = {
         "model",
         "model_swapped",
         "native_parent_session_id",
+        "parent_context_spans",
         "parent_session_key",
         "provider",
         "recipe",
@@ -98,6 +101,31 @@ _EXPECTED_FIELDS: dict[str, list[str]] = {
         "token_usage",
         "transcript_state",
         "usage_state",
+    ],
+    "turn": [
+        "cache_read_tokens",
+        "cache_write_tokens",
+        "context_fraction",
+        "context_window_tokens",
+        "harness",
+        "input_tokens",
+        "key",
+        "kind",
+        "level",
+        "message_id",
+        "model",
+        "ordinal",
+        "output_tokens",
+        "provider",
+        "recipe",
+        "request_id",
+        "schema_version",
+        "session_id",
+        "session_key",
+        "skill",
+        "source_id",
+        "step",
+        "time_ms",
     ],
     "tool": [
         "agent_name",

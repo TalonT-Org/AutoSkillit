@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import autoskillit.server.tools.tools_kitchen as _patch_tools_tools_kitchen
+from tests.server._helpers import patched_kitchen_id
 from tests.server.conftest import _make_mock_ctx, _set_mock_kitchen_transition
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -188,10 +189,7 @@ async def test_pipeline_health_override_wins_over_config(tmp_path, monkeypatch):
         with patch("autoskillit.server.logger"):
             with patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
                 with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
-                    with patch(
-                        "autoskillit.server.lifecycle._kitchen_identity.resolve_kitchen_id",
-                        return_value="test-kitchen-abc",
-                    ):
+                    with patched_kitchen_id("test-kitchen-abc"):
                         with patch.object(
                             _patch_tools_tools_kitchen,
                             "resolve_ingredient_defaults",
@@ -247,10 +245,7 @@ async def test_pipeline_health_config_default_applied(tmp_path, monkeypatch):
         with patch("autoskillit.server.logger"):
             with patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
                 with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
-                    with patch(
-                        "autoskillit.server.lifecycle._kitchen_identity.resolve_kitchen_id",
-                        return_value="test-kitchen-abc",
-                    ):
+                    with patched_kitchen_id("test-kitchen-abc"):
                         with patch.object(
                             _patch_tools_tools_kitchen,
                             "resolve_ingredient_defaults",

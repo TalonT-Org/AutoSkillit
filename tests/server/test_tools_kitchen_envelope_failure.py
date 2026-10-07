@@ -15,6 +15,7 @@ from tests.server._helpers import (
     _configure_admitted_recipe,
     _make_finalized_projection,
     _with_finalized_projection,
+    patched_kitchen_id,
 )
 from tests.server.conftest import _make_mock_ctx, _set_mock_kitchen_transition
 
@@ -167,10 +168,7 @@ async def test_open_kitchen_injects_hidden_ingredient_overrides(tmp_path, monkey
         with patch("autoskillit.server.logger"):
             with patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
                 with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
-                    with patch(
-                        "autoskillit.server.lifecycle._kitchen_identity.resolve_kitchen_id",
-                        return_value="test-kitchen-abc",
-                    ):
+                    with patched_kitchen_id("test-kitchen-abc"):
                         with patch.object(
                             _patch_tools_tools_kitchen,
                             "resolve_ingredient_defaults",
@@ -218,10 +216,7 @@ async def test_config_layer_keys_match_server_authoritative_ingredients(tmp_path
         with patch("autoskillit.server.logger"):
             with patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
                 with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
-                    with patch(
-                        "autoskillit.server.lifecycle._kitchen_identity.resolve_kitchen_id",
-                        return_value="test-kitchen-abc",
-                    ):
+                    with patched_kitchen_id("test-kitchen-abc"):
                         with patch.object(
                             _patch_tools_tools_kitchen,
                             "resolve_ingredient_defaults",
@@ -319,10 +314,7 @@ async def test_open_kitchen_rejects_config_authority_override(tmp_path, monkeypa
         with patch("autoskillit.server.logger"):
             with patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
                 with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
-                    with patch(
-                        "autoskillit.server.lifecycle._kitchen_identity.resolve_kitchen_id",
-                        return_value="test-kitchen-abc",
-                    ):
+                    with patched_kitchen_id("test-kitchen-abc"):
                         with patch.object(
                             _patch_tools_tools_kitchen,
                             "resolve_ingredient_defaults",
@@ -368,10 +360,7 @@ async def test_open_kitchen_rejects_authority_override_with_envelope(tmp_path, m
         with patch("autoskillit.server.logger"):
             with patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
                 with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
-                    with patch(
-                        "autoskillit.server.lifecycle._kitchen_identity.resolve_kitchen_id",
-                        return_value="test-kitchen-abc",
-                    ):
+                    with patched_kitchen_id("test-kitchen-abc"):
                         with patch.object(
                             _patch_tools_tools_kitchen,
                             "resolve_ingredient_defaults",

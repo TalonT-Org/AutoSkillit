@@ -53,15 +53,28 @@ async def test_headless_food_truck_reuses_its_kitchen_identity(
 name: kitchen-identity-probe
 description: Expose the session kitchen identity in rendered recipe content.
 recipe_version: "1.0.0"
+kitchen_rules:
+  - Use MCP tools only.
 ingredients:
+  source_dir:
+    description: Project directory
+    required: true
   kitchen_id:
     description: Session kitchen identity
     default: ""
     hidden: true
 steps:
+  observe_identity:
+    tool: run_cmd
+    with:
+      cmd: echo ${{ inputs.kitchen_id }}
+      cwd: ${{ inputs.source_dir }}
+      step_name: observe_identity
+    on_success: done
+    on_failure: done
   done:
     action: stop
-    message: ${{ inputs.kitchen_id }}
+    message: 'Emit the L3 result sentinel JSON block with success=true: {"success": true}'
 """,
         encoding="utf-8",
     )
@@ -88,14 +101,19 @@ steps:
             open_payload = _tool_json(
                 await client.call_tool(
                     "open_kitchen",
-                    {"name": "kitchen-identity-probe"},
+                    {
+                        "name": "kitchen-identity-probe",
+                        "overrides": {"source_dir": str(project_dir)},
+                    },
                 )
             )
             assert open_payload["success"] is True, open_payload
             assert open_payload["valid"] is True, open_payload
             assert open_payload["phase"] == "committed", open_payload
             opened_recipe = load_yaml(str(open_payload["content"]))
-            opened_kitchen_id = opened_recipe["steps"]["done"]["message"]
+            opened_kitchen_id = opened_recipe["steps"]["observe_identity"]["with"][
+                "cmd"
+            ].removeprefix("echo ")
             assert opened_kitchen_id
             assert "${{" not in opened_kitchen_id
             if campaign_id:
@@ -104,9 +122,15 @@ steps:
             load_payload = _tool_json(
                 await client.call_tool(
                     "load_recipe",
-                    {"name": "kitchen-identity-probe"},
+                    {
+                        "name": "kitchen-identity-probe",
+                        "overrides": {"source_dir": str(project_dir)},
+                    },
                 )
             )
             assert load_payload["success"] is True, load_payload
             loaded_recipe = load_yaml(str(load_payload["content"]))
-            assert loaded_recipe["steps"]["done"]["message"] == opened_kitchen_id
+            assert (
+                loaded_recipe["steps"]["observe_identity"]["with"]["cmd"]
+                == f"echo {opened_kitchen_id}"
+            )

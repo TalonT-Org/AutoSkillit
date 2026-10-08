@@ -60,18 +60,15 @@ def test_sessions_deck_refreshes_index_and_writes_session_data(
     from autoskillit.cli.ops._sessions import sessions_deck
 
     log_root = tmp_path / "logs"
-    _seed_session(log_root)
-    _seed_turn_ledger(log_root)
-    session_path = log_root / "sessions.jsonl"
-    session = json.loads(session_path.read_text(encoding="utf-8"))
-    session.update(
+    _seed_session(
+        log_root,
         success=False,
         skill_command="/autoskillit:implement",
         session_type="skill",
         recipe_name="implementation",
         step_name="build",
     )
-    session_path.write_text(json.dumps(session) + "\n", encoding="utf-8")
+    _seed_turn_ledger(log_root)
     _configure_log_root(monkeypatch, log_root)
     out = tmp_path / "deck.html"
 

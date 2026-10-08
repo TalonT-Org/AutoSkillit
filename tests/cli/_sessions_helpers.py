@@ -16,7 +16,7 @@ def _configure_log_root(monkeypatch: pytest.MonkeyPatch, log_root: Path) -> None
     )
 
 
-def _seed_session(log_root: Path) -> None:
+def _seed_session(log_root: Path, **fields: object) -> None:
     log_root.mkdir(parents=True, exist_ok=True)
     session = {
         "dir_name": "session-1",
@@ -24,6 +24,7 @@ def _seed_session(log_root: Path) -> None:
         "backend": "claude-code",
         "provider_used": "anthropic",
         "timestamp": "2020-01-01T00:00:00Z",
+        **fields,
     }
     (log_root / "sessions.jsonl").write_text(json.dumps(session) + "\n", encoding="utf-8")
 

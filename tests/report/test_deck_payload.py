@@ -955,11 +955,10 @@ def test_parent_span_provenance_is_json_safe_after_measure_aggregation() -> None
     )
 
     encoded = json.dumps(payload, allow_nan=False)
-    context = _view_block(payload, "context")
+    context = _view_block(json.loads(encoded), "context")
     model_row = next(
         row for row in context["metrics"]["parent_context"] if row["model"] == "model-x"
     )
-    assert len(encoded) > 0
     assert model_row["provenance"][0]["measure"] == {"state": "measured", "value": 6}
     assert model_row["provenance"][1]["measure"] == {"state": "measured", "value": 4}
 

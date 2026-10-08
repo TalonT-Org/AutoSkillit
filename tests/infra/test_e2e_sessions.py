@@ -551,8 +551,10 @@ def test_ownership_ignores_unhashable_tool_names(tmp_path: Path) -> None:
     assert proof["violations"] == []
 
 
-def test_ownership_ignores_child_branch_and_rejects_reentry_and_unpaired_results(
+@pytest.mark.parametrize("scenario", ["child_branch", "unpaired_root_branch", "claim_reentry"])
+def test_ownership_isolates_branch_and_claim_scenarios(
     tmp_path: Path,
+    scenario: str,
 ) -> None:
     child_records = [
         _tool_use(
@@ -564,19 +566,12 @@ def test_ownership_ignores_child_branch_and_rejects_reentry_and_unpaired_results
     ]
     log_root, trace, child_transcript = _base_sessions(
         tmp_path,
-        child_id="session-child",
-        child_records=child_records,
+        child_id="session-child" if scenario == "child_branch" else None,
+        child_records=child_records if scenario == "child_branch" else None,
     )
-    assert child_transcript is not None
     root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
-    _jsonl(
-        root_transcript,
-        [
-            _tool_use(
-                "root-branch",
-                "create_and_publish_branch",
-                {"issue_number": "5233", "remote_url": "git@github.com:owner/repo.git"},
-            ),
+    if scenario == "claim_reentry":
+        root_records = [
             _tool_use(
                 "claim-1",
                 "claim_and_resolve_issue",
@@ -589,22 +584,30 @@ def test_ownership_ignores_child_branch_and_rejects_reentry_and_unpaired_results
                 {"issue_url": ISSUE_URL, "allow_reentry": False},
             ),
             _tool_result("claim-2", {"success": True, "claimed": True, "issue_number": 5233}),
-            _tool_result("wrong-branch-id", {"merge_target": "must-not-be-paired"}),
-        ],
-    )
-    _trace(
-        trace,
-        [
-            _event("SessionStart", ROOT_ID, 1, transcript=root_transcript),
-            _event("SessionStart", "session-child", 2, transcript=child_transcript),
-            _event("SessionEnd", "session-child", 4, transcript=child_transcript),
-            _event("SessionEnd", ROOT_ID, 5, transcript=root_transcript),
-        ],
-    )
+        ]
+    else:
+        root_records = [
+            _tool_use(
+                "root-branch",
+                "create_and_publish_branch",
+                {"issue_number": "5233", "remote_url": "git@github.com:owner/repo.git"},
+            ),
+            _tool_result(
+                "root-branch" if scenario == "child_branch" else "wrong-branch-id",
+                {"merge_target": "impl/5233-root"},
+            ),
+        ]
+    _jsonl(root_transcript, root_records)
+    _trace(trace, [_event("SessionStart", ROOT_ID, 1, transcript=root_transcript)])
 
     proof = sessions.collect_ownership(trace, _envelope(), log_root, ISSUE_URL, REPOSITORY)
 
-    assert proof["branches"] == []
+    assert proof["branches"] == (["impl/5233-root"] if scenario == "child_branch" else [])
     assert proof["claimed"] is False
-    assert "ownership:claim_reentry" in proof["violations"]
-    assert any("unpaired_tool_use:root-branch" in item for item in proof["violations"])
+    if scenario == "claim_reentry":
+        assert proof["violations"] == ["ownership:claim_reentry"]
+    elif scenario == "unpaired_root_branch":
+        assert len(proof["violations"]) == 1
+        assert "unpaired_tool_use:root-branch" in proof["violations"][0]
+    else:
+        assert proof["violations"] == []

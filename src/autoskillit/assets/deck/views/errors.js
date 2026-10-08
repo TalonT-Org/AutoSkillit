@@ -51,10 +51,9 @@ DeckShell.registerView("errors", ctx => {
   ];
   const tableRows = [...ctx.rows];
   const populationRows = ctx.metrics?.populations ?? [];
-  const countLabel = value => value == null ? "count unavailable" : DeckCore.formatCount(value);
-  const outcomeCoverage = summary => countLabel(summary?.observed_count) +
-    " observed / " + countLabel(summary?.eligible_count) + " eligible · " +
-    countLabel(summary?.unknown_count) + " unknown · " +
+  const outcomeCoverage = summary => DeckCore.countLabel(summary?.observed_count) +
+    " observed / " + DeckCore.countLabel(summary?.eligible_count) + " eligible · " +
+    DeckCore.countLabel(summary?.unknown_count) + " unknown · " +
     Object.entries(summary?.state_counts ?? {}).map(([state, count]) =>
       state + " " + DeckCore.formatCount(count)).join(" · ");
   const coverageColumns = [

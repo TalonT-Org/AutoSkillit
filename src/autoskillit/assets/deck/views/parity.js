@@ -2,7 +2,6 @@ DeckShell.registerView("parity", ctx => {
   const groupFields = ["session_key", "harness", "provider", "skill", "recipe", "step",
     "model", "level", "population"];
   const groupKey = row => JSON.stringify(groupFields.map(field => row[field] ?? null));
-  const countLabel = value => value == null ? "count unavailable" : DeckCore.formatCount(value);
   const stateCell = row => {
     const state = row?.state ?? "no_observations";
     const body = DeckCore.isPrimitiveState(state) ? ctx.availabilityCell(row.measure ?? {state}) :
@@ -12,8 +11,8 @@ DeckShell.registerView("parity", ctx => {
     const counts = row ? Object.entries(row.state_counts ?? {}).map(([name, count]) =>
       name + " " + DeckCore.formatCount(count)).join(" · ") : "no row in this selection";
     const coverage = ctx.el("small", {class: "parity-cell__coverage"}, row ?
-      countLabel(row.observation_count) + " observations · " +
-      countLabel(row.eligible_count) + " eligible source records · " + counts : counts);
+      DeckCore.countLabel(row.observation_count) + " observations · " +
+      DeckCore.countLabel(row.eligible_count) + " eligible source records · " + counts : counts);
     const cell = ctx.el("span", {class: "parity-cell"}, [body, coverage]);
     if (!row || !["measured", "measured_zero", "not_applicable"].includes(state)) {
       return ctx.el("a", {class: "parity-cell-link",

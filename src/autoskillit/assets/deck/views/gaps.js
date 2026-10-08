@@ -14,7 +14,6 @@ DeckShell.registerView("gaps", ctx => {
         row.state === "no_observations" ? "no observations" : row.state ?? "unknown");
   const stateCounts = row => Object.entries(row.state_counts ?? {}).map(([state, count]) =>
     state + " " + DeckCore.formatCount(count)).join(" · ") || "state counts unavailable";
-  const countLabel = value => value == null ? "count unavailable" : DeckCore.formatCount(value);
   const tableRows = [...ctx.rows];
   const columns = [
     {key: "question", label: "Unanswered question", cell: row => row.question ??
@@ -30,7 +29,7 @@ DeckShell.registerView("gaps", ctx => {
     {key: "population", label: "Population"},
     {key: "state", label: "Coverage state", cell: stateCell},
     {key: "coverage_counts", label: "Observed / eligible", cell: row =>
-      countLabel(row.observation_count) + " observed / " + countLabel(row.eligible_count) +
+      DeckCore.countLabel(row.observation_count) + " observed / " + DeckCore.countLabel(row.eligible_count) +
         " eligible · " + stateCounts(row)},
     {key: "source", label: "Evidence source", cell: row => row.source ?? "not recorded"},
     {key: "reason", label: "Reason", cell: row => row.reason ?? "—"},

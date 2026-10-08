@@ -507,6 +507,7 @@ DECOMPOSITION_MOVE_SETS: dict[str, frozenset[str]] = {
         {
             "anomaly_detection",
             "_native_child_projection",
+            "_native_parent_context",
             "linux_tracing",
             "otlp_sink",
             "report_walk",

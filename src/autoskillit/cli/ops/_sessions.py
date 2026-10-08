@@ -56,7 +56,7 @@ def sessions_index(*, update: bool = False, rebuild: bool = False) -> None:
     print(
         f"report index v{REPORT_INDEX_SCHEMA_VERSION} at {index_dir}: "
         f"sessions={len(report.sessions)} requests={len(report.requests)} "
-        f"tools={len(report.tools)} subagents={len(report.subagents)}"
+        f"tools={len(report.tools)} subagents={len(report.subagents)} turns={len(report.turns)}"
     )
 
 
@@ -82,6 +82,7 @@ def sessions_deck(output: str) -> None:
         request_rows=report.requests.values(),
         tool_rows=report.tools.values(),
         subagent_rows=report.subagents.values(),
+        turn_rows=report.turns.values(),
         generated_at=datetime.now(UTC),
         index_schema_version=REPORT_INDEX_SCHEMA_VERSION,
     )

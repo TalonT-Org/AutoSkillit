@@ -209,7 +209,7 @@ def test_deck_asset_directory_contains_only_registered_shell_assets() -> None:
     assert actual == {"deck.html", "deck.css", "core.js", "shell.js"} | view_assets
 
 
-def test_built_wheel_contains_the_four_new_view_scripts(tmp_path: Path) -> None:
+def test_built_wheel_contains_registered_view_scripts(tmp_path: Path) -> None:
     # REQ-108/REQ-158: isolate the plan's wheel-check directory per test worker.
     wheel_out = tmp_path / "wheel-check"
     result = subprocess.run(
@@ -224,8 +224,9 @@ def test_built_wheel_contains_the_four_new_view_scripts(tmp_path: Path) -> None:
     assert len(wheels) == 1, f"Expected one built wheel, found {wheels}"
     with ZipFile(wheels[0]) as wheel:
         required = {
-            f"autoskillit/assets/deck/views/{view}.js"
-            for view in ("spend", "efficiency", "skill", "role")
+            f"autoskillit/assets/deck/{view.script}"
+            for view in DECK_VIEWS
+            if view.planned_issue is None and view.script is not None
         }
         missing = required - set(wheel.namelist())
         assert not missing, f"Built wheel is missing view scripts: {sorted(missing)}"

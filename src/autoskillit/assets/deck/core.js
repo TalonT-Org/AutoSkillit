@@ -2,8 +2,21 @@ globalThis.DeckCore = (() => {
   "use strict";
   const CHIP_STATES = Object.freeze({LIVE: "live", STRUCK: "struck", ABSENT: "absent"});
   const DAY_MS = 86400000;
+  const SESSION_VIEWS = ["context", "gaps", "parity"];
   const enc = encodeURIComponent;
   const formatCount = n => new Intl.NumberFormat("en-US").format(n);
+  const isPrimitiveState = state => ["measured", "measured_zero", "unknown",
+    "unavailable", "not_applicable"].includes(state);
+  const inspectParams = row => Object.fromEntries([
+    ["harness", row?.harness], ["provider", row?.provider], ["skill", row?.skill],
+    ["recipe", row?.recipe], ["step", row?.step], ["model", row?.model],
+    ["session", row?.session_key]
+  ].filter(([, value]) => value != null).map(([key, value]) => [key, [value]]));
+  const countLabel = value => value == null ? "count unavailable" : formatCount(value);
+  const measureValue = measure => measure?.state === "measured" ? measure.value :
+    measure?.state === "measured_zero" ? 0 : null;
+  const formatStateCounts = counts => Object.entries(counts ?? {}).map(([state, count]) =>
+    state + " " + formatCount(count)).join(" · ");
   const formatDate = ms => new Date(ms).toISOString().slice(0, 10);
 
   function formatRatio(ratio, percent = false) {
@@ -82,6 +95,15 @@ globalThis.DeckCore = (() => {
   }
   function measureCell(ctx, measure) {
     return ctx.availabilityCell(measure ?? {state: "unavailable"});
+  }
+
+  function coverageStateCell(ctx, measure, className) {
+    const state = measure?.state;
+    if (isPrimitiveState(state)) return ctx.availabilityCell(measure);
+    return ctx.el("span", {class: className ??
+      "coverage-state coverage-state--" + (state ?? "unknown")},
+      state === "no_observations" ? "no observations" :
+        state === "mixed" ? "mixed coverage" : state ?? "unknown");
   }
 
   function ratioCell(ctx, ratio, percent = false) {
@@ -175,9 +197,17 @@ globalThis.DeckCore = (() => {
   }
 
   function hrefFor(route, target, cohortKeys) {
-    const params = Object.fromEntries(cohortKeys.filter(k =>
+    const identityViews = ["context", "errors", "trend", "gaps", "parity", "skill", "cohort"];
+    const preserve = [...cohortKeys];
+    if (identityViews.includes(target.view)) preserve.push("skill", "recipe", "step", "model");
+    if (SESSION_VIEWS.includes(target.view)) preserve.push("session");
+    const params = Object.fromEntries(preserve.filter(k =>
       Object.hasOwn(route.params, k)).map(k => [k, [...route.params[k]]]));
     for (const [key, value] of Object.entries(target.params || {})) {
+      if (key === "session" && !SESSION_VIEWS.includes(target.view)) {
+        delete params[key];
+        continue;
+      }
       if (value === null) delete params[key];
       else Object.defineProperty(params, key, {value, enumerable: true,
         writable: true, configurable: true});
@@ -227,17 +257,20 @@ globalThis.DeckCore = (() => {
     const providers = new Set((chips.provider ?? [])
       .filter(chip => provider.keys.includes(chip.key)).map(chip => chip.match));
 
-    function selectedRows(blocks) {
-      if (!window.chip) return [];
+    function selectedBlock(blocks) {
+      if (!window.chip) return null;
       const inWindow = blocks.filter(block => block.window === window.chip.key);
       const domain = [...new Set(inWindow.flatMap(block => block.levels))];
       const selectedLevels = new Set(level.keys
         .map(key => (chips.level ?? []).find(chip => chip.key === key)?.match)
       );
       const requested = domain.filter(value => selectedLevels.has(value));
-      if (!requested.length) return [];
-      const block = inWindow.find(item => sameValues(item.levels, requested));
-      return block?.rows ?? [];
+      if (!requested.length) return null;
+      return inWindow.find(item => sameValues(item.levels, requested)) ?? null;
+    }
+
+    function selectedRows(blocks) {
+      return selectedBlock(blocks)?.rows ?? [];
     }
 
     let skillRows = viewId === "role" ? [] : selectedRows(prepared.skills ?? []).filter(row =>
@@ -252,6 +285,31 @@ globalThis.DeckCore = (() => {
     if (viewId === "role" && route.entity != null) {
       roleRows = roleRows.filter(row => row.role === route.entity);
     }
+    const viewData = prepared[viewId];
+    const hasPreparedPopulation = viewData !== null && typeof viewData === "object";
+    const block = Array.isArray(viewData?.blocks) ? selectedBlock(viewData.blocks) : null;
+    let rows = hasPreparedPopulation ? [] : viewId === "role" ? roleRows : skillRows;
+    let metrics = rows;
+    if (Array.isArray(viewData?.blocks)) {
+      const sessionKey = SESSION_VIEWS.includes(viewId) ?
+        params.session?.[0] ?? null : null;
+      const sessionBlock = sessionKey == null ? null :
+        (block?.sessions && Object.hasOwn(block.sessions, sessionKey) ?
+          block.sessions[sessionKey] : null);
+      const sourceRows = sessionKey == null ? block?.rows : sessionBlock?.rows;
+      const sourceMetrics = sessionKey == null ? block?.metrics : sessionBlock?.metrics;
+      const identityKeys = ["skill", "recipe", "step", "model"];
+      const matchesSelection = row =>
+        (row.harness == null || harnesses.has(row.harness)) &&
+        (row.provider == null || providers.has(row.provider)) &&
+        identityKeys.every(key => !Array.isArray(params[key]) || params[key].length === 0 ||
+          row[key] == null || params[key].includes(row[key]));
+      rows = (sourceRows ?? []).filter(matchesSelection);
+      const filterMetricRows = value => Array.isArray(value) ? value.filter(matchesSelection) :
+        value && typeof value === "object" ? Object.fromEntries(Object.entries(value).map(
+          ([key, rows]) => [key, Array.isArray(rows) ? rows.filter(matchesSelection) : rows])) : value;
+      metrics = filterMetricRows(sourceMetrics) ?? [];
+    }
     const relationships = (prepared.relationships ?? []).filter(edge => {
       if (viewId === "skill" && route.entity != null) return edge.skill === route.entity;
       if (viewId === "role" && route.entity != null) return edge.role === route.entity;
@@ -259,12 +317,15 @@ globalThis.DeckCore = (() => {
     });
 
     return {
+      rows,
+      metrics,
       skillRows,
       roleRows,
       relationships,
       definitions: prepared.definitions ?? {},
       viewHistory: prepared.view_histories?.[viewId] ?? null,
-      selection: {window, level, harness, provider}
+      selection: {window, level, harness, provider,
+        session: SESSION_VIEWS.includes(viewId) ? params.session?.[0] ?? null : null}
     };
   }
 
@@ -390,7 +451,7 @@ globalThis.DeckCore = (() => {
   return Object.freeze({decodeTable, encodeRoute, decodeRoute, hrefFor, effectiveSelection,
     toggleSelection, windowSelection, selectPrepared, filterRows, populationSentence,
     summarizePairs, sortRows, parseSort, chipPresentation, availabilityPresentation,
-    barLayout, formatCount, formatRatio, ratioSample, reviewEligibility, reviewSignal,
-    measureCell, ratioCell, definitionCard, toolMix, roleHarnessRows, formatDate,
+    isPrimitiveState, inspectParams, countLabel, measureValue, formatStateCounts, barLayout, formatCount, formatRatio, ratioSample, reviewEligibility, reviewSignal,
+    measureCell, coverageStateCell, ratioCell, definitionCard, toolMix, roleHarnessRows, formatDate,
     CHIP_STATES, DAY_MS});
 })();

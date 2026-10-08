@@ -33,18 +33,22 @@ from autoskillit.core import (
 )
 from autoskillit.execution._report_index_rows import (
     REPORT_INDEX_SCHEMA_VERSION,
+    UNKNOWN_SOURCE,
+    normalize_report_row,
+    resolve_token_measure,
+    rows_for_walk_item,
+)
+from autoskillit.execution._report_index_types import (
     REQUEST_KIND,
     SESSION_KIND,
     SUBAGENT_KIND,
     TOOL_KIND,
-    UNKNOWN_SOURCE,
+    TURN_KIND,
     ReportRequestRow,
     ReportSessionRow,
     ReportSubagentRow,
     ReportToolRow,
-    normalize_report_row,
-    resolve_token_measure,
-    rows_for_walk_item,
+    ReportTurnRow,
 )
 from autoskillit.execution.evidence.report_walk import (
     CHECKPOINT_WALK_KIND,
@@ -53,8 +57,8 @@ from autoskillit.execution.evidence.report_walk import (
     VALID_SOURCE_KEYS,
     SourceGapError,
     WalkItem,
-    child_evidence_fingerprint,
     iter_report_walk,
+    report_evidence_fingerprint,
 )
 from autoskillit.execution.session_log.session_index import (
     iter_tolerant_session_index_lines,
@@ -101,6 +105,7 @@ class ReportIndex:
     requests: dict[str, ReportRequestRow]
     tools: dict[str, ReportToolRow]
     subagents: dict[str, ReportSubagentRow]
+    turns: dict[str, ReportTurnRow]
 
 
 def report_index_dir(log_root: Path) -> Path:
@@ -128,19 +133,19 @@ def _update(log_root: Path, index_dir: Path, *, rebuild: bool) -> ReportIndexUpd
     with ArtifactLease.acquire_exclusive(index_dir / _LOCK_FILE, timeout=_LEASE_TIMEOUT_SECONDS):
         if rebuild:
             _clear_index_files(index_dir)
-        fingerprint = child_evidence_fingerprint(log_root)
+        fingerprint = report_evidence_fingerprint(log_root)
         state = read_versioned_json(index_dir / _STATE_FILE, _STATE_SCHEMA_VERSION)
         row_schema_mismatch = (
             state.get("row_schema_version") != REPORT_INDEX_SCHEMA_VERSION
             if state is not None
             else (index_dir / _ROWS_FILE).exists()
         )
-        child_evidence_changed = (
-            state is not None and state.get("child_evidence_fingerprint") != fingerprint
+        report_evidence_changed = (
+            state is not None and state.get("report_evidence_fingerprint") != fingerprint
         )
-        if row_schema_mismatch or child_evidence_changed:
+        if row_schema_mismatch or report_evidence_changed:
             _clear_index_files(index_dir)
-        with _RowAppender.open(index_dir, child_evidence_fingerprint=fingerprint) as appender:
+        with _RowAppender.open(index_dir, report_evidence_fingerprint=fingerprint) as appender:
             return _walk_into(log_root, appender)
 
 
@@ -289,12 +294,12 @@ class _RowAppender:
         index_dir: Path,
         handle: BinaryIO,
         watermark: dict[str, Any] | None,
-        child_evidence_fingerprint: str,
+        report_evidence_fingerprint: str,
     ) -> None:
         self.index_dir = index_dir
         self.handle = handle
         self.watermark = watermark
-        self.child_evidence_fingerprint = child_evidence_fingerprint
+        self.report_evidence_fingerprint = report_evidence_fingerprint
         self._pending = bytearray()
         self._dirty = False
         self.items_walked = 0
@@ -302,7 +307,7 @@ class _RowAppender:
 
     @classmethod
     @contextmanager
-    def open(cls, index_dir: Path, *, child_evidence_fingerprint: str) -> Iterator[_RowAppender]:
+    def open(cls, index_dir: Path, *, report_evidence_fingerprint: str) -> Iterator[_RowAppender]:
         rows_path = index_dir / _ROWS_FILE
         watermark, committed = _committed_state(index_dir, rows_path)
         fd = os.open(
@@ -313,7 +318,7 @@ class _RowAppender:
         with os.fdopen(fd, "r+b") as handle:
             handle.truncate(committed)
             handle.seek(committed)
-            yield cls(index_dir, handle, watermark, child_evidence_fingerprint)
+            yield cls(index_dir, handle, watermark, report_evidence_fingerprint)
 
     def add(self, item: WalkItem) -> None:
         for row in rows_for_walk_item(item):
@@ -343,7 +348,7 @@ class _RowAppender:
                 "walk": self.watermark,
                 "rows_bytes": self.handle.tell(),
                 "row_schema_version": REPORT_INDEX_SCHEMA_VERSION,
-                "child_evidence_fingerprint": self.child_evidence_fingerprint,
+                "report_evidence_fingerprint": self.report_evidence_fingerprint,
             },
             schema_version=_STATE_SCHEMA_VERSION,
         )
@@ -387,6 +392,7 @@ def _read_rows(rows_path: Path) -> dict[str, dict[str, dict[str, Any]]]:
         REQUEST_KIND: {},
         TOOL_KIND: {},
         SUBAGENT_KIND: {},
+        TURN_KIND: {},
     }
     for _, raw in iter_tolerant_session_index_lines(rows_path, complete_only=True):
         row = normalize_report_row(raw)
@@ -423,7 +429,7 @@ class _SessionAttribution:
         if time_ms is None:
             return entries[0][1] if len(entries) == 1 else None
         index = bisect_right(self._starts[session_id], time_ms) - 1
-        return entries[0][1] if index < 0 else entries[index][1]
+        return None if index < 0 else entries[index][1]
 
 
 def _resolve_session_measures(sessions: dict[str, dict[str, Any]]) -> None:
@@ -496,6 +502,7 @@ def read_report_index(index_dir: Path) -> ReportIndex:
     requests = by_kind[REQUEST_KIND]
     tools = by_kind[TOOL_KIND]
     subagents = by_kind[SUBAGENT_KIND]
+    turns = by_kind[TURN_KIND]
     _resolve_session_measures(sessions)
     attribution = _SessionAttribution(sessions)
     _join_request_rows(requests, sessions, attribution)
@@ -506,4 +513,5 @@ def read_report_index(index_dir: Path) -> ReportIndex:
         requests=cast("dict[str, ReportRequestRow]", _sorted_rows(requests)),
         tools=cast("dict[str, ReportToolRow]", _sorted_rows(tools)),
         subagents=cast("dict[str, ReportSubagentRow]", _sorted_rows(subagents)),
+        turns=cast("dict[str, ReportTurnRow]", _sorted_rows(turns)),
     )

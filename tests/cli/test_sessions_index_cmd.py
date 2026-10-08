@@ -8,7 +8,7 @@ import pytest
 
 from autoskillit.core import ArtifactLease
 from autoskillit.execution import REPORT_INDEX_SCHEMA_VERSION
-from tests.cli._sessions_helpers import _configure_log_root, _seed_session
+from tests.cli._sessions_helpers import _configure_log_root, _seed_session, _seed_turn_ledger
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -30,7 +30,7 @@ def test_sessions_index_reports_without_creating_rows(
     index_dir = log_root / "report-index"
     assert out == (
         f"report index v{REPORT_INDEX_SCHEMA_VERSION} at {index_dir}: "
-        "sessions=0 requests=0 tools=0 subagents=0\n"
+        "sessions=0 requests=0 tools=0 subagents=0 turns=0\n"
     )
     assert not (index_dir / "rows.jsonl").exists()
 
@@ -44,21 +44,22 @@ def test_sessions_index_updates_and_rebuilds(
 
     log_root = tmp_path / "logs"
     _seed_session(log_root)
+    _seed_turn_ledger(log_root)
     _configure_log_root(monkeypatch, log_root)
 
     sessions_index(update=True)
     index_dir = log_root / "report-index"
     assert capsys.readouterr().out == (
-        "report index: walked 2 items, wrote 1 rows\n"
+        "report index: walked 2 items, wrote 2 rows\n"
         f"report index v{REPORT_INDEX_SCHEMA_VERSION} at {index_dir}: "
-        "sessions=1 requests=0 tools=0 subagents=0\n"
+        "sessions=1 requests=0 tools=0 subagents=0 turns=1\n"
     )
 
     sessions_index(rebuild=True)
     assert capsys.readouterr().out == (
-        "report index: walked 2 items, wrote 1 rows\n"
+        "report index: walked 2 items, wrote 2 rows\n"
         f"report index v{REPORT_INDEX_SCHEMA_VERSION} at {index_dir}: "
-        "sessions=1 requests=0 tools=0 subagents=0\n"
+        "sessions=1 requests=0 tools=0 subagents=0 turns=1\n"
     )
 
 

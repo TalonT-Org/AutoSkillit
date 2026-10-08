@@ -69,6 +69,56 @@ def test_href_for_keeps_cohort_params_and_applies_target_changes(deck_js: Any) -
         deck_js.call("DeckCore.hrefFor", route, {"view": "spend"}, COHORT_KEYS)
         == "#/spend?harness=codex&window=28d"
     )
+
+
+def test_href_for_preserves_exact_session_selection(deck_js: Any) -> None:
+    route = {
+        "view": "context",
+        "entity": None,
+        "params": {
+            "harness": ["codex"],
+            "provider": ["openai"],
+            "level": ["L2"],
+            "window": ["28d"],
+            "session": ["owner-key-1"],
+        },
+    }
+
+    href = deck_js.call("DeckCore.hrefFor", route, {"view": "gaps"}, COHORT_KEYS)
+
+    assert href == ("#/gaps?harness=codex&provider=openai&level=L2&window=28d&session=owner-key-1")
+    assert deck_js.call("DeckCore.hrefFor", route, {"view": "errors"}, COHORT_KEYS) == (
+        "#/errors?harness=codex&provider=openai&level=L2&window=28d"
+    )
+
+
+def test_href_for_keeps_explicit_identity_filters_across_evidence_views(deck_js: Any) -> None:
+    route = {
+        "view": "context",
+        "entity": None,
+        "params": {
+            "harness": ["codex"],
+            "window": ["7d"],
+            "skill": ["demo"],
+            "recipe": ["recipe-demo"],
+            "step": ["run"],
+            "model": ["gpt-test"],
+            "session": ["owner-key-1"],
+        },
+    }
+
+    href = deck_js.call("DeckCore.hrefFor", route, {"view": "parity"}, COHORT_KEYS)
+    decoded = deck_js.call("DeckCore.decodeRoute", href, "cohort")
+
+    assert decoded["params"] == {
+        "harness": ["codex"],
+        "window": ["7d"],
+        "skill": ["demo"],
+        "recipe": ["recipe-demo"],
+        "step": ["run"],
+        "model": ["gpt-test"],
+        "session": ["owner-key-1"],
+    }
     assert (
         deck_js.call(
             "DeckCore.hrefFor",
@@ -266,6 +316,136 @@ def test_prepared_selection_returns_no_metrics_for_stale_scope(deck_js: Any) -> 
 
     assert selected["skillRows"] == []
     assert selected["roleRows"] == []
+
+
+def test_new_prepared_view_selects_actual_rows_and_exact_session_block(deck_js: Any) -> None:
+    chips = {
+        "window": [{"key": "7d", "match": "7d", "label": "7 days", "state": "live", "days": 7}],
+        "level": [{"key": "L2", "match": "orchestrator", "label": "L2", "state": "live"}],
+        "harness": [{"key": "codex", "match": "codex", "label": "Codex", "state": "live"}],
+        "provider": [{"key": "openai", "match": "openai", "label": "OpenAI", "state": "live"}],
+    }
+    selected_row = {
+        "key": "prepared-row",
+        "harness": "codex",
+        "provider": "openai",
+        "skill": "demo",
+        "recipe": "recipe-demo",
+        "step": "run",
+        "model": "gpt-test",
+    }
+    other_cohort_row = {
+        "key": "other-cohort",
+        "harness": "claude-code",
+        "provider": "anthropic",
+    }
+    session_row = {**selected_row, "key": "session-row"}
+    prepared = {
+        "skills": [
+            {
+                "window": "7d",
+                "levels": ["orchestrator"],
+                "rows": [{"key": "fallback", "harness": "codex", "provider": "openai"}],
+            }
+        ],
+        "context": {
+            "blocks": [
+                {
+                    "window": "7d",
+                    "levels": ["orchestrator"],
+                    "rows": [
+                        selected_row,
+                        other_cohort_row,
+                        {**selected_row, "key": "other-step", "step": "review"},
+                    ],
+                    "metrics": {
+                        "parent_context": [
+                            selected_row,
+                            other_cohort_row,
+                            {**selected_row, "key": "other-step", "step": "review"},
+                        ]
+                    },
+                    "sessions": {
+                        "owner-key-1": {
+                            "rows": [session_row],
+                            "metrics": {"parent_context": [session_row]},
+                        }
+                    },
+                }
+            ]
+        },
+    }
+    route = {
+        "view": "context",
+        "entity": None,
+        "params": {
+            "window": ["7d"],
+            "level": ["L2"],
+            "harness": ["codex"],
+            "provider": ["openai"],
+            "skill": ["demo"],
+            "recipe": ["recipe-demo"],
+            "step": ["run"],
+            "model": ["gpt-test"],
+        },
+    }
+
+    selected = deck_js.call("DeckCore.selectPrepared", prepared, "context", chips, route)
+
+    assert selected["rows"] == [selected_row]
+    assert selected["metrics"]["parent_context"] == [selected_row]
+    assert selected["skillRows"] == [{"key": "fallback", "harness": "codex", "provider": "openai"}]
+    route["params"]["session"] = ["owner-key-1"]
+    session_selected = deck_js.call("DeckCore.selectPrepared", prepared, "context", chips, route)
+    assert session_selected["rows"] == [session_row]
+    assert session_selected["metrics"]["parent_context"] == [session_row]
+    assert session_selected["selection"]["session"] == "owner-key-1"
+    route["params"]["session"] = ["unknown-owner"]
+    missing_session = deck_js.call("DeckCore.selectPrepared", prepared, "context", chips, route)
+    assert missing_session["rows"] == []
+    assert missing_session["metrics"] == []
+
+    route["params"]["session"] = ["owner-key-1"]
+    route["params"]["step"] = ["missing-step"]
+    missing_step = deck_js.call("DeckCore.selectPrepared", prepared, "context", chips, route)
+    assert missing_step["rows"] == []
+    assert missing_step["metrics"]["parent_context"] == []
+
+    prepared["trend"] = {
+        "blocks": [
+            {
+                "window": "7d",
+                "levels": ["orchestrator"],
+                "rows": [selected_row],
+                "metrics": {"comparisons": [selected_row]},
+            }
+        ]
+    }
+    route["view"] = "trend"
+    route["params"]["session"] = ["owner-key-1"]
+    route["params"]["step"] = ["run"]
+    trend_selected = deck_js.call("DeckCore.selectPrepared", prepared, "trend", chips, route)
+    assert trend_selected["rows"] == [selected_row]
+    assert trend_selected["metrics"]["comparisons"] == [selected_row]
+    assert trend_selected["selection"]["session"] is None
+
+    unattributed = {
+        "key": "unattributed-event",
+        "harness": None,
+        "provider": None,
+        "population": "unattributed_tool",
+        "attribution_state": "unattributed",
+    }
+    prepared["errors"] = {
+        "blocks": [
+            {"window": "7d", "levels": ["orchestrator"], "rows": [unattributed], "metrics": {}}
+        ]
+    }
+    route["view"] = "errors"
+    for key in ("session", "skill", "recipe", "step", "model"):
+        route["params"].pop(key, None)
+    selected_errors = deck_js.call("DeckCore.selectPrepared", prepared, "errors", chips, route)
+    assert selected_errors["rows"] == [unattributed]
 
 
 @pytest.mark.parametrize(

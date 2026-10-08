@@ -3,7 +3,7 @@
 import pytest
 
 from autoskillit.core import SessionType, TokenMeasureState
-from autoskillit.execution._report_index_rows import ReportSessionRow
+from autoskillit.execution._report_index_types import ReportSessionRow
 from autoskillit.report.deck._registry import (
     AVAILABILITY_VOCABULARY,
     DECK_VIEWS,
@@ -94,13 +94,18 @@ def test_session_columns_follow_report_session_row_schema() -> None:
     assert len(SESSION_COLUMNS) == len(set(SESSION_COLUMNS))
 
 
-def test_reserved_measure_views_have_primary_tables_and_registered_scripts() -> None:
+def test_built_views_have_primary_tables_and_registered_scripts() -> None:
     views = {view.view_id: view for view in DECK_VIEWS}
     expected = {
         "spend": ("skills", "views/spend.js"),
         "efficiency": ("skills", "views/efficiency.js"),
         "skill": ("skills", "views/skill.js"),
         "role": ("roles", "views/role.js"),
+        "context": ("turns", "views/context.js"),
+        "errors": ("errors", "views/errors.js"),
+        "trend": ("trends", "views/trend.js"),
+        "gaps": ("gaps", "views/gaps.js"),
+        "parity": ("parity", "views/parity.js"),
     }
 
     assert {

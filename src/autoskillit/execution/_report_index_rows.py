@@ -10,8 +10,7 @@ import math
 from collections import Counter
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
-from types import MappingProxyType
-from typing import Any, Final, TypedDict
+from typing import Any, Final
 
 from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
@@ -20,6 +19,13 @@ from autoskillit.core import (
     TokenMeasure,
     extract_skill_name,
     get_logger,
+)
+from autoskillit.execution._report_index_types import (
+    REQUEST_KIND,
+    SESSION_KIND,
+    SUBAGENT_KIND,
+    TOOL_KIND,
+    TURN_KIND,
 )
 from autoskillit.execution.evidence.otlp_tokens import (
     CLAUDE_CODE_SCOPE_NAME,
@@ -34,125 +40,18 @@ from autoskillit.execution.evidence.otlp_tokens import (
 from autoskillit.execution.evidence.report_walk import OTLP_WALK_KIND, SESSION_WALK_KIND, WalkItem
 from autoskillit.execution.session.turn_usage import classify_token_measure
 
-REPORT_INDEX_SCHEMA_VERSION: Final[int] = 2
-SESSION_KIND: Final[str] = "session"
-REQUEST_KIND: Final[str] = "request"
-TOOL_KIND: Final[str] = "tool"
-SUBAGENT_KIND: Final[str] = "subagent"
+REPORT_INDEX_SCHEMA_VERSION: Final[int] = 3
 UNKNOWN_SOURCE: Final[str] = "unknown"
 _STRUCTURED_MEASURE_SESSION_VERSION = 14
+_TURN_MEASURE_FIELDS = (
+    "input_tokens",
+    "output_tokens",
+    "cache_read_tokens",
+    "cache_write_tokens",
+)
+_PARENT_CONTEXT_FIELDS = frozenset({"parent_prompt_tokens", "subagent_return_tokens"})
 
 logger = get_logger(__name__)
-
-
-class ReportRowBase(TypedDict):
-    """Common fields carried by each report-index fact row."""
-
-    schema_version: int
-    kind: str
-    key: str
-    session_id: str | None
-    time_ms: int | None
-
-
-class ReportSessionRow(ReportRowBase):
-    """Session facts derived from one session or archive walk item.
-
-    The provider is persisted verbatim from ``provider_used``; token
-    classification casefolds it only for the source-pair lookup.
-    """
-
-    harness: str
-    provider: str
-    model: str | None
-    skill: str | None
-    recipe: str | None
-    step: str | None
-    level: str | None
-    kitchen_id: str | None
-    order_id: str | None
-    dispatch_id: str | None
-    campaign_id: str | None
-    caller_session_id: str | None
-    parent_session_id: str | None
-    success: bool | None
-    subtype: str | None
-    adjudication_reason: str | None
-    adjudication_subtype: str | None
-    duration_seconds: float | None
-    input_tokens: SerializedTokenMeasure
-    output_tokens: SerializedTokenMeasure
-    cache_read_tokens: SerializedTokenMeasure
-    cache_write_tokens: SerializedTokenMeasure
-    assistant_turn_count: int | None
-    tool_counts: dict[str, int] | None
-
-
-class ReportRequestRow(ReportRowBase):
-    """Request facts derived from a Claude Code ``api_request`` log record."""
-
-    harness: str
-    request_id: str
-    agent_name: str | None
-    query_source: str | None
-    model: str | None
-    event_sequence: int | None
-    input_tokens: int | None
-    output_tokens: int | None
-    cache_read_tokens: int | None
-    cache_write_tokens: int | None
-    cost_usd: float | None
-    duration_ms: int | None
-
-
-class ReportToolRow(ReportRowBase):
-    """Tool facts derived from a Claude Code ``tool_result`` log record."""
-
-    harness: str
-    agent_name: str | None
-    tool_name: str | None
-    tool_use_id: str | None
-    error_type: str | None
-    success: bool | None
-    duration_ms: int | None
-    tool_input_size_bytes: int | None
-    tool_result_size_bytes: int | None
-    event_sequence: int | None
-
-
-class ReportSubagentRow(ReportRowBase):
-    """Native child or OTLP completion facts, kept in one subagent fact family."""
-
-    harness: str
-    agent_type: str | None
-    model: str | None
-    final_model: str | None
-    model_swapped: bool | None
-    event_sequence: int | None
-    child_id: str | None
-    native_parent_session_id: str | None
-    parent_session_key: str | None
-    role: str | None
-    actor_level: str | None
-    provider: str
-    skill: str | None
-    recipe: str | None
-    step: str | None
-    level: str | None
-    token_usage: dict[str, SerializedTokenMeasure]
-    tool_counts: dict[str, int] | None
-    transcript_state: str | None
-    usage_state: str | None
-
-
-REPORT_ROW_TYPES: Mapping[str, type] = MappingProxyType(
-    {
-        SESSION_KIND: ReportSessionRow,
-        REQUEST_KIND: ReportRequestRow,
-        TOOL_KIND: ReportToolRow,
-        SUBAGENT_KIND: ReportSubagentRow,
-    }
-)
 
 
 def _text(value: object) -> str | None:
@@ -210,6 +109,46 @@ def _token_usage_map(value: object) -> dict[str, SerializedTokenMeasure]:
     return measures
 
 
+def _serialized_measure(value: object) -> SerializedTokenMeasure:
+    try:
+        if isinstance(value, TokenMeasure):
+            return value.to_dict()
+        if isinstance(value, Mapping):
+            return TokenMeasure.from_dict(dict(value)).to_dict()
+    except ValueError:
+        pass
+    return TokenMeasure.unknown().to_dict()
+
+
+def _parent_context_spans(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, (tuple, list)):
+        return []
+    spans: list[dict[str, Any]] = []
+    for raw in value:
+        if not isinstance(raw, Mapping):
+            continue
+        field = _text(raw.get("field"))
+        if field not in _PARENT_CONTEXT_FIELDS:
+            continue
+        spans.append(
+            {
+                "field": field,
+                "measure": _serialized_measure(raw.get("measure")),
+                "invocation_id": _text(raw.get("invocation_id")),
+                "turn_id": _text(raw.get("turn_id")),
+                "source_id": _text(raw.get("source_id")),
+                "timestamp": _text(raw.get("timestamp")),
+                "harness": _text(raw.get("harness")),
+                "provider": _text(raw.get("provider")),
+                "model": _text(raw.get("model")),
+                "tokenizer_version": _text(raw.get("tokenizer_version")),
+                "encoding": _text(raw.get("encoding")),
+                "reason": _text(raw.get("reason")),
+            }
+        )
+    return spans
+
+
 def _pair_text(value: object) -> str:
     return _text(value) or UNKNOWN_SOURCE
 
@@ -251,6 +190,8 @@ _ROW_FIELDS: dict[str, dict[str, Callable[[object], object]]] = {
         **{field: _raw_measure for field in CANONICAL_ACCOUNTING_FIELDS},
         "assistant_turn_count": _count,
         "tool_counts": _count_map,
+        "turn_usage_state": _text,
+        "turn_usage_reason": _text,
     },
     REQUEST_KIND: {
         "schema_version": _count,
@@ -305,6 +246,27 @@ _ROW_FIELDS: dict[str, dict[str, Callable[[object], object]]] = {
         "tool_counts": _count_map,
         "transcript_state": _text,
         "usage_state": _text,
+        "parent_context_spans": _parent_context_spans,
+    },
+    TURN_KIND: {
+        "schema_version": _count,
+        "time_ms": _count,
+        "session_id": _text,
+        "source_id": _text,
+        "session_key": _text,
+        "ordinal": _count,
+        "request_id": _text,
+        "message_id": _text,
+        "harness": _pair_text,
+        "provider": _pair_text,
+        "model": _text,
+        "skill": _text,
+        "recipe": _text,
+        "step": _text,
+        "level": _text,
+        **{field: _serialized_measure for field in _TURN_MEASURE_FIELDS},
+        "context_window_tokens": _count,
+        "context_fraction": _number,
     },
 }
 
@@ -343,7 +305,11 @@ def rows_for_walk_item(item: WalkItem) -> list[dict[str, Any]]:
         return []
     if item.kind == SESSION_WALK_KIND:
         session = _session_row(item.source_id, item.record)
-        return [session, *_native_subagent_rows(item.source_id, item.record, session)]
+        return [
+            session,
+            *_turn_rows(item.source_id, item.record, session),
+            *_native_subagent_rows(item.source_id, item.record, session),
+        ]
     if item.kind == OTLP_WALK_KIND:
         return _otlp_rows(item.source_id, item.record)
     return []
@@ -387,7 +353,46 @@ def _session_row(key: str, record: dict[str, Any]) -> dict[str, Any]:
         **measures,
         "assistant_turn_count": _count(record.get("assistant_turn_count")),
         "tool_counts": _tool_counts(record),
+        "turn_usage_state": _text(record.get("turn_usage_state")),
+        "turn_usage_reason": _text(record.get("turn_usage_reason")),
     }
+
+
+def _turn_rows(
+    source_id: str, record: dict[str, Any], parent: Mapping[str, Any]
+) -> list[dict[str, Any]]:
+    raw_rows = record.get("turn_usage_rows")
+    if not isinstance(raw_rows, (tuple, list)):
+        return []
+    rows: list[dict[str, Any]] = []
+    for ordinal, turn in enumerate(raw_rows):
+        if not isinstance(turn, Mapping):
+            continue
+        rows.append(
+            {
+                "schema_version": REPORT_INDEX_SCHEMA_VERSION,
+                "kind": TURN_KIND,
+                "key": f"{source_id}:turn:{ordinal}",
+                "session_id": parent["session_id"],
+                "time_ms": _iso_to_ms(turn.get("timestamp")),
+                "source_id": source_id,
+                "session_key": source_id,
+                "ordinal": ordinal,
+                "request_id": _text(turn.get("request_id")),
+                "message_id": _text(turn.get("message_id")),
+                "harness": _pair_text(turn.get("backend")),
+                "provider": _pair_text(turn.get("provider_used")),
+                "model": _text(turn.get("model")),
+                "skill": parent["skill"],
+                "recipe": parent["recipe"],
+                "step": parent["step"],
+                "level": parent["level"],
+                **{field: _serialized_measure(turn.get(field)) for field in _TURN_MEASURE_FIELDS},
+                "context_window_tokens": _count(turn.get("context_window_tokens")),
+                "context_fraction": _number(turn.get("context_fraction")),
+            }
+        )
+    return rows
 
 
 def _session_source_measure(row: dict[str, Any], field: str) -> object:
@@ -538,6 +543,7 @@ def _native_subagent_rows(
                 "tool_counts": tool_counts,
                 "transcript_state": transcript_state,
                 "usage_state": _text(child.get("usage_state")) or "unknown",
+                "parent_context_spans": _parent_context_spans(child.get("parent_context_spans")),
             }
         )
     rows.sort(key=lambda row: row["key"])
@@ -647,6 +653,23 @@ def _subagent_fields(
         "tool_counts": None,
         "transcript_state": None,
         "usage_state": None,
+        "parent_context_spans": [
+            {
+                "field": field,
+                "measure": TokenMeasure.unavailable().to_dict(),
+                "invocation_id": None,
+                "turn_id": None,
+                "source_id": position_key,
+                "timestamp": None,
+                "harness": AGENT_BACKEND_CLAUDE_CODE,
+                "provider": None,
+                "model": None,
+                "tokenizer_version": None,
+                "encoding": None,
+                "reason": "parent_invocation_unverified",
+            }
+            for field in ("parent_prompt_tokens", "subagent_return_tokens")
+        ],
     }
 
 

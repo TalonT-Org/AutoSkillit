@@ -7,7 +7,12 @@ each maintain their own near-identical helpers.
 
 from __future__ import annotations
 
+import json
 from typing import Any
+
+import tiktoken
+
+from autoskillit.core import TOKEN_USAGE_SCHEMA_VERSION, TURN_USAGE_SCHEMA_VERSION
 
 CLAUDE_SCOPE: str = "com.anthropic.claude_code.events"
 
@@ -65,3 +70,73 @@ def basic_session_row(dir_name: str, session_id: str, **fields: Any) -> dict[str
         **fields,
     }
     return session
+
+
+def _jsonl(*records: dict[str, Any]) -> str:
+    return "".join(json.dumps(record, separators=(",", ":")) + "\n" for record in records)
+
+
+def _encoding(name: str, *, merge_ab: bool = False) -> Any:
+    ranks = {bytes((value,)): value for value in range(256)}
+    if merge_ab:
+        ranks[b"ab"] = 256
+    return tiktoken.Encoding(
+        name=name,
+        pat_str=r"[\s\S]+",
+        mergeable_ranks=ranks,
+        special_tokens={"<|endoftext|>": 257 if merge_ab else 256},
+    )
+
+
+def _claude_call(
+    *,
+    child_id: str | None,
+    tool_id: str,
+    prompt: str,
+    model: str = "gpt-known",
+) -> dict[str, Any]:
+    inputs: dict[str, str] = {"prompt": prompt}
+    if child_id is not None:
+        inputs["agent_id"] = child_id
+    return {
+        "type": "assistant",
+        "uuid": f"record-{tool_id}",
+        "timestamp": "2026-10-07T10:00:00Z",
+        "requestId": f"turn-{tool_id}",
+        "message": {
+            "id": f"message-{tool_id}",
+            "model": model,
+            "content": [{"type": "tool_use", "id": tool_id, "name": "Task", "input": inputs}],
+        },
+    }
+
+
+def _claude_result(*, tool_id: str, record_id: str, text: str) -> dict[str, Any]:
+    return {
+        "type": "user",
+        "uuid": record_id,
+        "timestamp": f"2026-10-07T10:00:0{record_id[-1]}Z",
+        "message": {
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": tool_id,
+                    "content": [{"type": "text", "text": text}],
+                }
+            ]
+        },
+    }
+
+
+def _turn_usage_descriptor(
+    *,
+    count: int,
+    filename: str | None = "turn_usage.jsonl",
+    version: int = TURN_USAGE_SCHEMA_VERSION,
+) -> dict[str, Any]:
+    return {
+        "schema_version": TOKEN_USAGE_SCHEMA_VERSION,
+        "turn_usage_file": filename,
+        "turn_usage_count": count,
+        "turn_usage_schema_version": version,
+    }

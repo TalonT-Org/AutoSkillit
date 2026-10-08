@@ -72,6 +72,7 @@ def render_deck(
     request_rows: Iterable[Mapping[str, Any]] = (),
     tool_rows: Iterable[Mapping[str, Any]] = (),
     subagent_rows: Iterable[Mapping[str, Any]] = (),
+    turn_rows: Iterable[Mapping[str, Any]] = (),
     generated_at: datetime,
     index_schema_version: int,
 ) -> str:
@@ -81,6 +82,7 @@ def render_deck(
             request_rows=request_rows,
             tool_rows=tool_rows,
             subagent_rows=subagent_rows,
+            turn_rows=turn_rows,
             generated_at=generated_at,
             index_schema_version=index_schema_version,
         )

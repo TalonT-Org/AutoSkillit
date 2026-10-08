@@ -571,7 +571,6 @@ def test_view_renderers_keep_prepared_populations_and_filter_links(
     try:
         rendered = context.call("DeckTest.render", view_id, _new_view_context(view_id))
         assert marker.lower() in rendered["text"].lower()
-        assert rendered["links"]
         assert any(
             "harness=codex" in href and "provider=openai" in href for href in rendered["links"]
         )

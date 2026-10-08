@@ -135,7 +135,7 @@ def test_shell_passes_selected_prepared_rows_to_renderer_and_headline(
             + view_id
             + '?window=all&level=L2&harness=codex&provider=openai";'
         )
-        ctx.call("DeckShell.boot", payload)
+        ctx.eval(f"DeckShell.boot({json.dumps(payload)});")
         result = json.loads(ctx.call("deckProbeResult"))
         cohort_text = ctx.call("deckCohortText")
         view_text = ctx.call("deckViewText")

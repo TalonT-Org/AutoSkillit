@@ -1,6 +1,4 @@
 DeckShell.registerView("parity", ctx => {
-  const primitiveStates = ["measured", "measured_zero", "unknown", "unavailable",
-    "not_applicable"];
   const groupFields = ["session_key", "harness", "provider", "skill", "recipe", "step",
     "model", "level", "population"];
   const groupKey = row => JSON.stringify(groupFields.map(field => row[field] ?? null));
@@ -12,7 +10,7 @@ DeckShell.registerView("parity", ctx => {
   ].filter(([, value]) => value != null).map(([key, value]) => [key, [value]]));
   const stateCell = row => {
     const state = row?.state ?? "no_observations";
-    const body = primitiveStates.includes(state) ? ctx.availabilityCell(row.measure ?? {state}) :
+    const body = DeckCore.isPrimitiveState(state) ? ctx.availabilityCell(row.measure ?? {state}) :
       ctx.el("span", {class: "coverage-state coverage-state--" + state},
         state === "mixed" ? "mixed coverage" : state === "no_observations" ?
           "no observations" : state);

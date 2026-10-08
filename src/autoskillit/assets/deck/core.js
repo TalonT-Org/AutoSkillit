@@ -4,6 +4,8 @@ globalThis.DeckCore = (() => {
   const DAY_MS = 86400000;
   const enc = encodeURIComponent;
   const formatCount = n => new Intl.NumberFormat("en-US").format(n);
+  const isPrimitiveState = state => ["measured", "measured_zero", "unknown",
+    "unavailable", "not_applicable"].includes(state);
   const formatDate = ms => new Date(ms).toISOString().slice(0, 10);
 
   function formatRatio(ratio, percent = false) {
@@ -430,7 +432,7 @@ globalThis.DeckCore = (() => {
   return Object.freeze({decodeTable, encodeRoute, decodeRoute, hrefFor, effectiveSelection,
     toggleSelection, windowSelection, selectPrepared, filterRows, populationSentence,
     summarizePairs, sortRows, parseSort, chipPresentation, availabilityPresentation,
-    barLayout, formatCount, formatRatio, ratioSample, reviewEligibility, reviewSignal,
+    isPrimitiveState, barLayout, formatCount, formatRatio, ratioSample, reviewEligibility, reviewSignal,
     measureCell, ratioCell, definitionCard, toolMix, roleHarnessRows, formatDate,
     CHIP_STATES, DAY_MS});
 })();

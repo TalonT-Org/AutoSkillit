@@ -1,6 +1,5 @@
 DeckShell.registerView("errors", ctx => {
-  const stateCell = measure => ["measured", "measured_zero", "unknown", "unavailable",
-    "not_applicable"].includes(measure?.state) ? ctx.availabilityCell(measure) :
+  const stateCell = measure => DeckCore.isPrimitiveState(measure?.state) ? ctx.availabilityCell(measure) :
     ctx.el("span", {class: "coverage-state"}, measure?.state === "no_observations" ?
       "no observations" : measure?.state === "mixed" ? "mixed coverage" :
         measure?.state ?? "unknown");

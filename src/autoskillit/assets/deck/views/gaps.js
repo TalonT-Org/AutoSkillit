@@ -1,6 +1,4 @@
 DeckShell.registerView("gaps", ctx => {
-  const primitiveStates = ["measured", "measured_zero", "unknown", "unavailable",
-    "not_applicable"];
   const viewForField = field => {
     const name = String(field ?? "");
     if (name.includes("session_outcome") || name.includes("tool_error") ||
@@ -9,7 +7,7 @@ DeckShell.registerView("gaps", ctx => {
       name.includes("prompt") || name.includes("return")) return "context";
     return "trend";
   };
-  const stateCell = row => primitiveStates.includes(row.state) ?
+  const stateCell = row => DeckCore.isPrimitiveState(row.state) ?
     ctx.availabilityCell(row.measure ?? {state: row.state}) :
     ctx.el("span", {class: "coverage-state coverage-state--" + row.state},
       row.state === "mixed" ? "mixed coverage" :

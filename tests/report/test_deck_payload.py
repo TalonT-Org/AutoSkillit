@@ -17,6 +17,7 @@ from autoskillit.core import (
 )
 from autoskillit.report.deck import _measure_helpers as deck_measure_helpers
 from autoskillit.report.deck import _payload as deck_payload_module
+from autoskillit.report.deck import _view_common as deck_view_common
 from autoskillit.report.deck import build_deck_payload
 from autoskillit.report.deck._payload import encode_table
 from autoskillit.report.deck._registry import (
@@ -36,6 +37,28 @@ from tests.report._fixtures import session_row as _row
 
 pytestmark = [pytest.mark.small]
 GEN_MS = 1_791_072_000_000
+
+
+@pytest.mark.parametrize(
+    ("function", "all_keys", "finite_keys"),
+    [
+        ("_window_level_blocks", ["recent", "future", "untimed"], ["recent", "future"]),
+        ("_population_blocks", ["recent", "untimed"], ["recent"]),
+    ],
+)
+def test_level_grouping_preserves_each_window_time_policy(
+    function: str, all_keys: list[str], finite_keys: list[str]
+) -> None:
+    rows = [
+        {"key": "recent", "level": "skill", "time_ms": GEN_MS - 1},
+        {"key": "future", "level": "skill", "time_ms": GEN_MS + 1},
+        {"key": "untimed", "level": "skill", "time_ms": None},
+    ]
+    blocks = getattr(deck_view_common, function)(rows, generated_at_ms=GEN_MS)
+    assert blocks
+    for window, levels, members in blocks:
+        assert levels == ["skill"]
+        assert [row["key"] for row in members] == (all_keys if window == "all" else finite_keys)
 
 
 def _payload(rows: list[dict[str, Any]]) -> dict[str, Any]:

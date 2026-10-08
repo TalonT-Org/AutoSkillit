@@ -58,6 +58,21 @@ def _canonical_children(
     return children
 
 
+def _level_groups(
+    rows: Sequence[Mapping[str, Any]],
+) -> Iterable[tuple[list[str | None], list[Mapping[str, Any]]]]:
+    levels = sorted(
+        {_level_value(row.get("level")) for row in rows},
+        key=lambda level: (level is None, level or ""),
+    )
+    for size in range(1, len(levels) + 1):
+        for selected in combinations(levels, size):
+            selected_set = set(selected)
+            members = [row for row in rows if row.get("level") in selected_set]
+            if members:
+                yield list(selected), members
+
+
 def _window_level_blocks(
     rows: Sequence[Mapping[str, Any]], *, generated_at_ms: int
 ) -> list[tuple[str, list[str | None], list[Mapping[str, Any]]]]:
@@ -72,16 +87,9 @@ def _window_level_blocks(
                 and row["time_ms"] >= generated_at_ms - window.days * DAY_MS
             )
         ]
-        levels = sorted(
-            {_level_value(row.get("level")) for row in in_window},
-            key=lambda level: (level is None, level or ""),
+        blocks.extend(
+            (window.key, selected, members) for selected, members in _level_groups(in_window)
         )
-        for size in range(1, len(levels) + 1):
-            for selected in combinations(levels, size):
-                selected_set = set(selected)
-                members = [row for row in in_window if row.get("level") in selected_set]
-                if members:
-                    blocks.append((window.key, list(selected), members))
     return blocks
 
 
@@ -108,16 +116,9 @@ def _population_blocks(
             for row in rows
             if _time_in_window(row.get("time_ms"), window.key, generated_at_ms=generated_at_ms)
         ]
-        levels = sorted(
-            {_level_value(row.get("level")) for row in in_window},
-            key=lambda level: (level is None, level or ""),
+        blocks.extend(
+            (window.key, selected, members) for selected, members in _level_groups(in_window)
         )
-        for size in range(1, len(levels) + 1):
-            for selected in combinations(levels, size):
-                selected_set = set(selected)
-                members = [row for row in in_window if row.get("level") in selected_set]
-                if members:
-                    blocks.append((window.key, list(selected), members))
     return blocks
 
 

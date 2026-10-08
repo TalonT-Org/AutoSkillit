@@ -12,6 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -50,9 +51,13 @@ _SMOKE_FAILURE = {
     "message": "model reported failure",
     "issue": "https://github.com/TalonT-Org/AutoSkillit/issues/5232",
 }
+_IMPLEMENTATION_ISSUE = "https://github.com/owner/sandbox/issues/5233"
+_IMPLEMENTATION_EXPECTED_ISSUE = "https://github.com/TalonT-Org/AutoSkillit/issues/5233"
+_PIPELINE_HEAD = "0123456789abcdef"
+_PIPELINE_BRANCH = "codex/issue-5233"
 
 
-@dataclass
+@dataclass(eq=False)
 class RecordedCall:
     argv: list[str]
     cwd: Path | None
@@ -84,6 +89,39 @@ class FakeRunner:
 
 def _completed(argv, stdout: str = "", returncode: int = 0, stderr: str = ""):
     return subprocess.CompletedProcess(list(argv), returncode, stdout, stderr)
+
+
+def _recorded_calls(
+    calls: list[RecordedCall],
+    *,
+    prefix: list[str] | None = None,
+    exact: list[str] | None = None,
+    contains: str | None = None,
+) -> list[RecordedCall]:
+    return [
+        call
+        for call in calls
+        if (prefix is None or call.argv[: len(prefix)] == prefix)
+        and (exact is None or call.argv == exact)
+        and (contains is None or contains in " ".join(call.argv))
+    ]
+
+
+def _recorded_pr_list_calls(calls: list[RecordedCall], *, baseline: bool) -> list[RecordedCall]:
+    lists = _recorded_calls(calls, prefix=["gh", "pr", "list"])
+    selected = []
+    for call in lists:
+        is_baseline = call.argv[call.argv.index("--limit") + 1] == "1"
+        if (baseline and is_baseline) or (not baseline and not is_baseline):
+            selected.append(call)
+    return selected
+
+
+def _recorded_pr_detail_calls(calls: list[RecordedCall], number: int) -> list[RecordedCall]:
+    suffix = f"/pulls/{number}"
+    return [
+        call for call in calls if call.argv[:2] == ["gh", "api"] and call.argv[2].endswith(suffix)
+    ]
 
 
 def _pr(number: int, state: str, additions: int = 3, deletions: int = 1) -> dict:
@@ -142,6 +180,273 @@ def _env(**overrides: str) -> dict[str, str]:
     }
     env.update(overrides)
     return {name: value for name, value in env.items() if value}
+
+
+def _pipeline_catalog(expected_failures: list[dict[str, str]] | None = None):
+    entry = {
+        "name": "implementation",
+        "kind": "recipe",
+        "pipeline": True,
+        "peak_sessions": 6,
+        "timeout_sec": 600,
+        "trigger_paths": ["src/*"],
+        "recipe": "implementation",
+        "ingredients": {"source_dir": "/workspace/sandbox", "open_pr": "true"},
+        "expected_pull_request_state": "open",
+        "issue_url_env": "E2E_IMPLEMENTATION_ISSUE_URL",
+        "required_changed_paths": ["sandbox/", "tests/"],
+        "test_command": ["task", "test-check"],
+        "peak_sessions_evidence": "recorded session events",
+    }
+    if expected_failures is not None:
+        entry["expected_failures"] = expected_failures
+    return e2e_catalog.parse_catalog({"sandbox_repository": SANDBOX, "tests": [entry]})
+
+
+def _pipeline_pr(number: int = 8, *, branch: str = _PIPELINE_BRANCH) -> dict[str, Any]:
+    return {
+        "number": number,
+        "state": "open",
+        "merged": False,
+        "merged_at": None,
+        "auto_merge": None,
+        "body": f"Implements {_IMPLEMENTATION_ISSUE}",
+        "additions": 5,
+        "deletions": 2,
+        "head": {
+            "ref": branch,
+            "sha": _PIPELINE_HEAD,
+            "repo": {"full_name": SANDBOX},
+        },
+        "base": {"ref": "main", "repo": {"full_name": SANDBOX}},
+    }
+
+
+def _pipeline_setup_response(argv: list[str], state: dict[str, Any]):
+    if argv[:3] == ["autoskillit", "config", "show"]:
+        return _completed(argv, json.dumps(state["config"]))
+    if argv[:3] == ["gh", "issue", "view"]:
+        payload = (
+            state["seed"] if "number,url,state,title,body,labels" in argv else state["final_issue"]
+        )
+        return _completed(argv, json.dumps(payload))
+    if argv[:3] == ["gh", "repo", "view"]:
+        payload = {"defaultBranchRef": {"name": state["default_branch"]}}
+        return _completed(argv, json.dumps(payload))
+    if argv[:3] == ["gh", "pr", "list"]:
+        rows = [{"number": 7}] if argv[argv.index("--limit") + 1] == "1" else state["listed_prs"]
+        return _completed(argv, json.dumps(rows))
+    return None
+
+
+def _pipeline_execution_response(argv: list[str], state: dict[str, Any]):
+    if argv[:3] == ["autoskillit", "fleet", "run"]:
+        if state["fleet_exception"] is not None:
+            raise state["fleet_exception"]
+        return _completed(argv, json.dumps(state["fleet_envelope"]) + "\n")
+    if argv[:2] == ["task", "test-check"]:
+        state["test_check_count"] += 1
+        if state["test_check_count"] > 1 and state["pr_test_returncode"]:
+            return _completed(argv, returncode=state["pr_test_returncode"], stderr="tests failed")
+        return None
+    if argv[:2] == ["git", "rev-parse"]:
+        return _completed(argv, state["fetch_oid"] + "\n")
+    return None
+
+
+def _pipeline_ci_api_response(argv: list[str], endpoint: str, state: dict[str, Any]):
+    if endpoint.endswith("/actions/workflows?per_page=100"):
+        workflows = [{"id": 1, "name": "CI", "state": "active"}]
+        return _completed(argv, json.dumps([{"workflows": workflows}]))
+    if "/actions/workflows/1/runs?" in endpoint:
+        run = {
+            "id": 2,
+            "status": "completed",
+            "conclusion": state["workflow_conclusion"],
+            "pull_requests": [
+                {
+                    "number": 8,
+                    "head": {"sha": _PIPELINE_HEAD, "repo": {"full_name": SANDBOX}},
+                    "base": {"repo": {"full_name": SANDBOX}},
+                }
+            ],
+        }
+        return _completed(argv, json.dumps([{"workflow_runs": [run]}]))
+    if endpoint.endswith("/actions/runs/2/jobs?per_page=100"):
+        job = {"name": "test", "status": "completed", "conclusion": state["job_conclusion"]}
+        return _completed(argv, json.dumps([{"jobs": [job]}]))
+    return None
+
+
+def _pipeline_pull_request_api_response(argv: list[str], endpoint: str, state: dict[str, Any]):
+    if "/pulls/" not in endpoint:
+        return None
+    if endpoint.endswith("/files?per_page=100"):
+        return _completed(argv, json.dumps([state["files"]]))
+    number = int(endpoint.split("/pulls/", 1)[1].split("/", 1)[0])
+    return _completed(argv, json.dumps(state["pr_details"][number]))
+
+
+def _pipeline_cleanup_api_response(argv: list[str], endpoint: str, state: dict[str, Any]):
+    if argv[2] == "--method":
+        error = state["cleanup_errors"].get("branch_delete")
+        if error is not None:
+            raise error
+        return None
+    if "/git/refs/heads/" in endpoint:
+        error = state["cleanup_errors"].get("branch_get")
+        if error is not None:
+            raise error
+        return _completed(argv, "{}")
+    return None
+
+
+def _pipeline_api_response(argv: list[str], state: dict[str, Any]):
+    if argv[:2] != ["gh", "api"]:
+        return None
+    endpoint = argv[4] if argv[2] == "--method" else argv[2]
+    for route in (
+        _pipeline_ci_api_response,
+        _pipeline_pull_request_api_response,
+        _pipeline_cleanup_api_response,
+    ):
+        response = route(argv, endpoint, state)
+        if response is not None:
+            return response
+    return None
+
+
+def _pipeline_cleanup_response(argv: list[str], state: dict[str, Any]):
+    if argv[:3] == ["gh", "pr", "close"]:
+        error = state["cleanup_errors"].get("pr_close")
+        if error is not None:
+            raise error
+    return None
+
+
+def _pipeline_response(argv: list[str], state: dict[str, Any]):
+    for route in (
+        _pipeline_setup_response,
+        _pipeline_execution_response,
+        _pipeline_api_response,
+        _pipeline_cleanup_response,
+    ):
+        response = route(argv, state)
+        if response is not None:
+            return response
+    return None
+
+
+def _pipeline_runner() -> tuple[FakeRunner, dict[str, Any]]:
+    seed = {
+        "number": 5233,
+        "url": _IMPLEMENTATION_ISSUE,
+        "state": "OPEN",
+        "title": "Add a greeting",
+        "body": "Implement the requested behavior.",
+        "labels": [],
+    }
+    listed = {
+        "number": 8,
+        "state": "OPEN",
+        "additions": 5,
+        "deletions": 2,
+        "body": f"Implements {_IMPLEMENTATION_ISSUE}",
+        "headRefOid": _PIPELINE_HEAD,
+        "headRefName": _PIPELINE_BRANCH,
+        "headRepository": {"nameWithOwner": SANDBOX},
+        "baseRefName": "main",
+        "autoMergeRequest": None,
+        "mergedAt": None,
+    }
+    state: dict[str, Any] = {
+        "seed": seed,
+        "default_branch": "main",
+        "config": {
+            "github": {"in_progress_label": "in-progress"},
+            "branching": {"default_base_branch": "main"},
+        },
+        "listed_prs": [listed],
+        "pr_details": {8: _pipeline_pr()},
+        "files": [
+            {"filename": "sandbox/worker.py", "status": "added", "additions": 3, "deletions": 0},
+            {
+                "filename": "tests/test_worker.py",
+                "status": "modified",
+                "additions": 2,
+                "deletions": 1,
+            },
+        ],
+        "final_issue": {"state": "OPEN", "labels": [{"name": "in-progress"}]},
+        "fetch_oid": _PIPELINE_HEAD,
+        "test_check_count": 0,
+        "pr_test_returncode": 0,
+        "workflow_conclusion": "success",
+        "job_conclusion": "success",
+        "fleet_envelope": {
+            "success": True,
+            "dispatch_status": "success",
+            "dispatch_id": "dispatch-5233",
+            "dispatched_session_id": "session-5233",
+            "l3_payload": {"reason": "implementation_complete"},
+        },
+        "fleet_exception": None,
+        "cleanup_errors": {},
+        "proof": {"branches": [_PIPELINE_BRANCH], "claimed": True, "violations": []},
+        "summary": {"coverage": {"complete": True}, "peak_sessions": 4, "violations": []},
+    }
+
+    return FakeRunner(lambda argv: _pipeline_response(argv, state)), state
+
+
+def _patch_pipeline_measurement(monkeypatch, state: dict[str, Any]):
+    observed: dict[str, list[tuple]] = {"ownership": [], "summaries": []}
+
+    def collect(trace_path, envelope, log_root, issue_url, repository, *, claim_label=None):
+        observed["ownership"].append(
+            (trace_path, envelope, log_root, issue_url, repository, claim_label)
+        )
+        return state["proof"]
+
+    def summarize(trace_path, envelope, log_root):
+        observed["summaries"].append((trace_path, envelope, log_root))
+        return state["summary"]
+
+    monkeypatch.setattr(harness.e2e_sessions, "collect_ownership", collect)
+    monkeypatch.setattr(harness.e2e_sessions, "summarize", summarize)
+    monkeypatch.setattr(harness.time, "sleep", lambda _seconds: None)
+    return observed
+
+
+def _run_pipeline(
+    tmp_path: Path,
+    runner: FakeRunner,
+    state: dict[str, Any],
+    monkeypatch,
+    *,
+    env=None,
+    expected_failures=None,
+):
+    catalog = _pipeline_catalog(expected_failures)
+    out = tmp_path / "out"
+    home = tmp_path / "home"
+    observed = _patch_pipeline_measurement(monkeypatch, state)
+    failures = harness.run_test(
+        catalog.get("implementation"),
+        catalog,
+        out=out,
+        home=home,
+        env=env if env is not None else _env(E2E_IMPLEMENTATION_ISSUE_URL=_IMPLEMENTATION_ISSUE),
+        runner=runner,
+    )
+    return (
+        failures,
+        json.loads((out / "result.json").read_text(encoding="utf-8")),
+        out,
+        home,
+        catalog,
+        observed,
+    )
 
 
 def _run_recipe(tmp_path: Path, runner: FakeRunner, *, state: str = "open", env=None):
@@ -1470,11 +1775,15 @@ class TestRecipeFlow:
         assert ("autoskillit", "fleet", "run") not in prefixes
 
     def test_fleet_timeout_is_a_failure_and_cleanup_still_runs(self, tmp_path: Path) -> None:
-        timeout = subprocess.TimeoutExpired(["autoskillit"], 720)
+        timeout = subprocess.TimeoutExpired(
+            ["autoskillit"], 720, output=b"partial stdout", stderr=b"partial stderr"
+        )
         runner = FakeRunner(_recipe_handler(fleet=timeout))
         failures, result = _run_recipe(tmp_path, runner)
         assert result["passed"] is False
         assert any("fleet run: timed out" in failure for failure in failures)
+        assert (tmp_path / "out" / "fleet-run.stdout.log").read_text() == "partial stdout"
+        assert (tmp_path / "out" / "fleet-run.stderr.log").read_text() == "partial stderr"
         assert runner.calls[-1].argv[:4] == ["gh", "pr", "close", "8"]
 
     def test_unexpected_fleet_error_records_failure_and_still_cleans_up(
@@ -1548,6 +1857,410 @@ class TestRecipeFlow:
         assert failures == ["E2E_SANDBOX_TOKEN is not set"]
         assert result["passed"] is False
         assert runner.calls == []
+
+
+class TestPipelineRecipeFlow:
+    def test_pipeline_uses_the_seed_issue_and_cleans_only_its_owned_pr(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        runner, state = _pipeline_runner()
+        unrelated = {**state["listed_prs"][0], "number": 9, "headRefName": "other/branch"}
+        state["listed_prs"].append(unrelated)
+        state["pr_details"][9] = _pipeline_pr(9, branch="other/branch")
+        failures, result, out, home, catalog, observed = _run_pipeline(
+            tmp_path, runner, state, monkeypatch
+        )
+
+        assert failures == []
+        assert result == {
+            "test": "implementation",
+            "passed": True,
+            "failures": [],
+            "outcome": "passed",
+            "expected_findings": [],
+        }
+        test = catalog.get("implementation")
+        assert test.pipeline is True
+        assert test.issue_url_env == "E2E_IMPLEMENTATION_ISSUE_URL"
+        assert test.required_changed_paths == ("sandbox/", "tests/")
+        assert test.test_command == ("task", "test-check")
+
+        calls = runner.calls
+        config_call = _recorded_calls(calls, prefix=["autoskillit", "config", "show"])[0]
+        assert config_call.cwd == harness.SANDBOX_CLONE
+        assert config_call.env == harness.child_env(
+            _env(E2E_IMPLEMENTATION_ISSUE_URL=_IMPLEMENTATION_ISSUE)
+        )
+        seed_call = _recorded_calls(calls, prefix=["gh", "issue", "view"])[0]
+        repo_call = _recorded_calls(calls, prefix=["gh", "repo", "view"])[0]
+        baseline_install = _recorded_calls(calls, exact=["task", "install-worktree"])[0]
+        checks = _recorded_calls(calls, exact=["task", "test-check"])
+        baseline_list = _recorded_pr_list_calls(calls, baseline=True)[0]
+        fleet_call = _recorded_calls(calls, prefix=["autoskillit", "fleet", "run"])[0]
+        assert (
+            calls.index(config_call)
+            < calls.index(seed_call)
+            < calls.index(repo_call)
+            < calls.index(baseline_install)
+            < calls.index(checks[0])
+            < calls.index(baseline_list)
+            < calls.index(fleet_call)
+        )
+        assert baseline_install.cwd == checks[0].cwd == harness.SANDBOX_CLONE
+        assert len(checks) == 2 and checks[1].cwd == harness.SANDBOX_CLONE
+
+        listed_calls = _recorded_pr_list_calls(calls, baseline=False)
+        file_call = _recorded_calls(calls, contains="/files?per_page=100")[0]
+        fetch_call = _recorded_calls(calls, prefix=["git", "fetch"])[0]
+        oid_call = _recorded_calls(calls, prefix=["git", "rev-parse"])[0]
+        checkout_call = _recorded_calls(calls, prefix=["git", "checkout", "--detach"])[0]
+        install_calls = _recorded_calls(calls, exact=["task", "install-worktree"])
+        workflow_call = _recorded_calls(
+            calls, prefix=["gh", "api"], contains="/actions/workflows?per_page=100"
+        )[0]
+        runs_call = _recorded_calls(calls, contains="/actions/workflows/1/runs?")[0]
+        jobs_call = _recorded_calls(calls, contains="/actions/runs/2/jobs?")[0]
+        pr_reads = _recorded_pr_detail_calls(calls, 8)
+        close = _recorded_calls(calls, prefix=["gh", "pr", "close"])[0]
+        branch_delete = _recorded_calls(calls, prefix=["gh", "api", "--method", "DELETE"])[0]
+        final_issue = _recorded_calls(
+            calls, prefix=["gh", "issue", "view"], contains="state,labels"
+        )[-1]
+        issue_edit = _recorded_calls(calls, prefix=["gh", "issue", "edit"])[0]
+        assert len(listed_calls) == 2 and len(install_calls) == 2 and len(pr_reads) == 3
+        assert (
+            calls.index(fleet_call)
+            < calls.index(listed_calls[0])
+            < calls.index(file_call)
+            < calls.index(fetch_call)
+            < calls.index(oid_call)
+            < calls.index(checkout_call)
+            < calls.index(install_calls[1])
+            < calls.index(checks[1])
+            < calls.index(workflow_call)
+            < calls.index(runs_call)
+            < calls.index(jobs_call)
+            < calls.index(pr_reads[1])
+            < calls.index(listed_calls[1])
+            < calls.index(close)
+            < calls.index(branch_delete)
+            < calls.index(final_issue)
+            < calls.index(issue_edit)
+        )
+
+        ingredient_args = [
+            fleet_call.argv[index + 1]
+            for index, arg in enumerate(fleet_call.argv[:-1])
+            if arg == "-i"
+        ]
+        assert ingredient_args.count(f"issue_url={_IMPLEMENTATION_ISSUE}") == 1
+        assert (
+            ingredient_args.count("task=Add a greeting\n\nImplement the requested behavior.") == 1
+        )
+        ingredient_names = {key for key, _value in test.ingredients}
+        assert "issue_url" not in ingredient_names and "task" not in ingredient_names
+        assert fleet_call.timeout == test.timeout_sec + e2e_catalog.HARNESS_GRACE_SEC
+        assert fleet_call.cwd == harness.SANDBOX_CLONE
+        assert [call.input for call in calls if call.input] == [SANDBOX_TOKEN]
+        assert all(SANDBOX_TOKEN not in " ".join(call.argv) for call in calls)
+        assert all(
+            call.env == harness.child_env(_env(E2E_IMPLEMENTATION_ISSUE_URL=_IMPLEMENTATION_ISSUE))
+            for call in calls
+        )
+
+        trace = out / "session-events.jsonl"
+        log_root = home / ".local" / "share" / "autoskillit" / "logs"
+        envelope = json.loads((out / "envelope.json").read_text(encoding="utf-8"))
+        assert observed["ownership"] == [
+            (trace, envelope, log_root, _IMPLEMENTATION_ISSUE, SANDBOX, "in-progress")
+        ]
+        assert observed["summaries"] == [(trace, envelope, log_root)]
+        settings = json.loads((home / ".claude" / "settings.json").read_text(encoding="utf-8"))
+        assert settings["env"] == _EXPECTED_SETTINGS_ENV
+        assert all(
+            len(settings["hooks"][event]) == 1
+            for event in ("SessionStart", "SessionEnd", "SubagentStart", "SubagentStop")
+        )
+
+        close = next(call for call in calls if call.argv[:3] == ["gh", "pr", "close"])
+        assert close.argv == ["gh", "pr", "close", "8", "--repo", SANDBOX]
+        assert not any(call.argv[:4] == ["gh", "pr", "close", "9"] for call in calls)
+        assert any(
+            call.argv[:4] == ["gh", "api", "--method", "DELETE"]
+            and call.argv[4].endswith("codex%2Fissue-5233")
+            for call in calls
+        )
+        assert any(
+            call.argv[:3] == ["gh", "issue", "edit"]
+            and call.argv[-2:] == ["--remove-label", "in-progress"]
+            for call in calls
+        )
+
+    @pytest.mark.parametrize(
+        ("problem", "expected"),
+        [
+            ("malformed", "seed: expected the configured OPEN sandbox issue"),
+            ("closed", "seed: expected the configured OPEN sandbox issue"),
+            ("claimed", "seed: issue is already claimed"),
+        ],
+    )
+    def test_invalid_seed_stops_before_baseline_or_fleet(
+        self, tmp_path: Path, monkeypatch, problem: str, expected: str
+    ) -> None:
+        runner, state = _pipeline_runner()
+        if problem == "malformed":
+            state["seed"].pop("title")
+        elif problem == "closed":
+            state["seed"]["state"] = "CLOSED"
+        else:
+            state["seed"]["labels"] = [{"name": "in-progress"}]
+
+        failures, result, _out, _home, _catalog, observed = _run_pipeline(
+            tmp_path, runner, state, monkeypatch
+        )
+
+        assert any(expected in failure for failure in failures)
+        assert result["outcome"] == "failed"
+        assert not any(call.argv[:2] == ["task", "install-worktree"] for call in runner.calls)
+        assert not any(call.argv[:2] == ["autoskillit", "fleet"] for call in runner.calls)
+        assert not any(call.argv[:3] == ["gh", "pr", "list"] for call in runner.calls)
+        assert observed["ownership"] == observed["summaries"] == []
+
+    def test_missing_seed_url_stops_before_github_issue_lookup(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        runner, state = _pipeline_runner()
+        failures, result, _out, _home, _catalog, _observed = _run_pipeline(
+            tmp_path,
+            runner,
+            state,
+            monkeypatch,
+            env=_env(E2E_IMPLEMENTATION_ISSUE_URL=""),
+        )
+
+        assert failures == ["preflight: seed: missing or noncanonical sandbox issue URL"]
+        assert result["outcome"] == "failed"
+        assert not any(call.argv[:3] == ["gh", "issue", "view"] for call in runner.calls)
+        assert not any(call.argv[:3] == ["autoskillit", "fleet", "run"] for call in runner.calls)
+
+    @pytest.mark.parametrize("wrong_base", ["sandbox", "effective-config"])
+    def test_seed_requires_the_main_branch_in_repository_and_config(
+        self, tmp_path: Path, monkeypatch, wrong_base: str
+    ) -> None:
+        runner, state = _pipeline_runner()
+        if wrong_base == "sandbox":
+            state["default_branch"] = "develop"
+        else:
+            state["config"]["branching"]["default_base_branch"] = "trunk"
+
+        failures, _result, _out, _home, _catalog, _observed = _run_pipeline(
+            tmp_path, runner, state, monkeypatch
+        )
+
+        assert any(
+            "sandbox and effective configured base branch must both be main" in item
+            for item in failures
+        )
+        assert not any(call.argv[:2] == ["task", "install-worktree"] for call in runner.calls)
+        assert not any(call.argv[:3] == ["autoskillit", "fleet", "run"] for call in runner.calls)
+
+    def test_linked_stable_finding_is_recorded_and_skips_pr_assertions(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        runner, state = _pipeline_runner()
+        state["fleet_envelope"] = {
+            "success": False,
+            "dispatch_status": "retry_exhausted",
+            "dispatch_id": "dispatch-5233",
+            "dispatched_session_id": "session-5233",
+            "reason": "known orchestration failure",
+        }
+        state["listed_prs"] = []
+        state["pr_details"] = {}
+        state["final_issue"] = {"state": "OPEN", "labels": []}
+        state["proof"] = {"branches": [], "claimed": False, "violations": []}
+        expected = {
+            "check": "fleet_envelope",
+            "message": "retry_exhausted: known orchestration failure",
+            "issue": _IMPLEMENTATION_EXPECTED_ISSUE,
+        }
+
+        failures, result, _out, _home, _catalog, _observed = _run_pipeline(
+            tmp_path, runner, state, monkeypatch, expected_failures=[expected]
+        )
+
+        assert failures == []
+        assert result["outcome"] == "expected_failure"
+        assert result["passed"] is False
+        assert result["expected_findings"] == [expected]
+        assert not any(call.argv[:2] == ["git", "fetch"] for call in runner.calls)
+        assert not any(
+            "/pulls/" in " ".join(call.argv) and call.argv[0:2] == ["gh", "api"]
+            for call in runner.calls
+        )
+        assert not any("actions/workflows" in " ".join(call.argv) for call in runner.calls)
+
+    @pytest.mark.parametrize("envelope_kind", ["stale", "fatal"])
+    def test_stale_or_fatal_pipeline_failure_cannot_be_allowlisted(
+        self, tmp_path: Path, monkeypatch, envelope_kind: str
+    ) -> None:
+        runner, state = _pipeline_runner()
+        expected = {
+            "check": "fleet_envelope",
+            "message": "retry_exhausted: known orchestration failure",
+            "issue": _IMPLEMENTATION_EXPECTED_ISSUE,
+        }
+        state["listed_prs"] = []
+        state["pr_details"] = {}
+        state["final_issue"] = {"state": "OPEN", "labels": []}
+        state["proof"] = {"branches": [], "claimed": False, "violations": []}
+        if envelope_kind == "fatal":
+            state["fleet_envelope"] = {
+                "success": False,
+                "dispatch_status": "failed",
+                "dispatch_id": "dispatch-5233",
+                "dispatched_session_id": "session-5233",
+                "l3_payload": {},
+            }
+
+        failures, result, _out, _home, _catalog, _observed = _run_pipeline(
+            tmp_path, runner, state, monkeypatch, expected_failures=[expected]
+        )
+
+        assert result["outcome"] == "failed"
+        assert result["expected_findings"] == []
+        if envelope_kind == "stale":
+            assert any("expected recipe finding absent" in failure for failure in failures)
+        else:
+            assert any(
+                "unsuccessful envelope has no specific failure reason" in f for f in failures
+            )
+            assert any("expected recipe finding absent" in failure for failure in failures)
+        assert not any(call.argv[:2] == ["git", "fetch"] for call in runner.calls)
+
+    @pytest.mark.parametrize(
+        ("problem", "expected"),
+        [
+            ("pr", "implementation PR: expected an open, unmerged sandbox PR"),
+            ("body", "implementation PR: body does not reference the canonical seed URL"),
+            ("paths", "implementation PR: missing non-removed changes under tests/"),
+            ("ci", "sandbox CI: CI run and test job must succeed"),
+            ("head", "implementation PR: fetched head differs from captured head"),
+            ("ci-job", "sandbox CI: CI run and test job must succeed"),
+            ("test", "pr-test: exit 1: tests failed"),
+        ],
+    )
+    def test_pipeline_rejects_unverified_pr_or_validation_failure(
+        self, tmp_path: Path, monkeypatch, problem: str, expected: str
+    ) -> None:
+        runner, state = _pipeline_runner()
+        pr = state["pr_details"][8]
+        if problem == "pr":
+            pr["base"]["ref"] = "develop"
+        elif problem == "body":
+            pr["body"] = "No linked issue"
+        elif problem == "paths":
+            state["files"] = state["files"][:1]
+        elif problem == "ci":
+            state["workflow_conclusion"] = "failure"
+        elif problem == "ci-job":
+            state["job_conclusion"] = "failure"
+        elif problem == "head":
+            state["fetch_oid"] = "fetched-a-different-head"
+        else:
+            state["pr_test_returncode"] = 1
+
+        failures, result, _out, _home, _catalog, _observed = _run_pipeline(
+            tmp_path, runner, state, monkeypatch
+        )
+
+        assert result["outcome"] == "failed"
+        assert any(expected in failure for failure in failures)
+
+    def test_listed_pr_head_must_match_rest_head_before_validation(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        runner, state = _pipeline_runner()
+        state["listed_prs"][0]["headRefOid"] = "stale-listed-head"
+
+        failures, result, _out, _home, _catalog, _observed = _run_pipeline(
+            tmp_path, runner, state, monkeypatch
+        )
+
+        assert result["outcome"] == "failed"
+        assert any("head" in failure.lower() or "oid" in failure.lower() for failure in failures)
+        assert not any("/files?" in " ".join(call.argv) for call in runner.calls)
+        assert not any("actions/workflows" in " ".join(call.argv) for call in runner.calls)
+
+    @pytest.mark.parametrize(
+        ("problem", "expected"),
+        [
+            ("coverage", "session measurement: incomplete lifecycle coverage"),
+            ("capacity", "session measurement: observed peak exceeds catalog capacity"),
+        ],
+    )
+    def test_session_evidence_must_be_complete_and_within_catalog_capacity(
+        self, tmp_path: Path, monkeypatch, problem: str, expected: str
+    ) -> None:
+        runner, state = _pipeline_runner()
+        if problem == "coverage":
+            state["summary"]["coverage"]["complete"] = False
+        else:
+            state["summary"]["peak_sessions"] = 7
+
+        failures, result, _out, _home, _catalog, _observed = _run_pipeline(
+            tmp_path, runner, state, monkeypatch
+        )
+
+        assert result["outcome"] == "failed"
+        assert any(expected in failure for failure in failures)
+
+    def test_ownership_violations_fail_the_pipeline_result(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        runner, state = _pipeline_runner()
+        state["proof"]["violations"] = ["transcript evidence is incomplete"]
+
+        failures, result, _out, _home, _catalog, _observed = _run_pipeline(
+            tmp_path, runner, state, monkeypatch
+        )
+
+        assert result["outcome"] == "failed"
+        assert "ownership: transcript evidence is incomplete" in failures
+
+    def test_cleanup_errors_do_not_prevent_remaining_owned_cleanup(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        runner, state = _pipeline_runner()
+        state["cleanup_errors"] = {
+            "pr_close": RuntimeError("close failed"),
+            "branch_delete": RuntimeError("branch delete failed"),
+        }
+
+        failures, result, _out, _home, _catalog, _observed = _run_pipeline(
+            tmp_path, runner, state, monkeypatch
+        )
+
+        assert result["outcome"] == "failed"
+        assert any("cleanup PR: close failed" in failure for failure in failures)
+        assert any("cleanup branch: branch delete failed" in failure for failure in failures)
+        assert any(call.argv[:3] == ["gh", "issue", "edit"] for call in runner.calls)
+
+    def test_fleet_exception_and_cleanup_exception_are_both_preserved(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        runner, state = _pipeline_runner()
+        state["fleet_exception"] = RuntimeError("fleet launch crashed")
+        state["cleanup_errors"] = {"branch_delete": RuntimeError("branch delete failed")}
+
+        failures, result, _out, _home, _catalog, _observed = _run_pipeline(
+            tmp_path, runner, state, monkeypatch
+        )
+
+        assert result["outcome"] == "failed"
+        assert any("harness error: fleet launch crashed" in failure for failure in failures)
+        assert any("cleanup branch: branch delete failed" in failure for failure in failures)
+        assert any(call.argv[:3] == ["gh", "issue", "edit"] for call in runner.calls)
 
 
 class TestCanaryFlow:

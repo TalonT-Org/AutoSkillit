@@ -370,8 +370,16 @@ class TestSecrets:
         forwarded = re.findall(r"--env ([A-Z0-9_]+)", run)
         expected = ["MINIMAX_API_KEY", "E2E_SANDBOX_TOKEN"]
         if step_id == "e2e":
-            expected.append("E2E_SANDBOX_TOKEN")
+            expected.extend(["E2E_SANDBOX_TOKEN", "E2E_IMPLEMENTATION_ISSUE_URL"])
         assert Counter(forwarded) == Counter(expected)
+
+    def test_seed_repository_variable_reaches_test_container(self, workflow: dict) -> None:
+        step = _step(workflow, "run", step_id="e2e")
+        assert (
+            step["env"]["E2E_IMPLEMENTATION_ISSUE_URL"]
+            == "${{ vars.E2E_IMPLEMENTATION_ISSUE_URL }}"
+        )
+        assert "--env E2E_IMPLEMENTATION_ISSUE_URL" in step["run"]
 
     def test_redaction_keeps_required_secret_names(self, workflow: dict) -> None:
         run = _step(workflow, "run", step_id="redact")["run"]
@@ -421,10 +429,10 @@ def test_clean_install_uses_the_common_user_image_and_artifacts(
     ]
     assert len(credential_lines) == 1
     assert credential_lines[0].startswith("docker_args+=(")
-    assert re.findall(r"--env ([A-Z0-9_]+)", credential_lines[0]) == [
-        "MINIMAX_API_KEY",
-        "E2E_SANDBOX_TOKEN",
-    ]
+    forwarded = ["MINIMAX_API_KEY", "E2E_SANDBOX_TOKEN"]
+    if step_id == "e2e":
+        forwarded.append("E2E_IMPLEMENTATION_ISSUE_URL")
+    assert re.findall(r"--env ([A-Z0-9_]+)", credential_lines[0]) == forwarded
     if step_id == "e2e":
         assert not re.search(r"--env MINIMAX_API_KEY\b", outside)
         assert re.findall(r"--env ([A-Z0-9_]+)", outside) == ["E2E_SANDBOX_TOKEN"]

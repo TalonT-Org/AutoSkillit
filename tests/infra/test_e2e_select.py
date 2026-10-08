@@ -23,6 +23,13 @@ e2e_catalog = select.e2e_catalog
 REPOSITORY = "TalonT-Org/AutoSkillit"
 SHA_ZERO = "0" * 40
 SYNTHETIC_SHAS = [hashlib.sha1(str(index).encode()).hexdigest() for index in range(2000)]
+_IMPLEMENTATION_PATHS = (
+    "src/autoskillit/recipes/",
+    "src/autoskillit/skills/",
+    "src/autoskillit/skills_extended/",
+    "src/autoskillit/server/",
+    "src/autoskillit/execution/",
+)
 
 
 def _facts(
@@ -188,6 +195,44 @@ class TestSelectForPullRequest:
         assert pr.head_repository is None
         assert not selection.selected
 
+    @pytest.mark.parametrize(
+        ("changed_files", "additions", "deletions"),
+        [(10, 0, 0), (1, 300, 0), (1, 100, 200)],
+    )
+    def test_large_change_with_matching_root_selects_pipeline(
+        self, changed_files: int, additions: int, deletions: int
+    ) -> None:
+        pr = _facts(
+            head_sha=_sha_with_sample(5230, sampled=True),
+            changed_files=changed_files,
+            additions=additions,
+            deletions=deletions,
+        )
+        selection = select.select_for_pull_request(
+            pr,
+            ["src/autoskillit/recipes/changed.py"],
+            _catalog(_pipeline_entry()),
+            REPOSITORY,
+        )
+        assert selection.tests == ("implementation",)
+
+    def test_label_does_not_make_a_small_change_pipeline_eligible(self) -> None:
+        pr = _facts(changed_files=1, additions=10, labels=("e2e",))
+        selection = select.select_for_pull_request(
+            pr,
+            ["src/autoskillit/recipes/changed.py"],
+            _catalog(_pipeline_entry()),
+            REPOSITORY,
+        )
+        assert not selection.selected
+
+    def test_pipeline_is_not_an_unrelated_fallback(self) -> None:
+        pr = _facts(head_sha=_sha_with_sample(5230, sampled=True), changed_files=10)
+        selection = select.select_for_pull_request(
+            pr, ["README.md"], _catalog(_pipeline_entry()), REPOSITORY
+        )
+        assert not selection.selected
+
 
 class TestPickTests:
     _SEED = f"5230:{SHA_ZERO}"
@@ -227,6 +272,25 @@ class TestPickTests:
     def test_star_matches_across_directories(self) -> None:
         catalog = _catalog(_entry("deep", ("src/*",)), _entry("other", ("docs/*",)))
         assert select.pick_tests(catalog, ["src/a/b/c.py"], self._SEED) == ("deep",)
+
+    @pytest.mark.parametrize("root", _IMPLEMENTATION_PATHS)
+    def test_pipeline_trigger_roots_match(self, root: str) -> None:
+        assert select.pick_tests(
+            _catalog(_pipeline_entry()),
+            [f"{root}changed.py"],
+            self._SEED,
+            large_change=True,
+        ) == ("implementation",)
+
+    def test_at_most_one_pipeline_is_selected(self) -> None:
+        catalog = _catalog(
+            _pipeline_entry("pipeline-a", trigger_paths=["src/*"]),
+            _pipeline_entry("pipeline-b", trigger_paths=["src/*"]),
+            _entry("ordinary", ("src/*",)),
+        )
+        picked = select.pick_tests(catalog, ["src/changed.py"], self._SEED, large_change=True)
+        assert len(picked) == select.MAX_TESTS
+        assert sum(catalog.get(name).pipeline for name in picked) == 1
 
 
 class TestSelectForEvent:
@@ -301,6 +365,18 @@ _RECIPE_FIELDS = {
     "ingredients": {"task": "Add a greeting"},
     "expected_pull_request_state": "merged",
 }
+_RECIPE_EXPECTED_FAILURE = {
+    "check": "implementation-check",
+    "message": "expected implementation failure",
+    "issue": "https://github.com/TalonT-Org/AutoSkillit/issues/123",
+}
+_IMPLEMENTATION_INGREDIENTS = {
+    "source_dir": "/workspace/sandbox",
+    "open_pr": "true",
+    "auto_merge": "false",
+    "arch_lenses": "false",
+    "audit_impl": "true",
+}
 _MAX_TIMEOUT_SEC = (
     e2e_catalog.MAX_JOB_MINUTES - e2e_catalog.JOB_OVERHEAD_MINUTES
 ) * 60 - e2e_catalog.HARNESS_GRACE_SEC
@@ -309,6 +385,28 @@ _MAX_TIMEOUT_SEC = (
 def _recipe_entry_without(field: str) -> dict:
     fields = {key: value for key, value in _RECIPE_FIELDS.items() if key != field}
     return _entry("impl", kind="recipe", **fields)
+
+
+def _pipeline_entry(name: str = "implementation", **overrides) -> dict:
+    entry = _entry(
+        name,
+        tuple(f"{path}*" for path in _IMPLEMENTATION_PATHS),
+        kind="recipe",
+        peak_sessions=8,
+        timeout_sec=7200,
+        recipe="implementation",
+        ingredients=dict(_IMPLEMENTATION_INGREDIENTS),
+        expected_pull_request_state="open",
+        pipeline=True,
+        issue_url_env="E2E_IMPLEMENTATION_ISSUE_URL",
+        required_changed_paths=list(_IMPLEMENTATION_PATHS),
+        test_command=["task", "test-check"],
+        peak_sessions_evidence=(
+            "configured capacity limit of eight concurrent sessions; no measured peak supplied"
+        ),
+    )
+    entry.update(overrides)
+    return entry
 
 
 _INVALID_CATALOGS = {
@@ -351,6 +449,9 @@ _INVALID_CATALOGS = {
             expected_failures=[{**_EXPECTED_FAILURE, "severity": "warning"}],
             **_RECIPE_FIELDS,
         )
+    ),
+    "expected-failures-on-recipe": _raw_catalog(
+        _pipeline_entry(expected_failures=[_EXPECTED_FAILURE])
     ),
     "expected-failures-missing-field": _raw_catalog(
         _clean_install_entry(
@@ -465,6 +566,7 @@ class TestCatalog:
                 "impl",
                 kind="recipe",
                 recipe_fixture="sandbox-smoke.yaml",
+                expected_failures=[{"severity": "error", **_RECIPE_EXPECTED_FAILURE}],
                 **_RECIPE_FIELDS,
             )
         )
@@ -473,6 +575,12 @@ class TestCatalog:
         assert test.ingredients == (("task", "Add a greeting"),)
         assert test.expected_pull_request_state == "merged"
         assert test.recipe_fixture == "sandbox-smoke.yaml"
+        assert test.pipeline is False
+        assert test.issue_url_env is None
+        assert test.required_changed_paths == ()
+        assert test.test_command == ()
+        assert test.peak_sessions_evidence is None
+        assert test.expected_failures == ({"severity": "error", **_RECIPE_EXPECTED_FAILURE},)
 
     def test_recipe_without_fixture_defaults_to_none(self) -> None:
         test = _catalog(_entry("impl", kind="recipe", **_RECIPE_FIELDS)).get("impl")
@@ -524,3 +632,111 @@ class TestCatalog:
     def test_invalid_catalog_raises(self, raw: dict) -> None:
         with pytest.raises(e2e_catalog.CatalogError):
             e2e_catalog.parse_catalog(raw)
+
+
+class TestPipelineCatalog:
+    def test_shipped_implementation_targets_sandbox_source_and_tests_without_a_measurement(
+        self,
+    ) -> None:
+        test = e2e_catalog.load_catalog().get("implementation")
+        assert test.required_changed_paths == ("sandbox/", "tests/")
+        assert test.peak_sessions == 8
+        assert test.peak_sessions_evidence is None
+        assert test.timeout_sec == 7200
+        assert dict(test.ingredients) == _IMPLEMENTATION_INGREDIENTS
+
+    def test_pipeline_recipe_parses_its_contract_and_expected_failures(self) -> None:
+        rows = [
+            _RECIPE_EXPECTED_FAILURE,
+            {**_RECIPE_EXPECTED_FAILURE, "check": "another-check"},
+        ]
+        test = _catalog(_pipeline_entry(expected_failures=rows)).get("implementation")
+
+        assert test.pipeline is True
+        assert test.issue_url_env == "E2E_IMPLEMENTATION_ISSUE_URL"
+        assert test.required_changed_paths == _IMPLEMENTATION_PATHS
+        assert test.test_command == ("task", "test-check")
+        assert test.peak_sessions_evidence == (
+            "configured capacity limit of eight concurrent sessions; no measured peak supplied"
+        )
+        assert test.expected_failures == tuple(rows)
+        with pytest.raises(TypeError):
+            cast(MutableMapping[str, str], test.expected_failures[0])["check"] = "changed"
+
+    def test_recipe_options_are_independently_optional(self) -> None:
+        entry = _pipeline_entry()
+        for key in (
+            "issue_url_env",
+            "required_changed_paths",
+            "test_command",
+            "peak_sessions_evidence",
+        ):
+            entry.pop(key)
+        test = _catalog(entry).get("implementation")
+        assert test.pipeline is True
+        assert test.issue_url_env is None
+        assert test.required_changed_paths == ()
+        assert test.test_command == ()
+        assert test.peak_sessions_evidence is None
+
+    def test_pipeline_rejects_unknown_keys(self) -> None:
+        with pytest.raises(e2e_catalog.CatalogError, match="unknown keys"):
+            _catalog(_pipeline_entry(unrecognized=True))
+
+    @pytest.mark.parametrize("ingredient", ["issue_url", "task"])
+    def test_issue_url_env_conflicts_with_recipe_ingredient(self, ingredient: str) -> None:
+        ingredients = {**_IMPLEMENTATION_INGREDIENTS, ingredient: "value"}
+        with pytest.raises(e2e_catalog.CatalogError, match="cannot contain issue_url or task"):
+            _catalog(_pipeline_entry(ingredients=ingredients))
+
+    def test_recipe_options_do_not_require_pipeline_true(self) -> None:
+        entry = _pipeline_entry(pipeline=False)
+        assert _catalog(entry).get("implementation").pipeline is False
+
+    @pytest.mark.parametrize("value", [None, "true", 1])
+    def test_pipeline_flag_must_be_boolean(self, value: object) -> None:
+        with pytest.raises(e2e_catalog.CatalogError, match="pipeline must be a boolean"):
+            _catalog(_pipeline_entry(pipeline=value))
+
+    @pytest.mark.parametrize("value", ["", " ", 123])
+    def test_issue_url_environment_name_must_be_nonempty(self, value: object) -> None:
+        with pytest.raises(e2e_catalog.CatalogError, match="issue_url_env"):
+            _catalog(_pipeline_entry(issue_url_env=value))
+
+    @pytest.mark.parametrize(
+        "prefix",
+        ["", " ", 123, "/absolute/path", "../parent", "src/../other", "C:\\absolute"],
+    )
+    def test_required_changed_paths_must_be_relative_prefixes(self, prefix: object) -> None:
+        with pytest.raises(e2e_catalog.CatalogError):
+            _catalog(_pipeline_entry(required_changed_paths=[prefix]))
+
+    @pytest.mark.parametrize("command", [[], [""], [1]])
+    def test_pipeline_test_command_must_be_nonempty_argv(self, command: object) -> None:
+        with pytest.raises(e2e_catalog.CatalogError, match="test_command"):
+            _catalog(_pipeline_entry(test_command=command))
+
+    @pytest.mark.parametrize("evidence", ["", " ", 123])
+    def test_pipeline_peak_sessions_evidence_must_be_nonempty(self, evidence: object) -> None:
+        with pytest.raises(e2e_catalog.CatalogError, match="peak_sessions_evidence"):
+            _catalog(_pipeline_entry(peak_sessions_evidence=evidence))
+
+    @pytest.mark.parametrize(
+        "row",
+        [
+            {key: value for key, value in _RECIPE_EXPECTED_FAILURE.items() if key != "check"},
+            {**_RECIPE_EXPECTED_FAILURE, "severity": "warning"},
+            {**_RECIPE_EXPECTED_FAILURE, "issue": "https://github.com/other/repo/issues/123"},
+        ],
+    )
+    def test_recipe_expected_failures_have_exact_canonical_rows(self, row: dict) -> None:
+        with pytest.raises(e2e_catalog.CatalogError):
+            _catalog(_pipeline_entry(expected_failures=[row]))
+
+    def test_recipe_expected_failures_reject_duplicate_check_and_message(self) -> None:
+        duplicate = {
+            **_RECIPE_EXPECTED_FAILURE,
+            "issue": "https://github.com/TalonT-Org/AutoSkillit/issues/124",
+        }
+        with pytest.raises(e2e_catalog.CatalogError, match="duplicate diagnostic"):
+            _catalog(_pipeline_entry(expected_failures=[_RECIPE_EXPECTED_FAILURE, duplicate]))

@@ -3,6 +3,9 @@
 quota_guard:
   enabled: false
 
+branching:
+  default_base_branch: main
+
 features:
   fleet: true
   fleet_headless_run: true

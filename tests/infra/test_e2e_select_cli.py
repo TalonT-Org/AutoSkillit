@@ -24,6 +24,9 @@ _SHARED_HARNESS_MATRIX = (
 _HEADLESS_SMOKE_MATRIX = (
     '{"include":[{"test":"headless-smoke","kind":"recipe","timeout_minutes":47}]}'
 )
+_IMPLEMENTATION_MATRIX = (
+    '{"include":[{"test":"implementation","kind":"recipe","timeout_minutes":152}]}'
+)
 
 
 def _run(
@@ -112,6 +115,19 @@ def test_small_unlabelled_pull_request_selects_nothing(tmp_path: Path) -> None:
     assert outputs["matrix"] == '{"include":[]}'
 
 
+def test_large_pull_request_selects_implementation_pipeline(tmp_path: Path) -> None:
+    changed = tmp_path / "changed-paths.txt"
+    changed.write_text("src/autoskillit/recipes/changed.py\n", encoding="utf-8")
+    payload = _pull_request(changed_files=10, additions=0, labels=("e2e",))
+
+    result = _select(tmp_path, changed, "pull_request", payload)
+
+    assert result.returncode == 0, result.stderr
+    outputs = _outputs(result.stdout)
+    assert outputs["selected"] == "true"
+    assert outputs["matrix"] == _IMPLEMENTATION_MATRIX
+
+
 def test_merge_group_never_reads_the_changed_paths_file(tmp_path: Path) -> None:
     result = _select(tmp_path, tmp_path / "missing.txt", "merge_group", {"merge_group": {}})
     assert result.returncode == 0, result.stderr
@@ -149,6 +165,19 @@ def test_dispatch_selects_both_named_tests_in_request_order(tmp_path: Path) -> N
         '"timeout_minutes":37},{"test":"canary","kind":"canary",'
         '"timeout_minutes":37}]}'
     )
+
+
+def test_dispatch_selects_named_pipeline_without_pull_request_eligibility(tmp_path: Path) -> None:
+    result = _select(
+        tmp_path,
+        tmp_path / "missing.txt",
+        "workflow_dispatch",
+        {"inputs": {"tests": "implementation"}},
+    )
+    assert result.returncode == 0, result.stderr
+    outputs = _outputs(result.stdout)
+    assert outputs["selected"] == "true"
+    assert outputs["matrix"] == _IMPLEMENTATION_MATRIX
 
 
 def test_dispatch_of_an_unknown_test_fails(tmp_path: Path) -> None:

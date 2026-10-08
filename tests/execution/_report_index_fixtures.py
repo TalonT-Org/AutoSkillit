@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import tiktoken
+
 from autoskillit.core import TOKEN_USAGE_SCHEMA_VERSION, TURN_USAGE_SCHEMA_VERSION
 
 CLAUDE_SCOPE: str = "com.anthropic.claude_code.events"
@@ -75,8 +77,6 @@ def _jsonl(*records: dict[str, Any]) -> str:
 
 
 def _encoding(name: str, *, merge_ab: bool = False) -> Any:
-    import tiktoken
-
     ranks = {bytes((value,)): value for value in range(256)}
     if merge_ab:
         ranks[b"ab"] = 256

@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+import tiktoken
 
 from autoskillit.execution.evidence import _native_child_projection as projection
 from autoskillit.execution.evidence import _native_parent_context as parent_context
@@ -49,8 +50,6 @@ def _spans(
 def test_tokenizer_failures_keep_exception_diagnostics_and_unavailable_measure(
     monkeypatch: pytest.MonkeyPatch, phase: str, event: str, reason: str
 ) -> None:
-    import tiktoken
-
     warnings: list[tuple[str, dict[str, Any]]] = []
 
     def fail(_value: str) -> Any:
@@ -78,8 +77,6 @@ def test_tokenizer_failures_keep_exception_diagnostics_and_unavailable_measure(
 def test_claude_spans_count_exact_linked_text_deduplicate_replay_and_keep_deliveries(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import tiktoken
-
     encoding = _encoding("local-byte-merge", merge_ab=True)
     monkeypatch.setattr(tiktoken, "encoding_for_model", lambda _model: encoding)
     prompt = "<|endoftext|>ab"
@@ -132,8 +129,6 @@ def test_codex_model_requires_matching_context_or_explicit_call_turn(
     call_metadata: dict[str, str],
     expected_model: str | None,
 ) -> None:
-    import tiktoken
-
     encoding = _encoding("local-model-check")
     monkeypatch.setattr(tiktoken, "encoding_for_model", lambda _model: encoding)
     call_payload = {
@@ -174,8 +169,6 @@ def test_codex_model_requires_matching_context_or_explicit_call_turn(
 def test_codex_uses_each_invocation_turn_model_and_pairs_call_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import tiktoken
-
     encodings = {
         "gpt-model-a": _encoding("local-a", merge_ab=True),
         "gpt-model-b": _encoding("local-b"),
@@ -233,8 +226,6 @@ def test_codex_uses_each_invocation_turn_model_and_pairs_call_id(
 def test_codex_call_without_message_or_prompt_does_not_count_other_arguments(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import tiktoken
-
     encoding = _encoding("local-no-prompt")
     monkeypatch.setattr(tiktoken, "encoding_for_model", lambda _model: encoding)
     transcript = _jsonl(
@@ -290,8 +281,6 @@ def test_codex_acknowledgement_is_not_return_text(
     expected_value: int | None,
     expected_reason: str | None,
 ) -> None:
-    import tiktoken
-
     encoding = _encoding("local-acknowledgement")
     monkeypatch.setattr(tiktoken, "encoding_for_model", lambda _model: encoding)
     transcript = _jsonl(
@@ -323,8 +312,6 @@ def test_codex_acknowledgement_is_not_return_text(
 def test_codex_json_child_text_without_ack_shape_remains_return_text(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import tiktoken
-
     encoding = _encoding("local-json-child-text")
     monkeypatch.setattr(tiktoken, "encoding_for_model", lambda _model: encoding)
     output = json.dumps({"answer": "child-authored", "count": 1})
@@ -365,8 +352,6 @@ def test_empty_prompt_is_zero_and_missing_return_or_unsupported_provider_stays_e
     expected_state: str,
     expected_reason: str | None,
 ) -> None:
-    import tiktoken
-
     encoding = _encoding("local-empty")
     monkeypatch.setattr(tiktoken, "encoding_for_model", lambda _model: encoding)
     spans = _spans(

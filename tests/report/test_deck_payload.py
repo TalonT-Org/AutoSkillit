@@ -1134,4 +1134,11 @@ def test_gap_and_parity_share_missing_evidence_states_and_session_selection() ->
     assert "turn_usage_ledger_missing" in turn_series["reason"]
     assert missing_tools["state"] == "no_observations"
     assert prompt["state"] == "no_observations"
-    assert gaps["sessions"]["empty-ledger"]["rows"]
+    session_turn_gap = next(
+        row
+        for row in gaps["sessions"]["empty-ledger"]["rows"]
+        if row["field"] == "turn_series_coverage" and row["population"] == "turn"
+    )
+    assert session_turn_gap["session_key"] == "empty-ledger"
+    assert session_turn_gap["state"] == "unavailable"
+    assert "turn_usage_ledger_missing" in session_turn_gap["reason"]

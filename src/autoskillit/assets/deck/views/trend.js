@@ -2,8 +2,6 @@ DeckShell.registerView("trend", ctx => {
   const DAY_MS = 86400000;
   const tokenFields = ["input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens"];
   const colors = ["s1", "s2", "s3", "s4"];
-  const valueOf = measure => measure?.state === "measured" ? measure.value :
-    measure?.state === "measured_zero" ? 0 : null;
   const groupText = row => [row.skill ?? "unknown skill", row.recipe ?? "unknown recipe",
     row.step ?? "unknown step", row.harness ?? "unknown harness",
     row.provider ?? "unknown provider", row.model ?? "unknown model"].join(" · ");
@@ -27,7 +25,7 @@ DeckShell.registerView("trend", ctx => {
     const timed = rows.map(timeOf).filter(value => value != null);
     const first = timed.reduce((minimum, value) => Math.min(minimum, value), Infinity);
     const last = timed.reduce((maximum, value) => Math.max(maximum, value), -Infinity);
-    const values = rows.map(row => valueOf(
+    const values = rows.map(row => DeckCore.measureValue(
       field === "failure_share" ? row.failure_share : row.measures?.[field]
     )).filter(value => value !== null);
     const minValue = values.reduce((minimum, value) => Math.min(minimum, value), 0);
@@ -67,7 +65,7 @@ DeckShell.registerView("trend", ctx => {
       group.rows.forEach(row => {
         const time = timeOf(row);
         const measure = field === "failure_share" ? row.failure_share : row.measures?.[field];
-        const value = valueOf(measure);
+        const value = DeckCore.measureValue(measure);
         if (time == null || value == null || (priorTime != null && time - priorTime > DAY_MS)) {
           flush();
           if (time != null && value == null) rendered.push(ctx.svgElement("rect", {
@@ -108,7 +106,7 @@ DeckShell.registerView("trend", ctx => {
   }
 
   function measureText(measure, unit = "tokens/session") {
-    const value = valueOf(measure);
+    const value = DeckCore.measureValue(measure);
     if (value === null) return [measure?.state === "no_observations" ? "no observations" :
       measure?.state ?? "unknown", measure?.reason].filter(Boolean).join(" · ");
     const sample = measure.observed_sessions ?? measure.sample_size;
@@ -150,7 +148,7 @@ DeckShell.registerView("trend", ctx => {
     {key: "laterMeasure", label: "Later", cell: row => measureText(row.laterMeasure,
       row.field === "failure_share" ? "failure share" : "tokens/session")},
     {key: "delta", label: "Descriptive delta", cell: row => {
-      const value = valueOf(row.delta);
+      const value = DeckCore.measureValue(row.delta);
       return value == null ? ["no observations", "unknown", "unavailable"].includes(row.delta?.state) ?
         row.delta.state + (row.delta.reason ? ": " + row.delta.reason : "") :
       row.delta?.reason ?? "insufficient observations" :

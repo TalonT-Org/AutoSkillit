@@ -9,8 +9,6 @@ DeckShell.registerView("context", ctx => {
       prior === row.model ? "same as previous turn" : "changed from " + (prior ?? "unknown"));
     previousModels.set(row.session_key, row.model);
   });
-  const valueOf = measure => measure?.state === "measured" ? measure.value :
-    measure?.state === "measured_zero" ? 0 : null;
   const stateName = measure => measure?.state ?? "unknown";
   const countCell = measure => ctx.availabilityCell(measure ?? {state: "unknown"});
   const stateCell = measure => DeckCore.isPrimitiveState(measure?.state) ? countCell(measure) :
@@ -18,7 +16,7 @@ DeckShell.registerView("context", ctx => {
       measure?.state === "no_observations" ? "no observations" :
         measure?.state === "mixed" ? "mixed coverage" : measure?.state ?? "unknown");
   const countText = measure => {
-    const value = valueOf(measure);
+    const value = DeckCore.measureValue(measure);
     return value == null ? stateName(measure) : DeckCore.formatCount(value);
   };
   const turnLabel = row => "turn " + (row.ordinal ?? "?") + " · " +
@@ -28,7 +26,7 @@ DeckShell.registerView("context", ctx => {
     const width = 760, left = 230, right = 16, rowHeight = 22, gap = 5;
     const plotWidth = width - left - right;
     const totals = rows.map(row => fields.reduce((sum, field) => {
-      const value = valueOf(row[field.key]);
+      const value = DeckCore.measureValue(row[field.key]);
       return sum + (value == null ? 0 : value);
     }, 0));
     const maximum = Math.max(1, totals.reduce((current, total) => Math.max(current, total), 0));
@@ -43,7 +41,7 @@ DeckShell.registerView("context", ctx => {
       let x = left;
       fields.forEach(field => {
         const measure = row[field.key];
-        const value = valueOf(measure);
+        const value = DeckCore.measureValue(measure);
         if (value === 0) {
           children.push(ctx.svgElement("circle", {cx: x, cy: y + 7.5, r: 3,
             class: "deck-chart__zero", "aria-label": field.label + " measured zero"}));
@@ -64,7 +62,7 @@ DeckShell.registerView("context", ctx => {
   function occupancyChart(rows) {
     const width = 760, height = 230, left = 52, right = 18, top = 24, bottom = 40;
     const points = rows.map((row, index) => ({row, index,
-      value: valueOf(row.context_fraction_percent)}));
+      value: DeckCore.measureValue(row.context_fraction_percent)}));
     const observed = points.filter(point => point.value !== null);
     const maximum = Math.max(1, observed.reduce((current, point) =>
       Math.max(current, point.value), 0));
@@ -132,7 +130,7 @@ DeckShell.registerView("context", ctx => {
       row.returned?.observed_subset ?? row.returned
     ]
       .reduce((maximum, measure) => {
-        const value = valueOf(measure);
+        const value = DeckCore.measureValue(measure);
         return value === null ? maximum : Math.max(maximum, value);
       }, current), 0));
     const height = Math.max(46, rows.length * (rowHeight + gap) + 28);
@@ -146,7 +144,7 @@ DeckShell.registerView("context", ctx => {
       for (const [key, measure, offset] of [["prompt", row.prompt, 0],
         ["returned", row.returned, 18]]) {
         const observedSubset = measure?.observed_subset ?? measure;
-        const value = valueOf(observedSubset);
+        const value = DeckCore.measureValue(observedSubset);
         const barY = y + offset;
         if (value !== null && value > 0) {
           children.push(ctx.svgElement("rect", {x: left, y: barY, width: value / maxValue * plotWidth,
@@ -236,7 +234,7 @@ DeckShell.registerView("context", ctx => {
         .filter(Boolean).join(" / ")].filter(Boolean).join(" · "))
     .filter(Boolean).join("; ") || "no source span";
   const comparisonCell = row => {
-    const value = valueOf(row.comparison);
+    const value = DeckCore.measureValue(row.comparison);
     const samples = row.comparison?.sample_size ?? row.matched_invocations;
     return value === null ? stateCell(row.comparison) : ctx.el("span", {class: "view-measure"}, [
       ctx.el("span", {}, (value === 0 ? "0" : String(Math.round(value * 100) / 100)) + "×"),

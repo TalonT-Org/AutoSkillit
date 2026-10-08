@@ -12,6 +12,8 @@ globalThis.DeckCore = (() => {
     ["session", row?.session_key]
   ].filter(([, value]) => value != null).map(([key, value]) => [key, [value]]));
   const countLabel = value => value == null ? "count unavailable" : formatCount(value);
+  const measureValue = measure => measure?.state === "measured" ? measure.value :
+    measure?.state === "measured_zero" ? 0 : null;
   const formatDate = ms => new Date(ms).toISOString().slice(0, 10);
 
   function formatRatio(ratio, percent = false) {
@@ -438,7 +440,7 @@ globalThis.DeckCore = (() => {
   return Object.freeze({decodeTable, encodeRoute, decodeRoute, hrefFor, effectiveSelection,
     toggleSelection, windowSelection, selectPrepared, filterRows, populationSentence,
     summarizePairs, sortRows, parseSort, chipPresentation, availabilityPresentation,
-    isPrimitiveState, inspectParams, countLabel, barLayout, formatCount, formatRatio, ratioSample, reviewEligibility, reviewSignal,
+    isPrimitiveState, inspectParams, countLabel, measureValue, barLayout, formatCount, formatRatio, ratioSample, reviewEligibility, reviewSignal,
     measureCell, ratioCell, definitionCard, toolMix, roleHarnessRows, formatDate,
     CHIP_STATES, DAY_MS});
 })();

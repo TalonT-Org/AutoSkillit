@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -89,6 +90,46 @@ def _claude_result(*, tool_id: str, record_id: str, text: str) -> dict[str, Any]
             ]
         },
     }
+
+
+@pytest.mark.parametrize(
+    ("phase", "event", "reason"),
+    [
+        (
+            "initialization",
+            "parent_context_tokenizer_unavailable",
+            "tokenizer_initialization_failed",
+        ),
+        ("encoding", "parent_context_text_encoding_failed", "tokenizer_encoding_failed"),
+    ],
+)
+def test_tokenizer_failures_keep_exception_diagnostics_and_unavailable_measure(
+    monkeypatch: pytest.MonkeyPatch, phase: str, event: str, reason: str
+) -> None:
+    import tiktoken
+
+    warnings: list[tuple[str, dict[str, Any]]] = []
+
+    def fail(_value: str) -> Any:
+        raise RuntimeError("tokenizer failure detail")
+
+    encoding = SimpleNamespace(name="local-failing", encode_ordinary=fail)
+    monkeypatch.setattr(
+        tiktoken, "encoding_for_model", fail if phase == "initialization" else lambda _: encoding
+    )
+    monkeypatch.setattr(
+        parent_context.logger, "warning", lambda name, **fields: warnings.append((name, fields))
+    )
+    transcript = _jsonl(_claude_call(child_id="child-1", tool_id="tool-1", prompt="text"))
+
+    spans = _spans(transcript, child_id="child-1")
+
+    assert spans[0]["measure"] == {"state": "unavailable", "value": None}
+    assert spans[0]["reason"] == reason
+    assert any(
+        name == event and fields["error"] == "RuntimeError" and fields["exc_info"] is True
+        for name, fields in warnings
+    )
 
 
 def test_claude_spans_count_exact_linked_text_deduplicate_replay_and_keep_deliveries(

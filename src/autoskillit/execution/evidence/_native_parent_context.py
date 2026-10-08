@@ -596,6 +596,7 @@ def _parent_encoding(provider: object, model: object) -> tuple[Any | None, str |
             provider=provider,
             model=model,
             error=type(exc).__name__,
+            exc_info=True,
         )
         return None, None, "tokenizer_initialization_failed"
     name = getattr(encoding, "name", None)
@@ -638,6 +639,7 @@ def _span(
                     provider=provider,
                     model=model,
                     error=type(exc).__name__,
+                    exc_info=True,
                 )
                 reason = "tokenizer_encoding_failed"
     invocation_id = invocation.get("invocation_id")

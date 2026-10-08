@@ -521,6 +521,21 @@ def test_ownership_pairs_root_branch_with_managed_claim_and_keeps_compact_proof(
     assert {item["session_id"] for item in proof["transcripts"]} == {ROOT_ID, "session-child"}
 
 
+def test_ownership_ignores_unhashable_tool_names(tmp_path: Path) -> None:
+    log_root, trace, _ = _base_sessions(tmp_path)
+    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    record = _tool_use("unrelated", "ignored", {})
+    record["message"]["content"][0]["name"] = []
+    _jsonl(root_transcript, [record])
+    _trace(trace, [_event("SessionStart", ROOT_ID, 1, transcript=root_transcript)])
+
+    proof = sessions.collect_ownership(trace, _envelope(), log_root, ISSUE_URL, REPOSITORY)
+
+    assert proof["branches"] == []
+    assert proof["claimed"] is False
+    assert proof["violations"] == []
+
+
 def test_ownership_ignores_child_branch_and_rejects_reentry_and_unpaired_results(
     tmp_path: Path,
 ) -> None:

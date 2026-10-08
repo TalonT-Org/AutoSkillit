@@ -709,7 +709,9 @@ def _remember_tool_use(
     violations: list[str],
 ) -> None:
     name = block.get("name")
-    name = name.removeprefix("mcp__autoskillit__") if isinstance(name, str) else name
+    if not isinstance(name, str):
+        return
+    name = name.removeprefix("mcp__autoskillit__")
     if name not in {"claim_and_resolve_issue", "create_and_publish_branch"}:
         return
     tool_id, tool_input = block.get("id"), block.get("input")

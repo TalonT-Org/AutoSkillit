@@ -706,7 +706,13 @@ def test_python_prepared_payload_renders_all_new_views(deck_asset: Any) -> None:
     )
     context = _load_renderers(deck_asset)
     try:
-        for view_id in NEW_VIEW_IDS:
+        for view_id, marker in {
+            "context": "Context occupancy and per-turn tokens",
+            "errors": "Failure symptoms by skill and step",
+            "trend": "failure share",
+            "gaps": "Live evidence gaps",
+            "parity": "Harness and provider coverage parity",
+        }.items():
             rendered = context.call(
                 "DeckTest.renderPrepared",
                 view_id,
@@ -714,7 +720,7 @@ def test_python_prepared_payload_renders_all_new_views(deck_asset: Any) -> None:
                 {"view": view_id, "entity": None, "params": {}},
             )
             assert rendered["tag"] in {"div", "section"}
-            assert rendered["text"]
+            assert marker.lower() in rendered["text"].lower()
     finally:
         context.close()
 

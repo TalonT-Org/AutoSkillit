@@ -607,7 +607,9 @@ def test_ownership_isolates_branch_and_claim_scenarios(
     if scenario == "claim_reentry":
         assert proof["violations"] == ["ownership:claim_reentry"]
     elif scenario == "unpaired_root_branch":
-        assert len(proof["violations"]) == 1
-        assert "unpaired_tool_use:root-branch" in proof["violations"][0]
+        assert proof["violations"] == [
+            "ownership:branch_result_failed",
+            f"transcript:{ROOT_ID}:unpaired_tool_use:root-branch",
+        ]
     else:
         assert proof["violations"] == []

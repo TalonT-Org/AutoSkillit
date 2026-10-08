@@ -227,6 +227,7 @@ def _span_provenance(
 
 def _add_untimed_span(
     groups: dict[_SpanGroupKey, dict[str, Any]],
+    *,
     owner: Mapping[str, Any],
     raw_span: Mapping[str, Any],
     child: Mapping[str, Any],
@@ -249,6 +250,7 @@ def _add_untimed_span(
 
 def _add_selected_span(
     groups: dict[_SpanGroupKey, dict[str, Any]],
+    *,
     owners_with_spans: set[str],
     eligible_keys: set[str],
     owner: Mapping[str, Any],
@@ -286,6 +288,7 @@ def _add_selected_span(
 
 def _collect_candidate_span(
     groups: dict[_SpanGroupKey, dict[str, Any]],
+    *,
     owners_with_spans: set[str],
     eligible_keys: set[str],
     owner: Mapping[str, Any],
@@ -293,7 +296,6 @@ def _collect_candidate_span(
     raw_span: object,
     parent_key: str,
     child_key: str,
-    *,
     window: str,
     generated_at_ms: int,
 ) -> None:
@@ -312,21 +314,29 @@ def _collect_candidate_span(
         TokenMeasureState.MEASURED,
         TokenMeasureState.MEASURED_ZERO,
     ):
-        _add_untimed_span(groups, owner, raw_span, child, parent_key, child_key, measure)
+        _add_untimed_span(
+            groups,
+            owner=owner,
+            raw_span=raw_span,
+            child=child,
+            parent_key=parent_key,
+            child_key=child_key,
+            measure=measure,
+        )
         return
     if span_time is None and parent_key not in eligible_keys:
         return
     _add_selected_span(
         groups,
-        owners_with_spans,
-        eligible_keys,
-        owner,
-        raw_span,
-        child,
-        parent_key,
-        child_key,
-        measure,
-        span_time,
+        owners_with_spans=owners_with_spans,
+        eligible_keys=eligible_keys,
+        owner=owner,
+        raw_span=raw_span,
+        child=child,
+        parent_key=parent_key,
+        child_key=child_key,
+        measure=measure,
+        span_time=span_time,
     )
 
 
@@ -340,12 +350,12 @@ def _child_key(child: Mapping[str, Any]) -> str:
 
 def _collect_child_spans(
     groups: dict[_SpanGroupKey, dict[str, Any]],
+    *,
     owners_with_spans: set[str],
     eligible_keys: set[str],
     owner: Mapping[str, Any],
     child: Mapping[str, Any],
     parent_key: str,
-    *,
     window: str,
     generated_at_ms: int,
 ) -> None:
@@ -361,13 +371,13 @@ def _collect_child_spans(
     for raw_span in spans:
         _collect_candidate_span(
             groups,
-            owners_with_spans,
-            eligible_keys,
-            owner,
-            child,
-            raw_span,
-            parent_key,
-            child_key,
+            owners_with_spans=owners_with_spans,
+            eligible_keys=eligible_keys,
+            owner=owner,
+            child=child,
+            raw_span=raw_span,
+            parent_key=parent_key,
+            child_key=child_key,
             window=window,
             generated_at_ms=generated_at_ms,
         )
@@ -393,11 +403,11 @@ def _collect_parent_groups(
             continue
         _collect_child_spans(
             groups,
-            owners_with_spans,
-            eligible_keys,
-            owner,
-            child,
-            parent_key,
+            owners_with_spans=owners_with_spans,
+            eligible_keys=eligible_keys,
+            owner=owner,
+            child=child,
+            parent_key=parent_key,
             window=window,
             generated_at_ms=generated_at_ms,
         )

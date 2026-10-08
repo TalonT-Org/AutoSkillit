@@ -518,25 +518,36 @@ def test_each_prepared_view_renders_its_population_and_cohort_links(deck_asset: 
         context.close()
 
 
-def test_new_view_renderers_keep_prepared_populations_and_filter_links(deck_asset: Any) -> None:
+@pytest.mark.parametrize(
+    ("view_id", "marker"),
+    [
+        ("context", "Cache-read proxy"),
+        ("errors", "unknown symptom"),
+        ("trend", "failure share"),
+        ("gaps", "Which resolved window is needed?"),
+        ("parity", "coverage parity"),
+    ],
+)
+def test_view_renderers_keep_prepared_populations_and_filter_links(
+    deck_asset: Any, view_id: str, marker: str
+) -> None:
     context = _load_renderers(deck_asset)
     try:
-        markers = {
-            "context": "Cache-read proxy",
-            "errors": "unknown symptom",
-            "trend": "failure share",
-            "gaps": "Which resolved window is needed?",
-            "parity": "coverage parity",
-        }
-        for view_id, marker in markers.items():
-            rendered = context.call("DeckTest.render", view_id, _new_view_context(view_id))
-            assert marker.lower() in rendered["text"].lower()
-            assert rendered["links"]
-            assert any(
-                "harness=codex" in href and "provider=openai" in href for href in rendered["links"]
-            )
-            if view_id in {"context", "gaps", "parity"}:
-                assert any("session=owner-key-1" in href for href in rendered["links"])
+        rendered = context.call("DeckTest.render", view_id, _new_view_context(view_id))
+        assert marker.lower() in rendered["text"].lower()
+        assert rendered["links"]
+        assert any(
+            "harness=codex" in href and "provider=openai" in href for href in rendered["links"]
+        )
+        if view_id in {"context", "gaps", "parity"}:
+            assert any("session=owner-key-1" in href for href in rendered["links"])
+    finally:
+        context.close()
+
+
+def test_context_input_toggle_shows_inclusive_input_series(deck_asset: Any) -> None:
+    context = _load_renderers(deck_asset)
+    try:
         context.call("DeckTest.render", "context", _new_view_context("context"))
         input_toggle = context.call("DeckTest.clickContextInput")
         assert input_toggle["initial"] == {"pressed": "false", "style": "display:none"}

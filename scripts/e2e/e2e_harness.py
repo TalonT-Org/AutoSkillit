@@ -43,6 +43,7 @@ PIPELINE_RUNS_DIR = "autoskillit-runs"
 
 _SCRUBBED_ENV = frozenset({"CLAUDE_CODE_OAUTH_TOKEN", *SECRET_ENV})
 _STDERR_TAIL_CHARS = 2000
+_SESSION_TRACE_FILENAME = "session-events.jsonl"
 CLEAN_INSTALL_ALLOWED_WARNINGS: dict[tuple[str, str], str] = {
     (
         "pytest_temp_capacity",
@@ -1405,7 +1406,7 @@ def run_recipe(
     ingredients = dict(test.ingredients)
     label = ""
     home = home or Path.home()
-    trace = out / "session-events.jsonl"
+    trace = out / _SESSION_TRACE_FILENAME
     if test.pipeline or test.issue_url_env:
         try:
             seed, ingredients, label = prepare_seed(test, repository, out, env, runner)
@@ -1480,7 +1481,7 @@ def finish_pipeline(
     proof: dict[str, Any] | None,
 ) -> list[str]:
     failures: list[str] = []
-    trace = out / "session-events.jsonl"
+    trace = out / _SESSION_TRACE_FILENAME
     log_root = e2e_sessions.default_log_root(home)
     try:
         summary = e2e_sessions.summarize(trace, envelope, log_root)
@@ -1523,7 +1524,7 @@ def launch_recipe(
         )
         failures += fleet_failures
         proof = save_ownership(
-            out / "session-events.jsonl",
+            out / _SESSION_TRACE_FILENAME,
             envelope,
             e2e_sessions.default_log_root(home),
             seed,

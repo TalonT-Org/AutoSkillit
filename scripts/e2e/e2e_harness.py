@@ -42,6 +42,8 @@ SANDBOX_CLONE = Path("/workspace/sandbox")
 _SCRUBBED_ENV = frozenset({"CLAUDE_CODE_OAUTH_TOKEN", *SECRET_ENV})
 _STDERR_TAIL_CHARS = 2000
 _SESSION_TRACE_FILENAME = "session-events.jsonl"
+_CI_POLL_ATTEMPTS = 6
+_CI_POLL_INTERVAL_SEC = 10
 CLEAN_INSTALL_ALLOWED_WARNINGS: dict[tuple[str, str], str] = {
     (
         "pytest_temp_capacity",
@@ -1099,7 +1101,7 @@ def validate_sandbox_ci(
     ]
     if len(candidates) != 1:
         raise ValueError("sandbox CI: expected one active CI workflow")
-    for attempt in range(6):
+    for attempt in range(_CI_POLL_ATTEMPTS):
         pages = _api_pages(
             f"repos/{repository}/actions/workflows/{candidates[0]['id']}/runs?event=pull_request&per_page=100",
             env,
@@ -1143,8 +1145,8 @@ def validate_sandbox_ci(
                 ):
                     raise ValueError("sandbox CI: CI run and test job must succeed")
                 return
-        if attempt < 5:
-            time.sleep(10)
+        if attempt + 1 < _CI_POLL_ATTEMPTS:
+            time.sleep(_CI_POLL_INTERVAL_SEC)
     raise ValueError("sandbox CI: no completed CI run associated with the exact PR head")
 
 

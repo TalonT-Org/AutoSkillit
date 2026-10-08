@@ -1,5 +1,4 @@
 DeckShell.registerView("trend", ctx => {
-  const DAY_MS = 86400000;
   const tokenFields = ["input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens"];
   const colors = ["s1", "s2", "s3", "s4"];
   const groupText = row => [row.skill ?? "unknown skill", row.recipe ?? "unknown recipe",
@@ -66,7 +65,7 @@ DeckShell.registerView("trend", ctx => {
         const time = timeOf(row);
         const measure = field === "failure_share" ? row.failure_share : row.measures?.[field];
         const value = DeckCore.measureValue(measure);
-        if (time == null || value == null || (priorTime != null && time - priorTime > DAY_MS)) {
+        if (time == null || value == null || (priorTime != null && time - priorTime > DeckCore.DAY_MS)) {
           flush();
           if (time != null && value == null) rendered.push(ctx.svgElement("rect", {
             x: xFor(time) - 4, y: top + plotHeight - 8, width: 8, height: 8,

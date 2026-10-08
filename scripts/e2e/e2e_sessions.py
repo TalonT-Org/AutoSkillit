@@ -172,7 +172,7 @@ def _load_index(log_root: Path, violations: list[str]) -> list[dict[str, Any]]:
 
 def _safe_session_dir(log_root: Path, row: Mapping[str, Any]) -> Path | None:
     name = row.get("dir_name")
-    if not isinstance(name, str) or not name or Path(name).name != name:
+    if not isinstance(name, str) or not name or name in {".", ".."} or Path(name).name != name:
         return None
     return log_root / "sessions" / name
 

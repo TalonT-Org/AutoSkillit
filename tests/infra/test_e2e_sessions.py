@@ -426,6 +426,21 @@ def test_missing_root_and_malformed_trace_are_incomplete(tmp_path: Path) -> None
     assert "trace:invalid_json:1" in summary["violations"]
 
 
+@pytest.mark.parametrize("dir_name", [".", ".."])
+def test_summary_rejects_dot_session_directories(tmp_path: Path, dir_name: str) -> None:
+    log_root, trace, _ = _base_sessions(tmp_path)
+    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    entry = _entry(ROOT_ID, root_transcript)
+    entry["dir_name"] = dir_name
+    _index(log_root, [entry])
+    _trace(trace, [_event("SessionStart", ROOT_ID, 1, transcript=root_transcript)])
+
+    summary = sessions.summarize(trace, _envelope(), log_root)
+
+    assert summary["coverage"]["complete"] is False
+    assert f"sessions_index:{ROOT_ID}:invalid_dir_name" in summary["violations"]
+
+
 def test_summary_rejects_malformed_owned_index_summary_and_transcript(
     tmp_path: Path,
 ) -> None:

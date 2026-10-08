@@ -24,9 +24,9 @@ globalThis.window = {location, addEventListener() {}};
 
 function deckNode(tag, attrs = {}, children = null) {
   const node = {tag, attrs: {...attrs}, children: [], events: {}, hidden: attrs.hidden === true,
-    textContent: ""};
+    textContent: "", __deckNode: true};
   node.appendChild = child => {
-    if (!child || typeof child !== "object" || typeof child.tag !== "string") {
+    if (!child || typeof child !== "object" || child.__deckNode !== true) {
       throw new TypeError("appendChild requires a node");
     }
     node.children.push(child);
@@ -35,7 +35,14 @@ function deckNode(tag, attrs = {}, children = null) {
   node.addEventListener = (name, callback) => { node.events[name] = callback; };
   node.setAttribute = (name, value) => { node.attrs[name] = String(value); };
   if (Array.isArray(children)) {
-    for (const child of children) node.appendChild(child);
+    for (const child of children) {
+      if (child === null || child === undefined) continue;
+      if (["string", "number", "boolean"].includes(typeof child)) {
+        node.appendChild(deckNode("#text", {}, String(child)));
+      } else {
+        node.appendChild(child);
+      }
+    }
   } else if (children !== null && children !== undefined) {
     if (typeof children === "object") node.appendChild(children);
     else node.textContent = String(children);
@@ -150,7 +157,7 @@ globalThis.DeckTest = {
   renderPrepared(id, payload, route) {
     const chips = payload.chips[id];
     const selected = DeckCore.selectPrepared(payload.prepared, id, chips, route);
-    return this.render(id, {prepared: payload.prepared, rows: selected.rows,
+    return globalThis.DeckTest.render(id, {prepared: payload.prepared, rows: selected.rows,
       metrics: selected.metrics, chips, selection: selected.selection, route});
   },
   clickReview(index = 0) {

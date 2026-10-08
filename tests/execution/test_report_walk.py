@@ -263,7 +263,12 @@ def test_turn_ledgers_are_admitted_for_live_and_archived_sessions(
     ("descriptor", "ledger", "reason"),
     [
         (None, None, "descriptor-missing"),
-        (_turn_usage_descriptor(count=0), None, "ledger-not-published"),
+        (
+            _turn_usage_descriptor(count=0, filename=None),
+            None,
+            "ledger-not-published",
+        ),
+        (_turn_usage_descriptor(count=0), None, "ledger-missing"),
         (
             {
                 **_turn_usage_descriptor(count=1),

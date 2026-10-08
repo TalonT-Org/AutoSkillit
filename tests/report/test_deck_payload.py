@@ -998,8 +998,10 @@ def test_errors_keep_session_and_tool_failures_separate_with_known_denominators(
     assert tool_error["population"] == "tool_failure"
     assert tool_error["failures"]["value"] == 1
     assert unknown_tool["failures"]["state"] == "unknown"
-    assert orphan["harness"] is None and orphan["provider"] is None
+    assert orphan["harness"] == "unknown" and orphan["provider"] == "unknown"
     assert orphan["attribution_state"] == "unattributed"
+    assert orphan["session_key"] is None
+    assert _chip(payload["chips"]["errors"], "harness", "unknown")["state"] == "live"
 
 
 def test_trends_use_utc_days_and_disclose_future_untimed_and_interval_samples() -> None:

@@ -341,7 +341,13 @@ def test_new_prepared_view_selects_actual_rows_and_exact_session_block(deck_js: 
     }
     session_row = {**selected_row, "key": "session-row"}
     prepared = {
-        "skills": [{"window": "7d", "levels": ["orchestrator"], "rows": [{"key": "fallback"}]}],
+        "skills": [
+            {
+                "window": "7d",
+                "levels": ["orchestrator"],
+                "rows": [{"key": "fallback", "harness": "codex", "provider": "openai"}],
+            }
+        ],
         "context": {
             "blocks": [
                 {
@@ -388,7 +394,7 @@ def test_new_prepared_view_selects_actual_rows_and_exact_session_block(deck_js: 
 
     assert selected["rows"] == [selected_row]
     assert selected["metrics"]["parent_context"] == [selected_row]
-    assert selected["skillRows"] == [{"key": "fallback"}]
+    assert selected["skillRows"] == [{"key": "fallback", "harness": "codex", "provider": "openai"}]
     route["params"]["session"] = ["owner-key-1"]
     session_selected = deck_js.call("DeckCore.selectPrepared", prepared, "context", chips, route)
     assert session_selected["rows"] == [session_row]

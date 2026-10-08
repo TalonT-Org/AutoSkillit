@@ -56,7 +56,7 @@ class ReportSessionRow(ReportRowBase):
     cache_write_tokens: SerializedTokenMeasure
     assistant_turn_count: int | None
     tool_counts: dict[str, int] | None
-    turn_usage_state: str
+    turn_usage_state: str | None
     turn_usage_reason: str | None
 
 

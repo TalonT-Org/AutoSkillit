@@ -80,6 +80,8 @@ SESSION_COLUMNS: tuple[str, ...] = (
     "cache_read_tokens",
     "assistant_turn_count",
     "tool_counts",
+    "turn_usage_state",
+    "turn_usage_reason",
 )
 TURN_TABLE = "turns"
 TURN_COLUMNS: tuple[str, ...] = (

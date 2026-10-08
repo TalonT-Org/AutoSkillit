@@ -38,12 +38,13 @@ def _selected_tool_events(
         owner_key = raw.get("session_key")
         owner = owners.get(owner_key) if isinstance(owner_key, str) else None
         if owner is None:
+            event_pair = _source_pair(raw)
             selected.append(
                 {
                     **dict(raw),
                     "session_key": None,
-                    "harness": None,
-                    "provider": None,
+                    "harness": event_pair.harness,
+                    "provider": event_pair.provider,
                     "skill": None,
                     "recipe": None,
                     "step": None,
@@ -52,11 +53,12 @@ def _selected_tool_events(
                 }
             )
         else:
+            owner_pair = _source_pair(owner)
             selected.append(
                 {
                     **dict(raw),
-                    "harness": owner.get("harness"),
-                    "provider": owner.get("provider"),
+                    "harness": owner_pair.harness,
+                    "provider": owner_pair.provider,
                     "skill": owner.get("skill"),
                     "recipe": owner.get("recipe"),
                     "step": owner.get("step"),
@@ -261,52 +263,56 @@ def _tool_error_rows(
 def _unattributed_error_rows(events: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     if not events:
         return []
-    outcome = _outcome_summary(events)
+    groups: dict[SourcePair, list[Mapping[str, Any]]] = defaultdict(list)
+    for event in events:
+        groups[_source_pair(event)].append(event)
     rows = []
-    for symptom, affected in _tool_symptoms(events):
-        records = [
-            MeasureRecord(
-                SourcePair("unknown", "unknown"),
+    for pair, pair_events in groups.items():
+        outcome = _outcome_summary(pair_events)
+        for symptom, affected in _tool_symptoms(pair_events):
+            records = [
+                MeasureRecord(
+                    pair,
+                    {
+                        "failures": TokenMeasure.observed(1)
+                        if event.get("success") is False
+                        else TokenMeasure.unknown()
+                    },
+                )
+                for event in affected
+            ]
+            rows.append(
                 {
-                    "failures": TokenMeasure.observed(1)
-                    if event.get("success") is False
-                    else TokenMeasure.unknown()
-                },
+                    "key": f"unattributed:{pair.harness}:{pair.provider}:{symptom}",
+                    "time_ms": _latest_time(affected),
+                    "session_key": None,
+                    "session_keys": [],
+                    "harness": pair.harness,
+                    "provider": pair.provider,
+                    "skill": None,
+                    "recipe": None,
+                    "step": None,
+                    "level": None,
+                    "population": "unattributed_tool",
+                    "symptom": symptom,
+                    "failures": _aggregate_fields(records, ("failures",))["failures"],
+                    "failure_rate": outcome["failure_rate"],
+                    "eligible_count": len(pair_events),
+                    "observed_count": outcome["observed_count"],
+                    "unknown_count": outcome["unknown_count"],
+                    "tool_result_event_count": len(pair_events),
+                    "tool_event_coverage": {
+                        "state": "unattributed",
+                        "value": None,
+                        "sample_size": 0,
+                        "excluded_runs": 0,
+                        "unknown_runs": len(pair_events),
+                        "eligible_count": len(pair_events),
+                        "observation_count": len(pair_events),
+                    },
+                    "attribution_state": "unattributed",
+                }
             )
-            for event in affected
-        ]
-        rows.append(
-            {
-                "key": f"unattributed:{symptom}",
-                "time_ms": _latest_time(affected),
-                "session_key": None,
-                "session_keys": [],
-                "harness": None,
-                "provider": None,
-                "skill": None,
-                "recipe": None,
-                "step": None,
-                "level": None,
-                "population": "unattributed_tool",
-                "symptom": symptom,
-                "failures": _aggregate_fields(records, ("failures",))["failures"],
-                "failure_rate": outcome["failure_rate"],
-                "eligible_count": len(events),
-                "observed_count": outcome["observed_count"],
-                "unknown_count": outcome["unknown_count"],
-                "tool_result_event_count": len(events),
-                "tool_event_coverage": {
-                    "state": "unattributed",
-                    "value": None,
-                    "sample_size": 0,
-                    "excluded_runs": 0,
-                    "unknown_runs": len(events),
-                    "eligible_count": len(events),
-                    "observation_count": len(events),
-                },
-                "attribution_state": "unattributed",
-            }
-        )
     return rows
 
 
@@ -407,12 +413,15 @@ def _error_population_metrics(
                 "attribution_state": "attributed",
             }
         )
-    unattributed = [event for event in events if event.get("attribution_state") == "unattributed"]
-    if unattributed:
+    unattributed_groups: dict[SourcePair, list[Mapping[str, Any]]] = defaultdict(list)
+    for event in events:
+        if event.get("attribution_state") == "unattributed":
+            unattributed_groups[_source_pair(event)].append(event)
+    for pair, unattributed in unattributed_groups.items():
         result.append(
             {
-                "harness": None,
-                "provider": None,
+                "harness": pair.harness,
+                "provider": pair.provider,
                 "skill": None,
                 "recipe": None,
                 "step": None,

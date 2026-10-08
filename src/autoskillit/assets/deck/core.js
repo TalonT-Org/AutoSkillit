@@ -176,7 +176,9 @@ globalThis.DeckCore = (() => {
 
   function hrefFor(route, target, cohortKeys) {
     const sessionViews = ["context", "gaps", "parity"];
-    const preserve = [...cohortKeys, "skill", "recipe", "step", "model"];
+    const identityViews = ["context", "errors", "trend", "gaps", "parity", "skill", "cohort"];
+    const preserve = [...cohortKeys];
+    if (identityViews.includes(target.view)) preserve.push("skill", "recipe", "step", "model");
     if (sessionViews.includes(target.view)) preserve.push("session");
     const params = Object.fromEntries(preserve.filter(k =>
       Object.hasOwn(route.params, k)).map(k => [k, [...route.params[k]]]));

@@ -13,8 +13,14 @@ pytestmark = [pytest.mark.small]
 
 _SHELL_DOM_HARNESS = r"""
 function shellNode(tag) {
-  const node = {tag, attrs: {}, children: [], events: [], text: ""};
-  node.appendChild = child => { node.children.push(child); return child; };
+  const node = {tag, attrs: {}, children: [], events: [], text: "", __shellNode: true};
+  node.appendChild = child => {
+    if (!child || typeof child !== "object" || child.__shellNode !== true) {
+      throw new TypeError("appendChild requires a node");
+    }
+    node.children.push(child);
+    return child;
+  };
   node.replaceChildren = (...children) => { node.children = children; node.text = ""; };
   node.setAttribute = (key, value) => { node.attrs[key] = String(value); };
   node.addEventListener = (event, callback) => { node.events.push([event, callback]); };
@@ -30,17 +36,27 @@ const shellNodes = Object.fromEntries(["deck-nav", "deck-cohort", "deck-view", "
 globalThis.document = {
   createElement: shellNode,
   createElementNS: (_namespace, tag) => shellNode(tag),
+  createTextNode: text => {
+    const node = shellNode("#text");
+    node.textContent = String(text);
+    return node;
+  },
   getElementById: id => shellNodes[id] ?? null,
   addEventListener() {}
 };
 globalThis.location = {hash: ""};
 globalThis.window = {location, addEventListener() {}};
-globalThis.registerDeckProbe = viewId => DeckShell.registerView(viewId, ctx => {
-  globalThis.__selected = {rows: ctx.rows, metrics: ctx.metrics, session: ctx.selection.session};
-  return ctx.el("p", {}, ctx.rows.map(row => row.key).join(","));
-});
+globalThis.registerDeckProbe = viewId => {
+  DeckShell.registerView(viewId, ctx => {
+    globalThis.__selected = {rows: ctx.rows, metrics: ctx.metrics, session: ctx.selection.session};
+    return ctx.el("p", {}, ["Selected: ", ctx.el("span", {},
+      ctx.rows.map(row => row.key).join(",")), " selected."]);
+  });
+  return true;
+};
 globalThis.deckProbeResult = () => JSON.stringify(__selected);
 globalThis.deckCohortText = () => shellNodes["deck-cohort"].textContent;
+globalThis.deckViewText = () => shellNodes["deck-view"].textContent;
 """
 
 
@@ -122,7 +138,9 @@ def test_shell_passes_selected_prepared_rows_to_renderer_and_headline(
         ctx.call("DeckShell.boot", payload)
         result = json.loads(ctx.call("deckProbeResult"))
         cohort_text = ctx.call("deckCohortText")
+        view_text = ctx.call("deckViewText")
 
     assert result["rows"] == [selected_row]
     assert result["metrics"] == {"selected": view_id}
     assert f"1 {headline}" in cohort_text
+    assert view_text == "Selected: prepared-population-row selected."

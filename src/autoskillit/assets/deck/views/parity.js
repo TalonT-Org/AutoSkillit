@@ -19,8 +19,8 @@ DeckShell.registerView("parity", ctx => {
     const counts = row ? Object.entries(row.state_counts ?? {}).map(([name, count]) =>
       name + " " + DeckCore.formatCount(count)).join(" · ") : "no row in this selection";
     const coverage = ctx.el("small", {class: "parity-cell__coverage"}, row ?
-      countLabel(row.observation_count) + " observed / " +
-      countLabel(row.eligible_count) + " eligible · " + counts : counts);
+      countLabel(row.observation_count) + " observations · " +
+      countLabel(row.eligible_count) + " eligible source records · " + counts : counts);
     const cell = ctx.el("span", {class: "parity-cell"}, [body, coverage]);
     if (!row || !["measured", "measured_zero", "not_applicable"].includes(state)) {
       return ctx.el("a", {class: "parity-cell-link",
@@ -57,8 +57,9 @@ DeckShell.registerView("parity", ctx => {
   return ctx.el("section", {class: "card view-parity"}, [
     ctx.el("h1", {}, "Harness and provider coverage parity"),
     ctx.el("p", {class: "view-lede"}, "Each row shows the same target fields for one selected " +
-      "harness/provider population. Text labels and observed/eligible counts accompany every " +
-      "state; color is supplementary."),
+      "harness/provider population. Observation and eligibility counts are separate: " +
+      "eligibility counts owner sessions for attributed evidence and events for " +
+      "unattributed tools. Text accompanies every state; color is supplementary."),
     ctx.el("p", {class: "view-legend"}, "Measured and measured_zero are observed states. " +
       "Unknown, unavailable, and not_applicable remain distinct. Mixed coverage and no " +
       "observations are summaries of the primitive states shown in each cell."),

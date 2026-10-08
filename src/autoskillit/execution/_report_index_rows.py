@@ -153,10 +153,6 @@ def _pair_text(value: object) -> str:
     return _text(value) or UNKNOWN_SOURCE
 
 
-def _turn_usage_state(value: object) -> str:
-    return "observed" if value == "observed" else "unavailable"
-
-
 def _raw_measure(value: object) -> object:
     if isinstance(value, dict):
         return value
@@ -194,7 +190,7 @@ _ROW_FIELDS: dict[str, dict[str, Callable[[object], object]]] = {
         **{field: _raw_measure for field in CANONICAL_ACCOUNTING_FIELDS},
         "assistant_turn_count": _count,
         "tool_counts": _count_map,
-        "turn_usage_state": _turn_usage_state,
+        "turn_usage_state": _text,
         "turn_usage_reason": _text,
     },
     REQUEST_KIND: {
@@ -357,7 +353,7 @@ def _session_row(key: str, record: dict[str, Any]) -> dict[str, Any]:
         **measures,
         "assistant_turn_count": _count(record.get("assistant_turn_count")),
         "tool_counts": _tool_counts(record),
-        "turn_usage_state": _text(record.get("turn_usage_state")) or "unavailable",
+        "turn_usage_state": _text(record.get("turn_usage_state")),
         "turn_usage_reason": _text(record.get("turn_usage_reason")),
     }
 

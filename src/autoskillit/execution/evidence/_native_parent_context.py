@@ -15,7 +15,8 @@ from autoskillit._parent_assistant_turns import (
     _resolve_turn_id,
     is_parent_assistant_record,
 )
-from autoskillit.core import TokenMeasure, get_logger
+from autoskillit.core import BackendCapabilities, TokenMeasure, get_logger
+from autoskillit.execution.backends import get_backend
 
 logger = get_logger(__name__)
 
@@ -197,12 +198,15 @@ def _unlinked_spans(
 def _linked_parent_invocations(
     records: Sequence[dict[str, Any]], child_id: str, backend: str
 ) -> list[dict[str, Any]]:
+    capabilities = get_backend(backend.replace("_", "-")).capabilities
     if backend == "claude_code":
-        return _claude_invocations(records, child_id)
-    return _codex_invocations(records, child_id)
+        return _claude_invocations(records, child_id, capabilities)
+    return _codex_invocations(records, child_id, capabilities)
 
 
-def _claude_invocations(records: Sequence[dict[str, Any]], child_id: str) -> list[dict[str, Any]]:
+def _claude_invocations(
+    records: Sequence[dict[str, Any]], child_id: str, capabilities: BackendCapabilities
+) -> list[dict[str, Any]]:
     calls: dict[str, dict[str, Any]] = {}
     results: dict[str, list[dict[str, Any]]] = {}
     seen_results: set[str] = set()
@@ -211,7 +215,7 @@ def _claude_invocations(records: Sequence[dict[str, Any]], child_id: str) -> lis
             _claude_calls(entry, calls, child_id)
         if entry["record"].get("type") == "user":
             _claude_results(entry, results, seen_results)
-    return _linked_invocations(calls, results, child_id, "claude_code")
+    return _linked_invocations(calls, results, child_id, capabilities)
 
 
 def _claude_calls(
@@ -294,7 +298,9 @@ def _claude_result_text(value: object) -> tuple[str | None, str | None]:
     return None, "parent_return_text_missing"
 
 
-def _codex_invocations(records: Sequence[dict[str, Any]], child_id: str) -> list[dict[str, Any]]:
+def _codex_invocations(
+    records: Sequence[dict[str, Any]], child_id: str, capabilities: BackendCapabilities
+) -> list[dict[str, Any]]:
     calls: dict[str, dict[str, Any]] = {}
     results: dict[str, list[dict[str, Any]]] = {}
     seen_results: set[str] = set()
@@ -312,7 +318,7 @@ def _codex_invocations(records: Sequence[dict[str, Any]], child_id: str) -> list
             _codex_call(entry, payload, call_id, calls, child_id)
         elif payload_type in {"function_call_output", "custom_tool_call_output"}:
             _codex_result(entry, payload, call_id, results, seen_results)
-    return _linked_invocations(calls, results, child_id, "codex")
+    return _linked_invocations(calls, results, child_id, capabilities)
 
 
 def _codex_call(
@@ -396,14 +402,14 @@ def _linked_invocations(
     calls: Mapping[str, dict[str, Any]],
     results: Mapping[str, list[dict[str, Any]]],
     child_id: str,
-    backend: str,
+    capabilities: BackendCapabilities,
 ) -> list[dict[str, Any]]:
     linked = []
     for invocation_id, call in calls.items():
         candidates = results.get(invocation_id, [])
         if not _has_child_link(call, candidates, child_id):
             continue
-        accepted = _linked_results(candidates, call, child_id, backend)
+        accepted = _linked_results(candidates, call, child_id, capabilities)
         call["results"] = accepted
         if candidates and not accepted:
             call["return_reason"] = "parent_return_identity_mismatch"
@@ -423,22 +429,27 @@ def _linked_results(
     candidates: Sequence[dict[str, Any]],
     call: Mapping[str, Any],
     child_id: str,
-    backend: str,
+    capabilities: BackendCapabilities,
 ) -> list[dict[str, Any]]:
     return [
         result
         for result in candidates
         if (not result["identities"] or result["identities"] == {child_id})
-        and _same_invocation_turn(result, call, backend)
+        and _same_invocation_turn(result, call, capabilities)
     ]
 
 
 def _same_invocation_turn(
-    result: Mapping[str, Any], call: Mapping[str, Any], backend: str
+    result: Mapping[str, Any], call: Mapping[str, Any], capabilities: BackendCapabilities
 ) -> bool:
     result_turn = result.get("turn_id")
     call_turn = call.get("turn_id")
-    return backend != "codex" or not result_turn or not call_turn or result_turn == call_turn
+    return (
+        capabilities.supports_claude_format_stdout
+        or not result_turn
+        or not call_turn
+        or result_turn == call_turn
+    )
 
 
 def _child_ids(value: object) -> set[str]:

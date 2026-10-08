@@ -25,6 +25,7 @@ from ._measure_helpers import (
     _outcome_record,
     _ratio_field,
     _ratio_state_measure,
+    _source_pair,
 )
 from ._view_common import _session_identity, _time_in_window
 
@@ -589,51 +590,57 @@ def _unattributed_tool_rows(
 ) -> list[dict[str, Any]]:
     if not events:
         return []
-    pair = SourcePair("unknown", "unknown")
-    time_ms = _latest_time(events)
-    outcome_records = [_outcome_record(event) for event in events]
-    outcome = _aggregate_fields(outcome_records, ("failure",), eligible_count=len(events))[
-        "failure"
-    ]
-    attribution_records = [
-        MeasureRecord(pair, {"skill_step": TokenMeasure.unavailable()}) for _ in events
-    ]
-    attribution = _aggregate_fields(
-        attribution_records, ("skill_step",), eligible_count=len(events)
-    )["skill_step"]
+    groups: dict[SourcePair, list[Mapping[str, Any]]] = defaultdict(list)
+    for event in events:
+        groups[_source_pair(event)].append(event)
     rows = []
-    for field, field_measure, source in (
-        ("tool_errors", outcome, "indexed unattributed tool_result outcomes"),
-        (
-            "tool_skill_step_attribution",
-            attribution,
-            "tool_result rows without an exact owning session_key",
-        ),
-    ):
-        row = _coverage_row(
-            pair=pair,
-            model=None,
-            level=None,
-            skill=None,
-            recipe=None,
-            step=None,
-            population="unattributed_tool",
-            field=field,
-            measure=field_measure,
-            eligible_count=len(events),
-            observation_count=len(events),
-            source=(
-                f"{source} at event timestamp"
-                if time_ms is not None
-                else f"{source} as an untimed observation"
+    for pair, pair_events in groups.items():
+        time_ms = _latest_time(pair_events)
+        outcome_records = [_outcome_record(event) for event in pair_events]
+        outcome = _aggregate_fields(
+            outcome_records, ("failure",), eligible_count=len(pair_events)
+        )["failure"]
+        attribution_records = [
+            MeasureRecord(pair, {"skill_step": TokenMeasure.unavailable()}) for _ in pair_events
+        ]
+        attribution = _aggregate_fields(
+            attribution_records, ("skill_step",), eligible_count=len(pair_events)
+        )["skill_step"]
+        for field, field_measure, source in (
+            ("tool_errors", outcome, "indexed unattributed tool_result outcomes"),
+            (
+                "tool_skill_step_attribution",
+                attribution,
+                "tool_result rows without an exact owning session_key",
             ),
-            time_ms=time_ms,
-            reason="tool event has no exact indexed owner; no pair or skill/step is inferred",
-            state_counts=field_measure["state_counts"],
-        )
-        rows.append(
-            {**row, "key": f"unattributed_tool:{field}", "harness": None, "provider": None}
-        )
+        ):
+            row = _coverage_row(
+                pair=pair,
+                model=None,
+                level=None,
+                skill=None,
+                recipe=None,
+                step=None,
+                population="unattributed_tool",
+                field=field,
+                measure=field_measure,
+                eligible_count=len(pair_events),
+                observation_count=len(pair_events),
+                source=(
+                    f"{source} at event timestamp"
+                    if time_ms is not None
+                    else f"{source} as an untimed observation"
+                ),
+                time_ms=time_ms,
+                reason="tool event has no exact indexed owner; no pair or skill/step is inferred",
+                state_counts=field_measure["state_counts"],
+            )
+            rows.append(
+                {
+                    **row,
+                    "key": f"unattributed_tool:{pair.harness}:{pair.provider}:{field}",
+                }
+            )
     return rows
 
 

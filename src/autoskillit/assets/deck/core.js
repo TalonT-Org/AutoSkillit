@@ -2,6 +2,7 @@ globalThis.DeckCore = (() => {
   "use strict";
   const CHIP_STATES = Object.freeze({LIVE: "live", STRUCK: "struck", ABSENT: "absent"});
   const DAY_MS = 86400000;
+  const SESSION_VIEWS = ["context", "gaps", "parity"];
   const enc = encodeURIComponent;
   const formatCount = n => new Intl.NumberFormat("en-US").format(n);
   const isPrimitiveState = state => ["measured", "measured_zero", "unknown",
@@ -187,15 +188,14 @@ globalThis.DeckCore = (() => {
   }
 
   function hrefFor(route, target, cohortKeys) {
-    const sessionViews = ["context", "gaps", "parity"];
     const identityViews = ["context", "errors", "trend", "gaps", "parity", "skill", "cohort"];
     const preserve = [...cohortKeys];
     if (identityViews.includes(target.view)) preserve.push("skill", "recipe", "step", "model");
-    if (sessionViews.includes(target.view)) preserve.push("session");
+    if (SESSION_VIEWS.includes(target.view)) preserve.push("session");
     const params = Object.fromEntries(preserve.filter(k =>
       Object.hasOwn(route.params, k)).map(k => [k, [...route.params[k]]]));
     for (const [key, value] of Object.entries(target.params || {})) {
-      if (key === "session" && !sessionViews.includes(target.view)) {
+      if (key === "session" && !SESSION_VIEWS.includes(target.view)) {
         delete params[key];
         continue;
       }
@@ -282,7 +282,7 @@ globalThis.DeckCore = (() => {
     let rows = hasPreparedPopulation ? [] : viewId === "role" ? roleRows : skillRows;
     let metrics = rows;
     if (Array.isArray(viewData?.blocks)) {
-      const sessionKey = ["context", "gaps", "parity"].includes(viewId) ?
+      const sessionKey = SESSION_VIEWS.includes(viewId) ?
         params.session?.[0] ?? null : null;
       const sessionBlock = sessionKey == null ? null :
         (block?.sessions && Object.hasOwn(block.sessions, sessionKey) ?
@@ -316,7 +316,7 @@ globalThis.DeckCore = (() => {
       definitions: prepared.definitions ?? {},
       viewHistory: prepared.view_histories?.[viewId] ?? null,
       selection: {window, level, harness, provider,
-        session: ["context", "gaps", "parity"].includes(viewId) ? params.session?.[0] ?? null : null}
+        session: SESSION_VIEWS.includes(viewId) ? params.session?.[0] ?? null : null}
     };
   }
 

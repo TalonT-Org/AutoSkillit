@@ -1481,7 +1481,7 @@ def finish_pipeline(
 ) -> list[str]:
     failures: list[str] = []
     trace = out / "session-events.jsonl"
-    log_root = home / ".local" / "share" / "autoskillit" / "logs"
+    log_root = e2e_sessions.default_log_root(home)
     try:
         summary = e2e_sessions.summarize(trace, envelope, log_root)
         if not summary["coverage"]["complete"]:
@@ -1525,7 +1525,7 @@ def launch_recipe(
         proof = save_ownership(
             out / "session-events.jsonl",
             envelope,
-            home / ".local" / "share" / "autoskillit" / "logs",
+            e2e_sessions.default_log_root(home),
             seed,
             repository,
             out,

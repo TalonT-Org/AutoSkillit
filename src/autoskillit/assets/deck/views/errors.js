@@ -1,8 +1,5 @@
 DeckShell.registerView("errors", ctx => {
-  const stateCell = measure => DeckCore.isPrimitiveState(measure?.state) ? ctx.availabilityCell(measure) :
-    ctx.el("span", {class: "coverage-state"}, measure?.state === "no_observations" ?
-      "no observations" : measure?.state === "mixed" ? "mixed coverage" :
-        measure?.state ?? "unknown");
+  const stateCell = measure => DeckCore.coverageStateCell(ctx, measure, "coverage-state");
   const countCoverage = row => DeckCore.formatStateCounts(row.failures?.state_counts) ||
     "outcome coverage unavailable";
   const rateText = rate => {

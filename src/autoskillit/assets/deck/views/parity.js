@@ -4,10 +4,8 @@ DeckShell.registerView("parity", ctx => {
   const groupKey = row => JSON.stringify(groupFields.map(field => row[field] ?? null));
   const stateCell = row => {
     const state = row?.state ?? "no_observations";
-    const body = DeckCore.isPrimitiveState(state) ? ctx.availabilityCell(row.measure ?? {state}) :
-      ctx.el("span", {class: "coverage-state coverage-state--" + state},
-        state === "mixed" ? "mixed coverage" : state === "no_observations" ?
-          "no observations" : state);
+    const body = DeckCore.coverageStateCell(ctx,
+      DeckCore.isPrimitiveState(state) ? row.measure ?? {state} : {state});
     const counts = row ? DeckCore.formatStateCounts(row.state_counts) : "no row in this selection";
     const coverage = ctx.el("small", {class: "parity-cell__coverage"}, row ?
       DeckCore.countLabel(row.observation_count) + " observations · " +

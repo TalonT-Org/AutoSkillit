@@ -489,6 +489,42 @@ def _new_view_context(view_id: str) -> dict[str, Any]:
     }
 
 
+@pytest.mark.parametrize(
+    ("measure", "expected"),
+    [
+        ({"state": "measured_zero", "value": 0}, {"primitive": "measured_zero"}),
+        (
+            {"state": "mixed"},
+            {"class": "coverage-state coverage-state--mixed", "text": "mixed coverage"},
+        ),
+        (
+            {"state": "no_observations"},
+            {"class": "coverage-state coverage-state--no_observations", "text": "no observations"},
+        ),
+        (None, {"class": "coverage-state coverage-state--unknown", "text": "unknown"}),
+    ],
+)
+def test_shared_coverage_cell_keeps_primitive_and_summary_states_distinct(
+    deck_asset: Any, measure: dict[str, Any] | None, expected: dict[str, str]
+) -> None:
+    context = _load_renderers(deck_asset)
+    try:
+        context.eval("""
+          globalThis.coverageCell = (measure, className) => DeckCore.coverageStateCell({
+            availabilityCell: item => ({primitive: item.state}),
+            el: (tag, attrs, text) => ({class: attrs.class, text})
+          }, measure, className);
+        """)
+        assert context.call("coverageCell", measure) == expected
+        if "class" in expected:
+            assert context.call("coverageCell", measure, "coverage-state") == {
+                **expected,
+                "class": "coverage-state",
+            }
+    finally:
+        context.close()
+
+
 def test_each_prepared_view_renders_its_population_and_cohort_links(deck_asset: Any) -> None:
     context = _load_renderers(deck_asset)
     try:

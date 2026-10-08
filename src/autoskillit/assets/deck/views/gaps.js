@@ -7,11 +7,8 @@ DeckShell.registerView("gaps", ctx => {
       name.includes("prompt") || name.includes("return")) return "context";
     return "trend";
   };
-  const stateCell = row => DeckCore.isPrimitiveState(row.state) ?
-    ctx.availabilityCell(row.measure ?? {state: row.state}) :
-    ctx.el("span", {class: "coverage-state coverage-state--" + row.state},
-      row.state === "mixed" ? "mixed coverage" :
-        row.state === "no_observations" ? "no observations" : row.state ?? "unknown");
+  const stateCell = row => DeckCore.coverageStateCell(ctx,
+    DeckCore.isPrimitiveState(row.state) ? row.measure ?? {state: row.state} : {state: row.state});
   const stateCounts = row => DeckCore.formatStateCounts(row.state_counts) || "state counts unavailable";
   const tableRows = [...ctx.rows];
   const columns = [

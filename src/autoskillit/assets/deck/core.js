@@ -97,6 +97,15 @@ globalThis.DeckCore = (() => {
     return ctx.availabilityCell(measure ?? {state: "unavailable"});
   }
 
+  function coverageStateCell(ctx, measure, className) {
+    const state = measure?.state;
+    if (isPrimitiveState(state)) return ctx.availabilityCell(measure);
+    return ctx.el("span", {class: className ??
+      "coverage-state coverage-state--" + (state ?? "unknown")},
+      state === "no_observations" ? "no observations" :
+        state === "mixed" ? "mixed coverage" : state ?? "unknown");
+  }
+
   function ratioCell(ctx, ratio, percent = false) {
     const value = formatRatio(ratio, percent);
     return ctx.el("div", {class: "view-measure"}, [
@@ -443,6 +452,6 @@ globalThis.DeckCore = (() => {
     toggleSelection, windowSelection, selectPrepared, filterRows, populationSentence,
     summarizePairs, sortRows, parseSort, chipPresentation, availabilityPresentation,
     isPrimitiveState, inspectParams, countLabel, measureValue, formatStateCounts, barLayout, formatCount, formatRatio, ratioSample, reviewEligibility, reviewSignal,
-    measureCell, ratioCell, definitionCard, toolMix, roleHarnessRows, formatDate,
+    measureCell, coverageStateCell, ratioCell, definitionCard, toolMix, roleHarnessRows, formatDate,
     CHIP_STATES, DAY_MS});
 })();

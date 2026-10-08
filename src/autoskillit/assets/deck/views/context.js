@@ -11,10 +11,7 @@ DeckShell.registerView("context", ctx => {
   });
   const stateName = measure => measure?.state ?? "unknown";
   const countCell = measure => ctx.availabilityCell(measure ?? {state: "unknown"});
-  const stateCell = measure => DeckCore.isPrimitiveState(measure?.state) ? countCell(measure) :
-    ctx.el("span", {class: "coverage-state coverage-state--" + (measure?.state ?? "unknown")},
-      measure?.state === "no_observations" ? "no observations" :
-        measure?.state === "mixed" ? "mixed coverage" : measure?.state ?? "unknown");
+  const stateCell = measure => DeckCore.coverageStateCell(ctx, measure);
   const countText = measure => {
     const value = DeckCore.measureValue(measure);
     return value == null ? stateName(measure) : DeckCore.formatCount(value);

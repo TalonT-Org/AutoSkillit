@@ -12,7 +12,7 @@ from ._measure_helpers import (
     _ratio_field,
     _source_pair,
 )
-from ._view_common import _session_identity, _time_in_window
+from ._view_common import _latest_time, _session_identity, _time_in_window
 
 _ErrorIdentity = tuple[str, str, str | None, str | None, str | None]
 
@@ -67,15 +67,6 @@ def _selected_tool_events(
                 }
             )
     return selected
-
-
-def _latest_time(rows: Sequence[Mapping[str, Any]]) -> int | None:
-    times = [
-        value
-        for row in rows
-        if isinstance((value := row.get("time_ms")), int) and not isinstance(value, bool)
-    ]
-    return max(times, default=None)
 
 
 def _session_symptoms(

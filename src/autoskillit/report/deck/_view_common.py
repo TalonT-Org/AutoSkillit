@@ -174,3 +174,12 @@ def _prepared_view_block(
         ),
         None,
     )
+
+
+def _latest_time(rows: Sequence[Mapping[str, Any]], key: str = "time_ms") -> int | None:
+    values = [
+        value
+        for row in rows
+        if isinstance((value := row.get(key)), int) and not isinstance(value, bool)
+    ]
+    return max(values, default=None)

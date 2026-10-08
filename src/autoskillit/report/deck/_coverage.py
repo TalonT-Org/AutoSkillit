@@ -27,18 +27,9 @@ from ._measure_helpers import (
     _ratio_state_measure,
     _source_pair,
 )
-from ._view_common import _session_identity, _time_in_window
+from ._view_common import _latest_time, _session_identity, _time_in_window
 
 _Identity = tuple[str, str, str | None, str | None, str | None]
-
-
-def _latest_time(rows: Sequence[Mapping[str, Any]], key: str = "time_ms") -> int | None:
-    values = [
-        value
-        for row in rows
-        if isinstance((value := row.get(key)), int) and not isinstance(value, bool)
-    ]
-    return max(values, default=None)
 
 
 def _time_basis(

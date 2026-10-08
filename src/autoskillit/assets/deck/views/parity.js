@@ -3,11 +3,6 @@ DeckShell.registerView("parity", ctx => {
     "model", "level", "population"];
   const groupKey = row => JSON.stringify(groupFields.map(field => row[field] ?? null));
   const countLabel = value => value == null ? "count unavailable" : DeckCore.formatCount(value);
-  const inspectParams = row => Object.fromEntries([
-    ["harness", row?.harness], ["provider", row?.provider], ["skill", row?.skill],
-    ["recipe", row?.recipe], ["step", row?.step], ["model", row?.model],
-    ["session", row?.session_key]
-  ].filter(([, value]) => value != null).map(([key, value]) => [key, [value]]));
   const stateCell = row => {
     const state = row?.state ?? "no_observations";
     const body = DeckCore.isPrimitiveState(state) ? ctx.availabilityCell(row.measure ?? {state}) :
@@ -22,7 +17,7 @@ DeckShell.registerView("parity", ctx => {
     const cell = ctx.el("span", {class: "parity-cell"}, [body, coverage]);
     if (!row || !["measured", "measured_zero", "not_applicable"].includes(state)) {
       return ctx.el("a", {class: "parity-cell-link",
-        href: ctx.href({view: "gaps", params: inspectParams(row)})}, cell);
+        href: ctx.href({view: "gaps", params: DeckCore.inspectParams(row)})}, cell);
     }
     return cell;
   };

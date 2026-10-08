@@ -6,6 +6,11 @@ globalThis.DeckCore = (() => {
   const formatCount = n => new Intl.NumberFormat("en-US").format(n);
   const isPrimitiveState = state => ["measured", "measured_zero", "unknown",
     "unavailable", "not_applicable"].includes(state);
+  const inspectParams = row => Object.fromEntries([
+    ["harness", row?.harness], ["provider", row?.provider], ["skill", row?.skill],
+    ["recipe", row?.recipe], ["step", row?.step], ["model", row?.model],
+    ["session", row?.session_key]
+  ].filter(([, value]) => value != null).map(([key, value]) => [key, [value]]));
   const formatDate = ms => new Date(ms).toISOString().slice(0, 10);
 
   function formatRatio(ratio, percent = false) {
@@ -432,7 +437,7 @@ globalThis.DeckCore = (() => {
   return Object.freeze({decodeTable, encodeRoute, decodeRoute, hrefFor, effectiveSelection,
     toggleSelection, windowSelection, selectPrepared, filterRows, populationSentence,
     summarizePairs, sortRows, parseSort, chipPresentation, availabilityPresentation,
-    isPrimitiveState, barLayout, formatCount, formatRatio, ratioSample, reviewEligibility, reviewSignal,
+    isPrimitiveState, inspectParams, barLayout, formatCount, formatRatio, ratioSample, reviewEligibility, reviewSignal,
     measureCell, ratioCell, definitionCard, toolMix, roleHarnessRows, formatDate,
     CHIP_STATES, DAY_MS});
 })();

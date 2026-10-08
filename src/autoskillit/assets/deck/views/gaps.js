@@ -15,11 +15,6 @@ DeckShell.registerView("gaps", ctx => {
   const stateCounts = row => Object.entries(row.state_counts ?? {}).map(([state, count]) =>
     state + " " + DeckCore.formatCount(count)).join(" · ") || "state counts unavailable";
   const countLabel = value => value == null ? "count unavailable" : DeckCore.formatCount(value);
-  const inspectParams = row => Object.fromEntries([
-    ["harness", row.harness], ["provider", row.provider], ["skill", row.skill],
-    ["recipe", row.recipe], ["step", row.step], ["model", row.model],
-    ["session", row.session_key]
-  ].filter(([, value]) => value != null).map(([key, value]) => [key, [value]]));
   const tableRows = [...ctx.rows];
   const columns = [
     {key: "question", label: "Unanswered question", cell: row => row.question ??
@@ -40,7 +35,7 @@ DeckShell.registerView("gaps", ctx => {
     {key: "source", label: "Evidence source", cell: row => row.source ?? "not recorded"},
     {key: "reason", label: "Reason", cell: row => row.reason ?? "—"},
     {key: "affected_view", label: "Inspect", cell: row => ctx.el("a", {
-      href: ctx.href({view: viewForField(row.field), params: inspectParams(row)})
+      href: ctx.href({view: viewForField(row.field), params: DeckCore.inspectParams(row)})
     }, "Open evidence")}
   ];
 

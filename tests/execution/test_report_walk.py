@@ -25,6 +25,7 @@ from autoskillit.execution.evidence.report_walk import (
 from autoskillit.execution.session_log.session_index import (
     read_tolerant_session_index_rows,
 )
+from tests.execution._report_index_fixtures import _turn_usage_descriptor
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -91,20 +92,6 @@ def _turn_usage_row(
         "peak_context": {"state": "measured", "value": 12},
         "context_window_tokens": 100,
         "context_fraction": 0.12,
-    }
-
-
-def _turn_usage_descriptor(
-    *,
-    count: int,
-    filename: str | None = "turn_usage.jsonl",
-    version: int = TURN_USAGE_SCHEMA_VERSION,
-) -> dict[str, Any]:
-    return {
-        "schema_version": TOKEN_USAGE_SCHEMA_VERSION,
-        "turn_usage_file": filename,
-        "turn_usage_count": count,
-        "turn_usage_schema_version": version,
     }
 
 

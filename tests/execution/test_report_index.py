@@ -12,8 +12,6 @@ import pytest
 import autoskillit.execution.child_outcomes as child_snapshot
 import autoskillit.execution.evidence._native_child_projection as native_projection
 from autoskillit.core import (
-    TOKEN_USAGE_SCHEMA_VERSION,
-    TURN_USAGE_SCHEMA_VERSION,
     ArtifactLease,
     ArtifactLeaseContention,
 )
@@ -27,18 +25,17 @@ from autoskillit.execution import (
 from autoskillit.execution.evidence.report_walk import WalkItem
 from tests.execution._report_index_fixtures import (
     CLAUDE_SCOPE,
-    basic_session_row,
-)
-from tests.execution._report_index_fixtures import (
-    otlp_log_record as _log,
-)
-from tests.execution.test_parent_context_spans import (
     _claude_call,
     _claude_result,
     _encoding,
+    _turn_usage_descriptor,
+    basic_session_row,
 )
-from tests.execution.test_parent_context_spans import (
+from tests.execution._report_index_fixtures import (
     _jsonl as _parent_jsonl,
+)
+from tests.execution._report_index_fixtures import (
+    otlp_log_record as _log,
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -114,12 +111,10 @@ def _write_turn_ledger(
 ) -> None:
     session_dir = root / "sessions" / dir_name
     session_dir.mkdir(parents=True, exist_ok=True)
-    descriptor = {
-        "schema_version": TOKEN_USAGE_SCHEMA_VERSION,
-        "turn_usage_file": "turn_usage.jsonl" if published else None,
-        "turn_usage_count": len(rows) if published else 0,
-        "turn_usage_schema_version": TURN_USAGE_SCHEMA_VERSION,
-    }
+    descriptor = _turn_usage_descriptor(
+        count=len(rows) if published else 0,
+        filename="turn_usage.jsonl" if published else None,
+    )
     (session_dir / "token_usage.json").write_bytes(_json_line(descriptor))
     sidecar = session_dir / "turn_usage.jsonl"
     if published:

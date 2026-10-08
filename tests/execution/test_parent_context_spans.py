@@ -11,26 +11,9 @@ import pytest
 
 from autoskillit.execution.evidence import _native_child_projection as projection
 from autoskillit.execution.evidence import _native_parent_context as parent_context
+from tests.execution._report_index_fixtures import _claude_call, _claude_result, _encoding, _jsonl
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
-
-
-def _jsonl(*records: dict[str, Any]) -> str:
-    return "".join(json.dumps(record, separators=(",", ":")) + "\n" for record in records)
-
-
-def _encoding(name: str, *, merge_ab: bool = False) -> Any:
-    import tiktoken
-
-    ranks = {bytes((value,)): value for value in range(256)}
-    if merge_ab:
-        ranks[b"ab"] = 256
-    return tiktoken.Encoding(
-        name=name,
-        pat_str=r"[\s\S]+",
-        mergeable_ranks=ranks,
-        special_tokens={"<|endoftext|>": 257 if merge_ab else 256},
-    )
 
 
 def _spans(
@@ -50,46 +33,6 @@ def _spans(
         parent_transcript_reason=None,
         tokenizer_version="0.14.0",
     )
-
-
-def _claude_call(
-    *,
-    child_id: str | None,
-    tool_id: str,
-    prompt: str,
-    model: str = "gpt-known",
-) -> dict[str, Any]:
-    inputs: dict[str, str] = {"prompt": prompt}
-    if child_id is not None:
-        inputs["agent_id"] = child_id
-    return {
-        "type": "assistant",
-        "uuid": f"record-{tool_id}",
-        "timestamp": "2026-10-07T10:00:00Z",
-        "requestId": f"turn-{tool_id}",
-        "message": {
-            "id": f"message-{tool_id}",
-            "model": model,
-            "content": [{"type": "tool_use", "id": tool_id, "name": "Task", "input": inputs}],
-        },
-    }
-
-
-def _claude_result(*, tool_id: str, record_id: str, text: str) -> dict[str, Any]:
-    return {
-        "type": "user",
-        "uuid": record_id,
-        "timestamp": f"2026-10-07T10:00:0{record_id[-1]}Z",
-        "message": {
-            "content": [
-                {
-                    "type": "tool_result",
-                    "tool_use_id": tool_id,
-                    "content": [{"type": "text", "text": text}],
-                }
-            ]
-        },
-    }
 
 
 @pytest.mark.parametrize(

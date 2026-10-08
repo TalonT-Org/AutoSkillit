@@ -190,13 +190,17 @@ def _read_summary(session_dir: Path, expected_session_id: str) -> dict[str, Any]
     return summary
 
 
+def default_log_root(home: Path) -> Path:
+    return home / ".local" / "share" / "autoskillit" / "logs"
+
+
 def _discover_owned(
     trace_path: Path,
     envelope: dict[str, Any] | None,
     log_root: Path | None,
 ) -> dict[str, Any]:
     """Resolve only the dispatched session and fresh, linked managed descendants."""
-    root = log_root or Path.home() / ".local" / "share" / "autoskillit" / "logs"
+    root = log_root or default_log_root(Path.home())
     violations: list[str] = []
     events = _load_trace(trace_path, violations)
     root_id, dispatch_id = _read_envelope(envelope, violations)

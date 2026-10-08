@@ -70,6 +70,35 @@
       "recipe_fixture": "sandbox-smoke.yaml",
       "ingredients": {},
       "expected_pull_request_state": "closed"
+    },
+    {
+      "name": "implementation",
+      "kind": "recipe",
+      "pipeline": true,
+      "peak_sessions": 8,
+      "timeout_sec": 7200,
+      "trigger_paths": [
+        "src/autoskillit/recipes/*",
+        "src/autoskillit/skills/*",
+        "src/autoskillit/skills_extended/*",
+        "src/autoskillit/server/*",
+        "src/autoskillit/execution/*"
+      ],
+      "recipe": "implementation",
+      "ingredients": {
+        "source_dir": "/workspace/sandbox",
+        "open_pr": "true",
+        "auto_merge": "false",
+        "arch_lenses": "false",
+        "audit_impl": "true"
+      },
+      "expected_pull_request_state": "open",
+      "issue_url_env": "E2E_IMPLEMENTATION_ISSUE_URL",
+      "required_changed_paths": [
+        "sandbox/",
+        "tests/"
+      ],
+      "test_command": ["task", "test-check"]
     }
   ]
 }

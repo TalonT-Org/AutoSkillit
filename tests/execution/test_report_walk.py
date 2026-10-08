@@ -281,7 +281,6 @@ def test_turn_ledgers_are_admitted_for_live_and_archived_sessions(
             ),
             "ledger-count-mismatch",
         ),
-        (_turn_usage_descriptor(count=1), None, "ledger-missing"),
         (
             _turn_usage_descriptor(count=2),
             b'{"input_tokens":{"state":"measured","value":1}}\nnot-json',

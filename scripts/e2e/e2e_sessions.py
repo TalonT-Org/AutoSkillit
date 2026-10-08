@@ -844,10 +844,10 @@ def _claim_succeeded(
         return False
     tool_input, result, is_error = claims[0]
     requested_label = tool_input.get("label")
-    effective_label = claim_label is None or requested_label in (None, "", claim_label)
+    label_matches_request = claim_label is None or requested_label in (None, "", claim_label)
     claimed = bool(
         not is_error
-        and effective_label
+        and label_matches_request
         and tool_input.get("allow_reentry") is not True
         and result is not None
         and result.get("success") is True

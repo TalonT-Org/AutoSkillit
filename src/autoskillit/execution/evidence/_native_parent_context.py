@@ -185,7 +185,7 @@ def _unlinked_spans(
             tokenizer_version,
             None,
             None,
-            reason,
+            None,
             None,
             reason,
             None,

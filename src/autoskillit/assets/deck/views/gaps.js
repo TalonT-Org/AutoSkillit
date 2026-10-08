@@ -12,8 +12,7 @@ DeckShell.registerView("gaps", ctx => {
     ctx.el("span", {class: "coverage-state coverage-state--" + row.state},
       row.state === "mixed" ? "mixed coverage" :
         row.state === "no_observations" ? "no observations" : row.state ?? "unknown");
-  const stateCounts = row => Object.entries(row.state_counts ?? {}).map(([state, count]) =>
-    state + " " + DeckCore.formatCount(count)).join(" · ") || "state counts unavailable";
+  const stateCounts = row => DeckCore.formatStateCounts(row.state_counts) || "state counts unavailable";
   const tableRows = [...ctx.rows];
   const columns = [
     {key: "question", label: "Unanswered question", cell: row => row.question ??

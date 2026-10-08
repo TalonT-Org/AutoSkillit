@@ -217,15 +217,14 @@ DeckShell.registerView("context", ctx => {
   });
   const parentRows = ctx.metrics?.parent_context ?? [];
   function coverageText(measure) {
-    const states = Object.entries(measure?.state_counts ?? {}).map(([state, count]) =>
-      state + " " + DeckCore.formatCount(count));
+    const states = DeckCore.formatStateCounts(measure?.state_counts);
     const reasons = Object.entries(measure?.reason_counts ?? {}).map(([reason, count]) =>
       reason + " " + DeckCore.formatCount(count));
     const population = measure?.observation_count == null ? null :
       DeckCore.formatCount(measure.observation_count) + " observed / " +
       (measure.eligible_count == null ? "eligible count unavailable" :
         DeckCore.formatCount(measure.eligible_count) + " eligible");
-    return [population, ...states, ...reasons]
+    return [population, states, ...reasons]
       .filter(Boolean).join(" · ") || "coverage unavailable";
   }
   const provenanceText = provenance => (provenance ?? []).map(entry => typeof entry === "string" ?

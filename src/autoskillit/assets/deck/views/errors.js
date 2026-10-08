@@ -3,8 +3,7 @@ DeckShell.registerView("errors", ctx => {
     ctx.el("span", {class: "coverage-state"}, measure?.state === "no_observations" ?
       "no observations" : measure?.state === "mixed" ? "mixed coverage" :
         measure?.state ?? "unknown");
-  const countCoverage = row => Object.entries(row.failures?.state_counts ?? {})
-    .map(([state, count]) => state + " " + DeckCore.formatCount(count)).join(" · ") ||
+  const countCoverage = row => DeckCore.formatStateCounts(row.failures?.state_counts) ||
     "outcome coverage unavailable";
   const rateText = rate => {
     const value = rate?.state === "measured" ? rate.value :
@@ -54,8 +53,7 @@ DeckShell.registerView("errors", ctx => {
   const outcomeCoverage = summary => DeckCore.countLabel(summary?.observed_count) +
     " observed / " + DeckCore.countLabel(summary?.eligible_count) + " eligible · " +
     DeckCore.countLabel(summary?.unknown_count) + " unknown · " +
-    Object.entries(summary?.state_counts ?? {}).map(([state, count]) =>
-      state + " " + DeckCore.formatCount(count)).join(" · ");
+    DeckCore.formatStateCounts(summary?.state_counts);
   const coverageColumns = [
     {key: "skill", label: "Skill", cell: row => row.skill ?? "unknown skill"},
     {key: "recipe", label: "Recipe", cell: row => row.recipe ?? "unknown recipe"},

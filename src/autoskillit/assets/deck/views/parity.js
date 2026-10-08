@@ -8,8 +8,7 @@ DeckShell.registerView("parity", ctx => {
       ctx.el("span", {class: "coverage-state coverage-state--" + state},
         state === "mixed" ? "mixed coverage" : state === "no_observations" ?
           "no observations" : state);
-    const counts = row ? Object.entries(row.state_counts ?? {}).map(([name, count]) =>
-      name + " " + DeckCore.formatCount(count)).join(" · ") : "no row in this selection";
+    const counts = row ? DeckCore.formatStateCounts(row.state_counts) : "no row in this selection";
     const coverage = ctx.el("small", {class: "parity-cell__coverage"}, row ?
       DeckCore.countLabel(row.observation_count) + " observations · " +
       DeckCore.countLabel(row.eligible_count) + " eligible source records · " + counts : counts);

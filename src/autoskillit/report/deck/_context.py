@@ -151,10 +151,6 @@ def _context_turn_rows(
     )
 
 
-def _span_measure(span: Mapping[str, Any]) -> TokenMeasure:
-    return TokenMeasure.measure_from_raw(span.get("measure"))
-
-
 def _group_for_span(
     groups: dict[_SpanGroupKey, dict[str, Any]],
     owner: Mapping[str, Any],
@@ -304,7 +300,7 @@ def _collect_candidate_span(
     field = raw_span.get("field")
     if field not in ("parent_prompt_tokens", "subagent_return_tokens"):
         return
-    measure = _span_measure(raw_span)
+    measure = _decode_measure(raw_span, "measure")
     span_time = _timestamp_ms(raw_span.get("timestamp"))
     if span_time is not None and not _time_in_window(
         span_time, window, generated_at_ms=generated_at_ms

@@ -5,10 +5,11 @@ from typing import Any
 
 from autoskillit.core import TokenMeasureState
 
-from ._context import _context_turn_rows, _parent_context_metrics, _span_measure
+from ._context import _context_turn_rows, _parent_context_metrics
 from ._coverage import _coverage_rows
 from ._coverage_support import _gap_rows
 from ._errors import _error_population_metrics, _error_rows, _selected_tool_events
+from ._measure_helpers import _decode_measure
 from ._registry import (
     COVERAGE_COLUMNS,
     ERROR_COLUMNS,
@@ -404,7 +405,7 @@ def _span_population_rows(
             time_ms = _timestamp_ms(span.get("timestamp"))
             if time_ms is not None and time_ms > generated_at_ms:
                 continue
-            measure = _span_measure(span)
+            measure = _decode_measure(span, "measure")
             if time_ms is None and measure.state in (
                 TokenMeasureState.MEASURED,
                 TokenMeasureState.MEASURED_ZERO,

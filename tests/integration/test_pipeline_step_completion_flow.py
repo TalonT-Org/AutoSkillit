@@ -24,6 +24,7 @@ from autoskillit.server.tools.tools_pipeline_tracker import (
     complete_run_skill_result,
     recover_run_skill_result,
 )
+from tests.conftest import bind_test_kitchen_identity
 from tests.server._pipeline_test_helpers import (
     _ack_direct_run_skill_result,
     _write_tracker,
@@ -129,7 +130,6 @@ class TestServerSideStepCompletionMarking:
     ):
         monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
         _setup_project(tmp_path, tool_ctx_kitchen_open)
-        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
         _write_tracker(
             tmp_path,
             "test-kitchen",
@@ -153,7 +153,6 @@ class TestServerSideStepCompletionMarking:
     ):
         monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
         _setup_project(tmp_path, tool_ctx_kitchen_open)
-        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
         _write_tracker(
             tmp_path,
             "test-kitchen",
@@ -208,7 +207,6 @@ class TestServerSideStepCompletionMarking:
     ):
         monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
         _setup_project(tmp_path, tool_ctx_kitchen_open)
-        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
         _write_tracker(
             tmp_path,
             "test-kitchen",
@@ -279,7 +277,6 @@ class TestAcknowledgedReceiptReplay:
     ):
         monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
         _setup_project(tmp_path, tool_ctx_kitchen_open)
-        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
         _write_tracker(
             tmp_path,
             "test-kitchen",
@@ -358,7 +355,6 @@ class TestAcknowledgedReceiptReplay:
     ):
         monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
         _setup_project(tmp_path, tool_ctx_kitchen_open)
-        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
         _write_tracker(
             tmp_path,
             "test-kitchen",
@@ -395,7 +391,6 @@ class TestAcknowledgedReceiptReplay:
     ):
         monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
         _setup_project(tmp_path, tool_ctx_kitchen_open)
-        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
         _write_tracker(
             tmp_path,
             "test-kitchen",
@@ -425,20 +420,20 @@ class TestAcknowledgedReceiptReplay:
                 ctx=SimpleNamespace(session_id="other-session"),  # type: ignore[arg-type]
             )
         )
-        tool_ctx_kitchen_open.kitchen_id = "other-kitchen"
+        bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="other-kitchen")
         wrong_kitchen = json.loads(
             await complete_run_skill_result(
                 receipt_id,
                 ctx=SimpleNamespace(session_id="request-session"),  # type: ignore[arg-type]
             )
         )
-        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
         unknown = json.loads(
             await complete_run_skill_result(
                 "unknown-receipt",
                 ctx=SimpleNamespace(session_id="request-session"),  # type: ignore[arg-type]
             )
         )
+        bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="test-kitchen")
         replay = json.loads(
             await complete_run_skill_result(
                 receipt_id,
@@ -462,7 +457,6 @@ class TestDependentStepAllowedAfterServerSideMarking:
     ):
         monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
         _setup_project(tmp_path, tool_ctx_kitchen_open)
-        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
         _write_tracker(
             tmp_path,
             "test-kitchen",
@@ -496,7 +490,6 @@ class TestStaleSecondTrackerDoesNotDisableMarking:
     ):
         monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
         _setup_project(tmp_path, tool_ctx_kitchen_open)
-        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
         _write_tracker(
             tmp_path,
             "test-kitchen",
@@ -532,7 +525,6 @@ class TestRetrySuffixFoldsToCanonicalStep:
     ):
         monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
         _setup_project(tmp_path, tool_ctx_kitchen_open)
-        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
         _write_tracker(
             tmp_path,
             "test-kitchen",
@@ -558,7 +550,6 @@ class TestFailureAndNeedsRetryDoNotMarkComplete:
     ):
         monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
         _setup_project(tmp_path, tool_ctx_kitchen_open)
-        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
         _write_tracker(
             tmp_path,
             "test-kitchen",
@@ -584,7 +575,6 @@ class TestEmptyStepNameDoesNotWriteTracker:
     ):
         monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
         _setup_project(tmp_path, tool_ctx_kitchen_open)
-        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
         tool_ctx_kitchen_open.active_recipe_steps = {}
         _write_tracker(
             tmp_path,
@@ -613,7 +603,6 @@ class TestAdvisorySurfacedOnUnmetDependents:
         """The 'advisory' key mark_step_complete() populates must reach the caller."""
         monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
         _setup_project(tmp_path, tool_ctx_kitchen_open)
-        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
         _write_tracker(
             tmp_path,
             "test-kitchen",
@@ -645,7 +634,6 @@ class TestResumeWithStepNameMarksCompleteOnSuccess:
     ):
         monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
         _setup_project(tmp_path, tool_ctx_kitchen_open)
-        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
         _write_tracker(
             tmp_path,
             "test-kitchen",

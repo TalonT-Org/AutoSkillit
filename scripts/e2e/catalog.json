@@ -69,15 +69,7 @@
       "recipe": "sandbox-smoke",
       "recipe_fixture": "sandbox-smoke.yaml",
       "ingredients": {},
-      "expected_pull_request_state": "closed",
-      "expected_failures": [
-        {
-          "severity": "error",
-          "check": "open_kitchen_failed",
-          "message": "open_kitchen_failed",
-          "issue": "https://github.com/TalonT-Org/AutoSkillit/issues/5250"
-        }
-      ]
+      "expected_pull_request_state": "closed"
     }
   ]
 }

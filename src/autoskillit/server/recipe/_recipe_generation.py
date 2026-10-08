@@ -33,6 +33,7 @@ __all__ = [
     "RecipeGenerationCapacityError",
     "RecipeGenerationConflictError",
     "RecipeGenerationError",
+    "RecipeGenerationKitchenNotActiveError",
     "RecipeGenerationRecord",
     "RecipeGenerationRetiredError",
     "RecipeGenerationStore",
@@ -59,6 +60,10 @@ class RecipeGenerationCapacityError(RecipeGenerationError):
 
 class RecipeGenerationRetiredError(RecipeGenerationError):
     """A write targeted a kitchen whose generation namespace is retired."""
+
+
+class RecipeGenerationKitchenNotActiveError(RecipeGenerationError):
+    """A write targeted an inactive kitchen without retained retirement evidence."""
 
 
 def _freeze_primitive(value: object, *, path: str) -> object:
@@ -314,11 +319,14 @@ class RecipeGenerationStore:
             self._retired_kitchens.pop(kitchen_id, None)
 
     def _require_active_locked(self, kitchen_id: str) -> None:
-        if (self._lifecycle_authoritative and kitchen_id not in self._active_kitchens) or (
-            not self._lifecycle_authoritative and kitchen_id in self._retired_kitchens
-        ):
+        if kitchen_id in self._retired_kitchens:
             raise RecipeGenerationRetiredError(
                 f"recipe generation kitchen is retired: {kitchen_id}"
+            )
+        if self._lifecycle_authoritative and kitchen_id not in self._active_kitchens:
+            raise RecipeGenerationKitchenNotActiveError(
+                "recipe generation kitchen is not active in this process: "
+                f"{kitchen_id} ({len(self._active_kitchens)} active)"
             )
 
     def _deindex_artifacts_locked(

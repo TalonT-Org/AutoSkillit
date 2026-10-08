@@ -25,6 +25,7 @@ from autoskillit.core import DefaultManagedWorkerCapacity, atomic_write
 from autoskillit.execution.backends import CodexBackend
 from autoskillit.execution.headless import DefaultHeadlessExecutor
 from autoskillit.fleet._api import execute_dispatch
+from tests.conftest import bind_test_kitchen_identity
 from tests.fakes import InMemoryRecipeRepository
 from tests.fleet._helpers import assert_food_truck_lease_launch
 from tests.fleet.test_fleet_e2e import FleetTestRunner
@@ -161,7 +162,7 @@ class TestCodexFleetE2E:
         tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
         recipes = InMemoryRecipeRepository()
         tool_ctx.recipes = recipes
-        tool_ctx.kitchen_id = uuid4().hex[:16]
+        bind_test_kitchen_identity(tool_ctx, kitchen_id=uuid4().hex[:16])
         tool_ctx.project_dir = tmp_path
 
         dispatches_dir = tool_ctx.temp_dir / "dispatches"

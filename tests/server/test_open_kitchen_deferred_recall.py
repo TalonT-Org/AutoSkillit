@@ -12,12 +12,13 @@ from autoskillit.core import FinalizedRecipeStep, RecipeExecutionId, RecipeFlowE
 from autoskillit.recipe._binding import bind_recipe
 from autoskillit.recipe.schema import Recipe, RecipeStep
 from autoskillit.server.recipe._recipe_execution import get_recipe_execution
+from tests.conftest import bind_test_kitchen_identity
 from tests.server._helpers import (
     _configure_admitted_recipe,
     _make_finalized_projection,
     _with_finalized_projection,
 )
-from tests.server.conftest import _make_mock_ctx
+from tests.server.conftest import _make_mock_ctx, _set_mock_kitchen_transition
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -26,7 +27,7 @@ def _make_deferred_recall_ctx(name: str) -> MagicMock:
     ctx = _make_mock_ctx()
     ctx.gate.enabled = True
     ctx.recipe_name = name
-    ctx.kitchen_id = "test-kitchen"
+    _set_mock_kitchen_transition(ctx, kitchen_id="test-kitchen")
     ctx.gate_infrastructure_ready = True
     return ctx
 
@@ -100,7 +101,7 @@ async def test_recipe_open_atomically_installs_compiled_execution(
 
     tool_ctx.gate.enable()
     tool_ctx.gate_infrastructure_ready = True
-    tool_ctx.kitchen_id = f"test-open-{deferred_recall}"
+    bind_test_kitchen_identity(tool_ctx, kitchen_id=f"test-open-{deferred_recall}")
     tool_ctx.recipe_name = "test-recipe" if deferred_recall else ""
     recipes = MagicMock()
     tool_ctx.recipes = recipes
@@ -341,7 +342,7 @@ def _make_pre_revealed_ctx(name: str) -> MagicMock:
     ctx = _make_mock_ctx()
     ctx.gate.enabled = True
     ctx.recipe_name = ""
-    ctx.kitchen_id = "test-kitchen"
+    _set_mock_kitchen_transition(ctx, kitchen_id="test-kitchen")
     ctx.gate_infrastructure_ready = True
     ctx.recipes.load_and_validate.return_value = {
         "content": "name: test-recipe\nsteps:\n  build:\n    cmd: task build\n",
@@ -451,7 +452,7 @@ async def test_double_open_kitchen_no_name_does_not_re_execute_handler():
     mock_ctx = _make_mock_ctx()
     mock_ctx.gate.enabled = True
     mock_ctx.gate_infrastructure_ready = True
-    mock_ctx.kitchen_id = "test-kitchen"
+    _set_mock_kitchen_transition(mock_ctx, kitchen_id="test-kitchen")
 
     with (
         patch("autoskillit.server._get_ctx", return_value=mock_ctx),

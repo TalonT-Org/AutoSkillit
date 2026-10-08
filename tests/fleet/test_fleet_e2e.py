@@ -25,6 +25,7 @@ import psutil
 import pytest
 
 from autoskillit.core import CLAUDE_CODE_CAPABILITIES
+from tests.conftest import bind_test_kitchen_identity
 from tests.fleet._helpers import assert_food_truck_lease_launch
 
 pytestmark = [
@@ -387,7 +388,7 @@ def fleet_runtime(
     tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
     recipes = InMemoryRecipeRepository()
     tool_ctx.recipes = recipes
-    tool_ctx.kitchen_id = uuid4().hex[:16]
+    bind_test_kitchen_identity(tool_ctx, kitchen_id=uuid4().hex[:16])
     tool_ctx.project_dir = tmp_path
     tool_ctx.managed_headless_session_lineage_store = DefaultManagedHeadlessSessionLineageStore()
 
@@ -1129,11 +1130,6 @@ async def test_fleet_auto_gate_boot_reaps_orphan(tmp_path: Path) -> None:
             patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=False),
             patch.object(dispatch_reaper, "read_boot_id", return_value=None),
             patch.object(dispatch_reaper, "kill_process_tree"),
-            patch.object(
-                lifespan,
-                "resolve_kitchen_id",
-                return_value="kitchen-test",
-            ),
             patch.object(
                 lifespan,
                 "discover_campaign_state_files",

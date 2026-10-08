@@ -254,10 +254,7 @@ Recipe `expected_failures` rows identify an individual, verified product defect 
 accepted; process timeouts, malformed results, other failures and cleanup failures remain
 fatal. An accepted defect is provisional until mandatory branch/PR cleanup succeeds. A clean
 run that observes a configured row makes it stale and fails with instructions to remove the
-row and close the bug. The smoke catalog currently records
-[#5250](https://github.com/TalonT-Org/AutoSkillit/issues/5250) for `open_kitchen_failed`
-during kitchen initialization, before the recipe executes. This row does not accept
-arbitrary failures from the recipe's `failed` stop step. Fleet translates the L3 result's
+row and close the bug. Fleet translates the L3 result's
 `reason` into the failed command envelope's `error` and `user_visible_message` fields;
 the harness matches that envelope rather than the recipe payload's `failed_step`/`reason`.
 

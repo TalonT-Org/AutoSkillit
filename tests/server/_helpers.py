@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -30,6 +31,15 @@ from tests.fleet._helpers import _make_recipe_info as _fleet_make_recipe_info
 if TYPE_CHECKING:
     from autoskillit.config.settings import AgentBackendConfig
     from autoskillit.pipeline import ToolContext
+
+
+def patched_kitchen_id(kitchen_id: str) -> AbstractContextManager[MagicMock]:
+    """Patch the lifecycle identity resolver for server tests."""
+    return patch(
+        "autoskillit.server.lifecycle._kitchen_identity.resolve_kitchen_id",
+        return_value=kitchen_id,
+    )
+
 
 _HOOK_CONFIG_OVERLAY_RELPATH = (".autoskillit", "temp", ".hook_config_overlay.json")
 
@@ -245,11 +255,7 @@ async def _open_kitchen_patched(
     with patch.object(tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
         with patch.object(tools_kitchen, "_write_hook_config"):
             with patch.object(tools_kitchen, "create_background_task"):
-                with patch.object(
-                    tools_kitchen,
-                    "resolve_kitchen_id",
-                    return_value="test-kitchen",
-                ):
+                with patched_kitchen_id("test-kitchen"):
                     raw_response = await open_kitchen(name=name, overrides=overrides, ctx=fmcp_ctx)
                     envelope = json.loads(raw_response)
                     if counter is not None:

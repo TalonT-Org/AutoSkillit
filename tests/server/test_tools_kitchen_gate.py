@@ -9,7 +9,7 @@ import pytest
 
 import autoskillit.server.tools.tools_kitchen as _patch_tools_tools_kitchen
 from autoskillit.hooks.formatters._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
-from tests.server.conftest import _make_mock_ctx
+from tests.server.conftest import _make_mock_ctx, _set_mock_kitchen_transition
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -327,6 +327,7 @@ async def test_open_kitchen_inherits_campaign_id_from_env(tmp_path, monkeypatch)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "abc123def456")
     mock_ctx = _make_mock_ctx()
+    _set_mock_kitchen_transition(mock_ctx)
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -345,6 +346,7 @@ async def test_open_kitchen_generates_uuid_without_campaign_env(tmp_path, monkey
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
     mock_ctx = _make_mock_ctx()
+    _set_mock_kitchen_transition(mock_ctx)
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -386,7 +388,7 @@ async def test_close_kitchen_drains_orphaned_github_api_entries(tmp_path, monkey
     mock_ctx = _make_mock_ctx()
     mock_ctx.project_dir = tmp_path
     mock_ctx.github_api_log = log
-    mock_ctx.kitchen_id = "test-kitchen-123"
+    _set_mock_kitchen_transition(mock_ctx, kitchen_id="test-kitchen-123")
     log_dir = tmp_path / "logs"
     log_dir.mkdir()
     mock_ctx.config.linux_tracing.log_dir = str(log_dir)

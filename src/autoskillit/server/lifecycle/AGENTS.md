@@ -17,6 +17,11 @@ boot sequence — the async context manager wired via `lifespan=`, per-session-t
 auto-gate boots, and one-shot startup checks — lives in the `_lifespan/`
 sub-package.
 
+`_kitchen_identity` is the sole kitchen-identity mint and activation authority.
+This is application lifecycle state: `ToolContext.kitchen_id` is derived from
+`kitchen_open_state`, while the remaining context fields stay mutable. It is
+separate from FastMCP transport/session identity.
+
 The pre-deletion editable-install scan that halts `perform_merge()` before a
 worktree is deleted lives at `server/_editable_guard.py`, one level up, not
 here: it is a merge-time filesystem check with a single call site in

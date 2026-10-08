@@ -1,4 +1,10 @@
-"""Headless one-shot fleet dispatch command."""
+"""Headless one-shot fleet dispatch command.
+
+A fresh invocation inherits a nonempty ambient campaign id or mints a fresh id. A paired
+dispatch resume preserves the campaign id recorded in its prior state. The resolved parent
+id is forwarded through dispatch arguments and the child's
+AUTOSKILLIT_CAMPAIGN_ID environment value.
+"""
 
 from __future__ import annotations
 
@@ -15,7 +21,7 @@ from autoskillit.core import get_logger, is_feature_enabled
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
     from autoskillit.core import NativeShellCaptureMode
-    from autoskillit.fleet import DispatchResult
+    from autoskillit.fleet import CampaignState, DispatchResult
 
 logger = get_logger(__name__)
 
@@ -65,7 +71,7 @@ async def _execute_fleet_run(
         new_managed_launch_id,
     )
     from autoskillit.fleet import _build_food_truck_prompt, execute_dispatch
-    from autoskillit.server import make_context
+    from autoskillit.server import establish_kitchen_identity, make_context
     from autoskillit.workspace import (
         SkillProjectionContext,
         compile_session_skill_catalog,
@@ -76,6 +82,19 @@ async def _execute_fleet_run(
         cfg,
         project_dir=Path.cwd(),
         plugin_retirement_coordinator=default_plugin_retirement_coordinator(),
+    )
+    prior_state: CampaignState | None = None
+    if resume_session_id is not None and prior_dispatch_id is not None:
+        from autoskillit.fleet import read_state
+
+        prior_state = read_state(ctx.temp_dir / "dispatches" / f"{prior_dispatch_id}.json")
+    establish_kitchen_identity(
+        ctx,
+        campaign_id=(
+            prior_state.campaign_id
+            if prior_state is not None and prior_state.campaign_id
+            else None
+        ),
     )
     if disable_quota_guard:
         ctx.config.quota_guard.enabled = False
@@ -100,17 +119,13 @@ async def _execute_fleet_run(
         from autoskillit.server.managed_join_prelaunch import acquire_managed_join_evidence
 
         managed_join_parent_id = new_managed_launch_id()
-        if resume_session_id is not None and prior_dispatch_id is not None:
-            from autoskillit.fleet import read_state
-
-            prior_state = read_state(ctx.temp_dir / "dispatches" / f"{prior_dispatch_id}.json")
-            if prior_state is not None:
-                prior_record = next(
-                    (record for record in prior_state.dispatches if record.name == recipe),
-                    None,
-                )
-                if prior_record is not None and prior_record.managed_lineage_ref is not None:
-                    managed_join_parent_id = prior_record.managed_lineage_ref.launch_id
+        if prior_state is not None:
+            prior_record = next(
+                (record for record in prior_state.dispatches if record.name == recipe),
+                None,
+            )
+            if prior_record is not None and prior_record.managed_lineage_ref is not None:
+                managed_join_parent_id = prior_record.managed_lineage_ref.launch_id
         evidence = acquire_managed_join_evidence(
             backend=effective_backend,
             configured_model=cfg.model.model_override or cfg.model.default_model,

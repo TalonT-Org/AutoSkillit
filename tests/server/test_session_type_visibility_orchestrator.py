@@ -280,7 +280,6 @@ async def test_non_notification_backend_gets_kitchen_pre_reveal(build_ctx, monke
         patch.object(_misc, "_prime_quota_cache", new=AsyncMock()),
         patch.object(_session_boots, "_retain_kitchen_tracker_authority"),
         patch.object(_session_boots, "register_active_kitchen"),
-        patch.object(_session_boots, "_activate_recipe_kitchen"),
     ):
         await _lifespan._skill_auto_gate_boot(ctx)
 
@@ -319,7 +318,6 @@ async def test_non_notification_backend_plan_review_pre_revealed(build_ctx, monk
         patch.object(_misc, "_prime_quota_cache", new=AsyncMock()),
         patch.object(_session_boots, "_retain_kitchen_tracker_authority"),
         patch.object(_session_boots, "register_active_kitchen"),
-        patch.object(_session_boots, "_activate_recipe_kitchen"),
     ):
         await _lifespan._food_truck_auto_gate_boot(ctx)
 

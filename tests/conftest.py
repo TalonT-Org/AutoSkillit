@@ -868,7 +868,7 @@ def tool_ctx(make_tool_ctx):
 
 @pytest.fixture
 def tool_ctx_kitchen_open(tool_ctx):
-    """tool_ctx variant with gate explicitly opened.
+    """tool_ctx variant with established identity and gate explicitly opened.
 
     Use when the test requires a tool that calls _require_enabled() and
     the test is not testing gate-boot behavior itself. This fixture
@@ -881,8 +881,22 @@ def tool_ctx_kitchen_open(tool_ctx):
     from autoskillit.pipeline.gate import DefaultGateState
 
     tool_ctx.gate = DefaultGateState(enabled=True)
-    tool_ctx.kitchen_id = "test-kitchen"
+    bind_test_kitchen_identity(tool_ctx, "test-kitchen")
     return tool_ctx
+
+
+def bind_test_kitchen_identity(ctx, kitchen_id: str) -> None:
+    """Bind a test kitchen identity without activating the recipe store."""
+    from autoskillit.pipeline import closed_kitchen_open_state, new_kitchen_open_state
+
+    with ctx.kitchen_transition_lock:
+        context_id = ctx.kitchen_open_state.context_id
+        ctx.kitchen_open_state = (
+            new_kitchen_open_state(kitchen_id=kitchen_id, context_id=context_id)
+            if kitchen_id
+            else closed_kitchen_open_state(context_id=context_id)
+        )
+        ctx.kitchen_process_identity = None
 
 
 def bind_test_skill_resume_contract(

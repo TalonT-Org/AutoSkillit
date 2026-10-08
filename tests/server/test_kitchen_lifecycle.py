@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import psutil
 import pytest
 
-import autoskillit.core as core
 from autoskillit.config import AutomationConfig
 from autoskillit.hooks import _HOOK_CONFIG_PATH_COMPONENTS
 from autoskillit.server import _tracker_authority
@@ -21,6 +20,7 @@ from autoskillit.server.tools.tools_kitchen import (
 from autoskillit.server.tools.tools_kitchen._open_kitchen._tracker_auto_init import (
     prune_stale_kitchen_state,
 )
+from tests.conftest import bind_test_kitchen_identity
 from tests.fakes import FakePluginArtifactAuthority
 from tests.server._helpers import _write_registry
 
@@ -37,6 +37,7 @@ async def test_kitchen_open_close_lifecycle(monkeypatch, tmp_path):
         plugin_authority=FakePluginArtifactAuthority(tmp_path),
         project_dir=tmp_path,
     )
+    bind_test_kitchen_identity(ctx, "test-kitchen")
     monkeypatch.setattr(_state, "_ctx", ctx)
     monkeypatch.setattr(_state, "_startup_ready", None)
 
@@ -83,6 +84,7 @@ async def test_kitchen_lifecycle_logs_registry_write_refusals(monkeypatch, tmp_p
         plugin_authority=FakePluginArtifactAuthority(tmp_path),
         project_dir=tmp_path,
     )
+    bind_test_kitchen_identity(ctx, "test-kitchen")
     monkeypatch.setattr(_state, "_ctx", ctx)
     monkeypatch.setattr(_state, "_startup_ready", None)
     lifecycle_logger = MagicMock()
@@ -123,6 +125,7 @@ async def test_open_kitchen_runs_reaper(monkeypatch, tmp_path):
         plugin_authority=FakePluginArtifactAuthority(tmp_path),
         project_dir=tmp_path,
     )
+    bind_test_kitchen_identity(ctx, "test-kitchen")
     monkeypatch.setattr(_state, "_ctx", ctx)
     monkeypatch.setattr(_state, "_startup_ready", None)
 
@@ -137,7 +140,7 @@ async def test_open_kitchen_runs_reaper(monkeypatch, tmp_path):
 
     with (
         patch.object(tools_kitchen, "_prime_quota_cache", new_callable=AsyncMock),
-        patch.object(core, "register_active_kitchen"),
+        patch.object(_tracker_authority, "register_active_kitchen"),
     ):
         result = await _open_kitchen_handler()
         assert result is None
@@ -164,6 +167,7 @@ async def test_close_kitchen_preserves_peer_tracker_and_lease_sidecar(monkeypatc
         plugin_authority=FakePluginArtifactAuthority(tmp_path),
         project_dir=tmp_path,
     )
+    bind_test_kitchen_identity(ctx, "test-kitchen")
     monkeypatch.setattr(_state, "_ctx", ctx)
     monkeypatch.setattr(_state, "_startup_ready", None)
 
@@ -181,8 +185,8 @@ async def test_close_kitchen_preserves_peer_tracker_and_lease_sidecar(monkeypatc
     try:
         with (
             patch.object(tools_kitchen, "_prime_quota_cache", new_callable=AsyncMock),
-            patch.object(core, "register_active_kitchen"),
-            patch.object(core, "unregister_active_kitchen"),
+            patch.object(_tracker_authority, "register_active_kitchen"),
+            patch.object(_tracker_authority, "unregister_active_kitchen"),
         ):
             await _open_kitchen_handler()
             current_target = TrackerAuthorityTarget.for_project(
@@ -212,8 +216,21 @@ async def test_close_kitchen_preserves_peer_tracker_and_lease_sidecar(monkeypatc
 
 
 async def test_back_to_back_open_close_open_resets_infrastructure(monkeypatch, tmp_path):
-    """After close, gate_infrastructure_ready must be False so a re-open runs the handler."""
+    """Close resets identity, and a real reopen establishes a new usable identity."""
+    import json
+
+    from autoskillit.pipeline import KitchenOpenPhase
+    from autoskillit.server import _misc
+    from autoskillit.server.lifecycle import _lifespan
+    from autoskillit.server.tools.tools_kitchen import open_kitchen
+    from autoskillit.server.tools.tools_kitchen._open_kitchen import _gate as open_gate
+    from autoskillit.server.tools.tools_recipe import load_recipe
+    from tests.server._helpers import _mock_fmcp_ctx
+    from tests.server.conftest import _READY_RECIPE_OVERRIDES
+
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "0")
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
 
     ctx = make_context(
         AutomationConfig(),
@@ -223,31 +240,60 @@ async def test_back_to_back_open_close_open_resets_infrastructure(monkeypatch, t
     )
     monkeypatch.setattr(_state, "_ctx", ctx)
     monkeypatch.setattr(_state, "_startup_ready", None)
+    overrides = {
+        **_READY_RECIPE_OVERRIDES,
+        "source_dir": str(ctx.project_dir.resolve()),
+    }
+    fmcp_ctx = _mock_fmcp_ctx()
 
     with (
         patch.object(tools_kitchen, "_prime_quota_cache", new_callable=AsyncMock),
-        patch.object(core, "register_active_kitchen"),
-        patch.object(core, "unregister_active_kitchen"),
+        patch.object(_misc, "_prime_quota_cache", new_callable=AsyncMock),
+        patch.object(tools_kitchen, "_write_hook_config"),
+        patch.object(tools_kitchen, "create_background_task", return_value=None),
+        patch.object(tools_kitchen, "discover_campaign_state_files", return_value=[]),
+        patch.object(tools_kitchen, "reap_stale_dispatches_async", new_callable=AsyncMock),
+        patch.object(tools_kitchen, "sweep_orphaned_tethers_async", new_callable=AsyncMock),
+        patch.object(open_gate, "sweep_stale_markers"),
+        patch.object(open_gate, "prune_stale_kitchen_state"),
+        patch.object(_lifespan, "_reap_self_excluded_codex_and_daemon_orphans"),
+        patch.object(_tracker_authority, "register_active_kitchen", return_value=True),
+        patch.object(_tracker_authority, "unregister_active_kitchen", return_value=True),
     ):
-        result1 = await _open_kitchen_handler()
-        assert result1 is None
+        result1 = json.loads(
+            await open_kitchen(name="research", overrides=overrides, ctx=fmcp_ctx)
+        )
+        assert result1["success"] is True, result1
+        assert ctx.kitchen_open_state.phase is KitchenOpenPhase.COMMITTED
         assert ctx.gate_infrastructure_ready is True
-        first_task = ctx.quota_refresh_task
+        first_id = ctx.kitchen_id
+        first_identity = ctx.kitchen_process_identity
+        assert first_identity is not None
+        assert first_identity.kitchen_id == first_id
 
         _close_kitchen_handler()
         assert ctx.gate_infrastructure_ready is False
-        await asyncio.sleep(0)
-        assert first_task.cancelled() or first_task.done()
+        assert ctx.kitchen_open_state.phase is KitchenOpenPhase.CLOSED
+        assert ctx.kitchen_id == ""
+        assert ctx.kitchen_process_identity is None
 
-        result2 = await _open_kitchen_handler()
-        assert result2 is None
+        result2 = json.loads(
+            await open_kitchen(name="research", overrides=overrides, ctx=fmcp_ctx)
+        )
+        assert result2["success"] is True, result2
+        assert ctx.kitchen_open_state.phase is KitchenOpenPhase.COMMITTED
         assert ctx.gate_infrastructure_ready is True
-        second_task = ctx.quota_refresh_task
-        assert second_task is not first_task
+        second_id = ctx.kitchen_id
+        assert second_id != first_id
+        second_identity = ctx.kitchen_process_identity
+        assert second_identity is not None
+        assert second_identity.kitchen_id == second_id
+
+        loaded = json.loads(await load_recipe(name="research", overrides=overrides))
+        assert loaded["success"] is True, loaded
 
         _close_kitchen_handler()
         await asyncio.sleep(0)
-        assert second_task.cancelled() or second_task.done()
 
 
 def _write_tracker(tracker_dir, kitchen_id, *, initialized_at=None):
@@ -450,13 +496,14 @@ async def test_open_kitchen_sweeps_stale_kitchen_state_markers(monkeypatch, tmp_
         plugin_authority=FakePluginArtifactAuthority(tmp_path),
         project_dir=tmp_path,
     )
+    bind_test_kitchen_identity(ctx, "test-kitchen")
     monkeypatch.setattr(_state, "_ctx", ctx)
     monkeypatch.setattr(_state, "_startup_ready", None)
 
     with (
         patch.object(tools_kitchen, "_prime_quota_cache", new_callable=AsyncMock),
-        patch.object(core, "register_active_kitchen"),
-        patch.object(core, "unregister_active_kitchen"),
+        patch.object(_tracker_authority, "register_active_kitchen"),
+        patch.object(_tracker_authority, "unregister_active_kitchen"),
     ):
         result = await _open_kitchen_handler()
         assert result is None
@@ -504,13 +551,14 @@ async def test_close_kitchen_retains_stable_lock_and_restores_config_baseline(
         plugin_authority=FakePluginArtifactAuthority(tmp_path),
         project_dir=tmp_path,
     )
+    bind_test_kitchen_identity(ctx, "test-kitchen")
     monkeypatch.setattr(_state, "_ctx", ctx)
     monkeypatch.setattr(_state, "_startup_ready", None)
 
     with (
         patch.object(tools_kitchen, "_prime_quota_cache", new_callable=AsyncMock),
-        patch.object(core, "register_active_kitchen"),
-        patch.object(core, "unregister_active_kitchen"),
+        patch.object(_tracker_authority, "register_active_kitchen"),
+        patch.object(_tracker_authority, "unregister_active_kitchen"),
     ):
         await _open_kitchen_handler()
 

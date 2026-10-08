@@ -16,6 +16,8 @@ import pytest
 import structlog.contextvars
 import structlog.testing
 
+from tests.conftest import bind_test_kitchen_identity
+
 if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
     from autoskillit.pipeline.timings import DefaultTimingLog
@@ -141,18 +143,12 @@ def _set_mock_kitchen_transition(ctx: MagicMock, *, kitchen_id: str = "") -> Non
     """Give a mock context the typed transition state guaranteed by make_context()."""
     from threading import RLock
 
-    from autoskillit.pipeline import closed_kitchen_open_state, new_kitchen_open_state
+    from autoskillit.pipeline import closed_kitchen_open_state
 
-    closed_state = closed_kitchen_open_state()
     ctx.kitchen_transition_lock = RLock()
-    ctx.kitchen_open_state = (
-        new_kitchen_open_state(
-            kitchen_id=kitchen_id,
-            context_id=closed_state.context_id,
-        )
-        if kitchen_id
-        else closed_state
-    )
+    ctx.kitchen_open_state = closed_kitchen_open_state()
+    bind_test_kitchen_identity(ctx, kitchen_id)
+    type(ctx).kitchen_id = property(lambda self: self.kitchen_open_state.kitchen_id)
 
 
 def _make_mock_ctx(config=None) -> MagicMock:
@@ -181,7 +177,7 @@ def _make_mock_ctx(config=None) -> MagicMock:
     ctx.project_dir.mkdir(parents=True, exist_ok=True)
     ctx.skill_resolver = MagicMock(spec=SkillResolver)
     ctx.skill_resolver.resolve_effective.return_value = None
-    ctx.kitchen_id = f"test-{uuid4().hex}"
+    kitchen_id = f"test-{uuid4().hex}"
     ctx.kitchen_process_identity = None
     ctx.kitchen_tracker_key = None
     ctx.tracker_leases = {}
@@ -191,7 +187,7 @@ def _make_mock_ctx(config=None) -> MagicMock:
     ctx.config.subsets.disabled = []  # REQ-VIS-008: no subsets disabled by default
     ctx.active_recipe_ingredients = None
     ctx.gate_infrastructure_ready = False
-    _set_mock_kitchen_transition(ctx)
+    _set_mock_kitchen_transition(ctx, kitchen_id=kitchen_id)
     ctx.recipe_execution_lock = RLock()
     ctx.recipe_initialization_state = NoActiveRecipe()
     ctx.recipe_execution_factory = make_recipe_execution
@@ -449,17 +445,15 @@ class ReadyRecipeContext:
 
 @pytest.fixture
 def tool_ctx_kitchen_open(tool_ctx: ToolContext) -> ToolContext:
-    """Open the gate while retaining production backend compatibility metadata.
+    """Bind test identity and open the gate while retaining backend metadata.
 
     Mirrors the parent fixture in tests/conftest.py so tests under tests/server/
-    that read ``tool_ctx.kitchen_id`` (e.g. tracker-bound tests) get the same
-    ``"test-kitchen"`` sentinel the parent provides, instead of the silent
-    ``None`` a gate-only override would yield.
+    get the same established identity and open gate state.
     """
     assert tool_ctx is not None
     assert hasattr(tool_ctx, "gate"), "tool_ctx must expose a `gate` attribute"
     tool_ctx.gate = DefaultGateState(enabled=True)
-    tool_ctx.kitchen_id = "test-kitchen"
+    bind_test_kitchen_identity(tool_ctx, "test-kitchen")
     return tool_ctx
 
 

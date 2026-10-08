@@ -38,6 +38,9 @@ from autoskillit.pipeline import (  # noqa: F401
     ToolContext,
     gate_error_result,
 )
+from autoskillit.server.lifecycle._kitchen_identity import (
+    establish_kitchen_identity,
+)
 from autoskillit.server.lifecycle._lifespan import (
     _autoskillit_lifespan,
 )
@@ -59,6 +62,7 @@ __all__ = [
     # Public utilities consumed by CLI and tests
     "version_info",
     "make_context",
+    "establish_kitchen_identity",
     "resolve_backend_override",
     # Admission helpers consumed by CLI (re-exported to avoid cross-submodule imports)
     "_compute_effective_backend_map",

@@ -15,7 +15,8 @@ import pytest
 
 import autoskillit.server.tools.tools_kitchen as _patch_tools_tools_kitchen
 from autoskillit.recipe.schema import RecipeIngredient
-from tests.server.conftest import _make_mock_ctx
+from tests.server._helpers import patched_kitchen_id
+from tests.server.conftest import _make_mock_ctx, _set_mock_kitchen_transition
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -34,7 +35,7 @@ def _patched_env(mock_ctx: MagicMock) -> None:
     mock_ctx.enable_components = AsyncMock()
     mock_ctx.recipes = MagicMock()
     mock_ctx.config.migration.suppressed = []
-    mock_ctx.kitchen_id = "test-kitchen-type"
+    _set_mock_kitchen_transition(mock_ctx, kitchen_id="test-kitchen-type")
     mock_ctx.config.linux_tracing.log_dir = ""
 
 
@@ -79,11 +80,7 @@ async def _call_open_kitchen_with_recipe(
                 new=AsyncMock(),
             ):
                 with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
-                    with patch.object(
-                        _patch_tools_tools_kitchen,
-                        "resolve_kitchen_id",
-                        return_value="test-kitchen-type",
-                    ):
+                    with patched_kitchen_id("test-kitchen-type"):
                         with patch.object(
                             _patch_tools_tools_kitchen,
                             "resolve_ingredient_defaults",
@@ -298,11 +295,7 @@ async def test_open_kitchen_ingredients_only_rejects_invalid_type(tmp_path, monk
                 new=AsyncMock(),
             ):
                 with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
-                    with patch.object(
-                        _patch_tools_tools_kitchen,
-                        "resolve_kitchen_id",
-                        return_value="test-kitchen-type",
-                    ):
+                    with patched_kitchen_id("test-kitchen-type"):
                         with patch.object(
                             _patch_tools_tools_kitchen,
                             "resolve_ingredient_defaults",
@@ -349,11 +342,7 @@ async def test_open_kitchen_fails_closed_when_recipe_load_returns_none(tmp_path,
                 new=AsyncMock(),
             ):
                 with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
-                    with patch.object(
-                        _patch_tools_tools_kitchen,
-                        "resolve_kitchen_id",
-                        return_value="test-kitchen-fail-closed",
-                    ):
+                    with patched_kitchen_id("test-kitchen-fail-closed"):
                         with patch.object(
                             _patch_tools_tools_kitchen,
                             "resolve_ingredient_defaults",

@@ -47,6 +47,7 @@ from autoskillit.fleet.campaign_state.state import DispatchStatus
 from autoskillit.fleet.result_parser import parse_l3_result_block
 from autoskillit.fleet.sidecar import sidecar_path
 from autoskillit.recipe.schema import Recipe, RecipeInfo, RecipeKind, RecipeSource
+from tests.conftest import bind_test_kitchen_identity
 from tests.fakes import InMemoryRecipeRepository
 from tests.fleet._helpers import _read_dispatch_record
 from tests.fleet.test_fleet_e2e_codex import _noop_quota_refresher, _simple_prompt_builder
@@ -279,7 +280,7 @@ def _wire_codex_runtime(
     tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
     recipes = InMemoryRecipeRepository()
     tool_ctx.recipes = recipes
-    tool_ctx.kitchen_id = uuid4().hex[:16]
+    bind_test_kitchen_identity(tool_ctx, kitchen_id=uuid4().hex[:16])
     tool_ctx.project_dir = tmp_path
     (tool_ctx.temp_dir / "dispatches").mkdir(parents=True, exist_ok=True)
     _add_recipe(recipes, _RECIPE_NAME)

@@ -1029,13 +1029,15 @@ def run_test(
     """Run *test* and always record ``out/result.json``; return the failures."""
     out.mkdir(parents=True, exist_ok=True)
     matched_findings: list[dict[str, str]] = []
+    result: dict[str, Any] = {"test": test.name}
     try:
         failures, matched_findings = _run_test(
             test, catalog, out=out, home=home, env=env, runner=runner
         )
     except Exception as exc:
-        failures = [f"harness error: {exc}"]
-    result = {"test": test.name, "passed": not failures, "failures": failures}
+        failures = [f"harness error: {type(exc).__name__}: {exc}"]
+        result["exception"] = traceback.format_exc()
+    result.update(passed=not failures, failures=failures)
     if test.kind in ("clean-install", "recipe"):
         outcome = "failed" if failures else "expected_failure" if matched_findings else "passed"
         result.update(

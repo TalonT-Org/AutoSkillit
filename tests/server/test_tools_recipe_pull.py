@@ -92,6 +92,7 @@ from autoskillit.server.recipe.section import _lifecycle as recipe_section_lifec
 from autoskillit.server.response._response_budget import enforce_response_budget
 from autoskillit.server.tools._recipe_section_handler import _inject_initialization_counters
 from autoskillit.server.tools.tools_recipe import get_recipe_section
+from tests.conftest import bind_test_kitchen_identity
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
@@ -248,7 +249,7 @@ def test_prepare_generation_rejects_non_finite_compile_values(tool_ctx) -> None:
 
 
 def test_compile_identity_and_artifact_share_one_source_projection(tool_ctx) -> None:
-    tool_ctx.kitchen_id = "compile-identity"
+    bind_test_kitchen_identity(tool_ctx, kitchen_id="compile-identity")
     payload = _payload()
     payload["custom_generation_input"] = {"value": 3}
     payload["initialization_id"] = "caller-owned-stale-id"
@@ -286,7 +287,7 @@ def _persist_finalized_generation(
 
 
 def test_finalized_response_rejects_stale_kitchen_transition_owner(tool_ctx) -> None:
-    tool_ctx.kitchen_id = "transition-owner"
+    bind_test_kitchen_identity(tool_ctx, kitchen_id="transition-owner")
     tool_ctx.kitchen_open_state = start_kitchen_effect(
         new_kitchen_open_state(
             kitchen_id=tool_ctx.kitchen_id,
@@ -322,7 +323,7 @@ def test_finalized_response_rejects_stale_kitchen_transition_owner(tool_ctx) -> 
 
 
 def test_finalized_response_confirms_owned_kitchen_serving_effect(tool_ctx) -> None:
-    tool_ctx.kitchen_id = "transition-owner"
+    bind_test_kitchen_identity(tool_ctx, kitchen_id="transition-owner")
     tool_ctx.kitchen_open_state = start_kitchen_effect(
         new_kitchen_open_state(
             kitchen_id=tool_ctx.kitchen_id,
@@ -356,7 +357,7 @@ def test_finalized_response_confirms_owned_kitchen_serving_effect(tool_ctx) -> N
 def test_finalized_response_marks_changed_kitchen_serving_effect_ambiguous(
     tool_ctx,
 ) -> None:
-    tool_ctx.kitchen_id = "transition-owner"
+    bind_test_kitchen_identity(tool_ctx, kitchen_id="transition-owner")
     tool_ctx.kitchen_open_state = start_kitchen_effect(
         new_kitchen_open_state(
             kitchen_id=tool_ctx.kitchen_id,
@@ -982,7 +983,7 @@ def test_kitchen_retirement_rejects_dot_path_components(tmp_path: Path, kitchen_
 
 def test_codex_without_supported_host_evidence_uses_bounded_envelope(tool_ctx) -> None:
     tool_ctx.backend = CodexBackend()
-    tool_ctx.kitchen_id = "codex-envelope"
+    bind_test_kitchen_identity(tool_ctx, kitchen_id="codex-envelope")
     payload = _payload(
         "name: remediation\nsteps:\n  first:\n    action: stop\n    message: "
         + ("x" * 50_000)
@@ -1006,7 +1007,7 @@ def test_codex_without_supported_host_evidence_uses_bounded_envelope(tool_ctx) -
 
 def test_token_dense_payload_does_not_use_four_byte_ordinary_estimate(tool_ctx) -> None:
     tool_ctx.backend = CodexBackend()
-    tool_ctx.kitchen_id = "codex-token-dense"
+    bind_test_kitchen_identity(tool_ctx, kitchen_id="codex-token-dense")
 
     finalized = _finalize_recipe_delivery(
         _payload("!" * 20_000),
@@ -1028,7 +1029,7 @@ def test_initialization_requirements_use_the_pull_response_bound(
 ) -> None:
     response_max_bytes = RECIPE_SECTION_RESPONSE_FLOOR_BYTES + 500
     tool_ctx.backend = CodexBackend()
-    tool_ctx.kitchen_id = "initialization-page-bound"
+    bind_test_kitchen_identity(tool_ctx, kitchen_id="initialization-page-bound")
     tool_ctx.config.output_budget = OutputBudgetConfig(
         response_max_bytes=response_max_bytes,
         page_max_bytes=None,
@@ -1081,7 +1082,9 @@ async def test_initialization_pull_rejections_preserve_progress(
     expected_error: str,
 ) -> None:
     tool_ctx_kitchen_open.backend = CodexBackend()
-    tool_ctx_kitchen_open.kitchen_id = f"initialization-rejection-{case}"
+    bind_test_kitchen_identity(
+        tool_ctx_kitchen_open, kitchen_id=f"initialization-rejection-{case}"
+    )
     tool_ctx_kitchen_open.config.output_budget = OutputBudgetConfig(
         response_max_bytes=8_000,
         page_max_bytes=195_000,
@@ -1187,7 +1190,7 @@ def test_finalizer_uses_backend_selected_recipe_budget(tool_ctx) -> None:
         recipe_delivery_budget=selected_budget,
     )
     tool_ctx.backend = backend
-    tool_ctx.kitchen_id = "selected-budget"
+    bind_test_kitchen_identity(tool_ctx, kitchen_id="selected-budget")
 
     finalized = _finalize_recipe_delivery(
         _payload(),
@@ -1222,7 +1225,7 @@ def test_annotation_aware_inline_for_exempt_surface_within_ceiling(
     eligible for the annotation-aware branch when attestation is present.
     """
     tool_ctx.backend = ClaudeCodeBackend()
-    tool_ctx.kitchen_id = "claude-code-exemption"
+    bind_test_kitchen_identity(tool_ctx, kitchen_id="claude-code-exemption")
 
     # The effective unannotated limit rises to the attested gate × headroom
     # when attestation is valid. The payload must exceed THAT to exercise the
@@ -1270,7 +1273,7 @@ def test_annotation_aware_inline_falls_through_without_attestation(tool_ctx) -> 
     the annotation-aware branch must remain ENVELOPE — never trust an unattested
     per-call claim."""
     tool_ctx.backend = ClaudeCodeBackend()
-    tool_ctx.kitchen_id = "claude-code-exemption-unattested"
+    bind_test_kitchen_identity(tool_ctx, kitchen_id="claude-code-exemption-unattested")
 
     ordinary_limit = ClaudeCodeBackend().capabilities.unnegotiated_tool_result_token_limit
     ceiling = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes
@@ -1296,7 +1299,7 @@ def test_exemption_override_retains_envelope_for_payload_above_ceiling(tool_ctx)
     exemption.
     """
     tool_ctx.backend = ClaudeCodeBackend()
-    tool_ctx.kitchen_id = "claude-code-over-ceiling"
+    bind_test_kitchen_identity(tool_ctx, kitchen_id="claude-code-over-ceiling")
 
     # Payload whose ordinary JSON exceeds the 195,000-byte exemption ceiling.
     oversized_content = "y" * (
@@ -1328,7 +1331,7 @@ def test_exemption_override_requires_char_ceiling_too(tool_ctx) -> None:
     must not fire for such a payload.
     """
     tool_ctx.backend = ClaudeCodeBackend()
-    tool_ctx.kitchen_id = "claude-code-char-ceiling"
+    bind_test_kitchen_identity(tool_ctx, kitchen_id="claude-code-char-ceiling")
 
     exemption = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"]
     byte_margin = exemption.max_utf8_bytes * 9 // 10
@@ -1360,7 +1363,7 @@ def test_exemption_override_does_not_apply_to_non_exempt_surface(tool_ctx) -> No
     with attestation present.
     """
     tool_ctx.backend = ClaudeCodeBackend()
-    tool_ctx.kitchen_id = "claude-code-get-recipe"
+    bind_test_kitchen_identity(tool_ctx, kitchen_id="claude-code-get-recipe")
 
     ordinary_limit = ClaudeCodeBackend().capabilities.unnegotiated_tool_result_token_limit
     oversized_content = "z" * (ordinary_limit * 4 + 5_000)
@@ -1386,7 +1389,7 @@ def test_annotation_aware_inline_not_available_to_protected_backend(tool_ctx) ->
     delivery pipeline.
     """
     tool_ctx.backend = CodexBackend()
-    tool_ctx.kitchen_id = "codex-annotation-aware-rejected"
+    bind_test_kitchen_identity(tool_ctx, kitchen_id="codex-annotation-aware-rejected")
 
     ordinary_limit = CodexBackend().capabilities.unnegotiated_tool_result_token_limit
     ceiling = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes
@@ -1481,7 +1484,7 @@ def test_attested_finalization_commits_only_after_exact_enforcement(
     tmp_path: Path, tool_ctx
 ) -> None:
     tool_ctx.backend = _protected_codex_backend()
-    tool_ctx.kitchen_id = "codex-attested"
+    bind_test_kitchen_identity(tool_ctx, kitchen_id="codex-attested")
     ledger = _ledger(tmp_path)
     finalized = _finalize_recipe_delivery(
         _payload("x" * 50_000),
@@ -1523,7 +1526,7 @@ def test_failed_attested_receipt_commit_restores_prior_state_without_retirement(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     tool_ctx.backend = _protected_codex_backend()
-    tool_ctx.kitchen_id = "codex-commit-failure"
+    bind_test_kitchen_identity(tool_ctx, kitchen_id="codex-commit-failure")
     ledger = _ledger(tmp_path)
     finalized = _finalize_recipe_delivery(
         _payload("x" * 50_000),
@@ -1576,7 +1579,7 @@ def test_failed_attested_install_retires_restores_then_aborts_receipt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     tool_ctx.backend = _protected_codex_backend()
-    tool_ctx.kitchen_id = "codex-install-failure"
+    bind_test_kitchen_identity(tool_ctx, kitchen_id="codex-install-failure")
     ledger = _ledger(tmp_path)
     finalized = _finalize_recipe_delivery(
         _payload("x" * 50_000),
@@ -1630,7 +1633,7 @@ def test_failed_attested_install_retires_restores_then_aborts_receipt(
 
 def test_transformed_attested_response_aborts_pending_receipt(tmp_path: Path, tool_ctx) -> None:
     tool_ctx.backend = _protected_codex_backend()
-    tool_ctx.kitchen_id = "codex-abort"
+    bind_test_kitchen_identity(tool_ctx, kitchen_id="codex-abort")
     ledger = _ledger(tmp_path)
     finalized = _finalize_recipe_delivery(
         _payload("x" * 50_000),
@@ -1654,7 +1657,7 @@ def test_failed_receipt_abort_is_reported(
     tmp_path: Path, tool_ctx, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     tool_ctx.backend = _protected_codex_backend()
-    tool_ctx.kitchen_id = "codex-abort-failure"
+    bind_test_kitchen_identity(tool_ctx, kitchen_id="codex-abort-failure")
     ledger = _ledger(tmp_path)
     finalized = _finalize_recipe_delivery(
         _payload("x" * 50_000),
@@ -1684,7 +1687,7 @@ async def test_pull_tool_reads_exact_generation_and_reports_byte_offsets(
     tool_ctx_kitchen_open,
 ) -> None:
     tool_ctx_kitchen_open.backend = CodexBackend()
-    tool_ctx_kitchen_open.kitchen_id = "pull-kitchen"
+    bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="pull-kitchen")
     tool_ctx_kitchen_open.config.output_budget = OutputBudgetConfig(page_max_bytes=None)
     expected_content = "héllo\n" * 12_000
     generation = persist_recipe_artifact(
@@ -1742,7 +1745,7 @@ async def test_pull_tool_rejects_missing_or_wrong_continuation(
     continuation: str | None,
 ) -> None:
     tool_ctx_kitchen_open.backend = CodexBackend()
-    tool_ctx_kitchen_open.kitchen_id = "pull-continuation-rejection"
+    bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="pull-continuation-rejection")
     tool_ctx_kitchen_open.config.output_budget = OutputBudgetConfig(page_max_bytes=None)
     generation = persist_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,
@@ -1801,7 +1804,9 @@ async def test_pull_tool_maps_planner_failures_to_exact_bounded_codes(
     expected_code: str,
 ) -> None:
     tool_ctx_kitchen_open.backend = CodexBackend()
-    tool_ctx_kitchen_open.kitchen_id = f"planner-failure-{expected_code}"
+    bind_test_kitchen_identity(
+        tool_ctx_kitchen_open, kitchen_id=f"planner-failure-{expected_code}"
+    )
     generation = persist_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,
         kitchen_id=tool_ctx_kitchen_open.kitchen_id,
@@ -1849,7 +1854,7 @@ async def test_pull_tool_distinguishes_missing_none_and_present_empty_sections(
     expected_value: object,
 ) -> None:
     tool_ctx_kitchen_open.backend = CodexBackend()
-    tool_ctx_kitchen_open.kitchen_id = f"pull-empty-{section}-{state}"
+    bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id=f"pull-empty-{section}-{state}")
     payload = _payload()
     if state == "missing":
         payload.pop(section)
@@ -1894,7 +1899,7 @@ async def test_initial_schema_failure_is_bounded_and_never_recreates(
     import autoskillit.server.tools.tools_recipe as tools_recipe
 
     tool_ctx_kitchen_open.backend = CodexBackend()
-    tool_ctx_kitchen_open.kitchen_id = "pull-initial-schema-mismatch"
+    bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="pull-initial-schema-mismatch")
     payload = _payload()
     payload["warnings"] = ["valid", 1]
     generation = _write_malformed_generation(
@@ -1929,7 +1934,7 @@ async def test_recreation_persistence_schema_failure_precedes_artifact_error(
     import autoskillit.server.tools._recipe_section_handler as recipe_section_handler
 
     tool_ctx_kitchen_open.backend = CodexBackend()
-    tool_ctx_kitchen_open.kitchen_id = "pull-recreate-schema-write"
+    bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="pull-recreate-schema-write")
     generation, _finalized = _persist_finalized_generation(tool_ctx_kitchen_open)
     _remove_persisted_namespace(
         tool_ctx_kitchen_open.temp_dir,
@@ -1962,7 +1967,7 @@ async def test_post_recreation_reload_schema_failure_precedes_reload_error(
     import autoskillit.server.tools._recipe_section_handler as recipe_section_handler
 
     tool_ctx_kitchen_open.backend = CodexBackend()
-    tool_ctx_kitchen_open.kitchen_id = "pull-recreate-schema-reload"
+    bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="pull-recreate-schema-reload")
     generation, _finalized = _persist_finalized_generation(tool_ctx_kitchen_open)
     monkeypatch.setattr(
         recipe_section_handler,
@@ -2001,7 +2006,7 @@ async def test_post_recreation_reload_artifact_failure_logs_exception_context(
     import autoskillit.server.tools._recipe_section_handler as recipe_section_handler
 
     tool_ctx_kitchen_open.backend = CodexBackend()
-    tool_ctx_kitchen_open.kitchen_id = "pull-recreate-artifact-reload"
+    bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="pull-recreate-artifact-reload")
     generation, _finalized = _persist_finalized_generation(tool_ctx_kitchen_open)
     monkeypatch.setattr(
         recipe_section_handler,
@@ -2045,7 +2050,7 @@ async def test_negative_part_is_rejected_before_artifact_load(
     import autoskillit.server.tools._recipe_section_handler as recipe_section_handler
 
     tool_ctx_kitchen_open.backend = CodexBackend()
-    tool_ctx_kitchen_open.kitchen_id = "kitchen-test"
+    bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="kitchen-test")
     generation = _persist(tool_ctx_kitchen_open.temp_dir)
     artifact_load = MagicMock(side_effect=AssertionError("negative part reached artifact load"))
     monkeypatch.setattr(recipe_section_handler, "load_recipe_artifact", artifact_load)
@@ -2063,7 +2068,7 @@ async def test_oversized_part_is_rejected_after_page_planning(
     tool_ctx_kitchen_open,
 ) -> None:
     tool_ctx_kitchen_open.backend = CodexBackend()
-    tool_ctx_kitchen_open.kitchen_id = "kitchen-test"
+    bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="kitchen-test")
     generation = _persist(tool_ctx_kitchen_open.temp_dir)
     kwargs = generation.pull_identity()
     kwargs.pop("pull_tool")
@@ -2078,7 +2083,7 @@ async def test_request_specific_floor_returns_exact_bounded_failure(
     tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     tool_ctx_kitchen_open.backend = CodexBackend()
-    tool_ctx_kitchen_open.kitchen_id = "kitchen-test"
+    bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="kitchen-test")
     monkeypatch.setattr(
         tool_ctx_kitchen_open,
         "config",
@@ -2121,7 +2126,7 @@ async def test_pull_tool_returns_named_step_and_rejects_unknown_section(
     tool_ctx_kitchen_open,
 ) -> None:
     tool_ctx_kitchen_open.backend = CodexBackend()
-    tool_ctx_kitchen_open.kitchen_id = "pull-named-step"
+    bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="pull-named-step")
     generation = persist_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,
         kitchen_id=tool_ctx_kitchen_open.kitchen_id,
@@ -2146,7 +2151,7 @@ async def test_pull_tool_returns_named_step_and_rejects_unknown_section(
 
 
 async def test_pull_tool_reports_malformed_named_step_yaml(tool_ctx_kitchen_open) -> None:
-    tool_ctx_kitchen_open.kitchen_id = "pull-malformed-step"
+    bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="pull-malformed-step")
     malformed = _payload("steps: [")
     generation = persist_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,
@@ -2168,7 +2173,7 @@ async def test_oversized_named_step_round_trips_through_continuation(
     tool_ctx_kitchen_open,
 ) -> None:
     tool_ctx_kitchen_open.backend = CodexBackend()
-    tool_ctx_kitchen_open.kitchen_id = "pull-oversized-step"
+    bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="pull-oversized-step")
     tool_ctx_kitchen_open.config.output_budget = OutputBudgetConfig(page_max_bytes=None)
     content = "steps:\n  giant_step:\n    note: " + ("X" * 80_000) + "\n"
     payload = _payload(content)
@@ -2214,7 +2219,7 @@ async def test_oversized_named_step_round_trips_through_continuation(
 
 
 async def test_pull_tool_rejects_wrong_generation_identity(tool_ctx_kitchen_open) -> None:
-    tool_ctx_kitchen_open.kitchen_id = "pull-wrong"
+    bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="pull-wrong")
     generation = persist_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,
         kitchen_id=tool_ctx_kitchen_open.kitchen_id,
@@ -2234,7 +2239,7 @@ async def test_pull_tool_rejects_wrong_generation_identity(tool_ctx_kitchen_open
 async def test_pull_tool_rejects_forged_unbounded_identity_sizes(
     tool_ctx_kitchen_open, field: str, producer_tool: str
 ) -> None:
-    tool_ctx_kitchen_open.kitchen_id = "pull-unbounded-identity"
+    bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="pull-unbounded-identity")
     generation = persist_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,
         kitchen_id=tool_ctx_kitchen_open.kitchen_id,
@@ -2256,7 +2261,7 @@ async def test_pull_tool_recreates_missing_exact_generation(
 ) -> None:
     import autoskillit.server.tools.tools_recipe as tools_recipe
 
-    tool_ctx_kitchen_open.kitchen_id = "pull-recreate"
+    bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="pull-recreate")
     generation, finalized = _persist_finalized_generation(tool_ctx_kitchen_open)
     _remove_persisted_namespace(
         tool_ctx_kitchen_open.temp_dir, kitchen_id=tool_ctx_kitchen_open.kitchen_id
@@ -2291,7 +2296,7 @@ async def test_recreation_reuses_original_snapshot_without_snapshot_factory(
 ) -> None:
     import autoskillit.server.recipe._recipe_execution as recipe_execution
 
-    tool_ctx_kitchen_open.kitchen_id = "pull-recreate-stale-snapshot"
+    bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="pull-recreate-stale-snapshot")
     payload = _payload()
     payload["content_hash"] = "sha256:" + ("a" * 64)
     payload["composite_hash"] = "sha256:" + ("b" * 64)
@@ -2330,7 +2335,7 @@ async def test_recreation_reuses_original_snapshot_without_snapshot_factory(
 async def test_pull_tool_reports_invalid_missing_generation_recreation(
     tool_ctx_kitchen_open,
 ) -> None:
-    tool_ctx_kitchen_open.kitchen_id = "pull-recreate-invalid"
+    bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="pull-recreate-invalid")
     generation = persist_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,
         kitchen_id=tool_ctx_kitchen_open.kitchen_id,
@@ -2352,7 +2357,7 @@ async def test_pull_tool_reports_invalid_missing_generation_recreation(
 async def test_pull_tool_rejects_changed_recreated_generation(
     tool_ctx_kitchen_open,
 ) -> None:
-    tool_ctx_kitchen_open.kitchen_id = "pull-recreate-changed"
+    bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="pull-recreate-changed")
     generation, _finalized = _persist_finalized_generation(tool_ctx_kitchen_open)
     _remove_persisted_namespace(
         tool_ctx_kitchen_open.temp_dir, kitchen_id=tool_ctx_kitchen_open.kitchen_id

@@ -47,7 +47,6 @@ def _make_mock_ctx(recipes: MagicMock, temp_dir: Path) -> MagicMock:
     mock_ctx.skill_resolver.resolve_effective.return_value = None
     mock_ctx.project_dir = temp_dir
     mock_ctx.temp_dir = temp_dir
-    mock_ctx.kitchen_id = "test-mcp-overrides"
     mock_ctx.config.migration.suppressed = []
     mock_ctx.config.output_budget = OutputBudgetConfig()
     # linux_tracing.log_dir must be a real str/Path value: resolve_log_dir
@@ -60,7 +59,7 @@ def _make_mock_ctx(recipes: MagicMock, temp_dir: Path) -> MagicMock:
     mock_ctx.recipe_execution_lock = RLock()
     mock_ctx.recipe_initialization_state = NoActiveRecipe()
     mock_ctx.recipe_execution_factory = make_recipe_execution
-    _set_mock_kitchen_transition(mock_ctx)
+    _set_mock_kitchen_transition(mock_ctx, kitchen_id="test-mcp-overrides")
     mock_ctx.audit_admission_ledger.create_or_get_installation.return_value = InstallationVersion(
         "test-installation"
     )

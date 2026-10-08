@@ -24,7 +24,7 @@ from autoskillit.execution.headless import DefaultHeadlessExecutor
 from autoskillit.execution.process import default_tether_dir
 from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
-from tests.conftest import production_interpreter_env
+from tests.conftest import bind_test_kitchen_identity, production_interpreter_env
 from tests.fakes import InMemoryRecipeRepository
 from tests.fleet._codex_mcp_env import (
     CODEX_MCP_DEFAULT_ENV_VARS,
@@ -369,7 +369,7 @@ class TestCodexMcpDispatchIdentityE2E:
         tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
         recipes = InMemoryRecipeRepository()
         tool_ctx.recipes = recipes
-        tool_ctx.kitchen_id = uuid4().hex[:16]
+        bind_test_kitchen_identity(tool_ctx, kitchen_id=uuid4().hex[:16])
         tool_ctx.project_dir = tmp_path
 
         dispatches_dir = tool_ctx.temp_dir / "dispatches"

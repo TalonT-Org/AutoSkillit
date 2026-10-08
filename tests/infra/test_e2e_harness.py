@@ -1081,18 +1081,6 @@ class TestSmokeCleanup:
         sleeps: list[float] = []
         monkeypatch.setattr(harness, "time", SimpleNamespace(sleep=sleeps.append))
 
-        with subprocess.Popen(
-            [harness.sys.executable, "-c", "import sys; sys.stdin.read()"],
-            stdin=subprocess.PIPE,
-        ) as process:
-            try:
-                with pytest.raises(subprocess.TimeoutExpired):
-                    process.wait(timeout=0.05)
-            finally:
-                process.kill()
-                process.wait(timeout=5)
-        assert len(sleeps) == 0
-
         status = harness.cleanup_smoke_test(catalog, test.name, runner, out, env)
         result = json.loads((out / "result.json").read_text(encoding="utf-8"))
         evidence = json.loads((out / "smoke-cleanup.json").read_text(encoding="utf-8"))
@@ -1494,7 +1482,11 @@ class TestRecipeFlow:
     ) -> None:
         runner = FakeRunner(_recipe_handler(fleet=RuntimeError("unexpected fleet error")))
         failures, result = _run_recipe(tmp_path, runner)
-        assert failures == ["harness error: unexpected fleet error"]
+        assert failures == ["harness error: RuntimeError: unexpected fleet error"]
+        exception = result.pop("exception")
+        assert "Traceback (most recent call last)" in exception
+        assert "_run_test" in exception
+        assert "RuntimeError: unexpected fleet error" in exception
         assert result == {
             "test": "impl",
             "passed": False,
@@ -1868,7 +1860,7 @@ class TestCleanInstallFlow:
         assert "e2e_harness: clean-install expected_failure" in capsys.readouterr().out
 
         def crash(*_args, **_kwargs):
-            raise RuntimeError("runner crashed")
+            raise RuntimeError("runner crashed") from ValueError(SANDBOX_TOKEN)
 
         monkeypatch.setattr(harness, "run_command", crash)
         assert (
@@ -1885,7 +1877,20 @@ class TestCleanInstallFlow:
             )
             == 1
         )
-        assert "harness error: runner crashed" in capsys.readouterr().err
+        stderr = capsys.readouterr().err
+        assert "harness error: RuntimeError: runner crashed" in stderr
+        assert "Traceback" not in stderr
+        assert SANDBOX_TOKEN not in stderr
+        crash_out = tmp_path / "crash-out"
+        result = json.loads((crash_out / "result.json").read_text(encoding="utf-8"))
+        assert "RuntimeError: runner crashed" in result["exception"]
+        assert SANDBOX_TOKEN in result["exception"]
+
+        redacted = tmp_path / "redacted"
+        harness.redact_tree([crash_out], redacted, [SANDBOX_TOKEN])
+        copied_result = (redacted / "crash-out" / "result.json").read_text(encoding="utf-8")
+        assert SANDBOX_TOKEN not in copied_result
+        assert "[REDACTED]" in copied_result
 
 
 class TestRedaction:

@@ -153,7 +153,6 @@ def _close_kitchen_handler() -> None:
     with ctx.kitchen_transition_lock:
         context_id = ctx.kitchen_open_state.context_id
         ctx.kitchen_open_state = closed_kitchen_open_state(context_id=context_id)
-        ctx.kitchen_id = ""
 
 
 @mcp.tool(

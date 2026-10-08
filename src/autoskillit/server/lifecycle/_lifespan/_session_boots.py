@@ -36,12 +36,10 @@ from autoskillit.execution import (
 )
 from autoskillit.fleet import sweep_stale_dispatch_labels
 from autoskillit.pipeline import (
-    KitchenOpenPhase,
     OwnerBoundExplorationContextStore,
     confirm_kitchen_effect,
     exploration_auto_provision_eligible,
     get_kitchen_process_identity,
-    new_kitchen_open_state,
     start_kitchen_effect,
 )
 from autoskillit.server._tracker_authority import (
@@ -55,9 +53,7 @@ from autoskillit.server._tracker_authority import (
 # call time rather than imported by name into this submodule.
 from autoskillit.server.lifecycle import _lifespan as _lifespan_pkg
 from autoskillit.server.lifecycle._guards import _backend_supports_quota
-from autoskillit.server.lifecycle._lifespan._startup_checks import (
-    _activate_recipe_kitchen,
-)
+from autoskillit.server.lifecycle._kitchen_identity import establish_kitchen_identity
 
 logger = get_logger(__name__)
 
@@ -133,8 +129,9 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
     Called synchronously in _autoskillit_lifespan before yield, ensuring gate
     is open before any tool call arrives. Fails open: any step failure is
     logged as a warning and does not abort gate activation.
+    Identity establishment is not one of the fail-open steps.
     """
-    ctx.kitchen_id = _lifespan_pkg.resolve_kitchen_id()
+    establish_kitchen_identity(ctx)
     ctx.active_recipe_packs = frozenset()
     ctx.active_recipe_features = frozenset()
     ctx.active_recipe_steps = {}
@@ -189,7 +186,6 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
         _retain_kitchen_tracker_authority(ctx)
         if not register_active_kitchen(get_kitchen_process_identity(ctx)):
             logger.warning("fleet_auto_gate_boot_registry_refused")
-        _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:
         logger.warning("fleet_auto_gate_boot_registry_failed", exc_info=True)
 
@@ -238,14 +234,7 @@ async def _pre_reveal_kitchen(ctx: Any) -> None:
     from autoskillit.server.tools import tools_kitchen as _tk_pre_reveal  # circular-break
 
     with ctx.kitchen_transition_lock:
-        state = ctx.kitchen_open_state
-        if state.phase is KitchenOpenPhase.CLOSED:
-            state = new_kitchen_open_state(
-                kitchen_id=_lifespan_pkg.resolve_kitchen_id(),
-                context_id=state.context_id,
-            )
-            ctx.kitchen_open_state = state
-        ctx.kitchen_id = state.kitchen_id
+        establish_kitchen_identity(ctx)
         ctx.kitchen_open_state = start_kitchen_effect(
             ctx.kitchen_open_state,
             "pre_reveal_bootstrap",
@@ -280,7 +269,6 @@ async def _pre_reveal_kitchen(ctx: Any) -> None:
         _retain_kitchen_tracker_authority(ctx)
         if not register_active_kitchen(get_kitchen_process_identity(ctx)):
             logger.warning("pre_reveal_kitchen_registry_refused")
-        _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:
         logger.warning("pre_reveal_kitchen_registry_failed", exc_info=True)
     _tk_pre_reveal._write_hook_config()
@@ -302,6 +290,7 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
     Runs at lifespan startup when AUTOSKILLIT_HEADLESS=1 and
     AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS is set. No-ops for interactive
     ORCHESTRATOR sessions (open_kitchen handles the gate there).
+    Identity establishment is not one of the fail-open steps.
     """
     from autoskillit.server._misc import (  # circular-break
         _prime_quota_cache,
@@ -318,7 +307,7 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
         return
 
     _packs = frozenset(p.strip() for p in _raw_tags.split(",") if p.strip())
-    ctx.kitchen_id = _lifespan_pkg.resolve_kitchen_id()
+    establish_kitchen_identity(ctx)
     ctx.active_recipe_packs = _packs
     ctx.active_recipe_features = frozenset()
     ctx.active_recipe_steps = {}
@@ -373,7 +362,6 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
         _retain_kitchen_tracker_authority(ctx)
         if not register_active_kitchen(get_kitchen_process_identity(ctx)):
             logger.warning("food_truck_auto_gate_boot_registry_refused")
-        _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:
         logger.warning("food_truck_auto_gate_boot_registry_failed", exc_info=True)
 
@@ -433,6 +421,7 @@ async def _skill_auto_gate_boot(ctx: Any) -> None:
     Omits quota-refresh loop, campaign state recovery, and the codex/daemon
     orphan reap — SKILL sessions are short-lived and don't own long-lived
     codex/daemon children (see test_boot_step_symmetry.py's carve-out).
+    Identity establishment is not one of the fail-open steps.
     """
 
     if not session_shape().headless:
@@ -442,7 +431,7 @@ async def _skill_auto_gate_boot(ctx: Any) -> None:
     if os.environ.get(HEADLESS_AUTO_GATE_ENV_VAR) != "1":
         return
 
-    ctx.kitchen_id = _lifespan_pkg.resolve_kitchen_id()
+    establish_kitchen_identity(ctx)
     ctx.active_recipe_packs = frozenset()
     ctx.active_recipe_features = frozenset()
     ctx.active_recipe_steps = {}
@@ -486,7 +475,6 @@ async def _skill_auto_gate_boot(ctx: Any) -> None:
         _retain_kitchen_tracker_authority(ctx)
         if not register_active_kitchen(get_kitchen_process_identity(ctx)):
             logger.warning("skill_auto_gate_boot_registry_refused")
-        _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:
         logger.warning("skill_auto_gate_boot_registry_failed", exc_info=True)
 

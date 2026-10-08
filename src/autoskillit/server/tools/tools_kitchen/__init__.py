@@ -32,7 +32,6 @@ from autoskillit.config import (
 from autoskillit.core import (
     _collect_disabled_feature_tags,
     find_latest_session_id,
-    resolve_kitchen_id,
 )
 from autoskillit.core import get_logger as _get_logger
 from autoskillit.execution import default_tether_dir, sweep_orphaned_tethers_async
@@ -118,7 +117,6 @@ from autoskillit.server.tools.tools_kitchen._open_kitchen_transition import (
     _OPEN_KITCHEN_REQUEST_CTX,
     _attach_transition_fields,
     _bind_open_kitchen_transition,
-    _ensure_kitchen_transition,
     _open_kitchen_cancellation_response,
     _open_kitchen_conflict_response,
     _read_open_kitchen_request_ctx,
@@ -176,7 +174,6 @@ __all__ = [
     "_build_hook_diagnostic_warning",
     "_check_dispatch_feasibility",
     "_collect_disabled_feature_tags",
-    "_ensure_kitchen_transition",
     "_find_session_id_for_reload",
     "_hook_config_path",
     "_quota_refresh_loop",
@@ -217,7 +214,6 @@ __all__ = [
     "reap_stale_dispatches_async",
     "release_kitchen_request",
     "resolve_ingredient_defaults",
-    "resolve_kitchen_id",
     "resolve_log_dir",
     "serve_recipe",
     "sweep_orphaned_tethers_async",

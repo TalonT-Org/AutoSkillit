@@ -15,7 +15,8 @@ import pytest
 
 import autoskillit.server.tools.tools_kitchen as _patch_tools_tools_kitchen
 from autoskillit.config.ingredient_defaults import SERVER_AUTHORITATIVE_INGREDIENTS
-from tests.server.conftest import _make_mock_ctx
+from tests.server._helpers import patched_kitchen_id
+from tests.server.conftest import _make_mock_ctx, _set_mock_kitchen_transition
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -26,7 +27,7 @@ def _patched_env(mock_ctx: MagicMock) -> None:
     mock_ctx.enable_components = AsyncMock()
     mock_ctx.recipes = MagicMock()
     mock_ctx.config.migration.suppressed = []
-    mock_ctx.kitchen_id = "test-kitchen-auth"
+    _set_mock_kitchen_transition(mock_ctx, kitchen_id="test-kitchen-auth")
     mock_ctx.config.linux_tracing.log_dir = ""
 
 
@@ -48,11 +49,7 @@ async def test_open_kitchen_rejects_each_server_authoritative_ingredient(
                 new=AsyncMock(),
             ):
                 with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
-                    with patch.object(
-                        _patch_tools_tools_kitchen,
-                        "resolve_kitchen_id",
-                        return_value="test-kitchen-auth",
-                    ):
+                    with patched_kitchen_id("test-kitchen-auth"):
                         with patch.object(
                             _patch_tools_tools_kitchen,
                             "resolve_ingredient_defaults",
@@ -88,11 +85,7 @@ async def test_open_kitchen_rejects_base_branch_override(tmp_path, monkeypatch):
                 new=AsyncMock(),
             ):
                 with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
-                    with patch.object(
-                        _patch_tools_tools_kitchen,
-                        "resolve_kitchen_id",
-                        return_value="test-kitchen-auth",
-                    ):
+                    with patched_kitchen_id("test-kitchen-auth"):
                         with patch.object(
                             _patch_tools_tools_kitchen,
                             "resolve_ingredient_defaults",
@@ -142,11 +135,7 @@ async def test_open_kitchen_still_accepts_non_authoritative_overrides(tmp_path, 
                 new=AsyncMock(),
             ):
                 with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
-                    with patch.object(
-                        _patch_tools_tools_kitchen,
-                        "resolve_kitchen_id",
-                        return_value="test-kitchen-auth",
-                    ):
+                    with patched_kitchen_id("test-kitchen-auth"):
                         with patch.object(
                             _patch_tools_tools_kitchen,
                             "resolve_ingredient_defaults",
@@ -199,11 +188,7 @@ async def test_open_kitchen_authority_supersedes_type_validation(tmp_path, monke
                 new=AsyncMock(),
             ):
                 with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
-                    with patch.object(
-                        _patch_tools_tools_kitchen,
-                        "resolve_kitchen_id",
-                        return_value="test-kitchen-auth",
-                    ):
+                    with patched_kitchen_id("test-kitchen-auth"):
                         with patch.object(
                             _patch_tools_tools_kitchen,
                             "resolve_ingredient_defaults",
@@ -246,11 +231,7 @@ async def test_open_kitchen_no_snapshot_persisted_on_rejection(tmp_path, monkeyp
                 new=AsyncMock(),
             ):
                 with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
-                    with patch.object(
-                        _patch_tools_tools_kitchen,
-                        "resolve_kitchen_id",
-                        return_value="test-kitchen-auth",
-                    ):
+                    with patched_kitchen_id("test-kitchen-auth"):
                         with patch.object(
                             _patch_tools_tools_kitchen,
                             "resolve_ingredient_defaults",
@@ -294,11 +275,7 @@ async def test_open_kitchen_ingredients_only_rejects_authority_override(tmp_path
                 new=AsyncMock(),
             ):
                 with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
-                    with patch.object(
-                        _patch_tools_tools_kitchen,
-                        "resolve_kitchen_id",
-                        return_value="test-kitchen-auth",
-                    ):
+                    with patched_kitchen_id("test-kitchen-auth"):
                         with patch.object(
                             _patch_tools_tools_kitchen,
                             "resolve_ingredient_defaults",

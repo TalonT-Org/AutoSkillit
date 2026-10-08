@@ -17,7 +17,6 @@ class TestRecordPipelineStepInit:
     def _setup(self, tool_ctx_kitchen_open, monkeypatch, tmp_path):
         monkeypatch.chdir(tmp_path)
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
         tool_ctx_kitchen_open.active_recipe_steps = {
             "review": {},
             "implement": {},
@@ -277,7 +276,6 @@ class TestRecordPipelineStepStatus:
     def _setup(self, tool_ctx_kitchen_open, monkeypatch, tmp_path):
         monkeypatch.chdir(tmp_path)
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
         self.ctx = tool_ctx_kitchen_open
         self.tmp_path = tmp_path
 

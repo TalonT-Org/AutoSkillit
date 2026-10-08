@@ -345,6 +345,20 @@ def test_kitchen_process_identity_is_sampled_once_with_owner_fallback(tmp_path):
     assert first.project_path == str(tmp_path.resolve())
 
 
+def test_tool_context_kitchen_id_is_read_only_and_derived(tmp_path) -> None:
+    from tests.conftest import bind_test_kitchen_identity
+
+    ctx = _make_ctx(tmp_path)
+
+    assert "kitchen_id" not in {field.name for field in dataclasses.fields(ToolContext)}
+    assert ctx.kitchen_id == ""
+    with pytest.raises(AttributeError):
+        setattr(ctx, "kitchen_id", "forged")
+
+    bind_test_kitchen_identity(ctx, "test-kitchen")
+    assert ctx.kitchen_id == ctx.kitchen_open_state.kitchen_id == "test-kitchen"
+
+
 def test_toolcontext_github_client_annotated_with_protocol():
     """github_client annotation must reference GitHubFetcher protocol."""
     hints = get_type_hints(ToolContext)

@@ -8,7 +8,7 @@ FastMCP lifespan boot sequence — relocated from `server/_lifespan/`
 `_startup_checks` runs one-shot synchronous startup checks
 (`run_startup_drift_check`, `run_startup_hook_health_check`,
 `run_startup_install_state_check`, `run_startup_fix_required_coverage_check`,
-`run_startup_join_guard_coverage_check`, `_activate_recipe_kitchen`,
+`run_startup_join_guard_coverage_check`,
 `_finalize_recorder`). `_session_boots`
 holds the per-session-type async auto-gate boots and the
 `_LIFESPAN_BOOT_REGISTRY` dispatch table that picks exactly one boot path

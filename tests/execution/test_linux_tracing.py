@@ -6,6 +6,7 @@ import json
 import os
 import sys
 from datetime import datetime
+from unittest.mock import Mock
 
 import anyio
 import pytest
@@ -512,6 +513,30 @@ def test_read_enrollment_defaults_rollout_fields_for_historical_schemas(tmp_path
     assert record.schema_version == schema_version
     assert record.rollout is None
     assert record.logical_run_start_ts == ""
+
+
+@pytest.mark.parametrize("contents", [None, "{"])
+def test_read_enrollment_logs_invalid_sidecar_but_not_missing(tmp_path, monkeypatch, contents):
+    from autoskillit.execution.evidence import linux_tracing
+
+    enrollment = tmp_path / "enrollment.json"
+    if contents is not None:
+        enrollment.write_text(contents)
+    logger = Mock()
+    monkeypatch.setattr(linux_tracing, "logger", logger)
+
+    assert linux_tracing.read_enrollment(enrollment) is None
+
+    if contents is None:
+        logger.warning.assert_not_called()
+    else:
+        logger.warning.assert_called_once()
+        message, path, error_type, error = logger.warning.call_args.args
+        assert "Failed to read enrollment sidecar" in message
+        assert path == enrollment
+        assert error_type == "JSONDecodeError"
+        assert isinstance(error, json.JSONDecodeError)
+        assert str(error)
 
 
 # --- LinuxTracingConfig guard tests ---

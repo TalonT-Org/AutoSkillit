@@ -262,7 +262,12 @@ def read_enrollment(path: Path) -> TraceEnrollmentRecord | None:
             rollout=data.get("rollout"),
             logical_run_start_ts=data.get("logical_run_start_ts", ""),
         )
-    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+    except FileNotFoundError:
+        return None
+    except (OSError, KeyError, TypeError, ValueError) as exc:
+        logger.warning(
+            "Failed to read enrollment sidecar %s (%s): %s", path, type(exc).__name__, exc
+        )
         return None
 
 

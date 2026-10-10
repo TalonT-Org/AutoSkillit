@@ -185,8 +185,7 @@
           "audit_cycle_path": "${{ context.audit_cycle_path }}"
         },
         "cwd": "${{ inputs.worktree_path }}",
-        "step_name": "plan_phase",
-        "output_dir": "."
+        "step_name": "plan_phase"
       },
       "capture": {
         "phase_plan_path": "${{ result.plan_path }}",

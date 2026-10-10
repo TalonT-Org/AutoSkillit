@@ -499,8 +499,7 @@
           "plan_set_coverage_gaps": "${{ context.plan_set_coverage_gaps }}"
         },
         "cwd": "${{ context.work_dir }}",
-        "step_name": "plan",
-        "output_dir": "."
+        "step_name": "plan"
       },
       "capture": {
         "plan_path": "${{ result.plan_path }}",
@@ -1643,7 +1642,6 @@
           "run_name": "${{ inputs.run_name }}"
         },
         "cwd": "${{ context.work_dir }}",
-        "output_dir": ".",
         "step_name": "prepare_pr"
       },
       "capture": {

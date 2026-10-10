@@ -238,7 +238,6 @@ steps:
         audit_cycle_path: ${{ context.audit_cycle_path }}
       cwd: ${{ context.work_dir }}
       step_name: plan
-      output_dir: .
     capture:
       plan_path: ${{ result.plan_path }}
       all_plan_paths: ${{ result.plan_path }}
@@ -394,7 +393,6 @@ steps:
         audit_cycle_path: ${{ context.audit_cycle_path }}
       cwd: ${{ context.work_dir }}
       step_name: gap_replan
-      output_dir: .
     capture:
       plan_path: ${{ result.plan_path }}
       plan_disposition_path: ${{ result.plan_disposition_path }}
@@ -1163,7 +1161,6 @@ steps:
         base_branch: ${{ inputs.base_branch }}
         run_name: ${{ inputs.run_name }}
       cwd: ${{ context.work_dir }}
-      output_dir: .
       step_name: prepare_pr
     capture:
       prep_path: ${{ result.prep_path }}

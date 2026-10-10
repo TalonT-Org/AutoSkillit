@@ -25,6 +25,7 @@ from autoskillit.recipe.helpers._skill_helpers import (
     get_logger,
     logger,
     pkg_root,
+    skill_write_scope,
 )
 
 __all__ = [
@@ -46,4 +47,5 @@ __all__ = [
     "get_logger",
     "logger",
     "pkg_root",
+    "skill_write_scope",
 ]

@@ -13,10 +13,10 @@ from typing import assert_never
 
 import regex as re
 
-from autoskillit.core import Severity, get_logger
-from autoskillit.hooks._write_scope import WriteScopeKind, bounded_scope_contains
+from autoskillit.core import Severity
+from autoskillit.hooks._write_scope import WriteScope, WriteScopeKind, bounded_scope_contains
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe._skill_helpers import _resolve_skill_md
+from autoskillit.recipe._skill_helpers import skill_write_scope
 from autoskillit.recipe._skill_placeholder_parser import (
     extract_write_path_declarations,
     has_dynamic_write_path,
@@ -24,9 +24,6 @@ from autoskillit.recipe._skill_placeholder_parser import (
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 from autoskillit.recipe.schema import RecipeStep
-from autoskillit.workspace import parse_frontmatter_content
-
-logger = get_logger(__name__)
 
 _CONTEXT_TEMPLATE_RE = re.compile(r"\$\{\{\s*context\.[^}]+\}\}")
 _AUTOSKILLIT_TEMP_RE = re.compile(r"\{\{AUTOSKILLIT_TEMP\}\}")
@@ -78,11 +75,12 @@ def _first_misaligned_write_path(content: str, output_dir: str) -> str | None:
     return None
 
 
-def _declared_boundary_error(content: str, output_dir: str, project_dir: Path) -> str | None:
+def _declared_boundary_error(
+    write_scope: WriteScope | None, output_dir: str, project_dir: Path
+) -> str | None:
     static_base = _static_base_prefix(output_dir)
     if not static_base or "${{" in static_base:
         return None
-    write_scope = parse_frontmatter_content(content).write_scope
     if write_scope is None:
         return "cannot verify output_dir: skill lacks a valid write_paths declaration"
     match write_scope.kind:
@@ -96,7 +94,7 @@ def _declared_boundary_error(content: str, output_dir: str, project_dir: Path) -
             assert_never(unreachable)
 
 
-def _eligible_skill_path(ctx: ValidationContext, step: RecipeStep) -> tuple[str, str, Path] | None:
+def _eligible_skill_path(step: RecipeStep) -> tuple[str, str] | None:
     if step.tool != "run_skill":
         return None
     output_dir = (step.with_args or {}).get("output_dir", "") or ""
@@ -111,14 +109,7 @@ def _eligible_skill_path(ctx: ValidationContext, step: RecipeStep) -> tuple[str,
     skill_name = resolve_skill_name(skill_cmd)
     if skill_name is None:
         return None
-    skill_md_path = _resolve_skill_md(
-        skill_name,
-        project_root=ctx.project_dir,
-        resolver=ctx.skill_resolver,
-    )
-    if skill_md_path is None:
-        return None
-    return output_dir, skill_name, skill_md_path
+    return output_dir, skill_name
 
 
 @semantic_rule(
@@ -135,19 +126,17 @@ def _check_skill_write_path_alignment(ctx: ValidationContext) -> list[RuleFindin
     findings: list[RuleFinding] = []
 
     for step_name, step in ctx.recipe.steps.items():
-        eligible = _eligible_skill_path(ctx, step)
+        eligible = _eligible_skill_path(step)
         if eligible is None:
             continue
-        output_dir, skill_name, skill_md_path = eligible
-
-        try:
-            content = skill_md_path.read_text(encoding="utf-8")
-        except OSError:
-            logger.debug("Could not read SKILL.md for %s at %s", skill_name, skill_md_path)
+        output_dir, skill_name = eligible
+        resolved = skill_write_scope(ctx, skill_name)
+        if resolved is None:
             continue
+        skill_md_path, content, write_scope = resolved
 
         boundary_error = _declared_boundary_error(
-            content, output_dir, ctx.project_dir or skill_md_path.parent.parent
+            write_scope, output_dir, ctx.project_dir or skill_md_path.parent.parent
         )
         if boundary_error is not None:
             findings.append(

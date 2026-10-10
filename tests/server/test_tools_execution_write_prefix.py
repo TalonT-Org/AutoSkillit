@@ -375,8 +375,24 @@ def test_bounded_root_rejects_output_dir_outside_its_scope(tmp_path: Path) -> No
     assert state.write_watch_dirs == original_dirs
 
     assert failure is not None
-    assert failure["error"] == "run_skill output_dir is outside the skill's declared write scope"
+    for fragment in ("'widget'", "'.autoskillit/temp/other'", "{{AUTOSKILLIT_TEMP}}/widgets/"):
+        assert fragment in failure["error"]
     assert failure["stage"] == "validate_args:run_skill"
+
+
+def test_bounded_root_rejects_worktree_root_output_dir(tool_ctx, tmp_path: Path) -> None:
+    from autoskillit.core import SkillExecutionRole
+
+    invocation = tool_ctx.skill_resolver.resolve_invocation(
+        "make-plan", tool_ctx.project_dir, SkillExecutionRole.SESSION
+    )
+
+    failure = _extend(_scope_state(tmp_path, invocation.root, output_dir="."))
+
+    assert failure is not None
+    assert failure["stage"] == "validate_args:run_skill"
+    for fragment in ("'make-plan'", "'.'", "{{AUTOSKILLIT_TEMP}}/make-plan/"):
+        assert fragment in failure["error"]
 
 
 def test_bounded_root_admits_output_dir_inside_its_scope(tmp_path: Path) -> None:

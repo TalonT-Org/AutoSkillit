@@ -13,7 +13,7 @@ import os
 from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING, assert_never
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from autoskillit.core import (
@@ -33,7 +33,7 @@ from autoskillit.core import (
     resolve_skill_temp_dir as _resolve_skill_temp_dir,
 )
 from autoskillit.execution import ReplayingSubprocessRunner
-from autoskillit.hooks._write_scope import WriteScopeKind, bounded_scope_contains
+from autoskillit.hooks._write_scope import output_dir_widens_scope, widened_output_dir_message
 from autoskillit.pipeline import canonical_step_name as _canonical_step_name
 from autoskillit.pipeline import gate_error_result
 from autoskillit.server._explorer_projection import _build_requested_execution_identity
@@ -611,20 +611,14 @@ def _extend_closure_write_scope(state: _RunSkillDispatchState) -> str | None:
         return _write_scope_failure(str(exc))
     root_scope = state.invocation.root.write_scope
     assert root_scope is not None
-    match root_scope.kind:
-        case WriteScopeKind.BOUNDED:
-            # `_resolve_dispatch_paths` populates write_watch_dirs from state.output_dir
-            # before this runs, so [0] is the requested output_dir when supplied,
-            # or the default temp floor otherwise. The default floor is not narrowed.
-            if state.output_dir and not bounded_scope_contains(
-                root_scope, str(state.write_watch_dirs[0]), state.cwd
-            ):
-                return _write_scope_failure(
-                    "run_skill output_dir is outside the skill's declared write scope"
-                )
-        case WriteScopeKind.UNRESTRICTED | WriteScopeKind.INHERIT:
-            pass
-        case _ as unreachable:
-            assert_never(unreachable)
+    # `_resolve_dispatch_paths` populates write_watch_dirs from state.output_dir
+    # before this runs, so [0] is the granted output_dir prefix when supplied,
+    # or the default temp floor otherwise. The default floor is not narrowed.
+    if output_dir_widens_scope(
+        root_scope, str(state.write_watch_dirs[0]) if state.output_dir else "", state.cwd
+    ):
+        return _write_scope_failure(
+            widened_output_dir_message(state.invocation.root.name, root_scope, state.output_dir)
+        )
     state.write_watch_dirs.extend(closure_dirs)
     return None

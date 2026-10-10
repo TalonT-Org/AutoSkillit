@@ -1,8 +1,6 @@
-"""Contract-level tests for write_behavior + output_dir coherence across bundled recipes.
+"""Contract-level tests for planner.yaml write isolation.
 
-Enforces two invariants for every run_skill step:
-- write_behavior=always: output_dir must be declared unconditionally.
-- write_behavior=conditional: output_dir must be declared unconditionally (same as always).
+Every planner run_skill output_dir must be rooted at the planner run directory.
 """
 
 from __future__ import annotations
@@ -11,72 +9,16 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import SKILL_TOOLS
 from autoskillit.core.io import load_yaml
-from autoskillit.core.types import RecipeSource
-from autoskillit.recipe.contracts import load_bundled_manifest, resolve_skill_name
-from autoskillit.recipe.io import load_recipe
-from tests._tracked_recipes import tracked_recipe_paths
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 _RECIPE_DIR = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipes"
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 @pytest.fixture(scope="module")
 def planner_yaml() -> dict:
     return load_yaml(_RECIPE_DIR / "planner.yaml")
-
-
-_ALL_BUNDLED_RECIPE_PATHS = sorted(
-    tracked_recipe_paths(
-        _PROJECT_ROOT,
-        source=RecipeSource.BUILTIN,
-        scan_dirs=(".",),
-    )
-)
-assert _ALL_BUNDLED_RECIPE_PATHS
-
-
-@pytest.mark.parametrize("recipe_yaml", _ALL_BUNDLED_RECIPE_PATHS, ids=lambda p: p.stem)
-def test_write_skill_steps_have_output_dir(recipe_yaml: Path) -> None:
-    """Every run_skill step with write-capable behavior must declare output_dir.
-
-    write_behavior=always: output_dir required unconditionally.
-    write_behavior=conditional: output_dir required unconditionally.
-    """
-    recipe = load_recipe(recipe_yaml)
-    manifest = load_bundled_manifest()
-    skills = manifest.get("skills", {})
-
-    violations: list[str] = []
-    for step_name, step in recipe.steps.items():
-        if step.tool not in SKILL_TOOLS:
-            continue
-        skill_cmd = str((step.with_args or {}).get("skill_command", ""))
-        skill = resolve_skill_name(skill_cmd)
-        if skill is None:
-            continue
-        skill_data = skills.get(skill, {})
-        write_behavior = skill_data.get("write_behavior")
-        output_dir = (step.with_args or {}).get("output_dir")
-
-        if write_behavior == "always":
-            if not output_dir:
-                violations.append(
-                    f"{step_name} ({skill}): write_behavior=always but no output_dir"
-                )
-        elif write_behavior == "conditional":
-            if not output_dir:
-                violations.append(
-                    f"{step_name} ({skill}): write_behavior=conditional but no output_dir"
-                )
-
-    assert not violations, (
-        f"{recipe_yaml.stem}: run_skill steps missing required output_dir:\n"
-        + "\n".join(f"  {v}" for v in violations)
-    )
 
 
 def test_output_dir_is_under_planner_dir(planner_yaml: dict) -> None:

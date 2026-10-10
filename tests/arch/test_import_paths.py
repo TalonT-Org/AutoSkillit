@@ -133,6 +133,7 @@ _REQ_IMP_001_EXEMPTIONS: frozenset[tuple[str, str]] = frozenset(
         ("workspace/_projected_artifact/_validation.py", "autoskillit.hooks._write_scope"),
         ("workspace/session_skills/_provider.py", "autoskillit.hooks._write_scope"),
         ("recipe/rules/rules_skill_write_path_alignment.py", "autoskillit.hooks._write_scope"),
+        ("recipe/rules/rules_contracts.py", "autoskillit.hooks._write_scope"),
         ("migration/adapters_skill.py", "autoskillit.hooks._write_scope"),
     }
 )

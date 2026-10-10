@@ -1193,6 +1193,10 @@ _CROSS_PACKAGE_SUBMODULE_EXEMPTIONS: frozenset[tuple[str, str]] = frozenset(
             "autoskillit.hooks._write_scope",
         ),
         (
+            "recipe/rules/rules_contracts.py",
+            "autoskillit.hooks._write_scope",
+        ),
+        (
             "migration/adapters_skill.py",
             "autoskillit.hooks._write_scope",
         ),

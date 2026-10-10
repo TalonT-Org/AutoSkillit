@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
     CodingAgentBackend,
@@ -28,10 +28,13 @@ from autoskillit.core import (
     get_logger,
 )
 
+if TYPE_CHECKING:
+    from autoskillit.pipeline.context import ToolContext
+
 logger = get_logger(__name__)
 
 
-def persist_terminal_selection(ctx: Any, selection: ExecutionSelection | None) -> None:
+def persist_terminal_selection(ctx: ToolContext, selection: ExecutionSelection | None) -> None:
     """Publish the final candidate manifest without interrupting session logging."""
     if selection is None:
         return

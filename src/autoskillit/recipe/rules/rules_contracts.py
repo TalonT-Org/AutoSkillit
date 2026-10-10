@@ -713,7 +713,9 @@ def _check_path_output_recovery_coverage(ctx: ValidationContext) -> list[RuleFin
 
 def _unrestricted_without_output_dir(ctx: ValidationContext, name: str, step: RecipeStep) -> bool:
     resolved = skill_write_scope(ctx, name)
-    scope = resolved[2] if resolved is not None else None
+    scope = None
+    if resolved is not None:
+        _, _, scope = resolved
     unrestricted = scope is not None and scope.kind is WriteScopeKind.UNRESTRICTED
     return unrestricted and not (step.with_args or {}).get("output_dir")
 

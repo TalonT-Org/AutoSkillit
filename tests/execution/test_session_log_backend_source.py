@@ -111,6 +111,7 @@ class TestBackendAuthorityInSessionsJsonl:
             "adjudication_verdict": None,
             "native_shell_capture": None,
             "session_type": None,
+            "rollout": None,
             "subagent_model_outcomes": [],
             "child_outcomes": [],
             "schema_version": SESSION_INDEX_SCHEMA_VERSION,

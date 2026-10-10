@@ -32,6 +32,16 @@ from tests.execution.conftest import (
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 _SYNTHETIC_MODEL_ID = "gpt-synthetic"
+_ROLLOUT_MARKER = {
+    "change_id": "prompt-cost-study",
+    "effective_at": "2026-11-01T18:00:00+00:00",
+    "scope": {
+        "skills": ["make-plan"],
+        "backends": ["claude-code", "codex"],
+        "roles": ["planner"],
+    },
+    "expected_effect": "Reduce planning input tokens while preserving requirement coverage.",
+}
 
 
 class _FakeLocator:
@@ -2103,3 +2113,29 @@ def test_missing_evidence_worktree_persists_not_observed_defaults(tmp_path):
         assert row["evidence_worktree_path"] == ""
         assert row["evidence_worktree_source"] == "not_observed"
         assert row["evidence_worktree_detail"] == ""
+
+
+def test_rollout_marker_is_identical_in_summary_and_index(tmp_path):
+    _flush(
+        tmp_path,
+        session_id="marked-rollout",
+        rollout=_ROLLOUT_MARKER,
+        proc_snapshots=None,
+    )
+
+    summary = json.loads((tmp_path / "sessions" / "marked-rollout" / "summary.json").read_text())
+    index = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
+
+    assert summary["rollout"] == _ROLLOUT_MARKER
+    assert index["rollout"] == _ROLLOUT_MARKER
+    assert summary["rollout"] == index["rollout"]
+
+
+def test_inactive_rollout_is_null_in_summary_and_index(tmp_path):
+    _flush(tmp_path, session_id="unmarked-rollout", proc_snapshots=None)
+
+    summary = json.loads((tmp_path / "sessions" / "unmarked-rollout" / "summary.json").read_text())
+    index = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
+
+    assert summary["rollout"] is None
+    assert index["rollout"] is None

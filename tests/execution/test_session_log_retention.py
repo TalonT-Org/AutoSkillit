@@ -206,11 +206,12 @@ def test_recover_crashed_sessions_finalizes_orphaned_file(tmp_path):
     """recover_crashed_sessions reads tmpfs file and writes permanent session dir."""
     tmpfs = tmp_path / "shm"
     tmpfs.mkdir()
-    _write_old_trace(
+    trace = _write_old_trace(
         tmpfs,
         "autoskillit_trace_12345.jsonl",
         json.dumps({"vm_rss_kb": 500, "captured_at": "2026-03-03T10:00:00+00:00"}) + "\n",
     )
+    expected_start_ts = datetime.fromtimestamp(trace.stat().st_mtime, tz=UTC).isoformat()
     count = recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path / "logs"))
     assert count == 1
     sessions = list((tmp_path / "logs" / "sessions").iterdir())
@@ -219,6 +220,7 @@ def test_recover_crashed_sessions_finalizes_orphaned_file(tmp_path):
     assert (sessions[0] / "summary.json").exists()
     summary = json.loads((sessions[0] / "summary.json").read_text())
     assert summary["termination_reason"] == "CRASHED"
+    assert summary["start_ts"] == expected_start_ts
     assert summary["success"] is False
     assert summary["infra_exit_category"] == "unclassified"
     assert summary["infra_cleanup_incomplete"] is False
@@ -228,8 +230,59 @@ def test_recover_crashed_sessions_finalizes_orphaned_file(tmp_path):
     assert len(index_rows) == 1
     index = json.loads(index_rows[0])
     assert index["infra_exit_category"] == "unclassified"
+    assert index["timestamp"] == expected_start_ts
     assert index["infra_cleanup_incomplete"] is False
     assert index["infra_fault_domain"] == "infrastructure"
+
+
+def test_recovery_preserves_interrupted_nudge_rollout_and_logical_start(tmp_path):
+    tmpfs = tmp_path / "shm"
+    tmpfs.mkdir()
+    pid = 99992
+    trace = _write_old_trace(
+        tmpfs,
+        f"autoskillit_trace_{pid}.jsonl",
+        json.dumps(
+            {
+                "vm_rss_kb": 500,
+                "captured_at": "2026-03-03T10:00:00+00:00",
+                "comm": "claude",
+            }
+        )
+        + "\n",
+    )
+    enrollment = tmpfs / f"autoskillit_enrollment_{pid}.json"
+    sidecar = json.loads(enrollment.read_text())
+    rollout = {
+        "change_id": "prompt-cost-study",
+        "effective_at": "2026-11-01T18:00:00+00:00",
+        "scope": {
+            "skills": ["make-plan"],
+            "backends": ["claude-code", "codex"],
+            "roles": ["planner"],
+        },
+        "expected_effect": "Reduce planning input tokens while preserving requirement coverage.",
+    }
+    logical_run_start_ts = "2000-01-01T00:00:00+00:00"
+    sidecar.update(
+        schema_version=3,
+        comm="claude",
+        rollout=rollout,
+        logical_run_start_ts=logical_run_start_ts,
+    )
+    enrollment.write_text(json.dumps(sidecar))
+    trace_mtime_ts = datetime.fromtimestamp(trace.stat().st_mtime, tz=UTC).isoformat()
+
+    assert recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path / "logs")) == 1
+
+    session_dir = next((tmp_path / "logs" / "sessions").iterdir())
+    summary = json.loads((session_dir / "summary.json").read_text())
+    index = json.loads((tmp_path / "logs" / "sessions.jsonl").read_text().splitlines()[0])
+    assert logical_run_start_ts != trace_mtime_ts
+    assert summary["start_ts"] == logical_run_start_ts
+    assert index["timestamp"] == logical_run_start_ts
+    assert summary["rollout"] == rollout
+    assert index["rollout"] == rollout
 
 
 def test_recovery_replay_upserts_without_rewriting_committed_directory(

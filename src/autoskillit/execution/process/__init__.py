@@ -24,6 +24,7 @@ import anyio
 from autoskillit.core import (
     ChannelBStatus,
     ChannelConfirmation,
+    RolloutMarker,
     SessionEvent,
     SubprocessResult,
     TerminationReason,
@@ -249,6 +250,8 @@ async def run_managed_async(
     completion_drain_timeout: float = 5.0,
     natural_exit_grace_seconds: float = 3.0,
     linux_tracing_config: LinuxTracingConfig | None = None,
+    rollout: RolloutMarker | None = None,
+    logical_run_start_ts: str = "",
     idle_output_timeout: float | None = None,
     max_suppression_seconds: float | None = None,
     on_process_spawned: Callable[[int, int], None] | None = None,
@@ -542,6 +545,8 @@ async def run_managed_async(
                         target=_target,
                         config=linux_tracing_config,
                         tg=tg,
+                        rollout=rollout,
+                        logical_run_start_ts=logical_run_start_ts,
                     )
                 timeout_scope = await _await_race_and_drain(
                     tg,

@@ -1474,10 +1474,10 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
     f"{_SRD}::L121": _self_limiting(
         "An alien-command trace and its enrollment are deleted as a terminal safety disposition."
     ),
-    f"{_SRF}::L139": _retries_after_input_changes(
+    f"{_SRF}::L140": _retries_after_input_changes(
         "A second stat failure keeps the trace retryable until the filesystem becomes available."
     ),
-    f"{_SRF}::L180": _retries_after_input_changes(
+    f"{_SRF}::L182": _retries_after_input_changes(
         "Flush or output-index failure retains both files until output infrastructure recovers."
     ),
 }

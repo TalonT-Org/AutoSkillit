@@ -450,26 +450,68 @@ async def test_start_linux_tracing_writes_enrollment_sidecar(tmp_path):
     import anyio
 
     from autoskillit.execution.evidence.linux_tracing import (
+        read_enrollment,
         start_linux_tracing,
         trace_target_from_pid,
     )
     from tests._helpers import make_tracing_config
 
     cfg = make_tracing_config(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
+    rollout = {
+        "change_id": "prompt-cost-study",
+        "effective_at": "2026-11-01T18:00:00+00:00",
+        "scope": {
+            "skills": ["make-plan"],
+            "backends": ["claude-code", "codex"],
+            "roles": ["planner"],
+        },
+        "expected_effect": "Reduce planning input tokens while preserving requirement coverage.",
+    }
+    logical_run_start_ts = "2026-10-10T19:00:00+00:00"
     async with anyio.create_task_group() as tg:
         proc = await anyio.open_process(["sleep", "2"])
-        handle = start_linux_tracing(trace_target_from_pid(proc.pid), cfg, tg)
+        handle = start_linux_tracing(
+            trace_target_from_pid(proc.pid),
+            cfg,
+            tg,
+            rollout=rollout,
+            logical_run_start_ts=logical_run_start_ts,
+        )
         assert handle is not None
         enrollment = tmp_path / f"autoskillit_enrollment_{proc.pid}.json"
         assert enrollment.exists()
         data = json.loads(enrollment.read_text())
-        assert data["schema_version"] == 2
+        assert data["schema_version"] == 3
         assert data["pid"] == proc.pid
+        assert data["rollout"] == rollout
+        assert data["logical_run_start_ts"] == logical_run_start_ts
+        record = read_enrollment(enrollment)
+        assert record is not None
+        assert record.rollout == rollout
+        assert record.logical_run_start_ts == logical_run_start_ts
         try:
             handle.stop()
         finally:
             proc.kill()
     assert not enrollment.exists(), "Enrollment must be deleted by stop()"
+
+
+@pytest.mark.parametrize("schema_version", [1, 2])
+def test_read_enrollment_defaults_rollout_fields_for_historical_schemas(tmp_path, schema_version):
+    from autoskillit.execution.evidence.linux_tracing import read_enrollment
+
+    data = {"schema_version": schema_version, "pid": 12345}
+    if schema_version == 2:
+        data["comm"] = "claude"
+    enrollment = tmp_path / "enrollment.json"
+    enrollment.write_text(json.dumps(data))
+
+    record = read_enrollment(enrollment)
+
+    assert record is not None
+    assert record.schema_version == schema_version
+    assert record.rollout is None
+    assert record.logical_run_start_ts == ""
 
 
 # --- LinuxTracingConfig guard tests ---

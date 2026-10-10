@@ -1036,6 +1036,13 @@ async def test_recording_runner_forwards_process_lifecycle_callbacks(tmp_path: P
     )
     on_spawned = Mock()
     on_reaped = Mock()
+    rollout = {
+        "change_id": "prompt-cost-study",
+        "effective_at": "2026-11-01T18:00:00+00:00",
+        "scope": {"skills": ["make-plan"], "backends": ["codex"], "roles": ["planner"]},
+        "expected_effect": "Reduce planning input tokens while preserving requirement coverage.",
+    }
+    logical_run_start_ts = "2026-10-10T19:00:00+00:00"
 
     await runner(
         ["codex", "exec", "do something"],
@@ -1044,11 +1051,15 @@ async def test_recording_runner_forwards_process_lifecycle_callbacks(tmp_path: P
         env={"SCENARIO_STEP_NAME": "recorded"},
         on_process_spawned=on_spawned,
         on_process_reaped=on_reaped,
+        rollout=rollout,
+        logical_run_start_ts=logical_run_start_ts,
     )
 
     forwarded = inner.call_args_list[0][3]
     assert forwarded["on_process_spawned"] is on_spawned
     assert forwarded["on_process_reaped"] is on_reaped
+    assert forwarded["rollout"] is rollout
+    assert forwarded["logical_run_start_ts"] == logical_run_start_ts
 
 
 @pytest.mark.anyio
@@ -1098,6 +1109,12 @@ async def test_replay_runner_never_invokes_process_lifecycle_callbacks(tmp_path:
     )
     on_spawned = Mock()
     on_reaped = Mock()
+    rollout = {
+        "change_id": "prompt-cost-study",
+        "effective_at": "2026-11-01T18:00:00+00:00",
+        "scope": {"skills": ["make-plan"], "backends": ["codex"], "roles": ["planner"]},
+        "expected_effect": "Reduce planning input tokens while preserving requirement coverage.",
+    }
 
     await runner(
         ["codex", "exec", "do something"],
@@ -1106,6 +1123,8 @@ async def test_replay_runner_never_invokes_process_lifecycle_callbacks(tmp_path:
         env={"SCENARIO_STEP_NAME": "recorded"},
         on_process_spawned=on_spawned,
         on_process_reaped=on_reaped,
+        rollout=rollout,
+        logical_run_start_ts="2026-10-10T19:00:00+00:00",
     )
 
     on_spawned.assert_not_called()

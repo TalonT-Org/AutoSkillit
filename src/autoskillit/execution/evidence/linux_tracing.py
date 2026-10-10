@@ -32,8 +32,8 @@ import anyio
 import anyio.abc
 import psutil
 
+from autoskillit.core import RolloutMarker, get_logger
 from autoskillit.core import fast_dumps as _fast_dumps
-from autoskillit.core import get_logger
 from autoskillit.core import is_pid_zombie as is_pid_zombie
 from autoskillit.core import read_boot_id as read_boot_id
 from autoskillit.core import read_starttime_ticks as read_starttime_ticks
@@ -199,7 +199,7 @@ def trace_target_from_pid(pid: int) -> TraceTarget:
 
 
 # ---------------------------------------------------------------------------
-# TraceEnrollmentRecord: schema version 2 (adds comm field)
+# TraceEnrollmentRecord: schema version 3 (adds rollout and logical run start)
 # ---------------------------------------------------------------------------
 
 
@@ -213,9 +213,10 @@ class TraceEnrollmentRecord:
 
     Schema version 2 adds 'comm' to the enrollment record so that crash recovery
     can verify the process identity (not just its PID) and reject alien trace files.
+    Schema version 3 preserves the admitted rollout declaration and logical run start.
     """
 
-    schema_version: int  # 2 for post-#806 records; 1 for pre-fix records
+    schema_version: int
     pid: int
     boot_id: str | None  # read_boot_id(); None if /proc unavailable
     starttime_ticks: int | None  # read_starttime_ticks(pid); None if unavailable
@@ -224,6 +225,8 @@ class TraceEnrollmentRecord:
     kitchen_id: str  # ""
     order_id: str  # ""
     comm: str = ""  # /proc/{pid}/comm value; "" for pre-fix (schema_version=1) records
+    rollout: RolloutMarker | None = None
+    logical_run_start_ts: str = ""
 
 
 def _write_enrollment_atomic(path: Path, record: TraceEnrollmentRecord) -> None:
@@ -256,6 +259,8 @@ def read_enrollment(path: Path) -> TraceEnrollmentRecord | None:
             kitchen_id=data.get("kitchen_id", ""),
             order_id=data.get("order_id", ""),
             comm=data.get("comm", ""),  # "" for pre-fix schema_version=1 records
+            rollout=data.get("rollout"),
+            logical_run_start_ts=data.get("logical_run_start_ts", ""),
         )
     except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
         return None
@@ -578,6 +583,8 @@ def start_linux_tracing(
     session_id: str = "",
     kitchen_id: str = "",
     order_id: str = "",
+    rollout: RolloutMarker | None = None,
+    logical_run_start_ts: str = "",
 ) -> LinuxTracingHandle | None:
     """Start Linux tracing if all gates pass. Returns handle or None.
 
@@ -614,11 +621,10 @@ def start_linux_tracing(
             handle._trace_file = None
 
         # Write enrollment sidecar atomically for crash-recovery identity contract
-        # Schema version 2: includes comm field for alien-file rejection in recovery
         enrollment_path = tmpfs / f"autoskillit_enrollment_{pid}.json"
         try:
             record = TraceEnrollmentRecord(
-                schema_version=2,
+                schema_version=3,
                 pid=pid,
                 boot_id=read_boot_id(),
                 starttime_ticks=target.starttime_ticks,
@@ -627,6 +633,8 @@ def start_linux_tracing(
                 kitchen_id=kitchen_id,
                 order_id=order_id,
                 comm=target.comm,
+                rollout=rollout,
+                logical_run_start_ts=logical_run_start_ts,
             )
             _write_enrollment_atomic(enrollment_path, record)
             handle._enrollment_path = enrollment_path

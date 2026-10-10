@@ -45,13 +45,14 @@ __all__ = [
     "EvidenceWorktreeSource",
     "ValidatedAddDir",
     "ValidatedWorktreePath",
+    "RolloutMarker",
     "TokenUsageFileEntry",
     "SessionIndexEntry",
 ]
 
 T = TypeVar("T")
 
-SESSION_INDEX_SCHEMA_VERSION: Final[int] = 16
+SESSION_INDEX_SCHEMA_VERSION: Final[int] = 17
 TOKEN_USAGE_SCHEMA_VERSION: Final[int] = 4
 TURN_USAGE_SCHEMA_VERSION: Final[int] = 2
 
@@ -361,12 +362,22 @@ class TokenUsageFileEntry(TypedDict):
     schema_version: int
 
 
+class RolloutMarker(TypedDict):
+    """Run declaration; scope axes are skills, backends, and roles."""
+
+    change_id: str
+    effective_at: str
+    scope: dict[str, list[str]]
+    expected_effect: str
+
+
 class SessionIndexEntry(TypedDict):
     """Schema contract for sessions.jsonl entries written by flush_session_log."""
 
     session_id: str
     dir_name: str
     timestamp: str
+    rollout: RolloutMarker | None
     cwd: str
     evidence_worktree_path: str
     evidence_worktree_source: str

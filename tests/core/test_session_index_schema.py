@@ -27,6 +27,7 @@ _REQUIRED_INDEX_FIELDS = {
     "backend",
     "skill_command",
     "session_type",
+    "rollout",
     "subagent_model_outcomes",
     "evidence_worktree_path",
     "evidence_worktree_source",
@@ -70,6 +71,14 @@ class TestSessionIndexEntryCompleteness:
 
         hints = get_type_hints(SessionIndexEntry)
         assert hints["session_type"] == str | None
+
+    def test_has_nullable_rollout_marker(self):
+        from typing import get_type_hints
+
+        from autoskillit.core.types.results._type_results import RolloutMarker, SessionIndexEntry
+
+        hints = get_type_hints(SessionIndexEntry)
+        assert hints["rollout"] == RolloutMarker | None
 
     def test_canonical_cache_fields(self):
         """SessionIndexEntry must use canonical cache field names, not v1 API names."""

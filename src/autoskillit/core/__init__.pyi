@@ -1266,6 +1266,7 @@ from .types import ReviewOperationState as ReviewOperationState
 from .types import ReviewReconciliationResult as ReviewReconciliationResult
 from .types import ReviewResponseClass as ReviewResponseClass
 from .types import RollbackAdmissionEvent as RollbackAdmissionEvent
+from .types import RolloutMarker as RolloutMarker
 from .types import RolloverEpochEvent as RolloverEpochEvent
 from .types import RunSkillCompletionAuthority as RunSkillCompletionAuthority
 from .types import RuntimeAdmission as RuntimeAdmission

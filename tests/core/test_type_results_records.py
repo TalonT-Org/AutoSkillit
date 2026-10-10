@@ -39,6 +39,7 @@ ROOT_PUBLIC_NAMES = (
     "EvidenceWorktreeSource",
     "ValidatedAddDir",
     "ValidatedWorktreePath",
+    "RolloutMarker",
 )
 INTERNAL_INDEX_NAMES = (
     "TokenUsageFileEntry",

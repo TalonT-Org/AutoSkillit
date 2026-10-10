@@ -60,6 +60,9 @@ from autoskillit.config._dataclasses_execution import (
     QuotaGuardConfig as QuotaGuardConfig,
 )
 from autoskillit.config._dataclasses_execution import (
+    RolloutConfig as RolloutConfig,
+)
+from autoskillit.config._dataclasses_execution import (
     RunSkillConfig as RunSkillConfig,
 )
 from autoskillit.config._dataclasses_fleet import (

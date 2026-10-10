@@ -58,7 +58,7 @@ a named normalization contract. A ratio with an `unknown` required measure
 renders `unknown`; `unavailable` and `not_applicable` scopes do not contribute
 to its denominator, and an observed zero denominator renders `—`.
 
-Token descriptor schema v4, turn sidecar schema v2, session index schema v14,
+Token descriptor schema v4, turn sidecar schema v2, session index schema v17,
 fleet campaign state v13, and campaign summary v2 retain these records. Legacy
 numeric zero is decoded as `unknown` because older formats did not prove an
 observation. `context_window_tokens` is positive capacity metadata, not a
@@ -139,6 +139,108 @@ The historical query buffers the archive before deduplicating its at-least-once
 rows by `dir_name`. Archive-only history excludes the current live survivor
 window. The archive retains index metadata, not pruned session artifact
 directories, and operational consumers continue to read only `sessions.jsonl`.
+
+## Rollout cohorts
+
+Declare an evaluated change in `.autoskillit/config.yaml` before applying it:
+
+```yaml
+rollout:
+  active:
+    change_id: "prompt-cost-study"
+    effective_at: "2026-11-01T18:00:00Z"
+    scope:
+      skills: ["make-plan"]
+      backends: ["claude-code", "codex"]
+      roles: ["planner"]
+    expected_effect: "Reduce planning input tokens while preserving requirement coverage."
+```
+
+A before/after delta is a prompt to investigate, not proof that the change caused it.
+
+`change_id` identifies an unchanged declaration across the observation window.
+`effective_at` is the intentional UTC cutover, not a date inferred from code or
+configuration history. `scope` names affected skills, backends, and roles in a
+queryable form; its lists describe the change and never govern admission or marker
+attachment. `expected_effect` preserves the required, non-null, nonblank prediction
+with every run so readers can compare intended effects with subsequent observations.
+Empty scope lists are valid. Missing/null `active` is inactive; incomplete or
+otherwise invalid active declarations are rejected before generic string coercion.
+
+Declare the prediction and stable id before cutover, launch marked baseline work,
+apply the change at the stated UTC boundary, and keep the same declaration active
+while observing after runs. Clear `active` when the observation period ends. Use a
+new `change_id` for a revised prediction, scope, or cutover. Code validates each
+declaration and preserves each admitted run's snapshot; operators maintain stability
+across independent runs. Recording the prediction beforehand distinguishes intended
+effects from explanations developed after seeing outcomes. A pre-cutover marked
+row supplies that evidence; a current configuration or first after row alone does
+not establish preregistration.
+
+Summary and index records store the same nested `rollout` object with normalized
+UTC `effective_at`. Capture happens immediately before the first admitted launch;
+all headless runs then carry it, including failures and runs outside the descriptive
+scope. Same-run nudges and recovery keep that snapshot and logical start despite
+later configuration changes. The index `timestamp` and summary `start_ts` identify
+the admitted logical run. Operation, nudge-turn, and trace-enrollment times have
+different purposes. A subsequent independent run captures the current declaration.
+New unmarked rows contain null; older absent fields never imply cohort membership.
+
+This query counts one explicit change id while streaming the live retained index.
+Set `index_path` to `linux_tracing.log_dir / "sessions.jsonl"` if overriding the log
+root. It skips reader non-row entries and absent/null markers, and raises a visible
+error for malformed selected declarations or timestamps. It covers retained rows
+and excludes archived history; memory and printed output do not grow with row count.
+
+```python
+from datetime import datetime, timedelta
+
+from autoskillit.core import default_log_dir
+from autoskillit.execution.session_log.session_index import iter_tolerant_session_index_lines
+
+index_path = default_log_dir() / "sessions.jsonl"
+change_id = "prompt-cost-study"
+counts = {"before": 0, "after": 0}
+for end_offset, row in iter_tolerant_session_index_lines(index_path):
+    if row is None:
+        continue
+    rollout = row.get("rollout")
+    if rollout is None:
+        continue
+    if not isinstance(rollout, dict):
+        raise ValueError(f"Malformed rollout at byte {end_offset}")
+    if rollout["change_id"] != change_id:
+        continue
+    if set(rollout) != {"change_id", "effective_at", "scope", "expected_effect"}:
+        raise ValueError(f"Incomplete rollout at byte {end_offset}")
+    prediction = rollout["expected_effect"]
+    scope = rollout["scope"]
+    if not isinstance(prediction, str) or not prediction.strip():
+        raise ValueError(f"Invalid prediction at byte {end_offset}")
+    if not isinstance(scope, dict) or set(scope) != {"skills", "backends", "roles"}:
+        raise ValueError(f"Invalid scope at byte {end_offset}")
+    if any(
+        not isinstance(values, list)
+        or any(not isinstance(value, str) or not value.strip() for value in values)
+        for values in scope.values()
+    ):
+        raise ValueError(f"Invalid scope values at byte {end_offset}")
+    started_at = datetime.fromisoformat(row["timestamp"])
+    cutover_at = datetime.fromisoformat(rollout["effective_at"])
+    if started_at.utcoffset() is None or cutover_at.utcoffset() != timedelta(0):
+        raise ValueError(f"Expected aware run start and UTC cutover at byte {end_offset}")
+    if started_at < cutover_at:
+        counts["before"] += 1
+    elif started_at >= cutover_at:
+        counts["after"] += 1
+print(counts)
+```
+
+A before/after delta is a prompt to investigate, not proof that the change caused it.
+Work difficulty, repository state, and model versions can differ between cohorts.
+Compare parsed instants, including fractional seconds: equality is after cutover.
+Do not manufacture cohorts from content hashes, repository revisions, file mtimes,
+or guessed dates. Existing aggregate trends do not consume rollout markers.
 
 ## Native headless OTLP capture
 

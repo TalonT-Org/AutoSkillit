@@ -67,6 +67,70 @@ Logs are stored in a **global** directory (not per-project), so they persist acr
 
 `summary.json` contains: `session_id`, `dir_name`, `pid`, `cwd`, `evidence_worktree_path`, `evidence_worktree_source`, `evidence_worktree_detail`, `skill_command`, `success`, `subtype`, `exit_code`, `start_ts`, `snapshot_count`, `anomaly_count`, `peak_rss_kb`, `peak_oom_score`, `peak_fd_ratio`, `session_type`, `session_errors`, `child_outcomes` (see [Child Terminal Reasons](#child-terminal-reasons)).
 
+### Rollout declarations
+
+`summary.json.rollout` and `sessions.jsonl.rollout` store the same optional
+declaration. Configure it in `.autoskillit/config.yaml`:
+
+```yaml
+rollout:
+  active:
+    change_id: "prompt-cost-study"
+    effective_at: "2026-11-01T18:00:00Z"
+    scope:
+      skills: ["make-plan"]
+      backends: ["claude-code", "codex"]
+      roles: ["planner"]
+    expected_effect: "Reduce planning input tokens while preserving requirement coverage."
+```
+
+A before/after delta is a prompt to investigate, not proof that the change caused it.
+
+The stored object has these same fields, with `effective_at` normalized to UTC
+ISO-8601 (`2026-11-01T18:00:00+00:00` here). An active declaration must be complete;
+`change_id` and `expected_effect` must be nonblank strings. Scope has exactly the
+`skills`, `backends`, and `roles` lists of nonblank strings; empty lists are valid.
+Scope describes the change and does not filter launches. All admitted Claude Code
+and Codex headless runs carry the active marker, including launched failures.
+Missing `rollout`, absent/null `active`, or clearing `active` means inactive.
+New inactive records store null; older rows without the field remain unassigned.
+
+Capture occurs after final launch admission, immediately before the first runner
+call. The marker and logical start remain fixed through the same-run nudge and
+terminal logging even if configuration changes. Summary `start_ts`, index
+`timestamp`, and trace enrollment `logical_run_start_ts` share that instant;
+operation timing, nudge-turn timing, and enrollment `enrolled_at` remain separate.
+Enrollment schema 3 preserves the marker/start for crash recovery. Older sidecars
+recover without a marker and retain the historical trace-mtime fallback.
+
+Declare the prediction and stable change id **before** cutover, launch marked
+baseline work, apply the change at the stated UTC boundary, and retain the same
+declaration for after runs. Clear `active` when observation ends. A revised
+prediction, scope, or cutover requires a new `change_id`; stability across
+independent runs is the operator's responsibility. A pre-cutover marked row is
+evidence that its prediction was recorded beforehand. A current config or first
+after row alone cannot prove that timing; file mtimes do not provide declaration
+history. Keeping the prediction allows comparison with observations without
+replacing it with an explanation developed after seeing outcomes.
+
+Use the stored run start and cutover as parsed timezone-aware instants, preserving
+fractional seconds. The canonical comparison is:
+
+```python
+started_at = datetime.fromisoformat(row["timestamp"])
+cutover_at = datetime.fromisoformat(rollout["effective_at"])
+if started_at < cutover_at:
+    cohort = "before"
+elif started_at >= cutover_at:
+    cohort = "after"
+```
+
+A before/after delta is a prompt to investigate, not proof that the change caused it.
+Work difficulty, repository state, and model versions can differ across cohorts.
+See the [streaming retained-index query](../operations/observability.md#rollout-cohorts)
+for validation and bounded aggregation. Never infer marker membership from hashes,
+repository revisions, mtimes, or guessed dates.
+
 ### Execution-candidate manifests
 
 Before evaluating a primary binding or configured alternative, `run_skill`
@@ -178,7 +242,7 @@ Completed sessions with per-request evidence publish `turn_usage.jsonl` before
 version-4 token descriptor carries `turn_usage_file`, `turn_usage_count`, and
 `turn_usage_schema_version`. The file reference is `null` with count zero when
 no series was observed. The JSONL row schema is version 2; the retained
-`sessions.jsonl` index uses schema version 16.
+`sessions.jsonl` index uses schema version 17.
 
 Each token-bearing row carries non-empty `backend` and `provider_used`, plus
 nullable source `message_id`, `request_id`, `timestamp`, and observed `model`.

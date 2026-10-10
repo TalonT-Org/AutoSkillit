@@ -84,8 +84,6 @@ rollout:
     expected_effect: "Reduce planning input tokens while preserving requirement coverage."
 ```
 
-A before/after delta is a prompt to investigate, not proof that the change caused it.
-
 The stored object has these same fields, with `effective_at` normalized to UTC
 ISO-8601 (`2026-11-01T18:00:00+00:00` here). An active declaration must be complete;
 `change_id` and `expected_effect` must be nonblank strings. Scope has exactly the

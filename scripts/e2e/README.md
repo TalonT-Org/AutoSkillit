@@ -11,6 +11,7 @@ This directory holds everything the workflow runs:
 | `e2e_catalog.py` | Stdlib loader and validator for the catalog |
 | `e2e_select.py` | Picks the tests an event runs (`select`) and judges the required check (`gate`) |
 | `e2e_harness.py` | Runs one test (`run`), performs exact sandbox teardown (`cleanup`) and redacts artifacts (`redact`) |
+| `e2e_sessions.py` | Captures synchronous lifecycle events, measures concurrency and pairs ownership evidence |
 | `autoskillit-config.yaml` | AutoSkillit user-layer config the harness installs |
 | `post-e2e-failure.sh` | Appends a failure to the test's tracking issue |
 
@@ -40,6 +41,11 @@ model tests:
    because MiniMax serves the Anthropic Messages API.
 3. Create the `e2e` label in this repository.
 4. In branch protection, mark only `e2e-gate` as required — never `select` or `run (…)`.
+5. Before publishing a branch with the selectable `implementation` entry, obtain a passing
+   #5232 sandbox smoke CI run. A maintainer must seed a fixed OPEN sandbox issue describing
+   a small feature and its test, then set repository variable `E2E_IMPLEMENTATION_ISSUE_URL`
+   to its canonical `https://github.com/OWNER/REPO/issues/NUMBER` URL. Reuse that issue on
+   every run. Missing configuration fails preflight; it is not an expected product defect.
 
 ## Sandbox repository requirements
 
@@ -167,7 +173,11 @@ matrix is always parseable (`{"include":[]}` when nothing is selected).
   bypasses sampling because a labelled pull request whose sample fell out would otherwise
   never run for that commit.
 - **Picking:** tests whose `trigger_paths` match a changed path, up to `MAX_TESTS` (2); when
-  none match, exactly one test. Ties are ordered by the SHA-256 hex digest of
+  none match, one eligible ordinary test. A pipeline requires actual size at or above a
+  threshold and a matching trigger path, even with the `e2e` label. This filter also applies
+  to fallback; a pipeline-only ineligible pool selects nothing. At most one pipeline is
+  selected within the total cap. Named workflow dispatch bypasses PR eligibility.
+  Ties are ordered by the SHA-256 hex digest of
   `"{seed}:{name}"`, so the decision is a pure function of the payload and the changed paths.
   Patterns use `fnmatch.fnmatchcase`, where `*` also matches `/` (`scripts/e2e/*` matches
   every file below `scripts/e2e/`).
@@ -183,10 +193,24 @@ succeeded or nothing was selected and `run` was skipped. Every other combination
 The `run` job uses one repository-wide concurrency group (`group: e2e`, `queue: max`,
 `cancel-in-progress: false`) and `max-parallel: 1`, so every selected test of every run
 waits its turn and never cancels another. `select` and `e2e-gate` are not queued. A
-catalog entry's `peak_sessions` is capped at `MAX_PEAK_SESSIONS` (8): one step's fan-out of
-up to six subagents plus the orchestrator and step session. With one test running at a
-time, CI stays at or below eight of the roughly twelve concurrent MiniMax sessions.
+catalog entry's `peak_sessions` is capped at `MAX_PEAK_SESSIONS` (8). For an uncommissioned
+pipeline this declares capacity, not a measured fan-out. The child limit stays six.
 `clean-install` requires exactly zero `peak_sessions`.
+
+The implementation pipeline installs synchronous command hooks for `SessionStart`,
+`SessionEnd`, `SubagentStart` and `SubagentStop`, preserving existing hooks and MiniMax
+settings. These hooks follow the [Claude lifecycle schema](https://code.claude.com/docs/en/hooks).
+Each identity spans its first start through its final end, so compaction and resume yield
+a conservative upper bound. Half-open intervals end before simultaneous starts. The
+summary reconciles the dispatched root, managed lineage and enumerable native transcripts;
+missing endpoints, identities or owned transcripts fail coverage. Transcript activity is
+never used to infer a lifetime. A peak exceeding capacity fails validation.
+
+Commission with a successful MiniMax CI run and repeat against the same seed. Inspect
+planning, dry-walkthrough, implementation, test, integration, audit GO and open-PR evidence,
+plus cleanup and the sandbox CI association. Replace provisional `peak_sessions` with
+the observed conservative peak and set `peak_sessions_evidence` to the CI run URL, tested
+commit and first-start/final-end method. Expected failures do not satisfy commissioning.
 
 Every harness subprocess has a timeout that fires before the job's: `fleet run` gets the
 test's `timeout_sec` plus `HARNESS_GRACE_SEC`, and the job gets that budget in minutes plus
@@ -201,6 +225,12 @@ and are often `0600`, so a second container run copies `out/` and `data/logs/` i
 `upload/` world-readable with both secrets replaced by `[REDACTED]`, skips symlinks, and
 fails if any secret survives. Only `upload/` is uploaded, and only when redaction
 succeeded.
+
+Pipeline evidence includes `session-events.jsonl`, `session-concurrency.json`, compact
+`ownership.json`, the seed, effective configuration, fleet stdout/stderr/envelope, captured
+PR metadata/files, detached-head test commands and associated CI runs/jobs. Collection
+occurs inside the container before transcript paths disappear. Incomplete evidence is
+retained and fails the scenario; redaction and upload still run after failure.
 
 `clean-install` mounts no home directories and retains evidence under `out/`. Its redactor
 receives the same required `--secret-env` names with variables unset and skips the absent
@@ -258,6 +288,34 @@ row and close the bug. Fleet translates the L3 result's
 `reason` into the failed command envelope's `error` and `user_visible_message` fields;
 the harness matches that envelope rather than the recipe payload's `failed_step`/`reason`.
 
+For the implementation pipeline, the project-owned
+[`DispatchCompleted.to_envelope`](../../src/autoskillit/fleet/campaign_state/state_outcomes.py)
+must report success, `dispatch_status="success"` and root/dispatch identities. The nested
+[`implementation` terminal](../../src/autoskillit/recipes/implementation.yaml) must have
+`reason="implementation_complete"`. Successful no-change and already-done terminals remain
+valid recipe behavior but fail this scenario. No PR URL is required in the envelope.
+
+The harness resolves the configured seed once and dispatches its exact URL and title/body
+task once. Effective project-aware config comes from `autoskillit config show`, whose
+implementation calls `load_config(Path.cwd())`; both configured and sandbox default branches
+must be `main`. No caller `base_branch` ingredient is sent. Sandbox setup and baseline tests
+must succeed before launch.
+
+Paired root transcript tool calls/results prove the created branch; paired root/managed
+claim results prove any added claim label. Discovery paginates through the PR baseline
+and leaves unrelated PRs untouched. Require exactly one owned open, unmerged sandbox PR
+targeting `main`, without auto-merge, with the canonical seed URL and non-removed changes
+under both `sandbox/` and `tests/`. Fetch and detach at the captured head before setup and
+tests. Require a successful associated sandbox `CI` run and `test` job whose nested PR
+association has the exact branch revision; an outer merge SHA is not the branch SHA.
+Finally re-read the head and state to reject movement during validation.
+
+Teardown runs after validation, failure or exception. It independently collects metrics,
+closes owned open PRs, deletes evidenced branches (including branches without a PR), and
+removes only the effective claim label proven added by this run. The seed remains OPEN
+and other labels are preserved. Missing ownership proof preserves uncertain resources and
+fails cleanup. Cleanup errors remain fatal alongside the original failure.
+
 ## Catalog schema
 
 ```json
@@ -286,14 +344,37 @@ the harness matches that envelope rather than the recipe payload's `failed_step`
 ```
 
 `recipe`, `ingredients` and `expected_pull_request_state` are required for `recipe` tests
-and forbidden for `canary` and `clean-install` tests. `expected_failures` is optional for
-`clean-install` and recipe tests. Clean-install rows use the exact doctor `severity`, `check`
-and `message`; recipe rows require `severity: error`, `check` and `message` matching the failed
-envelope. Every row includes an open bug issue URL
-(`https://github.com/TalonT-Org/AutoSkillit/issues/<number>`). Duplicate diagnostic identities
-and unknown keys are rejected. `peak_sessions` must be
+and forbidden for `canary` and `clean-install` tests. Optional recipe-only fields are
+`pipeline` (boolean, default false), `issue_url_env` (seed variable name),
+`required_changed_paths` (nonempty relative prefixes), `test_command` (nonempty argv), and
+`peak_sessions_evidence` (nonempty provenance string). Environment-owned seeds cannot also
+specify literal `task` or `issue_url` ingredients. Path prefixes cannot be absolute or
+traverse parents. For example, the implementation entry uses:
+
+```json
+{"pipeline": true, "issue_url_env": "E2E_IMPLEMENTATION_ISSUE_URL",
+ "required_changed_paths": ["sandbox/", "tests/"], "test_command": ["task", "test-check"]}
+```
+
+The recipe_fixture field names a staged YAML fixture for the headless smoke scenario.
+
+The expected_failures field is optional for recipes and clean-install. Pipeline rows
+contain exactly check, message, issue; ordinary recipe and clean-install rows also
+contain severity. Ordinary recipes require severity: error and match the failed
+envelope's error and user_visible_message; clean-install allows error or warning
+and matches doctor diagnostics. Pipeline rows match structured implementation findings.
+Every row links to an open AutoSkillit bug issue. Duplicate diagnostic identities and
+unknown keys are rejected. The peak_sessions value must be
 1–8 for model tests and exactly zero for clean-install. `timeout_sec` must keep the
 derived job timeout within 360 minutes.
+
+Recipe expectations match exact stable `(check, message)` product findings linked to real
+bug issues. Setup, discovery, malformed evidence and cleanup failures cannot be admitted.
+Unknown findings and absent expected findings fail. Every recipe records `outcome`:
+`passed`, `expected_failure` (with `passed=false`), or `failed`. A linked known defect may
+use the accepted CLI exit convention, but only `passed` with no expected findings counts
+as successful commissioning. File or deduplicate observed product bugs separately; do not
+predeclare a provider defect or replace the MiniMax settings-file route.
 
 ### Adding a test
 

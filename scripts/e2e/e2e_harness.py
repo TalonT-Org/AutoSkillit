@@ -8,6 +8,7 @@ import ast
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -18,8 +19,10 @@ import uuid
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import e2e_catalog
+import e2e_sessions
 
 MINIMAX_BASE_URL = "https://api.minimax.io/anthropic"
 MINIMAX_MODEL = "MiniMax-M3[1m]"
@@ -38,6 +41,9 @@ SANDBOX_CLONE = Path("/workspace/sandbox")
 
 _SCRUBBED_ENV = frozenset({"CLAUDE_CODE_OAUTH_TOKEN", *SECRET_ENV})
 _STDERR_TAIL_CHARS = 2000
+_SESSION_TRACE_FILENAME = "session-events.jsonl"
+_CI_POLL_ATTEMPTS = 6
+_CI_POLL_INTERVAL_SEC = 10
 CLEAN_INSTALL_ALLOWED_WARNINGS: dict[tuple[str, str], str] = {
     (
         "pytest_temp_capacity",
@@ -257,28 +263,40 @@ def latest_pull_request_number(
 
 
 def new_pull_requests(
-    repository: str, baseline: int, env: Mapping[str, str], runner: Runner
+    repository: str,
+    baseline: int,
+    env: Mapping[str, str],
+    runner: Runner,
+    *,
+    pipeline: bool = False,
 ) -> tuple[list[dict[str, Any]] | None, str | None]:
-    rows, failure = _list_pull_requests(
-        repository, 20, "number,state,additions,deletions", env, runner
-    )
-    if rows is None:
-        return None, failure
-    return [row for row in rows if int(row["number"]) > baseline], None
+    limit = 20
+    fields = "number,state,additions,deletions"
+    if pipeline:
+        fields += (
+            ",body,headRefOid,headRefName,headRepository,baseRefName,autoMergeRequest,mergedAt"
+        )
+    while True:
+        rows, failure = _list_pull_requests(repository, limit, fields, env, runner)
+        if rows is None:
+            return None, failure
+        if not pipeline or len(rows) < limit or any(row["number"] <= baseline for row in rows):
+            return [row for row in rows if row["number"] > baseline], None
+        limit *= 2
 
 
 def fleet_run_argv(
-    test: e2e_catalog.CatalogTest, runtime_ingredients: Mapping[str, str] | None = None
+    test: e2e_catalog.CatalogTest, *, ingredients: Mapping[str, str] | None = None
 ) -> list[str]:
-    effective = dict(test.ingredients)
-    effective.update(runtime_ingredients or {})
-    ingredients = [arg for key, value in effective.items() for arg in ("-i", f"{key}={value}")]
+    values = dict(test.ingredients)
+    values.update(ingredients or {})
+    arguments = [arg for key, value in values.items() for arg in ("-i", f"{key}={value}")]
     return [
         "autoskillit",
         "fleet",
         "run",
         str(test.recipe),
-        *ingredients,
+        *arguments,
         "--disable-quota-guard",
         "--timeout-sec",
         str(test.timeout_sec),
@@ -305,28 +323,77 @@ def check_envelope(returncode: int, stdout: str) -> tuple[list[str], dict[str, A
     return failures, envelope
 
 
+def check_implementation_envelope(
+    envelope: Mapping[str, Any],
+) -> tuple[list[str], list[dict[str, str]]]:
+    failures: list[str] = []
+    findings: list[dict[str, str]] = []
+    payload = envelope.get("l3_payload")
+    reason = payload.get("reason") if isinstance(payload, dict) else None
+    status = envelope.get("dispatch_status")
+    if envelope.get("success") is not True or status != "success":
+        stable_reason = envelope.get("reason") or reason
+        if isinstance(stable_reason, str) and stable_reason:
+            findings.append({"check": "fleet_envelope", "message": f"{status}: {stable_reason}"})
+        else:
+            failures.append("fleet run: unsuccessful envelope has no specific failure reason")
+    elif reason != "implementation_complete":
+        if isinstance(reason, str) and reason:
+            findings.append({"check": "implementation_terminal", "message": reason})
+        else:
+            failures.append("fleet run: implementation terminal reason is missing")
+    if not all(
+        isinstance(envelope.get(key), str) and envelope[key]
+        for key in ("dispatch_id", "dispatched_session_id")
+    ):
+        failures.append("fleet run: dispatch/session identity is missing")
+    return failures, findings
+
+
 def run_fleet(
     test: e2e_catalog.CatalogTest,
     out: Path,
     env: Mapping[str, str],
     runner: Runner,
-    runtime_ingredients: Mapping[str, str] | None = None,
-) -> tuple[list[str], dict[str, Any] | None]:
+    *,
+    ingredients: Mapping[str, str] | None = None,
+) -> tuple[dict[str, Any] | None, list[str], list[dict[str, str]]]:
     result, failure = _call(
         runner,
-        fleet_run_argv(test, runtime_ingredients),
+        fleet_run_argv(test, ingredients=ingredients),
         what="fleet run",
+        evidence=out / "fleet-run",
         cwd=SANDBOX_CLONE,
         env=env,
         timeout=test.timeout_sec + e2e_catalog.HARNESS_GRACE_SEC,
-        evidence=out / "fleet-run",
     )
+    stdout = (out / "fleet-run.stdout.txt").read_text(encoding="utf-8", errors="replace")
+    shutil.copyfile(out / "fleet-run.stdout.txt", out / "fleet-run.stdout.log")
+    shutil.copyfile(out / "fleet-run.stderr.txt", out / "fleet-run.stderr.log")
+    line = last_line(stdout)
+    (out / "envelope.json").write_text(line + "\n", encoding="utf-8")
+    if not test.pipeline:
+        if result is None:
+            return None, [str(failure)], []
+        envelope_failures, envelope = check_envelope(result.returncode, stdout)
+        return envelope, envelope_failures, []
+    failures: list[str] = []
+    findings: list[dict[str, str]] = []
+    try:
+        envelope = json.loads(line)
+    except json.JSONDecodeError:
+        envelope = None
+    if not isinstance(envelope, dict):
+        envelope = None
+        failures.append("fleet run: the last stdout line is not a JSON object envelope")
     if result is None:
-        return [str(failure)], None
-    (out / "fleet-run.stdout.log").write_text(result.stdout, encoding="utf-8")
-    (out / "fleet-run.stderr.log").write_text(result.stderr, encoding="utf-8")
-    (out / "envelope.json").write_text(last_line(result.stdout) + "\n", encoding="utf-8")
-    return check_envelope(result.returncode, result.stdout)
+        failures.append(str(failure))
+    elif envelope is not None and test.pipeline:
+        envelope_failures, findings = check_implementation_envelope(envelope)
+        failures += envelope_failures
+        if failure and not findings:
+            failures.append(failure)
+    return envelope, failures, findings
 
 
 def match_recipe_failure(
@@ -456,7 +523,7 @@ def run_smoke_recipe(
     if runtime is None:
         return failures, []
     (out / "smoke-launched").write_text(test.name + "\n", encoding="utf-8")
-    fleet_failures, envelope = run_fleet(test, out, env, runner, runtime)
+    envelope, fleet_failures, _ = run_fleet(test, out, env, runner, ingredients=runtime)
     fleet_failures, matched = match_recipe_failure(test, fleet_failures, envelope)
     failures += fleet_failures
     if (
@@ -866,6 +933,456 @@ def close_open_pull_requests(
     return failures
 
 
+def install_session_hooks(home: Path, trace: Path) -> None:
+    path = home / ".claude" / "settings.json"
+    settings = json.loads(path.read_text(encoding="utf-8"))
+    command = f"python3 /opt/e2e/e2e_sessions.py {shlex.quote(str(trace))}"
+    hooks = settings.setdefault("hooks", {})
+    for event in ("SessionStart", "SessionEnd", "SubagentStart", "SubagentStop"):
+        hooks.setdefault(event, []).append(
+            {"hooks": [{"type": "command", "command": command, "timeout": 10}]}
+        )
+    path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
+
+
+def _json_call(
+    argv: Sequence[str],
+    env: Mapping[str, str],
+    runner: Runner,
+    *,
+    evidence: Path | None = None,
+    cwd: Path | None = None,
+) -> Any:
+    result, failure = _setup_call(runner, argv, env, evidence=evidence, cwd=cwd)
+    if failure or result is None:
+        raise ValueError(failure or "missing command result")
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{' '.join(argv[:3])}: invalid JSON") from exc
+
+
+def _api_pages(endpoint: str, env: Mapping[str, str], runner: Runner, evidence: Path) -> list[Any]:
+    pages = _json_call(
+        ["gh", "api", endpoint, "--paginate", "--slurp"], env, runner, evidence=evidence
+    )
+    if not isinstance(pages, list):
+        raise ValueError("GitHub API: expected paginated JSON array")
+    return pages
+
+
+def prepare_seed(
+    test: e2e_catalog.CatalogTest,
+    repository: str,
+    out: Path,
+    env: Mapping[str, str],
+    runner: Runner,
+) -> tuple[dict[str, Any], dict[str, str], str]:
+    url = env.get(test.issue_url_env or "", "")
+    match = re.fullmatch(
+        r"https://github\.com/" + re.escape(repository) + r"/issues/([1-9][0-9]*)", url
+    )
+    if not match:
+        raise ValueError("seed: missing or noncanonical sandbox issue URL")
+    config = _json_call(
+        ["autoskillit", "config", "show"],
+        env,
+        runner,
+        evidence=out / "effective-config",
+        cwd=SANDBOX_CLONE,
+    )
+    label = config["github"]["in_progress_label"]
+    seed = _json_call(
+        ["gh", "issue", "view", url, "--json", "number,url,state,title,body,labels"],
+        env,
+        runner,
+        evidence=out / "seed",
+    )
+    if (
+        not isinstance(seed, dict)
+        or seed.get("url") != url
+        or type(seed.get("number")) is not int
+        or seed["number"] != int(match[1])
+        or seed.get("state") != "OPEN"
+        or not isinstance(seed.get("title"), str)
+        or not seed["title"].strip()
+        or not isinstance(seed.get("body"), str)
+        or not isinstance(seed.get("labels"), list)
+        or any(
+            not isinstance(row, dict) or not isinstance(row.get("name"), str)
+            for row in seed["labels"]
+        )
+    ):
+        raise ValueError("seed: expected the configured OPEN sandbox issue with valid metadata")
+    if label in {row["name"] for row in seed["labels"]}:
+        raise ValueError("seed: issue is already claimed")
+    repo = _json_call(
+        ["gh", "repo", "view", repository, "--json", "defaultBranchRef"], env, runner
+    )
+    default_branch = repo.get("defaultBranchRef") if isinstance(repo, dict) else None
+    if (
+        not isinstance(default_branch, dict)
+        or default_branch.get("name") != "main"
+        or config["branching"]["default_base_branch"] != "main"
+    ):
+        raise ValueError("seed: sandbox and effective configured base branch must both be main")
+    ingredients = dict(test.ingredients)
+    ingredients.update(issue_url=url, task=f"{seed['title']}\n\n{seed['body']}")
+    for stage, argv in (
+        ("baseline-install", ["task", "install-worktree"]),
+        ("baseline-test", ["task", "test-check"]),
+    ):
+        _, failure = _call(
+            runner,
+            argv,
+            what=stage,
+            evidence=out / stage,
+            cwd=SANDBOX_CLONE,
+            env=env,
+            timeout=SETUP_COMMAND_TIMEOUT_SEC,
+        )
+        if failure:
+            raise ValueError(failure)
+    return seed, ingredients, label
+
+
+def _repo_matches(value: Any, repository: str) -> bool:
+    return isinstance(value, dict) and (
+        value.get("full_name") == repository
+        or value.get("url") == f"https://api.github.com/repos/{repository}"
+    )
+
+
+def owned_pull_requests(
+    rows: Sequence[Mapping[str, Any]],
+    proof: Mapping[str, Any],
+    repository: str,
+    out: Path,
+    env: Mapping[str, str],
+    runner: Runner,
+) -> list[dict[str, Any]]:
+    owned = []
+    for row in rows:
+        pr = _json_call(
+            ["gh", "api", f"repos/{repository}/pulls/{row['number']}"],
+            env,
+            runner,
+            evidence=out / f"pr-{row['number']}",
+        )
+        if not isinstance(pr, dict):
+            raise ValueError("PR discovery: expected an object")
+        head = pr.get("head")
+        if (
+            isinstance(head, dict)
+            and head.get("ref") in proof["branches"]
+            and _repo_matches(head.get("repo"), repository)
+        ):
+            pr["_listed_head"] = row.get("headRefOid")
+            owned.append(pr)
+    return owned
+
+
+def validate_sandbox_ci(
+    repository: str,
+    number: int,
+    head: str,
+    out: Path,
+    env: Mapping[str, str],
+    runner: Runner,
+) -> None:
+    workflows = _api_pages(
+        f"repos/{repository}/actions/workflows?per_page=100", env, runner, out / "ci-workflows"
+    )
+    candidates = [
+        workflow
+        for page in workflows
+        for workflow in page.get("workflows", [])
+        if workflow.get("name") == "CI" and workflow.get("state") == "active"
+    ]
+    if len(candidates) != 1:
+        raise ValueError("sandbox CI: expected one active CI workflow")
+    for attempt in range(_CI_POLL_ATTEMPTS):
+        pages = _api_pages(
+            f"repos/{repository}/actions/workflows/{candidates[0]['id']}/runs?event=pull_request&per_page=100",
+            env,
+            runner,
+            out / "ci-runs",
+        )
+        runs = [
+            run
+            for page in pages
+            for run in page.get("workflow_runs", [])
+            if any(
+                pr.get("number") == number
+                and pr.get("head", {}).get("sha") == head
+                and _repo_matches(pr.get("head", {}).get("repo"), repository)
+                and _repo_matches(pr.get("base", {}).get("repo"), repository)
+                for pr in run.get("pull_requests", [])
+            )
+        ]
+        if runs:
+            run = max(runs, key=lambda value: (value["id"], value.get("run_attempt", 1)))
+            if run.get("status") == "completed":
+                jobs = _api_pages(
+                    f"repos/{repository}/actions/runs/{run['id']}/jobs?per_page=100",
+                    env,
+                    runner,
+                    out / "ci-jobs",
+                )
+                tests = [
+                    job
+                    for page in jobs
+                    for job in page.get("jobs", [])
+                    if job.get("name") == "test"
+                ]
+                if (
+                    run.get("conclusion") != "success"
+                    or not tests
+                    or any(
+                        job.get("status") != "completed" or job.get("conclusion") != "success"
+                        for job in tests
+                    )
+                ):
+                    raise ValueError("sandbox CI: CI run and test job must succeed")
+                return
+        if attempt + 1 < _CI_POLL_ATTEMPTS:
+            time.sleep(_CI_POLL_INTERVAL_SEC)
+    raise ValueError("sandbox CI: no completed CI run associated with the exact PR head")
+
+
+def validate_implementation_pr(
+    test: e2e_catalog.CatalogTest,
+    prs: Sequence[Mapping[str, Any]],
+    seed: Mapping[str, Any],
+    repository: str,
+    out: Path,
+    env: Mapping[str, str],
+    runner: Runner,
+) -> list[str]:
+    if len(prs) != 1:
+        return [f"expected exactly one new owned sandbox pull request, found {len(prs)}"]
+    pr = prs[0]
+    number = pr["number"]
+    head = pr.get("head", {})
+    base = pr.get("base", {})
+    oid = head.get("sha")
+    if (
+        pr.get("state") != "open"
+        or pr.get("merged") is not False
+        or pr.get("merged_at")
+        or pr.get("auto_merge") is not None
+        or base.get("ref") != "main"
+        or head.get("ref") == "main"
+        or not isinstance(oid, str)
+        or not oid
+        or not _repo_matches(base.get("repo"), repository)
+        or not _repo_matches(head.get("repo"), repository)
+    ):
+        return [
+            "implementation PR: expected an open, unmerged sandbox PR targeting main "
+            "without auto-merge"
+        ]
+    if oid != pr.get("_listed_head"):
+        return ["implementation PR: REST head differs from captured headRefOid"]
+    if not re.search(re.escape(seed["url"]) + r"(?![A-Za-z0-9_/#?=-])", str(pr.get("body", ""))):
+        return ["implementation PR: body does not reference the canonical seed URL"]
+    if (
+        type(pr.get("additions")) is not int
+        or type(pr.get("deletions")) is not int
+        or (pr["additions"] + pr["deletions"] <= 0)
+    ):
+        return ["implementation PR: empty or malformed diff"]
+    pages = _api_pages(
+        f"repos/{repository}/pulls/{number}/files?per_page=100", env, runner, out / "pr-files"
+    )
+    files = [row for page in pages for row in page]
+    for prefix in test.required_changed_paths:
+        if not any(
+            row.get("status") != "removed"
+            and isinstance(row.get("filename"), str)
+            and row["filename"].startswith(prefix)
+            and row.get("additions", 0) + row.get("deletions", 0) > 0
+            for row in files
+        ):
+            return [f"implementation PR: missing non-removed changes under {prefix}"]
+    failures = test_pr_head(test, number, oid, out, env, runner)
+    if failures:
+        return failures
+    validate_sandbox_ci(repository, number, oid, out, env, runner)
+    final = _json_call(
+        ["gh", "api", f"repos/{repository}/pulls/{number}"], env, runner, evidence=out / "pr-final"
+    )
+    if (
+        final.get("head", {}).get("sha") != oid
+        or final.get("state") != "open"
+        or final.get("merged") is not False
+        or final.get("merged_at")
+    ):
+        return ["implementation PR: head or open/unmerged state changed during validation"]
+    return []
+
+
+def test_pr_head(
+    test: e2e_catalog.CatalogTest,
+    number: int,
+    oid: str,
+    out: Path,
+    env: Mapping[str, str],
+    runner: Runner,
+) -> list[str]:
+    commands = (
+        ("pr-fetch", ["git", "fetch", "origin", f"refs/pull/{number}/head"]),
+        ("pr-oid", ["git", "rev-parse", "FETCH_HEAD"]),
+        ("pr-checkout", ["git", "checkout", "--detach", oid]),
+        ("pr-install", ["task", "install-worktree"]),
+        ("pr-test", list(test.test_command)),
+    )
+    for stage, argv in commands:
+        result, failure = _call(
+            runner,
+            argv,
+            what=stage,
+            evidence=out / stage,
+            cwd=SANDBOX_CLONE,
+            env=env,
+            timeout=SETUP_COMMAND_TIMEOUT_SEC,
+        )
+        if failure:
+            return [failure]
+        if stage == "pr-oid" and (result is None or result.stdout.strip() != oid):
+            return ["implementation PR: fetched head differs from captured head"]
+    return []
+
+
+def discover_cleanup_prs(
+    repository: str,
+    baseline: int,
+    proof: Mapping[str, Any],
+    out: Path,
+    env: Mapping[str, str],
+    runner: Runner,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    failures: list[str] = []
+    owned: list[dict[str, Any]] = []
+    for attempt in range(2):
+        try:
+            rows, failure = new_pull_requests(repository, baseline, env, runner, pipeline=True)
+            if rows is None:
+                raise ValueError(failure)
+            owned = owned_pull_requests(rows, proof, repository, out, env, runner)
+            if owned or attempt == 1:
+                if rows and not proof["branches"]:
+                    failures.append("cleanup: PR ownership could not be established")
+                break
+        except Exception as exc:
+            if attempt == 1:
+                failures.append(f"cleanup discovery: {exc}")
+        if attempt == 0:
+            time.sleep(1)
+    return owned, failures
+
+
+def delete_owned_branch(
+    repository: str, branch: str, env: Mapping[str, str], runner: Runner
+) -> None:
+    if branch == "main" or not branch or branch.startswith("refs/"):
+        raise ValueError("refusing to delete an unsafe/default branch")
+    endpoint = f"repos/{repository}/git/refs/heads/{quote(branch, safe='')}"
+    result, failure = _setup_call(runner, ["gh", "api", endpoint], env)
+    if failure and result is not None and "404" in result.stderr:
+        return
+    if failure:
+        raise ValueError(failure)
+    time.sleep(1)
+    _, failure = _setup_call(runner, ["gh", "api", "--method", "DELETE", endpoint], env)
+    if failure:
+        raise ValueError(failure)
+
+
+def release_owned_claim(
+    proof: Mapping[str, Any],
+    seed: Mapping[str, Any],
+    label: str,
+    out: Path,
+    env: Mapping[str, str],
+    runner: Runner,
+) -> list[str]:
+    current = _json_call(
+        ["gh", "issue", "view", seed["url"], "--json", "state,labels"],
+        env,
+        runner,
+        evidence=out / "seed-final",
+    )
+    failures = [] if current.get("state") == "OPEN" else ["cleanup: seed issue is no longer OPEN"]
+    if label not in {row["name"] for row in current["labels"]}:
+        return failures
+    if not proof["claimed"]:
+        return [*failures, "cleanup: claim label is present without this run's claim proof"]
+    time.sleep(1)
+    _, failure = _setup_call(
+        runner, ["gh", "issue", "edit", seed["url"], "--remove-label", label], env
+    )
+    if failure:
+        failures.append(f"cleanup: {failure}")
+    return failures
+
+
+def cleanup_implementation(
+    repository: str,
+    baseline: int,
+    proof: Mapping[str, Any],
+    seed: Mapping[str, Any],
+    label: str,
+    out: Path,
+    env: Mapping[str, str],
+    runner: Runner,
+) -> list[str]:
+    owned, failures = discover_cleanup_prs(repository, baseline, proof, out, env, runner)
+    for pr in owned:
+        try:
+            if pr.get("state") == "open":
+                time.sleep(1)
+                _, failure = _setup_call(
+                    runner, ["gh", "pr", "close", str(pr["number"]), "--repo", repository], env
+                )
+                if failure:
+                    failures.append(f"cleanup: {failure}")
+        except Exception as exc:
+            failures.append(f"cleanup PR: {exc}")
+    for branch in proof["branches"]:
+        try:
+            delete_owned_branch(repository, branch, env, runner)
+        except Exception as exc:
+            failures.append(f"cleanup branch: {exc}")
+    try:
+        failures += release_owned_claim(proof, seed, label, out, env, runner)
+    except Exception as exc:
+        failures.append(f"cleanup claim: {exc}")
+    return failures
+
+
+def match_recipe_findings(
+    failures: list[str],
+    findings: Sequence[Mapping[str, str]],
+    expected: Sequence[Mapping[str, str]],
+) -> tuple[list[str], list[dict[str, str]]]:
+    annotations = {(row["check"], row["message"]): row for row in expected}
+    matched: dict[tuple[str, str], dict[str, str]] = {}
+    for row in findings:
+        identity = (row["check"], row["message"])
+        if identity in annotations:
+            matched[identity] = dict(annotations[identity])
+        else:
+            failures.append(f"{row['check']}: {row['message']}")
+    for identity, annotation in annotations.items():
+        if identity not in matched:
+            failures.append(
+                f"expected recipe finding absent {identity}; remove stale expected failure "
+                f"for {annotation['issue']}"
+            )
+    return failures, list(matched.values())
+
+
 def run_recipe(
     test: e2e_catalog.CatalogTest,
     repository: str,
@@ -873,6 +1390,8 @@ def run_recipe(
     out: Path,
     env: Mapping[str, str],
     runner: Runner,
+    *,
+    home: Path | None = None,
 ) -> tuple[list[str], list[dict[str, str]]]:
     failure = (
         configure_git(env, runner)
@@ -883,15 +1402,44 @@ def run_recipe(
         return [failure], []
     if test.recipe_fixture is not None:
         return run_smoke_recipe(test, repository, out, env, runner)
+    seed: dict[str, Any] = {}
+    ingredients = dict(test.ingredients)
+    label = ""
+    home = home or Path.home()
+    trace = out / _SESSION_TRACE_FILENAME
+    if test.pipeline or test.issue_url_env:
+        try:
+            seed, ingredients, label = prepare_seed(test, repository, out, env, runner)
+            if test.pipeline:
+                trace.write_text("", encoding="utf-8")
+                install_session_hooks(home, trace)
+        except Exception as exc:
+            return [f"preflight: {exc}"], []
     baseline, failure = latest_pull_request_number(repository, env, runner)
     if baseline is None:
         return [str(failure)], []
+    if not test.pipeline:
+        return launch_regular_recipe(test, repository, baseline, ingredients, out, env, runner)
+    return launch_recipe(
+        test, repository, baseline, seed, ingredients, label, out, home, env, runner
+    )
+
+
+def launch_regular_recipe(
+    test: e2e_catalog.CatalogTest,
+    repository: str,
+    baseline: int,
+    ingredients: Mapping[str, str],
+    out: Path,
+    env: Mapping[str, str],
+    runner: Runner,
+) -> tuple[list[str], list[dict[str, str]]]:
     failures: list[str] = []
+    matched: list[dict[str, str]] = []
     listed: list[dict[str, Any]] | None = None
     try:
-        fleet_failures, envelope = run_fleet(test, out, env, runner)
-        fleet_failures, matched = match_recipe_failure(test, fleet_failures, envelope)
-        failures += fleet_failures
+        envelope, failures, _ = run_fleet(test, out, env, runner, ingredients=ingredients)
+        failures, matched = match_recipe_failure(test, failures, envelope)
         if not matched:
             listed, failure = new_pull_requests(repository, baseline, env, runner)
             if listed is None:
@@ -901,6 +1449,106 @@ def run_recipe(
     finally:
         failures += close_open_pull_requests(repository, baseline, listed, env, runner)
     return failures, matched
+
+
+def save_ownership(
+    trace: Path,
+    envelope: dict[str, Any] | None,
+    log_root: Path,
+    seed: Mapping[str, Any],
+    repository: str,
+    out: Path,
+    label: str,
+) -> dict[str, Any]:
+    proof = e2e_sessions.collect_ownership(
+        trace, envelope, log_root, seed["url"], repository, claim_label=label
+    )
+    (out / "ownership.json").write_text(json.dumps(proof, indent=2) + "\n", encoding="utf-8")
+    return proof
+
+
+def finish_pipeline(
+    test: e2e_catalog.CatalogTest,
+    repository: str,
+    baseline: int,
+    seed: Mapping[str, Any],
+    label: str,
+    out: Path,
+    home: Path,
+    env: Mapping[str, str],
+    runner: Runner,
+    envelope: dict[str, Any] | None,
+    proof: dict[str, Any] | None,
+) -> list[str]:
+    failures: list[str] = []
+    trace = out / _SESSION_TRACE_FILENAME
+    log_root = e2e_sessions.default_log_root(home)
+    try:
+        summary = e2e_sessions.summarize(trace, envelope, log_root)
+        if not summary["coverage"]["complete"]:
+            failures.append("session measurement: incomplete lifecycle coverage")
+        if summary["peak_sessions"] > test.peak_sessions:
+            failures.append("session measurement: observed peak exceeds catalog capacity")
+    except Exception as exc:
+        failures.append(f"session measurement: {exc}")
+    if proof is None:
+        try:
+            proof = save_ownership(trace, envelope, log_root, seed, repository, out, label)
+            failures += [f"ownership: {value}" for value in proof["violations"]]
+        except Exception as exc:
+            failures.append(f"cleanup ownership: {exc}")
+    proof = proof or {"branches": [], "claimed": False}
+    failures += cleanup_implementation(repository, baseline, proof, seed, label, out, env, runner)
+    return failures
+
+
+def launch_recipe(
+    test: e2e_catalog.CatalogTest,
+    repository: str,
+    baseline: int,
+    seed: Mapping[str, Any],
+    ingredients: Mapping[str, str],
+    label: str,
+    out: Path,
+    home: Path,
+    env: Mapping[str, str],
+    runner: Runner,
+) -> tuple[list[str], list[dict[str, str]]]:
+    failures: list[str] = []
+    findings: list[dict[str, str]] = []
+    envelope: dict[str, Any] | None = None
+    proof: dict[str, Any] | None = None
+    try:
+        envelope, fleet_failures, findings = run_fleet(
+            test, out, env, runner, ingredients=ingredients
+        )
+        failures += fleet_failures
+        proof = save_ownership(
+            out / _SESSION_TRACE_FILENAME,
+            envelope,
+            e2e_sessions.default_log_root(home),
+            seed,
+            repository,
+            out,
+            label,
+        )
+        failures += [f"ownership: {value}" for value in proof["violations"]]
+        listed, failure = new_pull_requests(repository, baseline, env, runner, pipeline=True)
+        if listed is None:
+            failures.append(str(failure))
+        else:
+            owned = owned_pull_requests(listed, proof, repository, out, env, runner)
+            if not fleet_failures and not findings:
+                failures += validate_implementation_pr(
+                    test, owned, seed, repository, out, env, runner
+                )
+    except Exception as exc:
+        failures.append(f"harness error: {exc}")
+    finally:
+        failures += finish_pipeline(
+            test, repository, baseline, seed, label, out, home, env, runner, envelope, proof
+        )
+    return match_recipe_findings(failures, findings, test.expected_failures)
 
 
 def check_clean_install_doctor(
@@ -1014,7 +1662,7 @@ def _run_test(
     if test.kind == "canary":
         return run_canary(test, out, scrubbed, runner), []
     token = env["E2E_SANDBOX_TOKEN"]
-    return run_recipe(test, catalog.sandbox_repository, token, out, scrubbed, runner)
+    return run_recipe(test, catalog.sandbox_repository, token, out, scrubbed, runner, home=home)
 
 
 def run_test(

@@ -104,12 +104,13 @@ jobs:
         env:
           MINIMAX_API_KEY: ${{ matrix.kind != 'clean-install' && secrets.MINIMAX_API_KEY || '' }}
           E2E_SANDBOX_TOKEN: ${{ matrix.kind != 'clean-install' && secrets.E2E_SANDBOX_TOKEN || '' }}
+          E2E_IMPLEMENTATION_ISSUE_URL: ${{ vars.E2E_IMPLEMENTATION_ISSUE_URL }}
           TEST: ${{ matrix.test }}
         run: |
           set -euo pipefail
           docker_args=()
           if [[ '${{ matrix.kind }}' != 'clean-install' ]]; then
-            docker_args+=(--env MINIMAX_API_KEY --env E2E_SANDBOX_TOKEN)
+            docker_args+=(--env MINIMAX_API_KEY --env E2E_SANDBOX_TOKEN --env E2E_IMPLEMENTATION_ISSUE_URL)
             docker_args+=(--volume "$RUNNER_TEMP/e2e/data:/home/autoskillit/.local/share/autoskillit")
           fi
           if [[ "$TEST" == 'headless-smoke' ]]; then

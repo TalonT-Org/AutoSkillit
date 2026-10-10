@@ -53,10 +53,10 @@ Each selected lens runs against the target, producing per-lens output files (dia
 
 ### Synthesize — Aggregation and Verdict
 
-Reads all per-lens outputs from the capture directory and produces a unified result. The synthesis strategy (§6) determines how conflicts between lens outputs are resolved.
+Reads all per-lens outputs from the capture directory (for `vis-lens`, from the captured list of lens output paths) and produces a unified result. The synthesis strategy (§6) determines how conflicts between lens outputs are resolved.
 
 - Synthesize is the only phase that emits the family's final output tokens (e.g., `verdict`, `visualization_plan_path`, `architecture_impact`).
-- The synthesis skill is invoked with the capture directory containing all per-lens output files.
+- The synthesis skill is invoked with the capture directory containing all per-lens output files; `vis-lens` synthesis instead receives the apply step's captured path list (`vis_lens_output_paths`).
 
 ## §4. Configuration Knobs
 

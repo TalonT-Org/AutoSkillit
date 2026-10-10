@@ -225,7 +225,6 @@ steps:
       skill_command: "/autoskillit:vis-lens-{slug} {context_path} ${{ context.experiment_plan }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: vis_apply
-      output_dir: "{{AUTOSKILLIT_TEMP}}/run-vis-lenses"
     capture_list:
       vis_lens_output_paths: "${{ result.diagram_path }}"
     optional_context_refs: [selected_lenses, lens_context_paths]
@@ -238,7 +237,7 @@ steps:
     model: ""
     phoropter_family: vis-lens
     with:
-      skill_command: "/autoskillit:synthesize-vis-plan ${{ inputs.source_dir }} ${{ context.experiment_plan }} {{AUTOSKILLIT_TEMP}}/run-vis-lenses --tier-c-lens=${{ context.tier_c_lens }} --methodology-tradition=${{ context.methodology_tradition }} --disambiguation-rule-applied=${{ context.disambiguation_rule_applied }}"
+      skill_command: "/autoskillit:synthesize-vis-plan ${{ inputs.source_dir }} ${{ context.experiment_plan }} \"${{ context.vis_lens_output_paths }}\" --tier-c-lens=${{ context.tier_c_lens }} --methodology-tradition=${{ context.methodology_tradition }} --disambiguation-rule-applied=${{ context.disambiguation_rule_applied }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: vis_synthesize
       output_dir: "{{AUTOSKILLIT_TEMP}}/synthesize-vis-plan"
@@ -246,6 +245,7 @@ steps:
       visualization_plan_path: "${{ result.visualization_plan_path }}"
       report_plan_path: "${{ result.report_plan_path }}"
       visualization_plan_trace_path: "${{ result.visualization_plan_trace_path }}"
+    optional_context_refs: [vis_lens_output_paths]
     on_success: create_worktree
     on_failure: escalate_stop
 

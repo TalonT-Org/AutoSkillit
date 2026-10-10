@@ -95,6 +95,7 @@ def test_optional_context_structured_skill_input_inventory_is_explicit() -> None
         ("resolve-failures", "diagnosis_path"),
         ("resolve-review", "mode"),
         ("review-pr", "mode"),
+        ("synthesize-vis-plan", "lens_output_paths"),
     }
     manifest = load_bundled_manifest()
     occurrences: list[tuple[str, str, str, str]] = []
@@ -138,7 +139,7 @@ def test_optional_context_structured_skill_input_inventory_is_explicit() -> None
         for recipe, step, skill, input_name in occurrences
         if (recipe, step, skill, input_name) != standalone_optional
     }
-    assert len(occurrences) == 111
+    assert len(occurrences) == 112
     assert actual_pairs == expected_pairs
     assert not required_occurrences
     for skill_name, input_name in expected_pairs:

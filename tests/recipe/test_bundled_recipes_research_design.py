@@ -419,3 +419,22 @@ class TestResearchDesignRecipeStructure:
         rule = recipe.kitchen_rules[1].lower()
         assert "food truck" in rule, "Kitchen rule 2 must mention food truck"
         assert "sentinel" in rule, "Kitchen rule 2 must mention sentinel emission"
+
+
+@pytest.mark.parametrize("recipe_name", ["research", "research-design"])
+def test_vis_synthesize_consumes_vis_apply_outputs(recipe_name: str) -> None:
+    from autoskillit.core import BoundValueOrigin
+    from autoskillit.recipe._analysis import make_validation_context
+
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    apply_args = recipe.steps["vis_apply"].with_args
+    synthesize_args = recipe.steps["vis_synthesize"].with_args
+
+    assert "output_dir" not in apply_args
+    binding = make_validation_context(recipe).binding_projection.for_step("vis_synthesize")
+    assert binding is not None
+    lens_outputs = binding.skill_input("lens_output_paths")
+    assert lens_outputs is not None
+    assert lens_outputs.origin is BoundValueOrigin.CONTEXT
+    assert lens_outputs.context_dependencies == ("vis_lens_output_paths",)
+    assert "run-vis-lenses" not in repr((apply_args, synthesize_args))

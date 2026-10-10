@@ -93,10 +93,11 @@ vis_synthesize:
     /autoskillit:synthesize-vis-plan
     ${{ inputs.source_dir }}
     ${{ context.experiment_plan }}
-    {{AUTOSKILLIT_TEMP}}/run-vis-lenses
+    "${{ context.vis_lens_output_paths }}"
   capture:
     visualization_plan_path: "${{ result.visualization_plan_path }}"
     report_plan_path: "${{ result.report_plan_path }}"
     visualization_plan_trace_path: "${{ result.visualization_plan_trace_path }}"
+  optional_context_refs: [vis_lens_output_paths]
   on_success: next_stage
   on_failure: escalate_stop

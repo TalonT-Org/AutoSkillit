@@ -1722,9 +1722,10 @@ skills:
     - name: experiment_plan_path
       type: file_path
       required: true
-    - name: capture_dir
-      type: directory_path
-      required: true
+    - name: lens_output_paths
+      type: string
+      required: false
+      absence_value: ""
     - name: tier_c_lens
       type: string
       required: false

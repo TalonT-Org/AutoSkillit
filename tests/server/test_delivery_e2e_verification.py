@@ -248,18 +248,12 @@ async def test_implementation_bounded_path_counts_automatic_and_advertised_deliv
             part=record.part,
         )
     totals = normalized_counter.totals()
-    # Drift baseline, not a production-safe threshold. Updated to the
-    # values produced by the current implementation after the
-    # YAML-safe placeholder substitution fix landed
-    # (commit 4adc2f4cc) — literal " characters in the worktree directory
-    # name JSON-escape in serialized records, producing +92 chars per
-    # placeholder occurrence (× 2 = 184 bytes total) at the
-    # implementation recipe paths. Pin the refreshed values so this
-    # test stays a stable drift signal.
+    # Pin normalized delivery costs to detect drift in the bundled recipe.
+    # These measured totals are not production-safe thresholds.
     assert totals == {
-        "raw_chars": 18_572,
-        "utf8_bytes": 18_574,
-        "client_serialized_chars": 20_663,
-        "estimated_tokens": 4_641,
+        "raw_chars": 18_551,
+        "utf8_bytes": 18_553,
+        "client_serialized_chars": 20_634,
+        "estimated_tokens": 4_636,
         "responses": 5,
     }

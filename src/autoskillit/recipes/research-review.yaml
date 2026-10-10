@@ -101,7 +101,6 @@ steps:
         }} ${{ inputs.base_branch }}
       cwd: ${{ inputs.worktree_path }}
       step_name: prepare_research_pr
-      output_dir: .
     capture:
       prep_path: ${{ result.prep_path }}
       selected_lenses: ${{ result.selected_lenses }}
@@ -166,7 +165,6 @@ steps:
         }} ${{ inputs.base_branch }}
       cwd: ${{ inputs.worktree_path }}
       step_name: compose_research_pr
-      output_dir: .
     capture:
       pr_url:
         from: ${{ result.pr_url }}

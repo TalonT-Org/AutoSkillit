@@ -97,6 +97,7 @@ if TYPE_CHECKING:
         _resolve_skill_md,
         bound_skill_name,
         get_allowed_values_for_skill,
+        skill_write_scope,
     )
     from ._skill_placeholder_parser import (
         _BANNED_CONTENT_SUFFIX_RE,
@@ -232,6 +233,7 @@ _LAZY_SYMBOL_TO_MODULE: dict[str, str] = {
     "_resolve_skill_md": "_skill_helpers",
     "bound_skill_name": "_skill_helpers",
     "get_allowed_values_for_skill": "_skill_helpers",
+    "skill_write_scope": "_skill_helpers",
     "_BANNED_CONTENT_SUFFIX_RE": "_skill_placeholder_parser",
     "_CONTENT_VAR_SIGNAL_RE": "_skill_placeholder_parser",
     "_DYNAMIC_WRITE_VAR_RE": "_skill_placeholder_parser",
@@ -363,6 +365,7 @@ __all__ = [
     "pkg_root",
     "push_reachable",
     "shell_vars_assigned",
+    "skill_write_scope",
     "substitute_scripts_placeholder",
     "substitute_temp_placeholder",
 ]

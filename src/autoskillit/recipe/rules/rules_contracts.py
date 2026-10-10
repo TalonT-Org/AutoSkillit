@@ -12,9 +12,10 @@ from autoskillit.core import (
     get_logger,
     pkg_root,
 )
+from autoskillit.hooks._write_scope import WriteScopeKind
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._contracts_types import VALID_EXTERNAL_EFFECTS
-from autoskillit.recipe._skill_helpers import bound_skill_name
+from autoskillit.recipe._skill_helpers import bound_skill_name, skill_write_scope
 from autoskillit.recipe.contracts import (
     get_skill_contract,
     load_bundled_manifest,
@@ -712,14 +713,14 @@ def _check_path_output_recovery_coverage(ctx: ValidationContext) -> list[RuleFin
 @semantic_rule(
     name="write-skill-requires-source-output-dir",
     description=(
-        "run_skill steps with write_behavior in (always, conditional) and not read_only "
-        "must declare output_dir. Without it, the write guard defaults to a temp-dir "
-        "prefix that blocks source-file edits."
+        "run_skill steps whose skill declares write_paths: unrestricted and write_behavior in "
+        "(always, conditional) must declare output_dir; without it the write guard confines "
+        "the skill to its temp floor."
     ),
     severity=Severity.ERROR,
 )
 def _check_write_skill_requires_source_output_dir(ctx: ValidationContext) -> list[RuleFinding]:
-    """Fire when a write-behavior skill step lacks output_dir."""
+    """Fire when an UNRESTRICTED write-behavior skill step lacks output_dir."""
     try:
         manifest = load_bundled_manifest()
     except Exception:
@@ -742,16 +743,24 @@ def _check_write_skill_requires_source_output_dir(ctx: ValidationContext) -> lis
             continue
         if contract.write_behavior not in ("always", "conditional") or contract.read_only:
             continue
-        if "output_dir" not in (step.with_args or {}):
+        resolved = skill_write_scope(ctx, name)
+        if resolved is None:
+            continue
+        _, _, scope = resolved
+        if (
+            scope is not None
+            and scope.kind is WriteScopeKind.UNRESTRICTED
+            and not (step.with_args or {}).get("output_dir")
+        ):
             findings.append(
                 make_finding(
                     rule_name="write-skill-requires-source-output-dir",
                     step_name=step_name,
                     message=(
-                        f"Step '{step_name}' invokes skill '{name}' "
-                        f"(write_behavior={contract.write_behavior!r}) but declares "
-                        f"no output_dir. The write guard defaults to a temp-dir "
-                        f"prefix that blocks source-file edits. Add "
+                        f"Step '{step_name}' invokes skill '{name}' (write_paths: unrestricted, "
+                        f"write_behavior={contract.write_behavior!r}) but declares no "
+                        f"output_dir. The write guard confines the skill to its temp floor, "
+                        f"which blocks source-file edits. Add "
                         f"output_dir: ${{{{ context.work_dir }}}} "
                         f"(or equivalent) to this step."
                     ),

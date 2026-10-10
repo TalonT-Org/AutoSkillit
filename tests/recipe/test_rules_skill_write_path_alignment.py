@@ -19,11 +19,13 @@ from tests._tracked_recipes import tracked_recipe_paths
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 _RULE_NAME = "skill-write-path-recipe-alignment"
+_SCOPED_BOUNDED = "write_paths: ['{{AUTOSKILLIT_TEMP}}/scoped/']\n"
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
-def _make_recipe_yaml(skill_name: str, output_dir: str) -> str:
+def _make_recipe_yaml(skill_name: str, output_dir: str, *, cwd: str = "") -> str:
+    cwd_line = f'\n              cwd: "{cwd}"' if cwd else ""
     return textwrap.dedent(
         f"""\
         name: test-{skill_name}
@@ -34,7 +36,7 @@ def _make_recipe_yaml(skill_name: str, output_dir: str) -> str:
             tool: run_skill
             with:
               skill_command: "/autoskillit:{skill_name} branch"
-              output_dir: "{output_dir}"
+              output_dir: "{output_dir}"{cwd_line}
             on_success: done
           done:
             tool: run_cmd
@@ -233,7 +235,9 @@ def test_rule_fires_on_synthetic_pre_fix_divergence(tmp_path: Path) -> None:
     assert "NEVER block declares write scope 'review-pr/'" in rule_findings[0].message
 
 
-def _alignment_findings(tmp_path: Path, frontmatter: str, output_dir: str) -> list[str]:
+def _alignment_findings(
+    tmp_path: Path, frontmatter: str, output_dir: str, *, cwd: str = ""
+) -> list[str]:
     skill_dir = tmp_path / "scoped"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(
@@ -241,7 +245,7 @@ def _alignment_findings(tmp_path: Path, frontmatter: str, output_dir: str) -> li
         encoding="utf-8",
     )
     recipe_path = tmp_path / "recipe.yaml"
-    recipe_path.write_text(_make_recipe_yaml("scoped", output_dir), encoding="utf-8")
+    recipe_path.write_text(_make_recipe_yaml("scoped", output_dir, cwd=cwd), encoding="utf-8")
     with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(load_recipe(recipe_path))
     return [finding.message for finding in findings if finding.rule == _RULE_NAME]
@@ -263,12 +267,58 @@ def test_unbounded_scopes_do_not_narrow_output_dir(tmp_path: Path, frontmatter: 
 
 
 def test_bounded_scope_violation_names_the_declared_write_scope(tmp_path: Path) -> None:
-    messages = _alignment_findings(
-        tmp_path, "write_paths: ['{{AUTOSKILLIT_TEMP}}/scoped/']\n", "{{AUTOSKILLIT_TEMP}}/other/"
-    )
+    messages = _alignment_findings(tmp_path, _SCOPED_BOUNDED, "{{AUTOSKILLIT_TEMP}}/other/")
 
     assert len(messages) == 1
-    assert "is outside the skill's declared write scope" in messages[0]
+    assert "is outside the declared write scope of skill" in messages[0]
+
+
+_WORKTREE_ROOT_OUTPUT_DIRS = [
+    (".", ""),
+    ("/", ""),
+    ("${{ context.work_dir }}", "${{ context.work_dir }}"),
+    ("${{context.work_dir}}/.autoskillit/temp", "${{ context.work_dir }}"),
+]
+
+
+@pytest.mark.parametrize(("output_dir", "cwd"), _WORKTREE_ROOT_OUTPUT_DIRS)
+def test_worktree_root_output_dir_fires_for_bounded_skill(
+    tmp_path: Path, output_dir: str, cwd: str
+) -> None:
+    messages = _alignment_findings(tmp_path, _SCOPED_BOUNDED, output_dir, cwd=cwd)
+
+    assert len(messages) == 1
+    for fragment in ("is outside the declared write scope of skill", "'scoped'", output_dir):
+        assert fragment in messages[0]
+
+
+def test_cwd_prefixed_output_dir_inside_scope_is_silent(tmp_path: Path) -> None:
+    output_dir = "${{ context.work_dir }}/.autoskillit/temp/scoped/iter_${{ context.n }}"
+
+    assert (
+        _alignment_findings(tmp_path, _SCOPED_BOUNDED, output_dir, cwd="${{ context.work_dir }}")
+        == []
+    )
+
+
+@pytest.mark.parametrize(
+    ("output_dir", "cwd"),
+    [
+        ("${{ context.planner_dir }}", "${{ context.work_dir }}"),
+        ("${{ context.work_dir }}/${{ context.sub }}/x", "${{ context.work_dir }}"),
+        ("/abs/proj/.autoskillit/temp/other", ""),
+    ],
+)
+def test_undecidable_output_dir_is_silent(tmp_path: Path, output_dir: str, cwd: str) -> None:
+    assert _alignment_findings(tmp_path, _SCOPED_BOUNDED, output_dir, cwd=cwd) == []
+
+
+@pytest.mark.parametrize("frontmatter", ["write_paths: unrestricted\n", "write_paths: inherit\n"])
+@pytest.mark.parametrize(("output_dir", "cwd"), _WORKTREE_ROOT_OUTPUT_DIRS)
+def test_worktree_root_output_dir_silent_for_unrestricted_and_inherit(
+    tmp_path: Path, frontmatter: str, output_dir: str, cwd: str
+) -> None:
+    assert _alignment_findings(tmp_path, frontmatter, output_dir, cwd=cwd) == []
 
 
 def _bundled_recipe_paths() -> list[Path]:
@@ -299,4 +349,33 @@ def test_rule_silent_on_fixed_bundled_recipes(recipe_path: Path) -> None:
     assert len(rule_findings) == 0, (
         f"Recipe {recipe_path.name} has skill-write-path-recipe-alignment findings: "
         + "\n".join(f"  step={f.step_name}: {f.message}" for f in rule_findings)
+    )
+
+
+def test_rule_is_exercised_not_vacuously_silent() -> None:
+    """Proves the silence in test_rule_silent_on_fixed_bundled_recipes is earned —
+    the rule's own selection path reaches BOUNDED skills with a judged output_dir."""
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe.rules.rules_skill_write_path_alignment import (
+        _eligible_skill_path,
+        _static_output_dir,
+    )
+
+    evaluated = 0
+    for recipe_path in _bundled_recipe_paths():
+        ctx = make_validation_context(load_recipe(recipe_path))
+        for step in ctx.recipe.steps.values():
+            eligible = _eligible_skill_path(step)
+            if eligible is None:
+                continue
+            output_dir, cwd, skill_name = eligible
+            resolved = _sh.skill_write_scope(ctx, skill_name)
+            if _static_output_dir(output_dir, cwd) is None or resolved is None:
+                continue
+            scope = resolved[2]
+            if scope is not None and scope.kind == "bounded":
+                evaluated += 1
+    assert evaluated >= 1, (
+        "precondition: no bundled step reached the boundary check with a BOUNDED skill — "
+        "rule would be vacuously silent (dead matcher?)"
     )

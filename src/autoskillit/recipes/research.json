@@ -303,8 +303,7 @@
           "context_path": "{context_path}"
         },
         "cwd": "${{ inputs.source_dir }}",
-        "step_name": "vis_apply",
-        "output_dir": "{{AUTOSKILLIT_TEMP}}/run-vis-lenses"
+        "step_name": "vis_apply"
       },
       "capture_list": {
         "vis_lens_output_paths": "${{ result.diagram_path }}"
@@ -312,7 +311,7 @@
       "retries": 0,
       "on_success": "vis_synthesize",
       "on_failure": "escalate_stop",
-      "note": "LENS ITERATION: context.selected_lenses contains comma-separated vis-lens slugs (e.g. \"always-on,chart-select\"). context.lens_context_paths contains the corresponding comma-separated context file paths (same order as slugs). For each lens slug, run:\n  /autoskillit:vis-lens-{slug} {matching_context_path}\nRun all selected lenses in parallel (all run_skill calls in a single message). Accumulate each diagram_path value into context.vis_lens_output_paths via capture_list. If a lens fails, continue with remaining lenses.\n"
+      "note": "LENS ITERATION: context.selected_lenses contains comma-separated vis-lens slugs (e.g. \"always-on,chart-select\"). context.lens_context_paths contains the corresponding comma-separated context file paths (same order as slugs). For each lens slug, run:\n  /autoskillit:vis-lens-{slug} {matching_context_path}\nRun all selected lenses in parallel (all run_skill calls in a single message). Accumulate each diagram_path value into context.vis_lens_output_paths using comma separation via capture_list. If a lens fails, continue with remaining lenses.\n"
     },
     "vis_synthesize": {
       "tool": "run_skill",
@@ -326,7 +325,7 @@
           "experiment_plan_path": "${{ context.experiment_plan }}",
           "tier_c_lens": "${{ context.tier_c_lens }}",
           "source_dir": "${{ inputs.source_dir }}",
-          "capture_dir": "{{AUTOSKILLIT_TEMP}}/run-vis-lenses"
+          "lens_output_paths": "${{ context.vis_lens_output_paths }}"
         },
         "cwd": "${{ inputs.source_dir }}",
         "step_name": "vis_synthesize",
@@ -562,8 +561,7 @@
           "audit_cycle_path": "${{ context.audit_cycle_path }}"
         },
         "cwd": "${{ context.worktree_path }}",
-        "step_name": "plan_phase",
-        "output_dir": "."
+        "step_name": "plan_phase"
       },
       "capture": {
         "phase_plan_path": "${{ result.plan_path }}",
@@ -1343,8 +1341,7 @@
           "experiment_plan_path": "${{ context.experiment_plan }}"
         },
         "cwd": "${{ context.worktree_path }}",
-        "step_name": "prepare_research_pr",
-        "output_dir": "."
+        "step_name": "prepare_research_pr"
       },
       "capture": {
         "prep_path": "${{ result.prep_path }}",
@@ -1423,8 +1420,7 @@
           "prep_path": "${{ context.prep_path }}"
         },
         "cwd": "${{ context.worktree_path }}",
-        "step_name": "compose_research_pr",
-        "output_dir": "."
+        "step_name": "compose_research_pr"
       },
       "capture": {
         "pr_url": {

@@ -470,7 +470,6 @@
           "audit_cycle_path": "${{ context.audit_cycle_path }}"
         },
         "cwd": "${{ context.work_dir }}",
-        "output_dir": ".",
         "step_name": "plan_ejected_rebase_conflicts"
       },
       "capture": {
@@ -848,7 +847,6 @@
           "audit_cycle_path": "${{ context.audit_cycle_path }}"
         },
         "cwd": "${{ context.work_dir }}",
-        "output_dir": ".",
         "step_name": "plan_proactive_rebase_conflicts"
       },
       "capture": {
@@ -1065,8 +1063,7 @@
           "audit_cycle_path": "${{ context.audit_cycle_path }}"
         },
         "cwd": "${{ context.work_dir }}",
-        "step_name": "plan",
-        "output_dir": "."
+        "step_name": "plan"
       },
       "capture": {
         "pr_plan_path": "${{ result.plan_path }}",
@@ -1806,8 +1803,7 @@
           "audit_cycle_path": "${{ context.audit_cycle_path }}"
         },
         "cwd": "${{ context.work_dir }}",
-        "step_name": "plan_remediation",
-        "output_dir": "."
+        "step_name": "plan_remediation"
       },
       "capture": {
         "pr_plan_path": "${{ result.plan_path }}",

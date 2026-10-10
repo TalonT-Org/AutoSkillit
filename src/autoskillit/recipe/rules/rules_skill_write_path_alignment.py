@@ -1,7 +1,11 @@
 """Semantic rule: SKILL.md declared write scope must align with recipe output_dir.
 
-A BOUNDED write scope bounds a recipe output_dir; UNRESTRICTED and INHERIT scopes
-do not narrow it, and a skill without a valid declaration cannot be verified. An
+A recipe output_dir is resolved to the path run_skill will judge -- ``.``, a
+slash-only value, or a value rooted at the step's ``cwd`` -- and checked with the
+boundary predicate run_skill admission uses: it must stay inside a BOUNDED write
+scope, while UNRESTRICTED and INHERIT scopes do not narrow it. A value whose runtime
+path is statically unknown (another template root, or an absolute path) is not
+judged, and a skill without a valid declaration cannot be verified. An
 iteration-scoped output_dir also requires the skill's prose write instructions to
 use the dynamic write prefix so the agent can target the narrowed directory.
 """
@@ -9,14 +13,17 @@ use the dynamic write prefix so the agent can target the narrowed directory.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import assert_never
 
 import regex as re
 
-from autoskillit.core import Severity, get_logger
-from autoskillit.hooks._write_scope import WriteScopeKind, bounded_scope_contains
+from autoskillit.core import Severity
+from autoskillit.hooks._write_scope import (
+    WriteScope,
+    output_dir_widens_scope,
+    widened_output_dir_message,
+)
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe._skill_helpers import _resolve_skill_md
+from autoskillit.recipe._skill_helpers import skill_write_scope
 from autoskillit.recipe._skill_placeholder_parser import (
     extract_write_path_declarations,
     has_dynamic_write_path,
@@ -24,14 +31,12 @@ from autoskillit.recipe._skill_placeholder_parser import (
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 from autoskillit.recipe.schema import RecipeStep
-from autoskillit.workspace import parse_frontmatter_content
-
-logger = get_logger(__name__)
 
 _CONTEXT_TEMPLATE_RE = re.compile(r"\$\{\{\s*context\.[^}]+\}\}")
 _AUTOSKILLIT_TEMP_RE = re.compile(r"\{\{AUTOSKILLIT_TEMP\}\}")
 _TEMP_DIR_SUFFIX = "autoskillit/temp"
 _AUTOSKILLIT_TEMP_LITERAL_RE = re.compile(rf"\.{_TEMP_DIR_SUFFIX}(?=/|$)")
+_TEMPLATE_SPACING_RE = re.compile(r"\$\{\{\s*(.*?)\s*\}\}")
 
 
 def _static_base_prefix(output_dir: str) -> str:
@@ -78,47 +83,60 @@ def _first_misaligned_write_path(content: str, output_dir: str) -> str | None:
     return None
 
 
-def _declared_boundary_error(content: str, output_dir: str, project_dir: Path) -> str | None:
-    static_base = _static_base_prefix(output_dir)
-    if not static_base or "${{" in static_base:
+def _normalise_templates(value: str) -> str:
+    return _TEMPLATE_SPACING_RE.sub(r"${{ \1 }}", value)
+
+
+def _strip_cwd_prefix(output_dir: str, cwd: str) -> str:
+    base = _normalise_templates(cwd)
+    if base and (output_dir == base or output_dir.startswith(base + "/")):
+        return "." + output_dir[len(base) :]
+    return output_dir
+
+
+def _static_output_dir(output_dir: str, cwd: str) -> str | None:
+    """Return the path run_skill will judge for ``output_dir``, or None when undecidable."""
+    value = _normalise_templates(output_dir)
+    if value.strip("/") == "":
+        return "/"
+    value = _strip_cwd_prefix(value, cwd)
+    if Path(value).is_absolute():
         return None
-    write_scope = parse_frontmatter_content(content).write_scope
+    if "${{" not in value:
+        return value
+    static_base = _static_base_prefix(value)
+    if static_base in ("", ".") or "${{" in static_base:
+        return None
+    return static_base
+
+
+def _declared_boundary_error(
+    skill_name: str,
+    write_scope: WriteScope | None,
+    static_path: str | None,
+    output_dir: str,
+    project_dir: Path,
+) -> str | None:
+    if static_path is None:
+        return None
     if write_scope is None:
         return "cannot verify output_dir: skill lacks a valid write_paths declaration"
-    match write_scope.kind:
-        case WriteScopeKind.BOUNDED:
-            if bounded_scope_contains(write_scope, static_base, str(project_dir)):
-                return None
-            return f"recipe output_dir {output_dir!r} is outside the skill's declared write scope"
-        case WriteScopeKind.UNRESTRICTED | WriteScopeKind.INHERIT:
-            return None
-        case _ as unreachable:
-            assert_never(unreachable)
+    if output_dir_widens_scope(write_scope, static_path, str(project_dir)):
+        return widened_output_dir_message(skill_name, write_scope, output_dir)
+    return None
 
 
-def _eligible_skill_path(ctx: ValidationContext, step: RecipeStep) -> tuple[str, str, Path] | None:
+def _eligible_skill_path(step: RecipeStep) -> tuple[str, str, str] | None:
     if step.tool != "run_skill":
         return None
-    output_dir = (step.with_args or {}).get("output_dir", "") or ""
+    with_args = step.with_args or {}
+    output_dir = with_args.get("output_dir", "") or ""
     if not output_dir:
         return None
-    # Whole-worktree and work_dir destinations do not narrow the skill's write scope.
-    if output_dir in (".", "${{ context.work_dir }}") or output_dir.strip("/") == "":
-        return None
-    skill_cmd = (step.with_args or {}).get("skill_command", "") or ""
-    if not skill_cmd:
-        return None
-    skill_name = resolve_skill_name(skill_cmd)
+    skill_name = resolve_skill_name(with_args.get("skill_command", "") or "")
     if skill_name is None:
         return None
-    skill_md_path = _resolve_skill_md(
-        skill_name,
-        project_root=ctx.project_dir,
-        resolver=ctx.skill_resolver,
-    )
-    if skill_md_path is None:
-        return None
-    return output_dir, skill_name, skill_md_path
+    return output_dir, with_args.get("cwd", "") or "", skill_name
 
 
 @semantic_rule(
@@ -135,19 +153,21 @@ def _check_skill_write_path_alignment(ctx: ValidationContext) -> list[RuleFindin
     findings: list[RuleFinding] = []
 
     for step_name, step in ctx.recipe.steps.items():
-        eligible = _eligible_skill_path(ctx, step)
+        eligible = _eligible_skill_path(step)
         if eligible is None:
             continue
-        output_dir, skill_name, skill_md_path = eligible
-
-        try:
-            content = skill_md_path.read_text(encoding="utf-8")
-        except OSError:
-            logger.debug("Could not read SKILL.md for %s at %s", skill_name, skill_md_path)
+        output_dir, cwd, skill_name = eligible
+        resolved = skill_write_scope(ctx, skill_name)
+        if resolved is None:
             continue
+        skill_md_path, content, write_scope = resolved
 
         boundary_error = _declared_boundary_error(
-            content, output_dir, ctx.project_dir or skill_md_path.parent.parent
+            skill_name,
+            write_scope,
+            _static_output_dir(output_dir, cwd),
+            output_dir,
+            ctx.project_dir or skill_md_path.parent.parent,
         )
         if boundary_error is not None:
             findings.append(

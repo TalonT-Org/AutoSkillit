@@ -13,6 +13,7 @@ logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from autoskillit.core import SkillResolver
+    from autoskillit.hooks._write_scope import WriteScope
     from autoskillit.recipe.analysis._analysis import ValidationContext
 
 
@@ -90,6 +91,28 @@ def _resolve_skill_md(
         return None
     skill_path = getattr(skill_info, "path", None)
     return skill_path if isinstance(skill_path, Path) else None
+
+
+def skill_write_scope(
+    ctx: ValidationContext, skill_name: str
+) -> tuple[Path, str, WriteScope | None] | None:
+    """Return a skill's SKILL.md path, text, and declared write scope (None if undeclared).
+
+    Returns None when the SKILL.md cannot be resolved or read.
+    """
+    skill_md_path = _resolve_skill_md(
+        skill_name, project_root=ctx.project_dir, resolver=ctx.skill_resolver
+    )
+    if skill_md_path is None:
+        return None
+    try:
+        content = skill_md_path.read_text(encoding="utf-8")
+    except OSError:
+        logger.debug("Could not read SKILL.md for %s at %s", skill_name, skill_md_path)
+        return None
+    from autoskillit.workspace import parse_frontmatter_content
+
+    return skill_md_path, content, parse_frontmatter_content(content).write_scope
 
 
 def _has_dynamic_skill_name(skill_cmd: str) -> bool:

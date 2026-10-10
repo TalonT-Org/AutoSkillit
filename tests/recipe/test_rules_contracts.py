@@ -792,10 +792,11 @@ def _make_write_push_recipe(
     *,
     output_dir: str | None = None,
     routes_to_push: bool = True,
+    skill_command: str = "/autoskillit:resolve-review branch base",
 ) -> Recipe:
     """Minimal recipe: run_skill → push_to_remote (or stop)."""
     with_args: dict[str, str] = {
-        "skill_command": "/autoskillit:resolve-review branch base",
+        "skill_command": skill_command,
         "cwd": "/tmp",
     }
     if output_dir is not None:
@@ -917,6 +918,24 @@ def test_read_only_skill_without_output_dir_not_flagged() -> None:
         findings = run_semantic_rules(recipe)
     hits = [f for f in findings if f.rule == "write-skill-requires-source-output-dir"]
     assert not hits, "write-skill-requires-source-output-dir must not fire for read_only skills"
+
+
+def test_bounded_write_skill_without_output_dir_not_flagged() -> None:
+    """Rule does NOT fire for a BOUNDED write skill: its temp floor is its write scope."""
+    recipe = _make_write_push_recipe(output_dir=None, skill_command="/autoskillit:make-plan task")
+    findings = run_semantic_rules(recipe)
+    hits = [f for f in findings if f.rule == "write-skill-requires-source-output-dir"]
+    assert not hits, "write-skill-requires-source-output-dir must not fire for BOUNDED skills"
+
+
+def test_write_skill_rule_message_names_unrestricted_scope() -> None:
+    recipe = _make_write_push_recipe(output_dir=None)
+    contract = _make_write_contract(write_behavior="conditional")
+    with patch.object(_rc, "get_skill_contract", return_value=contract):
+        findings = run_semantic_rules(recipe)
+    hits = [f for f in findings if f.rule == "write-skill-requires-source-output-dir"]
+    assert hits
+    assert "write_paths: unrestricted" in hits[0].message
 
 
 def test_all_bundled_recipes_pass_write_skill_output_dir_rule() -> None:

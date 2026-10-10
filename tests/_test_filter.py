@@ -1327,6 +1327,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "migration",
             # Server file-level entries importing autoskillit.recipe:
             "server/test_run_skill_execution_tuning_fallbacks.py",
+            "server/test_bundled_dispatch_write_scope_admission.py",
             "server/test_serve_idempotence.py",
             "server/test_attestation_delivery_reachability.py",
             "server/test_tools_status_kitchen.py",

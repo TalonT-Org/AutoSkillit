@@ -64,7 +64,7 @@ def test_frontmatter_description_mentions_synthesize() -> None:
 
 def test_arguments_positional_args() -> None:
     text = _text()
-    for arg in ("source_dir", "experiment_plan_path", "capture_dir"):
+    for arg in ("source_dir", "experiment_plan_path", "lens_output_paths"):
         assert arg in text, f"Arguments must document {arg}"
 
 
@@ -130,7 +130,7 @@ def test_three_output_tokens() -> None:
 def test_yaml_figure_spec_parsing() -> None:
     text = _text()
     assert "yaml:figure-spec" in text
-    assert "capture_dir" in text
+    assert "lens_output_paths" in text
 
 
 def test_visualization_plan_content_structure() -> None:

@@ -41,15 +41,16 @@ hierarchy and token-based input, use `phoropter-priority-synthesis` instead.
 ## Arguments
 
 ```
-/autoskillit:synthesize-vis-plan {source_dir} {experiment_plan_path} {capture_dir} --tier-c-lens={tier_c_lens} --methodology-tradition={methodology_tradition} --disambiguation-rule-applied={disambiguation_rule_applied} --applied-union-rules={applied_union_rules} --precedence-trace={precedence_trace}
+/autoskillit:synthesize-vis-plan {source_dir} {experiment_plan_path} {lens_output_paths} --tier-c-lens={tier_c_lens} --methodology-tradition={methodology_tradition} --disambiguation-rule-applied={disambiguation_rule_applied} --applied-union-rules={applied_union_rules} --precedence-trace={precedence_trace}
 ```
 
 **Positional arguments:**
 
 - `{source_dir}` — Absolute path to the source repo (the CWD before worktree creation)
 - `{experiment_plan_path}` — Absolute path to the finalized experiment plan markdown
-- `{capture_dir}` — Absolute path to the directory containing lens output files (vis-lens
-  markdown files with `yaml:figure-spec` fenced blocks)
+- `{lens_output_paths}` — Comma-separated absolute paths of this run's lens output files
+  (`vis_lens_output_paths`: vis-lens markdown files with `yaml:figure-spec` fenced blocks);
+  may be empty
 
 **Tier-C routing fields** (named arguments, passed from the `select-vis-lenses` context):
 
@@ -94,7 +95,7 @@ hierarchy and token-based input, use `phoropter-priority-synthesis` instead.
 Extract positional arguments:
 - `source_dir` — the source repository path
 - `experiment_plan_path` — path to the experiment plan
-- `capture_dir` — directory containing lens output files
+- `lens_output_paths` — comma-separated lens output file paths; may be empty
 
 Extract Tier-C routing fields from named arguments:
 - `tier_c_lens`
@@ -105,7 +106,7 @@ Extract Tier-C routing fields from named arguments:
 - `precedence_trace` — sourced from the methodology-norms context file passed as
   arguments from `select-vis-lenses`, not from recipe context
 
-Read all files matching `capture_dir/**/*.md` and extract `yaml:figure-spec` fenced
+Read each file listed in `lens_output_paths` and extract `yaml:figure-spec` fenced
 blocks from each file. Parse each block as YAML to produce a list of figure
 specification objects.
 
@@ -122,7 +123,8 @@ chart_type: grouped_bar
 
 **Empty plan handling:** If no `yaml:figure-spec` blocks are found in any lens output
 file, record zero figures and proceed to Step 1 with an empty figure list. All three
-output files are still written (with empty tables).
+output files are still written (with empty tables). An empty `lens_output_paths`, or a
+listed file that cannot be read, contributes zero figures.
 
 ### Step 1 — Resolve Conflicts
 

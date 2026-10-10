@@ -21,7 +21,6 @@ from autoskillit.recipe.contracts import (
     load_bundled_manifest,
 )
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
-from autoskillit.recipe.schema import RecipeStep
 
 # Must match _INTENTIONALLY_EXCLUDED_PATH_TOKENS in _headless_path_tokens.py.
 # Cannot import directly: recipe (IL-2) cannot depend on execution (IL-1).
@@ -711,15 +710,6 @@ def _check_path_output_recovery_coverage(ctx: ValidationContext) -> list[RuleFin
     return findings
 
 
-def _unrestricted_without_output_dir(ctx: ValidationContext, name: str, step: RecipeStep) -> bool:
-    resolved = skill_write_scope(ctx, name)
-    scope = None
-    if resolved is not None:
-        _, _, scope = resolved
-    unrestricted = scope is not None and scope.kind is WriteScopeKind.UNRESTRICTED
-    return unrestricted and not (step.with_args or {}).get("output_dir")
-
-
 @semantic_rule(
     name="write-skill-requires-source-output-dir",
     description=(
@@ -753,7 +743,15 @@ def _check_write_skill_requires_source_output_dir(ctx: ValidationContext) -> lis
             continue
         if contract.write_behavior not in ("always", "conditional") or contract.read_only:
             continue
-        if _unrestricted_without_output_dir(ctx, name, step):
+        resolved = skill_write_scope(ctx, name)
+        if resolved is None:
+            continue
+        _, _, scope = resolved
+        if (
+            scope is not None
+            and scope.kind is WriteScopeKind.UNRESTRICTED
+            and not (step.with_args or {}).get("output_dir")
+        ):
             findings.append(
                 make_finding(
                     rule_name="write-skill-requires-source-output-dir",

@@ -156,8 +156,6 @@ rollout:
     expected_effect: "Reduce planning input tokens while preserving requirement coverage."
 ```
 
-A before/after delta is a prompt to investigate, not proof that the change caused it.
-
 `change_id` identifies an unchanged declaration across the observation window.
 `effective_at` is the intentional UTC cutover, not a date inferred from code or
 configuration history. `scope` names affected skills, backends, and roles in a

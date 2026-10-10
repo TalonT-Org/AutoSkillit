@@ -290,7 +290,6 @@ def test_headless_smoke_exit_trap_removes_exact_container_then_runs_cleanup(
         assert statuses[key] == value
 
 
-@pytest.mark.parametrize("redact_status", [0, 1])
 def test_e2e_test_container_exceeds_pytest_capacity_floor(workflow: dict, tmp_path: Path) -> None:
     result, events, _, _ = _run_smoke_workflow_shell(workflow, tmp_path)
 
@@ -302,6 +301,7 @@ def test_e2e_test_container_exceeds_pytest_capacity_floor(workflow: dict, tmp_pa
     assert int(size[1]) * 1024**3 > MIN_FREE_BYTES_THRESHOLD
 
 
+@pytest.mark.parametrize("redact_status", [0, 1])
 def test_local_lifecycle_records_redaction_and_fails_when_redaction_fails(
     tmp_path: Path, redact_status: int
 ) -> None:

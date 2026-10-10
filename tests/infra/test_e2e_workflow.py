@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import MIN_FREE_BYTES_THRESHOLD
 from autoskillit.core.io import load_yaml
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
@@ -290,6 +291,17 @@ def test_headless_smoke_exit_trap_removes_exact_container_then_runs_cleanup(
 
 
 @pytest.mark.parametrize("redact_status", [0, 1])
+def test_e2e_test_container_exceeds_pytest_capacity_floor(workflow: dict, tmp_path: Path) -> None:
+    result, events, _, _ = _run_smoke_workflow_shell(workflow, tmp_path)
+
+    assert result.returncode == 0, result.stderr
+    launch_args = events[0]["args"]
+    shm_arg = next(arg for arg in launch_args if arg.startswith("--shm-size="))
+    size = re.fullmatch(r"--shm-size=(\d+)g", shm_arg)
+    assert size is not None
+    assert int(size[1]) * 1024**3 > MIN_FREE_BYTES_THRESHOLD
+
+
 def test_local_lifecycle_records_redaction_and_fails_when_redaction_fails(
     tmp_path: Path, redact_status: int
 ) -> None:

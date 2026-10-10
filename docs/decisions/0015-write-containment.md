@@ -24,7 +24,11 @@ Cross-skill intersection was retired. Declared BOUNDED scopes are sibling
 directories, so no loaded skill's scope nests inside another's in practice, and
 narrowing one sibling by another only denied legitimate chains such as
 `investigate → prepare-issue`. Narrowing survives where it means something: a
-single skill's scope against one dispatch's `output_dir`.
+single skill's scope against one dispatch's `output_dir`. `run_skill` admission and
+the `skill-write-path-recipe-alignment` recipe rule both decide that through the one
+predicate `output_dir_widens_scope`, and
+`tests/server/test_bundled_dispatch_write_scope_admission.py` guards every bundled
+dispatch against drift between the two.
 
 A skill the projection manifest does not know — another plugin's skill or a
 built-in command — is bound as foreign: it abstains from containment and from join

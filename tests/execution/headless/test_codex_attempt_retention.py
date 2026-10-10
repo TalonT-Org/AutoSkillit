@@ -37,6 +37,10 @@ _THREAD_ID = "thread-retained"
 _EXECUTION_CEILING_SECONDS = 321.0
 
 
+def _unmarked_rollout_snapshot() -> tuple[None, str]:
+    return None, "2000-01-01T00:00:00+00:00"
+
+
 def _generated_home(tmp_path: Path, name: str) -> Path:
     """Create the inert rollout topology required before a Codex attempt enters."""
     home = tmp_path / name
@@ -189,6 +193,7 @@ async def _run_generated_attempt(
         completion_marker="%%DONE%%",
         stale_threshold=1.0,
         completion_drain_timeout=1.0,
+        capture_rollout_on_launch=_unmarked_rollout_snapshot,
         natural_exit_grace_seconds=1.0,
         linux_tracing_config=None,
         idle_output_timeout=None,
@@ -303,6 +308,7 @@ async def test_generated_home_attempt_retains_rollout_before_nudge_and_named_res
         session_home=str(first_home),
         launch_resolver=nudge_resolver,
         launch_preparation=nudge_preparation,
+        capture_rollout_on_launch=_unmarked_rollout_snapshot,
         natural_exit_grace_seconds=1.0,
         attempt=2,
         ceiling_seconds=_EXECUTION_CEILING_SECONDS,
@@ -415,6 +421,7 @@ async def test_generated_home_attempt_and_nudge_reuse_retained_binding(
         completion_marker="%%DONE%%",
         stale_threshold=1.0,
         completion_drain_timeout=1.0,
+        capture_rollout_on_launch=_unmarked_rollout_snapshot,
         natural_exit_grace_seconds=1.0,
         linux_tracing_config=None,
         idle_output_timeout=None,
@@ -488,6 +495,7 @@ async def test_generated_home_attempt_and_nudge_reuse_retained_binding(
         session_home=str(home),
         launch_resolver=nudge_resolver,
         launch_preparation=nudge_preparation,
+        capture_rollout_on_launch=_unmarked_rollout_snapshot,
         natural_exit_grace_seconds=1.0,
         attempt=2,
         ceiling_seconds=_EXECUTION_CEILING_SECONDS,

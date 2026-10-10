@@ -20,6 +20,7 @@ from autoskillit.core import (
     RecipeIdentity,
     ResolvedLaunchContract,
     RetryReason,
+    RolloutMarker,
     SessionTelemetry,
     SessionType,
     SkillResult,
@@ -311,6 +312,8 @@ def build_terminal_flush_kwargs(
     skill_command: str,
     step_name: str,
     start_ts: str,
+    rollout: RolloutMarker | None,
+    logical_run_start_ts: str | None,
     termination_reason: str,
     exception_text: str,
     versions: dict[str, Any],
@@ -353,7 +356,8 @@ def build_terminal_flush_kwargs(
         "is_error": skill_result.is_error,
         "subtype": skill_result.subtype,
         "exit_code": skill_result.exit_code,
-        "start_ts": result.start_ts if result is not None else start_ts,
+        "start_ts": logical_run_start_ts if logical_run_start_ts is not None else start_ts,
+        "rollout": rollout,
         "proc_snapshots": result.proc_snapshots if result is not None else None,
         "termination_reason": (
             result.termination.value if result is not None else termination_reason

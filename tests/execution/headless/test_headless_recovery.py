@@ -240,7 +240,7 @@ class TestNudgePtyMode:
         }
         logical_start = "2026-10-10T12:00:01+00:00"
         capture_rollout = Mock(return_value=(rollout_marker, logical_start))
-        linux_tracing_config = LinuxTracingConfig()
+        linux_tracing_config = LinuxTracingConfig(tmpfs_path=str(tmp_path))
 
         await _attempt_contract_nudge(
             skill_result=skill_result,

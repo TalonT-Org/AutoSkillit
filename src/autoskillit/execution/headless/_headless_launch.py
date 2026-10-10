@@ -65,21 +65,6 @@ def _report_plugin_binding_close_failure(error: BaseException, _: BaseException)
     logger.warning("plugin_launch_binding_close_failed", primary_error=repr(error), exc_info=True)
 
 
-def _plugin_launch_binding(
-    *,
-    authority: PluginArtifactAuthority | None,
-    backend: CodingAgentBackend,
-    load_mode: PluginLoadMode,
-) -> AbstractContextManager[PluginLaunchBinding | None]:
-    """Own one exact artifact binding for the complete child attempt."""
-    return plugin_launch_binding_scope(
-        authority=authority,
-        backend=backend,
-        load_mode=load_mode,
-        on_suppressed_close_error=_report_plugin_binding_close_failure,
-    )
-
-
 async def _run_headless_attempt(
     build_spec: _BuildSpec,
     *,
@@ -128,10 +113,11 @@ async def _run_headless_attempt(
     binding_scope: AbstractContextManager[PluginLaunchBinding | None] = (
         nullcontext(retained_binding)
         if retained_binding is not None
-        else _plugin_launch_binding(
+        else plugin_launch_binding_scope(
             authority=plugin_authority,
             backend=backend,
             load_mode=plugin_load_mode,
+            on_suppressed_close_error=_report_plugin_binding_close_failure,
         )
     )
     with binding_scope as binding:
@@ -333,10 +319,11 @@ async def _attempt_contract_nudge(
     nudge_binding_scope: AbstractContextManager[PluginLaunchBinding | None] = (
         nullcontext(retained_binding)
         if retained_binding is not None
-        else _plugin_launch_binding(
+        else plugin_launch_binding_scope(
             authority=plugin_authority,
             backend=backend,
             load_mode=plugin_load_mode,
+            on_suppressed_close_error=_report_plugin_binding_close_failure,
         )
     )
     try:

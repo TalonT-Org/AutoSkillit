@@ -18,11 +18,12 @@ Owns:
 from __future__ import annotations
 
 import dataclasses
-import re
 import types
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, TypeVar, Union, get_args, get_origin, get_type_hints
+
+import regex as re
 
 from autoskillit.config._config_loader import (
     _build_packs_config,

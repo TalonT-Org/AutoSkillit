@@ -215,7 +215,9 @@ def _build_codex_attempt_kwargs(
     runner = AsyncMock()
 
     def build_spec(_binding, _extras, _managed_attempt_id=None):
-        return backend.build_headless_cmd("test prompt", model=model_id)
+        return backend.build_headless_cmd(
+            "test prompt", model=model_id, generated_home=tmp_path / "codex-home"
+        )
 
     return (
         {

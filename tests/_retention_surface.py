@@ -1435,7 +1435,7 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
     # the #4623 pass's own child_outcomes import to inside the try block (issue
     # #4672 decomposition — module-level would circularly import back through
     # the evidence/ gateway that now wraps this file).
-    f"{_SR}::L231": _retries_after_input_changes(
+    f"{_SR}::L233": _retries_after_input_changes(
         "The configured trace root is absent, so no crash candidate can be discovered yet."
     ),
     f"{_SRE}::L45": _retries_after_input_changes(

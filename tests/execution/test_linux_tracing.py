@@ -11,6 +11,7 @@ from unittest.mock import Mock
 import anyio
 import pytest
 
+from tests._helpers import make_rollout_marker
 from tests.conftest import production_interpreter_env
 
 pytestmark = [
@@ -458,16 +459,7 @@ async def test_start_linux_tracing_writes_enrollment_sidecar(tmp_path):
     from tests._helpers import make_tracing_config
 
     cfg = make_tracing_config(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
-    rollout = {
-        "change_id": "prompt-cost-study",
-        "effective_at": "2026-11-01T18:00:00+00:00",
-        "scope": {
-            "skills": ["make-plan"],
-            "backends": ["claude-code", "codex"],
-            "roles": ["planner"],
-        },
-        "expected_effect": "Reduce planning input tokens while preserving requirement coverage.",
-    }
+    rollout = make_rollout_marker()
     logical_run_start_ts = "2026-10-10T19:00:00+00:00"
     async with anyio.create_task_group() as tg:
         proc = await anyio.open_process(["sleep", "2"])

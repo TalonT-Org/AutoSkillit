@@ -424,14 +424,9 @@ class TestTracingStopOnException:
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only tracing")
 async def test_run_managed_async_forwards_rollout_to_trace_enrollment(monkeypatch, tmp_path):
     from autoskillit.execution.evidence import linux_tracing
-    from tests._helpers import make_tracing_config
+    from tests._helpers import make_rollout_marker, make_tracing_config
 
-    rollout = {
-        "change_id": "prompt-cost-study",
-        "effective_at": "2026-11-01T18:00:00+00:00",
-        "scope": {"skills": ["make-plan"], "backends": ["codex"], "roles": ["planner"]},
-        "expected_effect": "Reduce planning input tokens while preserving requirement coverage.",
-    }
+    rollout = make_rollout_marker(backends=("codex",))
     logical_run_start_ts = "2026-10-10T19:00:00+00:00"
     forwarded: list[tuple[object, str]] = []
 

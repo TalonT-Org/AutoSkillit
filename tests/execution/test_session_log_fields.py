@@ -21,6 +21,7 @@ from autoskillit.core import (
     SessionType,
 )
 from autoskillit.core.types.results._type_results import ModelIdentity
+from tests._helpers import make_rollout_marker
 from tests.execution.conftest import (
     _flush,
     _make_cc_jsonl_record,
@@ -32,16 +33,7 @@ from tests.execution.conftest import (
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 _SYNTHETIC_MODEL_ID = "gpt-synthetic"
-_ROLLOUT_MARKER = {
-    "change_id": "prompt-cost-study",
-    "effective_at": "2026-11-01T18:00:00+00:00",
-    "scope": {
-        "skills": ["make-plan"],
-        "backends": ["claude-code", "codex"],
-        "roles": ["planner"],
-    },
-    "expected_effect": "Reduce planning input tokens while preserving requirement coverage.",
-}
+_ROLLOUT_MARKER = make_rollout_marker()
 
 
 class _FakeLocator:

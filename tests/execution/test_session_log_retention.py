@@ -27,6 +27,7 @@ from autoskillit.execution.session_log._session_log_retention import (
 )
 from autoskillit.execution.session_log.session_index import read_tolerant_session_index_rows
 from autoskillit.fleet import FLEET_STATE_SCHEMA_VERSION, build_protected_campaign_ids
+from tests._helpers import make_rollout_marker
 from tests._retention_surface import (
     RECLAIMER_CONVERGENCE_CASES,
     assert_second_pass_is_quiet,
@@ -253,16 +254,7 @@ def test_recovery_preserves_interrupted_nudge_rollout_and_logical_start(tmp_path
     )
     enrollment = tmpfs / f"autoskillit_enrollment_{pid}.json"
     sidecar = json.loads(enrollment.read_text())
-    rollout = {
-        "change_id": "prompt-cost-study",
-        "effective_at": "2026-11-01T18:00:00+00:00",
-        "scope": {
-            "skills": ["make-plan"],
-            "backends": ["claude-code", "codex"],
-            "roles": ["planner"],
-        },
-        "expected_effect": "Reduce planning input tokens while preserving requirement coverage.",
-    }
+    rollout = make_rollout_marker()
     logical_run_start_ts = "2000-01-01T00:00:00+00:00"
     sidecar.update(
         schema_version=3,

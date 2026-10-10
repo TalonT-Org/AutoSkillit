@@ -27,6 +27,7 @@ from autoskillit.execution.recording.recording import (
     _detect_backend_format,
     _extract_model,
 )
+from tests._helpers import make_rollout_marker
 from tests.conftest import _make_result
 from tests.execution.backends._plugin_binding import plugin_binding
 from tests.fakes import MockSubprocessRunner
@@ -1036,12 +1037,7 @@ async def test_recording_runner_forwards_process_lifecycle_callbacks(tmp_path: P
     )
     on_spawned = Mock()
     on_reaped = Mock()
-    rollout = {
-        "change_id": "prompt-cost-study",
-        "effective_at": "2026-11-01T18:00:00+00:00",
-        "scope": {"skills": ["make-plan"], "backends": ["codex"], "roles": ["planner"]},
-        "expected_effect": "Reduce planning input tokens while preserving requirement coverage.",
-    }
+    rollout = make_rollout_marker(backends=("codex",))
     logical_run_start_ts = "2026-10-10T19:00:00+00:00"
 
     await runner(
@@ -1109,12 +1105,7 @@ async def test_replay_runner_never_invokes_process_lifecycle_callbacks(tmp_path:
     )
     on_spawned = Mock()
     on_reaped = Mock()
-    rollout = {
-        "change_id": "prompt-cost-study",
-        "effective_at": "2026-11-01T18:00:00+00:00",
-        "scope": {"skills": ["make-plan"], "backends": ["codex"], "roles": ["planner"]},
-        "expected_effect": "Reduce planning input tokens while preserving requirement coverage.",
-    }
+    rollout = make_rollout_marker(backends=("codex",))
 
     await runner(
         ["codex", "exec", "do something"],

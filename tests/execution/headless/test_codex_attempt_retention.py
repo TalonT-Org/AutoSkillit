@@ -27,7 +27,7 @@ from autoskillit.core.types.results._type_results import WriteEvidence
 from autoskillit.execution.backends import codex as codex_module
 from autoskillit.execution.backends._codex_session_storage import CodexSessionStore
 from autoskillit.execution.backends.codex import CodexBackend
-from tests.execution.conftest import _launch_inputs, _mock_backend
+from tests.execution.conftest import _launch_inputs, _mock_backend, _unmarked_rollout_snapshot
 from tests.fakes import FakePluginArtifactAuthority
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -35,10 +35,6 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 _ROLLOUT_RELATIVE_PATH = Path("2026/09/rollout-retained.jsonl")
 _THREAD_ID = "thread-retained"
 _EXECUTION_CEILING_SECONDS = 321.0
-
-
-def _unmarked_rollout_snapshot() -> tuple[None, str]:
-    return None, "2000-01-01T00:00:00+00:00"
 
 
 def _generated_home(tmp_path: Path, name: str) -> Path:

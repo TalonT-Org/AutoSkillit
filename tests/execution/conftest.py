@@ -40,6 +40,11 @@ from autoskillit.execution.session._exit_classification import _CODEX_API_ERROR_
 from tests._helpers import make_tracing_config
 from tests.fixtures.codex import FLAT_ERROR_MODEL_CAPACITY, TURN_FAILED_MODEL_CAPACITY
 
+
+def _unmarked_rollout_snapshot() -> tuple[None, str]:
+    return None, "2000-01-01T00:00:00+00:00"
+
+
 # Strip regex metacharacters (e.g. \b word boundaries) to yield plain test signal strings.
 CODEX_API_ERROR_SIGNAL_STRINGS: tuple[str, ...] = tuple(
     p.pattern.replace(r"\b", "") for p in _CODEX_API_ERROR_PATTERNS

@@ -7,8 +7,9 @@ A skill's ``write_paths`` frontmatter declares one of three kinds:
 * ``INHERIT`` — the literal ``inherit``: the skill has no writes of its own.
 
 This module owns the single decoder and encoder for that declaration, the one
-expansion of both temp spellings, the temp-root containment check, and the
-session fold that composes loaded skills' scopes by union. It is imported both as
+expansion of both temp spellings, the temp-root containment check, the session
+fold that composes loaded skills' scopes by union, and the ``output_dir`` boundary
+predicate shared by ``run_skill`` admission and the recipe rule. It is imported both as
 ``_write_scope`` by hook subprocesses and as ``autoskillit.hooks._write_scope``
 by in-venv callers.
 """
@@ -210,6 +211,25 @@ def bounded_scope_contains(scope: WriteScope, path: str, project_dir: str) -> bo
     )
 
 
+def output_dir_widens_scope(scope: WriteScope, output_dir: str, project_dir: str) -> bool:
+    """Return whether a dispatch ``output_dir`` ("" if omitted) widens the skill's write scope."""
+    match scope.kind:
+        case WriteScopeKind.BOUNDED:
+            return bool(output_dir) and not bounded_scope_contains(scope, output_dir, project_dir)
+        case WriteScopeKind.UNRESTRICTED | WriteScopeKind.INHERIT:
+            return False
+        case _ as unreachable:
+            assert_never(unreachable)
+
+
+def widened_output_dir_message(skill_name: str, scope: WriteScope, output_dir: str) -> str:
+    return (
+        f"output_dir {output_dir!r} is outside the declared write scope of skill {skill_name!r} "
+        f"(write_paths: {', '.join(scope.paths)}); omit output_dir to use the skill's own temp "
+        "directory, or pass a directory inside write_paths"
+    )
+
+
 __all__ = [
     "TEMP_PLACEHOLDER",
     "WRITE_SCOPE_INHERIT",
@@ -224,6 +244,8 @@ __all__ = [
     "encode_write_scope",
     "expand_write_path",
     "fold_session_write_scopes",
+    "output_dir_widens_scope",
     "temp_root",
     "temp_root_escape",
+    "widened_output_dir_message",
 ]

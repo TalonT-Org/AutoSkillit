@@ -18,7 +18,9 @@ from autoskillit.hooks._write_scope import (
     encode_write_scope,
     expand_write_path,
     fold_session_write_scopes,
+    output_dir_widens_scope,
     temp_root_escape,
+    widened_output_dir_message,
 )
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
@@ -178,3 +180,39 @@ def test_bounded_scope_contains_rejects_unbounded_scopes(
 ) -> None:
     with pytest.raises(WriteScopeError):
         bounded_scope_contains(scope, "{{AUTOSKILLIT_TEMP}}/a/", str(tmp_path))
+
+
+@pytest.mark.parametrize(
+    ("output_dir", "widens"),
+    [
+        ("", False),
+        (".", True),
+        ("/", True),
+        (".autoskillit/temp", True),
+        (".autoskillit/temp/b", True),
+        (".autoskillit/temp/a/iter_1", False),
+    ],
+)
+def test_output_dir_widens_bounded_scope(tmp_path: Path, output_dir: str, widens: bool) -> None:
+    assert output_dir_widens_scope(_A[1], output_dir, str(tmp_path)) is widens
+
+
+def test_output_dir_widens_bounded_scope_judges_absolute_runtime_paths(tmp_path: Path) -> None:
+    project = str(tmp_path)
+
+    assert output_dir_widens_scope(_A[1], str(tmp_path / ".autoskillit/temp/a"), project) is False
+    assert output_dir_widens_scope(_A[1], project, project) is True
+
+
+@pytest.mark.parametrize("scope", [_INHERIT[1], _UNRESTRICTED[1]])
+def test_output_dir_never_widens_unbounded_scopes(tmp_path: Path, scope: WriteScope) -> None:
+    assert output_dir_widens_scope(scope, ".", str(tmp_path)) is False
+
+
+def test_widened_output_dir_message_names_skill_value_and_declared_paths() -> None:
+    scope = _bounded("{{AUTOSKILLIT_TEMP}}/make-plan/", "{{AUTOSKILLIT_TEMP}}/other/")
+
+    message = widened_output_dir_message("make-plan", scope, ".")
+
+    for fragment in ("'make-plan'", "'.'", *scope.paths):
+        assert fragment in message

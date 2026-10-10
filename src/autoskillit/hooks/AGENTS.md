@@ -74,6 +74,6 @@ Files with no registration support their folder; files with several registration
 - `_dispatch.py` — Support module: Stable hook dispatcher — NEVER RENAME THIS FILE.
 - `_join_ledger.py` — Support module: Stdlib-only durable authority for declared fixed-set join batches.
 - `_session_binding.py` — Support module: Shared authority for the cross-process session-binding channel.
-- `_write_scope.py` — Support module: Stdlib-only authority for typed skill write scopes, their expansion and containment, and the session fold.
+- `_write_scope.py` — Support module: Stdlib-only authority for typed skill write scopes, their expansion and containment, the session fold, and the `output_dir` boundary predicate.
 - `session_lifetime_notice_hook.py` — Groups 2 registrations: Interactive lifetime notice on PostToolUse and Stop.
 - `skill_load_post_hook.py` — Groups 2 registrations: PostToolUse Skill and UserPromptExpansion slash-command binding writer.

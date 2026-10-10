@@ -24,7 +24,28 @@ from autoskillit.core import (
     SessionType,
     SkillResult,
     SubprocessResult,
+    get_logger,
 )
+
+logger = get_logger(__name__)
+
+
+def persist_terminal_selection(ctx: Any, selection: ExecutionSelection | None) -> None:
+    """Publish the final candidate manifest without interrupting session logging."""
+    if selection is None:
+        return
+    from autoskillit.execution.session_log.session_log import write_execution_candidate_manifest
+
+    try:
+        write_execution_candidate_manifest(
+            selection,
+            ctx.config.linux_tracing.log_dir,
+            max_sessions=ctx.config.linux_tracing.max_sessions,
+            project_dir=str(ctx.project_dir),
+            build_protected_campaign_ids=ctx.build_protected_campaign_ids,
+        )
+    except Exception:
+        logger.debug("execution_candidate_manifest_write_failed", exc_info=True)
 
 
 def reconcile_token_evidence(

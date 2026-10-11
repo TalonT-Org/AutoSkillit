@@ -768,7 +768,7 @@
         }
       ],
       "on_failure": "release_issue_failure",
-      "note": "coverage_failed here is terminal by decision. The part passed the plan-set gate before the walkthrough edited it, and a walkthrough cannot be re-run until its edits are renewed. Relay the result's coverage_gaps in the failure diagnostic: it names the rows the edit broke."
+      "note": "__RECIPE_NOTE_PLAN_SET_RENEWAL_FAILURE__"
     },
     "retry_walkthrough": {
       "tool": "run_skill",
@@ -823,7 +823,7 @@
         }
       ],
       "on_failure": "release_issue_failure",
-      "note": "Bounded one-hop re-invoke of dry-walkthrough after a context-limit stumble on the primary dry_walkthrough step. Never routes back to dry_walkthrough — on_failure and on_context_limit both fall through to the original failure destination. coverage_failed here is terminal by decision. The part passed the plan-set gate before the walkthrough edited it, and a walkthrough cannot be re-run until its edits are renewed. Relay the result's coverage_gaps in the failure diagnostic: it names the rows the edit broke."
+      "note": "Bounded one-hop re-invoke of dry-walkthrough after a context-limit stumble on the primary dry_walkthrough step. Never routes back to dry_walkthrough — on_failure and on_context_limit both fall through to the original failure destination. __RECIPE_NOTE_PLAN_SET_RENEWAL_FAILURE__"
     },
     "create_impl_worktree": {
       "tool": "run_cmd",

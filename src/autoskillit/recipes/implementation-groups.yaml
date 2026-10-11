@@ -483,10 +483,7 @@ steps:
     on_failure: release_issue_failure
     note: >-
       Rebinds current part bytes after walkthrough edits before implementation.
-      coverage_failed here is terminal by decision. The part passed the plan-set gate before
-      the walkthrough edited it, and a walkthrough cannot be re-run until its edits are
-      renewed. Relay the result's coverage_gaps in the failure diagnostic: it names the rows
-      the edit broke.
+      __RECIPE_NOTE_PLAN_SET_RENEWAL_FAILURE__
   create_impl_worktree:
     tool: run_cmd
     with:

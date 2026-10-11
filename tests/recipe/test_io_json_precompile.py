@@ -56,6 +56,27 @@ def _compile_json(yaml_path: Path) -> None:
     json_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
+def test_load_recipe_dict_expands_shared_notes_in_surrounding_text(tmp_path: Path) -> None:
+    yaml_path = tmp_path / "recipe.yaml"
+    _write_yaml(
+        yaml_path,
+        {
+            **_MINIMAL_RECIPE,
+            "steps": {
+                "done": {
+                    "action": "stop",
+                    "note": "Before. __RECIPE_NOTE_PLAN_SET_RENEWAL_FAILURE__ After.",
+                }
+            },
+        },
+    )
+    _compile_json(yaml_path)
+    note = load_recipe_dict(yaml_path)["steps"]["done"]["note"]
+    assert note.startswith("Before. coverage_failed here is terminal by decision.")
+    assert note.endswith("it names the rows the edit broke. After.")
+    assert "__RECIPE_NOTE_" not in note
+
+
 def test_load_recipe_dict_prefers_json_when_fresh(tmp_path, monkeypatch):
     yaml_path = tmp_path / "recipe.yaml"
     _write_yaml(yaml_path, _MINIMAL_RECIPE)

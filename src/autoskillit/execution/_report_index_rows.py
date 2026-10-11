@@ -40,7 +40,7 @@ from autoskillit.execution.evidence.otlp_tokens import (
 from autoskillit.execution.evidence.report_walk import OTLP_WALK_KIND, SESSION_WALK_KIND, WalkItem
 from autoskillit.execution.session.turn_usage import classify_token_measure
 
-REPORT_INDEX_SCHEMA_VERSION: Final[int] = 3
+REPORT_INDEX_SCHEMA_VERSION: Final[int] = 4
 UNKNOWN_SOURCE: Final[str] = "unknown"
 _STRUCTURED_MEASURE_SESSION_VERSION = 14
 _TURN_MEASURE_FIELDS = (
@@ -56,6 +56,11 @@ logger = get_logger(__name__)
 
 def _text(value: object) -> str | None:
     return value if isinstance(value, str) and value else None
+
+
+def _json_value(value: object) -> object:
+    """Preserve an already-decoded JSON value without interpreting its shape."""
+    return value
 
 
 def _count(value: object) -> int | None:
@@ -163,6 +168,8 @@ _ROW_FIELDS: dict[str, dict[str, Callable[[object], object]]] = {
     SESSION_KIND: {
         "schema_version": _count,
         "time_ms": _count,
+        "timestamp": _text,
+        "rollout": _json_value,
         "session_id": _text,
         "harness": _pair_text,
         "provider": _pair_text,
@@ -332,6 +339,8 @@ def _session_row(key: str, record: dict[str, Any]) -> dict[str, Any]:
         "key": key,
         "session_id": _text(row.get("session_id")),
         "time_ms": _iso_to_ms(row.get("timestamp")),
+        "timestamp": _text(row.get("timestamp")),
+        "rollout": _json_value(row.get("rollout")),
         "harness": harness,
         "provider": provider,
         "model": _text(row.get("model_identifier")),

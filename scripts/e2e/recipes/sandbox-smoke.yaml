@@ -79,13 +79,19 @@ steps:
       skill_command: >-
         /autoskillit:smoke-task In ${{ context.worktree_path }}, append this
         function to sandbox/text.py: `def smoke_canary() -> bool:` followed by
-        `    return True`. Create tests/test_smoke_canary.py as a unittest
+        `    return True`. Preserve all existing contents of sandbox/text.py;
+        do not rewrite its module docstring or existing functions.
+        Create tests/test_smoke_canary.py as a unittest
         module importing unittest and smoke_canary from sandbox.text, with a
         unittest.TestCase method using `self.assertIs(smoke_canary(), True)`. Change
-        only those two files, then create one new commit containing only
+        only those two files. Before committing, use Python's `compile()` on
+        both files to verify their syntax without executing tests; correct any
+        syntax errors before staging. Create one new commit containing only
         sandbox/text.py and tests/test_smoke_canary.py with message
-        `smoke: add sandbox canary`. Do not run a test command or call tools
-        that dispatch work to another worker.
+        `smoke: add sandbox canary`. Leave all validated changes committed and
+        the worktree clean; if a correction is needed after a commit, create
+        another new commit rather than amending. Do not run a test command or
+        call tools that dispatch work to another worker.
       cwd: "${{ context.worktree_path }}"
       step_name: implement
     on_success: test

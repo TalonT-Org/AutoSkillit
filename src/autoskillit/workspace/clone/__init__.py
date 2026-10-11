@@ -46,6 +46,7 @@ from ._registry import (
 )
 from ._remote import (
     CloneSourceResolution,
+    _add_or_set_upstream,
     _ensure_origin_isolated,
     _probe_clone_source_url,
 )
@@ -404,16 +405,17 @@ def remove_clone(clone_path: str, keep: str = "false") -> dict[str, str]:
         return {"removed": "false", "reason": str(exc)}
 
 
-def _classify_push_failure(stderr_text: str, *, force: bool) -> str | None:
-    """Return the existing semantic error type for one failed push, if any."""
+def _classify_push_failure(stderr_text: str, *, force: bool) -> dict[str, str | bool]:
+    """Build the failure response with the existing semantic push error type."""
+    failure: dict[str, str | bool] = {"success": False, "stderr": stderr_text}
     if force:
         if "stale info" in stderr_text:
-            return "force_with_lease_stale"
+            return {**failure, "error_type": "force_with_lease_stale"}
         if "no upstream configured" in stderr_text or "has no upstream branch" in stderr_text:
-            return "force_with_lease_no_upstream"
+            return {**failure, "error_type": "force_with_lease_no_upstream"}
     if "GH006" in stderr_text or "merge queue" in stderr_text.lower():
-        return "queued_branch"
-    return None
+        return {**failure, "error_type": "queued_branch"}
+    return failure
 
 
 def push_to_remote(
@@ -427,8 +429,8 @@ def push_to_remote(
 ) -> dict[str, str | bool]:
     """Push the merged branch from the clone directly to the upstream remote.
 
-    When remote_url is provided (non-empty), it is used directly and source_dir
-    is not accessed for URL lookup. This is the preferred calling convention when
+    When remote_url is provided (non-empty), it sets the clone's upstream target;
+    source_dir is not accessed for URL lookup. This is the preferred calling convention when
     remote_url has been captured from clone_repo at pipeline start.
 
     When remote_url is empty, falls back to reading the upstream URL from
@@ -508,6 +510,11 @@ def push_to_remote(
             ),
         }
 
+    try:
+        _add_or_set_upstream(Path(clone_path), resolved_url)
+    except RuntimeError as exc:
+        return {"success": False, "stderr": str(exc)}
+
     push_cmd = ["git", "push", "-u", "upstream", branch]
     if force:
         push_cmd.append("--force-with-lease")
@@ -527,11 +534,7 @@ def push_to_remote(
             branch=branch,
             stderr=stderr_text,
         )
-        failure: dict[str, str | bool] = {"success": False, "stderr": stderr_text}
-        error_type = _classify_push_failure(stderr_text, force=force)
-        if error_type is not None:
-            failure["error_type"] = error_type
-        return failure
+        return _classify_push_failure(stderr_text, force=force)
 
     logger.info(
         "push_to_remote_succeeded",

@@ -204,6 +204,29 @@ class TestPushToRemoteProtectedBranch:
 
 
 class TestPushToRemoteMocked:
+    @pytest.fixture(autouse=True)
+    def _mock_upstream_setup(self):
+        with patch("autoskillit.workspace.clone._add_or_set_upstream"):
+            yield
+
+    def test_push_to_remote_reports_upstream_setup_failure(self) -> None:
+        with (
+            patch(
+                "autoskillit.workspace.clone._add_or_set_upstream",
+                side_effect=RuntimeError("cannot configure upstream"),
+            ),
+            patch("autoskillit.workspace.clone.subprocess.run") as run,
+        ):
+            result = push_to_remote(
+                "/clone",
+                remote_url="https://github.com/org/repo.git",
+                branch="feature",
+                protected_branches=[],
+            )
+
+        assert result == {"success": False, "stderr": "cannot configure upstream"}
+        run.assert_not_called()
+
     def test_ds6_push_to_remote_calls_get_url_then_push(self) -> None:
         """T_DS6: push_to_remote calls git remote get-url origin then git push -u upstream."""
         mock_url = MagicMock()
@@ -517,8 +540,9 @@ class TestPushToRemoteNonBare:
 
         shutil.rmtree(Path(clone_path).parent, ignore_errors=True)
 
+    @pytest.mark.parametrize("upstream_exists", [True, False])
     def test_push_to_remote_uses_explicit_remote_url_without_reading_source_dir(
-        self, tmp_path: Path
+        self, tmp_path: Path, upstream_exists: bool
     ) -> None:
         """When remote_url is explicit, source_dir is not accessed for URL lookup."""
         remote = tmp_path / "remote.git"
@@ -569,11 +593,37 @@ class TestPushToRemoteNonBare:
             capture_output=True,
         )
 
+        if not upstream_exists:
+            subprocess.run(
+                ["git", "-C", clone_path, "remote", "remove", "upstream"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", clone_path, "remote", "set-url", "origin", str(remote)],
+                check=True,
+                capture_output=True,
+            )
+
         # Pass explicit remote_url — source_dir is not needed
         result = push_to_remote(
             clone_path, remote_url=str(remote), branch="main", protected_branches=[]
         )
 
         assert result["success"] is True
+
+        remote_head = subprocess.run(
+            ["git", "-C", str(remote), "rev-parse", "refs/heads/main"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        tracked_head = subprocess.run(
+            ["git", "-C", clone_path, "rev-parse", "@{upstream}"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        assert remote_head == tracked_head
 
         shutil.rmtree(Path(clone_path).parent, ignore_errors=True)

@@ -94,6 +94,12 @@ def test_invalid_authority_states_fail_closed(
         _authority(tmp_path, **overrides)
 
 
+@pytest.mark.parametrize("mode", (InventoryMode.NO_ISSUE, InventoryMode.UNENUMERATED))
+def test_authority_rejects_omitted_empty_parts(tmp_path: Path, mode: InventoryMode) -> None:
+    with pytest.raises(ValueError, match="must match actual empty parts"):
+        _authority(tmp_path, inventory_mode=mode, allocations=())
+
+
 def test_part_ordinals_and_resolved_locators_are_unique(tmp_path: Path) -> None:
     authority = _authority(tmp_path)
     first = authority.parts[0]

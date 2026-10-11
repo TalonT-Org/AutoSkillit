@@ -719,8 +719,13 @@ _AUTOSKILLIT_GITIGNORE_ENTRIES = [
 _COMMITTED_BY_DESIGN: frozenset[str] = frozenset(
     {
         "config.yaml",
+        "evidence",
+        "experiment-types",
+        "methodology-traditions",
         "recipes",
+        "skills",
         "test-source-map.json",
+        "waivers",
     }
 )
 

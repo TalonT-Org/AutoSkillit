@@ -86,6 +86,8 @@ class TestRegisterAllBackendKwarg:
         mock_backend = MagicMock()
         mock_backend.capabilities.mcp_config_capable = False
         _register_all("user", tmp_path, backend=mock_backend)
+        ignore_lines = (tmp_path / ".autoskillit" / ".gitignore").read_text().splitlines()
+        assert ".state.yaml" in ignore_lines
 
 
 class TestInitBackendResolution:

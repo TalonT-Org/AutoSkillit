@@ -423,10 +423,10 @@ class TestEnsureProjectTemp:
         assert temp_gitignore.exists()
         assert "*" in temp_gitignore.read_text()
 
-    def test_ensure_project_temp_writes_autoskillit_gitignore_with_secrets(self, tmp_path):
-        from autoskillit.core.io import ensure_project_temp
+    def test_ensure_project_gitignore_writes_autoskillit_gitignore_with_secrets(self, tmp_path):
+        from autoskillit.core.io import ensure_project_gitignore
 
-        ensure_project_temp(tmp_path)
+        ensure_project_gitignore(tmp_path)
         gitignore = tmp_path / ".autoskillit" / ".gitignore"
         content = gitignore.read_text()
         assert ".secrets.yaml" in content
@@ -438,15 +438,15 @@ class TestEnsureProjectTemp:
         ensure_project_temp(tmp_path)  # second call must not raise
         assert (tmp_path / ".autoskillit" / "temp").is_dir()
 
-    def test_ensure_project_temp_backfills_secrets_into_existing_gitignore(self, tmp_path):
-        from autoskillit.core.io import ensure_project_temp
+    def test_ensure_project_gitignore_backfills_secrets_into_existing_gitignore(self, tmp_path):
+        from autoskillit.core.io import ensure_project_gitignore
 
         # Simulate a pre-fix .gitignore without .secrets.yaml
         autoskillit_dir = tmp_path / ".autoskillit"
         autoskillit_dir.mkdir()
         (autoskillit_dir / ".gitignore").write_text(".onboarded\n")
 
-        ensure_project_temp(tmp_path)
+        ensure_project_gitignore(tmp_path)
         content = (autoskillit_dir / ".gitignore").read_text()
         assert ".secrets.yaml" in content
         assert ".onboarded" in content
@@ -539,11 +539,13 @@ def test_init_all_created_files_covered_by_gitignore(tmp_path: Path) -> None:
     from autoskillit.cli._init_helpers import _create_secrets_template
     from autoskillit.core.io import (
         _COMMITTED_BY_DESIGN,
+        ensure_project_gitignore,
         ensure_project_temp,
         is_self_ignored,
     )
 
     ensure_project_temp(tmp_path)
+    ensure_project_gitignore(tmp_path)
     _create_secrets_template(tmp_path)
 
     autoskillit_dir = tmp_path / ".autoskillit"
@@ -570,9 +572,9 @@ def test_init_all_created_files_covered_by_gitignore(tmp_path: Path) -> None:
 def test_secrets_template_gitignore_comment_is_true(tmp_path: Path) -> None:
     """The comment in .secrets.yaml claiming it is gitignored must be actually true."""
     from autoskillit.cli._init_helpers import _create_secrets_template
-    from autoskillit.core.io import ensure_project_temp
+    from autoskillit.core.io import ensure_project_gitignore
 
-    ensure_project_temp(tmp_path)
+    ensure_project_gitignore(tmp_path)
     _create_secrets_template(tmp_path)
 
     autoskillit_dir = tmp_path / ".autoskillit"

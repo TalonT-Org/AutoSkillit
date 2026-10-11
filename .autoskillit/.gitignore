@@ -1,4 +1,5 @@
 temp/
+.state.yaml
 .secrets.yaml
 .onboarded
 sync_manifest.json

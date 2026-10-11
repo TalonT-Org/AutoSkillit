@@ -87,7 +87,14 @@ class TestDispatchStatusEnvelopeField:
         _setup_dispatch(tool_ctx, monkeypatch)
         payload = {
             "success": False,
-            "reason": "invariant violated: exact write evidence was not retained",
+            "reason": (
+                "uncommitted_changes: bootstrap_clone failed at "
+                "/tmp/project/.autoskillit/managed-headless-session-lineage/records/"
+                "0123456789abcdef0123456789abcdef.json "
+                "attempt_id=deaddeaddeaddeaddeaddeaddeaddead "
+                "launch_id=feedfacefeedfacefeedfacefeedface "
+                "requested_mode=direct effective_mode=capture lineage_status=corrupt"
+            ),
             "summary": "Outcome invariant failed.",
             "reason_kind": "outcome_invariant",
             "outcome_fields": {"write_count": 0, "required_writes": 1},
@@ -110,6 +117,19 @@ class TestDispatchStatusEnvelopeField:
         assert result["success"] is False
         assert result["dispatch_status"] == "failure"
         assert result["l3_parse_source"] == "stdout"
+        assert "uncommitted_changes" in result["reason"]
+        assert "bootstrap_clone" in result["reason"]
+        for private_detail in (
+            "managed-headless-session-lineage",
+            "0123456789abcdef",
+            "attempt_id",
+            "launch_id",
+            "requested_mode",
+            "effective_mode",
+            "lineage_status",
+        ):
+            assert private_detail not in result["reason"]
+            assert private_detail not in result["error"]
         # Independent assertions: a silent drop or rename of any single
         # evidence field names the regression, instead of passing through a
         # wholesale equality check that lets transforms hide.

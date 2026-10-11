@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, TypedDict
 
+import regex as re
+
 from autoskillit.core import (
     FleetErrorCode,
     InfraExitCategory,
@@ -49,6 +51,23 @@ _MANAGED_CAPTURE_DIAGNOSTIC_MARKERS: tuple[str, ...] = (
     "attempt_id",
 )
 
+_MANAGED_LINEAGE_PATH_RE = re.compile(
+    r"(?<![\w./-])(?:(?:/(?:[^/\\\r\n\"'<>|,;:(){}\[\]]+/)*)|"
+    r"(?:[^/\s\\\r\n\"'<>|,;:(){}\[\]]+/)+)?"
+    r"\.autoskillit/managed-headless-session-lineage"
+    r"(?=$|[/\s\"'<>|,;:(){}\[\]])(?:/[^\\\s\"'<>|,;:(){}\[\]]*)?",
+    re.IGNORECASE,
+)
+_MANAGED_CAPTURE_FIELD_ASSIGNMENT_RE = re.compile(
+    r"(?<![\w./-])(?P<quote>[\"']?)"
+    r"(?:attempt_id|launch_id|requested_mode|effective_mode|lineage[-_ ]status|"
+    r"native[-_ ]shell[-_ ]capture|managed[-_ ]headless[-_ ]session[-_ ]lineage|"
+    r"managed[-_ ]lineage|lineage[-_ ]validation)"
+    r"(?P=quote)\s*[=:]\s*(?:\"[^\"]*\"|'[^']*'|[^\s,;]+)",
+    re.IGNORECASE,
+)
+_REDACTED_ONLY_LINE_RE = re.compile(r"(?:<redacted>|[\s\p{P}])*", re.IGNORECASE)
+
 
 def _is_managed_capture_diagnostic_text(value: str) -> bool:
     """Return whether text belongs only in managed-lineage diagnostics."""
@@ -64,6 +83,17 @@ def _sanitize_managed_capture_diagnostics(value: str) -> str:
         line
         for line in value.splitlines(keepends=True)
         if not _is_managed_capture_diagnostic_text(line)
+    )
+
+
+def _normalize_failed_managed_capture_reason(value: str) -> str:
+    """Redact private lineage details while retaining failure causes."""
+    normalized = _MANAGED_LINEAGE_PATH_RE.sub("<redacted>", value)
+    normalized = _MANAGED_CAPTURE_FIELD_ASSIGNMENT_RE.sub("<redacted>", normalized)
+    return "".join(
+        line
+        for line in normalized.splitlines(keepends=True)
+        if not _REDACTED_ONLY_LINE_RE.fullmatch(line)
     )
 
 
@@ -153,7 +183,9 @@ def classify_dispatch_outcome(
             return DispatchStatus.RESUMABLE, FleetErrorCode.FLEET_QUOTA_EXHAUSTED
     if parsed.outcome == "completed_clean":
         raw_reason = str(parsed.payload.get("reason", "")) if parsed.payload else ""
-        reason = _sanitize_managed_capture_diagnostics(raw_reason)
+        reason = _sanitize_managed_capture_diagnostics(
+            _normalize_failed_managed_capture_reason(raw_reason)
+        )
         if raw_reason and not reason:
             reason = FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH
         return DispatchStatus.FAILURE, reason

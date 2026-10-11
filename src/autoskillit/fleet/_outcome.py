@@ -86,7 +86,7 @@ def _sanitize_managed_capture_diagnostics(value: str) -> str:
     )
 
 
-def _normalize_failed_managed_capture_reason(value: str) -> str:
+def _sanitize_failed_managed_capture_reason(value: str) -> str:
     """Redact private lineage details while retaining failure causes."""
     normalized = _MANAGED_LINEAGE_PATH_RE.sub("<redacted>", value)
     normalized = _MANAGED_CAPTURE_FIELD_ASSIGNMENT_RE.sub("<redacted>", normalized)
@@ -184,7 +184,7 @@ def classify_dispatch_outcome(
     if parsed.outcome == "completed_clean":
         raw_reason = str(parsed.payload.get("reason", "")) if parsed.payload else ""
         reason = _sanitize_managed_capture_diagnostics(
-            _normalize_failed_managed_capture_reason(raw_reason)
+            _sanitize_failed_managed_capture_reason(raw_reason)
         )
         if raw_reason and not reason:
             reason = FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH

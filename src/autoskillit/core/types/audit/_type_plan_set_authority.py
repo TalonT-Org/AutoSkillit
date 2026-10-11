@@ -628,8 +628,8 @@ class PlanSetBindResult:
     def __post_init__(self) -> None:
         if self.success != (self.reason is None):
             raise ValueError("successful results require no reason; failures require a reason")
-        if self.success and self.coverage_gaps:
-            raise ValueError("successful results must not contain coverage_gaps")
+        if self.reason is not PlanSetRejectReason.COVERAGE_FAILED and self.coverage_gaps:
+            raise ValueError("only coverage_failed results may contain coverage_gaps")
         if self.reason is PlanSetRejectReason.COVERAGE_FAILED and not self.coverage_gaps.strip():
             raise ValueError("coverage_failed requires non-empty coverage_gaps")
 

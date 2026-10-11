@@ -66,6 +66,7 @@ def test_coverage_failure_requires_nonblank_feedback(coverage_gaps: str) -> None
         (True, PlanSetRejectReason.NO_PARTS, ""),
         (False, None, ""),
         (True, None, "R2 [unassigned]"),
+        (False, PlanSetRejectReason.NO_PARTS, "R2 [unassigned]"),
     ],
 )
 def test_bind_result_rejects_inconsistent_success_fields(

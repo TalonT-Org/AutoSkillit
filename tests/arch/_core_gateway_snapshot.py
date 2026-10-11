@@ -762,6 +762,7 @@ CORE_GATEWAY_SYMBOLS: frozenset[str] = frozenset(
         "ReviewResponseClass",
         "Revocability",
         "RollbackAdmissionEvent",
+        "RolloutMarker",
         "RolloverEpochEvent",
         "RunSkillCompletionAuthority",
         "RuntimeAdmission",

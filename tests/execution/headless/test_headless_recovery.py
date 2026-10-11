@@ -27,7 +27,7 @@ from autoskillit.core.types import (
 from autoskillit.core.types.results._type_results import WriteEvidence
 from autoskillit.execution.headless._managed import _ManagedLineageObserver
 from autoskillit.execution.session.turn_usage import build_turn_token_entry
-from tests.execution.conftest import _launch_inputs, _mock_backend
+from tests.execution.conftest import _launch_inputs, _mock_backend, _unmarked_rollout_snapshot
 from tests.fakes import FakeManagedHeadlessSessionLineageStore
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -138,6 +138,7 @@ async def _run_turn_usage_nudge(
         retry_reason=RetryReason.EARLY_STOP,
         launch_resolver=launch_resolver,
         launch_preparation=launch_preparation,
+        capture_rollout_on_launch=_unmarked_rollout_snapshot,
         natural_exit_grace_seconds=3.0,
     )
     assert result is not None
@@ -175,6 +176,7 @@ class TestNudgePtyMode:
     @pytest.mark.anyio
     async def test_nudge_passes_pty_mode_for_claude_backend(self, tmp_path: Path) -> None:
         """_attempt_contract_nudge passes pty_mode=True to runner for ClaudeCode backend."""
+        from autoskillit.config import LinuxTracingConfig
         from autoskillit.execution.headless._headless_launch import _attempt_contract_nudge
         from tests.execution.conftest import _mock_backend
         from tests.fakes import MockSubprocessRunner
@@ -226,6 +228,15 @@ class TestNudgePtyMode:
             termination=TerminationReason.NATURAL_EXIT,
             pid=0,
         )
+        rollout_marker = {
+            "change_id": "rollout-nudge",
+            "effective_at": "2026-10-10T12:00:00+00:00",
+            "scope": {"skills": ["audit"], "backends": ["claude-code"], "roles": []},
+            "expected_effect": "Nudge retains the admitted snapshot",
+        }
+        logical_start = "2026-10-10T12:00:01+00:00"
+        capture_rollout = Mock(return_value=(rollout_marker, logical_start))
+        linux_tracing_config = LinuxTracingConfig(tmpfs_path=str(tmp_path))
 
         await _attempt_contract_nudge(
             skill_result=skill_result,
@@ -239,6 +250,8 @@ class TestNudgePtyMode:
             retry_reason=RetryReason.EARLY_STOP,
             launch_resolver=launch_resolver,
             launch_preparation=launch_preparation,
+            capture_rollout_on_launch=capture_rollout,
+            linux_tracing_config=linux_tracing_config,
             natural_exit_grace_seconds=3.0,
         )
 
@@ -247,6 +260,11 @@ class TestNudgePtyMode:
             f"Expected last_pty_mode=True for ClaudeCode backend (pty_required=True), "
             f"got {mock_runner.last_pty_mode!r}"
         )
+        nudge_kwargs = mock_runner.call_args_list[0][3]
+        capture_rollout.assert_called_once_with()
+        assert nudge_kwargs["rollout"] == rollout_marker
+        assert nudge_kwargs["logical_run_start_ts"] == logical_start
+        assert nudge_kwargs["linux_tracing_config"] is linux_tracing_config
 
     @pytest.mark.anyio
     async def test_nudge_respects_pty_override_false(self, tmp_path: Path) -> None:
@@ -315,6 +333,7 @@ class TestNudgePtyMode:
             pty_override=False,
             launch_resolver=launch_resolver,
             launch_preparation=launch_preparation,
+            capture_rollout_on_launch=_unmarked_rollout_snapshot,
             natural_exit_grace_seconds=3.0,
         )
 
@@ -429,6 +448,7 @@ class TestNudgePtyMode:
             managed_lineage_observer=lineage_observer,
             launch_resolver=launch_resolver,
             launch_preparation=launch_preparation,
+            capture_rollout_on_launch=_unmarked_rollout_snapshot,
             natural_exit_grace_seconds=3.0,
         )
 
@@ -514,6 +534,7 @@ class TestNudgeRetainedBindingAndManagedCatalog:
             retry_reason=RetryReason.EARLY_STOP,
             launch_resolver=launch_resolver,
             launch_preparation=launch_preparation,
+            capture_rollout_on_launch=_unmarked_rollout_snapshot,
             natural_exit_grace_seconds=3.0,
         )
 
@@ -603,6 +624,7 @@ class TestNudgeRetainedBindingAndManagedCatalog:
             retained_binding=retained_binding,
             launch_resolver=launch_resolver,
             launch_preparation=launch_preparation,
+            capture_rollout_on_launch=_unmarked_rollout_snapshot,
             natural_exit_grace_seconds=3.0,
         )
 
@@ -680,6 +702,7 @@ class TestNudgeRetainedBindingAndManagedCatalog:
             managed_skill_catalog=catalog,
             launch_resolver=launch_resolver,
             launch_preparation=launch_preparation,
+            capture_rollout_on_launch=_unmarked_rollout_snapshot,
             natural_exit_grace_seconds=3.0,
         )
 
@@ -809,6 +832,7 @@ async def test_nudge_skips_for_block_delimiter_patterns(tmp_path: Path) -> None:
         result_parser=result_parser,
         launch_resolver=launch_resolver,
         launch_preparation=launch_preparation,
+        capture_rollout_on_launch=_unmarked_rollout_snapshot,
         natural_exit_grace_seconds=3.0,
     )
 

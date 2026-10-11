@@ -150,6 +150,9 @@ from autoskillit.config._config_dataclasses import (
     ReviewConfig as ReviewConfig,
 )
 from autoskillit.config._config_dataclasses import (
+    RolloutConfig as RolloutConfig,
+)
+from autoskillit.config._config_dataclasses import (
     RunSkillConfig as RunSkillConfig,
 )
 from autoskillit.config._config_dataclasses import (
@@ -271,6 +274,7 @@ __all__ = [
     "RetiredConfigKeyDef",
     "ReviewConfig",
     "RunSkillConfig",
+    "RolloutConfig",
     "SafetyConfig",
     "SkillsConfig",
     "SubsetsConfig",

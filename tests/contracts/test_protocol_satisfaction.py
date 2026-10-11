@@ -535,6 +535,8 @@ class TestGroupDApiContractPreservation:
             "lifecycle_observation_enabled",
             "ceiling_seconds",
             "systemd_scope_enabled",
+            "rollout",
+            "logical_run_start_ts",
         }
         assert expected == public_params, (
             f"run_managed_async public params changed.\n"
@@ -560,6 +562,8 @@ class TestGroupDApiContractPreservation:
         assert p["completion_marker"].default == ""
         assert p["stale_threshold"].default == 1200
         assert p["completion_drain_timeout"].default == 5.0
+        assert p["rollout"].default is None
+        assert p["logical_run_start_ts"].default == ""
 
     # ------------------------------------------------------------------
     # REQ-API-002: DefaultSubprocessRunner satisfies SubprocessRunner protocol
@@ -618,6 +622,8 @@ class TestGroupDApiContractPreservation:
             "lifecycle_observation_enabled",
             "ceiling_seconds",
             "systemd_scope_enabled",
+            "rollout",
+            "logical_run_start_ts",
         }
         assert expected == actual, (
             f"DefaultSubprocessRunner.__call__ params changed.\n"

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 from ..foundation._type_enums import ChannelConfirmation, KillReason, TerminationReason
+from ..results._type_results_records import RolloutMarker
 from ._type_inspector import InspectorCallback, InspectorVerdict
 
 __all__ = [
@@ -258,6 +259,8 @@ class SubprocessRunner(Protocol):
         completion_drain_timeout: float = 5.0,
         natural_exit_grace_seconds: float = 3.0,
         linux_tracing_config: Any | None = None,
+        rollout: RolloutMarker | None = None,
+        logical_run_start_ts: str = "",
         idle_output_timeout: float | None = None,
         max_suppression_seconds: float | None = None,
         on_process_spawned: Callable[[int, int], None] | None = None,

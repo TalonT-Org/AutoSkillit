@@ -1,5 +1,6 @@
 """Arch guards for execution layer source splits (P8-F1, P8-F3, P8-F4 audit fixes)."""
 
+import ast
 from pathlib import Path
 
 import pytest
@@ -85,12 +86,22 @@ def test_headless_facade_does_not_define_recovery_functions():
 
 def test_plugin_bound_launch_lifecycle_is_centralized():
     launch = (SRC_EXECUTION / "headless" / "_headless_launch.py").read_text()
+    functions = {
+        node.name: node
+        for node in ast.parse(launch).body
+        if isinstance(node, ast.AsyncFunctionDef)
+    }
     for fn in (
-        "_plugin_launch_binding",
         "_run_headless_attempt",
         "_attempt_contract_nudge",
     ):
-        assert f"def {fn}" in launch, f"{fn} must live in _headless_launch.py"
+        assert fn in functions, f"{fn} must live in _headless_launch.py"
+        assert any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "plugin_launch_binding_scope"
+            for node in ast.walk(functions[fn])
+        ), f"{fn} must own its plugin binding scope"
 
 
 def test_headless_facade_does_not_define_path_token_functions():

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
     ChannelConfirmation,
+    RolloutMarker,
     SubprocessResult,
     TerminationReason,
     get_logger,
@@ -149,6 +150,8 @@ class DefaultSubprocessRunner:
         completion_drain_timeout: float = 5.0,
         natural_exit_grace_seconds: float = 3.0,
         linux_tracing_config: LinuxTracingConfig | None = None,
+        rollout: RolloutMarker | None = None,
+        logical_run_start_ts: str = "",
         idle_output_timeout: float | None = None,
         max_suppression_seconds: float | None = None,
         on_process_spawned: Callable[[int, int], None] | None = None,
@@ -188,6 +191,8 @@ class DefaultSubprocessRunner:
             completion_drain_timeout=completion_drain_timeout,
             natural_exit_grace_seconds=natural_exit_grace_seconds,
             linux_tracing_config=linux_tracing_config,
+            rollout=rollout,
+            logical_run_start_ts=logical_run_start_ts,
             idle_output_timeout=idle_output_timeout,
             max_suppression_seconds=max_suppression_seconds,
             on_process_spawned=on_process_spawned,

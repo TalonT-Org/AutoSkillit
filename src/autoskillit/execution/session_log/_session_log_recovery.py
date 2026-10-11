@@ -131,6 +131,7 @@ def _finalize_crashed_trace(
     build_protected_campaign_ids: CampaignProtector | None,
     pid: int,
     snapshots: list[dict[str, object]],
+    enrollment: TraceEnrollmentRecord,
 ) -> bool:
     """Write one decoded crash trace into the durable session log."""
     try:
@@ -160,7 +161,8 @@ def _finalize_crashed_trace(
             is_error=True,
             subtype="crashed",
             exit_code=-1,
-            start_ts=mtime_ts,
+            start_ts=enrollment.logical_run_start_ts or mtime_ts,
+            rollout=enrollment.rollout,
             proc_snapshots=snapshots if snapshots else None,
             termination_reason="CRASHED",
             provider_outcome=ProviderOutcome.none_used(),
@@ -245,6 +247,7 @@ def recover_crashed_sessions(
                 build_protected_campaign_ids=build_protected_campaign_ids,
                 pid=pid,
                 snapshots=snapshots,
+                enrollment=enrollment,
             ):
                 _delete_trace_pair(trace_file, enrollment_path)
                 count += 1

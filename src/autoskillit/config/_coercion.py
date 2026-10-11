@@ -19,8 +19,11 @@ from __future__ import annotations
 
 import dataclasses
 import types
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, TypeVar, Union, get_args, get_origin, get_type_hints
+
+import regex as re
 
 from autoskillit.config._config_loader import (
     _build_packs_config,
@@ -29,6 +32,7 @@ from autoskillit.config._config_loader import (
 )
 from autoskillit.config._dataclasses_errors import ConfigSchemaError
 from autoskillit.config._dataclasses_test_gating import _COMMAND_UNSET
+from autoskillit.core import RolloutMarker
 
 if TYPE_CHECKING:
     from _typeshed import DataclassInstance
@@ -190,10 +194,64 @@ _YAML_KEY_ALIASES: dict[tuple[str, str], str] = {
 }
 
 
+def _rollout_cutover_utc(cutover: Any) -> str:
+    if not isinstance(cutover, str) or re.search(r"(?:Z|[+-]00:00)$", cutover) is None:
+        raise ConfigSchemaError(
+            "rollout.active.effective_at must be an explicit UTC ISO-8601 timestamp"
+        )
+    try:
+        instant = datetime.fromisoformat(cutover.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ConfigSchemaError(
+            "rollout.active.effective_at must be an explicit UTC ISO-8601 timestamp"
+        ) from exc
+    if instant.utcoffset() != timedelta(0):
+        raise ConfigSchemaError("rollout.active.effective_at must be UTC")
+    return instant.astimezone(UTC).isoformat()
+
+
+def _build_rollout_active(
+    section: dict[str, Any], defaults: dict[str, Any]
+) -> RolloutMarker | None:
+    raw = section.get("active", defaults.get("active"))
+    if raw is None:
+        return None
+    keys = {"change_id", "effective_at", "scope", "expected_effect"}
+    if not isinstance(raw, Mapping) or set(raw) != keys:
+        raise ConfigSchemaError(
+            "rollout.active must contain exactly change_id, effective_at, scope, expected_effect"
+        )
+    for name in ("change_id", "expected_effect"):
+        if not isinstance(raw[name], str) or not raw[name].strip():
+            raise ConfigSchemaError(f"rollout.active.{name} must be a nonblank string")
+    effective_at = _rollout_cutover_utc(raw["effective_at"])
+    scope = raw["scope"]
+    if not isinstance(scope, Mapping) or set(scope) != {"skills", "backends", "roles"}:
+        raise ConfigSchemaError(
+            "rollout.active.scope must contain exactly skills, backends, roles"
+        )
+    copied_scope: dict[str, list[str]] = {}
+    for axis, values in scope.items():
+        if not isinstance(values, list) or any(
+            not isinstance(value, str) or not value.strip() for value in values
+        ):
+            raise ConfigSchemaError(
+                f"rollout.active.scope.{axis} must be a list of nonblank strings"
+            )
+        copied_scope[axis] = list(values)
+    return RolloutMarker(
+        change_id=raw["change_id"],
+        effective_at=effective_at,
+        scope=copied_scope,
+        expected_effect=raw["expected_effect"],
+    )
+
+
 # Custom field builders that bypass _coerce_value.
 # Signature: (section_dict, defaults_dict) -> coerced_value
 # The override is responsible for its own key lookup from section_dict.
 _FIELD_OVERRIDES: dict[tuple[str, str], Callable[[dict[str, Any], dict[str, Any]], Any]] = {
+    ("rollout", "active"): _build_rollout_active,
     # YAML key "default" with None-means-unset semantic.
     # ``defs.get(...)`` (no explicit fallback) is structurally defensive — if the
     # dataclass field is ever removed without updating this lambda, the .get()

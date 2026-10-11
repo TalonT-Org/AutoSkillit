@@ -14,7 +14,12 @@ import math
 from dataclasses import dataclass, field
 from typing import ClassVar, Literal, cast
 
-from autoskillit.core import CodexRuntimeSpec, OutputFormat
+from autoskillit.core import CodexRuntimeSpec, OutputFormat, RolloutMarker
+
+
+@dataclass
+class RolloutConfig:
+    active: RolloutMarker | None = None
 
 
 @dataclass

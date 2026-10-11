@@ -108,7 +108,7 @@ jobs:
           TEST: ${{ matrix.test }}
         run: |
           set -euo pipefail
-          docker_args=()
+          docker_args=(--shm-size=3g)
           if [[ '${{ matrix.kind }}' != 'clean-install' ]]; then
             docker_args+=(--env MINIMAX_API_KEY --env E2E_SANDBOX_TOKEN --env E2E_IMPLEMENTATION_ISSUE_URL)
             docker_args+=(--volume "$RUNNER_TEMP/e2e/data:/home/autoskillit/.local/share/autoskillit")

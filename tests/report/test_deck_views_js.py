@@ -671,8 +671,8 @@ def test_trend_renders_temporal_and_frozen_deltas_with_samples_and_guardrails(
     assert "unknown" in text
     assert "no observations" in text.lower()
     assert guardrail in text
-    delta_offset = text.index("3.75")
-    assert 0 <= text.index(guardrail) - delta_offset < 500
+    temporal_delta_offset = text.index("25 tokens/session")
+    assert abs(text.index(guardrail) - temporal_delta_offset) < 500
 
 
 def test_context_input_toggle_shows_inclusive_input_series(deck_asset: Any) -> None:

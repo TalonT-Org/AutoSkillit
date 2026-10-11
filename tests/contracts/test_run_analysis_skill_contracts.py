@@ -23,12 +23,7 @@ def test_analyze_run_loads_as_bounded_diagnostic_session_skill() -> None:
     assert skill.write_scope is not None
     assert skill.write_scope.kind.value == "bounded"
     assert skill.write_scope.paths == ("{{AUTOSKILLIT_TEMP}}/analyze-run/",)
-    assert skill.semantic_plan is not None
-    assert [role.name for role in skill.semantic_plan.logical_roles] == [
-        "run-analysis-interpreter"
-    ]
-    assert skill.semantic_plan.child_spawns == ()
-    assert skill.semantic_plan.join is None
+    assert skill.semantic_plan is None
 
     catalog = resolver.list_effective(
         None,
@@ -67,4 +62,4 @@ def test_analyze_run_contract_matches_frozen_packet_workflow() -> None:
     ):
         assert required in content
     assert "frozen packet" in content
-    assert "skip new interpretation" in content
+    assert "skip new interpretation" in " ".join(content.split())

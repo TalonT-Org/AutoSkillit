@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import ArtifactLease, validate_rollout_marker
+from autoskillit.core import ArtifactLease, TokenMeasure, validate_rollout_marker
 from autoskillit.core import atomic_write as _atomic_write
 
 from .deck._html import render_deck_html
@@ -47,19 +47,22 @@ def _coverage(populations: Mapping[str, list[dict[str, Any]]]) -> dict[str, Any]
                 not isinstance(row.get("time_ms"), int) or isinstance(row.get("time_ms"), bool)
                 for row in rows
             ),
-            "measure_states": {
-                field: dict(
-                    sorted(
-                        Counter(
-                            row[field].get("state", "unknown")
-                            if isinstance(row.get(field), Mapping)
-                            else "unknown"
-                            for row in rows
-                        ).items()
-                    )
+        }
+        if name == "tools":
+            continue
+        measures = [row.get("token_usage", {}) if name == "subagents" else row for row in rows]
+        result["populations"][name]["measure_states"] = {
+            field: dict(
+                sorted(
+                    Counter(
+                        TokenMeasure.measure_from_raw(
+                            row.get(field) if isinstance(row, Mapping) else None
+                        ).state.value
+                        for row in measures
+                    ).items()
                 )
-                for field in TOKEN_FIELDS
-            },
+            )
+            for field in TOKEN_FIELDS
         }
     return result
 
@@ -367,10 +370,15 @@ def _verify_completed(output_dir: Path, manifest: dict[str, Any]) -> dict[str, A
 def _completed_findings(root: Path, packet: dict[str, Any]) -> dict[str, Any] | None:
     winner = None
     for path in sorted(root.glob("*/analysis.json")):
+        read_error: OSError | None = None
         try:
             manifest_bytes = path.read_bytes()
         except (FileNotFoundError, NotADirectoryError, PermissionError) as exc:
-            raise ValueError("retained completion manifest is unavailable") from exc
+            read_error = exc
+        if read_error is not None:
+            raise ValueError(
+                f"retained completion manifest is unavailable: {path}"
+            ) from read_error
         manifest = json.loads(manifest_bytes)
         if manifest.get("input_fingerprint") != packet["input_fingerprint"]:
             continue

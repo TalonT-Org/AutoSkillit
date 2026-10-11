@@ -14,12 +14,6 @@ hooks:
     - type: command
       command: 'echo ''[SKILL: analyze-run] Preparing a frozen run analysis...'''
       once: true
-semantic_version: 1
-semantic_requirements:
-  logical_roles:
-  - name: run-analysis-interpreter
-    purpose: use this session's terminal and file tools to interpret the frozen packet and write cited findings
-  child_spawns: []
 ---
 
 # Analyze Run

@@ -183,6 +183,20 @@ def test_input_fingerprint_is_independent_of_each_population_order(population_na
     assert _json_bytes(actual) == _json_bytes(expected)
 
 
+def test_coverage_counts_request_and_nested_child_measures() -> None:
+    populations = _populations()
+    populations["requests"][0]["input_tokens"] = 0
+    coverage = _prepare(populations)["coverage"]["populations"]
+
+    assert coverage["requests"]["measure_states"]["input_tokens"] == {
+        "measured_zero": 1,
+        "measured": 1,
+    }
+    assert coverage["subagents"]["measure_states"]["input_tokens"] == {"measured": 2}
+    assert coverage["turns"]["measure_states"]["input_tokens"] == {"measured": 2}
+    assert "measure_states" not in coverage["tools"]
+
+
 def test_empty_change_id_has_no_cohort_comparisons() -> None:
     cohort = _prepare({"sessions": [_session("session-a", time_ms=1)]})["cohort"]
 

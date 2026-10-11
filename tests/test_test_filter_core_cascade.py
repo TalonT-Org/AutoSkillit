@@ -798,7 +798,8 @@ class TestBuildTestScopeCoreCascade:
         dir_names = {p.name for p in result}
         for pkg in ["core", "execution", "server", "fleet", "migration"]:
             assert pkg in dir_names, f"_type_results cascade should include {pkg}"
-        assert ("config" in dir_names) == source_path.endswith("_type_results_records.py")
+        assert "config" in dir_names
+        assert ("report" in dir_names) == source_path.endswith("_type_results.py")
         for excluded in ["hooks", "skills", "planner"]:
             assert excluded not in dir_names, (
                 f"_type_results cascade should not include {excluded}"

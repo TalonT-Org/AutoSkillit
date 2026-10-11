@@ -314,6 +314,26 @@ def test_writer_requires_a_dated_new_directory(
     assert marker.read_text(encoding="utf-8") == "existing"
 
 
+def test_vanished_completed_manifest_is_a_visible_error(
+    tmp_path: Path, frozen_packet: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "analyses"
+    completed = _dated_dir(root, "completed")
+    _complete(completed, frozen_packet)
+    read_bytes = Path.read_bytes
+
+    def read_with_vanished_manifest(path: Path) -> bytes:
+        if path == completed / "analysis.json":
+            raise FileNotFoundError(path)
+        return read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", read_with_vanished_manifest)
+    target = _dated_dir(root, "new")
+    with pytest.raises(ValueError, match="completion manifest is unavailable"):
+        write_run_analysis_packet(target, frozen_packet)
+    assert not target.exists()
+
+
 @pytest.mark.parametrize("corrupt", ("measurements.json", "findings.json", "report.html"))
 def test_corrupt_completed_artifacts_cannot_supply_reused_findings(
     tmp_path: Path, frozen_packet: dict[str, Any], corrupt: str

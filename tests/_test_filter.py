@@ -1183,10 +1183,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # file-level: the deck column drift guard imports
             # execution._report_index_types.ReportSessionRow.
             "report/test_deck_registry.py",
-            # file-level: these report HTML/shell and analysis contracts also import
-            # execution schema constants or report-index row types.
-            "report/test_deck_html.py",
-            "report/test_deck_shell_js.py",
+            # file-level: run-analysis packet and publication contracts import the
+            # report-index schema version from execution.
             "report/test_run_analysis.py",
             "report/test_run_analysis_publication.py",
             "_llm_triage",

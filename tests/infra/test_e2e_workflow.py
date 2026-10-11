@@ -420,7 +420,7 @@ def test_clean_install_uses_the_common_user_image_and_artifacts(
     run = _inline_smoke_cleanup(_step(workflow, "run", step_id=step_id)["run"])
     branch, outside = _model_branch(run)
 
-    assert run.count("docker_args=()") == 1
+    assert run.count("docker_args=(") == 1
     assert '"${docker_args[@]}"' in outside
     assert "docker run --rm" in outside
     assert '"$IMAGE"' in outside

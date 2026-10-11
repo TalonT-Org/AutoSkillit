@@ -15,24 +15,24 @@ _STR_RX = re.compile(r"(?:^|[/\"'`\s(~])\.autoskillit/([A-Za-z0-9._-]+)")
 
 # These names are accounted for elsewhere: home-level artifacts, a read-only
 # legacy path, a runtime directory with a real-git proof, and a tracked gap.
-_CLASSIFIED_ELSEWHERE: dict[str, int] = {
+_CLASSIFIED_ELSEWHERE: set[str] = {
     # Home-level hook state: hooks/guards/mcp_health_advisor.py:36.
-    "active_kitchens.json": 1,
+    "active_kitchens.json",
     # Home-level marketplace shape: core/types/constants/_type_constants_retirements.py:309.
-    "marketplace": 1,
+    "marketplace",
     # Home-level plugin storage: cli/doctor/_doctor_install.py:355.
-    "plugin-generations": 1,
+    "plugin-generations",
     # Home-level hook projection repair: workspace/_projected_artifact/_hook_repair.py:538.
-    "plugin-projections": 1,
+    "plugin-projections",
     # Home-level dismissal state: cli/update/_update_checks.py:79.
-    "update_check.json": 1,
+    "update_check.json",
     # Legacy path is read only for migration: cli/install/_marketplace.py:162.
-    "scripts": 1,
+    "scripts",
     # Runtime self-ignore is proven by tests/workspace/test_clone_gate_runtime_state.py.
-    "managed-headless-session-lineage": 1,
+    "managed-headless-session-lineage",
     # Known gap: init writes this without a keep-out rule; tracked by #5258
     # recommendation 4.
-    ".state.yaml": 1,
+    ".state.yaml",
 }
 
 
@@ -119,11 +119,8 @@ def test_every_autoskillit_child_named_in_src_is_classified() -> None:
         for child in _children_named_in(ast.parse(path.read_text(encoding="utf-8")))
     }
     ignored_names = {entry.rstrip("/") for entry in _AUTOSKILLIT_GITIGNORE_ENTRIES}
-    classified_elsewhere = {
-        name for name, classification in _CLASSIFIED_ELSEWHERE.items() if classification == 1
-    }
     unclassified = sorted(
-        named - set(_COMMITTED_BY_DESIGN) - ignored_names - {".gitignore"} - classified_elsewhere
+        named - set(_COMMITTED_BY_DESIGN) - ignored_names - {".gitignore"} - _CLASSIFIED_ELSEWHERE
     )
 
     assert not unclassified, (

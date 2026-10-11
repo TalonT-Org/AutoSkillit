@@ -1,8 +1,6 @@
 DeckShell.registerView("trend", ctx => {
   const tokenFields = ["input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens"];
   const colors = ["s1", "s2", "s3", "s4"];
-  const deltaGuardrail = "Observed differences prompt investigation; " +
-    "they are not proof of causation.";
   const groupText = row => [row.skill ?? "unknown skill", row.recipe ?? "unknown recipe",
     row.step ?? "unknown step", row.harness ?? "unknown harness",
     row.provider ?? "unknown provider", row.model ?? "unknown model"].join(" · ");
@@ -162,7 +160,7 @@ DeckShell.registerView("trend", ctx => {
         DeckCore.formatCount(delta.earlier_samples)) + "/" +
       (delta?.later_samples == null ? "unavailable" :
         DeckCore.formatCount(delta.later_samples)) + " · " +
-      (delta?.guardrail ?? deltaGuardrail);
+      delta?.guardrail;
   }
 
   const comparisons = ctx.metrics?.comparisons ?? [];
@@ -196,7 +194,7 @@ DeckShell.registerView("trend", ctx => {
             DeckCore.formatCount(row.delta.earlier_samples)) + "/" +
           (row.delta.later_samples == null ? "unavailable" :
             DeckCore.formatCount(row.delta.later_samples)) + " · " +
-          (row.delta.guardrail ?? deltaGuardrail);
+          row.delta.guardrail;
     }}
   ];
   const cohort = ctx.model.analysis?.cohort;

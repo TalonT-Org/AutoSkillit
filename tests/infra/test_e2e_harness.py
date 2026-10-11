@@ -547,6 +547,7 @@ class TestSandboxSmokeFixture:
         assert "child agents" in discipline and "replay" in discipline
         assert recipe.steps["setup"].with_args["cwd"] == "${{ context.worktree_path }}"
         assert worker.with_args["cwd"] == "${{ context.worktree_path }}"
+        assert worker.with_args["output_dir"] == worker.with_args["cwd"]
         assert recipe.steps["test"].tool == "test_check"
         assert recipe.steps["test"].with_args["worktree_path"] == "${{ context.worktree_path }}"
         assert recipe.steps["push"].with_args["clone_path"] == "${{ context.worktree_path }}"

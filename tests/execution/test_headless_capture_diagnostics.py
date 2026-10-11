@@ -99,6 +99,7 @@ class _ExecutionContext:
                 completion_child_deferral_ceiling_seconds=1.0,
             ),
             providers=SimpleNamespace(provider_retry_limit=0),
+            rollout=SimpleNamespace(active=None),
             linux_tracing=SimpleNamespace(
                 log_dir=log_dir,
                 max_sessions=20,

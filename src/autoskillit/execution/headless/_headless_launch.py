@@ -20,6 +20,7 @@ from autoskillit.core import (
     PluginLoadMode,
     ResolvedLaunchContract,
     RetryReason,
+    RolloutMarker,
     SkillContractView,
     SkillResult,
     StreamParser,
@@ -64,21 +65,6 @@ def _report_plugin_binding_close_failure(error: BaseException, _: BaseException)
     logger.warning("plugin_launch_binding_close_failed", primary_error=repr(error), exc_info=True)
 
 
-def _plugin_launch_binding(
-    *,
-    authority: PluginArtifactAuthority | None,
-    backend: CodingAgentBackend,
-    load_mode: PluginLoadMode,
-) -> AbstractContextManager[PluginLaunchBinding | None]:
-    """Own one exact artifact binding for the complete child attempt."""
-    return plugin_launch_binding_scope(
-        authority=authority,
-        backend=backend,
-        load_mode=load_mode,
-        on_suppressed_close_error=_report_plugin_binding_close_failure,
-    )
-
-
 async def _run_headless_attempt(
     build_spec: _BuildSpec,
     *,
@@ -97,6 +83,7 @@ async def _run_headless_attempt(
     completion_drain_timeout: float,
     natural_exit_grace_seconds: float,
     linux_tracing_config: Any,
+    capture_rollout_on_launch: Callable[[], tuple[RolloutMarker | None, str]],
     idle_output_timeout: float | None,
     max_suppression_seconds: float,
     child_deferral_ceiling: float,
@@ -126,10 +113,11 @@ async def _run_headless_attempt(
     binding_scope: AbstractContextManager[PluginLaunchBinding | None] = (
         nullcontext(retained_binding)
         if retained_binding is not None
-        else _plugin_launch_binding(
+        else plugin_launch_binding_scope(
             authority=plugin_authority,
             backend=backend,
             load_mode=plugin_load_mode,
+            on_suppressed_close_error=_report_plugin_binding_close_failure,
         )
     )
     with binding_scope as binding:
@@ -187,6 +175,7 @@ async def _run_headless_attempt(
                     on_spec_built(spec)
                 if mark_execution_started is not None:
                     mark_execution_started()
+                rollout, logical_run_start_ts = capture_rollout_on_launch()
                 result = await runner(
                     list(spec.cmd),
                     cwd=Path(spec.cwd),
@@ -201,6 +190,8 @@ async def _run_headless_attempt(
                     completion_drain_timeout=completion_drain_timeout,
                     natural_exit_grace_seconds=natural_exit_grace_seconds,
                     linux_tracing_config=linux_tracing_config,
+                    rollout=rollout,
+                    logical_run_start_ts=logical_run_start_ts,
                     idle_output_timeout=idle_output_timeout,
                     max_suppression_seconds=max_suppression_seconds,
                     child_deferral_ceiling=child_deferral_ceiling,
@@ -234,6 +225,8 @@ async def _attempt_contract_nudge(
     cwd: str,
     runner: SubprocessRunner,
     *,
+    capture_rollout_on_launch: Callable[[], tuple[RolloutMarker | None, str]],
+    linux_tracing_config: Any | None = None,
     backend: CodingAgentBackend | None = None,
     result_parser: ResultParser | None = None,
     provider_extras: Mapping[str, str] | None = None,
@@ -326,10 +319,11 @@ async def _attempt_contract_nudge(
     nudge_binding_scope: AbstractContextManager[PluginLaunchBinding | None] = (
         nullcontext(retained_binding)
         if retained_binding is not None
-        else _plugin_launch_binding(
+        else plugin_launch_binding_scope(
             authority=plugin_authority,
             backend=backend,
             load_mode=plugin_load_mode,
+            on_suppressed_close_error=_report_plugin_binding_close_failure,
         )
     )
     try:
@@ -430,6 +424,7 @@ async def _attempt_contract_nudge(
                 nudge_start_ts = datetime.now(UTC).isoformat()
                 if mark_execution_started is not None:
                     mark_execution_started()
+                rollout, logical_run_start_ts = capture_rollout_on_launch()
                 nudge_result = await runner(
                     list(spec.cmd),
                     cwd=Path(spec.cwd),
@@ -443,6 +438,9 @@ async def _attempt_contract_nudge(
                     on_process_reaped=handle.record_reaped if handle is not None else None,
                     ceiling_seconds=ceiling_seconds,
                     natural_exit_grace_seconds=natural_exit_grace_seconds,
+                    rollout=rollout,
+                    logical_run_start_ts=logical_run_start_ts,
+                    linux_tracing_config=linux_tracing_config,
                     line_driver=backend.line_driver(spec),
                 )
                 nudge_end_ts = datetime.now(UTC).isoformat()

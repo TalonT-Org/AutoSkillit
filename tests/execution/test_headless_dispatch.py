@@ -183,10 +183,11 @@ def test_plugin_binding_cleanup_does_not_replace_primary_error(
     monkeypatch.setattr(headless_launch, "logger", logger)
 
     with pytest.raises(RuntimeError) as caught:
-        with headless_launch._plugin_launch_binding(
+        with headless_launch.plugin_launch_binding_scope(
             authority=authority,
             backend=ClaudeCodeBackend(),
             load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+            on_suppressed_close_error=headless_launch._report_plugin_binding_close_failure,
         ):
             raise primary
 

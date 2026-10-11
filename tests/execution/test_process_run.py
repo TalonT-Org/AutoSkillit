@@ -338,6 +338,42 @@ class TestSubprocessResultAndRunnerTypes:
             == ()
         )
 
+    @pytest.mark.anyio
+    async def test_default_runner_forwards_rollout_and_logical_run_start(
+        self, monkeypatch, tmp_path
+    ):
+        from autoskillit.execution.process import DefaultSubprocessRunner
+        from tests.conftest import _make_result
+
+        rollout = {
+            "change_id": "prompt-cost-study",
+            "effective_at": "2026-11-01T18:00:00+00:00",
+            "scope": {"skills": ["make-plan"], "backends": ["codex"], "roles": ["planner"]},
+            "expected_effect": "Reduce planning input tokens while preserving coverage.",
+        }
+        logical_run_start_ts = "2026-10-10T19:00:00+00:00"
+        captured: dict[str, object] = {}
+        expected = _make_result(returncode=0)
+
+        async def fake_run_managed_async(_cmd, **kwargs):
+            captured.update(kwargs)
+            return expected
+
+        import autoskillit.execution.process as process
+
+        monkeypatch.setattr(process, "run_managed_async", fake_run_managed_async)
+        result = await DefaultSubprocessRunner()(
+            ["python", "-c", "pass"],
+            cwd=tmp_path,
+            timeout=10,
+            rollout=rollout,
+            logical_run_start_ts=logical_run_start_ts,
+        )
+
+        assert result is expected
+        assert captured["rollout"] is rollout
+        assert captured["logical_run_start_ts"] == logical_run_start_ts
+
 
 class TestTracingStopOnException:
     """Verify tracing_handle.stop() is called on BaseException in run_managed_async."""
@@ -382,6 +418,35 @@ class TestTracingStopOnException:
 
         # stop() should have been called (via happy path or exception path)
         assert len(stop_called) >= 1
+
+
+@pytest.mark.anyio
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux-only tracing")
+async def test_run_managed_async_forwards_rollout_to_trace_enrollment(monkeypatch, tmp_path):
+    from autoskillit.execution.evidence import linux_tracing
+    from tests._helpers import make_rollout_marker, make_tracing_config
+
+    rollout = make_rollout_marker(backends=("codex",))
+    logical_run_start_ts = "2026-10-10T19:00:00+00:00"
+    forwarded: list[tuple[object, str]] = []
+
+    def capture_enrollment(*, rollout=None, logical_run_start_ts="", **_kwargs):
+        forwarded.append((rollout, logical_run_start_ts))
+
+    monkeypatch.setattr(linux_tracing, "start_linux_tracing", capture_enrollment)
+    cfg = make_tracing_config(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
+
+    result = await run_managed_async(
+        [sys.executable, "-c", "pass"],
+        cwd=tmp_path,
+        timeout=10,
+        linux_tracing_config=cfg,
+        rollout=rollout,
+        logical_run_start_ts=logical_run_start_ts,
+    )
+
+    assert result.returncode == 0
+    assert forwarded == [(rollout, logical_run_start_ts)]
 
 
 class TestManagedProcessOwnership:

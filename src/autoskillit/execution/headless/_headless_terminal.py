@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
     CodingAgentBackend,
@@ -20,11 +20,36 @@ from autoskillit.core import (
     RecipeIdentity,
     ResolvedLaunchContract,
     RetryReason,
+    RolloutMarker,
     SessionTelemetry,
     SessionType,
     SkillResult,
     SubprocessResult,
+    get_logger,
 )
+
+if TYPE_CHECKING:
+    from autoskillit.pipeline.context import ToolContext
+
+logger = get_logger(__name__)
+
+
+def persist_terminal_selection(ctx: ToolContext, selection: ExecutionSelection | None) -> None:
+    """Publish the final candidate manifest without interrupting session logging."""
+    if selection is None:
+        return
+    from autoskillit.execution.session_log.session_log import write_execution_candidate_manifest
+
+    try:
+        write_execution_candidate_manifest(
+            selection,
+            ctx.config.linux_tracing.log_dir,
+            max_sessions=ctx.config.linux_tracing.max_sessions,
+            project_dir=str(ctx.project_dir),
+            build_protected_campaign_ids=ctx.build_protected_campaign_ids,
+        )
+    except Exception:
+        logger.debug("execution_candidate_manifest_write_failed", exc_info=True)
 
 
 def reconcile_token_evidence(
@@ -290,6 +315,8 @@ def build_terminal_flush_kwargs(
     skill_command: str,
     step_name: str,
     start_ts: str,
+    rollout: RolloutMarker | None,
+    logical_run_start_ts: str | None,
     termination_reason: str,
     exception_text: str,
     versions: dict[str, Any],
@@ -332,7 +359,8 @@ def build_terminal_flush_kwargs(
         "is_error": skill_result.is_error,
         "subtype": skill_result.subtype,
         "exit_code": skill_result.exit_code,
-        "start_ts": result.start_ts if result is not None else start_ts,
+        "start_ts": logical_run_start_ts if logical_run_start_ts is not None else start_ts,
+        "rollout": rollout,
         "proc_snapshots": result.proc_snapshots if result is not None else None,
         "termination_reason": (
             result.termination.value if result is not None else termination_reason

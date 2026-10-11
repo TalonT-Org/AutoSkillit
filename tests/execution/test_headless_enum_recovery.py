@@ -28,6 +28,10 @@ from tests.execution.conftest import _launch_inputs, _mock_backend, _success_ses
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
+def _unmarked_rollout_snapshot() -> tuple[None, str]:
+    return None, "2000-01-01T00:00:00+00:00"
+
+
 def _make_plan_contract(
     *,
     write_behavior: str | None = "conditional",
@@ -366,6 +370,7 @@ class TestEnumNudgeIntegration:
             skill_contract=contract,
             launch_resolver=launch_resolver,
             launch_preparation=launch_preparation,
+            capture_rollout_on_launch=_unmarked_rollout_snapshot,
             natural_exit_grace_seconds=3.0,
         )
         assert patched is not None
@@ -388,6 +393,7 @@ class TestEnumNudgeIntegration:
             skill_contract=contract,
             launch_resolver=launch_resolver,
             launch_preparation=launch_preparation,
+            capture_rollout_on_launch=_unmarked_rollout_snapshot,
             natural_exit_grace_seconds=3.0,
         )
         assert rejected is None

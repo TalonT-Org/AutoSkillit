@@ -130,7 +130,7 @@ globalThis.DeckTest = {
     const cohortKeys = ["harness", "provider", "level", "window"];
     const context = {
       ...input,
-      model: {prepared: input.prepared},
+      model: input.model ?? {prepared: input.prepared},
       el: deckNode,
       href: target => DeckCore.hrefFor(route, target, cohortKeys),
       entityLink: (text, target) => deckNode("a", {
@@ -578,6 +578,101 @@ def test_view_renderers_keep_prepared_populations_and_filter_links(
             assert any("session=owner-key-1" in href for href in rendered["links"])
     finally:
         context.close()
+
+
+def test_trend_renders_temporal_and_frozen_deltas_with_samples_and_guardrails(
+    deck_asset: Any,
+) -> None:
+    guardrail = "Observed differences prompt investigation; they are not proof of causation."
+    group = ["summarizer", "daily", "draft", "codex", "openai", "gpt-test"]
+    measured = {
+        "group": group,
+        "metric": "input_tokens",
+        "before": {
+            "state": "measured",
+            "value": 10.5,
+            "observed_sessions": 2,
+            "eligible_sessions": 3,
+            "state_counts": {"measured": 2, "unknown": 1},
+        },
+        "after": {
+            "state": "measured",
+            "value": 14.25,
+            "observed_sessions": 3,
+            "eligible_sessions": 4,
+            "state_counts": {"measured": 3, "unknown": 1},
+        },
+        "delta": {
+            "state": "measured",
+            "value": 3.75,
+            "unit": "tokens/session",
+            "earlier_samples": 2,
+            "later_samples": 3,
+            "reason": None,
+            "guardrail": guardrail,
+        },
+    }
+    no_observations = {
+        "group": group,
+        "metric": "output_tokens",
+        "before": {
+            "state": "no_observations",
+            "value": None,
+            "observed_sessions": 0,
+            "eligible_sessions": 2,
+            "state_counts": {"unknown": 2},
+        },
+        "after": {
+            "state": "measured",
+            "value": 8,
+            "observed_sessions": 1,
+            "eligible_sessions": 1,
+            "state_counts": {"measured": 1},
+        },
+        "delta": {
+            "state": "no_observations",
+            "value": None,
+            "unit": "tokens/session",
+            "earlier_samples": 0,
+            "later_samples": 1,
+            "reason": "earlier interval has no observed values",
+            "guardrail": guardrail,
+        },
+    }
+    view = _new_view_context("trend")
+    view["metrics"]["comparisons"][0]["deltas"]["input_tokens"]["guardrail"] = guardrail
+    view["model"] = {
+        "prepared": view["prepared"],
+        "analysis": {
+            "cohort": {"change_id": "change-42", "comparisons": [measured, no_observations]}
+        },
+    }
+
+    context = _load_renderers(deck_asset)
+    try:
+        rendered = context.call("DeckTest.render", "trend", view)
+    finally:
+        context.close()
+
+    text = rendered["text"]
+    for marker in (
+        "Frozen rollout comparison",
+        "10.5",
+        "14.25",
+        "3.75",
+        "25",
+        "tokens/session",
+        "n=1/1",
+    ):
+        assert marker in text
+    assert "observed samples 2/3" in text
+    assert "eligible 3" in text and "eligible 4" in text
+    assert "2" in text and "3" in text
+    assert "unknown" in text
+    assert "no observations" in text.lower()
+    assert guardrail in text
+    delta_offset = text.index("3.75")
+    assert 0 <= text.index(guardrail) - delta_offset < 500
 
 
 def test_context_input_toggle_shows_inclusive_input_series(deck_asset: Any) -> None:

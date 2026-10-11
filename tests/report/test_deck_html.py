@@ -14,10 +14,11 @@ from zipfile import ZipFile
 import pytest
 
 from autoskillit.core import pkg_root
+from autoskillit.execution import REPORT_INDEX_SCHEMA_VERSION
 from autoskillit.report import render_deck
+from autoskillit.report.deck import _analysis_payload, build_deck_payload
 from autoskillit.report.deck import _html as deck_html
 from autoskillit.report.deck import _payload as deck_payload_module
-from autoskillit.report.deck import build_deck_payload
 from autoskillit.report.deck import render_deck as render_deck_from_deck
 from autoskillit.report.deck._html import render_deck_html
 from autoskillit.report.deck._registry import DECK_VIEWS
@@ -57,6 +58,32 @@ def _collect(html: str) -> _HTMLCollector:
     collector.feed(html)
     collector.close()
     return collector
+
+
+def _saved_analysis_payload(
+    payload: dict[str, Any],
+    *,
+    findings: list[dict[str, Any]],
+    evidence: dict[str, Any],
+) -> dict[str, Any]:
+    packet = {
+        "payload": payload,
+        "input_fingerprint": "frozen-input-fingerprint",
+        "coverage": {
+            "limitation": (
+                "Coverage includes retained report-index sources, "
+                "not complete historical coverage."
+            ),
+            "populations": {},
+        },
+        "cohort": {"change_id": None, "reason": "No rollout cohort applied.", "comparisons": []},
+        "evidence": evidence,
+    }
+    interpretation = {
+        "interpreter": {"role": "research-synthesizer", "model": "test-model", "prompt": None},
+        "findings": findings,
+    }
+    return _analysis_payload(packet, interpretation, 1_791_504_000_123)
 
 
 def test_rendered_deck_has_no_network_dependency(deck_payload: dict[str, Any]) -> None:
@@ -150,6 +177,75 @@ def test_embedded_json_escapes_markup_and_round_trips(deck_rows: list[dict[str, 
             "<!--deck:scripts-->",
         )
     )
+
+
+def test_saved_analysis_findings_are_inert_and_offline(
+    deck_asset: Any, deck_payload: dict[str, Any]
+) -> None:
+    hostile = "</script><img src=x onerror=alert(1)>"
+    evidence = {
+        "evidence-1": {
+            "view_id": "cohort",
+            "source": "session",
+            "measurement": {"note": hostile, "value": 10.5, "unit": "tokens"},
+        }
+    }
+    payload = _saved_analysis_payload(
+        deck_payload,
+        findings=[{"view_id": "cohort", "text": hostile, "evidence_ids": ["evidence-1"]}],
+        evidence=evidence,
+    )
+    html = render_deck_html(payload)
+    collector = _collect(html)
+    data_script = next(
+        source for attrs, source in collector.scripts if attrs.get("id") == "deck-data"
+    )
+
+    assert json.loads(data_script) == payload
+    assert payload["analysis"]["findings"][0]["text"] == hostile
+    assert hostile not in html
+    assert not any(tag == "img" for tag, _ in collector.elements)
+    assert all("src" not in attrs for _, attrs in collector.elements)
+    assert all(
+        attrs.get("href") is None or attrs["href"].startswith("#")
+        for tag, attrs in collector.elements
+        if tag == "a"
+    )
+    assert "report-index/rows.jsonl" not in html
+    assert all(
+        name not in html for name in ("analysis.json", "findings.json", "measurements.json")
+    )
+    actual_scripts = [source for attrs, source in collector.scripts if "type" not in attrs]
+    view_assets = [
+        deck_asset(view.script)
+        for view in DECK_VIEWS
+        if view.planned_issue is None and view.script is not None
+    ]
+    assert actual_scripts == [deck_asset("core.js"), deck_asset("shell.js"), *view_assets]
+
+
+def test_empty_saved_analysis_keeps_explicit_no_observations_finding() -> None:
+    payload = build_deck_payload(
+        [], generated_at=DECK_GENERATED_AT, index_schema_version=REPORT_INDEX_SCHEMA_VERSION
+    )
+    payload = _saved_analysis_payload(
+        payload,
+        findings=[
+            {
+                "view_id": "cohort",
+                "text": "No observations in the frozen corpus.",
+                "evidence_ids": [],
+            }
+        ],
+        evidence={},
+    )
+
+    collector = _collect(render_deck_html(payload))
+    data_script = next(
+        source for attrs, source in collector.scripts if attrs.get("id") == "deck-data"
+    )
+
+    assert json.loads(data_script)["analysis"]["findings"] == payload["analysis"]["findings"]
 
 
 def test_rendered_scripts_follow_core_shell_and_registry_order(

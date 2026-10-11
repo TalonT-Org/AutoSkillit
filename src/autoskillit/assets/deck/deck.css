@@ -148,6 +148,20 @@ svg { display: block; max-width: 100%; height: auto; }
 .view-review button:disabled, .view-review-signal button:disabled { cursor: not-allowed; opacity: .6; }
 .view-review__reason { color: var(--warn); font-size: 12px; }
 .view-actor { color: var(--ink-3); font: 11px var(--mono); }
+.run-analysis__populations { margin: 0; padding-left: 20px; color: var(--ink-2); }
+.run-analysis__finding { border-top: 1px solid var(--rule); padding: 12px 0; }
+.run-analysis__comparison { border-left: 2px solid var(--rule-2); padding-left: 12px; }
+.run-analysis__measure { margin: 8px 0; }
+.run-analysis__measure p { margin: 3px 0; }
+.run-analysis__fields { margin: 6px 0; }
+.run-analysis__evidence { margin: 6px 0; }
+.run-analysis__evidence summary { color: var(--s1); cursor: pointer; }
+.run-analysis__evidence pre { color: var(--ink-2); font: 10px/1.5 var(--mono);
+  white-space: pre-wrap; overflow-wrap: anywhere; }
+.trend-rollout__measure { margin: 0; min-width: 180px; max-width: 420px;
+  font: 10px/1.4 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.trend-rollout__delta { display: block; min-width: 220px; max-width: 480px;
+  line-height: 1.45; white-space: normal; overflow-wrap: anywhere; }
 .foot { color: var(--ink-3); font: 10px/1.5 var(--mono); padding: 0 28px 24px; }
 @media screen and (max-width: 860px) {
   .shell { grid-template-columns: minmax(0,1fr); }

@@ -243,6 +243,136 @@ globalThis.DeckShell = (() => {
       }, "Reset cohort"));
     }
 
+    function renderAnalysisCard(analysis, viewId) {
+      const display = value => value == null || value === "" ? "not recorded" :
+        typeof value === "object" ? JSON.stringify(value) : String(value);
+      const interpreter = analysis.interpreter ?? {};
+      const identity = el("dl", {class: "run-analysis__identity"}, [
+        el("dt", {}, "Input fingerprint"), el("dd", {}, display(analysis.input_fingerprint)),
+        el("dt", {}, "Interpreter role"), el("dd", {}, display(interpreter.role)),
+        el("dt", {}, "Model"), el("dd", {}, display(interpreter.model)),
+        el("dt", {}, "Prompt"), el("dd", {}, display(interpreter.prompt))
+      ]);
+      const populations = Object.entries(analysis.coverage?.populations ?? {}).map(
+        ([name, coverage]) => {
+          const states = Object.entries(coverage.measure_states ?? {}).map(([field, counts]) =>
+            field + ": " + Object.entries(counts ?? {}).map(([state, count]) =>
+              state + " " + display(count)).join(", "));
+          return el("li", {}, name + " · rows " + display(coverage.rows) + " · untimed " +
+            display(coverage.untimed_rows) + (states.length ? " · " + states.join("; ") : ""));
+        });
+      const cohort = analysis.cohort ?? {};
+      const hasCohort = cohort.change_id != null && String(cohort.change_id).length > 0;
+      const cohortContent = hasCohort ? el("dl", {class: "run-analysis__cohort"}, [
+        el("dt", {}, "Change ID"), el("dd", {}, display(cohort.change_id)),
+        el("dt", {}, "Effective at"), el("dd", {}, display(cohort.effective_at)),
+        el("dt", {}, "Scope"), el("dd", {}, display(cohort.scope)),
+        el("dt", {}, "Expected effect"), el("dd", {}, display(cohort.expected_effect)),
+        el("dt", {}, "Before / after / excluded"), el("dd", {},
+          [cohort.before_count, cohort.after_count, cohort.excluded_count]
+            .map(display).join(" / ")),
+        el("dt", {}, "Marked pre-cutover baseline"), el("dd", {},
+          cohort.marked_pre_cutover_observation ? "yes" : "no"),
+        el("dt", {}, "Preregistration"), el("dd", {}, display(cohort.preregistration))
+      ]) : el("div", {}, [
+        el("p", {}, "No rollout cohort applied."),
+        el("p", {}, display(cohort.reason)),
+        el("p", {}, "Baseline and preregistration assessment is unavailable " +
+          "without a rollout cohort.")
+      ]);
+
+      function evidenceMeasure(label, measure, fallbackUnit) {
+        if (!measure || typeof measure !== "object") {
+          return el("p", {}, label + " · " + display(measure));
+        }
+        const value = measure.value == null ? "value unavailable" : display(measure.value);
+        const unit = measure.unit ?? fallbackUnit ?? "unit not reported";
+        const observed = measure.observed_sessions ?? measure.sample_size;
+        const eligible = measure.eligible_sessions ?? measure.eligible_count;
+        const unknown = measure.unknown_sessions ?? measure.unknown_runs ??
+          measure.state_counts?.unknown;
+        const sampleText = measure.earlier_samples != null || measure.later_samples != null ?
+          "Observed before/after samples " + display(measure.earlier_samples) + "/" +
+            display(measure.later_samples) :
+          "Observed samples " + display(observed);
+        const states = Object.entries(measure.state_counts ?? {}).map(([state, count]) =>
+          state + " " + display(count)).join(", ");
+        return el("div", {class: "run-analysis__measure"}, [
+          el("p", {}, [el("strong", {}, label), " · ", availabilityCell(measure), " · ", value,
+            " ", unit, measure.reason ? " · " + measure.reason : ""]),
+          el("p", {}, sampleText + " · eligible " + display(eligible) + " · unknown " +
+            display(unknown)),
+          states ? el("p", {}, "Availability counts · " + states) : null,
+          measure.guardrail ? el("p", {}, "Guardrail · " + measure.guardrail) : null
+        ]);
+      }
+
+      function evidenceSummary(measurement) {
+        if (!measurement || typeof measurement !== "object") {
+          return el("p", {}, display(measurement));
+        }
+        if (measurement.before && measurement.after && measurement.delta && measurement.metric) {
+          return el("div", {class: "run-analysis__comparison"}, [
+            el("p", {}, "Measure · " + display(measurement.metric)),
+            Array.isArray(measurement.group) ? el("p", {}, "Group · " +
+              measurement.group.map(display).join(" · ")) : null,
+            evidenceMeasure("Before", measurement.before, measurement.delta.unit),
+            evidenceMeasure("After", measurement.after, measurement.delta.unit),
+            evidenceMeasure("Delta", measurement.delta, measurement.delta.unit)
+          ]);
+        }
+        if ("state" in measurement || "value" in measurement) {
+          return evidenceMeasure("Measurement", measurement, measurement.unit);
+        }
+        return el("dl", {class: "run-analysis__fields"}, Object.entries(measurement).flatMap(
+          ([key, value]) => [el("dt", {}, key), el("dd", {}, display(value))]
+        ));
+      }
+
+      const children = [
+        el("h2", {}, "Run analysis"),
+        identity,
+        el("h3", {}, "Frozen coverage"),
+        el("p", {}, display(analysis.coverage?.limitation)),
+        el("p", {}, "This analysis covers the frozen retained report-index population. " +
+          "Current chart filters do not change its evidence."),
+        populations.length ? el("ul", {class: "run-analysis__populations"}, populations) :
+          el("p", {}, "No retained indexed populations."),
+        el("h3", {}, "Rollout marker"),
+        cohortContent
+      ];
+
+      if (viewId !== null) {
+        const findings = (analysis.findings ?? []).filter(finding => finding.view_id === viewId);
+        children.push(el("h3", {}, "Interpretation"));
+        children.push(el("p", {}, "Findings below apply to this built view and the frozen " +
+          "population shown above; interactive filters do not alter them."));
+        if (!findings.length) {
+          children.push(el("p", {class: "view-empty"},
+            "No interpretation was recorded for this view."));
+        }
+        findings.forEach(finding => {
+          const evidenceItems = (finding.evidence_ids ?? []).map(id => {
+            const evidence = analysis.evidence?.[id];
+            if (!evidence) return el("li", {}, "Missing frozen evidence: " + id);
+            return el("li", {}, [
+              evidenceSummary(evidence.measurement),
+              el("details", {class: "run-analysis__evidence"}, [
+                el("summary", {}, id + " · " + display(evidence.source)),
+                el("pre", {}, JSON.stringify(evidence.measurement, null, 2))
+              ])
+            ]);
+          });
+          children.push(el("div", {class: "run-analysis__finding"}, [
+            el("p", {}, finding.text),
+            evidenceItems.length ? el("ul", {}, evidenceItems) :
+              el("p", {}, "No evidence references in this finding.")
+          ]));
+        });
+      }
+      return el("section", {class: "card run-analysis"}, children);
+    }
+
     function render() {
       route = DeckCore.decodeRoute(location.hash, model.landing);
       renderNav();
@@ -313,15 +443,27 @@ globalThis.DeckShell = (() => {
         }
         content.appendChild(noticeCard);
       }
+      if (model.analysis) {
+        content.appendChild(renderAnalysisCard(
+          model.analysis, view && view.status === "built" ? view.id : null
+        ));
+      }
 
       const first = model.history.first_ms;
       const last = model.history.last_ms;
       const history = first === null || last === null ? "—" :
         DeckCore.formatDate(first) + " → " + DeckCore.formatDate(last);
-      const generated = new Date(model.generated_at_ms).toISOString().slice(0, 16);
-      document.getElementById("deck-foot").textContent = "report index v" +
-        model.index_schema_version + " · " + DeckCore.formatCount(model.tables.sessions.length) +
-        " session rows · history " + history + " · generated " + generated + " UTC";
+      const footer = document.getElementById("deck-foot");
+      const footerPrefix = "report index v" + model.index_schema_version + " · " +
+        DeckCore.formatCount(model.tables.sessions.length) + " session rows · history " + history;
+      if (model.analysis) {
+        footer.textContent = footerPrefix + " · corpus/window anchor " +
+          new Date(model.generated_at_ms).toISOString() + " · analysis created " +
+          new Date(model.analysis.generated_at_ms).toISOString();
+      } else {
+        const generated = new Date(model.generated_at_ms).toISOString().slice(0, 16);
+        footer.textContent = footerPrefix + " · generated " + generated + " UTC";
+      }
     }
 
     window.addEventListener("hashchange", render);

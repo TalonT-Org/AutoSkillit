@@ -115,6 +115,8 @@ def test_part_ordinals_and_resolved_locators_are_unique(tmp_path: Path) -> None:
     valid = _authority(
         tmp_path,
         parts=(first, replace(alias, locator=str(second))),
+        allocations=authority.allocations
+        + (replace(authority.allocations[0], requirement_id="P-2", part_key="P2"),),
     )
     assert [part.part_suffix for part in valid.parts] == ["A", "A"]
 

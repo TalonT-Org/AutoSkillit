@@ -443,18 +443,18 @@ class PlanSetAuthority:
         part_keys = {part.part_key for part in self.parts}
         if not set(self.coverage.parts_without_obligations) <= part_keys:
             raise ValueError("coverage.parts_without_obligations contains an unknown part key")
-        if self.inventory_mode in {InventoryMode.UNENUMERATED, InventoryMode.NO_ISSUE}:
-            empty_parts = part_keys - {row.part_key for row in self.allocations}
-            if set(self.coverage.parts_without_obligations) != empty_parts:
-                raise ValueError(
-                    "coverage.parts_without_obligations must match actual empty parts"
-                )
         if self.state is PlanSetState.SEALED and self.coverage.status is not CoverageStatus.PASS:
             raise ValueError("sealed authority requires passing coverage")
         if tuple(part.ordinal for part in self.parts) != tuple(range(1, len(self.parts) + 1)):
             raise ValueError("PlanSetAuthority.parts must have consecutive ordinals")
         if len({Path(part.locator).resolve() for part in self.parts}) != len(self.parts):
             raise ValueError("PlanSetAuthority.parts contain duplicate locators")
+        if self.inventory_mode in {InventoryMode.UNENUMERATED, InventoryMode.NO_ISSUE}:
+            empty_parts = part_keys - {row.part_key for row in self.allocations}
+            if set(self.coverage.parts_without_obligations) != empty_parts:
+                raise ValueError(
+                    "coverage.parts_without_obligations must match actual empty parts"
+                )
 
     @classmethod
     def create(

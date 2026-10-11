@@ -363,7 +363,7 @@ def test_corrupt_unsupported_and_digest_mismatched_records_fail_closed(
         store.load(lineage_anchor=anchor, launch_id=lineage.launch_id)
 
 
-def test_namespace_self_ignore_failure_prevents_record_write(
+def test_create_fails_closed_when_namespace_cannot_be_self_ignored(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     anchor = tmp_path / "project"
@@ -392,7 +392,7 @@ def test_namespace_self_ignore_failure_prevents_record_write(
     assert not list((anchor / ".autoskillit" / "managed-headless-session-lineage").rglob("*.json"))
 
 
-def test_malformed_namespace_self_ignore_is_preserved_without_records_dir(
+def test_create_rejects_existing_non_self_ignoring_marker(
     tmp_path: Path,
 ) -> None:
     anchor = tmp_path / "project"

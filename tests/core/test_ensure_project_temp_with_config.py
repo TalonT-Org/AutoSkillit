@@ -89,7 +89,7 @@ def test_ensure_self_ignored_writes_marker_only_when_absent(tmp_path: Path) -> N
     assert marker.read_text(encoding="utf-8") == custom
 
 
-def test_is_self_ignored_requires_standalone_star(tmp_path: Path) -> None:
+def test_is_self_ignored_requires_a_star_line(tmp_path: Path) -> None:
     from autoskillit.core.io import is_self_ignored
 
     target = tmp_path / "runtime"

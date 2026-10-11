@@ -48,6 +48,7 @@ __all__ = [
     "TreeVanishedError",
     "atomic_write",
     "decode_versioned_json_bytes",
+    "ensure_project_gitignore",
     "ensure_project_temp",
     "ensure_self_ignored",
     "is_python_bytecode_path",
@@ -707,6 +708,7 @@ def _reset_schema_drift_logged_for_tests() -> None:
 
 _AUTOSKILLIT_GITIGNORE_ENTRIES = [
     "temp/",
+    ".state.yaml",
     ".secrets.yaml",
     ".onboarded",
     "sync_manifest.json",
@@ -738,35 +740,28 @@ def ensure_self_ignored(directory: Path) -> None:
 
 
 def ensure_project_temp(project_dir: Path, override: str | None = None) -> Path:
-    """Create the autoskillit temp directory with a self-gitignore; idempotent.
-
-    Uses the pytest/mypy self-gitignoring directory pattern: the temp directory
-    owns a ``.gitignore`` containing ``*`` — no mutation of the project root
-    ``.gitignore``. Works identically for default, custom-relative, and absolute
-    external overrides.
-
-    Also maintains ``.autoskillit/.gitignore`` covering session artefacts that
-    land alongside ``config.yaml`` (``.secrets.yaml``, ``.onboarded``,
-    ``sync_manifest.json``) when the project uses the canonical ``.autoskillit``
-    directory.
-    """
+    """Create the project temp directory with its own gitignore."""
     temp_dir = resolve_temp_dir(project_dir, override)
     temp_dir.mkdir(parents=True, exist_ok=True)
     ensure_self_ignored(temp_dir)
+    return temp_dir
+
+
+def ensure_project_gitignore(project_dir: Path) -> None:
+    """Create or update the canonical project runtime-artifact ignore file."""
     autoskillit_dir = project_dir / ".autoskillit"
-    if autoskillit_dir.is_dir():
-        autoskillit_gitignore = autoskillit_dir / ".gitignore"
-        if not autoskillit_gitignore.exists():
+    autoskillit_dir.mkdir(parents=True, exist_ok=True)
+    autoskillit_gitignore = autoskillit_dir / ".gitignore"
+    if not autoskillit_gitignore.exists():
+        atomic_write(
+            autoskillit_gitignore,
+            "\n".join(_AUTOSKILLIT_GITIGNORE_ENTRIES) + "\n",
+        )
+    else:
+        existing = autoskillit_gitignore.read_text(encoding="utf-8")
+        missing = [e for e in _AUTOSKILLIT_GITIGNORE_ENTRIES if e not in existing.splitlines()]
+        if missing:
             atomic_write(
                 autoskillit_gitignore,
-                "\n".join(_AUTOSKILLIT_GITIGNORE_ENTRIES) + "\n",
+                existing.rstrip("\n") + "\n" + "\n".join(missing) + "\n",
             )
-        else:
-            existing = autoskillit_gitignore.read_text(encoding="utf-8")
-            missing = [e for e in _AUTOSKILLIT_GITIGNORE_ENTRIES if e not in existing.splitlines()]
-            if missing:
-                atomic_write(
-                    autoskillit_gitignore,
-                    existing.rstrip("\n") + "\n" + "\n".join(missing) + "\n",
-                )
-    return temp_dir

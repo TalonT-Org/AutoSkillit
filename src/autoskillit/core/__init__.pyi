@@ -145,6 +145,7 @@ from .io import default_log_dir as default_log_dir
 from .io import destination_location as destination_location
 from .io import directory_tree_digest as directory_tree_digest
 from .io import dump_yaml_str as dump_yaml_str
+from .io import ensure_project_gitignore as ensure_project_gitignore
 from .io import ensure_project_temp as ensure_project_temp
 from .io import ensure_self_ignored as ensure_self_ignored
 from .io import extract_section as extract_section

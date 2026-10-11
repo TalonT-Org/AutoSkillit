@@ -215,6 +215,105 @@ class TestManagedCaptureDiagnosticBoundaries:
         assert reason == FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH
         assert "feedface" not in reason
 
+    @pytest.mark.parametrize(
+        "private_record",
+        [
+            ".autoskillit/managed-headless-session-lineage/",
+            "/tmp/project/.autoskillit/managed-headless-session-lineage/records/"
+            "0123456789abcdef0123456789abcdef.json",
+        ],
+    )
+    def test_failed_reason_preserves_uncommitted_changes_cause(self, private_record):
+        diagnostic = (
+            f"uncommitted_changes: bootstrap_clone failed at {private_record}; "
+            "cache path /tmp/project/cache/clone.lock"
+        )
+        parsed = L3ParseResult(
+            outcome="completed_clean",
+            payload={"success": False, "reason": diagnostic},
+            raw_body=None,
+            parse_error=None,
+            source="stdout",
+        )
+
+        status, reason = classify_dispatch_outcome(
+            parsed,
+            dataclasses.replace(_DEFAULT_SKILL_RESULT, success=False),
+        )
+
+        assert status == DispatchStatus.FAILURE
+        assert reason == (
+            "uncommitted_changes: bootstrap_clone failed at <redacted>; "
+            "cache path /tmp/project/cache/clone.lock"
+        )
+        assert private_record not in reason
+
+    def test_failed_reason_redacts_inline_capture_fields_but_keeps_cause(self):
+        private_record = (
+            "/tmp/project/.autoskillit/managed-headless-session-lineage/records/"
+            "abcdef0123456789abcdef0123456789.json"
+        )
+        diagnostic = (
+            f"bootstrap_clone failed at {private_record} "
+            "attempt_id=deaddeaddeaddeaddeaddeaddeaddead "
+            "launch_id=feedfacefeedfacefeedfacefeedface "
+            "requested_mode=direct effective_mode=capture "
+            "lineage_status=corrupt native_shell_capture=enabled"
+        )
+        parsed = L3ParseResult(
+            outcome="completed_clean",
+            payload={"success": False, "reason": diagnostic},
+            raw_body=None,
+            parse_error=None,
+            source="stdout",
+        )
+
+        status, reason = classify_dispatch_outcome(
+            parsed,
+            dataclasses.replace(_DEFAULT_SKILL_RESULT, success=False),
+        )
+
+        assert status == DispatchStatus.FAILURE
+        assert reason == (
+            "bootstrap_clone failed at <redacted> <redacted> <redacted> "
+            "<redacted> <redacted> <redacted> <redacted>"
+        )
+        for private_value in (
+            private_record,
+            "deaddead",
+            "feedface",
+            "direct",
+            "capture",
+            "corrupt",
+            "enabled",
+        ):
+            assert private_value not in reason
+
+    @pytest.mark.parametrize(
+        "private_record",
+        [
+            ".autoskillit/managed-headless-session-lineage/",
+            "/tmp/project/.autoskillit/managed-headless-session-lineage/records/"
+            "0123456789abcdef0123456789abcdef.json",
+        ],
+    )
+    def test_private_path_only_uses_standard_startup_failure(self, private_record):
+        parsed = L3ParseResult(
+            outcome="completed_clean",
+            payload={"success": False, "reason": private_record},
+            raw_body=None,
+            parse_error=None,
+            source="stdout",
+        )
+
+        status, reason = classify_dispatch_outcome(
+            parsed,
+            dataclasses.replace(_DEFAULT_SKILL_RESULT, success=False),
+        )
+
+        assert status == DispatchStatus.FAILURE
+        assert reason == FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH
+
 
 class TestReasonAwareResumePolicy:
     def test_idle_stall_with_progress_is_failure(self):

@@ -319,10 +319,7 @@ steps:
     optional_context_refs:
     - plan_set_authority_path
     note: >-
-      Bind exactly the plan_parts value captured from the producer that just ran. A successful
-      replan replaces the earlier list with its returned list: do not append rejected paths or
-      rebuild the list from a directory listing. When salvage_plan is the producer, bind its
-      returned list unchanged under the existing salvage recovery and strict coverage checks.
+      __RECIPE_NOTE_PLAN_PARTS_BINDING__
       coverage_failed here is terminal by decision. Two producers (plan, gap_replan) share
       this bind, and a correct replan must return to the one that wrote the rejected part.
       Relay the result's coverage_gaps in the failure diagnostic: it names the part, the rows

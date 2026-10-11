@@ -45,6 +45,13 @@ _RECIPE_NOTE_TABLE: dict[str, str] = {
         "edits are renewed. Relay the result's coverage_gaps in the failure diagnostic: "
         "it names the rows the edit broke."
     ),
+    "__RECIPE_NOTE_PLAN_PARTS_BINDING__": (
+        "Bind exactly the plan_parts value captured from the producer that just ran. "
+        "A successful replan replaces the earlier list with its returned list: do not "
+        "append rejected paths or rebuild the list from a directory listing. When "
+        "salvage_plan is the producer, bind its returned list unchanged under the "
+        "existing salvage recovery and strict coverage checks."
+    ),
 }
 
 

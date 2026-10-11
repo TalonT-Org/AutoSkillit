@@ -151,11 +151,12 @@ def _ensure_workspace_ready(*, cwd: Path | None = None) -> None:
     Called after the CLAUDECODE guard — only when the actual install proceeds.
     Idempotent: safe to call on any project state.
     """
-    from autoskillit.core import ensure_project_temp
+    from autoskillit.core import ensure_project_gitignore, ensure_project_temp
 
     project_dir = Path.cwd() if cwd is None else Path(cwd)
-    # Repair .autoskillit/.gitignore and ensure temp/ exists
+    # Repair project runtime ignores and ensure temp/ exists.
     if (project_dir / ".autoskillit").is_dir():
+        ensure_project_gitignore(project_dir)
         ensure_project_temp(project_dir)
 
     # Migrate legacy .autoskillit/scripts/ to .autoskillit/recipes/ if present

@@ -423,10 +423,10 @@ class TestEnsureProjectTemp:
         assert temp_gitignore.exists()
         assert "*" in temp_gitignore.read_text()
 
-    def test_ensure_project_temp_writes_autoskillit_gitignore_with_secrets(self, tmp_path):
-        from autoskillit.core.io import ensure_project_temp
+    def test_ensure_project_gitignore_writes_autoskillit_gitignore_with_secrets(self, tmp_path):
+        from autoskillit.core.io import ensure_project_gitignore
 
-        ensure_project_temp(tmp_path)
+        ensure_project_gitignore(tmp_path)
         gitignore = tmp_path / ".autoskillit" / ".gitignore"
         content = gitignore.read_text()
         assert ".secrets.yaml" in content
@@ -438,15 +438,15 @@ class TestEnsureProjectTemp:
         ensure_project_temp(tmp_path)  # second call must not raise
         assert (tmp_path / ".autoskillit" / "temp").is_dir()
 
-    def test_ensure_project_temp_backfills_secrets_into_existing_gitignore(self, tmp_path):
-        from autoskillit.core.io import ensure_project_temp
+    def test_ensure_project_gitignore_backfills_secrets_into_existing_gitignore(self, tmp_path):
+        from autoskillit.core.io import ensure_project_gitignore
 
         # Simulate a pre-fix .gitignore without .secrets.yaml
         autoskillit_dir = tmp_path / ".autoskillit"
         autoskillit_dir.mkdir()
         (autoskillit_dir / ".gitignore").write_text(".onboarded\n")
 
-        ensure_project_temp(tmp_path)
+        ensure_project_gitignore(tmp_path)
         content = (autoskillit_dir / ".gitignore").read_text()
         assert ".secrets.yaml" in content
         assert ".onboarded" in content

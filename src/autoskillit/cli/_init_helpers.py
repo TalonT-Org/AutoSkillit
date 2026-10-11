@@ -278,8 +278,10 @@ def _log_secret_scan_bypass(project_dir: Path) -> None:
         logger.warning("corrupt_state_yaml", path=str(state_path), error=str(exc))
         msg = f"Cannot update {state_path}: file has YAML syntax errors. Delete the file to reset."
         raise SystemExit(msg) from exc
+    from autoskillit.core import ensure_project_gitignore
+
     data.setdefault("safety", {})["secret_scan_bypass_accepted"] = datetime.now(UTC).isoformat()
-    state_path.parent.mkdir(exist_ok=True)
+    ensure_project_gitignore(project_dir)
     atomic_write(state_path, dump_yaml_str(data, default_flow_style=False, allow_unicode=True))
 
 
@@ -640,7 +642,7 @@ def _register_all(
     import autoskillit.core.paths as _core_paths
     from autoskillit.cli._hooks import sweep_all_scopes_for_orphans
     from autoskillit.config import load_config
-    from autoskillit.core import ensure_project_temp
+    from autoskillit.core import ensure_project_gitignore, ensure_project_temp
     from autoskillit.execution import get_backend
 
     # Refuse to register from inside the autoskillit source tree — this would
@@ -669,6 +671,7 @@ def _register_all(
     colors = _colors()
 
     ensure_project_temp(project_dir)
+    ensure_project_gitignore(project_dir)
 
     _cfg = None
     try:

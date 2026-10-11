@@ -24,13 +24,21 @@ pytestmark = [
 ]
 
 
-def _initialized(repo: Path) -> Path:
-    commit_file(
-        repo,
-        ".autoskillit/.gitignore",
-        "\n".join(_AUTOSKILLIT_GITIGNORE_ENTRIES) + "\n",
-        "add AutoSkillit ignore entries",
-    )
+_CANONICAL_PARENT_GITIGNORE = "\n".join(_AUTOSKILLIT_GITIGNORE_ENTRIES) + "\n"
+
+
+def _initialized(
+    repo: Path,
+    *,
+    parent_gitignore: str | None = _CANONICAL_PARENT_GITIGNORE,
+) -> Path:
+    if parent_gitignore is not None:
+        commit_file(
+            repo,
+            ".autoskillit/.gitignore",
+            parent_gitignore,
+            "add AutoSkillit ignore entries",
+        )
     commit_file(repo, ".autoskillit/config.yaml", "project: probe\n", "add project config")
     return repo
 
@@ -58,6 +66,27 @@ def test_launch_sequence_leaves_checkout_clean(git_repo: Path) -> None:
     assert records_dir.is_dir() and any(records_dir.iterdir())
     assert detect_uncommitted_changes(str(repo)) == []
     assert gitignore_path.read_bytes() == committed_gitignore
+
+
+@pytest.mark.parametrize(
+    "parent_gitignore",
+    [None, "# user rule retained\nprivate-artifacts/\n"],
+    ids=["absent", "tracked-stale"],
+)
+def test_launch_sequence_preserves_parent_gitignore_state(
+    git_repo: Path, parent_gitignore: str | None
+) -> None:
+    repo = _initialized(git_repo, parent_gitignore=parent_gitignore)
+    gitignore_path = repo / ".autoskillit" / ".gitignore"
+
+    ensure_project_temp(repo)
+    _create_record(repo)
+
+    assert detect_uncommitted_changes(str(repo)) == []
+    if parent_gitignore is None:
+        assert not gitignore_path.exists()
+    else:
+        assert gitignore_path.read_bytes() == parent_gitignore.encode()
 
 
 def test_user_edits_still_block_after_launch(git_repo: Path) -> None:

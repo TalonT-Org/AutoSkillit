@@ -14,25 +14,22 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 _STR_RX = re.compile(r"(?:^|[/\"'`\s(~])\.autoskillit/([A-Za-z0-9._-]+)")
 
 # These names are accounted for elsewhere: home-level artifacts, a read-only
-# legacy path, a runtime directory with a real-git proof, and a tracked gap.
-_CLASSIFIED_ELSEWHERE: set[str] = {
+# legacy path, and a runtime directory with a real-git proof.
+_CLASSIFIED_ELSEWHERE: dict[str, int] = {
     # Home-level hook state: hooks/guards/mcp_health_advisor.py:36.
-    "active_kitchens.json",
+    "active_kitchens.json": 1,
     # Home-level marketplace shape: core/types/constants/_type_constants_retirements.py:309.
-    "marketplace",
+    "marketplace": 1,
     # Home-level plugin storage: cli/doctor/_doctor_install.py:355.
-    "plugin-generations",
+    "plugin-generations": 1,
     # Home-level hook projection repair: workspace/_projected_artifact/_hook_repair.py:538.
-    "plugin-projections",
+    "plugin-projections": 1,
     # Home-level dismissal state: cli/update/_update_checks.py:79.
-    "update_check.json",
+    "update_check.json": 1,
     # Legacy path is read only for migration: cli/install/_marketplace.py:162.
-    "scripts",
+    "scripts": 1,
     # Runtime self-ignore is proven by tests/workspace/test_clone_gate_runtime_state.py.
-    "managed-headless-session-lineage",
-    # Known gap: init writes this without a keep-out rule; tracked by #5258
-    # recommendation 4.
-    ".state.yaml",
+    "managed-headless-session-lineage": 1,
 }
 
 
@@ -119,15 +116,44 @@ def test_every_autoskillit_child_named_in_src_is_classified() -> None:
         for child in _children_named_in(ast.parse(path.read_text(encoding="utf-8")))
     }
     ignored_names = {entry.rstrip("/") for entry in _AUTOSKILLIT_GITIGNORE_ENTRIES}
+    classified_names = {
+        name for name, classification in _CLASSIFIED_ELSEWHERE.items() if classification == 1
+    }
     unclassified = sorted(
-        named - set(_COMMITTED_BY_DESIGN) - ignored_names - {".gitignore"} - _CLASSIFIED_ELSEWHERE
+        named - set(_COMMITTED_BY_DESIGN) - ignored_names - {".gitignore"} - classified_names
     )
 
     assert not unclassified, (
         f"Unclassified .autoskillit children named in src/autoskillit: {unclassified}. "
         f"Commit a persistent child by adding it to _COMMITTED_BY_DESIGN; list a file "
-        f"in _AUTOSKILLIT_GITIGNORE_ENTRIES only when a setup command writes it, since "
-        f"init and ensure_project_temp maintain the tracked .gitignore. For a runtime "
+        f"in _AUTOSKILLIT_GITIGNORE_ENTRIES only when explicit setup writes it through "
+        f"ensure_project_gitignore; runtime ensure_project_temp does not maintain the "
+        f"tracked parent .gitignore. For a runtime "
         f"directory, call ensure_self_ignored when creating it, prove the behavior with "
         f"a real-git test, and name that test in an adjacent justification comment."
     )
+
+
+def test_zero_classification_flag_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(_CLASSIFIED_ELSEWHERE, "managed-headless-session-lineage", 0)
+
+    with pytest.raises(AssertionError, match="managed-headless-session-lineage"):
+        test_every_autoskillit_child_named_in_src_is_classified()
+
+
+def test_classification_map_matches_policy_checker_contract() -> None:
+    from tests.arch.test_acceptance_policy_relaxation_gate import check
+
+    surface = check.PolicySurface(
+        "tests/arch/test_autoskillit_root_children_registered.py",
+        "_CLASSIFIED_ELSEWHERE",
+        "int_map",
+        default=0,
+    )
+    set_source = "_CLASSIFIED_ELSEWHERE: set[str] = {'managed-headless-session-lineage'}"
+    with pytest.raises(check.UnsupportedSurfaceShape):
+        check.extract_surface_values(set_source, surface)
+
+    actual_source = Path(__file__).read_text(encoding="utf-8")
+    actual = check.extract_surface_values(actual_source, surface)
+    assert {name: value.limit for name, value in actual.items()} == _CLASSIFIED_ELSEWHERE

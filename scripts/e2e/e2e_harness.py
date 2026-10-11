@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import fnmatch
 import json
 import os
 import re
@@ -35,6 +36,7 @@ SECRET_ENV = ("MINIMAX_API_KEY", "E2E_SANDBOX_TOKEN")
 REDACTED = b"[REDACTED]"
 CONFIG_TEMPLATE = Path(__file__).with_name("autoskillit-config.yaml")
 SANDBOX_CLONE = Path("/workspace/sandbox")
+PIPELINE_RUNS_DIR = "autoskillit-runs"
 
 _SCRUBBED_ENV = frozenset({"CLAUDE_CODE_OAUTH_TOKEN", *SECRET_ENV})
 _STDERR_TAIL_CHARS = 2000
@@ -1017,6 +1019,67 @@ def _run_test(
     return run_recipe(test, catalog.sandbox_repository, token, out, scrubbed, runner)
 
 
+def _copy_failure_files(
+    source: Path, dest: Path, boundary: Path, pattern: str, errors: list[str]
+) -> int:
+    relative = source.relative_to(boundary)
+    try:
+        if any(
+            boundary.joinpath(*relative.parts[:depth]).is_symlink()
+            for depth in range(len(relative.parts) + 1)
+        ):
+            return 0
+        if not source.exists():
+            return 0
+    except OSError as exc:
+        errors.append(f"{source}: {exc}")
+        return 0
+    copied = 0
+    for root, dirs, files in os.walk(
+        source, followlinks=False, onerror=lambda exc: errors.append(f"{source}: {exc}")
+    ):
+        dirs.sort()
+        for name in sorted(fnmatch.filter(files, pattern)):
+            path = Path(root) / name
+            try:
+                if path.is_symlink() or not path.is_file():
+                    continue
+                target = dest / path.relative_to(source)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(path, target)
+                copied += 1
+            except OSError as exc:
+                errors.append(f"{path}: {exc}")
+    return copied
+
+
+def collect_failure_evidence(out: Path, home: Path) -> dict[str, Any]:
+    """Keep pipeline plans and Claude transcripts for an unsuccessful E2E run."""
+    errors: list[str] = []
+    runs = SANDBOX_CLONE.parent / PIPELINE_RUNS_DIR
+    try:
+        clones = [] if runs.is_symlink() else sorted(runs.iterdir())
+    except FileNotFoundError:
+        clones = []
+    except OSError as exc:
+        errors.append(f"{runs}: {exc}")
+        clones = []
+    plan_files = 0
+    for clone in clones:
+        for kind in ("make-plan", "rectify"):
+            plan_files += _copy_failure_files(
+                clone / ".autoskillit" / "temp" / kind,
+                out / "pipeline-artifacts" / clone.name / kind,
+                clone,
+                "*",
+                errors,
+            )
+    transcripts = _copy_failure_files(
+        home / ".claude" / "projects", out / "transcripts", home, "*.jsonl", errors
+    )
+    return {"plan_files": plan_files, "transcripts": transcripts, "errors": errors}
+
+
 def run_test(
     test: e2e_catalog.CatalogTest,
     catalog: e2e_catalog.Catalog,
@@ -1043,6 +1106,18 @@ def run_test(
         result.update(
             outcome=outcome, passed=outcome == "passed", expected_findings=matched_findings
         )
+    if not result["passed"]:
+        try:
+            evidence = collect_failure_evidence(out, home)
+        except Exception as exc:
+            evidence = {
+                "plan_files": 0,
+                "transcripts": 0,
+                "errors": [f"{type(exc).__name__}: {exc}"],
+                "exception": traceback.format_exc(),
+            }
+        if any(evidence.values()):
+            result["evidence"] = evidence
     (out / "result.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     return failures
 

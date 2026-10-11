@@ -9,32 +9,6 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 class TestMultipartIterationRule:
-    def test_mi1_multipart_rule_warns_on_missing_glob_note(self) -> None:
-        """T_MI1: multipart-glob-note fires when make-plan step has no *_part_*.md in note."""
-        recipe = Recipe(
-            name="test-recipe",
-            description="test",
-            ingredients={},
-            steps={
-                "plan": RecipeStep(
-                    tool="run_skill",
-                    with_args={"skill_command": "/autoskillit:make-plan inputs.task"},
-                    on_success="verify",
-                    note="Produces a plan file.",
-                ),
-                "verify": RecipeStep(
-                    tool="run_skill",
-                    with_args={"skill_command": "/autoskillit:dry-walkthrough context.plan_path"},
-                    on_success="done",
-                ),
-                "done": RecipeStep(action="stop", message="Done"),
-            },
-            kitchen_rules=[],
-        )
-        warnings = run_semantic_rules(recipe)
-        rule_names = [w.rule for w in warnings]
-        assert "multipart-iteration-notes" in rule_names
-
     def test_mi2_multipart_rule_passes_compliant_recipe(self) -> None:
         """T_MI2: Validator emits no multipart warnings when all conventions are present."""
         recipe = Recipe(
@@ -46,7 +20,7 @@ class TestMultipartIterationRule:
                     tool="run_skill",
                     with_args={"skill_command": "/autoskillit:make-plan inputs.task"},
                     on_success="verify",
-                    note="Glob plan_dir for *_part_*.md or single plan file.",
+                    note="Produces the plan_parts result.",
                 ),
                 "verify": RecipeStep(
                     tool="run_skill",
@@ -78,7 +52,7 @@ class TestMultipartIterationRule:
                     tool="run_skill",
                     with_args={"skill_command": "/autoskillit:rectify context.investigation_path"},
                     on_success="dry_walkthrough",
-                    note="Glob plan_dir for *_part_*.md or single plan file.",
+                    note="Produces the plan_parts result.",
                 ),
                 "dry_walkthrough": RecipeStep(
                     tool="run_skill",
@@ -111,7 +85,7 @@ class TestMultipartIterationRule:
                     tool="run_skill",
                     with_args={"skill_command": "/autoskillit:make-plan inputs.task"},
                     on_success="next_or_done",
-                    note="Glob plan_dir for *_part_*.md or single plan file.",
+                    note="Produces the plan_parts result.",
                 ),
                 "next_or_done": RecipeStep(
                     action="route",
@@ -138,7 +112,7 @@ def compliant_multipart_recipe_no_list() -> Recipe:
                 tool="run_skill",
                 with_args={"skill_command": "/autoskillit:make-plan inputs.task"},
                 capture={"plan_path": "${{ result.plan_path }}"},
-                note="Glob plan_dir for *_part_*.md or single plan file. Sort into plan_parts[].",
+                note="Produces the plan_parts result.",
                 on_success="done",
             ),
             "done": RecipeStep(action="stop", message="Done"),
@@ -161,7 +135,7 @@ def compliant_multipart_recipe_with_list() -> Recipe:
                 capture={"plan_path": "${{ result.plan_path }}"},
                 capture_list={"plan_parts": "${{ result.plan_parts }}"},
                 retries=0,
-                note="Glob plan_dir for *_part_*.md or single plan file. Sort into plan_parts[].",
+                note="Produces the plan_parts result.",
                 on_success="done",
             ),
             "done": RecipeStep(action="stop", message="Done"),

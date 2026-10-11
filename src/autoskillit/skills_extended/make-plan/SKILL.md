@@ -1,5 +1,7 @@
 ---
 name: make-plan
+requires_resources:
+- plan-part-form
 write_paths:
 - '{{AUTOSKILLIT_TEMP}}/make-plan/'
 uses_capabilities:
@@ -68,9 +70,12 @@ Create focused, actionable implementation plans that recommend the technically b
   not prose flags or ambient files, activates remediation mode. Before reading any referenced
   artifact, verify that this authority is the server-published current `NO GO` head and that
   its generation, plan set, scope, part, round, parent, and audited-plan lineage match this run.
-- `plan_set_coverage_gaps` (optional) — A bounded list of requirement gaps returned by a
-  failed sealed plan-set bind. On re-entry, allocate every listed requirement in the new
-  plan set; do not absorb the gaps into Part A by default. In grouped planning, the
+- `plan_set_coverage_gaps` (optional) — Feedback from a failed plan-set bind, never empty
+  on re-entry. Requirement-gap lines such as `R2 [unassigned]: …` mean allocate every
+  listed requirement in the new plan set; do not absorb gaps into Part A by default.
+  A block starting `Plan part rejected by the plan-set gate: <path>` lists what the parser
+  rejected in that part: write a corrected replacement to a new file in the plan-part
+  form, keeping its requirements allocated. In grouped planning, the
   dedicated gap-replan route adds a group to the still-open set.
 
 In conflict-resolution examples, `{branch}` is the source PR branch and
@@ -427,6 +432,9 @@ plan_parts = {path_to_part_a}
 plan_disposition_path = {absolute_path_when_in_remediation_mode}
 ```
 
+**Plan-part form.** Follow the shared `plan-part-form` resource when writing
+each part; the template below applies those rules.
+
 **Plan structure (single-part):**
 ```markdown
 # Implementation Plan: {Task Name}
@@ -438,7 +446,14 @@ plan_disposition_path = {absolute_path_when_in_remediation_mode}
 {Tests to write first — should fail now, pass after implementation}
 
 ## Implementation Steps
-{Ordered steps, each making one or more of the above tests pass}
+
+### Step 1: {step title}
+Requirements: P-1
+{What this step changes; it makes one or more of the above tests pass}
+
+### Step 2: {step title}
+Requirements: P-2
+{What this step changes}
 
 ## Verification
 {How to verify the implementation is correct}
@@ -446,7 +461,8 @@ plan_disposition_path = {absolute_path_when_in_remediation_mode}
 ## Issue Requirement Allocation
 | Requirement ID | Allocation | Implementation Step |
 |---|---|---|
-| {label from issue, or P-1 without enumerated items} | owned \| shared | Step {N.M} |
+| P-1 | owned | Step 1 |
+| P-2 | owned | Step 2 |
 
 ## Requirements Map
 | Requirement (from prose) | Implementation Step |
@@ -467,7 +483,14 @@ plan_disposition_path = {absolute_path_when_in_remediation_mode}
 {Tests for THIS part only — should fail now, pass after THIS part's implementation}
 
 ## Implementation Steps
-{Steps for THIS part only}
+
+### Step 1: {step title}
+Requirements: P-1
+{What this step changes; it makes one or more of the above tests pass}
+
+### Step 2: {step title}
+Requirements: P-2
+{What this step changes}
 
 ## Verification
 {How to verify THIS part's implementation is correct}
@@ -475,7 +498,8 @@ plan_disposition_path = {absolute_path_when_in_remediation_mode}
 ## Issue Requirement Allocation
 | Requirement ID | Allocation | Implementation Step |
 |---|---|---|
-| {label from issue, or P-1 without enumerated items} | owned \| shared | Step {N.M} |
+| P-1 | owned | Step 1 |
+| P-2 | owned | Step 2 |
 
 ## Requirements Map
 | Requirement (from prose) | Implementation Step |

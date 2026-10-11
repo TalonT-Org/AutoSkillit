@@ -22,7 +22,7 @@ RECIPE_PATH = (
     Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipes" / "remediation.yaml"
 )
 _PRE_DELIVERY_STRUCTURE_SHA256 = (
-    "sha256:ecd6705d9e08441738c914d0853a975c292bdd341e1bf7957e35256d4ca11777"
+    "sha256:64e553d7e7669f32968ac401161139869fce71c023dbb129ba977d0dd2e3d831"
 )
 
 
@@ -48,7 +48,13 @@ def test_context_limited_walkthrough_renews_before_retry(recipe) -> None:
 def test_coverage_replan_is_bounded(recipe) -> None:
     bind = recipe.steps["bind_plan_set"]
     assert bind.on_result is not None
-    assert any(c.route == "check_replan_iteration" for c in bind.on_result.conditions)
+    assert any(
+        c.route == "check_replan_iteration"
+        and c.when
+        and "result.reason" in c.when
+        and "coverage_failed" in c.when
+        for c in bind.on_result.conditions
+    )
     guard = recipe.steps["check_replan_iteration"]
     assert guard.with_args["max_iterations"] == "2"
     assert guard.on_result is not None

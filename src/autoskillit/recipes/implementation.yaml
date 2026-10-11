@@ -451,11 +451,11 @@ steps:
     optional_context_refs:
     - audit_cycle_path
     - plan_set_coverage_gaps
-    note: Produces an ordinary plan when no audit_cycle_path is present. On NO GO
-      re-entry, consumes that exact current authority and emits both plan_path and
+    note: >-
+      Produces an ordinary plan when no audit_cycle_path is present. On NO GO re-entry,
+      consumes that exact current authority and emits both plan_path and
       plan_disposition_path. all_plan_paths appends result.plan_path across re-entries;
-      verdict=plan is the only successful result. Glob plan_dir for *_part_*.md or
-      a single plan file and preserve alphabetical part order.
+      verdict=plan is the only successful result.
   salvage_plan:
     tool: run_python
     with:
@@ -503,13 +503,12 @@ steps:
       route: check_replan_iteration
     - route: release_issue_failure
     on_failure: release_issue_failure
-    note: |
-      Aggregate plan-set gate before every walkthrough.
-
-      Single-shot plans omit parent_authority_path intentionally: there is no prior
-      multipart authority to thread through. Multi-shot bind_group_parts in
-      implementation-groups.yaml supplies one because group iteration threads the
-      parent digest from the previous cycle's bind step.
+    note: >-
+      __RECIPE_NOTE_PLAN_PARTS_BINDING__
+      Aggregate plan-set gate before every walkthrough. Single-shot plans omit
+      parent_authority_path intentionally: there is no prior multipart authority to thread
+      through. Multi-shot bind_group_parts in implementation-groups.yaml supplies one because
+      group iteration threads the parent digest from the previous cycle's bind step.
   check_replan_iteration:
     tool: run_python
     with:
@@ -591,7 +590,8 @@ steps:
       route: create_impl_worktree
     - route: release_issue_failure
     on_failure: release_issue_failure
-    note: Renews plan-set bytes after a walkthrough before implementation.
+    note: >-
+      Renews plan-set bytes after a walkthrough before implementation. __RECIPE_NOTE_PLAN_SET_RENEWAL_FAILURE__
   create_impl_worktree:
     tool: run_cmd
     with:

@@ -25,6 +25,206 @@ _HARNESS_SCRIPT = REPO_ROOT / "scripts" / "e2e" / "e2e_harness.py"
 harness = load_check_script("_autoskillit_e2e_harness", _HARNESS_SCRIPT)
 e2e_catalog = harness.e2e_catalog
 
+
+@pytest.fixture(autouse=True)
+def _isolated_sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(harness, "SANDBOX_CLONE", tmp_path / "workspace" / "sandbox")
+
+
+@pytest.fixture
+def failure_sources(tmp_path: Path) -> dict[Path, Path]:
+    runs = harness.SANDBOX_CLONE.parent / harness.PIPELINE_RUNS_DIR
+    project = tmp_path / "home" / ".claude" / "projects" / "project"
+    sources = {
+        runs / "clone-a/.autoskillit/temp/make-plan/a_plan.md": Path(
+            "pipeline-artifacts/clone-a/make-plan/a_plan.md"
+        ),
+        runs / "clone-b/.autoskillit/temp/rectify/b_plan.md": Path(
+            "pipeline-artifacts/clone-b/rectify/b_plan.md"
+        ),
+        runs / "clone-a/.autoskillit/temp/make-plan/nested/metadata.json": Path(
+            "pipeline-artifacts/clone-a/make-plan/nested/metadata.json"
+        ),
+        project / "session.jsonl": Path("transcripts/project/session.jsonl"),
+        project / "session/subagents/agent-one.jsonl": Path(
+            "transcripts/project/session/subagents/agent-one.jsonl"
+        ),
+    }
+    for source, relative in sources.items():
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_bytes(f"evidence for {relative}\n".encode())
+    (project / "ignored.txt").write_text("not a transcript")
+    return sources
+
+
+@pytest.mark.parametrize(
+    ("case", "outcome", "passed"),
+    (
+        ("failed", "failed", False),
+        ("exception", "failed", False),
+        ("expected_failure", "expected_failure", False),
+        ("passed", "passed", True),
+    ),
+)
+def test_run_test_retains_evidence_only_when_it_does_not_pass(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure_sources, case, outcome, passed
+) -> None:
+    def run(*_args, **_kwargs):
+        if case == "exception":
+            raise RuntimeError("harness crashed")
+        return (
+            ["test failed"] if case == "failed" else [],
+            [_SMOKE_FAILURE] if case == "expected_failure" else [],
+        )
+
+    monkeypatch.setattr(harness, "_run_test", run)
+    failures, result = _run_recipe(tmp_path, FakeRunner(lambda _argv: None))
+    out = tmp_path / "out"
+    assert result["passed"] is passed
+    assert result["outcome"] == outcome
+    assert result["failures"] == failures
+    if passed:
+        assert "evidence" not in result
+        assert not (out / "pipeline-artifacts").exists()
+        assert not (out / "transcripts").exists()
+        return
+    assert result["evidence"] == {"plan_files": 3, "transcripts": 2, "errors": []}
+    for source, relative in failure_sources.items():
+        assert (out / relative).read_bytes() == source.read_bytes()
+    assert not (out / "transcripts/project/ignored.txt").exists()
+
+
+@pytest.mark.parametrize("failure_site", ("copy", "walk"))
+def test_evidence_errors_preserve_the_verdict_and_continue_other_sources(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure_sources, failure_site
+) -> None:
+    source = next(path for path in failure_sources if path.name == "a_plan.md")
+    target = source if failure_site == "copy" else source.parent
+    owner = harness.shutil if failure_site == "copy" else harness.os
+    name = "copyfile" if failure_site == "copy" else "scandir"
+    original = getattr(owner, name)
+
+    def unreadable(path, *args, **kwargs):
+        if path in (target, str(target)):
+            raise OSError("cannot read evidence")
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(owner, name, unreadable)
+    monkeypatch.setattr(harness, "_run_test", lambda *_args, **_kwargs: (["test failed"], []))
+    failures, result = _run_recipe(tmp_path, FakeRunner(lambda _argv: None))
+    assert failures == ["test failed"]
+    assert result["outcome"] == "failed"
+    assert result["passed"] is False
+    assert result["evidence"]["transcripts"] == 2
+    assert any(str(target) in error for error in result["evidence"]["errors"])
+    readable = next(path for path in failure_sources if path.name == "b_plan.md")
+    assert (tmp_path / "out" / failure_sources[readable]).read_bytes() == readable.read_bytes()
+
+
+def test_unexpected_collection_error_still_writes_the_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def crash(*_args, **_kwargs):
+        try:
+            raise ValueError("collection root cause")
+        except ValueError as exc:
+            raise RuntimeError("collection crashed") from exc
+
+    monkeypatch.setattr(harness, "collect_failure_evidence", crash)
+    monkeypatch.setattr(harness, "_run_test", lambda *_args, **_kwargs: (["test failed"], []))
+    failures, result = _run_recipe(tmp_path, FakeRunner(lambda _argv: None))
+    assert failures == ["test failed"]
+    assert result["outcome"] == "failed"
+    assert result["evidence"]["plan_files"] == result["evidence"]["transcripts"] == 0
+    assert "collection crashed" in result["evidence"]["errors"][0]
+    assert "ValueError: collection root cause" in result["evidence"]["exception"]
+    assert "RuntimeError: collection crashed" in result["evidence"]["exception"]
+    assert 'raise RuntimeError("collection crashed") from exc' in result["evidence"]["exception"]
+
+
+def test_nothing_to_collect_adds_no_evidence_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(harness, "_run_test", lambda *_args, **_kwargs: (["test failed"], []))
+    _, result = _run_recipe(tmp_path, FakeRunner(lambda _argv: None))
+    assert "evidence" not in result
+
+
+def test_failure_evidence_skips_symlinks_and_linked_scan_ancestors(tmp_path: Path) -> None:
+    runs = harness.SANDBOX_CLONE.parent / harness.PIPELINE_RUNS_DIR
+    plans = runs / "clone-a/.autoskillit/temp/make-plan"
+    plans.mkdir(parents=True)
+    (plans / "kept.md").write_text("kept")
+    external = tmp_path / "external"
+    (external / "make-plan").mkdir(parents=True)
+    (external / "make-plan" / "outside.md").write_text("outside")
+    (plans / "file-link.md").symlink_to(external / "make-plan" / "outside.md")
+    (plans / "dir-link").symlink_to(external, target_is_directory=True)
+    ancestor = runs / "clone-b/.autoskillit"
+    ancestor.mkdir(parents=True)
+    (ancestor / "temp").symlink_to(external, target_is_directory=True)
+    (runs / "linked-clone").symlink_to(runs / "clone-a", target_is_directory=True)
+    home = tmp_path / "home"
+    home.mkdir()
+    (external / "projects").mkdir()
+    (external / "projects" / "outside.jsonl").write_text("outside transcript")
+    (home / ".claude").symlink_to(external, target_is_directory=True)
+    out = tmp_path / "out"
+
+    result = harness.collect_failure_evidence(out, home)
+
+    assert result == {"plan_files": 1, "transcripts": 0, "errors": []}
+    assert [path.relative_to(out) for path in out.rglob("*") if path.is_file()] == [
+        Path("pipeline-artifacts/clone-a/make-plan/kept.md")
+    ]
+
+
+def test_collected_plans_and_transcripts_are_redacted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure_sources
+) -> None:
+    plan = next(path for path in failure_sources if path.name == "a_plan.md")
+    transcript = next(path for path in failure_sources if path.name == "session.jsonl")
+    plan.write_bytes(MINIMAX_KEY.encode())
+    transcript.write_bytes(SANDBOX_TOKEN.encode())
+    monkeypatch.setattr(harness, "_run_test", lambda *_args, **_kwargs: (["test failed"], []))
+    _run_recipe(tmp_path, FakeRunner(lambda _argv: None))
+    upload = tmp_path / "upload"
+
+    harness.redact_tree([tmp_path / "out"], upload, [MINIMAX_KEY, SANDBOX_TOKEN])
+
+    for source, secret in ((plan, MINIMAX_KEY), (transcript, SANDBOX_TOKEN)):
+        copied = (upload / "out" / failure_sources[source]).read_bytes()
+        assert harness.REDACTED in copied
+        assert secret.encode() not in copied
+
+
+def test_runs_scan_error_keeps_readable_transcripts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure_sources
+) -> None:
+    runs = harness.SANDBOX_CLONE.parent / harness.PIPELINE_RUNS_DIR
+    original = Path.iterdir
+
+    def unreadable(path):
+        if path == runs:
+            raise OSError("cannot enumerate runs")
+        return original(path)
+
+    monkeypatch.setattr(Path, "iterdir", unreadable)
+    monkeypatch.setattr(harness, "_run_test", lambda *_args, **_kwargs: (["test failed"], []))
+    failures, result = _run_recipe(tmp_path, FakeRunner(lambda _argv: None))
+    assert failures == ["test failed"]
+    assert result["outcome"] == "failed"
+    assert result["evidence"]["plan_files"] == 0
+    assert result["evidence"]["transcripts"] == 2
+    assert str(runs) in result["evidence"]["errors"][0]
+
+
+def test_pipeline_runs_directory_matches_clone_source_of_truth() -> None:
+    from autoskillit.workspace.clone._detect import RUNS_DIR
+
+    assert harness.PIPELINE_RUNS_DIR == RUNS_DIR
+
+
 MINIMAX_KEY = "minimax-test-key"
 SANDBOX_TOKEN = "sandbox-test-token"
 SANDBOX = "owner/sandbox"
@@ -1416,7 +1616,7 @@ class TestRecipeFlow:
             ],
             ["gh", "auth", "login", "--hostname", "github.com", "--with-token"],
             ["gh", "auth", "setup-git"],
-            ["gh", "repo", "clone", SANDBOX, "/workspace/sandbox"],
+            ["gh", "repo", "clone", SANDBOX, str(harness.SANDBOX_CLONE)],
             ["gh", "pr", "list", "--repo", SANDBOX, "--state", "all"]
             + ["--limit", "1", "--json", "number"],
             ["autoskillit", "fleet", "run", "implementation", "-i", "task=Add a greeting"]
@@ -1816,6 +2016,7 @@ class TestCleanInstallFlow:
     def test_cli_names_expected_failure_and_run_test_handles_exceptions(
         self, tmp_path, monkeypatch, capsys
     ):
+        monkeypatch.setattr(harness.Path, "home", classmethod(lambda _cls: tmp_path / "home"))
         diagnostic = _diagnostic("error", "runtime", "known clean-install failure")
         expected = {**diagnostic, "issue": _CLEAN_INSTALL_ISSUE}
         catalog_path = tmp_path / "catalog.json"

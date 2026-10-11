@@ -251,9 +251,9 @@ async def test_implementation_bounded_path_counts_automatic_and_advertised_deliv
     # Pin normalized delivery costs to detect drift in the bundled recipe.
     # These measured totals are not production-safe thresholds.
     assert totals == {
-        "raw_chars": 18_551,
-        "utf8_bytes": 18_553,
-        "client_serialized_chars": 20_634,
-        "estimated_tokens": 4_636,
+        "raw_chars": 18_800,
+        "utf8_bytes": 18_802,
+        "client_serialized_chars": 20_871,
+        "estimated_tokens": 4_698,
         "responses": 5,
     }

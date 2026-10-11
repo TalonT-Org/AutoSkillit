@@ -440,6 +440,9 @@ class PlanSetAuthority:
         object.__setattr__(self, "unparsed_marker_lines", tuple(self.unparsed_marker_lines))
         if not isinstance(self.coverage, CoverageResultDef):
             raise ValueError("PlanSetAuthority.coverage is invalid")
+        part_keys = {part.part_key for part in self.parts}
+        if not set(self.coverage.parts_without_obligations) <= part_keys:
+            raise ValueError("coverage.parts_without_obligations contains an unknown part key")
         if self.state is PlanSetState.SEALED and self.coverage.status is not CoverageStatus.PASS:
             raise ValueError("sealed authority requires passing coverage")
         if tuple(part.ordinal for part in self.parts) != tuple(range(1, len(self.parts) + 1)):

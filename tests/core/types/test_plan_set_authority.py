@@ -77,6 +77,14 @@ def test_create_digest_and_canonical_round_trip(tmp_path: Path) -> None:
             "execution generation",
         ),
         ({"binding_mode": "foreign"}, "binding_mode"),
+        (
+            {
+                "coverage": CoverageResultDef(
+                    CoverageStatus.PASS, parts_without_obligations=("P2",)
+                )
+            },
+            "unknown part key",
+        ),
     ],
 )
 def test_invalid_authority_states_fail_closed(

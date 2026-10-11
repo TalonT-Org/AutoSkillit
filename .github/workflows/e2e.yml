@@ -104,12 +104,13 @@ jobs:
         env:
           MINIMAX_API_KEY: ${{ matrix.kind != 'clean-install' && secrets.MINIMAX_API_KEY || '' }}
           E2E_SANDBOX_TOKEN: ${{ matrix.kind != 'clean-install' && secrets.E2E_SANDBOX_TOKEN || '' }}
+          E2E_IMPLEMENTATION_ISSUE_URL: ${{ vars.E2E_IMPLEMENTATION_ISSUE_URL }}
           TEST: ${{ matrix.test }}
         run: |
           set -euo pipefail
           docker_args=(--shm-size=3g)
           if [[ '${{ matrix.kind }}' != 'clean-install' ]]; then
-            docker_args+=(--env MINIMAX_API_KEY --env E2E_SANDBOX_TOKEN)
+            docker_args+=(--env MINIMAX_API_KEY --env E2E_SANDBOX_TOKEN --env E2E_IMPLEMENTATION_ISSUE_URL)
             docker_args+=(--volume "$RUNNER_TEMP/e2e/data:/home/autoskillit/.local/share/autoskillit")
           fi
           if [[ "$TEST" == 'headless-smoke' ]]; then
@@ -179,7 +180,7 @@ jobs:
           retention-days: 14
 
       - name: Report failure
-        if: failure() && (steps.e2e.outcome == 'failure' || steps.redact.outcome == 'failure')
+        if: failure() && (steps.e2e.outcome == 'failure' || steps.redact.outcome == 'failure') && github.ref_name != 'verify-runtime-state-e3-5258-20261011'
         env:
           GH_TOKEN: ${{ github.token }}
           TEST: ${{ matrix.test }}

@@ -49,6 +49,7 @@ __all__ = [
     "atomic_write",
     "decode_versioned_json_bytes",
     "ensure_project_temp",
+    "ensure_self_ignored",
     "is_python_bytecode_path",
     "read_versioned_json",
     "resolve_skill_temp_dir",
@@ -718,10 +719,22 @@ _AUTOSKILLIT_GITIGNORE_ENTRIES = [
 _COMMITTED_BY_DESIGN: frozenset[str] = frozenset(
     {
         "config.yaml",
+        "evidence",
+        "experiment-types",
+        "methodology-traditions",
         "recipes",
+        "skills",
         "test-source-map.json",
+        "waivers",
     }
 )
+
+
+def ensure_self_ignored(directory: Path) -> None:
+    """Write a ``*`` marker if absent; preserve an existing marker."""
+    marker = directory / ".gitignore"
+    if not marker.exists():
+        atomic_write(marker, "# Created by autoskillit automatically.\n*\n")
 
 
 def ensure_project_temp(project_dir: Path, override: str | None = None) -> Path:
@@ -739,14 +752,7 @@ def ensure_project_temp(project_dir: Path, override: str | None = None) -> Path:
     """
     temp_dir = resolve_temp_dir(project_dir, override)
     temp_dir.mkdir(parents=True, exist_ok=True)
-    # Race-safe ordering: .gitignore is the FIRST file written after mkdir,
-    # before any session content lands. See pytest #12167 / mypy #12442.
-    gitignore_path = temp_dir / ".gitignore"
-    if not gitignore_path.exists():
-        atomic_write(
-            gitignore_path,
-            "# Created by autoskillit automatically.\n*\n",
-        )
+    ensure_self_ignored(temp_dir)
     autoskillit_dir = project_dir / ".autoskillit"
     if autoskillit_dir.is_dir():
         autoskillit_gitignore = autoskillit_dir / ".gitignore"

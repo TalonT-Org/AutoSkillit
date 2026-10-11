@@ -157,13 +157,19 @@ def _collect_uncovered_gitignore_entries(
     autoskillit_dir: Path,
     gitignore_content: str,
 ) -> list[str]:
-    from autoskillit.core import _AUTOSKILLIT_GITIGNORE_ENTRIES, _COMMITTED_BY_DESIGN
+    from autoskillit.core import (
+        _AUTOSKILLIT_GITIGNORE_ENTRIES,
+        _COMMITTED_BY_DESIGN,
+        is_self_ignored,
+    )
 
     uncovered: list[str] = []
     for item in sorted(autoskillit_dir.iterdir()):
         if item.name == ".gitignore":
             continue
         if item.name in _COMMITTED_BY_DESIGN:
+            continue
+        if item.is_dir() and is_self_ignored(item):
             continue
         check_name = item.name + "/" if item.is_dir() else item.name
         if check_name not in gitignore_content:

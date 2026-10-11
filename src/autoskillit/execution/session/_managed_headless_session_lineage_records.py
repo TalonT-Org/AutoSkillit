@@ -22,6 +22,8 @@ from autoskillit.core import (
     NativeShellCaptureDecision,
     acquire_flock_with_timeout,
     atomic_write,
+    ensure_self_ignored,
+    is_self_ignored,
 )
 from autoskillit.execution.session._managed_headless_session_lineage import (
     _DISPATCH_INDEX,
@@ -137,6 +139,9 @@ def _prepare_root(anchor: Path) -> Path:
         current.mkdir(mode=0o700, exist_ok=True)
         if current.is_symlink() or not current.is_dir():
             raise ValueError("Managed lineage namespace is not a regular directory")
+    ensure_self_ignored(current)
+    if not is_self_ignored(current):
+        raise OSError("Lineage namespace requires a self-ignoring .gitignore")
     for relative in (
         Path(_RECORDS_DIR),
         Path(_INDEXES_DIR) / _FINAL_NATIVE_INDEX,

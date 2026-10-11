@@ -1,4 +1,9 @@
-"""Crash-durable managed headless session lineage persistence."""
+"""Crash-durable managed headless session lineage persistence.
+
+Records live in <anchor>/.autoskillit/managed-headless-session-lineage/, a
+self-ignoring runtime directory at the .autoskillit root. Records are durable
+across resume; keeping the namespace here repairs existing stores in place.
+"""
 
 from __future__ import annotations
 

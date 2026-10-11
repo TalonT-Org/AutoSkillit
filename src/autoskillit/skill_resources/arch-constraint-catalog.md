@@ -26,6 +26,7 @@ classified `REJECT` with `category: "arch_violation"`.
 | Canonical maintenance argv | `test_maintenance_install_argv_contract.py` | Hand-built list or tuple argv containing `--maintenance-update` outside `MaintenanceInstallArgv.to_argv()` |
 | step_name in run_cmd | `test_anti_pattern_guards.py` | Missing `step_name` in `run_cmd` `with:` blocks in recipe YAML |
 | No hardcoded temp paths | `test_python_no_hardcoded_temp.py` | Hardcoded temp-root path strings in Python outside whitelist |
+| AutoSkillit root children | `test_autoskillit_root_children_registered.py` | Naming an unclassified `.autoskillit/` child in production Python; runtime directories need a self-ignore marker and a real-Git proof |
 | run_python path resolution | `test_run_python_path_resolution.py` | smoke_utils callable with relative-path fallback or path-like param not in `_PATH_LIKE_ARGS` |
 | SkillResult kill_reason | `test_skill_result_construction_guard.py` | `SkillResult()` without `kill_reason=` kwarg |
 | Never-raises contracts | `test_never_raises_contracts.py` | `mcp.tool()` handlers without top-level `try/except` and "Never raises" docstring |

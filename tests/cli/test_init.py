@@ -537,7 +537,11 @@ def test_init_all_created_files_covered_by_gitignore(tmp_path: Path) -> None:
     be in the committed allowlist.
     """
     from autoskillit.cli._init_helpers import _create_secrets_template
-    from autoskillit.core.io import _COMMITTED_BY_DESIGN, ensure_project_temp
+    from autoskillit.core.io import (
+        _COMMITTED_BY_DESIGN,
+        ensure_project_temp,
+        is_self_ignored,
+    )
 
     ensure_project_temp(tmp_path)
     _create_secrets_template(tmp_path)
@@ -552,10 +556,7 @@ def test_init_all_created_files_covered_by_gitignore(tmp_path: Path) -> None:
             continue
         if item.is_dir() and (item / ".gitignore").exists():
             # Self-gitignoring directory — its own .gitignore covers its contents.
-            self_ignore = (item / ".gitignore").read_text()
-            assert "*" in self_ignore, (
-                f"{item.name}/ is a directory without a self-gitignore covering '*'"
-            )
+            assert is_self_ignored(item)
             continue
         check_name = item.name + "/" if item.is_dir() else item.name
         assert check_name in gitignore_content, (

@@ -4,6 +4,7 @@ write_paths: unrestricted
 uses_capabilities: []
 requires_resources:
 - arch-constraint-catalog
+- plan-part-form
 description: Plan validation executor. ALWAYS invoke this skill when instructed to validate or dry-walkthrough a plan. Do
   not read the plan or trace changes directly — use this skill first to load the validation workflow.
 hooks:

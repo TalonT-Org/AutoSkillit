@@ -256,7 +256,7 @@ def test_shell_keeps_saved_analysis_scoped_and_fixed_across_interactive_filters(
             "evidence_ids": ["cohort-evidence"],
         },
     ]
-    created = datetime(2026, 10, 11, 12, 34, 56, 789_000, tzinfo=UTC)
+    created = datetime(2026, 10, 12, 12, 34, 56, 789_000, tzinfo=UTC)
     created_ms = int(created.timestamp() * 1000)
     payload = _analysis_payload_for_shell(
         deck_payload,
@@ -320,7 +320,7 @@ def test_shell_keeps_saved_analysis_scoped_and_fixed_across_interactive_filters(
     assert created_iso in footer
     assert anchor_date in footer
     assert f"→ {anchor_date}" in cohort_text
-    assert "2026-10-11" not in cohort_text
+    assert created.strftime("%Y-%m-%d") not in cohort_text
 
 
 @pytest.mark.parametrize(

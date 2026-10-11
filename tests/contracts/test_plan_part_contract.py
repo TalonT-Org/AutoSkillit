@@ -38,11 +38,14 @@ def test_bundled_plan_part_templates_pass_the_allocation_verifier() -> None:
     from autoskillit.core import parse_part_allocation, verify_allocation_evidence
     from autoskillit.workspace.skills import bundled_skills_dir, bundled_skills_extended_dir
 
+    expected_skills: set[str] = set()
     verified_skills: set[str] = set()
     verified_block_count = 0
     for skills_root in (bundled_skills_dir(), bundled_skills_extended_dir()):
         for skill_path in skills_root.rglob("SKILL.md"):
             content = skill_path.read_text(encoding="utf-8")
+            if "**Plan-part form.**" in content:
+                expected_skills.add(skill_path.parent.name)
             assert "Step {N.M} |" not in content, f"{skill_path} has a stale step placeholder"
             assert r"owned \| shared" not in content, (
                 f"{skill_path} escapes the allocation separator"
@@ -65,4 +68,5 @@ def test_bundled_plan_part_templates_pass_the_allocation_verifier() -> None:
                 verified_skills.add(skill_path.parent.name)
 
     assert verified_block_count > 0, "no bundled plan-part allocation template was checked"
-    assert {"make-plan", "rectify"} <= verified_skills
+    assert expected_skills, "no bundled plan-part authoring skill was found"
+    assert expected_skills <= verified_skills

@@ -285,23 +285,24 @@ globalThis.DeckShell = (() => {
         if (!measure || typeof measure !== "object") {
           return el("p", {}, label + " · " + display(measure));
         }
-        const value = measure.value == null ? "value unavailable" : display(measure.value);
+        const measured = DeckCore.measureValue(measure);
+        const value = measured == null ? "value unavailable" : display(measured);
         const unit = measure.unit ?? fallbackUnit ?? "unit not reported";
         const observed = measure.observed_sessions ?? measure.sample_size;
         const eligible = measure.eligible_sessions ?? measure.eligible_count;
         const unknown = measure.unknown_sessions ?? measure.unknown_runs ??
           measure.state_counts?.unknown;
         const sampleText = measure.earlier_samples != null || measure.later_samples != null ?
-          "Observed before/after samples " + display(measure.earlier_samples) + "/" +
-            display(measure.later_samples) :
-          "Observed samples " + display(observed);
+          "Observed before/after samples " + DeckCore.countLabel(measure.earlier_samples) + "/" +
+            DeckCore.countLabel(measure.later_samples) :
+          "Observed samples " + DeckCore.countLabel(observed);
         const states = Object.entries(measure.state_counts ?? {}).map(([state, count]) =>
-          state + " " + display(count)).join(", ");
+          state + " " + DeckCore.formatCount(count)).join(", ");
         return el("div", {class: "run-analysis__measure"}, [
           el("p", {}, [el("strong", {}, label), " · ", availabilityCell(measure), " · ", value,
             " ", unit, measure.reason ? " · " + measure.reason : ""]),
-          el("p", {}, sampleText + " · eligible " + display(eligible) + " · unknown " +
-            display(unknown)),
+          el("p", {}, sampleText + " · eligible " + DeckCore.countLabel(eligible) + " · unknown " +
+            DeckCore.countLabel(unknown)),
           states ? el("p", {}, "Availability counts · " + states) : null,
           measure.guardrail ? el("p", {}, "Guardrail · " + measure.guardrail) : null
         ]);

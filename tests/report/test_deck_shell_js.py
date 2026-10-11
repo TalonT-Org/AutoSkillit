@@ -323,6 +323,60 @@ def test_shell_keeps_saved_analysis_scoped_and_fixed_across_interactive_filters(
     assert "2026-10-11" not in cohort_text
 
 
+@pytest.mark.parametrize(
+    ("state", "value", "expected_value"),
+    [
+        ("measured", 10.55555, "10.55555"),
+        ("measured_zero", None, "0"),
+        ("unknown", 999, "value unavailable"),
+    ],
+)
+def test_analysis_evidence_uses_measure_states_and_formats_counts(
+    deck_asset: Any,
+    deck_payload: dict[str, Any],
+    state: str,
+    value: float | None,
+    expected_value: str,
+) -> None:
+    payload = _analysis_payload_for_shell(
+        deck_payload,
+        generated_at_ms=deck_payload["generated_at_ms"],
+        cohort={"change_id": None, "comparisons": []},
+        coverage={"populations": {}},
+        evidence={
+            "measure": {
+                "view_id": "trend",
+                "source": "rollout",
+                "measurement": {
+                    "state": state,
+                    "value": value,
+                    "unit": "tokens",
+                    "sample_size": 2000,
+                    "eligible_count": 3000,
+                    "state_counts": {"measured": 2000, "unknown": 1000},
+                },
+            },
+        },
+        findings=[{"view_id": "trend", "text": "Saved measurement.", "evidence_ids": ["measure"]}],
+    )
+    with MiniRacer() as ctx:
+        ctx.eval(deck_asset("core.js"))
+        ctx.eval(_SHELL_DOM_HARNESS)
+        for asset in deck_script_assets()[1:]:
+            ctx.eval(deck_asset(asset))
+        ctx.eval('location.hash = "#/trend?window=all";')
+        ctx.eval(f"DeckShell.boot({json.dumps(payload)});")
+        text = ctx.call("deckViewText")
+
+    assert f"{expected_value} tokens" in text
+    assert "Observed samples 2,000" in text
+    assert "eligible 3,000" in text
+    assert "unknown 1,000" in text
+    assert "Availability counts · measured 2,000, unknown 1,000" in text
+    if state == "unknown":
+        assert "999 tokens" not in text
+
+
 def test_shell_shows_explicit_empty_corpus_interpretation(deck_asset: Any) -> None:
     payload = build_deck_payload(
         [],

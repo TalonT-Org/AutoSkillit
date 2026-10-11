@@ -127,7 +127,7 @@ def test_unexpected_collection_error_still_writes_the_result(
     def crash(*_args, **_kwargs):
         raise RuntimeError("collection crashed")
 
-    monkeypatch.setattr(harness, "collect_failure_evidence", crash, raising=False)
+    monkeypatch.setattr(harness, "collect_failure_evidence", crash)
     monkeypatch.setattr(harness, "_run_test", lambda *_args, **_kwargs: (["test failed"], []))
     failures, result = _run_recipe(tmp_path, FakeRunner(lambda _argv: None))
     assert failures == ["test failed"]

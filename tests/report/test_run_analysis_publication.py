@@ -15,13 +15,13 @@ import pytest
 
 from autoskillit.core import ArtifactLease, ArtifactLeaseContention
 from autoskillit.execution import REPORT_INDEX_SCHEMA_VERSION
-from autoskillit.report.deck import _html as deck_html
-from autoskillit.report.deck._analysis import (
+from autoskillit.report._analysis import (
     _json_bytes,
     finish_run_analysis,
     prepare_run_analysis,
     write_run_analysis_packet,
 )
+from autoskillit.report.deck import _html as deck_html
 from tests.report._fixtures import session_row, token_measure
 
 pytestmark = [pytest.mark.medium]

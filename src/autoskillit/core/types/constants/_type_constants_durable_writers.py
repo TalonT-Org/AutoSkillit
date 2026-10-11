@@ -354,7 +354,7 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
         detection=None,
     ),
     DurableArtifactWriterDef(
-        writer="autoskillit.report.deck._analysis:write_run_analysis_packet",
+        writer="autoskillit.report._analysis:write_run_analysis_packet",
         artifact=(
             "dated report-analysis child: measurements.json and a reused "
             ".candidate-findings.json when available"
@@ -363,7 +363,7 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
         detection=None,
     ),
     DurableArtifactWriterDef(
-        writer="autoskillit.report.deck._analysis:finish_run_analysis",
+        writer="autoskillit.report._analysis:finish_run_analysis",
         artifact=(
             "dated report-analysis child: findings.json, report.html, and the final "
             "analysis.json manifest"

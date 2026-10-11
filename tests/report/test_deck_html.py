@@ -14,11 +14,11 @@ from zipfile import ZipFile
 import pytest
 
 from autoskillit.core import pkg_root
-from autoskillit.execution import REPORT_INDEX_SCHEMA_VERSION
 from autoskillit.report import render_deck
-from autoskillit.report.deck import _analysis_payload, build_deck_payload
+from autoskillit.report._analysis import _analysis_payload
 from autoskillit.report.deck import _html as deck_html
 from autoskillit.report.deck import _payload as deck_payload_module
+from autoskillit.report.deck import build_deck_payload
 from autoskillit.report.deck import render_deck as render_deck_from_deck
 from autoskillit.report.deck._html import render_deck_html
 from autoskillit.report.deck._registry import DECK_VIEWS
@@ -225,9 +225,7 @@ def test_saved_analysis_findings_are_inert_and_offline(
 
 
 def test_empty_saved_analysis_keeps_explicit_no_observations_finding() -> None:
-    payload = build_deck_payload(
-        [], generated_at=DECK_GENERATED_AT, index_schema_version=REPORT_INDEX_SCHEMA_VERSION
-    )
+    payload = build_deck_payload([], generated_at=DECK_GENERATED_AT, index_schema_version=1)
     payload = _saved_analysis_payload(
         payload,
         findings=[

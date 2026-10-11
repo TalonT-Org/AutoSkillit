@@ -16,7 +16,9 @@ hooks:
       once: true
 semantic_version: 1
 semantic_requirements:
-  logical_roles: []
+  logical_roles:
+  - name: run-analysis-interpreter
+    purpose: use this session's terminal and file tools to interpret the frozen packet and write cited findings
   child_spawns: []
 ---
 
@@ -33,6 +35,12 @@ selects a previously marked rollout cohort; it is never inferred.
 - `--change-id` is optional. Pass only the exact value supplied by the caller. When
   omitted, prepare an explicit no-cohort analysis.
 
+## Arguments
+
+- `instance_dir` — runtime-derived absolute path printed in Step 1; not caller-supplied.
+- `working_log` — runtime-derived sibling log path printed in Step 1; not caller-supplied.
+- `view_id` — runtime-derived ID of a built view in the frozen packet; not caller-supplied.
+
 ## Critical Constraints
 
 **NEVER:**
@@ -40,7 +48,8 @@ selects a previously marked rollout cohort; it is never inferred.
   `analysis-prepare` has completed. All interpretation uses the frozen packet.
 - Directly edit `measurements.json`, the saved render bundle, a previous analysis
   instance, or the completed report. The CLI owns those instance artifacts; this skill
-  writes only its bounded sibling working log and the new instance's candidate file.
+  writes only its bounded sibling working log and the new instance's
+  `.candidate-findings.json` file.
 - Invent measurements, evidence IDs, cohort markers, model identities, causes, or
   unsupported conclusions. State uncertainty plainly.
 - Treat digest, schema, ownership, or evidence-reference validation as certification of
@@ -78,7 +87,8 @@ selects a previously marked rollout cohort; it is never inferred.
 Create the skill scratch root:
 
 ```bash
-mkdir -p '{{AUTOSKILLIT_TEMP}}/analyze-run/'
+set -o pipefail
+mkdir -p '{{AUTOSKILLIT_TEMP}}/analyze-run/' 2>&1 | head -c 4000
 ```
 
 Run this read-only path generator, then copy its two absolute output lines literally
@@ -185,7 +195,7 @@ tail -n 1 '{working_log}' 2>&1 | head -c 4000
 ```
 
 Parse the final JSON status. Only when it reports `completed: true`, emit the absolute
-`report_path` from that status as the final line:
+`report_path` from that status as a plain output line:
 
 ```text
 report_path = /absolute/path/to/report.html
@@ -193,3 +203,6 @@ report_path = /absolute/path/to/report.html
 
 If finish fails, preserve the candidate and frozen packet, report the bounded error, and
 do not emit a `report_path` token.
+
+In a headless session, also reproduce the supplied `%%ORDER_UP::{nonce}%%` completion
+token exactly as instructed by that session. Never invent a completion nonce.

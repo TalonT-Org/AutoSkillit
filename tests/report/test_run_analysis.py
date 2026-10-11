@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 from autoskillit.execution import REPORT_INDEX_SCHEMA_VERSION
-from autoskillit.report.deck._analysis import _json_bytes, prepare_run_analysis
+from autoskillit.report._analysis import _json_bytes, prepare_run_analysis
 from tests.report._fixtures import session_row, token_measure
 
 pytestmark = [pytest.mark.small]

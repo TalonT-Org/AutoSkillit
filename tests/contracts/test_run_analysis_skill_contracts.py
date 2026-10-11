@@ -24,6 +24,9 @@ def test_analyze_run_loads_as_bounded_diagnostic_session_skill() -> None:
     assert skill.write_scope.kind.value == "bounded"
     assert skill.write_scope.paths == ("{{AUTOSKILLIT_TEMP}}/analyze-run/",)
     assert skill.semantic_plan is not None
+    assert [role.name for role in skill.semantic_plan.logical_roles] == [
+        "run-analysis-interpreter"
+    ]
     assert skill.semantic_plan.child_spawns == ()
     assert skill.semantic_plan.join is None
 
@@ -43,7 +46,11 @@ def test_analyze_run_contract_matches_frozen_packet_workflow() -> None:
     contract = load_bundled_manifest()["skills"]["analyze-run"]
     assert contract["inputs"] == [{"name": "change_id", "type": "string", "required": False}]
     assert contract["outputs"] == [{"name": "report_path", "type": "file_path"}]
-    assert contract["expected_output_patterns"] == [r"report_path[ \t]*=[ \t]*\S+"]
+    assert contract["completion_required"] is True
+    assert contract["expected_output_patterns"] == [
+        r"report_path[ \t]*=[ \t]*\S+",
+        r"%%ORDER_UP::[a-f0-9]+%%",
+    ]
 
     skill_path = pkg_root() / "skills_extended" / "analyze-run" / "SKILL.md"
     content = skill_path.read_text(encoding="utf-8")

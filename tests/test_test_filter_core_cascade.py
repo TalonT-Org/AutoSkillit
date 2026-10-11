@@ -300,10 +300,12 @@ class TestModuleCascadeCore:
                 "_test_filter",
                 "hook_registry",
                 "smoke_utils",
+                "config",
+                "report",
             }
         )
         assert MODULE_CASCADE_CORE["_type_results_records"] == (
-            MODULE_CASCADE_CORE["_type_results"] | {"config"}
+            MODULE_CASCADE_CORE["_type_results"] - {"report"}
         )
 
     def test_type_backend_cascade(self) -> None:

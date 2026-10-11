@@ -14,13 +14,12 @@ from typing import Any
 from autoskillit.core import ArtifactLease, validate_rollout_marker
 from autoskillit.core import atomic_write as _atomic_write
 
-from ._html import render_deck_html
-from ._measure_helpers import TOKEN_FIELDS
-from ._payload import build_deck_payload
-from ._trend import _trend_delta, _trend_group_key, _trend_measure_summary
+from .deck._html import render_deck_html
+from .deck._measure_helpers import TOKEN_FIELDS
+from .deck._payload import build_deck_payload
+from .deck._trend import _trend_delta, _trend_group_key, _trend_measure_summary
 
 _LIMITATION = "Coverage includes retained report-index sources, not complete historical coverage."
-_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 
 def _json_bytes(value: Any) -> bytes:
@@ -234,7 +233,7 @@ def prepare_run_analysis(
         tool_rows=populations["tools"],
         subagent_rows=populations["subagents"],
         turn_rows=populations["turns"],
-        generated_at=_EPOCH + timedelta(milliseconds=anchor_ms),
+        generated_at=datetime(1970, 1, 1, tzinfo=UTC) + timedelta(milliseconds=anchor_ms),
         index_schema_version=index_schema_version,
     )
     cohort = _cohort(populations["sessions"], change_id)
@@ -368,7 +367,10 @@ def _verify_completed(output_dir: Path, manifest: dict[str, Any]) -> dict[str, A
 def _completed_findings(root: Path, packet: dict[str, Any]) -> dict[str, Any] | None:
     winner = None
     for path in sorted(root.glob("*/analysis.json")):
-        manifest_bytes = path.read_bytes()
+        try:
+            manifest_bytes = path.read_bytes()
+        except (FileNotFoundError, NotADirectoryError, PermissionError) as exc:
+            raise ValueError("retained completion manifest is unavailable") from exc
         manifest = json.loads(manifest_bytes)
         if manifest.get("input_fingerprint") != packet["input_fingerprint"]:
             continue
@@ -421,7 +423,9 @@ def finish_run_analysis(output_dir: Path, *, analysis_generated_at: datetime) ->
     candidate = _validate_findings(
         json.loads((output_dir / ".candidate-findings.json").read_bytes()), packet, snapshot_digest
     )
-    generated_at_ms = (analysis_generated_at - _EPOCH) // timedelta(milliseconds=1)
+    generated_at_ms = (analysis_generated_at - datetime(1970, 1, 1, tzinfo=UTC)) // timedelta(
+        milliseconds=1
+    )
     with ArtifactLease.acquire_exclusive(output_dir.parent / ".publication.lock", timeout=5.0):
         if (output_dir / "analysis.json").exists():
             raise ValueError("analysis is already completed")

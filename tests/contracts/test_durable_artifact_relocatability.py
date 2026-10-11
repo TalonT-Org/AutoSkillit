@@ -189,15 +189,15 @@ class TestNonMachineLocalWritersAreRelocatable:
         from datetime import UTC, datetime
 
         from autoskillit.execution import REPORT_INDEX_SCHEMA_VERSION
-        from autoskillit.report.deck._analysis import (
+        from autoskillit.report._analysis import (
             finish_run_analysis,
             prepare_run_analysis,
             write_run_analysis_packet,
         )
 
         writer_names = (
-            "autoskillit.report.deck._analysis:write_run_analysis_packet",
-            "autoskillit.report.deck._analysis:finish_run_analysis",
+            "autoskillit.report._analysis:write_run_analysis_packet",
+            "autoskillit.report._analysis:finish_run_analysis",
         )
         entries = {entry.writer: entry for entry in DURABLE_ARTIFACT_WRITERS}
         for writer in writer_names:

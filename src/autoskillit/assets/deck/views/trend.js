@@ -138,7 +138,9 @@ DeckShell.registerView("trend", ctx => {
     const states = Object.entries(measure.state_counts ?? {}).map(([state, count]) =>
       state + " " + DeckCore.formatCount(count)).join(", ");
     const measureUnit = measure.unit ?? unit ?? "unit unavailable";
-    const valueText = value == null ? (measure.state ?? "unknown") +
+    const label = measure.state === "no_observations" ? "no observations" :
+      measure.state ?? "unknown";
+    const valueText = value == null ? label +
       (measure.reason ? ": " + measure.reason : ": value unavailable") :
       String(value);
     const sampleText = sample == null ? "unavailable" : DeckCore.formatCount(sample);

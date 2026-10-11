@@ -7,9 +7,8 @@ from typing import Any
 import pytest
 from py_mini_racer import MiniRacer
 
-from autoskillit.execution import REPORT_INDEX_SCHEMA_VERSION
+from autoskillit.report._analysis import _analysis_payload
 from autoskillit.report.deck import build_deck_payload
-from autoskillit.report.deck._analysis import _analysis_payload
 from autoskillit.report.deck._html import deck_script_assets
 from autoskillit.report.deck._registry import DECK_VIEWS
 from tests.report._fixtures import DECK_GENERATED_AT
@@ -41,6 +40,7 @@ const shellNodes = Object.fromEntries(["deck-nav", "deck-cohort", "deck-view", "
 globalThis.document = {
   createElement: shellNode,
   createElementNS: (_namespace, tag) => shellNode(tag),
+  createDocumentFragment: () => shellNode("#fragment"),
   createTextNode: text => {
     const node = shellNode("#text");
     node.textContent = String(text);
@@ -277,9 +277,9 @@ def test_shell_keeps_saved_analysis_scoped_and_fixed_across_interactive_filters(
         trend_text = ctx.call("deckViewText")
         cohort_text = ctx.call("deckCohortText")
         footer = ctx.call("deckFootText")
-        ctx.call("deckSetHash", "#/trend?window=all&harness=codex&provider=codex")
+        ctx.eval('deckSetHash("#/trend?window=all&harness=codex&provider=codex");')
         filtered_trend_text = ctx.call("deckViewText")
-        ctx.call("deckSetHash", "#/cohort?window=all")
+        ctx.eval('deckSetHash("#/cohort?window=all");')
         cohort_view_text = ctx.call("deckViewText")
 
     assert "Run analysis" in trend_text
@@ -327,7 +327,7 @@ def test_shell_shows_explicit_empty_corpus_interpretation(deck_asset: Any) -> No
     payload = build_deck_payload(
         [],
         generated_at=DECK_GENERATED_AT,
-        index_schema_version=REPORT_INDEX_SCHEMA_VERSION,
+        index_schema_version=1,
     )
     payload = _analysis_payload_for_shell(
         payload,

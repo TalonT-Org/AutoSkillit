@@ -524,7 +524,7 @@
         "audit_cycle_path",
         "plan_set_coverage_gaps"
       ],
-      "note": "Produces an ordinary plan when no audit_cycle_path is present. On NO GO re-entry, consumes that exact current authority and emits both plan_path and plan_disposition_path. all_plan_paths appends result.plan_path across re-entries; verdict=plan is the only successful result. Glob plan_dir for *_part_*.md or a single plan file and preserve alphabetical part order."
+      "note": "Produces an ordinary plan when no audit_cycle_path is present. On NO GO re-entry, consumes that exact current authority and emits both plan_path and plan_disposition_path. all_plan_paths appends result.plan_path across re-entries; verdict=plan is the only successful result."
     },
     "salvage_plan": {
       "tool": "run_python",
@@ -587,7 +587,7 @@
         }
       ],
       "on_failure": "release_issue_failure",
-      "note": "Aggregate plan-set gate before every walkthrough.\n\nSingle-shot plans omit parent_authority_path intentionally: there is no prior\nmultipart authority to thread through. Multi-shot bind_group_parts in\nimplementation-groups.yaml supplies one because group iteration threads the\nparent digest from the previous cycle's bind step.\n"
+      "note": "Aggregate plan-set gate before every walkthrough. Single-shot plans omit parent_authority_path intentionally: there is no prior multipart authority to thread through. Multi-shot bind_group_parts in implementation-groups.yaml supplies one because group iteration threads the parent digest from the previous cycle's bind step. Bind exactly the plan_parts value captured from the producer that just ran. A successful replan replaces the earlier list with its returned list: do not append rejected paths or rebuild the list from a directory listing. When salvage_plan is the producer, bind its returned list unchanged under the existing salvage recovery and strict coverage checks."
     },
     "check_replan_iteration": {
       "tool": "run_python",
@@ -692,7 +692,7 @@
         }
       ],
       "on_failure": "release_issue_failure",
-      "note": "Renews plan-set bytes after a walkthrough before implementation."
+      "note": "Renews plan-set bytes after a walkthrough before implementation. coverage_failed here is terminal by decision. The part passed the plan-set gate before the walkthrough edited it, and a walkthrough cannot be re-run until its edits are renewed. Relay the result's coverage_gaps in the failure diagnostic: it names the rows the edit broke."
     },
     "create_impl_worktree": {
       "tool": "run_cmd",

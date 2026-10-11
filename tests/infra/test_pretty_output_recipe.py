@@ -1058,7 +1058,7 @@ def _assert_compaction_semantics(recipe_name: str, mode_name: str, loaded_result
     if recipe_name != "remediation":
         return False
     rectify_note = original_parsed["steps"]["rectify"]["note"]
-    assert "Glob plan_dir for *_part_*.md" in rectify_note, (
+    assert "plan_parts is exactly the plan_parts value" in rectify_note, (
         f"property=remediation rectify note source; recipe={recipe_name}; mode={mode_name}"
     )
     assert compacted_parsed["steps"]["rectify"]["note"] == rectify_note, (

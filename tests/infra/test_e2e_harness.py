@@ -33,7 +33,7 @@ def _isolated_sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def failure_sources(tmp_path: Path) -> dict[Path, Path]:
-    runs = harness.SANDBOX_CLONE.parent / "autoskillit-runs"
+    runs = harness.SANDBOX_CLONE.parent / harness.PIPELINE_RUNS_DIR
     project = tmp_path / "home" / ".claude" / "projects" / "project"
     sources = {
         runs / "clone-a/.autoskillit/temp/make-plan/a_plan.md": Path(
@@ -151,7 +151,7 @@ def test_nothing_to_collect_adds_no_evidence_key(
 
 
 def test_failure_evidence_skips_symlinks_and_linked_scan_ancestors(tmp_path: Path) -> None:
-    runs = harness.SANDBOX_CLONE.parent / "autoskillit-runs"
+    runs = harness.SANDBOX_CLONE.parent / harness.PIPELINE_RUNS_DIR
     plans = runs / "clone-a/.autoskillit/temp/make-plan"
     plans.mkdir(parents=True)
     (plans / "kept.md").write_text("kept")
@@ -201,7 +201,7 @@ def test_collected_plans_and_transcripts_are_redacted(
 def test_runs_scan_error_keeps_readable_transcripts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure_sources
 ) -> None:
-    runs = harness.SANDBOX_CLONE.parent / "autoskillit-runs"
+    runs = harness.SANDBOX_CLONE.parent / harness.PIPELINE_RUNS_DIR
     original = Path.iterdir
 
     def unreadable(path):

@@ -1114,6 +1114,7 @@ def run_test(
                 "plan_files": 0,
                 "transcripts": 0,
                 "errors": [f"{type(exc).__name__}: {exc}"],
+                "exception": traceback.format_exc(),
             }
         if any(evidence.values()):
             result["evidence"] = evidence

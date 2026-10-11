@@ -125,7 +125,10 @@ def test_unexpected_collection_error_still_writes_the_result(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def crash(*_args, **_kwargs):
-        raise RuntimeError("collection crashed")
+        try:
+            raise ValueError("collection root cause")
+        except ValueError as exc:
+            raise RuntimeError("collection crashed") from exc
 
     monkeypatch.setattr(harness, "collect_failure_evidence", crash)
     monkeypatch.setattr(harness, "_run_test", lambda *_args, **_kwargs: (["test failed"], []))
@@ -134,6 +137,9 @@ def test_unexpected_collection_error_still_writes_the_result(
     assert result["outcome"] == "failed"
     assert result["evidence"]["plan_files"] == result["evidence"]["transcripts"] == 0
     assert "collection crashed" in result["evidence"]["errors"][0]
+    assert "ValueError: collection root cause" in result["evidence"]["exception"]
+    assert "RuntimeError: collection crashed" in result["evidence"]["exception"]
+    assert 'raise RuntimeError("collection crashed") from exc' in result["evidence"]["exception"]
 
 
 def test_nothing_to_collect_adds_no_evidence_key(

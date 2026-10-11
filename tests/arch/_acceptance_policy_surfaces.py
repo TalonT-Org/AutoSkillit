@@ -50,12 +50,6 @@ class PolicyRelaxationApproval:
 
 POLICY_SURFACES: tuple[PolicySurface, ...] = (
     PolicySurface(
-        "tests/arch/test_autoskillit_root_children_registered.py",
-        "_CLASSIFIED_ELSEWHERE",
-        "int_map",
-        default=0,
-    ),
-    PolicySurface(
         "tests/arch/_subpackage_isolation_line_limits.py",
         "_LINE_LIMIT_EXEMPTIONS",
         "exemption_map",
@@ -65,6 +59,12 @@ POLICY_SURFACES: tuple[PolicySurface, ...] = (
         "FILE_COUNT_LIMITS",
         "int_map",
         default=12,
+    ),
+    PolicySurface(
+        "tests/arch/test_autoskillit_root_children_registered.py",
+        "_CLASSIFIED_ELSEWHERE",
+        "int_map",
+        default=0,
     ),
     PolicySurface(
         "tests/arch/test_pyright_suppression_allowlist.py", "TYPE_IGNORE_BUDGET", "int_scalar"

@@ -202,6 +202,15 @@ and are often `0600`, so a second container run copies `out/` and `data/logs/` i
 fails if any secret survives. Only `upload/` is uploaded, and only when redaction
 succeeded.
 
+When a test does not pass, the harness preserves plans from each pipeline clone under
+`out/pipeline-artifacts/<clone>/<make-plan|rectify>/` and Claude Code JSONL under
+`out/transcripts/`, retaining relative paths. The transcripts include the orchestrator,
+skill sessions and their subagents; the orchestrator's transcript holds each raw
+`bind_plan_set` response and its `plan_parts` argument. These files go through the same
+redaction and upload steps as the other output artifacts. Collection also runs for an
+expected failure or a harness exception. A container killed before or during collection
+may leave no evidence or only partial evidence.
+
 `clean-install` mounts no home directories and retains evidence under `out/`. Its redactor
 receives the same required `--secret-env` names with variables unset and skips the absent
 home-log tree. Redaction and upload still run after test failures.
@@ -329,6 +338,25 @@ docker run --rm \
   autoskillit-e2e:local \
   python3 /opt/e2e/e2e_harness.py run --test clean-install --out /artifacts
 ```
+
+### Check a real plan against the plan-set gate before dispatching a pipeline scenario
+
+After the plan-set changes have merged, perform this check before CI commissioning:
+
+1. Check out the #5255 branch revision containing both the `implementation` E2E scenario
+   and the evidence collector. Build and run that revision with the Docker
+   invocation above, selecting `--test implementation`. Use the same revision for
+   commissioning and record the model.
+2. If the run reaches implementation, the first bind succeeded. If the test does not
+   pass, inspect the orchestrator's `bind_plan_set` results in `out/transcripts/`.
+   An observed `success: true` on the first or second bind is the pass condition.
+   A `coverage_failed` result explains the rejection in `coverage_gaps`, and
+   `out/pipeline-artifacts/` retains the rejected plan. Missing evidence is inconclusive
+   and does not satisfy this gate: require an observed successful bind. When a run
+   replans, also confirm the second bind's `plan_parts` names only the replacement plan.
+3. Record the model, plan path and bind result in issue #5259's body using
+   `gh issue edit --body-file`, never as a comment. Only an observed successful bind
+   unblocks `gh workflow run e2e.yml -f tests=implementation`.
 
 ### Sandbox smoke with teardown
 

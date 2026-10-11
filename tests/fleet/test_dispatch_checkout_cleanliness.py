@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import subprocess
 from pathlib import Path
 
@@ -21,13 +20,8 @@ pytestmark = [
     pytest.mark.layer("fleet"),
     pytest.mark.medium,
     pytest.mark.feature("fleet"),
+    pytest.mark.usefixtures("isolated_git_config"),
 ]
-
-
-@pytest.fixture(autouse=True)
-def _isolate_git_config(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
-    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
 
 
 def _autoskillit_status(project_dir: Path) -> set[str]:

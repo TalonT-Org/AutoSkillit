@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import uuid
 from pathlib import Path
 
@@ -18,13 +17,11 @@ from autoskillit.execution.session import DefaultManagedHeadlessSessionLineageSt
 from autoskillit.workspace.clone import detect_uncommitted_changes
 from tests._git_topology import commit_file
 
-pytestmark = [pytest.mark.layer("workspace"), pytest.mark.medium]
-
-
-@pytest.fixture(autouse=True)
-def _isolate_git_config(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
-    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+pytestmark = [
+    pytest.mark.layer("workspace"),
+    pytest.mark.medium,
+    pytest.mark.usefixtures("isolated_git_config"),
+]
 
 
 def _initialized(repo: Path) -> Path:

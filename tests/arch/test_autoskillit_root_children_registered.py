@@ -62,6 +62,12 @@ def _is_root(node: ast.AST, roots: frozenset[str]) -> bool:
 
 
 def _children_named_in(tree: ast.Module) -> set[str]:
+    """Collect children from literal paths and simple syntactic path expressions.
+
+    Recognize direct root assignments, slash joins, and adjacent literal
+    arguments or sequence elements. Root names are matched across the module
+    without scope analysis; dynamic strings and indirect aliases are not traced.
+    """
     roots = {
         target.id
         for node in ast.walk(tree)

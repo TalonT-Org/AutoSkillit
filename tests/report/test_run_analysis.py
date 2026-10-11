@@ -290,6 +290,10 @@ def test_cohort_summaries_keep_zero_unknown_empty_side_and_guardrail() -> None:
     assert delta["state"] == "no_observations"
     assert delta["reason"] == "later interval has no observed values"
     assert delta["guardrail"] == _GUARDRAIL
+    assert before["unit"] == after["unit"] == delta["unit"] == "tokens/session"
+    failure = next(item for item in cohort["comparisons"] if item["metric"] == "failure_share")
+    assert failure["before"]["unit"] == failure["after"]["unit"] == "ratio"
+    assert failure["delta"]["unit"] == "percentage_points"
 
 
 def test_fractional_cohort_averages_survive_canonical_json_and_fingerprint() -> None:

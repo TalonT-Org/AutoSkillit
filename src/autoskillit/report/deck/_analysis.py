@@ -116,17 +116,19 @@ def _cohort(sessions: list[dict[str, Any]], change_id: str) -> dict[str, Any]:
                 {
                     "group": list(group),
                     "metric": metric,
-                    "before": before["failure_share"]
+                    "before": {**before["failure_share"], "unit": "ratio"}
                     if metric == "failure_share"
-                    else before["measures"][metric],
-                    "after": after["failure_share"]
+                    else {**before["measures"][metric], "unit": "tokens/session"},
+                    "after": {**after["failure_share"], "unit": "ratio"}
                     if metric == "failure_share"
-                    else after["measures"][metric],
+                    else {**after["measures"][metric], "unit": "tokens/session"},
                     "delta": _trend_delta(
                         before,
                         after,
                         metric,
-                        unit="percentage_points" if metric == "failure_share" else "tokens",
+                        unit="percentage_points"
+                        if metric == "failure_share"
+                        else "tokens/session",
                     ),
                 }
             )

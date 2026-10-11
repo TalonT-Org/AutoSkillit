@@ -150,7 +150,9 @@ TEST_HELPER_CASCADE: dict[str, frozenset[str]] = {
     "tests/arch/_rules.py": _ARCH_HELPER_TEST_TARGETS,
     "tests/fleet/_reaper_test_support.py": frozenset({"fleet"}),
     "tests/hooks/_interactive_guard_harness.py": frozenset({"hooks", "skills"}),
-    "tests/_git_topology.py": frozenset({"core", "execution", "server", "integration"}),
+    "tests/_git_topology.py": frozenset(
+        {"core", "execution", "server", "integration", "workspace", "fleet"}
+    ),
     "tests/fleet/_codex_mcp_env.py": frozenset({"fleet", "integration"}),
     "tests/fleet/_descendant_worker.py": frozenset({"fleet"}),
 }

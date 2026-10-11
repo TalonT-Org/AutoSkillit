@@ -280,6 +280,13 @@ def exploration_snapshot_service() -> MagicMock:
 
 
 @pytest.fixture
+def isolated_git_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep real-Git visibility tests independent of user and system config."""
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+
+
+@pytest.fixture
 def remote_only_base_clone(tmp_path: _Path, monkeypatch: pytest.MonkeyPatch) -> tuple[_Path, str]:
     """Create an isolated ``feat`` clone with only remote ``develop`` history."""
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)

@@ -19,7 +19,7 @@ _AUTHORED_COUNT = re.compile(
 @pytest.mark.parametrize(
     ("resource_id", "expected_count"),
     [
-        ("arch-constraint-catalog", 71),
+        ("arch-constraint-catalog", 72),
         ("review-approach-criteria", None),
     ],
 )

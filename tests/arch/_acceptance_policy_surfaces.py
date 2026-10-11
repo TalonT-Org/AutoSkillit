@@ -49,6 +49,12 @@ class PolicyRelaxationApproval:
 
 POLICY_SURFACES: tuple[PolicySurface, ...] = (
     PolicySurface(
+        "tests/arch/test_autoskillit_root_children_registered.py",
+        "_CLASSIFIED_ELSEWHERE",
+        "int_map",
+        default=0,
+    ),
+    PolicySurface(
         "tests/arch/_subpackage_isolation_line_limits.py",
         "_LINE_LIMIT_EXEMPTIONS",
         "exemption_map",

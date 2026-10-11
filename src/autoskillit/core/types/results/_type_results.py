@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -61,8 +61,8 @@ from ._type_results_records import (
     ValidatedAddDir,
     ValidatedWorktreePath,
     _require_aware_timestamp,
+    _validate_rollout_scope,
     is_recipe_path_validation_report,
-    validate_rollout_marker,
 )
 from ._type_token import TurnTokenEntry
 
@@ -139,6 +139,39 @@ __all__ = [
 VALID_INPUT_SPEC_TYPES = frozenset({"file_path", "directory_path", "file_path_list"})
 
 InputSpecType = Literal["file_path", "directory_path", "file_path_list"]
+
+
+def validate_rollout_marker(raw: object, *, field_name: str = "rollout.active") -> RolloutMarker:
+    """Validate and normalize a rollout marker from untrusted input."""
+    required_keys = {"change_id", "effective_at", "scope", "expected_effect"}
+    if not isinstance(raw, Mapping) or set(raw) != required_keys:
+        raise ValueError(
+            f"{field_name} must contain exactly change_id, effective_at, scope, expected_effect"
+        )
+    for name in ("change_id", "expected_effect"):
+        value = raw[name]
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{field_name}.{name} must be a nonblank string")
+
+    effective_at = raw["effective_at"]
+    if not isinstance(effective_at, str) or not effective_at.endswith(("Z", "+00:00", "-00:00")):
+        raise ValueError(f"{field_name}.effective_at must be an explicit UTC ISO-8601 timestamp")
+    try:
+        normalized_effective_at = _require_aware_timestamp(
+            effective_at, field_name=f"{field_name}.effective_at"
+        ).isoformat()
+    except ValueError as exc:
+        raise ValueError(
+            f"{field_name}.effective_at must be an explicit UTC ISO-8601 timestamp"
+        ) from exc
+
+    marker: RolloutMarker = {
+        "change_id": raw["change_id"],
+        "effective_at": normalized_effective_at,
+        "scope": _validate_rollout_scope(raw["scope"], field_name=field_name),
+        "expected_effect": raw["expected_effect"],
+    }
+    return marker
 
 
 @dataclass(frozen=True, slots=True)

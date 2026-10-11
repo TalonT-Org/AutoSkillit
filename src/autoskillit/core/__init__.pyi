@@ -1492,4 +1492,5 @@ from .types import (
 from .types import validate_label_transition as validate_label_transition
 from .types import validate_managed_skill_entries as validate_managed_skill_entries
 from .types import validate_recipe_artifact_sections as validate_recipe_artifact_sections
+from .types import validate_rollout_marker as validate_rollout_marker
 from .types import validate_skill_capability_roles as validate_skill_capability_roles

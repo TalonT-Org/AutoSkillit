@@ -166,6 +166,66 @@ def test_rendered_scripts_follow_core_shell_and_registry_order(
     assert actual == [deck_asset("core.js"), deck_asset("shell.js"), *view_assets]
 
 
+def test_frozen_render_bundle_avoids_live_assets_and_registry(
+    monkeypatch: pytest.MonkeyPatch, deck_payload: dict[str, Any]
+) -> None:
+    bundle = deck_html.load_render_bundle()
+    assert set(bundle) == {"template", "css", "scripts"}
+    assert [asset["name"] for asset in bundle["scripts"]] == list(deck_html.deck_script_assets())
+    assert all(set(asset) == {"name", "text"} for asset in bundle["scripts"])
+    expected_html = render_deck_html(deck_payload)
+    expected_scripts = [asset["text"] for asset in bundle["scripts"]]
+
+    def unexpected_asset_read(rel: str) -> str:
+        pytest.fail(f"render bundle unexpectedly read live asset {rel!r}")
+
+    monkeypatch.setattr(deck_html, "_asset_text", unexpected_asset_read)
+    monkeypatch.setattr(deck_html, "DECK_VIEWS", ())
+
+    rendered = render_deck_html(deck_payload, render_bundle=bundle)
+    assert rendered == expected_html
+
+    collector = _collect(rendered)
+    actual_scripts = [source for attrs, source in collector.scripts if "type" not in attrs]
+    policy = next(
+        attrs["content"]
+        for tag, attrs in collector.elements
+        if tag == "meta" and attrs.get("http-equiv", "").lower() == "content-security-policy"
+    )
+    expected_hashes = [
+        "'sha256-"
+        + base64.b64encode(hashlib.sha256(source.encode("utf-8")).digest()).decode("ascii")
+        + "'"
+        for source in expected_scripts
+    ]
+    script_tokens = next(
+        directive.strip().split()[1:]
+        for directive in policy.split(";")
+        if directive.strip().startswith("script-src ")
+    )
+
+    assert actual_scripts == expected_scripts
+    assert sorted(script_tokens) == sorted(expected_hashes)
+
+
+def test_frozen_render_bundle_rejects_closing_script_tag(
+    deck_payload: dict[str, Any],
+) -> None:
+    bundle = deck_html.load_render_bundle()
+    bundle["scripts"][0]["text"] = "const bad = '</SCRIPT>'"
+
+    with pytest.raises(ValueError, match="closing script tag"):
+        render_deck_html(deck_payload, render_bundle=bundle)
+
+
+def test_embedded_json_uses_canonical_mapping_order() -> None:
+    first = {"z": {"b": 2, "a": 1}, "a": 0}
+    second = {"a": 0, "z": {"a": 1, "b": 2}}
+
+    assert deck_html.embed_json(first) == deck_html.embed_json(second)
+    assert deck_html.embed_json(first) == '{"a":0,"z":{"a":1,"b":2}}'
+
+
 @pytest.mark.parametrize("invalid_asset", ["script", "css", "missing_marker", "duplicate_marker"])
 def test_render_deck_html_rejects_unsafe_assets_and_template_markers(
     invalid_asset: str,

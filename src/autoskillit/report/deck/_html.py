@@ -27,9 +27,24 @@ def deck_script_assets() -> tuple[str, ...]:
     )
 
 
+def load_render_bundle() -> dict[str, Any]:
+    scripts = deck_script_assets()
+    return {
+        "template": _asset_text("deck.html"),
+        "css": _asset_text("deck.css"),
+        "scripts": [{"name": name, "text": _asset_text(name)} for name in scripts],
+    }
+
+
 def embed_json(payload: Mapping[str, Any]) -> str:
     return (
-        json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
+            sort_keys=True,
+        )
         .replace("&", r"\u0026")
         .replace("<", r"\u003c")
         .replace(">", r"\u003e")
@@ -41,9 +56,12 @@ def _script_hash(source: str) -> str:
     return "'sha256-" + base64.b64encode(digest).decode("ascii") + "'"
 
 
-def render_deck_html(payload: Mapping[str, Any]) -> str:
-    scripts = [_asset_text(rel) for rel in deck_script_assets()]
-    css = _asset_text("deck.css")
+def render_deck_html(
+    payload: Mapping[str, Any], *, render_bundle: Mapping[str, Any] | None = None
+) -> str:
+    bundle = load_render_bundle() if render_bundle is None else render_bundle
+    scripts = [asset["text"] for asset in bundle["scripts"]]
+    css = bundle["css"]
     if any("</script" in script.lower() for script in scripts):
         raise ValueError("script asset contains a closing script tag")
     if "</style" in css.lower():
@@ -59,7 +77,7 @@ def render_deck_html(payload: Mapping[str, Any]) -> str:
         "data": embed_json(payload),
         "scripts": "\n".join("<script>" + s + "</script>" for s in scripts),
     }
-    template = _asset_text("deck.html")
+    template = bundle["template"]
     pattern = r"<!--deck:(\w+)-->"
     if sorted(re.findall(pattern, template)) != sorted(values):
         raise ValueError("deck template must contain each insertion marker exactly once")

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Final, Generic, Literal, TypedDict, TypeGuard, TypeVar
@@ -369,6 +370,69 @@ class RolloutMarker(TypedDict):
     effective_at: str
     scope: dict[str, list[str]]
     expected_effect: str
+
+
+def _require_aware_timestamp(value: str, *, field_name: str) -> datetime:
+    """Parse an ISO-8601 timestamp with an offset and return it in UTC."""
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{field_name} must be a non-empty ISO-8601 timestamp")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be an ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"{field_name} must include a UTC offset")
+    return parsed.astimezone(UTC)
+
+
+def _validate_rollout_scope(scope: object, *, field_name: str) -> dict[str, list[str]]:
+    if not isinstance(scope, Mapping) or set(scope) != {"skills", "backends", "roles"}:
+        raise ValueError(f"{field_name}.scope must contain exactly skills, backends, roles")
+    copied_scope: dict[str, list[str]] = {}
+    for axis in ("skills", "backends", "roles"):
+        values = scope[axis]
+        if not isinstance(values, list):
+            raise ValueError(f"{field_name}.scope.{axis} must be a list of nonblank strings")
+        copied_values: list[str] = []
+        for value in values:
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{field_name}.scope.{axis} must be a list of nonblank strings")
+            copied_values.append(value)
+        copied_scope[axis] = copied_values
+    return copied_scope
+
+
+def validate_rollout_marker(raw: object, *, field_name: str = "rollout.active") -> RolloutMarker:
+    """Validate and normalize a rollout marker from untrusted input."""
+    required_keys = {"change_id", "effective_at", "scope", "expected_effect"}
+    if not isinstance(raw, Mapping) or set(raw) != required_keys:
+        raise ValueError(
+            f"{field_name} must contain exactly change_id, effective_at, scope, expected_effect"
+        )
+    for name in ("change_id", "expected_effect"):
+        value = raw[name]
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{field_name}.{name} must be a nonblank string")
+
+    effective_at = raw["effective_at"]
+    if not isinstance(effective_at, str) or not effective_at.endswith(("Z", "+00:00", "-00:00")):
+        raise ValueError(f"{field_name}.effective_at must be an explicit UTC ISO-8601 timestamp")
+    try:
+        normalized_effective_at = _require_aware_timestamp(
+            effective_at, field_name=f"{field_name}.effective_at"
+        ).isoformat()
+    except ValueError as exc:
+        raise ValueError(
+            f"{field_name}.effective_at must be an explicit UTC ISO-8601 timestamp"
+        ) from exc
+
+    marker: RolloutMarker = {
+        "change_id": raw["change_id"],
+        "effective_at": normalized_effective_at,
+        "scope": _validate_rollout_scope(raw["scope"], field_name=field_name),
+        "expected_effect": raw["expected_effect"],
+    }
+    return marker
 
 
 class SessionIndexEntry(TypedDict):

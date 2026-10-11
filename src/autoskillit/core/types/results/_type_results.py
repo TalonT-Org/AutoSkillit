@@ -10,7 +10,6 @@ import json
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
@@ -61,7 +60,9 @@ from ._type_results_records import (
     TokenUsageFileEntry,
     ValidatedAddDir,
     ValidatedWorktreePath,
+    _require_aware_timestamp,
     is_recipe_path_validation_report,
+    validate_rollout_marker,
 )
 from ._type_token import TurnTokenEntry
 
@@ -128,6 +129,7 @@ __all__ = [
     "TokenUsageFileEntry",
     "SessionIndexEntry",
     "RolloutMarker",
+    "validate_rollout_marker",
     "SESSION_INDEX_SCHEMA_VERSION",
     "TOKEN_USAGE_SCHEMA_VERSION",
     "TURN_USAGE_SCHEMA_VERSION",
@@ -137,24 +139,6 @@ __all__ = [
 VALID_INPUT_SPEC_TYPES = frozenset({"file_path", "directory_path", "file_path_list"})
 
 InputSpecType = Literal["file_path", "directory_path", "file_path_list"]
-
-
-def _require_aware_timestamp(value: str, *, field_name: str) -> datetime:
-    """Validate that ``value`` is an ISO-8601 timestamp with a UTC offset.
-
-    Returns the parsed ``datetime`` in UTC so callers can reuse the parsed value
-    rather than re-parsing the same string. Raises ``ValueError`` with the
-    canonical error wording for any malformed input.
-    """
-    if not isinstance(value, str) or not value:
-        raise ValueError(f"{field_name} must be a non-empty ISO-8601 timestamp")
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError as exc:
-        raise ValueError(f"{field_name} must be an ISO-8601 timestamp") from exc
-    if parsed.tzinfo is None or parsed.utcoffset() is None:
-        raise ValueError(f"{field_name} must include a UTC offset")
-    return parsed.astimezone(UTC)
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,5 +1,7 @@
 ---
 name: rectify
+requires_resources:
+- plan-part-form
 write_paths:
 - '{{AUTOSKILLIT_TEMP}}/rectify/'
 uses_capabilities: []
@@ -273,6 +275,12 @@ plan_parts = {path_to_part_a}
 {path_to_part_c}
 ```
 
+**Plan-part form.** Follow the shared `plan-part-form` resource when writing
+each part; the template below applies those rules.
+
+Sub-steps are further level-3 headings (`### Step 2.1: …`); an allocation row cites
+the sub-step key.
+
 **Plan structure:**
 ```markdown
 # Rectify: {Topic}
@@ -295,9 +303,11 @@ plan_parts = {path_to_part_a}
 ## Immunity Plan
 
 ### Step 1: Failing Tests
+Requirements: P-1
 {Tests that reproduce the issue and capture the gap — these must be written first}
 
 ### Step 2: Implementation
+Requirements: P-1
 {The architectural solution that makes this class of bug impossible or instantly caught, structured so each change makes a failing test pass}
 
 ## Verification
@@ -306,5 +316,5 @@ plan_parts = {path_to_part_a}
 ## Issue Requirement Allocation
 | Requirement ID | Allocation | Implementation Step |
 |---|---|---|
-| {label from issue, or P-1 without enumerated items} | owned \| shared | Step {N.M} |
+| P-1 | owned | Step 2 |
 ```

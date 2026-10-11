@@ -9,6 +9,8 @@ import pytest
 from autoskillit.core import (
     CoverageStatus,
     InventoryMode,
+    PlanSetBindResult,
+    PlanSetRejectReason,
     evaluate_coverage,
     extract_requirement_inventory,
     parse_part_allocation,
@@ -45,3 +47,45 @@ def test_unenumerated_parts_require_planner_obligations() -> None:
     assert evaluate_coverage(
         InventoryMode.UNENUMERATED, (), {"P1": (), "P2": ()}
     ).parts_without_obligations == ("P1", "P2")
+
+
+@pytest.mark.parametrize("coverage_gaps", ("", " \n\t"))
+def test_coverage_failure_requires_nonblank_feedback(coverage_gaps: str) -> None:
+    with pytest.raises(ValueError):
+        PlanSetBindResult(
+            False,
+            PlanSetRejectReason.COVERAGE_FAILED,
+            "plan-set coverage has gaps",
+            coverage_gaps=coverage_gaps,
+        )
+
+
+@pytest.mark.parametrize(
+    ("success", "reason", "coverage_gaps"),
+    [
+        (True, PlanSetRejectReason.NO_PARTS, ""),
+        (False, None, ""),
+        (True, None, "R2 [unassigned]"),
+        (False, PlanSetRejectReason.NO_PARTS, "R2 [unassigned]"),
+    ],
+)
+def test_bind_result_rejects_inconsistent_success_fields(
+    success: bool, reason: PlanSetRejectReason | None, coverage_gaps: str
+) -> None:
+    with pytest.raises(ValueError):
+        PlanSetBindResult(success, reason, "", coverage_gaps=coverage_gaps)
+
+
+def test_coverage_feedback_invariant_applies_only_to_coverage_failures() -> None:
+    failed = PlanSetBindResult(
+        False,
+        PlanSetRejectReason.COVERAGE_FAILED,
+        "plan-set coverage has gaps",
+        coverage_gaps="R2 [unassigned]",
+    )
+    other_failure = PlanSetBindResult(False, PlanSetRejectReason.NO_PARTS, "no plan parts")
+    success = PlanSetBindResult(True, None, "")
+
+    assert failed.coverage_gaps == "R2 [unassigned]"
+    assert other_failure.coverage_gaps == ""
+    assert success.coverage_gaps == ""

@@ -77,6 +77,14 @@ def test_create_digest_and_canonical_round_trip(tmp_path: Path) -> None:
             "execution generation",
         ),
         ({"binding_mode": "foreign"}, "binding_mode"),
+        (
+            {
+                "coverage": CoverageResultDef(
+                    CoverageStatus.PASS, parts_without_obligations=("P2",)
+                )
+            },
+            "unknown part key",
+        ),
     ],
 )
 def test_invalid_authority_states_fail_closed(
@@ -84,6 +92,12 @@ def test_invalid_authority_states_fail_closed(
 ) -> None:
     with pytest.raises(ValueError, match=message):
         _authority(tmp_path, **overrides)
+
+
+@pytest.mark.parametrize("mode", (InventoryMode.NO_ISSUE, InventoryMode.UNENUMERATED))
+def test_authority_rejects_omitted_empty_parts(tmp_path: Path, mode: InventoryMode) -> None:
+    with pytest.raises(ValueError, match="must match actual empty parts"):
+        _authority(tmp_path, inventory_mode=mode, allocations=())
 
 
 def test_part_ordinals_and_resolved_locators_are_unique(tmp_path: Path) -> None:
@@ -101,6 +115,8 @@ def test_part_ordinals_and_resolved_locators_are_unique(tmp_path: Path) -> None:
     valid = _authority(
         tmp_path,
         parts=(first, replace(alias, locator=str(second))),
+        allocations=authority.allocations
+        + (replace(authority.allocations[0], requirement_id="P-2", part_key="P2"),),
     )
     assert [part.part_suffix for part in valid.parts] == ["A", "A"]
 

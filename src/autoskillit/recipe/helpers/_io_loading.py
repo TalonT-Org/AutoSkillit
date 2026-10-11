@@ -13,8 +13,10 @@ from autoskillit.core import (
     LoadReport,
     LoadResult,
     RecipeSource,
+    compose_yaml,
     fast_loads,
     get_logger,
+    is_yaml_mapping_node,
     load_yaml,
     pkg_root,
 )
@@ -25,7 +27,7 @@ logger = get_logger(__name__)
 
 
 # Canonical recipe step note prose, single-sourced here so a doctrinal update
-# lands in one place instead of eight recipe YAML/JSON copies.
+# lands in one place instead of repeated recipe YAML/JSON copies.
 ANALYZE_PIPELINE_HEALTH_ERROR_NOTE: str = (
     "Preserve the originating failure response separately. Inspect the diagnostic "
     "response and include its non-empty result verbatim as supplementary evidence. "
@@ -39,14 +41,55 @@ _RECIPE_NOTE_ANALYZE_PIPELINE_HEALTH_ERROR: str = "__RECIPE_NOTE_ANALYZE_PIPELIN
 
 _RECIPE_NOTE_TABLE: dict[str, str] = {
     _RECIPE_NOTE_ANALYZE_PIPELINE_HEALTH_ERROR: ANALYZE_PIPELINE_HEALTH_ERROR_NOTE,
+    "__RECIPE_NOTE_PLAN_SET_RENEWAL_FAILURE__": (
+        "coverage_failed here is terminal by decision. The part passed the plan-set gate "
+        "before the walkthrough edited it, and a walkthrough cannot be re-run until its "
+        "edits are renewed. Relay the result's coverage_gaps in the failure diagnostic: "
+        "it names the rows the edit broke."
+    ),
+    "__RECIPE_NOTE_PLAN_PARTS_BINDING__": (
+        "Bind exactly the plan_parts value captured from the producer that just ran. "
+        "A successful replan replaces the earlier list with its returned list: do not "
+        "append rejected paths or rebuild the list from a directory listing. When "
+        "salvage_plan is the producer, bind its returned list unchanged under the "
+        "existing salvage recovery and strict coverage checks."
+    ),
 }
 
 
 def _substitute_recipe_note_placeholders(value: Any) -> Any:
     """Substitute recipe note placeholders. Only strings reach this layer."""
     if isinstance(value, str):
-        return _RECIPE_NOTE_TABLE.get(value, value)
+        for placeholder, note in _RECIPE_NOTE_TABLE.items():
+            value = value.replace(placeholder, note)
     return value
+
+
+def _substitute_recipe_notes_in_yaml(text: str) -> str:
+    """Expand shared step notes without changing the surrounding recipe source."""
+    if "__RECIPE_NOTE_" not in text:
+        return text
+    root = compose_yaml(text)
+    if not is_yaml_mapping_node(root):
+        return text
+    steps = next((node for key, node in root.value if key.value == "steps"), None)
+    if not is_yaml_mapping_node(steps):
+        return text
+    edits: dict[tuple[int, int], str] = {}
+    for _, step in steps.value:
+        if not is_yaml_mapping_node(step):
+            continue
+        for field, node in step.value:
+            if field.value != "note":
+                continue
+            expanded = _substitute_recipe_note_placeholders(node.value)
+            if expanded != node.value:
+                start, end = node.start_mark.index, node.end_mark.index
+                newline = "\n" if text[start:end].endswith("\n") else ""
+                edits[start, end] = json.dumps(expanded, ensure_ascii=False) + newline
+    for (start, end), value in sorted(edits.items(), reverse=True):
+        text = text[:start] + value + text[end:]
+    return text
 
 
 _TEMP_PLACEHOLDER = "{{AUTOSKILLIT_TEMP}}"

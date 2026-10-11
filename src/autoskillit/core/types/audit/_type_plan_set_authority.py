@@ -440,12 +440,21 @@ class PlanSetAuthority:
         object.__setattr__(self, "unparsed_marker_lines", tuple(self.unparsed_marker_lines))
         if not isinstance(self.coverage, CoverageResultDef):
             raise ValueError("PlanSetAuthority.coverage is invalid")
+        part_keys = {part.part_key for part in self.parts}
+        if not set(self.coverage.parts_without_obligations) <= part_keys:
+            raise ValueError("coverage.parts_without_obligations contains an unknown part key")
         if self.state is PlanSetState.SEALED and self.coverage.status is not CoverageStatus.PASS:
             raise ValueError("sealed authority requires passing coverage")
         if tuple(part.ordinal for part in self.parts) != tuple(range(1, len(self.parts) + 1)):
             raise ValueError("PlanSetAuthority.parts must have consecutive ordinals")
         if len({Path(part.locator).resolve() for part in self.parts}) != len(self.parts):
             raise ValueError("PlanSetAuthority.parts contain duplicate locators")
+        if self.inventory_mode in {InventoryMode.UNENUMERATED, InventoryMode.NO_ISSUE}:
+            empty_parts = part_keys - {row.part_key for row in self.allocations}
+            if set(self.coverage.parts_without_obligations) != empty_parts:
+                raise ValueError(
+                    "coverage.parts_without_obligations must match actual empty parts"
+                )
 
     @classmethod
     def create(
@@ -621,6 +630,14 @@ class PlanSetBindResult:
     parts_without_obligations: tuple[str, ...] = ()
     first_part_path: str = ""
     coverage_gaps: str = ""
+
+    def __post_init__(self) -> None:
+        if self.success != (self.reason is None):
+            raise ValueError("successful results require no reason; failures require a reason")
+        if self.reason is not PlanSetRejectReason.COVERAGE_FAILED and self.coverage_gaps:
+            raise ValueError("only coverage_failed results may contain coverage_gaps")
+        if self.reason is PlanSetRejectReason.COVERAGE_FAILED and not self.coverage_gaps.strip():
+            raise ValueError("coverage_failed requires non-empty coverage_gaps")
 
     def to_dict(self) -> dict[str, Any]:
         result = {name: getattr(self, name) for name in self.__dataclass_fields__}

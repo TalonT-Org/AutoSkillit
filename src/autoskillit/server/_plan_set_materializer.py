@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from autoskillit.core import (
     PLAN_SET_AUTHORITY_ID_DOMAIN,
     PLAN_SET_MAX_ISSUE_BYTES,
     PLAN_SET_MAX_PART_BYTES,
+    AllocationRowDef,
     CoverageResultDef,
     CoverageStatus,
     GitHubFetcher,
@@ -44,8 +46,10 @@ _PART_SUFFIX = re.compile(r"(?:^|_)part_([a-z0-9]+)")
 _ISSUE_NUMBER = re.compile(r"(?:#|/issues/)(\d+)(?:$|[/?#])")
 
 
-def _failure(reason: PlanSetRejectReason, error: str) -> PlanSetBindResult:
-    return PlanSetBindResult(False, reason, error)
+def _failure(
+    reason: PlanSetRejectReason, error: str, coverage_gaps: str = ""
+) -> PlanSetBindResult:
+    return PlanSetBindResult(False, reason, error, coverage_gaps=coverage_gaps)
 
 
 def _write_or_verify(path: Path, data: bytes, allowed_root: Path) -> None:
@@ -66,7 +70,11 @@ def _part_suffix(path: Path, *, only_part: bool) -> str:
     return "A" if only_part else path.stem.upper()
 
 
-def _coverage_gaps(coverage: CoverageResultDef, requirements: tuple[RequirementDef, ...]) -> str:
+def _coverage_gaps(
+    coverage: CoverageResultDef,
+    requirements: tuple[RequirementDef, ...],
+    parts: Sequence[PlanPartRef],
+) -> str:
     requirement_text = {item.requirement_id: item.text for item in requirements}
     gaps: list[str] = []
     for reason, values in (
@@ -79,7 +87,43 @@ def _coverage_gaps(coverage: CoverageResultDef, requirements: tuple[RequirementD
         gaps.extend(
             f"{item} [{reason}]: {requirement_text.get(item, '')}".rstrip() for item in values
         )
+    locators = {part.part_key: part.locator for part in parts}
+    gaps.extend(
+        f"{key} [part_without_obligations]: {locators[key]} allocates no requirement; "
+        "every part needs at least one allocation row"
+        for key in coverage.parts_without_obligations
+    )
     return "\n".join(gaps)
+
+
+def _inspect_parts(
+    parts: Sequence[PlanPartRef], loaded_by_locator: dict[str, bytes]
+) -> tuple[list[AllocationRowDef], list[str], list[str]]:
+    allocations: list[AllocationRowDef] = []
+    errors: list[str] = []
+    blocks: list[str] = []
+    for part in parts:
+        if part.locator not in loaded_by_locator:
+            continue
+        try:
+            text = loaded_by_locator[part.locator].decode("utf-8")
+            rows = parse_part_allocation(text, part_key=part.part_key)
+        except (UnicodeDecodeError, ValueError) as exc:
+            errors.append(str(exc))
+            details = [str(exc)]
+        else:
+            allocations.extend(rows)
+            defects = verify_allocation_evidence(text, rows)
+            errors.extend(f"{identifier}: {reason.value}" for identifier, reason, _ in defects)
+            details = [detail for _, _, detail in defects]
+        if details:
+            blocks.append(
+                f"Plan part rejected by the plan-set gate: {part.locator}\n"
+                + "\n".join(f"- {detail}" for detail in details)
+                + "\nWrite a corrected plan part to a new file in the form the planning skill's "
+                "plan template shows; keep the same requirements allocated."
+            )
+    return allocations, errors, blocks
 
 
 def _result(authority: PlanSetAuthority, path: Path) -> PlanSetBindResult:
@@ -102,7 +146,7 @@ def _result(authority: PlanSetAuthority, path: Path) -> PlanSetBindResult:
         container_allocated=coverage.container_allocated,
         parts_without_obligations=coverage.parts_without_obligations,
         first_part_path=authority.parts[0].locator if authority.parts else "",
-        coverage_gaps=_coverage_gaps(coverage, authority.requirements),
+        coverage_gaps=_coverage_gaps(coverage, authority.requirements, authority.parts),
     )
 
 
@@ -354,23 +398,13 @@ class DefaultPlanSetMaterializer:
                     content_digest=compute_bytes_hash(data),
                 )
             )
-        errors: list[str] = []
         loaded_by_locator = {str(path): data for path, data in loaded}
-        for part in parts:
-            if part.locator not in loaded_by_locator:
-                continue
-            try:
-                text = loaded_by_locator[part.locator].decode("utf-8")
-                rows = parse_part_allocation(text, part_key=part.part_key)
-            except (UnicodeDecodeError, ValueError) as exc:
-                return _failure(PlanSetRejectReason.COVERAGE_FAILED, str(exc))
-            allocations.extend(rows)
-            errors.extend(
-                f"{identifier}: {reason.value}"
-                for identifier, reason in verify_allocation_evidence(text, rows)
-            )
+        rows, errors, blocks = _inspect_parts(parts, loaded_by_locator)
+        allocations.extend(rows)
         if errors:
-            return _failure(PlanSetRejectReason.COVERAGE_FAILED, "; ".join(errors))
+            return _failure(
+                PlanSetRejectReason.COVERAGE_FAILED, "; ".join(errors), "\n\n".join(blocks)
+            )
 
         requirements: tuple[RequirementDef, ...]
         unparsed: tuple[int, ...]
@@ -421,7 +455,7 @@ class DefaultPlanSetMaterializer:
                 unknown=coverage.unknown,
                 container_allocated=coverage.container_allocated,
                 parts_without_obligations=coverage.parts_without_obligations,
-                coverage_gaps=_coverage_gaps(coverage, requirements),
+                coverage_gaps=_coverage_gaps(coverage, requirements, parts),
             )
         authority = PlanSetAuthority.create(
             binding_mode=request.binding_mode,

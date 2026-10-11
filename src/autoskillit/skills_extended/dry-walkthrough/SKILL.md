@@ -4,6 +4,7 @@ write_paths: unrestricted
 uses_capabilities: []
 requires_resources:
 - arch-constraint-catalog
+- plan-part-form
 description: Plan validation executor. ALWAYS invoke this skill when instructed to validate or dry-walkthrough a plan. Do
   not read the plan or trace changes directly — use this skill first to load the validation workflow.
 hooks:
@@ -337,6 +338,12 @@ or reconstruct any inventory, remediation, authority, or report.
    come from the same bound invocation payload; neither requires opening an authority file.
 
 ### Step 5: Fix the Plan
+
+Every edit must leave the part in the plan-part form. When a `### Step` heading cited
+by an allocation row is renamed, renumbered, re-levelled or removed, update that row's
+`Implementation Step` cell to the surviving key. Keep each allocated Requirement ID
+in its step's text, and add no prose inside the allocation section. The recipe
+re-verifies the part after this skill; a nonconforming part stops the pipeline.
 
 For each issue found:
 1. Directly edit the plan file to fix it

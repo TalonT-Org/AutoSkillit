@@ -17,6 +17,7 @@ from autoskillit.recipe.api_orchestration._api_orchestration_types import (
     _LoadPipelineInputs,
     _ValidationResult,
 )
+from autoskillit.recipe.helpers._io_loading import _substitute_recipe_notes_in_yaml
 from autoskillit.recipe.io import (
     RecipeInfo,
     find_recipe_by_name,
@@ -45,6 +46,7 @@ def _resolve_recipe_match(
     raw_declared = match.content if match.content is not None else match.path.read_text()
     raw = substitute_temp_placeholder_yaml_safe(raw_declared, pipeline_inputs.temp_dir_relpath)
     raw = substitute_scripts_placeholder_yaml_safe(raw)
+    raw = _substitute_recipe_notes_in_yaml(raw)
 
     if match.source == RecipeSource.BUILTIN:
         recipes_dir = _orch.pkg_root() / "recipes"

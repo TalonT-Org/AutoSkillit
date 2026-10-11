@@ -171,8 +171,8 @@ def test_matching_or_stricter_override_is_effective(tmp_path: Path) -> None:
     assert not resolver.scan_effective(tmp_path)[1]
 
     extended = bundled.replace(
-        "activate_deps:\n- write-recipe\n",
-        "activate_deps:\n- write-recipe\nrequires_resources:\n- arch-constraint-catalog\n",
+        "requires_resources:\n",
+        "requires_resources:\n- arch-constraint-catalog\n",
         1,
     )
     _write_make_plan_override(tmp_path, extended)

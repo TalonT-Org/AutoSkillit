@@ -622,6 +622,10 @@ class PlanSetBindResult:
     first_part_path: str = ""
     coverage_gaps: str = ""
 
+    def __post_init__(self) -> None:
+        if self.reason is PlanSetRejectReason.COVERAGE_FAILED and not self.coverage_gaps.strip():
+            raise ValueError("coverage_failed requires non-empty coverage_gaps")
+
     def to_dict(self) -> dict[str, Any]:
         result = {name: getattr(self, name) for name in self.__dataclass_fields__}
         result["reason"] = self.reason.value if self.reason else ""

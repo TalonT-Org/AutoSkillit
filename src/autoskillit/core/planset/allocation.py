@@ -21,16 +21,29 @@ def parse_part_allocation(part_markdown: str, *, part_key: str) -> tuple[Allocat
     rows = parse_pipe_table(section, _HEADER)
     result: list[AllocationRowDef] = []
     seen: set[str] = set()
-    for requirement_id, allocation, implementation_step in rows:
+    raw_rows = tuple(line for line in section.splitlines() if line.strip())[2:]
+    for (requirement_id, allocation, implementation_step), raw_row in zip(
+        rows, raw_rows, strict=True
+    ):
+        if not requirement_id:
+            raise ValueError(
+                f'Requirement ID is empty in row "{raw_row.strip()[:120]}"; '
+                "use a non-empty bare Requirement ID"
+            )
         if requirement_id in seen:
             raise ValueError(f"duplicate allocated requirement {requirement_id}")
         seen.add(requirement_id)
         if not implementation_step:
-            raise ValueError("allocation implementation step is empty")
+            raise ValueError(
+                f"{requirement_id}: allocation implementation step is empty; "
+                "use one matching heading key such as Step 2.1"
+            )
         try:
             kind = AllocationKind(allocation.lower())
         except ValueError as exc:
-            raise ValueError(f"unknown allocation {allocation!r}") from exc
+            raise ValueError(
+                f'{requirement_id}: unknown allocation "{allocation}"; use owned or shared'
+            ) from exc
         result.append(
             AllocationRowDef(
                 requirement_id=requirement_id,
@@ -45,7 +58,7 @@ def parse_part_allocation(part_markdown: str, *, part_key: str) -> tuple[Allocat
 def verify_allocation_evidence(
     part_markdown: str,
     rows: tuple[AllocationRowDef, ...],
-) -> tuple[tuple[str, PlanSetRejectReason], ...]:
+) -> tuple[tuple[str, PlanSetRejectReason, str], ...]:
     """Ensure an allocation names a real step whose own text names the requirement."""
     matches = tuple(STEP_HEADING_RE.finditer(part_markdown))
     blocks: dict[str, str] = {}
@@ -57,11 +70,30 @@ def verify_allocation_evidence(
         )
         end = min(next_step, section_end)
         blocks[match.group(1)] = part_markdown[match.start() : end]
-    errors: list[tuple[str, PlanSetRejectReason]] = []
+    errors: list[tuple[str, PlanSetRejectReason, str]] = []
     for row in rows:
         block = blocks.get(row.implementation_step)
         if block is None:
-            errors.append((row.requirement_id, PlanSetRejectReason.ALLOCATION_STEP_MISSING))
+            found = (
+                f"step keys found: {', '.join(blocks)}" if blocks else "no step heading was found"
+            )
+            errors.append(
+                (
+                    row.requirement_id,
+                    PlanSetRejectReason.ALLOCATION_STEP_MISSING,
+                    f'{row.requirement_id}: Implementation Step cell "{row.implementation_step}" '
+                    f"does not match a step; {found}. Expected exactly one key such as Step 2.1, "
+                    "copied from a ### Step N: title heading (### Step N.M: title for sub-steps).",
+                )
+            )
         elif row.requirement_id not in block:
-            errors.append((row.requirement_id, PlanSetRejectReason.ALLOCATION_STEP_UNREFERENCED))
+            errors.append(
+                (
+                    row.requirement_id,
+                    PlanSetRejectReason.ALLOCATION_STEP_UNREFERENCED,
+                    f'Requirement ID cell "{row.requirement_id}" is not referenced in '
+                    f"{row.implementation_step}; the bare ID must appear in that step's own "
+                    "text, on the line under its heading.",
+                )
+            )
     return tuple(errors)

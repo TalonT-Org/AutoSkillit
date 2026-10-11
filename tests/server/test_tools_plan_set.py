@@ -116,7 +116,9 @@ async def test_identical_bind_reconciles_existing_artifacts(
     assert repeated["plan_set_authority_path"] == initial["plan_set_authority_path"]
 
 
-@pytest.mark.parametrize("case", ("empty", "outside", "fetch_failure", "no_issue"))
+@pytest.mark.parametrize(
+    "case", ("empty", "outside", "fetch_failure", "no_issue", "coverage_failed")
+)
 async def test_wrapper_classifies_inputs_and_failures(
     tmp_path: Path, tool_ctx, monkeypatch: pytest.MonkeyPatch, case: str
 ) -> None:
@@ -139,14 +141,19 @@ async def test_wrapper_classifies_inputs_and_failures(
         assert result["reason"] == PlanSetRejectReason.ISSUE_FETCH_FAILED.value
         assert not list((root / "plan-set-authority").rglob("*.json"))
     else:
+        step_heading = "#### Step 1.1: P-1" if case == "coverage_failed" else "### Step 1.1: P-1"
         first.write_text(
-            "# Plan\n\n### Step 1.1: P-1\nImplement P-1.\n\n"
+            f"# Plan\n\n{step_heading}\nImplement P-1.\n\n"
             "## Issue Requirement Allocation\n"
             "| Requirement ID | Allocation | Implementation Step |\n"
             "|---|---|---|\n| P-1 | owned | Step 1.1 |\n",
             encoding="utf-8",
         )
         result = json.loads(await bind_plan_set(plan_parts=str(first), cwd=str(tmp_path)))
+        if case == "coverage_failed":
+            assert result["reason"] == PlanSetRejectReason.COVERAGE_FAILED.value
+            assert result["coverage_gaps"].strip()
+            return
         assert result["success"] is True
         authority = json.loads(Path(result["plan_set_authority_path"]).read_text())
         assert authority["inventory_mode"] == "no_issue"

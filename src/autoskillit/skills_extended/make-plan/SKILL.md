@@ -68,9 +68,12 @@ Create focused, actionable implementation plans that recommend the technically b
   not prose flags or ambient files, activates remediation mode. Before reading any referenced
   artifact, verify that this authority is the server-published current `NO GO` head and that
   its generation, plan set, scope, part, round, parent, and audited-plan lineage match this run.
-- `plan_set_coverage_gaps` (optional) — A bounded list of requirement gaps returned by a
-  failed sealed plan-set bind. On re-entry, allocate every listed requirement in the new
-  plan set; do not absorb the gaps into Part A by default. In grouped planning, the
+- `plan_set_coverage_gaps` (optional) — Feedback from a failed plan-set bind, never empty
+  on re-entry. Requirement-gap lines such as `R2 [unassigned]: …` mean allocate every
+  listed requirement in the new plan set; do not absorb gaps into Part A by default.
+  A block starting `Plan part rejected by the plan-set gate: <path>` lists what the parser
+  rejected in that part: write a corrected replacement to a new file in the plan-part
+  form, keeping its requirements allocated. In grouped planning, the
   dedicated gap-replan route adds a group to the still-open set.
 
 In conflict-resolution examples, `{branch}` is the source PR branch and
@@ -427,6 +430,26 @@ plan_parts = {path_to_part_a}
 plan_disposition_path = {absolute_path_when_in_remediation_mode}
 ```
 
+**Plan-part form.** `bind_plan_set` deterministically checks the allocation table,
+resolves each row's step key and checks that its ID cell occurs in that step's text.
+Follow this authoring form; the verifier's existing acceptance rules stay unchanged:
+- Write each step as a level-3 heading `### Step N: title` (sub-steps
+  `### Step N.M: title`). Other heading levels, and a dash in place of the colon, are
+  not recognised. Do not repeat a step heading anywhere in the file, quoted examples
+  included.
+- On the line under each heading, name every Requirement ID the step delivers
+  (`Requirements: P-1, P-2`). The ID must appear in that step's own text, which ends at
+  the next step heading or the next line starting with `# ` or `## `, code fences
+  included.
+- The line `## Issue Requirement Allocation` appears once in the file, and its section
+  holds only the table: no sentence before, between or after the rows.
+- Each row is the bare Requirement ID with no description, then `owned` or `shared`,
+  then exactly one step key copied from a heading (`Step 2.1`): not a list, a range, a
+  backticked key or a key with its title. One row per ID.
+- Use the issue's own labels as IDs when it enumerates items; otherwise number your own
+  `P-1`, `P-2`. `owned` means this part alone delivers the item; `shared` means another
+  part allocates it too.
+
 **Plan structure (single-part):**
 ```markdown
 # Implementation Plan: {Task Name}
@@ -438,7 +461,14 @@ plan_disposition_path = {absolute_path_when_in_remediation_mode}
 {Tests to write first — should fail now, pass after implementation}
 
 ## Implementation Steps
-{Ordered steps, each making one or more of the above tests pass}
+
+### Step 1: {step title}
+Requirements: P-1
+{What this step changes; it makes one or more of the above tests pass}
+
+### Step 2: {step title}
+Requirements: P-2
+{What this step changes}
 
 ## Verification
 {How to verify the implementation is correct}
@@ -446,7 +476,8 @@ plan_disposition_path = {absolute_path_when_in_remediation_mode}
 ## Issue Requirement Allocation
 | Requirement ID | Allocation | Implementation Step |
 |---|---|---|
-| {label from issue, or P-1 without enumerated items} | owned \| shared | Step {N.M} |
+| P-1 | owned | Step 1 |
+| P-2 | owned | Step 2 |
 
 ## Requirements Map
 | Requirement (from prose) | Implementation Step |
@@ -467,7 +498,14 @@ plan_disposition_path = {absolute_path_when_in_remediation_mode}
 {Tests for THIS part only — should fail now, pass after THIS part's implementation}
 
 ## Implementation Steps
-{Steps for THIS part only}
+
+### Step 1: {step title}
+Requirements: P-1
+{What this step changes; it makes one or more of the above tests pass}
+
+### Step 2: {step title}
+Requirements: P-2
+{What this step changes}
 
 ## Verification
 {How to verify THIS part's implementation is correct}
@@ -475,7 +513,8 @@ plan_disposition_path = {absolute_path_when_in_remediation_mode}
 ## Issue Requirement Allocation
 | Requirement ID | Allocation | Implementation Step |
 |---|---|---|
-| {label from issue, or P-1 without enumerated items} | owned \| shared | Step {N.M} |
+| P-1 | owned | Step 1 |
+| P-2 | owned | Step 2 |
 
 ## Requirements Map
 | Requirement (from prose) | Implementation Step |

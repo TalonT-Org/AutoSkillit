@@ -11,7 +11,12 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import ArtifactLease, TokenMeasure, validate_rollout_marker
+from autoskillit.core import (
+    ArtifactLease,
+    TokenMeasure,
+    require_aware_timestamp,
+    validate_rollout_marker,
+)
 from autoskillit.core import atomic_write as _atomic_write
 
 from .deck._html import render_deck_html
@@ -84,13 +89,12 @@ def _selected_runs(
         if declaration is not None and marker != declaration:
             raise ValueError(f"conflicting rollout declarations for {change_id}")
         declaration = dict(marker)
-        timestamp = row.get("timestamp")
         try:
-            instant = datetime.fromisoformat(timestamp) if isinstance(timestamp, str) else None
+            instant = require_aware_timestamp(
+                row.get("timestamp"), field_name="selected run timestamp"
+            )
         except ValueError as exc:
             raise ValueError("selected run timestamp must be an aware ISO-8601 timestamp") from exc
-        if instant is None or instant.utcoffset() is None:
-            raise ValueError("selected run timestamp must be an aware ISO-8601 timestamp")
         selected.append((row, instant))
     if declaration is None:
         raise ValueError(f"no retained runs match rollout change_id {change_id}")

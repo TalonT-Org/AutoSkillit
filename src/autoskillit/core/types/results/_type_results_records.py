@@ -47,6 +47,7 @@ __all__ = [
     "ValidatedAddDir",
     "ValidatedWorktreePath",
     "RolloutMarker",
+    "require_aware_timestamp",
     "TokenUsageFileEntry",
     "SessionIndexEntry",
 ]
@@ -372,7 +373,7 @@ class RolloutMarker(TypedDict):
     expected_effect: str
 
 
-def _require_aware_timestamp(value: str, *, field_name: str) -> datetime:
+def require_aware_timestamp(value: object, *, field_name: str) -> datetime:
     """Parse an ISO-8601 timestamp with an offset and return it in UTC."""
     if not isinstance(value, str) or not value:
         raise ValueError(f"{field_name} must be a non-empty ISO-8601 timestamp")

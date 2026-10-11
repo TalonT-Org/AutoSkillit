@@ -60,9 +60,9 @@ from ._type_results_records import (
     TokenUsageFileEntry,
     ValidatedAddDir,
     ValidatedWorktreePath,
-    _require_aware_timestamp,
     _validate_rollout_scope,
     is_recipe_path_validation_report,
+    require_aware_timestamp,
 )
 from ._type_token import TurnTokenEntry
 
@@ -130,6 +130,7 @@ __all__ = [
     "SessionIndexEntry",
     "RolloutMarker",
     "validate_rollout_marker",
+    "require_aware_timestamp",
     "SESSION_INDEX_SCHEMA_VERSION",
     "TOKEN_USAGE_SCHEMA_VERSION",
     "TURN_USAGE_SCHEMA_VERSION",
@@ -157,7 +158,7 @@ def validate_rollout_marker(raw: object, *, field_name: str = "rollout.active") 
     if not isinstance(effective_at, str) or not effective_at.endswith(("Z", "+00:00", "-00:00")):
         raise ValueError(f"{field_name}.effective_at must be an explicit UTC ISO-8601 timestamp")
     try:
-        normalized_effective_at = _require_aware_timestamp(
+        normalized_effective_at = require_aware_timestamp(
             effective_at, field_name=f"{field_name}.effective_at"
         ).isoformat()
     except ValueError as exc:
@@ -190,7 +191,7 @@ class WorkspaceOutcomeRecord:
     def __post_init__(self) -> None:
         if not isinstance(self.workspace, str) or not self.workspace:
             raise ValueError("WorkspaceOutcomeRecord.workspace must be non-empty")
-        _require_aware_timestamp(
+        require_aware_timestamp(
             self.recorded_at,
             field_name="WorkspaceOutcomeRecord.recorded_at",
         )

@@ -1471,6 +1471,7 @@ from .types import render_intake_digest as render_intake_digest
 from .types import render_measure as render_measure
 from .types import render_ratio as render_ratio
 from .types import render_target_skill_command as render_target_skill_command
+from .types import require_aware_timestamp as require_aware_timestamp
 from .types import required_join_is_unsupported as required_join_is_unsupported
 from .types import resolve_native_shell_capture_decision as resolve_native_shell_capture_decision
 from .types import resolve_payload_field as resolve_payload_field

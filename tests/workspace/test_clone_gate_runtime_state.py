@@ -49,7 +49,7 @@ def _create_record(anchor: Path):
     )
 
 
-def test_launch_sequence_leaves_checkout_clean_and_user_edits_still_block(git_repo: Path) -> None:
+def test_launch_sequence_leaves_checkout_clean(git_repo: Path) -> None:
     repo = _initialized(git_repo)
     gitignore_path = repo / ".autoskillit" / ".gitignore"
     committed_gitignore = gitignore_path.read_bytes()
@@ -60,6 +60,16 @@ def test_launch_sequence_leaves_checkout_clean_and_user_edits_still_block(git_re
     records_dir = repo / ".autoskillit" / "managed-headless-session-lineage" / "records"
     assert records_dir.is_dir() and any(records_dir.iterdir())
     assert detect_uncommitted_changes(str(repo)) == []
+    assert gitignore_path.read_bytes() == committed_gitignore
+
+
+def test_user_edits_still_block_after_launch(git_repo: Path) -> None:
+    repo = _initialized(git_repo)
+    gitignore_path = repo / ".autoskillit" / ".gitignore"
+    committed_gitignore = gitignore_path.read_bytes()
+
+    ensure_project_temp(repo)
+    _create_record(repo)
 
     (repo / "notes.txt").write_text("keep this note\n", encoding="utf-8")
     config_path = repo / ".autoskillit" / "config.yaml"

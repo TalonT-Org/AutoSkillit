@@ -400,7 +400,7 @@ def test_conflicting_rollout_declarations_for_one_change_id_fail() -> None:
     first = _rollout()
     second = {**first, "expected_effect": "A conflicting prediction."}
 
-    with pytest.raises(ValueError, match="conflicting rollout declarations"):
+    with pytest.raises(ValueError, match="conflicting rollout declarations") as exc_info:
         _prepare(
             {
                 "sessions": [
@@ -410,6 +410,8 @@ def test_conflicting_rollout_declarations_for_one_change_id_fail() -> None:
             },
             change_id="change-a",
         )
+    assert first["expected_effect"] in str(exc_info.value)
+    assert second["expected_effect"] in str(exc_info.value)
 
 
 def test_unknown_change_id_fails_instead_of_returning_empty_cohort() -> None:

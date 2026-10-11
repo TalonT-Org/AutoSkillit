@@ -87,7 +87,10 @@ def _selected_runs(
             continue
         marker = validate_rollout_marker(raw, field_name="rollout")
         if declaration is not None and marker != declaration:
-            raise ValueError(f"conflicting rollout declarations for {change_id}")
+            raise ValueError(
+                f"conflicting rollout declarations for {change_id}: "
+                f"first={declaration!r}, current={marker!r}"
+            )
         declaration = dict(marker)
         try:
             instant = require_aware_timestamp(

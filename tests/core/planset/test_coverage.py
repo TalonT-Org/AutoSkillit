@@ -60,6 +60,21 @@ def test_coverage_failure_requires_nonblank_feedback(coverage_gaps: str) -> None
         )
 
 
+@pytest.mark.parametrize(
+    ("success", "reason", "coverage_gaps"),
+    [
+        (True, PlanSetRejectReason.NO_PARTS, ""),
+        (False, None, ""),
+        (True, None, "R2 [unassigned]"),
+    ],
+)
+def test_bind_result_rejects_inconsistent_success_fields(
+    success: bool, reason: PlanSetRejectReason | None, coverage_gaps: str
+) -> None:
+    with pytest.raises(ValueError):
+        PlanSetBindResult(success, reason, "", coverage_gaps=coverage_gaps)
+
+
 def test_coverage_feedback_invariant_applies_only_to_coverage_failures() -> None:
     failed = PlanSetBindResult(
         False,

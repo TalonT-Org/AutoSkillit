@@ -13,8 +13,10 @@ from autoskillit.core import (
     LoadReport,
     LoadResult,
     RecipeSource,
+    compose_yaml,
     fast_loads,
     get_logger,
+    is_yaml_mapping_node,
     load_yaml,
     pkg_root,
 )
@@ -61,6 +63,33 @@ def _substitute_recipe_note_placeholders(value: Any) -> Any:
         for placeholder, note in _RECIPE_NOTE_TABLE.items():
             value = value.replace(placeholder, note)
     return value
+
+
+def _substitute_recipe_notes_in_yaml(text: str) -> str:
+    """Expand shared step notes without changing the surrounding recipe source."""
+    if "__RECIPE_NOTE_" not in text:
+        return text
+    root = compose_yaml(text)
+    if not is_yaml_mapping_node(root):
+        return text
+    steps = next((node for key, node in root.value if key.value == "steps"), None)
+    if not is_yaml_mapping_node(steps):
+        return text
+    edits: dict[tuple[int, int], str] = {}
+    for _, step in steps.value:
+        if not is_yaml_mapping_node(step):
+            continue
+        for field, node in step.value:
+            if field.value != "note":
+                continue
+            expanded = _substitute_recipe_note_placeholders(node.value)
+            if expanded != node.value:
+                start, end = node.start_mark.index, node.end_mark.index
+                newline = "\n" if text[start:end].endswith("\n") else ""
+                edits[start, end] = json.dumps(expanded, ensure_ascii=False) + newline
+    for (start, end), value in sorted(edits.items(), reverse=True):
+        text = text[:start] + value + text[end:]
+    return text
 
 
 _TEMP_PLACEHOLDER = "{{AUTOSKILLIT_TEMP}}"

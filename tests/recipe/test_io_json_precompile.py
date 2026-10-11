@@ -77,6 +77,32 @@ def test_load_recipe_dict_expands_shared_notes_in_surrounding_text(tmp_path: Pat
     assert "__RECIPE_NOTE_" not in note
 
 
+def test_raw_recipe_delivery_expands_shared_notes_as_valid_yaml(tmp_path: Path) -> None:
+    from autoskillit.recipe import load_and_validate
+
+    yaml_path = tmp_path / ".autoskillit" / "recipes" / "test-recipe.yaml"
+    yaml_path.parent.mkdir(parents=True)
+    _write_yaml(
+        yaml_path,
+        {
+            **_MINIMAL_RECIPE,
+            "steps": {
+                "done": {
+                    "action": "stop",
+                    "message": "Done.",
+                    "note": "Before. __RECIPE_NOTE_PLAN_SET_RENEWAL_FAILURE__ After.",
+                }
+            },
+        },
+    )
+    delivered = load_and_validate("test-recipe", project_dir=tmp_path, temp_dir=tmp_path)
+    assert "__RECIPE_NOTE_" not in delivered["content"]
+    assert (
+        load_yaml(delivered["content"])["steps"]["done"]["note"]
+        == (load_recipe_dict(yaml_path)["steps"]["done"]["note"])
+    )
+
+
 def test_load_recipe_dict_prefers_json_when_fresh(tmp_path, monkeypatch):
     yaml_path = tmp_path / "recipe.yaml"
     _write_yaml(yaml_path, _MINIMAL_RECIPE)

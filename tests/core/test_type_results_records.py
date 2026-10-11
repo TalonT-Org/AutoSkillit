@@ -40,6 +40,7 @@ ROOT_PUBLIC_NAMES = (
     "ValidatedAddDir",
     "ValidatedWorktreePath",
     "RolloutMarker",
+    "require_aware_timestamp",
 )
 INTERNAL_INDEX_NAMES = (
     "TokenUsageFileEntry",

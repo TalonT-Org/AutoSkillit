@@ -1,10 +1,9 @@
-from .deck import (
+from ._analysis import (
     finish_run_analysis,
-    load_render_bundle,
     prepare_run_analysis,
-    render_deck,
     write_run_analysis_packet,
 )
+from .deck import load_render_bundle, render_deck
 from .renderer import HTML_TEMPLATE, VALIDATION_KEYWORDS, main
 
 __all__ = [

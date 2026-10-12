@@ -78,7 +78,6 @@ def test_admission_rejects_invalid_dependency_edges(dependencies, reason, detail
         _initialization(dependencies=dependencies)
 
     violations = raised.value.violations
-    assert any(violation.reason == reason for violation in violations)
     assert any(
         violation.reason == reason and all(part in violation.detail for part in detail_parts)
         for violation in violations

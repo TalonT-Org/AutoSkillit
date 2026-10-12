@@ -130,6 +130,24 @@ class TestDerivePhaseADeps:
 
         assert _derive_phase_a_deps(projection) == {}
 
+    def test_run_skill_predecessor_creates_dependency(self):
+        projection = _projection(
+            "rectify",
+            "review_approach",
+            edges=(
+                RecipeFlowEdge(
+                    source="rectify",
+                    edge_type="success",
+                    target="review_approach",
+                    condition=None,
+                    result_field=None,
+                ),
+            ),
+            tool_by_step={"rectify": "run_skill", "review_approach": "run_skill"},
+        )
+
+        assert _derive_phase_a_deps(projection) == {"review_approach": ["rectify"]}
+
     def test_tracker_dependencies_unions_requested_and_derived_without_mutation(self, monkeypatch):
         from autoskillit.server.tools import _pipeline_deps
         from autoskillit.server.tools._pipeline_deps import _tracker_dependencies

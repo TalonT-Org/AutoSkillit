@@ -146,6 +146,13 @@ class TestDerivePhaseADeps:
                     condition=None,
                     result_field=None,
                 ),
+                RecipeFlowEdge(
+                    source="review_approach",
+                    edge_type="success",
+                    target="make_plan",
+                    condition=None,
+                    result_field=None,
+                ),
             ),
         )
         derived = _derive_phase_a_deps(projection)

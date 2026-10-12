@@ -107,7 +107,10 @@ def _tracker_dependencies(
     requested: Mapping[str, Sequence[str]] | None = None,
 ) -> dict[str, list[str]]:
     """Combine enforceable recipe dependencies with distinct caller requests."""
-    dependencies = _derive_phase_a_deps(projection)
+    dependencies = {
+        dependent: list(prerequisites)
+        for dependent, prerequisites in _derive_phase_a_deps(projection).items()
+    }
     for dependent, prerequisites in (requested or {}).items():
         if not prerequisites:
             continue

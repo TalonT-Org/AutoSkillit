@@ -185,7 +185,8 @@ def _dependency_endpoint_violations(
                         dependent,
                         prerequisite,
                         "self_dependency",
-                        f"dependent/prerequisite '{dependent}' (kind: {kind}) "
+                        f"self-dependency: dependent/prerequisite '{dependent}' "
+                        f"(kind: {kind}) "
                         "cannot be the same step",
                     )
                 )
@@ -481,7 +482,9 @@ def _read_tracker_unlocked(target: TrackerAuthorityTarget) -> TrackerAuthorityRe
                 target,
                 error=(
                     f"Expected pipeline tracker '{target.target_order_id}' is unavailable at "
-                    f"{target.path}. Initialize or restore that exact tracker before retrying."
+                    f"{target.path}. Create it with "
+                    f"record_pipeline_step(op='init', pipeline_id='{target.target_order_id}') "
+                    "(dependencies are optional) or restore that exact tracker, then retry."
                 ),
             )
         return TrackerAuthorityReadResult(target)

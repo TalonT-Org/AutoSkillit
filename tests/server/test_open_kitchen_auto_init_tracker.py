@@ -20,7 +20,10 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 def _configure_open_kitchen_mock(ctx, steps, tmp_path):
     from unittest.mock import MagicMock
 
+    from autoskillit.execution.backends import get_backend
+
     ctx.project_dir = tmp_path
+    ctx.backend = get_backend(ctx.config.agent_backend.backend)
     ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
         {
             "content": "name: remediation\nsteps: {}\n",

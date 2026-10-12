@@ -473,21 +473,24 @@ def test_record_pipeline_step_docstring_pins_init_admission_guidance() -> None:
     assert "create-only" in docstring
     assert "run_skill" in docstring
     assert "optional" in docstring
-    dependency_guidance = re.search(
-        r"preflight:pipeline_tracker_dependencies(.{0,260}?)(?=pipeline_tracker:init|$)",
-        docstring,
+    sentences = tuple(sentence.strip() for sentence in docstring.split("."))
+    dependency_guidance = next(
+        (
+            sentence
+            for sentence in sentences
+            if "preflight:pipeline_tracker_dependencies" in sentence
+        ),
+        "",
     )
-    initialization_guidance = re.search(
-        r"pipeline_tracker:init(.{0,260}?)(?=preflight:pipeline_tracker_dependencies|$)",
-        docstring,
+    initialization_guidance = next(
+        (sentence for sentence in sentences if "pipeline_tracker:init" in sentence),
+        "",
     )
-    assert dependency_guidance is not None
-    assert any(word in dependency_guidance.group(1) for word in ("revis", "omit"))
-    assert "supplied" in dependency_guidance.group(1)
-    assert any(
-        word in dependency_guidance.group(1) for word in ("graph", "mapping", "dependencies")
-    )
-    assert initialization_guidance is not None
-    assert "diagnos" in initialization_guidance.group(1)
-    assert "failure" in initialization_guidance.group(1)
-    assert "retr" in initialization_guidance.group(1)
+    assert dependency_guidance
+    assert any(word in dependency_guidance for word in ("revis", "omit"))
+    assert "supplied" in dependency_guidance
+    assert any(word in dependency_guidance for word in ("graph", "mapping", "dependencies"))
+    assert initialization_guidance
+    assert "diagnos" in initialization_guidance
+    assert "initialization failure" in initialization_guidance
+    assert "before retrying" in initialization_guidance

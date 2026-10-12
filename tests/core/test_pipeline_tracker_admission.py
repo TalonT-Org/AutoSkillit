@@ -201,7 +201,7 @@ def test_tracker_writers_require_admitted_initialization(tmp_path, initializer, 
     target = _target(tmp_path, "p", expected=False)
     lease = retain_tracker_lease({}, _key(target, tmp_path, owner_kind))
     try:
-        with pytest.raises(TypeError):
+        with pytest.raises(TypeError, match="TrackerInitialization; got dict"):
             initializer(target, lease, _tracker())
         assert not target.path.exists()
     finally:

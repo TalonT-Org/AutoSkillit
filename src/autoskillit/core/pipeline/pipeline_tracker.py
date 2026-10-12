@@ -527,7 +527,9 @@ def initialize_kitchen_tracker(
     """Create or idempotently merge readable kitchen tracker authority."""
     _require_shared_lease(target, lease)
     if not isinstance(initialization, TrackerInitialization):
-        raise TypeError("initialization must be a TrackerInitialization")
+        raise TypeError(
+            f"initialization must be a TrackerInitialization; got {type(initialization).__name__}"
+        )
     if initialization.kitchen_id != target.target_order_id:
         raise ValueError("kitchen_id must match the tracker target id")
     incoming = _validate_tracker_data(
@@ -557,7 +559,9 @@ def initialize_manual_tracker(
     """Create manual tracker authority, refusing every existing target."""
     _require_shared_lease(target, lease)
     if not isinstance(initialization, TrackerInitialization):
-        raise TypeError("initialization must be a TrackerInitialization")
+        raise TypeError(
+            f"initialization must be a TrackerInitialization; got {type(initialization).__name__}"
+        )
     incoming = _validate_tracker_data(
         initialization.tracker_data(pipeline_id=target.target_order_id)
     )

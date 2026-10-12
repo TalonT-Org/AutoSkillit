@@ -20,6 +20,18 @@ FIXTURE_NAME = "run_38170521660_attempt_1"
 FIXTURE_DIR = Path(__file__).with_name("fixtures") / "e2e_sessions" / FIXTURE_NAME
 _SCRIPT = REPO_ROOT / "scripts" / "e2e" / "e2e_sessions.py"
 sessions = load_check_script("_autoskillit_e2e_sessions_captured", _SCRIPT)
+ROOT_SESSION_ID = "2292658a-34cf-44a0-a0b1-f7a20218874b"
+WORKER_SESSION_IDS = (
+    "8ef8f993-8caa-47dd-83b0-26f9e5b51139",
+    "54f18144-1188-45d7-a392-17b4529f721e",
+)
+UNMATCHED_AGENT_ID = "a610a4bda1f28ca35"
+NATIVE_AGENT_IDS = {
+    "a516cbae85151dc7c",
+    "a9ed51b7c02b828dd",
+    "aeb96cc0ddbdab294",
+    "a7e613554b849d6b2",
+}
 
 _INPUTS_TO_PRESERVE = {
     PLUGIN_PREFIX + "claim_and_resolve_issue",
@@ -156,3 +168,81 @@ def test_captured_run_proves_claim_and_published_branch(tmp_path: Path) -> None:
     assert proof["claimed"] is True
     assert proof["violations"] == []
     assert envelope["l3_payload"] is None
+
+
+def test_captured_run_accounts_for_successful_and_failed_workers(
+    tmp_path: Path,
+) -> None:
+    provenance = load_provenance(FIXTURE_NAME)
+    trace = tmp_path / "trace" / "session-events.jsonl"
+    log_root = tmp_path / "log-root"
+    envelope = materialize_run(
+        FIXTURE_NAME,
+        trace=trace,
+        log_root=log_root,
+        projects=tmp_path / "projects",
+    )
+
+    summary = sessions.summarize(trace, envelope, log_root)
+    coverage = summary["coverage"]
+    assert coverage["managed_session_ids"] == sorted(WORKER_SESSION_IDS)
+    assert coverage["owned_session_ids"] == sorted((ROOT_SESSION_ID, *WORKER_SESSION_IDS))
+    assert summary["peak_sessions"] == 5
+    assert {agent["agent_id"] for agent in coverage["native_agents"]} == NATIVE_AGENT_IDS
+    assert coverage["complete"] is False
+    assert summary["violations"] == sorted(
+        [
+            f"lifecycle:agent:{ROOT_SESSION_ID}:{UNMATCHED_AGENT_ID}:orphan_end",
+            f"native:{ROOT_SESSION_ID}:{UNMATCHED_AGENT_ID}:lifecycle_incomplete",
+            f"native:{ROOT_SESSION_ID}:{UNMATCHED_AGENT_ID}:transcript_unenumerated",
+        ]
+    )
+    assert envelope["l3_payload"] is None
+
+    ownership = sessions.collect_ownership(
+        trace,
+        envelope,
+        log_root,
+        provenance["issue_url"],
+        provenance["repository"],
+        claim_label=provenance["claim_label"],
+    )
+    assert ownership["branches"] == ["e2e-implementation-fixture-normalize-whitespace/1-3"]
+    assert ownership["claimed"] is True
+    assert ownership["violations"] == []
+    assert [item["session_id"] for item in ownership["transcripts"]] == sorted(
+        (ROOT_SESSION_ID, *WORKER_SESSION_IDS)
+    )
+
+
+def test_captured_run_is_complete_once_the_unmatched_stop_is_removed(
+    tmp_path: Path,
+) -> None:
+    trace = tmp_path / "trace" / "session-events.jsonl"
+    log_root = tmp_path / "log-root"
+    envelope = materialize_run(
+        FIXTURE_NAME,
+        trace=trace,
+        log_root=log_root,
+        projects=tmp_path / "projects",
+    )
+    events = _rows(trace)
+    unmatched_stops = [
+        event
+        for event in events
+        if event.get("event") == "SubagentStop" and event.get("agent_id") == UNMATCHED_AGENT_ID
+    ]
+    assert len(unmatched_stops) == 1
+    trace.write_text(
+        "".join(
+            json.dumps(event, separators=(",", ":"), ensure_ascii=False) + "\n"
+            for event in events
+            if event not in unmatched_stops
+        ),
+        encoding="utf-8",
+    )
+
+    summary = sessions.summarize(trace, envelope, log_root)
+    assert summary["coverage"]["complete"] is True
+    assert summary["violations"] == []
+    assert summary["peak_sessions"] == 5

@@ -202,9 +202,19 @@ The implementation pipeline installs synchronous command hooks for `SessionStart
 settings. These hooks follow the [Claude lifecycle schema](https://code.claude.com/docs/en/hooks).
 Each identity spans its first start through its final end, so compaction and resume yield
 a conservative upper bound. Half-open intervals end before simultaneous starts. The
-summary reconciles the dispatched root, managed lineage and enumerable native transcripts;
-missing endpoints, identities or owned transcripts fail coverage. Transcript activity is
-never used to infer a lifetime. A peak exceeding capacity fails validation.
+summary reconciles the dispatched root, managed lineage and enumerable native transcripts.
+AutoSkillit writes `logs/sessions.jsonl` and each session's `summary.json`; their dispatch
+and parent/caller fields are AutoSkillit provenance, separate from Claude Code transcript
+and lifecycle hook fields. Empty links do not imply a Claude Code schema guarantee.
+Managed sessions are adopted through declared parent fields or receipted `run_skill`,
+`complete_run_skill_result` or `recover_run_skill_result` replies in an owned transcript.
+Each must have exactly one index row with the run's `dispatch_id`. Parentless sessions
+without receipts, missing or ambiguous index rows, and receipt-named sessions absent
+from both trace and index fail coverage. Shared dispatch IDs or overlapping lifetimes
+never adopt a session. Missing endpoints, identities or owned transcripts fail coverage;
+transcript activity never infers a lifetime. An auto-compacted root can leave an unmatched
+`SubagentStop`, which still fails coverage and is tracked separately. A peak exceeding
+capacity fails validation.
 
 Commission with a successful MiniMax CI run and repeat against the same seed. Inspect
 planning, dry-walkthrough, implementation, test, integration, audit GO and open-PR evidence,

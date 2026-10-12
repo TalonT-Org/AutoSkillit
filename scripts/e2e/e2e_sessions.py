@@ -22,7 +22,8 @@ _AUTOSKILLIT_SERVERS = frozenset(
     {("mcp", "autoskillit"), ("mcp", "plugin_autoskillit_autoskillit")}
 )
 _RESOURCE_TOOLS = frozenset({"claim_and_resolve_issue", "create_and_publish_branch"})
-_TRACKED_TOOLS = _RESOURCE_TOOLS
+_LAUNCH_TOOLS = frozenset({"run_skill", "complete_run_skill_result", "recover_run_skill_result"})
+_TRACKED_TOOLS = _RESOURCE_TOOLS | _LAUNCH_TOOLS
 _MAX_HOOK_INPUT_BYTES = 65_536
 _MAX_TRACE_RECORD_BYTES = 8_192
 
@@ -230,8 +231,13 @@ def _discover_owned(
         if not dispatch_id or root_row.get("dispatch_id") != dispatch_id:
             violations.append("sessions_index:root_dispatch_mismatch")
         _add_owned_session(root, root_row, root_id, violations, owned)
-    candidates = _fresh_candidates(root, root_id, dispatch_id, trace_session_ids, rows_by_id)
+    candidates = _fresh_candidates(
+        root, root_id, dispatch_id, trace_session_ids, rows_by_id, violations
+    )
     _add_linked_descendants(root, dispatch_id, candidates, owned, violations)
+    observed = trace_session_ids | set(rows_by_id)
+    for session_id in sorted(_launched_session_ids(owned) - observed):
+        violations.append(f"lineage:{session_id}:launched_session_unobserved")
 
     return {
         "root_id": root_id,
@@ -250,6 +256,7 @@ def _fresh_candidates(
     dispatch_id: str,
     trace_session_ids: set[str],
     rows_by_id: Mapping[str, list[dict[str, Any]]],
+    violations: list[str],
 ) -> dict[str, tuple[dict[str, Any], dict[str, Any] | None]]:
     candidates: dict[str, tuple[dict[str, Any], dict[str, Any] | None]] = {}
     candidate_ids = trace_session_ids | {
@@ -262,12 +269,38 @@ def _fresh_candidates(
             continue
         matching_rows = rows_by_id.get(session_id, [])
         if len(matching_rows) != 1:
+            violations.append(f"sessions_index:{session_id}:missing_or_ambiguous")
             continue
         row = matching_rows[0]
         session_dir = _safe_session_dir(log_root, row)
         summary = _read_summary(session_dir, session_id) if session_dir else None
         candidates[session_id] = row, summary
     return candidates
+
+
+def _launched_session_ids(owned: Mapping[str, Mapping[str, Any]]) -> set[str]:
+    """Return the session ids named by receipted launch replies in owned transcripts."""
+    launched: set[str] = set()
+    for item in owned.values():
+        for tool, _tool_input, reply, is_error in item["calls"]:
+            if tool not in _LAUNCH_TOOLS or is_error or reply is None:
+                continue
+            session_id = reply.get("session_id")
+            if reply.get("receipt_id") and isinstance(session_id, str) and session_id:
+                launched.add(session_id)
+    return launched
+
+
+def _report_unattributed(
+    remaining: Mapping[str, tuple[dict[str, Any], dict[str, Any] | None]], violations: list[str]
+) -> None:
+    """Report sessions of the run that declare no parent and were named by no launch receipt."""
+    for session_id, (row, summary) in sorted(remaining.items()):
+        declared = [row.get("parent_session_id"), row.get("caller_session_id")]
+        if summary:
+            declared.append(summary["execution_identity"]["parent_session_id"])
+        if not any(isinstance(value, str) and value for value in declared):
+            violations.append(f"lineage:{session_id}:unattributed")
 
 
 def _add_linked_descendants(
@@ -281,6 +314,7 @@ def _add_linked_descendants(
     while remaining:
         changed = False
         owned_ids = set(owned)
+        launched = _launched_session_ids(owned)
         for session_id, (row, summary) in list(remaining.items()):
             parents = {
                 value
@@ -288,7 +322,9 @@ def _add_linked_descendants(
                 if isinstance((value := row.get(key)), str) and value
             }
             summary_parent = summary["execution_identity"]["parent_session_id"] if summary else ""
-            if not parents.intersection(owned_ids) and summary_parent not in owned_ids:
+            by_receipt = session_id in launched
+            linked = by_receipt or parents.intersection(owned_ids) or summary_parent in owned_ids
+            if not linked:
                 continue
             if not dispatch_id or row.get("dispatch_id") != dispatch_id:
                 violations.append(f"sessions_index:{session_id}:dispatch_mismatch")
@@ -296,7 +332,7 @@ def _add_linked_descendants(
                 continue
             if summary is None:
                 violations.append(f"summary:{session_id}:missing_or_malformed")
-            elif summary_parent not in owned_ids:
+            elif summary_parent not in owned_ids and (summary_parent or not by_receipt):
                 violations.append(f"summary:{session_id}:parent_mismatch")
             if parents and not parents.intersection(owned_ids):
                 violations.append(f"sessions_index:{session_id}:parent_mismatch")
@@ -305,6 +341,7 @@ def _add_linked_descendants(
             changed = True
         if not changed:
             break
+    _report_unattributed(remaining, violations)
 
 
 def _add_owned_session(
@@ -344,15 +381,18 @@ def _add_owned_session(
             transcript = log_root / transcript
     else:
         violations.append(f"sessions_index:{session_id}:missing_transcript")
+    calls = []
     if transcript is None or not transcript.is_file():
         violations.append(f"transcript:{session_id}:missing")
     else:
         _read_jsonl(transcript, f"transcript:{session_id}", violations, collect=False)
+        calls = _transcript_tool_pairs(transcript, session_id, violations)
     owned[session_id] = {
         "row": dict(row),
         "summary": summary,
         "session_dir": session_dir,
         "transcript": transcript,
+        "calls": calls,
     }
 
 
@@ -804,9 +844,7 @@ def _owned_tool_proofs(
         if not isinstance(transcript, Path) or not transcript.is_file():
             continue
         transcripts.append({"session_id": session_id, "path": str(transcript)})
-        for name, tool_input, result, is_error in _transcript_tool_pairs(
-            transcript, session_id, violations
-        ):
+        for name, tool_input, result, is_error in item["calls"]:
             target = _branch_target(
                 session_id,
                 root_id,

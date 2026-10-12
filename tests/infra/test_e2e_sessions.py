@@ -139,6 +139,33 @@ def _base_sessions(
     return log_root, trace, child_transcript
 
 
+def _worker(log_root: Path, session_id: str) -> Path:
+    transcript = _session(log_root, session_id)
+    index_path = log_root / "sessions.jsonl"
+    entries = [json.loads(line) for line in index_path.read_text(encoding="utf-8").splitlines()]
+    entries.append(_entry(session_id, transcript))
+    _index(log_root, entries)
+    return transcript
+
+
+def _trace_root_and_worker(
+    trace: Path,
+    log_root: Path,
+    worker_id: str,
+    worker_transcript: Path,
+) -> None:
+    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    _trace(
+        trace,
+        [
+            _event("SessionStart", ROOT_ID, 1, transcript=root_transcript),
+            _event("SessionStart", worker_id, 2, transcript=worker_transcript),
+            _event("SessionEnd", worker_id, 3, transcript=worker_transcript),
+            _event("SessionEnd", ROOT_ID, 4, transcript=root_transcript),
+        ],
+    )
+
+
 def _tool_use(
     tool_id: str,
     name: str,
@@ -166,6 +193,7 @@ def _tool_result(
     result: dict[str, Any],
     *,
     carrier: str = "mcp_meta",
+    is_error: bool = False,
 ) -> dict[str, Any]:
     display = "tool reply\n\nsuccess: True"
     if carrier == "mcp_meta" or carrier == "display_only":
@@ -183,6 +211,7 @@ def _tool_result(
                     "type": "tool_result",
                     "tool_use_id": tool_id,
                     "content": content,
+                    "is_error": is_error,
                 }
             ]
         },
@@ -193,6 +222,19 @@ def _tool_result(
             "structuredContent": {"result": json.dumps(result)},
         }
     return row
+
+
+def _launch(
+    tool_id: str,
+    reply: dict[str, Any],
+    *,
+    tool: str = "run_skill",
+    is_error: bool = False,
+) -> list[dict[str, Any]]:
+    return [
+        _tool_use(tool_id, tool, {}),
+        _tool_result(tool_id, reply, is_error=is_error),
+    ]
 
 
 def _root_ownership_proof(
@@ -304,6 +346,7 @@ def test_summary_collapses_repeated_events_excludes_unrelated_and_sweeps_half_op
 
     assert summary["peak_sessions"] == 1
     assert summary["coverage"]["complete"] is True
+    assert summary["violations"] == []
     assert summary["coverage"]["managed_session_ids"] == ["session-child"]
     assert [identity["session_id"] for identity in summary["identities"]] == [
         ROOT_ID,
@@ -846,3 +889,316 @@ def test_untracked_merge_target_reply_is_not_a_branch(tmp_path: Path) -> None:
 
     assert proof["branches"] == []
     assert proof["violations"] == []
+
+
+@pytest.mark.parametrize(
+    ("tool", "success"),
+    [
+        ("run_skill", True),
+        ("complete_run_skill_result", True),
+        ("recover_run_skill_result", True),
+        ("run_skill", False),
+    ],
+)
+def test_launch_receipt_adopts_a_worker_with_empty_parent_fields(
+    tmp_path: Path,
+    tool: str,
+    success: bool,
+) -> None:
+    log_root, trace, _ = _base_sessions(tmp_path)
+    worker_id = "session-worker"
+    worker_transcript = _worker(log_root, worker_id)
+    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    _jsonl(
+        root_transcript,
+        _launch(
+            "launch",
+            {"success": success, "receipt_id": "r1", "session_id": worker_id},
+            tool=tool,
+        ),
+    )
+    _trace_root_and_worker(trace, log_root, worker_id, worker_transcript)
+
+    summary = sessions.summarize(trace, _envelope(), log_root)
+
+    assert summary["coverage"]["managed_session_ids"] == [worker_id]
+    assert summary["coverage"]["complete"] is True
+
+
+def test_acknowledgement_alone_adopts_a_worker(tmp_path: Path) -> None:
+    log_root, trace, _ = _base_sessions(tmp_path)
+    worker_id = "session-worker"
+    worker_transcript = _worker(log_root, worker_id)
+    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    _jsonl(
+        root_transcript,
+        [
+            *_launch(
+                "launch",
+                {"success": True, "receipt_id": "r1", "audit_status": "published"},
+            ),
+            *_launch(
+                "ack",
+                {"success": True, "receipt_id": "r1", "session_id": worker_id},
+                tool="complete_run_skill_result",
+            ),
+        ],
+    )
+    _trace_root_and_worker(trace, log_root, worker_id, worker_transcript)
+
+    summary = sessions.summarize(trace, _envelope(), log_root)
+
+    assert summary["coverage"]["managed_session_ids"] == [worker_id]
+    assert summary["violations"] == []
+
+
+@pytest.mark.parametrize("worker_dispatch", [DISPATCH_ID, "another-dispatch"])
+def test_overlapping_session_without_receipt_or_parent_is_reported_not_adopted(
+    tmp_path: Path,
+    worker_dispatch: str,
+) -> None:
+    log_root, trace, _ = _base_sessions(tmp_path)
+    worker_id = "session-worker"
+    worker_transcript = _worker(log_root, worker_id)
+    index_path = log_root / "sessions.jsonl"
+    entries = [json.loads(line) for line in index_path.read_text(encoding="utf-8").splitlines()]
+    next(row for row in entries if row["session_id"] == worker_id)["dispatch_id"] = worker_dispatch
+    _index(log_root, entries)
+    _trace_root_and_worker(trace, log_root, worker_id, worker_transcript)
+
+    summary = sessions.summarize(trace, _envelope(), log_root)
+    proof = sessions.collect_ownership(trace, _envelope(), log_root, ISSUE_URL, REPOSITORY)
+
+    violation = f"lineage:{worker_id}:unattributed"
+    assert worker_id not in summary["coverage"]["managed_session_ids"]
+    assert violation in summary["violations"]
+    assert summary["coverage"]["complete"] is False
+    assert violation in proof["violations"]
+
+
+def test_receipt_in_an_unowned_transcript_does_not_adopt(tmp_path: Path) -> None:
+    log_root, trace, _ = _base_sessions(tmp_path)
+    worker_id = "session-worker"
+    worker_transcript = _worker(log_root, worker_id)
+    foreign_id = "session-foreign"
+    foreign_transcript = _session(
+        log_root,
+        foreign_id,
+        parent_session_id="other-parent",
+        records=_launch(
+            "launch",
+            {"success": True, "receipt_id": "r1", "session_id": worker_id},
+        ),
+    )
+    index_path = log_root / "sessions.jsonl"
+    entries = [json.loads(line) for line in index_path.read_text(encoding="utf-8").splitlines()]
+    entries.append(
+        _entry(
+            foreign_id,
+            foreign_transcript,
+            parent_session_id="other-parent",
+            caller_session_id="other-parent",
+        )
+    )
+    _index(log_root, entries)
+    _trace_root_and_worker(trace, log_root, worker_id, worker_transcript)
+
+    summary = sessions.summarize(trace, _envelope(), log_root)
+
+    assert worker_id not in summary["coverage"]["managed_session_ids"]
+    assert f"lineage:{worker_id}:unattributed" in summary["violations"]
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        {
+            "success": False,
+            "is_error": True,
+            "error": "permission denied",
+            "stage": "preflight",
+            "retriable": False,
+        },
+        {"success": False, "session_id": ""},
+        {"success": False, "session_id": "headless-0123456789ab"},
+    ],
+)
+def test_reply_without_receipt_id_proves_no_launch(
+    tmp_path: Path,
+    reply: dict[str, Any],
+) -> None:
+    log_root, trace, _ = _base_sessions(tmp_path)
+    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    _jsonl(root_transcript, _launch("launch", reply))
+    _trace(
+        trace,
+        [
+            _event("SessionStart", ROOT_ID, 1, transcript=root_transcript),
+            _event("SessionEnd", ROOT_ID, 2, transcript=root_transcript),
+        ],
+    )
+
+    summary = sessions.summarize(trace, _envelope(), log_root)
+
+    assert summary["coverage"]["managed_session_ids"] == []
+    assert summary["violations"] == []
+
+
+def test_launch_reply_marked_is_error_is_not_evidence(tmp_path: Path) -> None:
+    log_root, trace, _ = _base_sessions(tmp_path)
+    worker_id = "session-worker"
+    worker_transcript = _worker(log_root, worker_id)
+    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    _jsonl(
+        root_transcript,
+        _launch(
+            "launch",
+            {"success": True, "receipt_id": "r1", "session_id": worker_id},
+            is_error=True,
+        ),
+    )
+    _trace_root_and_worker(trace, log_root, worker_id, worker_transcript)
+
+    summary = sessions.summarize(trace, _envelope(), log_root)
+
+    assert worker_id not in summary["coverage"]["managed_session_ids"]
+    assert f"lineage:{worker_id}:unattributed" in summary["violations"]
+
+
+def test_launched_session_absent_from_trace_and_index_is_reported(tmp_path: Path) -> None:
+    log_root, trace, _ = _base_sessions(tmp_path)
+    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    _jsonl(
+        root_transcript,
+        _launch(
+            "launch",
+            {"success": True, "receipt_id": "r1", "session_id": "session-ghost"},
+        ),
+    )
+    _trace(
+        trace,
+        [
+            _event("SessionStart", ROOT_ID, 1, transcript=root_transcript),
+            _event("SessionEnd", ROOT_ID, 2, transcript=root_transcript),
+        ],
+    )
+
+    summary = sessions.summarize(trace, _envelope(), log_root)
+
+    assert "lineage:session-ghost:launched_session_unobserved" in summary["violations"]
+
+
+@pytest.mark.parametrize(
+    ("index_count", "receipt_names_worker"),
+    [(0, False), (0, True), (2, False), (2, True)],
+)
+def test_candidate_without_exactly_one_index_row_is_reported(
+    tmp_path: Path,
+    index_count: int,
+    receipt_names_worker: bool,
+) -> None:
+    log_root, trace, _ = _base_sessions(tmp_path)
+    worker_id = "session-worker"
+    worker_transcript = _worker(log_root, worker_id)
+    index_path = log_root / "sessions.jsonl"
+    entries = [json.loads(line) for line in index_path.read_text(encoding="utf-8").splitlines()]
+    worker_entry = next(row for row in entries if row["session_id"] == worker_id)
+    entries = [row for row in entries if row["session_id"] != worker_id]
+    if index_count == 2:
+        entries.extend([worker_entry, dict(worker_entry)])
+    _index(log_root, entries)
+    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    _jsonl(
+        root_transcript,
+        _launch(
+            "launch",
+            {"success": True, "receipt_id": "r1", "session_id": worker_id},
+        )
+        if receipt_names_worker
+        else [],
+    )
+    _trace_root_and_worker(trace, log_root, worker_id, worker_transcript)
+
+    summary = sessions.summarize(trace, _envelope(), log_root)
+
+    assert worker_id not in summary["coverage"]["managed_session_ids"]
+    assert f"sessions_index:{worker_id}:missing_or_ambiguous" in summary["violations"]
+
+
+def test_receipt_named_worker_from_another_dispatch_is_not_adopted(tmp_path: Path) -> None:
+    log_root, trace, _ = _base_sessions(tmp_path)
+    worker_id = "session-worker"
+    worker_transcript = _worker(log_root, worker_id)
+    index_path = log_root / "sessions.jsonl"
+    entries = [json.loads(line) for line in index_path.read_text(encoding="utf-8").splitlines()]
+    next(row for row in entries if row["session_id"] == worker_id)["dispatch_id"] = (
+        "another-dispatch"
+    )
+    _index(log_root, entries)
+    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    _jsonl(
+        root_transcript,
+        _launch(
+            "launch",
+            {"success": True, "receipt_id": "r1", "session_id": worker_id},
+        ),
+    )
+    _trace_root_and_worker(trace, log_root, worker_id, worker_transcript)
+
+    summary = sessions.summarize(trace, _envelope(), log_root)
+
+    assert worker_id not in summary["coverage"]["managed_session_ids"]
+    assert f"sessions_index:{worker_id}:dispatch_mismatch" in summary["violations"]
+
+
+def test_receipt_adopted_worker_with_a_contradicting_declared_parent_is_reported(
+    tmp_path: Path,
+) -> None:
+    log_root, trace, _ = _base_sessions(tmp_path)
+    worker_id = "session-worker"
+    worker_transcript = _worker(log_root, worker_id)
+    summary_path = log_root / "sessions" / worker_id / "summary.json"
+    worker_summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    worker_summary["execution_identity"]["parent_session_id"] = "other-parent"
+    summary_path.write_text(json.dumps(worker_summary), encoding="utf-8")
+    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    _jsonl(
+        root_transcript,
+        _launch(
+            "launch",
+            {"success": True, "receipt_id": "r1", "session_id": worker_id},
+        ),
+    )
+    _trace_root_and_worker(trace, log_root, worker_id, worker_transcript)
+
+    summary = sessions.summarize(trace, _envelope(), log_root)
+
+    assert summary["coverage"]["managed_session_ids"] == [worker_id]
+    assert f"summary:{worker_id}:parent_mismatch" in summary["violations"]
+
+
+def test_receipt_adopted_worker_without_lifecycle_endpoints_is_incomplete(tmp_path: Path) -> None:
+    log_root, trace, _ = _base_sessions(tmp_path)
+    worker_id = "session-worker"
+    _worker(log_root, worker_id)
+    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    _jsonl(
+        root_transcript,
+        _launch(
+            "launch",
+            {"success": True, "receipt_id": "r1", "session_id": worker_id},
+        ),
+    )
+    _trace(
+        trace,
+        [
+            _event("SessionStart", ROOT_ID, 1, transcript=root_transcript),
+            _event("SessionEnd", ROOT_ID, 2, transcript=root_transcript),
+        ],
+    )
+
+    summary = sessions.summarize(trace, _envelope(), log_root)
+
+    assert summary["coverage"]["managed_session_ids"] == [worker_id]
+    assert summary["coverage"]["complete"] is False
+    assert f"lifecycle:{worker_id}:missing_endpoints" in summary["violations"]

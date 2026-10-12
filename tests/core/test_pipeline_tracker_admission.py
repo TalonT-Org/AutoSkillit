@@ -134,6 +134,17 @@ def test_admission_rejects_cycles_and_names_a_ring_edge(dependencies, cycle_edge
     assert reported & cycle_edges
 
 
+def test_admission_describes_unconfigured_steps():
+    with pytest.raises(
+        TrackerDependencyAdmissionError,
+        match="prerequisite 'empty' is an unconfigured step",
+    ):
+        _initialization(
+            recipe_steps=_skill_steps("plan") | {"empty": FinalizedRecipeStep(name="empty")},
+            dependencies={"plan": ["empty"]},
+        )
+
+
 def test_admission_rejects_edges_with_untyped_step_values():
     with pytest.raises(TrackerDependencyAdmissionError) as raised:
         _initialization(

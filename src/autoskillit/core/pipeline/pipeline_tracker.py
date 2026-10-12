@@ -152,10 +152,11 @@ def _dependency_endpoint_violation(
     if is_tracker_enforced_step(step):
         return None
     kind = _dependency_step_kind(step)
+    article = "an" if kind == "unconfigured" else "a"
     description = (
         f"{role} '{step_name}' is untyped"
         if kind == "untyped"
-        else f"{role} '{step_name}' is a {kind} step"
+        else f"{role} '{step_name}' is {article} {kind} step"
     )
     rule = "are dependency-gated" if role == "dependent" else "earn completion credit"
     return TrackerDependencyViolation(

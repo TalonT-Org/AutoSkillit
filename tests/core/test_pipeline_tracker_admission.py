@@ -10,6 +10,7 @@ import pytest
 from autoskillit.core.pipeline.pipeline_tracker import (
     TrackerDependencyAdmissionError,
     TrackerInitialization,
+    dependency_cycle_members,
     initialize_kitchen_tracker,
     initialize_manual_tracker,
     is_tracker_enforced_step,
@@ -132,6 +133,30 @@ def test_admission_rejects_cycles_and_names_a_ring_edge(dependencies, cycle_edge
         if violation.reason == "cycle"
     }
     assert reported & cycle_edges
+
+
+@pytest.mark.parametrize("cyclic", [False, True])
+def test_admission_handles_deep_dependency_chains(cyclic):
+    names = tuple(f"step-{index}" for index in range(1500))
+    dependencies = {left: [right] for left, right in zip(names, names[1:])}
+    steps = _skill_steps(*names)
+    if cyclic:
+        dependencies[names[-1]] = [names[-2]]
+        with pytest.raises(TrackerDependencyAdmissionError) as raised:
+            _initialization(recipe_steps=steps, dependencies=dependencies)
+        reported = {
+            (violation.dependent, violation.prerequisite)
+            for violation in raised.value.violations
+            if violation.reason == "cycle"
+        }
+        assert reported == {(names[-2], names[-1]), (names[-1], names[-2])}
+        assert dependency_cycle_members(dependencies) == set(names[-2:])
+    else:
+        admitted = _initialization(recipe_steps=steps, dependencies=dependencies)
+        assert dict(admitted.dependencies) == {
+            name: tuple(prerequisites) for name, prerequisites in dependencies.items()
+        }
+        assert dependency_cycle_members(dependencies) == set()
 
 
 def test_admission_describes_unconfigured_steps():

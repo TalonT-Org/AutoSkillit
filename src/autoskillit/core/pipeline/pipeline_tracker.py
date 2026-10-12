@@ -11,7 +11,7 @@ import fcntl
 import json
 import os
 import uuid
-from collections.abc import Callable, Iterable, Mapping, MutableMapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -76,22 +76,28 @@ def _dependency_cycle_edges(
     color: dict[str, int] = dict.fromkeys(graph, white)
     cycle_edges: set[tuple[str, str]] = set()
 
-    def visit(node: str, stack: list[str]) -> None:
-        color[node] = gray
-        stack.append(node)
-        for neighbor in graph.get(node, ()):
+    for root in graph:
+        if color[root] != white:
+            continue
+        color[root] = gray
+        path = [root]
+        frames: list[tuple[str, Iterator[str]]] = [(root, iter(graph[root]))]
+        while frames:
+            node, neighbors = frames[-1]
+            neighbor = next(neighbors, None)
+            if neighbor is None:
+                frames.pop()
+                path.pop()
+                color[node] = black
+                continue
             if color.get(neighbor) == gray:
-                cycle_start = stack.index(neighbor)
-                cycle_edges.update(zip(stack[cycle_start:-1], stack[cycle_start + 1 :]))
+                cycle_start = path.index(neighbor)
+                cycle_edges.update(zip(path[cycle_start:-1], path[cycle_start + 1 :]))
                 cycle_edges.add((node, neighbor))
             elif color.get(neighbor) == white:
-                visit(neighbor, stack)
-        stack.pop()
-        color[node] = black
-
-    for node in graph:
-        if color[node] == white:
-            visit(node, [])
+                color[neighbor] = gray
+                path.append(neighbor)
+                frames.append((neighbor, iter(graph.get(neighbor, ()))))
     return cycle_edges
 
 

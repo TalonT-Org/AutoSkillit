@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -152,3 +153,60 @@ def sessions_analyze(
         f"\n{result.session_count} sessions | {len(result.by_recipe)} recipe(s)",
         file=sys.stderr,
     )
+
+
+@sessions_app.command(name="analysis-prepare")
+def sessions_analysis_prepare(output_dir: str, *, change_id: str = "") -> None:
+    """Freeze the current report-index populations for a run analysis."""
+    from autoskillit.config import load_config
+    from autoskillit.core import ArtifactLeaseContention
+    from autoskillit.execution import (
+        REPORT_INDEX_SCHEMA_VERSION,
+        read_report_index,
+        report_index_dir,
+        resolve_log_dir,
+    )
+    from autoskillit.report import (
+        load_render_bundle,
+        prepare_run_analysis,
+        write_run_analysis_packet,
+    )
+
+    try:
+        log_root = resolve_log_dir(load_config().linux_tracing.log_dir)
+        index_dir = report_index_dir(log_root)
+        _refresh_report_index(log_root, index_dir, rebuild=False)
+        report = read_report_index(index_dir)
+        packet = prepare_run_analysis(
+            report.sessions.values(),
+            request_rows=report.requests.values(),
+            tool_rows=report.tools.values(),
+            subagent_rows=report.subagents.values(),
+            turn_rows=report.turns.values(),
+            index_schema_version=REPORT_INDEX_SCHEMA_VERSION,
+            change_id=change_id,
+            render_bundle=load_render_bundle(),
+        )
+        status = write_run_analysis_packet(Path(output_dir).resolve(), packet)
+    except (ArtifactLeaseContention, OSError, ValueError) as exc:
+        print(f"sessions analysis-prepare: {exc}", file=sys.stderr)
+        raise SystemExit(1) from None
+
+    print(json.dumps(status, sort_keys=True))
+
+
+@sessions_app.command(name="analysis-finish")
+def sessions_analysis_finish(output_dir: str) -> None:
+    """Finish interpretation of a previously frozen run-analysis packet."""
+    from autoskillit.core import ArtifactLeaseContention
+    from autoskillit.report import finish_run_analysis
+
+    analysis_generated_at = datetime.now(UTC)
+    try:
+        status = finish_run_analysis(
+            Path(output_dir).resolve(), analysis_generated_at=analysis_generated_at
+        )
+    except (ArtifactLeaseContention, OSError, ValueError) as exc:
+        print(f"sessions analysis-finish: {exc}", file=sys.stderr)
+        raise SystemExit(1) from None
+    print(json.dumps(status, sort_keys=True))

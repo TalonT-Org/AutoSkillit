@@ -300,11 +300,11 @@ class TestModuleCascadeCore:
                 "_test_filter",
                 "hook_registry",
                 "smoke_utils",
+                "config",
+                "report",
             }
         )
-        assert MODULE_CASCADE_CORE["_type_results_records"] == (
-            MODULE_CASCADE_CORE["_type_results"] | {"config"}
-        )
+        assert MODULE_CASCADE_CORE["_type_results_records"] == MODULE_CASCADE_CORE["_type_results"]
 
     def test_type_backend_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_backend"] == frozenset(
@@ -796,7 +796,8 @@ class TestBuildTestScopeCoreCascade:
         dir_names = {p.name for p in result}
         for pkg in ["core", "execution", "server", "fleet", "migration"]:
             assert pkg in dir_names, f"_type_results cascade should include {pkg}"
-        assert ("config" in dir_names) == source_path.endswith("_type_results_records.py")
+        assert "config" in dir_names
+        assert "report" in dir_names
         for excluded in ["hooks", "skills", "planner"]:
             assert excluded not in dir_names, (
                 f"_type_results cascade should not include {excluded}"

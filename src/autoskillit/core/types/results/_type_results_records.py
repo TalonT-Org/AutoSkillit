@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Final, Generic, Literal, TypedDict, TypeGuard, TypeVar
@@ -46,6 +47,7 @@ __all__ = [
     "ValidatedAddDir",
     "ValidatedWorktreePath",
     "RolloutMarker",
+    "require_aware_timestamp",
     "TokenUsageFileEntry",
     "SessionIndexEntry",
 ]
@@ -369,6 +371,36 @@ class RolloutMarker(TypedDict):
     effective_at: str
     scope: dict[str, list[str]]
     expected_effect: str
+
+
+def require_aware_timestamp(value: object, *, field_name: str) -> datetime:
+    """Parse an ISO-8601 timestamp with an offset and return it in UTC."""
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{field_name} must be a non-empty ISO-8601 timestamp")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be an ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"{field_name} must include a UTC offset")
+    return parsed.astimezone(UTC)
+
+
+def _validate_rollout_scope(scope: object, *, field_name: str) -> dict[str, list[str]]:
+    if not isinstance(scope, Mapping) or set(scope) != {"skills", "backends", "roles"}:
+        raise ValueError(f"{field_name}.scope must contain exactly skills, backends, roles")
+    copied_scope: dict[str, list[str]] = {}
+    for axis in ("skills", "backends", "roles"):
+        values = scope[axis]
+        if not isinstance(values, list):
+            raise ValueError(f"{field_name}.scope.{axis} must be a list of nonblank strings")
+        copied_values: list[str] = []
+        for value in values:
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{field_name}.scope.{axis} must be a list of nonblank strings")
+            copied_values.append(value)
+        copied_scope[axis] = copied_values
+    return copied_scope
 
 
 class SessionIndexEntry(TypedDict):

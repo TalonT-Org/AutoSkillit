@@ -183,6 +183,72 @@ class TestNonMachineLocalWritersAreRelocatable:
         _assert_relocatable((index_dir / "rows.jsonl").read_text(encoding="utf-8"))
         _assert_relocatable((index_dir / "state.json").read_text(encoding="utf-8"))
 
+    def test_run_analysis_writers_are_relocatable_and_reuse_candidate(
+        self, tmp_path: Path
+    ) -> None:
+        from datetime import UTC, datetime
+
+        from autoskillit.execution import REPORT_INDEX_SCHEMA_VERSION
+        from autoskillit.report._analysis import (
+            finish_run_analysis,
+            prepare_run_analysis,
+            write_run_analysis_packet,
+        )
+
+        writer_names = (
+            "autoskillit.report._analysis:write_run_analysis_packet",
+            "autoskillit.report._analysis:finish_run_analysis",
+        )
+        entries = {entry.writer: entry for entry in DURABLE_ARTIFACT_WRITERS}
+        for writer in writer_names:
+            assert entries[writer].machine_local is False
+            assert entries[writer].detection is None
+            assert callable(_resolve(writer))
+
+        render_bundle = {
+            "scripts": [],
+            "css": "",
+            "template": "<!--deck:csp--><!--deck:css--><!--deck:data--><!--deck:scripts-->",
+        }
+        packet = prepare_run_analysis(
+            [],
+            index_schema_version=REPORT_INDEX_SCHEMA_VERSION,
+            render_bundle=render_bundle,
+        )
+        first_dir = tmp_path / "2026-10-11_120000"
+        first = write_run_analysis_packet(first_dir, packet)
+        candidate = {
+            "snapshot_digest": first["snapshot_digest"],
+            "interpreter": {"role": "test", "model": None, "prompt": None},
+            "findings": [
+                {
+                    "view_id": "cohort",
+                    "text": "No observations in the frozen corpus.",
+                    "evidence_ids": [],
+                }
+            ],
+        }
+        Path(first["candidate_path"]).write_text(json.dumps(candidate), encoding="utf-8")
+        finish_run_analysis(
+            first_dir,
+            analysis_generated_at=datetime(2026, 10, 11, tzinfo=UTC),
+        )
+
+        second_dir = tmp_path / "2026-10-11_120001"
+        second = write_run_analysis_packet(second_dir, packet)
+        assert second["interpretation_required"] is False
+        assert json.loads(Path(second["candidate_path"]).read_text(encoding="utf-8")) == candidate
+        finish_run_analysis(
+            second_dir,
+            analysis_generated_at=datetime(2026, 10, 11, tzinfo=UTC),
+        )
+
+        expected_files = {"measurements.json", "findings.json", "report.html", "analysis.json"}
+        for output_dir in (first_dir, second_dir):
+            assert {path.name for path in output_dir.iterdir()} == expected_files
+            for filename in expected_files:
+                _assert_relocatable((output_dir / filename).read_text(encoding="utf-8"))
+
     def test_skill_unavailability_metadata_output_is_relocatable(
         self,
         tmp_path: Path,

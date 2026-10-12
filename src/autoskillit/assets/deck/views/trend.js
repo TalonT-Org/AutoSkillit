@@ -126,6 +126,43 @@ DeckShell.registerView("trend", ctx => {
       DeckCore.formatDate(start) + " → " + DeckCore.formatDate(end);
   }
 
+  function rolloutMeasureText(measure, unit) {
+    if (!measure) return "unknown · observed sample unavailable · eligibility unavailable";
+    const value = DeckCore.measureValue(measure);
+    const sample = measure.observed_sessions ?? measure.sample_size;
+    const eligible = measure.eligible_sessions ?? measure.eligible_count;
+    const unknown = measure.unknown_sessions ?? measure.unknown_runs ??
+      measure.state_counts?.unknown;
+    const states = Object.entries(measure.state_counts ?? {}).map(([state, count]) =>
+      state + " " + DeckCore.formatCount(count)).join(", ");
+    const measureUnit = measure.unit ?? unit ?? "unit unavailable";
+    const label = measure.state === "no_observations" ? "no observations" :
+      measure.state ?? "unknown";
+    const valueText = value == null ? label +
+      (measure.reason ? ": " + measure.reason : ": value unavailable") :
+      String(value);
+    const sampleText = sample == null ? "unavailable" : DeckCore.formatCount(sample);
+    const eligibleText = eligible == null ? "unavailable" : DeckCore.formatCount(eligible);
+    const unknownText = unknown == null ? "not separate" : DeckCore.formatCount(unknown);
+    return valueText + " · unit " + measureUnit + " · observed " + sampleText +
+      " · eligible " + eligibleText + " · unknown " + unknownText +
+      (states ? " · availability " + states : "");
+  }
+
+  function rolloutDeltaText(delta) {
+    const value = DeckCore.measureValue(delta);
+    const valueText = value == null ? (delta?.state ?? "unknown") +
+      (delta?.reason ? ": " + delta.reason : "") :
+      (value === 0 ? "0" : String(Math.round(value * 100) / 100)) + " " +
+      (delta.unit ?? "unit unavailable");
+    return valueText + " · observed samples " +
+      (delta?.earlier_samples == null ? "unavailable" :
+        DeckCore.formatCount(delta.earlier_samples)) + "/" +
+      (delta?.later_samples == null ? "unavailable" :
+        DeckCore.formatCount(delta.later_samples)) + " · " +
+      delta?.guardrail;
+  }
+
   const comparisons = ctx.metrics?.comparisons ?? [];
   const comparisonRows = comparisons.flatMap(comparison => [
     ...tokenFields.map(field => ({...comparison, field, earlierMeasure: comparison.earlier?.measures?.[field],
@@ -156,8 +193,28 @@ DeckShell.registerView("trend", ctx => {
           (row.delta.earlier_samples == null ? "unavailable" :
             DeckCore.formatCount(row.delta.earlier_samples)) + "/" +
           (row.delta.later_samples == null ? "unavailable" :
-            DeckCore.formatCount(row.delta.later_samples));
+            DeckCore.formatCount(row.delta.later_samples)) + " · " +
+          row.delta.guardrail;
     }}
+  ];
+  const cohort = ctx.model.analysis?.cohort;
+  const rolloutRows = (cohort?.comparisons ?? []).map(comparison => ({
+    ...comparison,
+    group_label: Array.isArray(comparison.group) ?
+      comparison.group.map(value => value == null ? "unknown" : value).join(" · ") :
+      "unknown group"
+  }));
+  const rolloutColumns = [
+    {key: "group_label", label: "Run group"},
+    {key: "metric", label: "Measure"},
+    {key: "before", label: "Before", cell: row => ctx.el(
+      "pre", {class: "trend-rollout__measure"},
+      rolloutMeasureText(row.before, row.delta?.unit))},
+    {key: "after", label: "After", cell: row => ctx.el(
+      "pre", {class: "trend-rollout__measure"},
+      rolloutMeasureText(row.after, row.delta?.unit))},
+    {key: "delta", label: "Descriptive delta", cell: row => ctx.el("span",
+      {class: "trend-rollout__delta"}, rolloutDeltaText(row.delta))}
   ];
   const tableColumns = [
     {key: "day", label: "UTC day"},
@@ -207,6 +264,14 @@ DeckShell.registerView("trend", ctx => {
         ctx.el("a", {href: ctx.href({view: "errors"})}, "Inspect failure symptoms"),
         ctx.el("a", {href: ctx.href({view: "gaps"})}, "Inspect evidence gaps")
       ])
-    ])
+    ]),
+    cohort ? ctx.el("section", {class: "card trend-rollout"}, [
+      ctx.el("h2", {}, "Frozen rollout comparison"),
+      ctx.el("p", {class: "view-note"}, "These before/after samples and guardrails come from " +
+        "the frozen rollout cohort and do not change with the selected chart filters."),
+      rolloutRows.length ? ctx.sortableTable({columns: rolloutColumns, rows: rolloutRows,
+        defaultSort: {key: "metric", dir: "asc"}}) :
+        ctx.el("p", {class: "view-empty"}, "No retained rollout comparisons are available.")
+    ]) : null
   ]);
 });

@@ -56,6 +56,8 @@ SESSION_COLUMNS: tuple[str, ...] = (
     "key",
     "session_id",
     "time_ms",
+    "timestamp",
+    "rollout",
     "harness",
     "provider",
     "model",

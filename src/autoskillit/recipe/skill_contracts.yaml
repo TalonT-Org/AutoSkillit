@@ -2987,6 +2987,21 @@ skills:
     - "## Findings\n### confirmed_bug\n...\n---pipeline-health-result---\n%%ORDER_UP%%"
     - "Analysis complete.\n\n---\npipeline-health-result---\n%%ORDER_UP%%"
     read_only: true
+  analyze-run:
+    inputs:
+    - name: change_id
+      type: string
+      required: false
+    outputs:
+    - name: report_path
+      type: file_path
+    expected_output_patterns:
+    - "report_path[ \\t]*=[ \\t]*\\S+"
+    - "%%ORDER_UP::[a-f0-9]+%%"
+    pattern_examples:
+    - "Run analysis completed.\nreport_path = /home/operator/.autoskillit/temp/analyze-run/2026-10-11_162824_0123456789abcdef0123456789abcdef/report.html\n%%ORDER_UP::a1b2c3d4%%"
+    completion_required: true
+    write_behavior: always
 callable_contracts:
   autoskillit.smoke_utils.check_loop_iteration:
     inputs:

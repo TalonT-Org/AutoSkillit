@@ -51,6 +51,7 @@ SKILL_ADMISSION_LEDGER: dict[CatalogCombination, AdmissionRows] = {
     (SkillExecutionRole.SESSION, False): {
         "analyze-pipeline-health": {"claude-code": "admitted", "codex": "admitted"},
         "analyze-prs": {"claude-code": "admitted", "codex": "admitted"},
+        "analyze-run": {"claude-code": "admitted", "codex": "admitted"},
         "arch-lens-c4-container": {"claude-code": "admitted", "codex": "admitted"},
         "arch-lens-concurrency": {"claude-code": "admitted", "codex": "admitted"},
         "arch-lens-data-lineage": {"claude-code": "admitted", "codex": "admitted"},
@@ -120,6 +121,7 @@ SKILL_ADMISSION_LEDGER: dict[CatalogCombination, AdmissionRows] = {
     (SkillExecutionRole.SESSION, True): {
         "analyze-pipeline-health": {"claude-code": "admitted", "codex": "admitted"},
         "analyze-prs": {"claude-code": "admitted", "codex": "admitted"},
+        "analyze-run": {"claude-code": "admitted", "codex": "admitted"},
         "arch-lens-c4-container": {"claude-code": "admitted", "codex": "admitted"},
         "arch-lens-concurrency": {"claude-code": "admitted", "codex": "admitted"},
         "arch-lens-data-lineage": {"claude-code": "admitted", "codex": "admitted"},

@@ -372,6 +372,7 @@ PATH_CAPTURE_SKILLS: dict[str, list[str]] = {
     "make-groups": ["groups_path", "manifest_path", "group_files"],
     "review-approach": ["review_path"],
     "audit-impl": ["audit_semantic_result_path"],
+    "analyze-run": ["report_path"],
     "arch-lens-c4-container": ["diagram_path"],
     "arch-lens-process-flow": ["diagram_path"],
     "arch-lens-data-lineage": ["diagram_path"],

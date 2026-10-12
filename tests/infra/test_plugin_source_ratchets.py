@@ -64,6 +64,15 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Rebuilds and incompatible generations remove the watermark under the writer lease.",
     ),
     (
+        "report/_analysis.py",
+        "finish_run_analysis",
+        "(output_dir / '.candidate-findings.json').unlink",
+    ): (
+        1,
+        "Finishing a dated analysis removes its temporary candidate file during report-artifact "
+        "cleanup; this is not plugin retirement.",
+    ),
+    (
         "server/tools/tools_kitchen/_close_kitchen.py",
         "_restore_baseline_config",
         "hook_cfg_path.unlink",

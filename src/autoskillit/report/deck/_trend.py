@@ -24,6 +24,8 @@ from ._measure_helpers import (
 from ._registry import WINDOWS
 from ._view_common import DAY_MS
 
+_DELTA_GUARDRAIL = "Observed differences prompt investigation; they are not proof of causation."
+
 
 def _trend_measure_summary(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     if not rows:
@@ -178,6 +180,7 @@ def _trend_delta(
             "reason": None,
             "earlier_samples": left_samples,
             "later_samples": right_samples,
+            "guardrail": _DELTA_GUARDRAIL,
         }
     reason = (
         "earlier interval has no observed values"
@@ -191,6 +194,7 @@ def _trend_delta(
         "reason": reason,
         "earlier_samples": left_samples,
         "later_samples": right_samples,
+        "guardrail": _DELTA_GUARDRAIL,
     }
 
 

@@ -299,6 +299,7 @@ skills:
     - pipeline-summary
     - diagnose-ci
     - analyze-pipeline-health
+    - analyze-run
     - file-audit-issues
     - verify-diag
     - prepare-research-pr

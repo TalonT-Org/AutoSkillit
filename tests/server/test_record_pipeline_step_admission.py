@@ -473,19 +473,11 @@ def test_record_pipeline_step_docstring_pins_init_admission_guidance() -> None:
     assert "create-only" in docstring
     assert "run_skill" in docstring
     assert "optional" in docstring
-    sentences = tuple(sentence.strip() for sentence in docstring.split("."))
-    dependency_guidance = next(
-        (
-            sentence
-            for sentence in sentences
-            if "preflight:pipeline_tracker_dependencies" in sentence
-        ),
-        "",
+    _, dependency_guidance = docstring.split("preflight:pipeline_tracker_dependencies", 1)
+    dependency_guidance, initialization_guidance = dependency_guidance.split(
+        "pipeline_tracker:init", 1
     )
-    initialization_guidance = next(
-        (sentence for sentence in sentences if "pipeline_tracker:init" in sentence),
-        "",
-    )
+    initialization_guidance = initialization_guidance.split('**op="status"**', 1)[0]
     assert dependency_guidance
     assert any(word in dependency_guidance for word in ("revis", "omit"))
     assert "supplied" in dependency_guidance

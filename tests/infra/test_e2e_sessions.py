@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 
+from autoskillit.core import DIRECT_PREFIX, PLUGIN_PREFIX
 from tests.infra._complexity_helpers import load_check_script
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
@@ -138,7 +139,13 @@ def _base_sessions(
     return log_root, trace, child_transcript
 
 
-def _tool_use(tool_id: str, name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
+def _tool_use(
+    tool_id: str,
+    name: str,
+    tool_input: dict[str, Any],
+    *,
+    prefix: str = PLUGIN_PREFIX,
+) -> dict[str, Any]:
     return {
         "type": "assistant",
         "message": {
@@ -146,7 +153,7 @@ def _tool_use(tool_id: str, name: str, tool_input: dict[str, Any]) -> dict[str, 
                 {
                     "type": "tool_use",
                     "id": tool_id,
-                    "name": f"mcp__autoskillit__{name}",
+                    "name": f"{prefix}{name}",
                     "input": tool_input,
                 }
             ]
@@ -154,19 +161,55 @@ def _tool_use(tool_id: str, name: str, tool_input: dict[str, Any]) -> dict[str, 
     }
 
 
-def _tool_result(tool_id: str, result: dict[str, Any]) -> dict[str, Any]:
-    return {
+def _tool_result(
+    tool_id: str,
+    result: dict[str, Any],
+    *,
+    carrier: str = "mcp_meta",
+) -> dict[str, Any]:
+    display = "tool reply\n\nsuccess: True"
+    if carrier == "mcp_meta" or carrier == "display_only":
+        content = display
+    elif carrier == "block_json":
+        content = json.dumps(result)
+    else:
+        raise ValueError(f"unsupported tool result carrier: {carrier}")
+
+    row: dict[str, Any] = {
         "type": "user",
         "message": {
             "content": [
                 {
                     "type": "tool_result",
                     "tool_use_id": tool_id,
-                    "content": json.dumps(result),
+                    "content": content,
                 }
             ]
         },
     }
+    if carrier == "mcp_meta":
+        row["mcpMeta"] = {
+            "_meta": {"fastmcp": {"wrap_result": True}},
+            "structuredContent": {"result": json.dumps(result)},
+        }
+    return row
+
+
+def _root_ownership_proof(
+    tmp_path: Path,
+    records: list[dict[str, Any]],
+) -> dict[str, Any]:
+    log_root, trace, _ = _base_sessions(tmp_path)
+    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    _jsonl(root_transcript, records)
+    _trace(
+        trace,
+        [
+            _event("SessionStart", ROOT_ID, 1, transcript=root_transcript),
+            _event("SessionEnd", ROOT_ID, 2, transcript=root_transcript),
+        ],
+    )
+    return sessions.collect_ownership(trace, _envelope(), log_root, ISSUE_URL, REPOSITORY)
 
 
 def test_hook_capture_appends_concurrent_allow_listed_records(tmp_path: Path) -> None:
@@ -613,3 +656,193 @@ def test_ownership_isolates_branch_and_claim_scenarios(
         ]
     else:
         assert proof["violations"] == []
+
+
+@pytest.mark.parametrize("prefix", [DIRECT_PREFIX, PLUGIN_PREFIX])
+def test_ownership_accepts_both_canonical_namespaces(tmp_path: Path, prefix: str) -> None:
+    proof = _root_ownership_proof(
+        tmp_path,
+        [
+            _tool_use(
+                "claim",
+                "claim_and_resolve_issue",
+                {"issue_url": ISSUE_URL, "allow_reentry": False},
+                prefix=prefix,
+            ),
+            _tool_result("claim", {"success": True, "claimed": True, "issue_number": 5233}),
+            _tool_use(
+                "branch",
+                "create_and_publish_branch",
+                {
+                    "issue_number": "5233",
+                    "remote_url": "https://github.com/owner/repo.git",
+                },
+                prefix=prefix,
+            ),
+            _tool_result("branch", {"merge_target": "impl/5233-fix", "was_unique": True}),
+        ],
+    )
+
+    assert proof["branches"] == ["impl/5233-fix"]
+    assert proof["claimed"] is True
+    assert proof["violations"] == []
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "create_and_publish_branch",
+        "mcp__other__create_and_publish_branch",
+        f"{PLUGIN_PREFIX}extra__create_and_publish_branch",
+    ],
+)
+def test_tracked_tool_under_another_namespace_is_reported(tmp_path: Path, name: str) -> None:
+    proof = _root_ownership_proof(
+        tmp_path,
+        [
+            _tool_use(
+                "branch",
+                name,
+                {
+                    "issue_number": "5233",
+                    "remote_url": "https://github.com/owner/repo.git",
+                },
+                prefix="",
+            ),
+            _tool_result("branch", {"merge_target": "impl/5233-fix"}),
+        ],
+    )
+
+    assert proof["branches"] == []
+    assert f"transcript:{ROOT_ID}:unrecognised_tool_namespace:1" in proof["violations"]
+
+
+@pytest.mark.parametrize("carrier", ["mcp_meta", "block_json"])
+def test_reply_is_read_from_each_supported_carrier(tmp_path: Path, carrier: str) -> None:
+    proof = _root_ownership_proof(
+        tmp_path,
+        [
+            _tool_use(
+                "branch",
+                "create_and_publish_branch",
+                {
+                    "issue_number": "5233",
+                    "remote_url": "https://github.com/owner/repo.git",
+                },
+            ),
+            _tool_result("branch", {"merge_target": "impl/5233-fix"}, carrier=carrier),
+        ],
+    )
+
+    assert proof["branches"] == ["impl/5233-fix"]
+    assert proof["violations"] == []
+
+
+def test_non_json_display_text_proves_no_reply(tmp_path: Path) -> None:
+    result_row = _tool_result(
+        "branch",
+        {"merge_target": "impl/evil"},
+        carrier="display_only",
+    )
+    result_row["message"]["content"][0]["content"] += "\nmerge_target: impl/evil"
+    proof = _root_ownership_proof(
+        tmp_path,
+        [
+            _tool_use(
+                "branch",
+                "create_and_publish_branch",
+                {
+                    "issue_number": "5233",
+                    "remote_url": "https://github.com/owner/repo.git",
+                },
+            ),
+            result_row,
+        ],
+    )
+
+    assert proof["branches"] == []
+    assert "ownership:branch_result_failed" in proof["violations"]
+
+
+def test_invalid_row_metadata_does_not_fall_back_to_block_json(tmp_path: Path) -> None:
+    result_row = _tool_result(
+        "branch",
+        {"merge_target": "impl/5233-fix"},
+        carrier="block_json",
+    )
+    result_row["mcpMeta"] = {
+        "_meta": {"fastmcp": {"wrap_result": True}},
+        "structuredContent": {"result": "not json"},
+    }
+    proof = _root_ownership_proof(
+        tmp_path,
+        [
+            _tool_use(
+                "branch",
+                "create_and_publish_branch",
+                {
+                    "issue_number": "5233",
+                    "remote_url": "https://github.com/owner/repo.git",
+                },
+            ),
+            result_row,
+        ],
+    )
+
+    assert proof["branches"] == []
+    assert "ownership:branch_result_failed" in proof["violations"]
+
+
+def test_row_level_reply_is_ignored_when_a_row_holds_several_results(tmp_path: Path) -> None:
+    result = {"merge_target": "impl/5233-fix"}
+    proof = _root_ownership_proof(
+        tmp_path,
+        [
+            _tool_use(
+                "branch",
+                "create_and_publish_branch",
+                {
+                    "issue_number": "5233",
+                    "remote_url": "https://github.com/owner/repo.git",
+                },
+            ),
+            _tool_use("claim", "claim_and_resolve_issue", {"issue_url": "https://example.com"}),
+            {
+                "type": "user",
+                "message": {
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "branch",
+                            "content": "tool reply\n\nsuccess: True",
+                        },
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "claim",
+                            "content": "tool reply\n\nsuccess: True",
+                        },
+                    ]
+                },
+                "mcpMeta": {
+                    "_meta": {"fastmcp": {"wrap_result": True}},
+                    "structuredContent": {"result": json.dumps(result)},
+                },
+            },
+        ],
+    )
+
+    assert proof["branches"] == []
+    assert "ownership:branch_result_failed" in proof["violations"]
+
+
+def test_untracked_merge_target_reply_is_not_a_branch(tmp_path: Path) -> None:
+    proof = _root_ownership_proof(
+        tmp_path,
+        [
+            _tool_use("clone", "bootstrap_clone", {}),
+            _tool_result("clone", {"merge_target": "main"}),
+        ],
+    )
+
+    assert proof["branches"] == []
+    assert proof["violations"] == []

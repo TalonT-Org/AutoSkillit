@@ -1,0 +1,114 @@
+{
+  "kind": "completed",
+  "success": false,
+  "dispatch_status": "resumable",
+  "dispatch_id": "4666c3fd-486f-4ce1-b51f-9d9d660a5560",
+  "dispatched_session_id": "2292658a-34cf-44a0-a0b1-f7a20218874b",
+  "reason": "fleet_l3_no_result_block",
+  "effect_provenance": {
+    "operation_id": "b6908330d53b40b98656d73e3a8fdb05",
+    "aggregate_phase": "started",
+    "retry_disposition": "resume_by_identity",
+    "effects": [
+      {
+        "name": "campaign_state_write",
+        "phase": "confirmed",
+        "effect_id": "b6908330d53b40b98656d73e3a8fdb05:campaign_state_write",
+        "retry_relevant": true,
+        "confirmation_receipt": "per-dispatch state and captures persisted",
+        "known_downstream_identities": {
+          "dispatch_id": "4666c3fd-486f-4ce1-b51f-9d9d660a5560",
+          "state_path": "/workspace/sandbox/.autoskillit/temp/dispatches/4666c3fd-486f-4ce1-b51f-9d9d660a5560.json"
+        },
+        "ambiguity": ""
+      },
+      {
+        "name": "child_discovery",
+        "phase": "confirmed",
+        "effect_id": "b6908330d53b40b98656d73e3a8fdb05:child_discovery",
+        "retry_relevant": true,
+        "confirmation_receipt": "captured one process identity tuple",
+        "known_downstream_identities": {
+          "boot_id": "95f60de8-f823-4b7a-abc9-9e3f15310bc6",
+          "create_time": "1791749076.16",
+          "dispatch_id": "4666c3fd-486f-4ce1-b51f-9d9d660a5560",
+          "identity_degraded": "False",
+          "pid": "106",
+          "starttime_ticks": "15116"
+        },
+        "ambiguity": ""
+      },
+      {
+        "name": "dispatch_allocation",
+        "phase": "confirmed",
+        "effect_id": "b6908330d53b40b98656d73e3a8fdb05:dispatch_allocation",
+        "retry_relevant": true,
+        "confirmation_receipt": "per-dispatch state identity persisted",
+        "known_downstream_identities": {
+          "dispatch_id": "4666c3fd-486f-4ce1-b51f-9d9d660a5560",
+          "state_path": "/workspace/sandbox/.autoskillit/temp/dispatches/4666c3fd-486f-4ce1-b51f-9d9d660a5560.json"
+        },
+        "ambiguity": ""
+      },
+      {
+        "name": "process_spawn",
+        "phase": "confirmed",
+        "effect_id": "b6908330d53b40b98656d73e3a8fdb05:process_spawn",
+        "retry_relevant": true,
+        "confirmation_receipt": "executor reported spawned process and authoritative session identity",
+        "known_downstream_identities": {
+          "dispatch_id": "4666c3fd-486f-4ce1-b51f-9d9d660a5560",
+          "dispatched_session_id": "2292658a-34cf-44a0-a0b1-f7a20218874b",
+          "pid": "106",
+          "starttime_ticks": "15116"
+        },
+        "ambiguity": ""
+      }
+    ],
+    "cancel_requested": false,
+    "local_cleanup": null,
+    "state_cleanup_confirmed": false,
+    "labels_cleanup_confirmed": false
+  },
+  "token_usage": {
+    "backend": "claude-code",
+    "provider_used": "anthropic",
+    "input_tokens": {
+      "state": "measured",
+      "value": 205063
+    },
+    "output_tokens": {
+      "state": "measured",
+      "value": 39864
+    },
+    "cache_read_tokens": {
+      "state": "measured",
+      "value": 11571251
+    },
+    "cache_write_tokens": {
+      "state": "measured_zero",
+      "value": 0
+    },
+    "peak_context": {
+      "state": "unknown",
+      "value": null
+    }
+  },
+  "l3_payload": null,
+  "l3_parse_source": "stdout",
+  "lifespan_started": true,
+  "stderr": "",
+  "elapsed_seconds": 708.0250108242035,
+  "error": "fleet_l3_no_result_block",
+  "user_visible_message": "fleet_l3_no_result_block",
+  "resume_checkpoint": {
+    "completed_items": [
+      "plan"
+    ],
+    "step_name": "plan",
+    "progress_pct": 0.007407407407407408,
+    "ts": "2026-10-11T20:07:18.776245+00:00",
+    "backend_name": "claude-code",
+    "skill_name": "implementation"
+  }
+}

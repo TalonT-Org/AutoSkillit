@@ -311,7 +311,19 @@ must be `main`. No caller `base_branch` ingredient is sent. Sandbox setup and ba
 must succeed before launch.
 
 Paired root transcript tool calls/results prove the created branch; paired root/managed
-claim results prove any added claim label. Discovery paginates through the PR baseline
+claim results prove any added claim label. The collector accepts the direct
+`mcp__autoskillit__` and plugin `mcp__plugin_autoskillit_autoskillit__` namespaces;
+a tracked tool under any other namespace fails the proof. Claude Code persisted
+transcripts carry replies in row-level `mcpMeta.structuredContent` when `mcpMeta`
+is present, otherwise in JSON block content. Malformed metadata or metadata on a
+row with several results fails the paired resource call. Hook display text never
+replaces unusable metadata. The pretty-output hook emits `updatedMCPToolOutput`;
+`_result_object` remains the shared envelope decoder, and metadata presence alone
+does not identify whether the hook ran. These shapes are pinned by
+`tests/infra/fixtures/e2e_sessions/` from Claude Code 2.1.280; re-capture them when
+an otherwise successful call reports a failed branch or claim result.
+
+Discovery paginates through the PR baseline
 and leaves unrelated PRs untouched. Require exactly one owned open, unmerged sandbox PR
 targeting `main`, without auto-merge, with the canonical seed URL and non-removed changes
 under both `sandbox/` and `tests/`. Fetch and detach at the captured head before setup and

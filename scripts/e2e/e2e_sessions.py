@@ -17,6 +17,12 @@ from urllib.parse import urlsplit
 _SESSION_EVENTS = frozenset({"SessionStart", "SessionEnd"})
 _AGENT_EVENTS = frozenset({"SubagentStart", "SubagentStop"})
 _LIFECYCLE_EVENTS = _SESSION_EVENTS | _AGENT_EVENTS
+# Pinned to product prefixes by tests/arch/test_e2e_sessions_contract.py.
+_AUTOSKILLIT_SERVERS = frozenset(
+    {("mcp", "autoskillit"), ("mcp", "plugin_autoskillit_autoskillit")}
+)
+_RESOURCE_TOOLS = frozenset({"claim_and_resolve_issue", "create_and_publish_branch"})
+_TRACKED_TOOLS = _RESOURCE_TOOLS
 _MAX_HOOK_INPUT_BYTES = 65_536
 _MAX_TRACE_RECORD_BYTES = 8_192
 
@@ -673,6 +679,21 @@ def _transcript_tool_pairs(
     return paired
 
 
+def _receipt(
+    row: Mapping[str, Any], content: list[Any], block: Mapping[str, Any]
+) -> dict[str, Any] | None:
+    """Decode row metadata when present, otherwise decode the JSON block carrier."""
+    meta = row.get("mcpMeta")
+    results = [
+        item for item in content if isinstance(item, dict) and item.get("type") == "tool_result"
+    ]
+    if "mcpMeta" in row:
+        if len(results) != 1 or not isinstance(meta, dict):
+            return None
+        return _result_object(meta.get("structuredContent"))
+    return _result_object(block.get("content"))
+
+
 def _pair_record(
     row: dict[str, Any],
     line_number: int,
@@ -697,7 +718,7 @@ def _pair_record(
             tool_id = block.get("tool_use_id")
             if isinstance(tool_id, str) and tool_id in pending:
                 name, tool_input = pending.pop(tool_id)
-                result = _result_object(block.get("content"))
+                result = _receipt(row, content, block)
                 paired.append((name, tool_input, result, block.get("is_error") is True))
 
 
@@ -711,8 +732,12 @@ def _remember_tool_use(
     name = block.get("name")
     if not isinstance(name, str):
         return
-    name = name.removeprefix("mcp__autoskillit__")
-    if name not in {"claim_and_resolve_issue", "create_and_publish_branch"}:
+    parts = tuple(name.split("__"))
+    tool = parts[-1]
+    if tool not in _TRACKED_TOOLS:
+        return
+    if len(parts) != 3 or parts[:2] not in _AUTOSKILLIT_SERVERS:
+        violations.append(f"transcript:{prefix}:unrecognised_tool_namespace:{line_number}")
         return
     tool_id, tool_input = block.get("id"), block.get("input")
     if not isinstance(tool_id, str) or not tool_id or not isinstance(tool_input, dict):
@@ -720,7 +745,7 @@ def _remember_tool_use(
         return
     if tool_id in pending:
         violations.append(f"transcript:{prefix}:duplicate_tool_use:{line_number}")
-    pending[tool_id] = (name, tool_input)
+    pending[tool_id] = (tool, tool_input)
 
 
 def collect_ownership(

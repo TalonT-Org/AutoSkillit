@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -13,8 +14,10 @@ import autoskillit.core.plugins._active_kitchens as _patch_plugins__active_kitch
 from autoskillit.core import (
     ArtifactLease,
     ArtifactLeaseContention,
+    FinalizedRecipeStep,
     TrackerAuthorityReadResult,
     TrackerAuthorityTarget,
+    TrackerInitialization,
     TrackerParticipantKey,
     initialize_kitchen_tracker,
     initialize_manual_tracker,
@@ -56,6 +59,20 @@ def _tracker(*, kitchen_id: str = "kitchen-1"):
         "steps": {"prepare": {"status": "pending"}},
         "dependencies": {"prepare": []},
     }
+
+
+def _initialization(
+    *step_names: str,
+    kitchen_id: str = "order-1",
+    dependencies: Mapping[str, Sequence[str]] | None = None,
+) -> TrackerInitialization:
+    return TrackerInitialization(
+        kitchen_id=kitchen_id,
+        recipe_steps={
+            name: FinalizedRecipeStep(name=name, tool="run_skill") for name in step_names
+        },
+        dependencies={} if dependencies is None else dependencies,
+    )
 
 
 def _registry(monkeypatch, tmp_path, payload: object | None) -> None:
@@ -158,11 +175,12 @@ def test_locked_initialization_and_mutation_preserve_invalid_existing_bytes(tmp_
     target.path.parent.mkdir(parents=True, exist_ok=True)
     target.path.write_bytes(b"{broken")
     try:
-        kitchen_result = initialize_kitchen_tracker(target, lease, _tracker())
+        initialization = _initialization("prepare", kitchen_id=target.target_order_id)
+        kitchen_result = initialize_kitchen_tracker(target, lease, initialization)
         assert kitchen_result.error is not None
         assert target.path.read_bytes() == b"{broken"
 
-        manual_result = initialize_manual_tracker(target, lease, _tracker())
+        manual_result = initialize_manual_tracker(target, lease, initialization)
         assert "create-only" in (manual_result.error or "")
         assert target.path.read_bytes() == b"{broken"
 
@@ -232,12 +250,17 @@ def test_kitchen_merge_preserves_progress_and_manual_init_is_create_only(tmp_pat
     leases = {}
     lease = retain_tracker_lease(leases, _key(target, tmp_path, "manual"))
     try:
-        initial = _tracker()
-        assert initialize_manual_tracker(target, lease, initial).data == initial
+        initial = _initialization("prepare", kitchen_id=target.target_order_id)
+        created = initialize_manual_tracker(target, lease, initial)
+        assert created.data is not None
+        assert created.data["pipeline_id"] == target.target_order_id
+        assert created.data["kitchen_id"] == target.target_order_id
+        assert created.data["steps"] == {"prepare": {"status": "pending"}}
+        assert created.data["dependencies"] == {}
+        assert created.data["tracker_incarnation_id"]
         assert initialize_manual_tracker(target, lease, initial).error is not None
 
-        incoming = _tracker()
-        incoming["steps"]["new"] = {"status": "pending"}
+        incoming = _initialization("new", "prepare", kitchen_id=target.target_order_id)
         current = json.loads(target.path.read_text())
         current["steps"]["prepare"] = {"status": "complete"}
         target.path.write_text(json.dumps(current))
@@ -255,16 +278,26 @@ def test_kitchen_merge_recomputes_dependencies_and_preserves_progress(tmp_path):
     target = _target(tmp_path, expected=False)
     lease = retain_tracker_lease({}, _key(target, tmp_path))
     try:
-        initial = _tracker()
-        initial["dependencies"] = {"dry_walkthrough": ["make_plan"]}
-        assert initialize_kitchen_tracker(target, lease, initial).data == initial
+        steps = ("prepare", "dry_walkthrough", "make_plan")
+        initial = _initialization(
+            *steps,
+            kitchen_id=target.target_order_id,
+            dependencies={"dry_walkthrough": ["make_plan"]},
+        )
+        created = initialize_kitchen_tracker(target, lease, initial)
+        assert created.data is not None
+        assert created.data["steps"] == {
+            "prepare": {"status": "pending"},
+            "dry_walkthrough": {"status": "pending"},
+            "make_plan": {"status": "pending"},
+        }
+        assert created.data["dependencies"] == {"dry_walkthrough": ["make_plan"]}
 
         current = json.loads(target.path.read_text())
         current["steps"]["prepare"] = {"status": "complete"}
         target.path.write_text(json.dumps(current))
 
-        refreshed = _tracker()
-        refreshed["dependencies"] = {}
+        refreshed = _initialization(*steps, kitchen_id=target.target_order_id)
         result = initialize_kitchen_tracker(target, lease, refreshed)
 
         assert result.data is not None

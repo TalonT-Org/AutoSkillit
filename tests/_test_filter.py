@@ -1362,6 +1362,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_open_kitchen_type_enforcement.py",
             "server/test_tools_kitchen_sous_chef.py",
             "server/test_open_kitchen_auto_init_tracker.py",
+            "server/test_record_pipeline_step_complete.py",
             "server/test_tools_execution_input_gates_cross_binding.py",
             "server/test_tools_execution_input_gates_real_contracts.py",
             # Skills file-level entry that exercises plan-set skill-contract wiring:

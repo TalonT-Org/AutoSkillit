@@ -247,7 +247,8 @@ may leave no evidence or only partial evidence.
 
 Pipeline evidence includes `session-events.jsonl`, `session-concurrency.json`, compact
 `ownership.json`, the seed, effective configuration, fleet stdout/stderr/envelope, captured
-PR metadata/files, detached-head test commands and associated CI runs/jobs. Collection
+PR metadata/files, detached-head test commands, associated CI runs/jobs, and sandbox head-ref
+listings before the run and after cleanup (`head-refs-before.*`, `head-refs-after.*`). Collection
 occurs inside the container before transcript paths disappear. Incomplete evidence is
 retained and fails the scenario; redaction and upload still run after failure.
 
@@ -346,6 +347,17 @@ closes owned open PRs, deletes evidenced branches (including branches without a 
 removes only the effective claim label proven added by this run. The seed remains OPEN
 and other labels are preserved. Missing ownership proof preserves uncertain resources and
 fails cleanup. Cleanup errors remain fatal alongside the original failure.
+
+Branch reconciliation lists the sandbox's branches before the run and after cleanup.
+A branch created during the run that `ownership.json` does not explain is preserved
+and fails cleanup; baseline branches are excluded from unexplained-branch reports.
+Branches named by the ownership proof retain the existing cleanup rule. The original
+API stdout saved as `head-refs-before.stdout.txt` and `head-refs-after.stdout.txt` supplies
+the in-memory snapshots; accompanying stderr and command records diagnose failed requests.
+This check only detects unexplained branches: the creating run records the failure once,
+and the branch and any PR on it must be removed by hand. The next run includes it in
+its baseline. A manual run overlapping CI can trigger the check because CI serialization
+does not cover local runs.
 
 ## Catalog schema
 

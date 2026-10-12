@@ -258,7 +258,7 @@ def test_kitchen_initialization_rejects_a_different_target_id(tmp_path):
     target = _target(tmp_path, "p", expected=False)
     lease = retain_tracker_lease({}, _key(target, tmp_path, "kitchen"))
     try:
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="kitchen_id 'other-kitchen'.*target id 'p'"):
             initialize_kitchen_tracker(
                 target,
                 lease,

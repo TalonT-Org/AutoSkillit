@@ -531,7 +531,10 @@ def initialize_kitchen_tracker(
             f"initialization must be a TrackerInitialization; got {type(initialization).__name__}"
         )
     if initialization.kitchen_id != target.target_order_id:
-        raise ValueError("kitchen_id must match the tracker target id")
+        raise ValueError(
+            f"kitchen_id {initialization.kitchen_id!r} must match "
+            f"the tracker target id {target.target_order_id!r}"
+        )
     incoming = _validate_tracker_data(
         initialization.tracker_data(pipeline_id=target.target_order_id)
     )

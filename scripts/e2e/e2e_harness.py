@@ -973,6 +973,31 @@ def _api_pages(endpoint: str, env: Mapping[str, str], runner: Runner, evidence: 
     return pages
 
 
+def list_head_refs(
+    repository: str, out: Path, env: Mapping[str, str], runner: Runner, stage: str
+) -> frozenset[str]:
+    """Return the branch names currently present in the sandbox repository."""
+    pages = _api_pages(
+        f"repos/{repository}/git/matching-refs/heads/", env, runner, out / f"head-refs-{stage}"
+    )
+    if not pages:
+        raise ValueError("head-ref listing must contain a page")
+    refs: set[str] = set()
+    for page in pages:
+        if not isinstance(page, list):
+            raise ValueError("head-ref listing page must be an array")
+        for row in page:
+            ref = row.get("ref") if isinstance(row, dict) else None
+            if (
+                not isinstance(ref, str)
+                or not ref.startswith("refs/heads/")
+                or ref == "refs/heads/"
+            ):
+                raise ValueError("head-ref listing must contain nonempty refs/heads/ objects")
+            refs.add(ref.removeprefix("refs/heads/"))
+    return frozenset(refs)
+
+
 def prepare_seed(
     test: e2e_catalog.CatalogTest,
     repository: str,
@@ -1329,9 +1354,29 @@ def release_owned_claim(
     return failures
 
 
+def unexplained_branch_failures(
+    repository: str,
+    head_refs: frozenset[str],
+    proof: Mapping[str, Any],
+    out: Path,
+    env: Mapping[str, str],
+    runner: Runner,
+) -> list[str]:
+    """Report branches created during the run that the ownership proof does not explain."""
+    try:
+        current = list_head_refs(repository, out, env, runner, "after")
+    except Exception as exc:
+        return [f"cleanup refs: {exc}"]
+    return [
+        f"cleanup: branch {branch} was created during this run without ownership proof"
+        for branch in sorted(current - head_refs - set(proof["branches"]))
+    ]
+
+
 def cleanup_implementation(
     repository: str,
     baseline: int,
+    head_refs: frozenset[str],
     proof: Mapping[str, Any],
     seed: Mapping[str, Any],
     label: str,
@@ -1356,6 +1401,7 @@ def cleanup_implementation(
             delete_owned_branch(repository, branch, env, runner)
         except Exception as exc:
             failures.append(f"cleanup branch: {exc}")
+    failures += unexplained_branch_failures(repository, head_refs, proof, out, env, runner)
     try:
         failures += release_owned_claim(proof, seed, label, out, env, runner)
     except Exception as exc:
@@ -1405,6 +1451,7 @@ def run_recipe(
     if test.recipe_fixture is not None:
         return run_smoke_recipe(test, repository, out, env, runner)
     seed: dict[str, Any] = {}
+    head_refs: frozenset[str] = frozenset()
     ingredients = dict(test.ingredients)
     label = ""
     home = home or Path.home()
@@ -1413,6 +1460,7 @@ def run_recipe(
         try:
             seed, ingredients, label = prepare_seed(test, repository, out, env, runner)
             if test.pipeline:
+                head_refs = list_head_refs(repository, out, env, runner, "before")
                 trace.write_text("", encoding="utf-8")
                 install_session_hooks(home, trace)
         except Exception as exc:
@@ -1423,7 +1471,7 @@ def run_recipe(
     if not test.pipeline:
         return launch_regular_recipe(test, repository, baseline, ingredients, out, env, runner)
     return launch_recipe(
-        test, repository, baseline, seed, ingredients, label, out, home, env, runner
+        test, repository, baseline, head_refs, seed, ingredients, label, out, home, env, runner
     )
 
 
@@ -1473,6 +1521,7 @@ def finish_pipeline(
     test: e2e_catalog.CatalogTest,
     repository: str,
     baseline: int,
+    head_refs: frozenset[str],
     seed: Mapping[str, Any],
     label: str,
     out: Path,
@@ -1500,7 +1549,9 @@ def finish_pipeline(
         except Exception as exc:
             failures.append(f"cleanup ownership: {exc}")
     proof = proof or {"branches": [], "claimed": False}
-    failures += cleanup_implementation(repository, baseline, proof, seed, label, out, env, runner)
+    failures += cleanup_implementation(
+        repository, baseline, head_refs, proof, seed, label, out, env, runner
+    )
     return failures
 
 
@@ -1508,6 +1559,7 @@ def launch_recipe(
     test: e2e_catalog.CatalogTest,
     repository: str,
     baseline: int,
+    head_refs: frozenset[str],
     seed: Mapping[str, Any],
     ingredients: Mapping[str, str],
     label: str,
@@ -1548,7 +1600,18 @@ def launch_recipe(
         failures.append(f"harness error: {exc}")
     finally:
         failures += finish_pipeline(
-            test, repository, baseline, seed, label, out, home, env, runner, envelope, proof
+            test,
+            repository,
+            baseline,
+            head_refs,
+            seed,
+            label,
+            out,
+            home,
+            env,
+            runner,
+            envelope,
+            proof,
         )
     return match_recipe_findings(failures, findings, test.expected_failures)
 

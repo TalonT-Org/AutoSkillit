@@ -724,10 +724,12 @@ def _receipt(
 ) -> dict[str, Any] | None:
     """Decode row metadata when present, otherwise decode the JSON block carrier."""
     meta = row.get("mcpMeta")
-    results = [
-        item for item in content if isinstance(item, dict) and item.get("type") == "tool_result"
-    ]
     if "mcpMeta" in row:
+        results = [
+            item
+            for item in content
+            if isinstance(item, dict) and item.get("type") == "tool_result"
+        ]
         if len(results) != 1 or not isinstance(meta, dict):
             return None
         return _result_object(meta.get("structuredContent"))

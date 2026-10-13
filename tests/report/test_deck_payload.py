@@ -340,6 +340,17 @@ def test_encode_table_aligns_rows_to_columns_and_fills_missing_keys() -> None:
     assert encoded["rows"][0][SESSION_COLUMNS.index("harness")] is None
 
 
+def test_session_table_preserves_original_timestamp_and_rollout_json() -> None:
+    timestamp = "2026-09-01T00:00:00.123400Z"
+    rollout = {"change_id": "change-1", "scope": {"skills": ["make-plan"]}}
+    payload = _payload([_row("session-1", timestamp=timestamp, rollout=rollout)])
+    table = payload["tables"][SESSION_TABLE]
+    row = dict(zip(table["columns"], table["rows"][0], strict=True))
+
+    assert row["timestamp"] == timestamp
+    assert row["rollout"] == rollout
+
+
 def test_payload_orders_rows_by_timestamp_then_key_and_handles_epoch() -> None:
     rows = [
         _row("late", time_ms=2),

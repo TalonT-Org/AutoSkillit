@@ -6,11 +6,11 @@ pipeline tracker before the first recipe projection is served.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 
 from autoskillit.core import (
     TrackerAuthorityTarget,
+    TrackerInitialization,
     get_logger,
     initialize_kitchen_tracker,
     pipeline_tracker_directory,
@@ -25,7 +25,7 @@ from autoskillit.server._tracker_authority import (
     _retain_kitchen_tracker_authority,
     try_retire_tracker,
 )
-from autoskillit.server.tools._pipeline_deps import _derive_phase_a_deps
+from autoskillit.server.tools._pipeline_deps import _tracker_dependencies
 from autoskillit.server.tools.tools_kitchen._open_kitchen_errors import (
     _kitchen_failure_envelope,
 )
@@ -65,7 +65,7 @@ def _auto_init_pipeline_tracker(tool_ctx: ToolContext) -> str | None:
     if not active_steps or projection is None:
         return None
     try:
-        deps = _derive_phase_a_deps(projection)
+        deps = _tracker_dependencies(projection)
     except Exception:
         logger.warning("pipeline_tracker_auto_init_deps_failed", exc_info=True)
         return None
@@ -81,16 +81,13 @@ def _auto_init_pipeline_tracker(tool_ctx: ToolContext) -> str | None:
             return None
 
     key, lease = _retain_kitchen_tracker_authority(tool_ctx)
-    steps: dict[str, dict[str, str]] = {name: {"status": "pending"} for name in active_steps}
-    tracker_data = {
-        "kitchen_id": tool_ctx.kitchen_id,
-        "pipeline_id": tool_ctx.kitchen_id,
-        "steps": steps,
-        "dependencies": dict(deps),
-        "initialized_at": datetime.now(UTC).isoformat(),
-    }
     try:
-        result = initialize_kitchen_tracker(key.target, lease, tracker_data)
+        initialization = TrackerInitialization(
+            kitchen_id=tool_ctx.kitchen_id,
+            recipe_steps=active_steps,
+            dependencies=deps,
+        )
+        result = initialize_kitchen_tracker(key.target, lease, initialization)
     except Exception:
         _release_kitchen_tracker_authority(tool_ctx, unregister=False, retire=False)
         raise

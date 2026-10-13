@@ -551,8 +551,8 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_managed_worker_capacity": frozenset({"cli", "core", "fleet", "server"}),
     "tool_sequence_analysis": frozenset({"core", "execution", "fleet", "server", "cli"}),
     "_type_checkpoint": frozenset({"core", "execution", "fleet", "server"}),
-    "_type_results": _TYPE_RESULTS_CASCADE,
-    "_type_results_records": _TYPE_RESULTS_CASCADE | {"config"},
+    "_type_results": _TYPE_RESULTS_CASCADE | {"config", "report"},
+    "_type_results_records": _TYPE_RESULTS_CASCADE | {"config", "report"},
     "_type_results_execution": frozenset({"core", "execution", "server", "pipeline"}),
     "_type_execution_identity": frozenset(
         {"core", "execution", "server", "cli", "fleet", "smoke_utils"}
@@ -1183,6 +1183,10 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # file-level: the deck column drift guard imports
             # execution._report_index_types.ReportSessionRow.
             "report/test_deck_registry.py",
+            # file-level: run-analysis packet and publication contracts import the
+            # report-index schema version from execution.
+            "report/test_run_analysis.py",
+            "report/test_run_analysis_publication.py",
             "_llm_triage",
             "smoke_utils",
         }
@@ -1362,6 +1366,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_open_kitchen_type_enforcement.py",
             "server/test_tools_kitchen_sous_chef.py",
             "server/test_open_kitchen_auto_init_tracker.py",
+            "server/test_record_pipeline_step_complete.py",
             "server/test_tools_execution_input_gates_cross_binding.py",
             "server/test_tools_execution_input_gates_real_contracts.py",
             # Skills file-level entry that exercises plan-set skill-contract wiring:

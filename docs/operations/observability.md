@@ -171,9 +171,10 @@ while observing after runs. Clear `active` when the observation period ends. Use
 new `change_id` for a revised prediction, scope, or cutover. Code validates each
 declaration and preserves each admitted run's snapshot; operators maintain stability
 across independent runs. Recording the prediction beforehand distinguishes intended
-effects from explanations developed after seeing outcomes. A pre-cutover marked
-row supplies that evidence; a current configuration or first after row alone does
-not establish preregistration.
+effects from explanations developed after seeing outcomes. A pre-cutover marked row
+is a baseline sample, but its logical start time does not prove when the prediction
+was registered. Keep contemporaneous evidence if preregistration matters; neither
+the current configuration nor the first after row establishes it.
 
 Summary and index records store the same nested `rollout` object with normalized
 UTC `effective_at`. Capture happens immediately before the first admitted launch;
@@ -239,6 +240,94 @@ Work difficulty, repository state, and model versions can differ between cohorts
 Compare parsed instants, including fractional seconds: equality is after cutover.
 Do not manufacture cohorts from content hashes, repository revisions, file mtimes,
 or guessed dates. Existing aggregate trends do not consume rollout markers.
+
+## Dated run analysis
+
+The packaged deck files under `src/autoskillit/assets/deck/` are the rendering
+template. A dated analysis preserves a separate snapshot of the report-index rows,
+prepared measurements, and exact template bundle used for that run. Coverage is
+limited to retained report-index sources; it does not reconstruct pruned session
+history.
+
+Use a fresh directory whose name starts with a UTC timestamp in
+`YYYY-MM-DD_HHMMSS` form. The token makes repeated runs distinct:
+
+```bash
+RUN_DIR=".autoskillit/temp/analyze-run/2026-10-11_162824_demo"
+autoskillit sessions analysis-prepare "$RUN_DIR" --change-id prompt-cost-study
+```
+
+Preparation refreshes and reads the report index, then freezes the five populations
+(`sessions`, `requests`, `tools`, `subagents`, and `turns`) in `measurements.json`.
+Its `payload.generated_at_ms` is the latest integer `time_ms` across those
+populations, ignoring booleans and defaulting to zero when no valid time exists.
+This fixed corpus anchor drives the report’s time windows; it is not the time the
+analysis was created. The `analysis-finish` command records the actual finish time
+in UTC milliseconds.
+
+Ask the analysis skill to interpret the frozen packet:
+
+```text
+/autoskillit:analyze-run --change-id prompt-cost-study
+```
+
+The skill chooses a new dated directory under
+`.autoskillit/temp/analyze-run/`, runs both preparation and finish, and returns a
+`report_path` only after completion. Omit `--change-id` for an analysis with no
+rollout cohort. To drive the two CLI steps directly, write a candidate to the
+`.candidate-findings.json` path returned by preparation, then finish the same
+directory:
+
+```bash
+autoskillit sessions analysis-finish "$RUN_DIR"
+```
+
+A completed directory contains `measurements.json`, `findings.json`, `report.html`,
+and `analysis.json`; the temporary candidate is removed. The frozen packet retains
+the HTML template, CSS, script bytes and order, so rendering uses the same CSP
+script hashes. Verification rerenders from those frozen inputs and compares the
+HTML bytes exactly. It does not compare an HTML hash that would be sensitive to the
+finish timestamp.
+
+An unchanged input fingerprint can reuse a verified completed interpretation and
+its provenance. Existing completions with that fingerprint must verify and agree;
+inconsistent candidates fail closed. Publication serializes under a finite
+five-second lease and checks again inside the lease, so concurrent finishes
+converge on the same verified candidate. Changed inputs produce a different
+fingerprint and require a new interpretation; prior findings are not carried
+forward.
+
+With a `change_id`, the cohort includes only session rows bearing that exact id;
+missing markers and other ids are excluded. The comparison parses each selected
+row's original aware `timestamp`, including fractional seconds. A start before
+`effective_at` is a baseline; a start exactly at cutover is after. `scope` describes
+the intended change but does not filter rows. Malformed matched markers, conflicting
+declarations, and selected rows without aware start times fail closed. If the id is
+not present in retained runs, preparation errors rather than returning an empty
+cohort. A pre-cutover row remains a baseline, not independent proof that the
+prediction was preregistered.
+
+Read sample counts per field: each token measure has its own `observed_sessions`,
+`eligible_sessions`, and `state_counts`; failure share has its own sample and
+unknown counts. `measured_zero` is an observed zero, while `unknown` is missing or
+invalid evidence, not zero. The candidate at `candidate_path` must contain the
+exact `snapshot_digest` returned by preparation, an `interpreter` object with
+`role`, `model`, and `prompt`, and a nonempty `findings` list. Each finding has
+`view_id`, nonblank plain-text `text`, and `evidence_ids`. Copy ids from the
+packet's `evidence` map: each resolves to a specific table row, prepared measure,
+or rollout group-and-metric comparison, and the referenced view must equal the
+finding's `view_id`. An empty corpus still needs an explicit no-observations
+finding; only then may its `evidence_ids` be empty. Numeric measures are computed
+by Python and should be reported from the referenced record. Structural checks
+validate the digest and evidence links, not whether the prose is true or whether
+an observed difference is causal. The analyst must check each claim against its
+referenced measurement.
+
+Related rationale: [Megagon Labs’ discussion of auditable source-grounded
+tables](https://megagon.ai/data-provenance-source-grounded-ai/) explains why
+item-level evidence and separate scope checks help make structured claims
+independently reviewable. This workflow applies that distinction to measurements
+and interpretation prose.
 
 ## Native headless OTLP capture
 

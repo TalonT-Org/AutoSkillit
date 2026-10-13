@@ -15,6 +15,50 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 class TestRecordPipelineStepComplete:
     @pytest.mark.anyio
+    async def test_complete_refuses_linked_and_unlinked_steps_without_credit(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
+        from autoskillit.recipe.schema import RecipeStep
+        from tests.server._pipeline_test_helpers import _setup_project
+
+        _setup_project(
+            tmp_path,
+            tool_ctx_kitchen_open,
+            active_recipe_steps={
+                "plan": RecipeStep(name="plan", tool="run_skill", on_success="verify"),
+                "verify": RecipeStep(name="verify", tool="run_skill", on_success="unrelated"),
+                "unrelated": RecipeStep(name="unrelated", tool="run_skill"),
+            },
+        )
+        pipeline_id = "linked-steps"
+        initialized = json.loads(
+            await record_pipeline_step(
+                pipeline_id=pipeline_id,
+                op="init",
+                dependencies={"verify": ["plan"]},
+            )
+        )
+        assert initialized["success"] is True
+
+        tracker_path = (
+            tmp_path / ".autoskillit" / "temp" / "pipeline_tracker" / f"{pipeline_id}.json"
+        )
+        for step_name in ("plan", "unrelated"):
+            result = json.loads(
+                await record_pipeline_step(
+                    pipeline_id=pipeline_id,
+                    op="complete",
+                    step_name=step_name,
+                )
+            )
+
+            assert result["success"] is False
+            assert result["stage"] == "preflight:pipeline_tracker_credit"
+            assert result["retriable"] is False
+            tracker = json.loads(tracker_path.read_text())
+            assert tracker["steps"][step_name]["status"] == "pending"
+
+    @pytest.mark.anyio
     async def test_marks_step_complete(self, tool_ctx_kitchen_open, tmp_path):
         tool_ctx_kitchen_open.project_dir = tmp_path
         _write_tracker(tmp_path, "test-kitchen", {"rectify": {"status": "pending"}}, {})

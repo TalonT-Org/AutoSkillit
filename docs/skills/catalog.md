@@ -53,7 +53,8 @@ runs:
 `prepare-pr`, `compose-pr`, `open-integration-pr`, `merge-pr`, `analyze-prs`, `review-pr`,
 `resolve-review`, `implement-worktree-no-merge`, `resolve-failures`,
 `retry-worktree`, `resolve-merge-conflicts`, `audit-impl`, `smoke-task`,
-`report-bug`, `pipeline-summary`, `diagnose-ci`, `analyze-pipeline-health`, `file-audit-issues`, `verify-diag`,
+`report-bug`, `pipeline-summary`, `diagnose-ci`, `analyze-pipeline-health`,
+`analyze-run`, `file-audit-issues`, `verify-diag`,
 `resolve-claims-review`, `resolve-design-review`, `resolve-research-review`,
 `compose-research-pr`, `prepare-research-pr`, `review-research-pr`,
 `promote-to-main`, `classify-experiment-type`, `apply-review-dimensions`

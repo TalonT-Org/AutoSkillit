@@ -14,9 +14,14 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 def _projection(
     *step_names: str,
     edges: tuple[RecipeFlowEdge, ...] = (),
+    tool_by_step: dict[str, str] | None = None,
 ):
+    tool_by_step = tool_by_step or {}
     return _make_finalized_projection(
-        steps=tuple(FinalizedRecipeStep(name=name) for name in step_names),
+        steps=tuple(
+            FinalizedRecipeStep(name=name, tool=tool_by_step.get(name, "run_skill"))
+            for name in step_names
+        ),
         edges=edges,
     )
 
@@ -55,6 +60,139 @@ class TestDerivePhaseADeps:
         )
         deps = _derive_phase_a_deps(projection)
         assert deps == {"review_approach": ["make_plan"]}
+
+    def test_run_python_predecessor_does_not_create_dependency(self):
+        projection = _projection(
+            "make_plan",
+            "dry_walkthrough",
+            edges=(
+                RecipeFlowEdge(
+                    source="make_plan",
+                    edge_type="success",
+                    target="dry_walkthrough",
+                    condition=None,
+                    result_field=None,
+                ),
+            ),
+            tool_by_step={"make_plan": "run_python"},
+        )
+
+        assert _derive_phase_a_deps(projection) == {}
+
+    def test_non_skill_dependent_does_not_create_dependency(self):
+        projection = _projection(
+            "rectify",
+            "review_approach",
+            edges=(
+                RecipeFlowEdge(
+                    source="rectify",
+                    edge_type="success",
+                    target="review_approach",
+                    condition=None,
+                    result_field=None,
+                ),
+            ),
+            tool_by_step={"review_approach": "run_cmd"},
+        )
+
+        assert _derive_phase_a_deps(projection) == {}
+
+    def test_ambiguous_predecessors_are_counted_before_tool_filter(self):
+        projection = _projection(
+            "rectify",
+            "make_plan",
+            "dry_walkthrough",
+            edges=(
+                RecipeFlowEdge(
+                    source="rectify",
+                    edge_type="success",
+                    target="dry_walkthrough",
+                    condition=None,
+                    result_field=None,
+                ),
+                RecipeFlowEdge(
+                    source="rectify",
+                    edge_type="success",
+                    target="make_plan",
+                    condition=None,
+                    result_field=None,
+                ),
+                RecipeFlowEdge(
+                    source="make_plan",
+                    edge_type="success",
+                    target="dry_walkthrough",
+                    condition=None,
+                    result_field=None,
+                ),
+            ),
+            tool_by_step={"make_plan": "run_python"},
+        )
+
+        assert _derive_phase_a_deps(projection) == {}
+
+    def test_run_skill_predecessor_creates_dependency(self):
+        projection = _projection(
+            "rectify",
+            "review_approach",
+            edges=(
+                RecipeFlowEdge(
+                    source="rectify",
+                    edge_type="success",
+                    target="review_approach",
+                    condition=None,
+                    result_field=None,
+                ),
+            ),
+            tool_by_step={"rectify": "run_skill", "review_approach": "run_skill"},
+        )
+
+        assert _derive_phase_a_deps(projection) == {"review_approach": ["rectify"]}
+
+    def test_tracker_dependencies_unions_requested_and_derived_without_mutation(self, monkeypatch):
+        from autoskillit.server.tools import _pipeline_deps
+        from autoskillit.server.tools._pipeline_deps import _tracker_dependencies
+
+        projection = _projection(
+            "rectify",
+            "make_plan",
+            "review_approach",
+            edges=(
+                RecipeFlowEdge(
+                    source="rectify",
+                    edge_type="success",
+                    target="review_approach",
+                    condition=None,
+                    result_field=None,
+                ),
+                RecipeFlowEdge(
+                    source="review_approach",
+                    edge_type="success",
+                    target="make_plan",
+                    condition=None,
+                    result_field=None,
+                ),
+            ),
+        )
+        derived = _derive_phase_a_deps(projection)
+        assert _tracker_dependencies(projection, None) == derived
+
+        derived_by_tracker = {"review_approach": ["rectify"]}
+        monkeypatch.setattr(
+            _pipeline_deps,
+            "_derive_phase_a_deps",
+            lambda _projection: derived_by_tracker,
+        )
+        requested = {
+            "review_approach": ["make_plan", "rectify"],
+            "custom": ["verify"],
+        }
+
+        merged = _tracker_dependencies(projection, requested)
+
+        assert set(merged["review_approach"]) == {"make_plan", "rectify"}
+        assert len(merged["review_approach"]) == 2
+        assert merged["custom"] == ["verify"]
+        assert derived_by_tracker == {"review_approach": ["rectify"]}
 
     def test_no_curated_targets_present_returns_empty(self):
         projection = _projection(

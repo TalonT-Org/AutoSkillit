@@ -142,6 +142,8 @@ def test_session_row_carries_facets_pair_and_resolved_measures() -> None:
     assert row["model"] == "resolved-model"
     assert row["subtype"] == "context_exhausted"
     assert row["time_ms"] == expected_time_ms == 1788220800500
+    assert row["timestamp"] == timestamp
+    assert row["rollout"] is None
     assert row["tool_counts"] == {"Bash": 1, "Read": 2}
     assert row["assistant_turn_count"] == 2
     assert row["input_tokens"] == source_row["input_tokens"]
@@ -154,6 +156,37 @@ def test_session_row_carries_facets_pair_and_resolved_measures() -> None:
     assert "/private/workspace/project" not in serialized
     assert "/private/transcripts/session.jsonl" not in serialized
     assert "private-turn-id" not in serialized
+
+
+@pytest.mark.parametrize(
+    ("rollout", "include_rollout"),
+    [
+        ({"change_id": "change-1", "scope": {"skills": ["make-plan"]}}, True),
+        ("legacy-marker", True),
+        (["change-1", None, 2], True),
+        (None, True),
+        (None, False),
+    ],
+    ids=["object", "scalar", "array", "null", "absent"],
+)
+def test_session_rollout_is_preserved_as_json_value(rollout: Any, include_rollout: bool) -> None:
+    source_row: dict[str, Any] = {
+        "session_id": "sid-rollout",
+        "backend": "codex",
+        "provider_used": "openai",
+        "timestamp": "2026-09-01T00:00:00.123400Z",
+    }
+    if include_rollout:
+        source_row["rollout"] = rollout
+
+    (row,) = rows_for_walk_item(_session_item("rollout", source_row))
+    normalized = normalize_report_row(json.loads(json.dumps(row)))
+
+    expected = rollout if include_rollout and rollout is not None else None
+    assert row["rollout"] == expected
+    assert normalized is not None
+    assert normalized["rollout"] == expected
+    assert row["timestamp"] == "2026-09-01T00:00:00.123400Z"
 
 
 def test_turn_rows_keep_owner_and_ordinal_identity_with_measure_states() -> None:

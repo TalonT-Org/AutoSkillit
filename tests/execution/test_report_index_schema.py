@@ -15,7 +15,7 @@ from autoskillit.execution._report_index_types import REPORT_ROW_TYPES
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
-_EXPECTED = (3, "ce6665e9b25e6c0ea3d578271a782cec2b922899b055e9e81f7d74ad2360a6d2")
+_EXPECTED = (4, "92c8202aa412b52da15a73c2efd083d8ddec74484c8c32484c125b94fae17d39")
 # Locked snapshot of per-kind field name orderings that produced ``_EXPECTED``.
 # Bump ``_EXPECTED[0]`` and refresh this dict in lockstep when row fields change;
 # ``test_report_index_schema_version_matches_field_digest`` is what fails first
@@ -63,6 +63,7 @@ _EXPECTED_FIELDS: dict[str, list[str]] = {
         "parent_session_id",
         "provider",
         "recipe",
+        "rollout",
         "schema_version",
         "session_id",
         "skill",
@@ -70,6 +71,7 @@ _EXPECTED_FIELDS: dict[str, list[str]] = {
         "subtype",
         "success",
         "time_ms",
+        "timestamp",
         "tool_counts",
         "turn_usage_reason",
         "turn_usage_state",

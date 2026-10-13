@@ -646,6 +646,48 @@ def test_rebuild_from_scratch_equals_incremental_build(tmp_path: Path) -> None:
     assert read_report_index(inc) == read_report_index(full)
 
 
+def test_session_timestamp_and_rollout_survive_live_archive_update_and_rebuild(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "logs"
+    index_dir = tmp_path / "incremental"
+    rebuilt_dir = tmp_path / "rebuilt"
+    live = _basic_session(
+        "live",
+        "reused-session-id",
+        timestamp="2026-09-01T00:00:00.123400Z",
+        rollout={"change_id": "change-live", "scope": {"skills": ["make-plan"]}},
+    )
+    archived = _basic_session(
+        "archive",
+        "reused-session-id",
+        timestamp="2026-09-01T00:00:00.123800Z",
+        rollout=["change-archive", 7, None],
+    )
+    _write_jsonl(root / "sessions.jsonl", [live])
+    _write_jsonl(root / "sessions-archive.jsonl", [archived])
+
+    update_report_index(root, index_dir)
+
+    updated_live = {
+        **live,
+        "timestamp": "2026-09-01T00:00:00.123600Z",
+        "rollout": "updated-live-marker",
+    }
+    _write_jsonl(root / "sessions.jsonl", [updated_live])
+    update_report_index(root, index_dir)
+
+    indexed = read_report_index(index_dir)
+    assert indexed.sessions["live"]["timestamp"] == "2026-09-01T00:00:00.123600Z"
+    assert indexed.sessions["live"]["rollout"] == "updated-live-marker"
+    assert indexed.sessions["archive"]["timestamp"] == "2026-09-01T00:00:00.123800Z"
+    assert indexed.sessions["archive"]["rollout"] == ["change-archive", 7, None]
+    assert indexed.sessions["live"]["time_ms"] == indexed.sessions["archive"]["time_ms"]
+
+    rebuild_report_index(root, rebuilt_dir)
+    assert read_report_index(index_dir) == read_report_index(rebuilt_dir)
+
+
 def test_child_only_changes_refresh_live_and_archive_rows_once(tmp_path: Path) -> None:
     root = tmp_path / "logs"
     index_dir = tmp_path / "index"
@@ -819,7 +861,7 @@ def test_older_version_rows_parse_without_error(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     ("row_schema_marker", "remove_rows"),
-    [(None, False), (1, False), (REPORT_INDEX_SCHEMA_VERSION + 1, True)],
+    [(None, False), (3, False), (REPORT_INDEX_SCHEMA_VERSION + 1, True)],
     ids=["absent", "mismatched", "future"],
 )
 def test_incompatible_row_schema_is_rejected_and_rebuilt(

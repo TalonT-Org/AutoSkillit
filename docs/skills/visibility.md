@@ -45,11 +45,12 @@ simultaneously or reclassify session-role skills between tiers. See
 ### Tier 3 — Pipeline-Only (Automation Skills)
 
 - **Location**: `src/autoskillit/skills_extended/` (same directory as Tier 2)
-- **Default members** (32 total):
+- **Default members**:
   `prepare-pr`, `compose-pr`, `open-integration-pr`, `merge-pr`, `analyze-prs`,
   `review-pr`, `resolve-review`, `implement-worktree-no-merge`, `resolve-failures`,
   `retry-worktree`, `resolve-merge-conflicts`, `audit-impl`, `smoke-task`,
-  `report-bug`, `pipeline-summary`, `diagnose-ci`, `analyze-pipeline-health`, `verify-diag`,
+  `report-bug`, `pipeline-summary`, `diagnose-ci`, `analyze-pipeline-health`,
+  `analyze-run`, `verify-diag`,
   `compose-research-pr`, `prepare-research-pr`, `resolve-claims-review`,
   `resolve-design-review`, `resolve-research-review`, `review-research-pr`,
   `audit-claims`, `build-execution-map`, `promote-to-main`,

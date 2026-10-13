@@ -1,4 +1,4 @@
-"""Curated Phase A dependencies from the finalized recipe routing graph.
+"""Produce tracker dependencies from recipe routes and caller requests.
 
 Underscore-prefixed helper module (not ``tools_*.py``) — exempt from the
 ``tools_*.py`` import-namespace restriction (REQ-ARCH-003 / REQ-IMP-003),
@@ -10,7 +10,14 @@ The finalized projection is the single authority for executable routes.
 
 from __future__ import annotations
 
-from autoskillit.core import FinalizedRecipeProjection, get_logger
+from collections.abc import Mapping, Sequence
+
+from autoskillit.core import (
+    FinalizedRecipeProjection,
+    dependency_cycle_members,
+    get_logger,
+    is_tracker_enforced_step,
+)
 
 logger = get_logger(__name__)
 
@@ -27,34 +34,10 @@ _CURATED_TARGETS: dict[str, frozenset[str]] = {
 }
 
 
-def _find_cycle_members(graph: dict[str, set[str]]) -> set[str]:
-    """Return step names that participate in a cycle, via DFS back-edge detection."""
-    WHITE, GRAY, BLACK = 0, 1, 2
-    color: dict[str, int] = dict.fromkeys(graph, WHITE)
-    cycle_members: set[str] = set()
-
-    def visit(node: str, stack: list[str]) -> None:
-        color[node] = GRAY
-        stack.append(node)
-        for neighbor in graph.get(node, ()):
-            if color.get(neighbor) == GRAY:
-                idx = stack.index(neighbor)
-                cycle_members.update(stack[idx:])
-            elif color.get(neighbor) == WHITE:
-                visit(neighbor, stack)
-        stack.pop()
-        color[node] = BLACK
-
-    for node in graph:
-        if color[node] == WHITE:
-            visit(node, [])
-    return cycle_members
-
-
-def _derive_phase_a_deps(
+def _curated_single_predecessors(
     projection: FinalizedRecipeProjection | None,
 ) -> dict[str, list[str]]:
-    """Derive curated, single-edge, loop-free step dependencies for Phase A.
+    """Select curated, single-edge, loop-free predecessors from the recipe graph.
 
     Steps involved in a cycle are skipped. Multiple matching predecessors are
     branch alternatives that the all-of tracker cannot represent, so they are
@@ -68,7 +51,7 @@ def _derive_phase_a_deps(
     for edge in projection.ordered_flow_edges:
         if edge.target in step_names:
             graph[edge.source].add(edge.target)
-    cycle_members = _find_cycle_members(graph)
+    cycle_members = dependency_cycle_members(graph)
 
     predecessors: dict[str, set[str]] = {name: set() for name in graph}
     for name, successors in graph.items():
@@ -93,3 +76,46 @@ def _derive_phase_a_deps(
                 predecessors=matched,
             )
     return deps
+
+
+def _derive_phase_a_deps(
+    projection: FinalizedRecipeProjection | None,
+) -> dict[str, list[str]]:
+    """Derive curated Phase A dependencies that the tracker can enforce."""
+    if projection is None:
+        return {}
+
+    steps = {step.name: step for step in projection.ordered_steps}
+    dependencies: dict[str, list[str]] = {}
+    for dependent, prerequisites in _curated_single_predecessors(projection).items():
+        for prerequisite in prerequisites:
+            if is_tracker_enforced_step(steps.get(dependent)) and is_tracker_enforced_step(
+                steps.get(prerequisite)
+            ):
+                dependencies[dependent] = [prerequisite]
+            else:
+                logger.warning(
+                    "pipeline_dependency_unenforceable_step",
+                    dependent=dependent,
+                    prerequisite=prerequisite,
+                )
+    return dependencies
+
+
+def _tracker_dependencies(
+    projection: FinalizedRecipeProjection | None,
+    requested: Mapping[str, Sequence[str]] | None = None,
+) -> dict[str, list[str]]:
+    """Combine enforceable recipe dependencies with distinct caller requests."""
+    dependencies = {
+        dependent: list(prerequisites)
+        for dependent, prerequisites in _derive_phase_a_deps(projection).items()
+    }
+    for dependent, prerequisites in (requested or {}).items():
+        if not prerequisites:
+            continue
+        stored = dependencies.setdefault(dependent, [])
+        for prerequisite in prerequisites:
+            if prerequisite not in stored:
+                stored.append(prerequisite)
+    return dependencies

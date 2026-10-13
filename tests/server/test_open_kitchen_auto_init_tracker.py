@@ -20,7 +20,10 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 def _configure_open_kitchen_mock(ctx, steps, tmp_path):
     from unittest.mock import MagicMock
 
+    from autoskillit.execution.backends import get_backend
+
     ctx.project_dir = tmp_path
+    ctx.backend = get_backend(ctx.config.agent_backend.backend)
     ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
         {
             "content": "name: remediation\nsteps: {}\n",
@@ -101,8 +104,10 @@ class TestOpenKitchenAutoInitTracker:
         _install_active_recipe_projection(
             ctx,
             {
-                "rectify": RecipeStep(name="rectify", on_success="review_approach"),
-                "review_approach": RecipeStep(name="review_approach"),
+                "rectify": RecipeStep(
+                    name="rectify", tool="run_skill", on_success="review_approach"
+                ),
+                "review_approach": RecipeStep(name="review_approach", tool="run_skill"),
             },
         )
 
@@ -130,8 +135,10 @@ class TestOpenKitchenAutoInitTracker:
         _install_active_recipe_projection(
             ctx,
             {
-                "rectify": RecipeStep(name="rectify", on_success="review_approach"),
-                "review_approach": RecipeStep(name="review_approach"),
+                "rectify": RecipeStep(
+                    name="rectify", tool="run_skill", on_success="review_approach"
+                ),
+                "review_approach": RecipeStep(name="review_approach", tool="run_skill"),
             },
         )
         tracker_path = (
@@ -160,8 +167,10 @@ class TestOpenKitchenAutoInitTracker:
         (temp_dir / ".hook_config.json").write_text("{}")
 
         steps = {
-            "rectify": RecipeStep(name="rectify", on_success="review_approach"),
-            "review_approach": RecipeStep(name="review_approach", on_success="dry_walkthrough"),
+            "rectify": RecipeStep(name="rectify", tool="run_skill", on_success="review_approach"),
+            "review_approach": RecipeStep(
+                name="review_approach", tool="run_skill", on_success="dry_walkthrough"
+            ),
         }
 
         ctx = _make_mock_ctx()
@@ -197,8 +206,10 @@ class TestOpenKitchenAutoInitTracker:
         (temp_dir / ".hook_config.json").write_text("{}")
 
         steps = {
-            "rectify": RecipeStep(name="rectify", on_success="review_approach"),
-            "review_approach": RecipeStep(name="review_approach", on_success="dry_walkthrough"),
+            "rectify": RecipeStep(name="rectify", tool="run_skill", on_success="review_approach"),
+            "review_approach": RecipeStep(
+                name="review_approach", tool="run_skill", on_success="dry_walkthrough"
+            ),
         }
 
         ctx1 = _make_mock_ctx()
@@ -251,8 +262,8 @@ class TestOpenKitchenAutoInitTracker:
         kitchen_id = "kitchen-clear-stale-dependencies"
 
         initial_steps = {
-            "rectify": RecipeStep(name="rectify", on_success="review_approach"),
-            "review_approach": RecipeStep(name="review_approach"),
+            "rectify": RecipeStep(name="rectify", tool="run_skill", on_success="review_approach"),
+            "review_approach": RecipeStep(name="review_approach", tool="run_skill"),
         }
         first_ctx = _make_mock_ctx()
         first_ctx.gate.enabled = True
@@ -270,7 +281,7 @@ class TestOpenKitchenAutoInitTracker:
         tracker["steps"]["rectify"]["status"] = "complete"
         tracker_path.write_text(json.dumps(tracker))
 
-        no_dependency_steps = {"rectify": RecipeStep(name="rectify")}
+        no_dependency_steps = {"rectify": RecipeStep(name="rectify", tool="run_skill")}
         second_ctx = _make_mock_ctx()
         second_ctx.gate.enabled = True
         second_ctx.gate_infrastructure_ready = True
@@ -301,8 +312,10 @@ class TestOpenKitchenAutoInitTracker:
         (temp_dir / ".hook_config.json").write_text("{}")
 
         steps = {
-            "rectify": RecipeStep(name="rectify", on_success="review_approach"),
-            "review_approach": RecipeStep(name="review_approach", on_success="dry_walkthrough"),
+            "rectify": RecipeStep(name="rectify", tool="run_skill", on_success="review_approach"),
+            "review_approach": RecipeStep(
+                name="review_approach", tool="run_skill", on_success="dry_walkthrough"
+            ),
         }
 
         ctx = _make_mock_ctx()

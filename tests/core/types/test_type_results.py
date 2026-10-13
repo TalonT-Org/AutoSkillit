@@ -84,6 +84,47 @@ class TestWriteEvidence:
         assert ev.has_implementation_evidence is True
 
 
+class TestValidateRolloutMarker:
+    def test_normalizes_utc_timestamp_and_copies_scope(self) -> None:
+        from autoskillit.core import validate_rollout_marker
+
+        scope = {"skills": ["make-plan"], "backends": ["codex"], "roles": []}
+        raw = {
+            "change_id": "prompt-cost-study",
+            "effective_at": "2026-11-01T18:00:00Z",
+            "scope": scope,
+            "expected_effect": "Reduce planning input tokens.",
+        }
+
+        marker = validate_rollout_marker(raw)
+        scope["skills"].append("later-skill")
+
+        assert marker["effective_at"] == "2026-11-01T18:00:00+00:00"
+        assert marker["scope"] == {
+            "skills": ["make-plan"],
+            "backends": ["codex"],
+            "roles": [],
+        }
+
+    @pytest.mark.parametrize(
+        "effective_at",
+        ["2026-11-01T18:00:00", "2026-11-01T18:00:00-07:00", "not-a-date", 1700000000],
+        ids=["naive", "non-utc", "malformed", "non-string"],
+    )
+    def test_rejects_timestamps_outside_explicit_utc_contract(self, effective_at: object) -> None:
+        from autoskillit.core import validate_rollout_marker
+
+        raw = {
+            "change_id": "prompt-cost-study",
+            "effective_at": effective_at,
+            "scope": {"skills": [], "backends": [], "roles": []},
+            "expected_effect": "Reduce planning input tokens.",
+        }
+
+        with pytest.raises(ValueError, match="rollout.active.effective_at"):
+            validate_rollout_marker(raw)
+
+
 class TestHasImplementationProgress:
     def test_excludes_infrastructure_writes(self) -> None:
         from autoskillit.core.types import RetryReason, SkillResult

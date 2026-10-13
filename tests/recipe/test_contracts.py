@@ -874,6 +874,7 @@ def test_investigate_declares_report_write_contract() -> None:
 
 
 ALWAYS_WRITE_SKILLS = {
+    "analyze-run",
     "apply-review-dimensions",
     "audit-tests",
     "build-execution-map",

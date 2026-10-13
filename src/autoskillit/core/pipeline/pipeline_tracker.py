@@ -10,10 +10,13 @@ from __future__ import annotations
 import fcntl
 import json
 import os
-from collections.abc import Callable, Mapping, MutableMapping
+import uuid
+from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Literal
 
 import psutil
@@ -29,14 +32,20 @@ from ..runtime.artifact_lease import (
     ArtifactLease,
     acquire_flock_with_timeout,
 )
+from ..types import SKILL_TOOLS, FinalizedRecipeStep
 
 __all__ = [
     "TrackerAuthorityReadResult",
     "TrackerAuthorityTarget",
+    "TrackerDependencyAdmissionError",
+    "TrackerDependencyViolation",
     "TrackerData",
+    "TrackerInitialization",
     "TrackerMutation",
     "TrackerOwnerKind",
     "TrackerParticipantKey",
+    "dependency_cycle_members",
+    "is_tracker_enforced_step",
     "initialize_kitchen_tracker",
     "initialize_manual_tracker",
     "mutate_tracker",
@@ -52,6 +61,214 @@ __all__ = [
 TrackerOwnerKind = Literal["kitchen", "dispatch", "manual"]
 TrackerData = dict[str, Any]
 TrackerMutation = Callable[[TrackerData], TrackerData]
+
+
+def is_tracker_enforced_step(step: object) -> bool:
+    """Only run_skill steps are dependency-gated and earn completion credit."""
+    return isinstance(step, FinalizedRecipeStep) and step.tool in SKILL_TOOLS
+
+
+def _dependency_cycle_edges(
+    graph: Mapping[str, Iterable[str]],
+) -> set[tuple[str, str]]:
+    """Return only edges witnessed along DFS cycle paths and back edges."""
+    white, gray, black = 0, 1, 2
+    color: dict[str, int] = dict.fromkeys(graph, white)
+    cycle_edges: set[tuple[str, str]] = set()
+
+    for root in graph:
+        if color[root] != white:
+            continue
+        color[root] = gray
+        path = [root]
+        frames: list[tuple[str, Iterator[str]]] = [(root, iter(graph[root]))]
+        while frames:
+            node, neighbors = frames[-1]
+            neighbor = next(neighbors, None)
+            if neighbor is None:
+                frames.pop()
+                path.pop()
+                color[node] = black
+                continue
+            if color.get(neighbor) == gray:
+                cycle_start = path.index(neighbor)
+                cycle_edges.update(zip(path[cycle_start:-1], path[cycle_start + 1 :]))
+                cycle_edges.add((node, neighbor))
+            elif color.get(neighbor) == white:
+                color[neighbor] = gray
+                path.append(neighbor)
+                frames.append((neighbor, iter(graph.get(neighbor, ()))))
+    return cycle_edges
+
+
+def dependency_cycle_members(graph: Mapping[str, Iterable[str]]) -> set[str]:
+    """Return the step names on witnessed cycle edges in *graph*."""
+    return {name for edge in _dependency_cycle_edges(graph) for name in edge}
+
+
+@dataclass(frozen=True, slots=True)
+class TrackerDependencyViolation:
+    dependent: str
+    prerequisite: str
+    reason: Literal["unknown_step", "not_run_skill", "self_dependency", "cycle"]
+    detail: str
+
+
+class TrackerDependencyAdmissionError(ValueError):
+    """A dependency graph contains edges the tracker cannot enforce."""
+
+    violations: tuple[TrackerDependencyViolation, ...]
+
+    def __init__(self, violations: Sequence[TrackerDependencyViolation]) -> None:
+        self.violations = tuple(violations)
+        super().__init__("; ".join(violation.detail for violation in self.violations))
+
+
+def _normalize_tracker_dependencies(
+    dependencies: Mapping[str, Sequence[str]],
+) -> dict[str, tuple[str, ...]]:
+    return {
+        dependent: tuple(dict.fromkeys(prerequisites))
+        for dependent, prerequisites in dependencies.items()
+        if prerequisites
+    }
+
+
+def _dependency_step_kind(step: object) -> str:
+    if not isinstance(step, FinalizedRecipeStep):
+        return "untyped"
+    return step.tool or step.action or "unconfigured"
+
+
+def _dependency_endpoint_violation(
+    dependent: str,
+    prerequisite: str,
+    step_name: str,
+    role: str,
+    recipe_steps: Mapping[str, FinalizedRecipeStep],
+) -> TrackerDependencyViolation | None:
+    if step_name not in recipe_steps:
+        return TrackerDependencyViolation(
+            dependent,
+            prerequisite,
+            "unknown_step",
+            f"{role} '{step_name}' is not a step in the finalized recipe",
+        )
+    step = recipe_steps[step_name]
+    if is_tracker_enforced_step(step):
+        return None
+    kind = _dependency_step_kind(step)
+    article = "an" if kind == "unconfigured" else "a"
+    description = (
+        f"{role} '{step_name}' is untyped"
+        if kind == "untyped"
+        else f"{role} '{step_name}' is {article} {kind} step"
+    )
+    rule = "are dependency-gated" if role == "dependent" else "earn completion credit"
+    return TrackerDependencyViolation(
+        dependent,
+        prerequisite,
+        "not_run_skill",
+        f"{description}; only run_skill steps {rule}",
+    )
+
+
+def _dependency_endpoint_violations(
+    dependencies: Mapping[str, Sequence[str]],
+    recipe_steps: Mapping[str, FinalizedRecipeStep],
+) -> tuple[list[TrackerDependencyViolation], dict[str, list[str]]]:
+    violations: list[TrackerDependencyViolation] = []
+    admissible_graph: dict[str, list[str]] = {}
+    for dependent, prerequisites in dependencies.items():
+        for prerequisite in prerequisites:
+            if dependent == prerequisite:
+                kind = (
+                    _dependency_step_kind(recipe_steps[dependent])
+                    if dependent in recipe_steps
+                    else "unknown"
+                )
+                violations.append(
+                    TrackerDependencyViolation(
+                        dependent,
+                        prerequisite,
+                        "self_dependency",
+                        f"self-dependency: dependent/prerequisite '{dependent}' "
+                        f"(kind: {kind}) "
+                        "cannot be the same step",
+                    )
+                )
+                continue
+            violation_count = len(violations)
+            for step_name, role in (
+                (dependent, "dependent"),
+                (prerequisite, "prerequisite"),
+            ):
+                violation = _dependency_endpoint_violation(
+                    dependent,
+                    prerequisite,
+                    step_name,
+                    role,
+                    recipe_steps,
+                )
+                if violation is not None:
+                    violations.append(violation)
+            if len(violations) == violation_count:
+                admissible_graph.setdefault(dependent, []).append(prerequisite)
+                admissible_graph.setdefault(prerequisite, [])
+    return violations, admissible_graph
+
+
+def _dependency_cycle_violations(
+    graph: Mapping[str, Iterable[str]],
+) -> list[TrackerDependencyViolation]:
+    return [
+        TrackerDependencyViolation(
+            dependent,
+            prerequisite,
+            "cycle",
+            f"dependent '{dependent}' and prerequisite '{prerequisite}' "
+            "are run_skill steps in a cycle",
+        )
+        for dependent, prerequisite in sorted(_dependency_cycle_edges(graph))
+    ]
+
+
+@dataclass(frozen=True, slots=True)
+class TrackerInitialization:
+    kitchen_id: str
+    recipe_steps: Mapping[str, FinalizedRecipeStep]
+    dependencies: Mapping[str, Sequence[str]] = field(default_factory=dict)
+    skipped: frozenset[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        recipe_steps = dict(self.recipe_steps)
+        dependencies = _normalize_tracker_dependencies(self.dependencies)
+        endpoint_violations, admissible_graph = _dependency_endpoint_violations(
+            dependencies, recipe_steps
+        )
+        violations = endpoint_violations + _dependency_cycle_violations(admissible_graph)
+        if violations:
+            raise TrackerDependencyAdmissionError(violations)
+        object.__setattr__(self, "recipe_steps", MappingProxyType(recipe_steps))
+        object.__setattr__(self, "dependencies", MappingProxyType(dependencies))
+        object.__setattr__(self, "skipped", frozenset(self.skipped))
+
+    def tracker_data(self, *, pipeline_id: str) -> TrackerData:
+        return {
+            "pipeline_id": pipeline_id,
+            "kitchen_id": self.kitchen_id,
+            "initialized_at": datetime.now(UTC).isoformat(),
+            "tracker_incarnation_id": uuid.uuid4().hex,
+            "steps": {
+                name: {"status": "skipped" if name in self.skipped else "pending"}
+                for name in self.recipe_steps
+            },
+            "dependencies": {
+                dependent: list(prerequisites)
+                for dependent, prerequisites in self.dependencies.items()
+            },
+        }
+
 
 _TRACKER_DIR_COMPONENTS = (".autoskillit", "temp", "pipeline_tracker")
 
@@ -272,7 +489,9 @@ def _read_tracker_unlocked(target: TrackerAuthorityTarget) -> TrackerAuthorityRe
                 target,
                 error=(
                     f"Expected pipeline tracker '{target.target_order_id}' is unavailable at "
-                    f"{target.path}. Initialize or restore that exact tracker before retrying."
+                    f"{target.path}. Create it with "
+                    f"record_pipeline_step(op='init', pipeline_id='{target.target_order_id}') "
+                    "(dependencies are optional) or restore that exact tracker, then retry."
                 ),
             )
         return TrackerAuthorityReadResult(target)
@@ -310,11 +529,22 @@ def read_tracker_authority(
 def initialize_kitchen_tracker(
     target: TrackerAuthorityTarget,
     lease: ArtifactLease,
-    data: Mapping[str, Any],
+    initialization: TrackerInitialization,
 ) -> TrackerAuthorityReadResult:
     """Create or idempotently merge readable kitchen tracker authority."""
     _require_shared_lease(target, lease)
-    incoming = _validate_tracker_data(dict(data))
+    if not isinstance(initialization, TrackerInitialization):
+        raise TypeError(
+            f"initialization must be a TrackerInitialization; got {type(initialization).__name__}"
+        )
+    if initialization.kitchen_id != target.target_order_id:
+        raise ValueError(
+            f"kitchen_id {initialization.kitchen_id!r} must match "
+            f"the tracker target id {target.target_order_id!r}"
+        )
+    incoming = _validate_tracker_data(
+        initialization.tracker_data(pipeline_id=target.target_order_id)
+    )
     with _TrackerLock(target):
         current = _read_tracker_unlocked(target)
         if current.error is not None:
@@ -334,11 +564,17 @@ def initialize_kitchen_tracker(
 def initialize_manual_tracker(
     target: TrackerAuthorityTarget,
     lease: ArtifactLease,
-    data: Mapping[str, Any],
+    initialization: TrackerInitialization,
 ) -> TrackerAuthorityReadResult:
     """Create manual tracker authority, refusing every existing target."""
     _require_shared_lease(target, lease)
-    incoming = _validate_tracker_data(dict(data))
+    if not isinstance(initialization, TrackerInitialization):
+        raise TypeError(
+            f"initialization must be a TrackerInitialization; got {type(initialization).__name__}"
+        )
+    incoming = _validate_tracker_data(
+        initialization.tracker_data(pipeline_id=target.target_order_id)
+    )
     with _TrackerLock(target):
         if target.path.exists() or target.path.is_symlink():
             return TrackerAuthorityReadResult(
@@ -365,6 +601,8 @@ def mutate_tracker(
         if current.data is None:
             return current
         updated = _validate_tracker_data(mutation(deepcopy(current.data)))
+        if updated["dependencies"] != current.data["dependencies"]:
+            raise ValueError("tracker mutations must not change dependencies")
         if updated == current.data:
             return current
         atomic_write(target.path, json.dumps(updated))

@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+from autoskillit.core import FinalizedRecipeStep
 from autoskillit.server.tools.tools_pipeline_tracker import record_pipeline_step
 from tests.server._pipeline_test_helpers import _grant_success_credit
 
@@ -18,9 +19,9 @@ class TestRecordPipelineStepInit:
         monkeypatch.chdir(tmp_path)
         tool_ctx_kitchen_open.project_dir = tmp_path
         tool_ctx_kitchen_open.active_recipe_steps = {
-            "review": {},
-            "implement": {},
-            "verify": {},
+            "review": FinalizedRecipeStep(name="review", tool="run_skill"),
+            "implement": FinalizedRecipeStep(name="implement", tool="run_skill"),
+            "verify": FinalizedRecipeStep(name="verify", tool="run_skill"),
         }
         self.ctx = tool_ctx_kitchen_open
         self.tmp_path = tmp_path

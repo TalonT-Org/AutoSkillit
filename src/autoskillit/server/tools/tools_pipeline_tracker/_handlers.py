@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,6 +16,8 @@ from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     ArtifactLease,
     TrackerAuthorityTarget,
+    TrackerDependencyAdmissionError,
+    TrackerInitialization,
     get_logger,
     initialize_manual_tracker,
     mutate_tracker,
@@ -43,9 +44,9 @@ from autoskillit.server.tools import (
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._overlay_state import read_overlay
+from autoskillit.server.tools._pipeline_deps import _tracker_dependencies
 from autoskillit.server.tools._types import deny_envelope
 from autoskillit.server.tools.tools_pipeline_tracker._status import (
-    _build_tracker_steps,
     _compute_status_counts,
 )
 
@@ -54,6 +55,7 @@ if TYPE_CHECKING:
     from autoskillit.pipeline import RunSkillCompletionReceipt, ToolContext
 
 logger = get_logger(__name__)
+_MAX_REPORTED_DEPENDENCY_VIOLATIONS = 10
 
 
 def _resolve_skipped_steps(project_dir: Path, pipeline_id: str) -> set[str]:
@@ -63,6 +65,34 @@ def _resolve_skipped_steps(project_dir: Path, pipeline_id: str) -> set[str]:
         return {step for step, locked in pid_locks.items() if locked is False}
     except OSError:
         return set()
+
+
+def _dependency_admission_denial(error: TrackerDependencyAdmissionError) -> str:
+    violations = error.violations
+    details = [
+        f"{item.dependent} -> {item.prerequisite}: {item.detail}"
+        for item in violations[:_MAX_REPORTED_DEPENDENCY_VIOLATIONS]
+    ]
+    remaining = len(violations) - len(details)
+    message = "record_pipeline_step: dependencies were rejected; no tracker was created."
+    if details:
+        message += " " + "; ".join(details)
+    if remaining:
+        message += f" {remaining} additional violation(s) omitted."
+    recovery = (
+        "Call record_pipeline_step(op='init') again without dependencies, or supply only "
+        "edges whose dependent and prerequisite are both run_skill steps of the open recipe. "
+        "The server already adds the recipe's own dependencies; other steps are never tracked "
+        "for completion."
+    )
+    return json.dumps(
+        deny_envelope(
+            message,
+            stage="preflight:pipeline_tracker_dependencies",
+            retriable=False,
+            recovery=recovery,
+        )
+    )
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
@@ -77,9 +107,21 @@ async def record_pipeline_step(
 ) -> str:
     """Initialize, query, or mark completion on the pipeline step tracker.
 
-    **op="init"**: Creates the tracker file with the server-authoritative step list
-    from the currently open recipe. The LLM provides the dependency graph at init time.
-    Idempotent — calling init twice with the same pipeline_id returns an error.
+    **op="init"**: Creates the tracker for ``pipeline_id`` (default: the dispatch id)
+    from the open recipe's step list. Initialization is create-only; a second init for
+    the same id is refused. Call it once before the first step-named ``run_skill`` when
+    ``run_skill`` reports that its expected tracker is unavailable. ``dependencies`` is
+    optional and normally omitted because the server already adds the recipe's own
+    dependencies. A supplied mapping ``{dependent: [prerequisite, ...]}`` is added to
+    them; empty prerequisite lists are discarded, and both endpoints of every retained
+    edge must be ``run_skill`` steps of the open recipe. Other steps (clone, branch,
+    merge, ``run_cmd``, ``run_python``) are never tracked for completion, so an edge
+    that names one is rejected and no tracker is created.
+
+    ``preflight:pipeline_tracker_dependencies`` rejects unsupported caller-supplied
+    edges and requires revising or omitting that mapping. ``pipeline_tracker:init``
+    reports an initialization failure, including an exception while deriving the recipe
+    graph; diagnose the reported error or active recipe projection before retrying.
 
     **op="status"**: Returns the current state of all tracked steps.
 
@@ -166,49 +208,50 @@ def _handle_init(
     dependencies: dict[str, list[str]] | None,
 ) -> str:
     active_steps = ctx.active_recipe_steps
-    if active_steps is None:
+    if not active_steps:
         return json.dumps(
-            {
-                "success": False,
-                "is_error": True,
-                "error": (
+            deny_envelope(
+                (
                     "record_pipeline_step: no active recipe steps found. "
                     "Ensure the kitchen is open with a loaded recipe."
                 ),
-            }
+                stage="preflight:pipeline_tracker",
+                retriable=False,
+            )
         )
 
-    skipped = _resolve_skipped_steps(ctx.project_dir, target.target_order_id)
-    steps = _build_tracker_steps(active_steps, skipped)
+    try:
+        initialization = TrackerInitialization(
+            kitchen_id=ctx.kitchen_id,
+            recipe_steps=active_steps,
+            dependencies=_tracker_dependencies(ctx.active_recipe_projection, dependencies),
+            skipped=frozenset(_resolve_skipped_steps(ctx.project_dir, target.target_order_id)),
+        )
+    except TrackerDependencyAdmissionError as exc:
+        return _dependency_admission_denial(exc)
 
-    tracker_data = {
-        "pipeline_id": target.target_order_id,
-        "kitchen_id": ctx.kitchen_id,
-        "initialized_at": datetime.now(UTC).isoformat(),
-        "tracker_incarnation_id": uuid.uuid4().hex,
-        "steps": steps,
-        "dependencies": dependencies or {},
-    }
-
-    authority = initialize_manual_tracker(target, lease, tracker_data)
+    authority = initialize_manual_tracker(target, lease, initialization)
     if authority.error is not None:
         return json.dumps(
-            {
-                "success": False,
-                "is_error": True,
-                "error": (
+            deny_envelope(
+                (
                     f"record_pipeline_step: pipeline '{target.target_order_id}' "
                     f"has already been initialized. {authority.error}"
                 ),
-            }
+                stage="preflight:pipeline_tracker",
+                retriable=False,
+            )
         )
 
+    tracker = authority.data
+    assert tracker is not None
     return json.dumps(
         {
             "success": True,
-            "pipeline_id": target.target_order_id,
-            "step_count": len(steps),
-            "dependency_count": len(dependencies or {}),
+            "pipeline_id": tracker["pipeline_id"],
+            "step_count": len(tracker["steps"]),
+            "dependency_count": len(tracker["dependencies"]),
+            "dependencies": tracker["dependencies"],
         }
     )
 

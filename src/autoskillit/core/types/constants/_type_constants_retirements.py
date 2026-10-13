@@ -75,6 +75,7 @@ KNOWN_UNAFFECTED_SKILL_IDS: frozenset[str] = frozenset(
     {
         "analyze-pipeline-health",
         "analyze-prs",
+        "analyze-run",
         "apply-review-dimensions",
         "audit-arch",
         "audit-bugs",

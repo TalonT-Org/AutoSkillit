@@ -196,11 +196,18 @@ from .pipeline._step_context import current_step_name as current_step_name
 from .pipeline.pipeline_tracker import TrackerAuthorityReadResult as TrackerAuthorityReadResult
 from .pipeline.pipeline_tracker import TrackerAuthorityTarget as TrackerAuthorityTarget
 from .pipeline.pipeline_tracker import TrackerData as TrackerData
+from .pipeline.pipeline_tracker import (
+    TrackerDependencyAdmissionError as TrackerDependencyAdmissionError,
+)
+from .pipeline.pipeline_tracker import TrackerDependencyViolation as TrackerDependencyViolation
+from .pipeline.pipeline_tracker import TrackerInitialization as TrackerInitialization
 from .pipeline.pipeline_tracker import TrackerMutation as TrackerMutation
 from .pipeline.pipeline_tracker import TrackerOwnerKind as TrackerOwnerKind
 from .pipeline.pipeline_tracker import TrackerParticipantKey as TrackerParticipantKey
+from .pipeline.pipeline_tracker import dependency_cycle_members as dependency_cycle_members
 from .pipeline.pipeline_tracker import initialize_kitchen_tracker as initialize_kitchen_tracker
 from .pipeline.pipeline_tracker import initialize_manual_tracker as initialize_manual_tracker
+from .pipeline.pipeline_tracker import is_tracker_enforced_step as is_tracker_enforced_step
 from .pipeline.pipeline_tracker import mutate_tracker as mutate_tracker
 from .pipeline.pipeline_tracker import pipeline_tracker_directory as pipeline_tracker_directory
 from .pipeline.pipeline_tracker import pipeline_tracker_path as pipeline_tracker_path
@@ -1471,6 +1478,7 @@ from .types import render_intake_digest as render_intake_digest
 from .types import render_measure as render_measure
 from .types import render_ratio as render_ratio
 from .types import render_target_skill_command as render_target_skill_command
+from .types import require_aware_timestamp as require_aware_timestamp
 from .types import required_join_is_unsupported as required_join_is_unsupported
 from .types import resolve_native_shell_capture_decision as resolve_native_shell_capture_decision
 from .types import resolve_payload_field as resolve_payload_field
@@ -1492,4 +1500,5 @@ from .types import (
 from .types import validate_label_transition as validate_label_transition
 from .types import validate_managed_skill_entries as validate_managed_skill_entries
 from .types import validate_recipe_artifact_sections as validate_recipe_artifact_sections
+from .types import validate_rollout_marker as validate_rollout_marker
 from .types import validate_skill_capability_roles as validate_skill_capability_roles

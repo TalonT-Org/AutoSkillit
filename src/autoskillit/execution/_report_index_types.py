@@ -32,6 +32,8 @@ class ReportSessionRow(ReportRowBase):
     classification casefolds it only for the source-pair lookup.
     """
 
+    timestamp: str | None
+    rollout: object
     harness: str
     provider: str
     model: str | None

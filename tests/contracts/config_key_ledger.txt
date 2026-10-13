@@ -110,6 +110,7 @@ report_bug.timeout
 reset_workspace.command
 reset_workspace.preserve_dirs
 review.local_review_rounds
+rollout.active
 run_skill.completion_child_deferral_ceiling_seconds
 run_skill.completion_drain_timeout
 run_skill.completion_marker

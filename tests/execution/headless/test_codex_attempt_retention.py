@@ -27,7 +27,7 @@ from autoskillit.core.types.results._type_results import WriteEvidence
 from autoskillit.execution.backends import codex as codex_module
 from autoskillit.execution.backends._codex_session_storage import CodexSessionStore
 from autoskillit.execution.backends.codex import CodexBackend
-from tests.execution.conftest import _launch_inputs, _mock_backend
+from tests.execution.conftest import _launch_inputs, _mock_backend, _unmarked_rollout_snapshot
 from tests.fakes import FakePluginArtifactAuthority
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -189,6 +189,7 @@ async def _run_generated_attempt(
         completion_marker="%%DONE%%",
         stale_threshold=1.0,
         completion_drain_timeout=1.0,
+        capture_rollout_on_launch=_unmarked_rollout_snapshot,
         natural_exit_grace_seconds=1.0,
         linux_tracing_config=None,
         idle_output_timeout=None,
@@ -303,6 +304,7 @@ async def test_generated_home_attempt_retains_rollout_before_nudge_and_named_res
         session_home=str(first_home),
         launch_resolver=nudge_resolver,
         launch_preparation=nudge_preparation,
+        capture_rollout_on_launch=_unmarked_rollout_snapshot,
         natural_exit_grace_seconds=1.0,
         attempt=2,
         ceiling_seconds=_EXECUTION_CEILING_SECONDS,
@@ -415,6 +417,7 @@ async def test_generated_home_attempt_and_nudge_reuse_retained_binding(
         completion_marker="%%DONE%%",
         stale_threshold=1.0,
         completion_drain_timeout=1.0,
+        capture_rollout_on_launch=_unmarked_rollout_snapshot,
         natural_exit_grace_seconds=1.0,
         linux_tracing_config=None,
         idle_output_timeout=None,
@@ -488,6 +491,7 @@ async def test_generated_home_attempt_and_nudge_reuse_retained_binding(
         session_home=str(home),
         launch_resolver=nudge_resolver,
         launch_preparation=nudge_preparation,
+        capture_rollout_on_launch=_unmarked_rollout_snapshot,
         natural_exit_grace_seconds=1.0,
         attempt=2,
         ceiling_seconds=_EXECUTION_CEILING_SECONDS,

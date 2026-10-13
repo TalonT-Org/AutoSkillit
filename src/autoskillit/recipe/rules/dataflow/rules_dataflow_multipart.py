@@ -25,31 +25,6 @@ def _check_multipart_iteration_notes(ctx: ValidationContext) -> list[RuleFinding
     if not has_multipart_step:
         return []
 
-    plan_step = wf.steps.get("plan")
-    plan_note = (plan_step.note or "") if plan_step is not None else ""
-    # Also accept the glob pattern from the note of whichever step invokes the multipart skill
-    multipart_step_notes = [
-        (step.note or "")
-        for step in wf.steps.values()
-        if step.tool in SKILL_TOOLS
-        and extract_skill_name(step.with_args.get("skill_command", "")) in MULTIPART_SKILL_NAMES
-    ]
-    if "*_part_*.md" not in plan_note and not any(
-        "*_part_*.md" in note for note in multipart_step_notes
-    ):
-        findings.append(
-            make_finding(
-                rule_name="multipart-iteration-notes",
-                step_name="plan",
-                message="Recipe uses make-plan or rectify but neither the 'plan' step note nor "
-                "the planning step's own note contains '*_part_*.md'. Agents will not "
-                "know to glob for multi-part plan files. Add: "
-                "'Glob plan_dir for *_part_*.md or single plan file.' to the plan "
-                "step's note (or to the make-plan/rectify step's note if no separate "
-                "'plan' step exists).",
-            )
-        )
-
     sequential_keywords = ("SEQUENTIAL EXECUTION", "full cycle", "Never run verify for all parts")
     rules_text = " ".join(wf.kitchen_rules)
     if not any(kw in rules_text for kw in sequential_keywords):

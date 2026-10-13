@@ -20,6 +20,7 @@ import pytest
 from autoskillit.core import (
     InstructionExtractionMode,
     OrchestratorSurfaceDef,
+    RolloutMarker,
     ToolParamRole,
     get_tool_def,
 )
@@ -36,6 +37,19 @@ T = TypeVar("T")
 # ``MagicMock`` is included because ``Path(...)`` accepts it via ``__fspath__``;
 # the explicit ``isinstance`` guard is what keeps the rejection test honest.
 INVALID_PATH_INPUTS: tuple[object, ...] = (None, 0, b"", object(), MagicMock())
+
+
+def make_rollout_marker(*, backends: tuple[str, ...] = ("claude-code", "codex")) -> RolloutMarker:
+    return {
+        "change_id": "prompt-cost-study",
+        "effective_at": "2026-11-01T18:00:00+00:00",
+        "scope": {
+            "skills": ["make-plan"],
+            "backends": list(backends),
+            "roles": ["planner"],
+        },
+        "expected_effect": "Reduce planning input tokens while preserving requirement coverage.",
+    }
 
 
 def load_core_stub_generator() -> ModuleType:

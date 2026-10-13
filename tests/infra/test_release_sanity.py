@@ -35,15 +35,20 @@ def test_sync_manifest_in_gitignore():
     assert ".autoskillit/sync_manifest.json" in gitignore
 
 
-def test_autoskillit_root_files_are_all_registered():
-    """.autoskillit/ root must only contain files registered in _COMMITTED_BY_DESIGN
-    or _AUTOSKILLIT_GITIGNORE_ENTRIES (or .gitignore itself).
+def test_autoskillit_root_entries_are_all_registered():
+    """Every .autoskillit/ root entry must be registered or self-ignored.
 
-    Catches any session-scoped file mistakenly placed outside temp/ at CI time.
-    If .hook_config.json (or any future runtime artifact) is present in the root
-    rather than temp/, this test fails immediately.
+    Files may be registered in _COMMITTED_BY_DESIGN or
+    _AUTOSKILLIT_GITIGNORE_ENTRIES; .gitignore itself is always accepted. A
+    runtime directory must have a valid self-ignore marker. A directory without
+    one is a namespace left by an earlier version: delete it or run a dispatch
+    to repair its marker.
     """
-    from autoskillit.core.io import _AUTOSKILLIT_GITIGNORE_ENTRIES, _COMMITTED_BY_DESIGN
+    from autoskillit.core.io import (
+        _AUTOSKILLIT_GITIGNORE_ENTRIES,
+        _COMMITTED_BY_DESIGN,
+        is_self_ignored,
+    )
 
     autoskillit_dir = REPO_ROOT / ".autoskillit"
     if not autoskillit_dir.is_dir():
@@ -58,13 +63,15 @@ def test_autoskillit_root_files_are_all_registered():
     unregistered = [
         p.name
         for p in autoskillit_dir.iterdir()
-        if not p.is_dir() and p.name not in registered_names
+        if p.name not in registered_names and not (p.is_dir() and is_self_ignored(p))
     ]
 
     assert not unregistered, (
-        f"Unregistered files found in .autoskillit/: {unregistered}. "
-        f"Session-scoped runtime files belong in .autoskillit/temp/ where they "
-        f"are auto-gitignored by temp/.gitignore ('*'). Persistent files that "
-        f"belong in .autoskillit/ root need an entry added to "
+        f"Unregistered entries found in .autoskillit/: {unregistered}. "
+        f"A runtime directory without a valid self-ignore marker is a namespace "
+        f"left by an earlier version; delete it or run a dispatch to repair the "
+        f"marker. Runtime files belong in .autoskillit/temp/ where they are "
+        f"auto-gitignored by temp/.gitignore ('*'). Persistent files that belong "
+        f"in .autoskillit/ root need an entry added to "
         f"_AUTOSKILLIT_GITIGNORE_ENTRIES in src/autoskillit/core/io/io.py."
     )

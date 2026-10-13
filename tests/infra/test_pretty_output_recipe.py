@@ -1058,7 +1058,7 @@ def _assert_compaction_semantics(recipe_name: str, mode_name: str, loaded_result
     if recipe_name != "remediation":
         return False
     rectify_note = original_parsed["steps"]["rectify"]["note"]
-    assert "Glob plan_dir for *_part_*.md" in rectify_note, (
+    assert "plan_parts is exactly the plan_parts value" in rectify_note, (
         f"property=remediation rectify note source; recipe={recipe_name}; mode={mode_name}"
     )
     assert compacted_parsed["steps"]["rectify"]["note"] == rectify_note, (
@@ -1350,9 +1350,9 @@ def test_pretty_output_recipe_grid_preserves_semantics_and_budgets(tmp_path, mon
         f"ingredients_only=both; actual={measured_modes!r}; limit=all registry modes"
     )
     assert maxima == {
-        "get_recipe_section": (186_838, "remediation", "all_truthy"),
-        "load_recipe": (186_838, "remediation", "all_truthy"),
-        "open_kitchen": (186_892, "remediation", "all_truthy"),
+        "get_recipe_section": (188_124, "remediation", "all_truthy"),
+        "load_recipe": (188_124, "remediation", "all_truthy"),
+        "open_kitchen": (188_178, "remediation", "all_truthy"),
     }, (
         "property=canonical baseline maxima; recipe=all; mode=all; tool=all; "
         f"ingredients_only=both; actual={maxima!r}; limit=measured current baseline"

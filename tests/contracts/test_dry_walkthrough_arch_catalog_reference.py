@@ -23,7 +23,10 @@ def test_dry_walkthrough_declares_arch_constraint_catalog_resource():
     """The catalog is provided data, not a source-tree prose dependency."""
     frontmatter = read_skill_frontmatter(_skill_path())
     assert frontmatter.data is not None, frontmatter.error
-    assert frontmatter.data.get("requires_resources") == ["arch-constraint-catalog"], (
-        "dry-walkthrough must declare requires_resources: [arch-constraint-catalog] "
-        "so the architectural constraint catalog is delivered with the projected skill"
+    assert frontmatter.data.get("requires_resources") == [
+        "arch-constraint-catalog",
+        "plan-part-form",
+    ], (
+        "dry-walkthrough must deliver the architectural constraint catalog and canonical "
+        "plan-part authoring form with the projected skill"
     )

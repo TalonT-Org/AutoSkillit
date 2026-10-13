@@ -363,6 +363,56 @@ def test_corrupt_unsupported_and_digest_mismatched_records_fail_closed(
         store.load(lineage_anchor=anchor, launch_id=lineage.launch_id)
 
 
+def test_create_fails_closed_when_namespace_cannot_be_self_ignored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    anchor = tmp_path / "project"
+    anchor.mkdir()
+    from autoskillit.execution.session import (
+        _managed_headless_session_lineage_records as lineage_module,
+    )
+
+    launch_id = "1" * 32
+
+    def fail_self_ignore(_namespace: Path) -> None:
+        raise OSError("disk unavailable")
+
+    monkeypatch.setattr(lineage_module, "ensure_self_ignored", fail_self_ignore)
+    with pytest.raises(OSError, match="disk unavailable"):
+        _create(DefaultManagedHeadlessSessionLineageStore(), anchor, launch_id=launch_id)
+
+    record = (
+        anchor
+        / ".autoskillit"
+        / "managed-headless-session-lineage"
+        / "records"
+        / f"{launch_id}.json"
+    )
+    assert not record.exists()
+    assert not list((anchor / ".autoskillit" / "managed-headless-session-lineage").rglob("*.json"))
+
+
+def test_create_rejects_existing_non_self_ignoring_marker(
+    tmp_path: Path,
+) -> None:
+    anchor = tmp_path / "project"
+    anchor.mkdir()
+    namespace = anchor / ".autoskillit" / "managed-headless-session-lineage"
+    namespace.mkdir(parents=True)
+    marker = namespace / ".gitignore"
+    malformed = "# not a self-ignoring marker\nmanaged-data/\n"
+    marker.write_text(malformed, encoding="utf-8")
+
+    with pytest.raises(
+        OSError,
+        match="Lineage namespace requires a self-ignoring .gitignore",
+    ):
+        _create(DefaultManagedHeadlessSessionLineageStore(), anchor)
+
+    assert marker.read_text(encoding="utf-8") == malformed
+    assert not (namespace / "records").exists()
+
+
 def test_cross_process_conflicting_creation_has_one_winner(tmp_path: Path) -> None:
     anchor = tmp_path / "project"
     anchor.mkdir()

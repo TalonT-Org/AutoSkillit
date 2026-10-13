@@ -7,6 +7,7 @@ import os
 import time
 import traceback
 from collections.abc import Awaitable, Callable, Mapping, Sequence
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import TracebackType
@@ -32,6 +33,7 @@ from autoskillit.core import (
     PluginLoadMode,
     ResolvedLaunchContract,
     RetryReason,
+    RolloutMarker,
     SkillResult,
     WriteBehaviorSpec,
     collect_version_snapshot,
@@ -191,6 +193,17 @@ async def _execute_claude_headless(
     _start_ts = datetime.now(UTC).isoformat()
     _start_mono = time.monotonic()
     _start_epoch = time.time()
+    _rollout_snapshot: RolloutMarker | None = None
+    _logical_run_start_ts: str | None = None
+
+    def capture_rollout_on_launch() -> tuple[RolloutMarker | None, str]:
+        """Capture marker and UTC start once after admission; reuse across retries and nudges."""
+        nonlocal _rollout_snapshot, _logical_run_start_ts
+        if _logical_run_start_ts is None:
+            _rollout_snapshot = deepcopy(ctx.config.rollout.active)
+            _logical_run_start_ts = datetime.now(UTC).isoformat()
+        return _rollout_snapshot, _logical_run_start_ts
+
     _versions = collect_version_snapshot(_step_backend)  # type: ignore[arg-type]
 
     _readonly_skill = readonly_skill
@@ -346,6 +359,7 @@ async def _execute_claude_headless(
                     completion_drain_timeout=cfg.completion_drain_timeout,
                     natural_exit_grace_seconds=natural_exit_grace_seconds,
                     linux_tracing_config=linux_tracing_cfg,
+                    capture_rollout_on_launch=capture_rollout_on_launch,
                     idle_output_timeout=base_effective_idle,
                     max_suppression_seconds=cfg.max_suppression_seconds,
                     child_deferral_ceiling=cfg.completion_child_deferral_ceiling_seconds,
@@ -506,6 +520,8 @@ async def _execute_claude_headless(
                         mark_execution_started=observe_execution_started,
                         on_session_id_resolved=capture_resolved_session_id,
                         natural_exit_grace_seconds=natural_exit_grace_seconds,
+                        capture_rollout_on_launch=capture_rollout_on_launch,
+                        linux_tracing_config=linux_tracing_cfg,
                         nudge_timeout=min(60.0, nudge_deadline_remaining),
                         attempt=physical_attempt,
                         ceiling_seconds=ceiling_seconds,
@@ -654,21 +670,7 @@ async def _execute_claude_headless(
             execution_selection=terminal_selection,
         )
 
-        if terminal_selection is not None:
-            from autoskillit.execution.session_log.session_log import (
-                write_execution_candidate_manifest,
-            )
-
-            try:
-                write_execution_candidate_manifest(
-                    terminal_selection,
-                    ctx.config.linux_tracing.log_dir,
-                    max_sessions=ctx.config.linux_tracing.max_sessions,
-                    project_dir=str(ctx.project_dir),
-                    build_protected_campaign_ids=ctx.build_protected_campaign_ids,
-                )
-            except Exception:
-                logger.debug("execution_candidate_manifest_write_failed", exc_info=True)
+        _terminal.persist_terminal_selection(ctx, terminal_selection)
 
         terminal_capture_diagnostic = _diag.capture(managed_lineage_observer)
         if _diag.should_flush(result, skill_result, step_name, terminal_capture_diagnostic):
@@ -692,6 +694,8 @@ async def _execute_claude_headless(
                 skill_command=skill_command,
                 step_name=step_name,
                 start_ts=_start_ts,
+                rollout=_rollout_snapshot,
+                logical_run_start_ts=_logical_run_start_ts,
                 termination_reason=terminal_reason_override,
                 exception_text=terminal_exception_text,
                 versions=_versions,

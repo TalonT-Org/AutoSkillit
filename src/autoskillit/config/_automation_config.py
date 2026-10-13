@@ -44,6 +44,7 @@ from autoskillit.config._dataclasses_errors import ConfigSchemaError
 from autoskillit.config._dataclasses_execution import (
     CodexRuntimeConfig,
     QuotaGuardConfig,
+    RolloutConfig,
     RunSkillConfig,
 )
 from autoskillit.config._dataclasses_fleet import FleetConfig, ProcessTetherConfig
@@ -181,6 +182,7 @@ class AutomationConfig:
     safety: SafetyConfig = field(default_factory=SafetyConfig)
     read_db: ReadDbConfig = field(default_factory=ReadDbConfig)
     run_skill: RunSkillConfig = field(default_factory=RunSkillConfig)
+    rollout: RolloutConfig = field(default_factory=RolloutConfig)
     model: CoreRunConfig = field(default_factory=CoreRunConfig)
     worktree_setup: WorktreeSetupConfig = field(default_factory=WorktreeSetupConfig)
     migration: MigrationConfig = field(default_factory=MigrationConfig)

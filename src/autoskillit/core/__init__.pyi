@@ -145,7 +145,9 @@ from .io import default_log_dir as default_log_dir
 from .io import destination_location as destination_location
 from .io import directory_tree_digest as directory_tree_digest
 from .io import dump_yaml_str as dump_yaml_str
+from .io import ensure_project_gitignore as ensure_project_gitignore
 from .io import ensure_project_temp as ensure_project_temp
+from .io import ensure_self_ignored as ensure_self_ignored
 from .io import extract_section as extract_section
 from .io import fast_dumps as fast_dumps
 from .io import fast_loads as fast_loads
@@ -156,6 +158,7 @@ from .io import is_git_main_checkout as is_git_main_checkout
 from .io import is_git_worktree as is_git_worktree
 from .io import is_in_git_repo as is_in_git_repo
 from .io import is_python_bytecode_path as is_python_bytecode_path
+from .io import is_self_ignored as is_self_ignored
 from .io import is_yaml_mapping_node as is_yaml_mapping_node
 from .io import load_yaml as load_yaml
 from .io import main_checkout_root as main_checkout_root
@@ -1266,6 +1269,7 @@ from .types import ReviewOperationState as ReviewOperationState
 from .types import ReviewReconciliationResult as ReviewReconciliationResult
 from .types import ReviewResponseClass as ReviewResponseClass
 from .types import RollbackAdmissionEvent as RollbackAdmissionEvent
+from .types import RolloutMarker as RolloutMarker
 from .types import RolloverEpochEvent as RolloverEpochEvent
 from .types import RunSkillCompletionAuthority as RunSkillCompletionAuthority
 from .types import RuntimeAdmission as RuntimeAdmission

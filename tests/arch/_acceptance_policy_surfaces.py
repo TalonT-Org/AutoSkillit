@@ -2,11 +2,12 @@
 # automated repair sessions must not. Every approval needs a tracking issue and code-owner review.
 """Declared acceptance-policy surfaces and the human approval ledger.
 
-A policy surface is a value the repository treats as the accepted limit for
-something it measures. Because a surface and the measurement it gates live in
-the same working tree, raising one is indistinguishable from satisfying it
-unless a trusted revision is consulted; scripts/check_policy_relaxation.py
-does that consulting and reads this file by AST from both revisions.
+A policy surface holds accepted limits or numeric exemption flags. Because a
+surface and the check it gates live in the same working tree, raising a limit
+or adding an exemption is indistinguishable from satisfying the check unless
+a trusted revision is consulted; scripts/check_policy_relaxation.py does that
+consulting and reads this file by AST from both revisions. Classification flags
+use int_map with default=0: enabling a flag with 1 is a policy relaxation.
 """
 
 from __future__ import annotations
@@ -21,13 +22,13 @@ SurfaceKind = Literal["int_scalar", "int_map", "exemption_map"]
 
 @dataclasses.dataclass(frozen=True)
 class PolicySurface:
-    """One module-level assignment holding an accepted limit."""
+    """One module-level assignment holding accepted limits or exemption flags."""
 
     path: str
     symbol: str
     kind: SurfaceKind
     default: int | None = None
-    """int_map only: the limit an absent key already implies."""
+    """int_map only: the value an absent key already implies."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -58,6 +59,12 @@ POLICY_SURFACES: tuple[PolicySurface, ...] = (
         "FILE_COUNT_LIMITS",
         "int_map",
         default=12,
+    ),
+    PolicySurface(
+        "tests/arch/test_autoskillit_root_children_registered.py",
+        "_CLASSIFIED_ELSEWHERE",
+        "int_map",
+        default=0,
     ),
     PolicySurface(
         "tests/arch/test_pyright_suppression_allowlist.py", "TYPE_IGNORE_BUDGET", "int_scalar"

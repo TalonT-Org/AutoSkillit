@@ -28,7 +28,7 @@ _ALLOWLIST: frozenset[tuple[str, int]] = frozenset(
         # the failure it is inside of.
         ("pipeline/background.py", 81),
         # Config re-read on a config-load failure path.
-        ("cli/_init_helpers.py", 687),
+        ("cli/_init_helpers.py", 690),
     }
 )
 

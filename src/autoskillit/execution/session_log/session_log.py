@@ -31,6 +31,7 @@ from autoskillit.core import (
     EvidenceWorktree,
     EvidenceWorktreeSource,
     ModelIdentity,
+    RolloutMarker,
     SessionType,
     atomic_write,
     default_log_dir,
@@ -158,6 +159,7 @@ def flush_session_log(
     subtype: str,
     exit_code: int,
     start_ts: str,
+    rollout: RolloutMarker | None = None,
     proc_snapshots: list[dict[str, object]] | None,
     end_ts: str = "",
     elapsed_seconds: float | None = None,
@@ -413,6 +415,7 @@ def flush_session_log(
         )
 
         summary = {
+            "rollout": rollout,
             "session_id": session_id,
             "dir_name": dir_name,
             "pid": pid,
@@ -582,6 +585,7 @@ def flush_session_log(
             refresh_summary_child_outcomes(summary_path, list(telemetry.child_outcomes))
 
         index_entry = {
+            "rollout": rollout,
             "session_id": session_id,
             "dir_name": dir_name,
             "timestamp": start_ts,

@@ -1137,7 +1137,7 @@ def test_install_sweeps_all_scopes_for_orphans(
 def test_install_creates_autoskillit_gitignore(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """After install(), .autoskillit/.gitignore must exist (ensure_project_temp was called)."""
+    """install() ensures runtime artifacts are ignored in the project directory."""
     import importlib as _importlib
 
     from autoskillit.cli.install._marketplace import install as _install
@@ -1163,6 +1163,8 @@ def test_install_creates_autoskillit_gitignore(
     assert (tmp_path / ".autoskillit" / ".gitignore").exists(), (
         ".autoskillit/.gitignore must be created by install(), not just by init()"
     )
+    ignore_lines = (tmp_path / ".autoskillit" / ".gitignore").read_text().splitlines()
+    assert ".state.yaml" in ignore_lines
 
 
 def test_install_calls_upgrade_when_scripts_dir_exists(

@@ -7,6 +7,8 @@ across the three per-variant classes.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from autoskillit.core.types import Severity
@@ -15,6 +17,91 @@ from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import analyze_dataflow, run_semantic_rules
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
+_TERMINAL_COVERAGE_BINDS = {
+    ("implementation-groups", "bind_group_parts"),
+    ("implementation-groups", "renew_plan_set"),
+    ("implementation", "renew_plan_set"),
+    ("remediation", "renew_plan_set"),
+    ("remediation", "renew_before_retry"),
+}
+
+
+def _assert_bind_coverage_disposition(recipe, step_name: str) -> None:
+    bind = recipe.steps[step_name]
+    assert bind.on_result is not None
+    coverage_routes = [
+        condition
+        for condition in bind.on_result.conditions
+        if "result.reason" in (condition.when or "")
+        and "coverage_failed" in (condition.when or "")
+    ]
+    if (recipe.name, step_name) in _TERMINAL_COVERAGE_BINDS:
+        assert not coverage_routes
+        return
+    assert len(coverage_routes) == 1, f"undecided bind site: {recipe.name}/{step_name}"
+    assert bind.capture["plan_set_coverage_gaps"].from_ == "${{ result.coverage_gaps }}"
+    guard = recipe.steps[coverage_routes[0].route]
+    assert guard.tool == "run_python"
+    assert guard.with_args["callable"] == "autoskillit.smoke_utils.check_loop_iteration"
+    assert guard.with_args["max_iterations"] == "2"
+    assert guard.on_result is not None
+    routes = [condition.route for condition in guard.on_result.conditions if not condition.when]
+    assert len(routes) == 1
+    replan_name = routes[0]
+    replan = recipe.steps[replan_name]
+    assert replan.tool == "run_skill"
+    inputs = replan.with_args["skill_inputs"]
+    assert isinstance(inputs, dict)
+    assert "${{ context.plan_set_coverage_gaps }}" in inputs.values()
+    assert any(
+        recipe.steps[target].tool == "bind_plan_set"
+        for target in _build_success_step_graph(recipe)[replan_name]
+    )
+
+
+def test_all_bind_sites_have_decided_coverage_failure_disposition() -> None:
+    bind_sites: set[tuple[str, str]] = set()
+    for path in sorted(builtin_recipes_dir().glob("*.yaml")):
+        recipe = load_recipe(path)
+        for step_name, step in recipe.steps.items():
+            if step.tool == "bind_plan_set":
+                bind_sites.add((recipe.name, step_name))
+                _assert_bind_coverage_disposition(recipe, step_name)
+    assert _TERMINAL_COVERAGE_BINDS <= bind_sites
+
+
+def test_bind_disposition_guard_names_an_undecided_bind(tmp_path: Path) -> None:
+    source = (builtin_recipes_dir() / "implementation.yaml").read_text()
+    scratch = tmp_path / "implementation.yaml"
+    scratch.write_text(
+        source.replace(
+            "\nsteps:\n",
+            "\nsteps:\n  undecided_bind:\n    tool: bind_plan_set\n"
+            "    on_result:\n    - route: release_issue_failure\n",
+            1,
+        )
+    )
+    recipe = load_recipe(scratch)
+    with pytest.raises(AssertionError, match="undecided bind site: implementation/undecided_bind"):
+        _assert_bind_coverage_disposition(recipe, "undecided_bind")
+
+
+def test_binds_use_the_producer_part_list_without_directory_discovery() -> None:
+    for path in sorted(builtin_recipes_dir().glob("*.yaml")):
+        recipe = load_recipe(path)
+        binds = {name for name, step in recipe.steps.items() if step.tool == "bind_plan_set"}
+        if binds:
+            assert all("*_part_*.md" not in (step.note or "") for step in recipe.steps.values())
+        graph = _build_success_step_graph(recipe)
+        for bind_name in binds:
+            if recipe.steps[bind_name].with_args.get("plan_parts") != "${{ context.plan_parts }}":
+                continue
+            for source, targets in graph.items():
+                if bind_name in targets:
+                    assert recipe.steps[source].capture_list["plan_parts"].from_ == (
+                        "${{ result.plan_parts }}"
+                    ), f"{recipe.name}/{source} must capture the replacement list for {bind_name}"
 
 
 def _skill_input(step, name: str) -> object:
@@ -325,14 +412,6 @@ class TestImplementationPipelineStructure:
         step = recipe.steps["audit_impl"]
         assert step.on_success is None  # on_result is used; on_success remains absent
         assert step.on_failure == "check_audit_integrity_retry"
-
-    def test_ip6_plan_step_note_contains_glob_pattern(self, recipe) -> None:
-        """T_IP6: plan step note must contain *_part_*.md glob pattern for multi-part discovery."""
-        note = recipe.steps["plan"].note or ""
-        assert "*_part_*.md" in note, (
-            "plan step note must contain glob pattern for multi-part discovery; "
-            "if removed, agents will not discover part files"
-        )
 
     def test_ip7_verify_step_note_sequential_constraint(self, recipe) -> None:
         """T_IP7: verify step note must contain sequential execution constraint."""
@@ -647,7 +726,13 @@ class TestImplementationPipelineStructure:
     def test_ip_coverage_replan_is_bounded(self, recipe) -> None:
         bind = recipe.steps["bind_plan_set"]
         assert bind.on_result is not None
-        assert any(c.route == "check_replan_iteration" for c in bind.on_result.conditions)
+        assert any(
+            c.route == "check_replan_iteration"
+            and c.when
+            and "result.reason" in c.when
+            and "coverage_failed" in c.when
+            for c in bind.on_result.conditions
+        )
         guard = recipe.steps["check_replan_iteration"]
         assert guard.with_args["max_iterations"] == "2"
         assert guard.on_result is not None
@@ -712,7 +797,13 @@ class TestImplementationGroupsStructure:
     def test_ig_gap_replan_is_bounded(self, recipe) -> None:
         seal = recipe.steps["seal_plan_set"]
         assert seal.on_result is not None
-        assert any(c.route == "check_replan_iteration" for c in seal.on_result.conditions)
+        assert any(
+            c.route == "check_replan_iteration"
+            and c.when
+            and "result.reason" in c.when
+            and "coverage_failed" in c.when
+            for c in seal.on_result.conditions
+        )
         guard = recipe.steps["check_replan_iteration"]
         assert guard.with_args["max_iterations"] == "2"
         assert guard.on_result is not None

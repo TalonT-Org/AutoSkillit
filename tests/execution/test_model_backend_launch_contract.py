@@ -9,7 +9,7 @@ reaches ``LaunchPreparation``.
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -17,7 +17,7 @@ import autoskillit.execution.headless as _patch_execution_headless
 from autoskillit.core import LaunchValueSourceKind
 from autoskillit.core.types import LaunchContractError, RetryReason, SkillResult
 
-from .conftest import _backend_authority, _launch_inputs, _mock_backend
+from .conftest import _backend_authority, _launch_inputs, _mock_backend, _unmarked_rollout_snapshot
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small, pytest.mark.model_contract]
 
@@ -166,7 +166,7 @@ async def test_retired_codex_model_fails_during_real_command_preparation_before_
     """The real Codex command builder rejects retired targets before runner invocation."""
     from autoskillit.execution.headless._headless_launch import _run_headless_attempt
 
-    kwargs, runner = _build_real_codex_attempt_kwargs_for_retired_model(model_id, tmp_path)
+    kwargs, runner = _build_codex_attempt_kwargs(model_id, tmp_path)
 
     with pytest.raises(ValueError):
         await _run_headless_attempt(kwargs.pop("build_spec"), runner=runner, **kwargs)
@@ -174,15 +174,38 @@ async def test_retired_codex_model_fails_during_real_command_preparation_before_
     runner.assert_not_awaited()
 
 
-def _build_real_codex_attempt_kwargs_for_retired_model(
+@pytest.mark.anyio
+async def test_rejected_admission_does_not_capture_rollout_or_invoke_runner(tmp_path) -> None:
+    from autoskillit.core import CandidatePreSpawnRejection
+    from autoskillit.execution.headless._headless_launch import _run_headless_attempt
+
+    kwargs, runner = _build_codex_attempt_kwargs("gpt-6-sol", tmp_path)
+    capture = Mock(side_effect=_unmarked_rollout_snapshot)
+    kwargs["capture_rollout_on_launch"] = capture
+
+    async def reject(contract):
+        return CandidatePreSpawnRejection(
+            reason="candidate is not admitted",
+            attempted_contract=contract,
+        )
+
+    kwargs["pre_spawn_admission"] = reject
+    build_spec = kwargs.pop("build_spec")
+    result = await _run_headless_attempt(build_spec, runner=runner, **kwargs)
+
+    assert isinstance(result, CandidatePreSpawnRejection)
+    capture.assert_not_called()
+    runner.assert_not_awaited()
+
+
+def _build_codex_attempt_kwargs(
     model_id: str,
     tmp_path,
 ) -> tuple[dict[str, Any], AsyncMock]:
-    """Build the kwargs dict for one retired-Codex-model launch attempt.
+    """Build the kwargs dict for one real Codex launch attempt.
 
     A new required parameter on ``_run_headless_attempt`` will break this helper
-    at its single definition site, which is the desired locality for a contract
-    test that pins the function's full parameter surface.
+    at this single fixture site.
     """
     from autoskillit.core import PluginLoadMode
     from autoskillit.execution.backends import CodexBackend
@@ -192,7 +215,9 @@ def _build_real_codex_attempt_kwargs_for_retired_model(
     runner = AsyncMock()
 
     def build_spec(_binding, _extras, _managed_attempt_id=None):
-        return backend.build_headless_cmd("test prompt", model=model_id)
+        return backend.build_headless_cmd(
+            "test prompt", model=model_id, generated_home=tmp_path / "codex-home"
+        )
 
     return (
         {
@@ -201,6 +226,7 @@ def _build_real_codex_attempt_kwargs_for_retired_model(
             "launch_resolver": resolver,
             "launch_preparation": preparation,
             "expected_launch_contract": None,
+            "capture_rollout_on_launch": _unmarked_rollout_snapshot,
             "plugin_authority": None,
             "plugin_load_mode": PluginLoadMode.NONE,
             "provider_extras": None,

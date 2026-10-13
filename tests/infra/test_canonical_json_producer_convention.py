@@ -132,7 +132,7 @@ _CANONICAL_JSON_ARTIFACT_REGISTRY: dict[str, CanonicalArtifactDef] = {
         producer_symbol="write_audit_disposition_bundle",
         producer_path=_TYPED_PRODUCER_MODULE,
         producer_function="_write_disposition_report",
-        skill_md_refs=(("src/autoskillit/skills_extended/make-plan/SKILL.md", 383, 395),),
+        skill_md_refs=(("src/autoskillit/skills_extended/make-plan/SKILL.md", 386, 398),),
     ),
     "inventory": CanonicalArtifactDef(
         consumer_site=("src/autoskillit/core/audit/audit_cycle_verifier.py", (660,)),
@@ -146,7 +146,7 @@ _CANONICAL_JSON_ARTIFACT_REGISTRY: dict[str, CanonicalArtifactDef] = {
         producer_symbol="write_audit_disposition_bundle",
         producer_path=_TYPED_PRODUCER_MODULE,
         producer_function="_write_plan_association",
-        skill_md_refs=(("src/autoskillit/skills_extended/make-plan/SKILL.md", 383, 395),),
+        skill_md_refs=(("src/autoskillit/skills_extended/make-plan/SKILL.md", 386, 398),),
     ),
     "audit_semantic_result": CanonicalArtifactDef(
         consumer_site=("src/autoskillit/core/audit/audit_semantic_codec.py", 423),

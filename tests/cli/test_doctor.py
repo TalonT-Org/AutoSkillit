@@ -1086,6 +1086,31 @@ def test_doctor_gitignore_ok_when_all_covered(
     assert result.severity == Severity.OK
 
 
+def test_doctor_gitignore_exempts_only_self_ignoring_directories(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from autoskillit.core.io import _AUTOSKILLIT_GITIGNORE_ENTRIES
+
+    autoskillit_dir = tmp_path / ".autoskillit"
+    autoskillit_dir.mkdir()
+    (autoskillit_dir / ".gitignore").write_text(
+        "\n".join(_AUTOSKILLIT_GITIGNORE_ENTRIES) + "\n", encoding="utf-8"
+    )
+    runtime_dir = autoskillit_dir / "runtime-a"
+    runtime_dir.mkdir()
+    (runtime_dir / ".gitignore").write_text("*\n", encoding="utf-8")
+    (autoskillit_dir / "runtime-b").mkdir()
+
+    monkeypatch.chdir(tmp_path)
+    from autoskillit.cli.doctor import _check_gitignore_completeness
+    from autoskillit.core import Severity
+
+    result = _check_gitignore_completeness(tmp_path)
+    assert result.severity == Severity.WARNING
+    assert "runtime-b" in result.message
+    assert "runtime-a" not in result.message
+
+
 # SS-DOC-1
 def test_doctor_includes_secret_scanning_hook_check(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture

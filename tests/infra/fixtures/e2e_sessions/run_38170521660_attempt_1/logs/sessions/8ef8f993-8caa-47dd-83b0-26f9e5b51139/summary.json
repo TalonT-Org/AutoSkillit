@@ -1,0 +1,23 @@
+{
+  "backend": "claude-code",
+  "campaign_id": "48915f19-d220-4069-8d55-b81efff84c05",
+  "dispatch_id": "4666c3fd-486f-4ce1-b51f-9d9d660a5560",
+  "end_ts": "2026-10-11T20:07:16.866414+00:00",
+  "execution_identity": {
+    "children": [],
+    "cli_version": "",
+    "effective_parent_backend": "",
+    "effective_parent_effort": "",
+    "effective_parent_model": "",
+    "override_key_path": "",
+    "override_tier": "",
+    "parent_session_id": "",
+    "requested_parent_backend": "claude-code",
+    "requested_parent_effort": "",
+    "requested_parent_model": "sonnet"
+  },
+  "provider_used": "anthropic",
+  "session_id": "8ef8f993-8caa-47dd-83b0-26f9e5b51139",
+  "session_type": "skill",
+  "start_ts": "2026-10-11T20:05:22.655547+00:00"
+}

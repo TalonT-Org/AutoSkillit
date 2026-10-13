@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import UTC, datetime, tzinfo
 from pathlib import Path
 from unittest.mock import patch
 
@@ -11,7 +12,7 @@ import pytest
 import structlog
 
 import autoskillit.execution.headless._headless_execute as _patch_headless__headless_execute
-from autoskillit.core import CmdSpec, ValidatedAddDir
+from autoskillit.core import CmdSpec, RolloutMarker, ValidatedAddDir
 from autoskillit.core.types import SubprocessResult, TerminationReason
 from tests.execution.conftest import _sink_env
 
@@ -36,6 +37,369 @@ def _success_result() -> SubprocessResult:
         termination=TerminationReason.NATURAL_EXIT,
         pid=12345,
     )
+
+
+class _ControlledDateTime(datetime):
+    current: datetime = datetime(2026, 10, 10, 12, 0, 0, 499999, tzinfo=UTC)
+
+    @classmethod
+    def now(cls, tz: tzinfo | None = None) -> datetime:
+        value = cls.current.replace(tzinfo=None) if tz is None else cls.current.astimezone(tz)
+        return cls.fromisoformat(value.isoformat())
+
+
+def _rollout_marker(change_id: str) -> RolloutMarker:
+    return {
+        "change_id": change_id,
+        "effective_at": "2026-10-10T12:00:00.500000+00:00",
+        "scope": {"skills": ["audit"], "backends": ["claude-code", "codex"], "roles": []},
+        "expected_effect": f"Expected effect for {change_id}",
+    }
+
+
+async def _run_rollout_execution(
+    ctx,
+    tmp_path: Path,
+    *,
+    backend_name: str = "claude-code",
+    pre_spawn_admission=None,
+):
+    from autoskillit.execution.headless import _execute_claude_headless
+    from tests.execution.conftest import _launch_preparation, _mock_backend
+
+    backend = _mock_backend(pty_required=True, channel_b_capable=True)
+    backend.name = backend_name
+    ctx.backend = backend
+    return await _execute_claude_headless(
+        lambda _binding, extras, _attempt_id=None: CmdSpec(
+            cmd=(backend_name, "--test"), env=dict(extras or {})
+        ),
+        str(tmp_path),
+        ctx,
+        timeout=30.0,
+        stale_threshold=5.0,
+        step_name="rollout-test",
+        launch_resolver=ctx.launch_resolver,
+        launch_preparation=_launch_preparation(ctx, cwd=str(tmp_path)),
+        pre_spawn_admission=pre_spawn_admission,
+    )
+
+
+def _capture_rollout_flushes(monkeypatch, ctx, tmp_path: Path) -> list[dict[str, object]]:
+    import autoskillit.execution as execution
+    import autoskillit.execution.headless._headless_execute as execute_module
+    import autoskillit.execution.session_log.session_log as session_log
+
+    log_dir = str(tmp_path / "rollout-logs")
+    ctx.config.linux_tracing.log_dir = log_dir
+    _install_fake_sink(
+        monkeypatch,
+        execute_module,
+        [],
+        log_dir,
+        close_raises=False,
+    )
+    flushed: list[dict[str, object]] = []
+    original_flush = session_log.flush_session_log
+
+    def capture_flush(**kwargs):
+        flushed.append(kwargs)
+        original_flush(**kwargs)
+
+    monkeypatch.setattr(session_log, "flush_session_log", capture_flush)
+    monkeypatch.setattr(execution, "flush_session_log", capture_flush)
+    return flushed
+
+
+def _assert_rollout_artifacts(ctx, rollout: RolloutMarker | None, start_ts: str) -> None:
+    log_root = Path(ctx.config.linux_tracing.log_dir)
+    summary_paths = list(log_root.rglob("summary.json"))
+    assert len(summary_paths) == 1
+    summary = json.loads(summary_paths[0].read_text())
+    index_rows = [
+        json.loads(line)
+        for line in (log_root / "sessions.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    assert len(index_rows) == 1
+    assert summary["rollout"] == rollout
+    assert summary["start_ts"] == start_ts
+    assert index_rows[0]["rollout"] == rollout
+    assert index_rows[0]["timestamp"] == start_ts
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("backend_name", ["claude-code", "codex"])
+async def test_rollout_snapshot_is_taken_after_admission_for_both_backends(
+    minimal_ctx, tmp_path: Path, monkeypatch, backend_name: str
+) -> None:
+    import autoskillit.execution.headless._headless_execute as execute_module
+    from tests.fakes import MockSubprocessRunner
+
+    before_cutover = datetime.fromisoformat("2026-10-10T12:00:00.499999+00:00")
+    after_cutover = datetime.fromisoformat("2026-10-10T12:00:00.500001+00:00")
+    marker_a = _rollout_marker("rollout-a")
+    marker_b = _rollout_marker("rollout-b")
+    minimal_ctx.config.rollout.active = marker_a
+    monkeypatch.setattr(_ControlledDateTime, "current", before_cutover)
+    monkeypatch.setattr(execute_module, "datetime", _ControlledDateTime)
+
+    runner = MockSubprocessRunner()
+    runner.set_default(_success_result())
+    minimal_ctx.runner = runner
+    flushed = _capture_rollout_flushes(monkeypatch, minimal_ctx, tmp_path)
+    admission_calls = 0
+
+    async def admit_after_cutover(_contract):
+        nonlocal admission_calls
+        admission_calls += 1
+        minimal_ctx.config.rollout.active = marker_b
+        monkeypatch.setattr(_ControlledDateTime, "current", after_cutover)
+        return None
+
+    await _run_rollout_execution(
+        minimal_ctx,
+        tmp_path,
+        backend_name=backend_name,
+        pre_spawn_admission=admit_after_cutover,
+    )
+
+    assert admission_calls == 1
+    assert len(runner.call_args_list) == 1
+    runner_kwargs = runner.call_args_list[0][3]
+    assert runner_kwargs["rollout"] == marker_b
+    assert runner_kwargs["logical_run_start_ts"] == after_cutover.isoformat()
+    assert datetime.fromisoformat(runner_kwargs["logical_run_start_ts"]) >= datetime.fromisoformat(
+        marker_b["effective_at"]
+    )
+    assert flushed[0]["rollout"] == marker_b
+    assert flushed[0]["start_ts"] == after_cutover.isoformat()
+    _assert_rollout_artifacts(minimal_ctx, marker_b, after_cutover.isoformat())
+
+
+@pytest.mark.anyio
+async def test_admitted_inactive_run_uses_logical_start_over_later_result_start(
+    minimal_ctx, tmp_path: Path, monkeypatch
+) -> None:
+    import autoskillit.execution.headless._headless_execute as execute_module
+    import autoskillit.execution.headless._headless_terminal as terminal
+    from tests.fakes import MockSubprocessRunner
+
+    operation_start = datetime.fromisoformat("2026-10-10T12:00:00.499999+00:00")
+    logical_start = datetime.fromisoformat("2026-10-10T12:00:00.500001+00:00")
+    later_result_start = datetime.fromisoformat("2026-10-10T12:00:00.500003+00:00")
+    minimal_ctx.config.rollout.active = None
+    monkeypatch.setattr(_ControlledDateTime, "current", operation_start)
+    monkeypatch.setattr(execute_module, "datetime", _ControlledDateTime)
+
+    runner = MockSubprocessRunner()
+    runner.set_default(_success_result())
+    minimal_ctx.runner = runner
+    flushed = _capture_rollout_flushes(monkeypatch, minimal_ctx, tmp_path)
+    original_builder = terminal.build_terminal_flush_kwargs
+    observed_result_starts: list[str] = []
+
+    def set_later_result_start(**kwargs):
+        result = kwargs["result"]
+        assert result is not None
+        observed_result_starts.append(result.start_ts)
+        result.start_ts = later_result_start.isoformat()
+        return original_builder(**kwargs)
+
+    monkeypatch.setattr(terminal, "build_terminal_flush_kwargs", set_later_result_start)
+
+    async def admit(_contract):
+        monkeypatch.setattr(_ControlledDateTime, "current", logical_start)
+        return None
+
+    await _run_rollout_execution(minimal_ctx, tmp_path, pre_spawn_admission=admit)
+
+    runner_kwargs = runner.call_args_list[0][3]
+    assert runner_kwargs["rollout"] is None
+    assert runner_kwargs["logical_run_start_ts"] == logical_start.isoformat()
+    assert observed_result_starts == [operation_start.isoformat()]
+    assert later_result_start > logical_start
+    assert flushed[0]["rollout"] is None
+    assert flushed[0]["start_ts"] == logical_start.isoformat()
+
+
+@pytest.mark.anyio
+async def test_rollout_snapshot_survives_midrun_config_mutation_and_independent_run(
+    minimal_ctx, tmp_path: Path, monkeypatch
+) -> None:
+    from copy import deepcopy
+
+    import autoskillit.execution.headless._headless_execute as execute_module
+    from tests.fakes import MockSubprocessRunner
+
+    marker_a = _rollout_marker("rollout-a")
+    marker_b = _rollout_marker("rollout-b")
+    minimal_ctx.config.rollout.active = deepcopy(marker_a)
+    monkeypatch.setattr(
+        _ControlledDateTime,
+        "current",
+        datetime.fromisoformat("2026-10-10T12:00:01+00:00"),
+    )
+    monkeypatch.setattr(execute_module, "datetime", _ControlledDateTime)
+
+    class MutatingRunner(MockSubprocessRunner):
+        rollout_calls: list[dict[str, object]]
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.rollout_calls = []
+            self.set_default(_success_result())
+
+        async def __call__(self, *args, **kwargs):
+            self.rollout_calls.append(kwargs)
+            if len(self.rollout_calls) == 1:
+                configured = minimal_ctx.config.rollout.active
+                assert configured is not None
+                configured["scope"]["skills"].clear()
+                minimal_ctx.config.rollout.active = None
+                monkeypatch.setattr(
+                    _ControlledDateTime,
+                    "current",
+                    datetime.fromisoformat("2026-10-10T12:00:02+00:00"),
+                )
+            return await super().__call__(*args, **kwargs)
+
+    runner = MutatingRunner()
+    minimal_ctx.runner = runner
+    flushed = _capture_rollout_flushes(monkeypatch, minimal_ctx, tmp_path)
+
+    await _run_rollout_execution(minimal_ctx, tmp_path)
+
+    assert runner.rollout_calls[0]["rollout"] == marker_a
+    assert runner.rollout_calls[0]["logical_run_start_ts"] == "2026-10-10T12:00:01+00:00"
+    assert flushed[0]["rollout"] == marker_a
+    assert flushed[0]["start_ts"] == runner.rollout_calls[0]["logical_run_start_ts"]
+
+    minimal_ctx.config.rollout.active = marker_b
+    await _run_rollout_execution(minimal_ctx, tmp_path)
+
+    assert runner.rollout_calls[1]["rollout"] == marker_b
+    assert runner.rollout_calls[1]["logical_run_start_ts"] == "2026-10-10T12:00:02+00:00"
+    assert flushed[1]["rollout"] == marker_b
+    assert flushed[1]["start_ts"] == runner.rollout_calls[1]["logical_run_start_ts"]
+
+
+@pytest.mark.anyio
+async def test_contract_nudge_reuses_executor_rollout_snapshot_after_config_changes(
+    minimal_ctx, tmp_path: Path, monkeypatch
+) -> None:
+    import autoskillit.execution.headless._headless_execute as execute_module
+    from autoskillit.core import RetryReason, SkillResult
+    from tests.fakes import MockSubprocessRunner
+
+    marker_a = _rollout_marker("rollout-a")
+    marker_b = _rollout_marker("rollout-b")
+    minimal_ctx.config.rollout.active = marker_a
+    monkeypatch.setattr(
+        _ControlledDateTime,
+        "current",
+        datetime.fromisoformat("2026-10-10T12:00:03+00:00"),
+    )
+    monkeypatch.setattr(execute_module, "datetime", _ControlledDateTime)
+
+    class MutatingRunner(MockSubprocessRunner):
+        observed_kwargs: dict[str, object] | None = None
+
+        async def __call__(self, *args, **kwargs):
+            self.observed_kwargs = kwargs
+            minimal_ctx.config.rollout.active = marker_b
+            monkeypatch.setattr(
+                _ControlledDateTime,
+                "current",
+                datetime.fromisoformat("2026-10-10T12:00:04+00:00"),
+            )
+            return await super().__call__(*args, **kwargs)
+
+    runner = MutatingRunner()
+    runner.set_default(_success_result())
+    minimal_ctx.runner = runner
+    flushed = _capture_rollout_flushes(monkeypatch, minimal_ctx, tmp_path)
+    retry_result = SkillResult(
+        success=False,
+        result="missing completion marker",
+        session_id="nudge-session",
+        subtype="contract_recovery",
+        is_error=False,
+        exit_code=1,
+        needs_retry=True,
+        retry_reason=RetryReason.CONTRACT_RECOVERY,
+        stderr="",
+    )
+    nudge_snapshots: list[tuple[RolloutMarker | None, str]] = []
+    nudge_configs: list[object] = []
+
+    monkeypatch.setattr(
+        execute_module,
+        "_build_skill_result",
+        lambda *_args, **_kwargs: retry_result,
+    )
+
+    async def nudge_with_shared_snapshot(*_args, **kwargs):
+        nudge_snapshots.append(kwargs["capture_rollout_on_launch"]())
+        nudge_configs.append(kwargs["linux_tracing_config"])
+        return SkillResult(
+            success=True,
+            result="recovered",
+            session_id="nudge-session",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+
+    monkeypatch.setattr(execute_module, "_attempt_contract_nudge", nudge_with_shared_snapshot)
+
+    await _run_rollout_execution(minimal_ctx, tmp_path)
+
+    assert runner.observed_kwargs is not None
+    main_snapshot = (
+        runner.observed_kwargs["rollout"],
+        runner.observed_kwargs["logical_run_start_ts"],
+    )
+    assert main_snapshot == (marker_a, "2026-10-10T12:00:03+00:00")
+    assert nudge_snapshots == [main_snapshot]
+    assert nudge_configs == [minimal_ctx.config.linux_tracing]
+    assert flushed[0]["rollout"] == marker_a
+    assert flushed[0]["start_ts"] == main_snapshot[1]
+
+
+@pytest.mark.anyio
+async def test_launched_runner_failure_keeps_rollout_marker_in_flush(
+    minimal_ctx, tmp_path: Path, monkeypatch
+) -> None:
+    from tests.fakes import MockSubprocessRunner
+
+    marker = _rollout_marker("rollout-failure")
+    minimal_ctx.config.rollout.active = marker
+
+    class FailingRunner(MockSubprocessRunner):
+        observed_kwargs: dict[str, object] | None = None
+
+        async def __call__(self, *args, **kwargs):
+            self.observed_kwargs = kwargs
+            raise RuntimeError("runner failed after launch")
+
+    runner = FailingRunner()
+    minimal_ctx.runner = runner
+    flushed = _capture_rollout_flushes(monkeypatch, minimal_ctx, tmp_path)
+
+    result = await _run_rollout_execution(minimal_ctx, tmp_path)
+
+    assert result.subtype == "crashed"
+    assert runner.observed_kwargs is not None
+    assert runner.observed_kwargs["rollout"] == marker
+    logical_start = runner.observed_kwargs["logical_run_start_ts"]
+    assert isinstance(logical_start, str) and logical_start
+    assert flushed[0]["rollout"] == marker
+    assert flushed[0]["start_ts"] == logical_start
+    _assert_rollout_artifacts(minimal_ctx, marker, logical_start)
 
 
 def _install_fake_sink(

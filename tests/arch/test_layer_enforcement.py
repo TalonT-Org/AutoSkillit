@@ -2002,6 +2002,8 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/execution/test_process_tether.py": frozenset({"autoskillit.config"}),
     # workspace tests
     "tests/workspace/test_clone_ci_contract.py": frozenset({"autoskillit.execution"}),
+    # Clone cleanliness is exercised against the real execution-layer lineage writer.
+    "tests/workspace/test_clone_gate_runtime_state.py": frozenset({"autoskillit.execution"}),
     # the frontmatter write scope round-trips through the stdlib-only write-scope
     # authority and the hook-side manifest decoder it feeds
     "tests/workspace/test_skill_write_boundary_contract.py": frozenset({"autoskillit.hooks"}),

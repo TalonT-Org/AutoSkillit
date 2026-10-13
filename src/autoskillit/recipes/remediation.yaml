@@ -499,10 +499,9 @@ steps:
     on_failure: release_issue_failure
     on_rate_limit: release_issue_failure
     on_context_limit: salvage_rectify_plan
-    note: 'Glob plan_dir for *_part_*.md or single plan file. Sort alphabetically
-      into plan_parts[].
-
-      '
+    note: >-
+      plan_parts is exactly the plan_parts value of this step's result, in the order the skill
+      emitted it.
   salvage_rectify_plan:
     tool: run_python
     with:
@@ -540,6 +539,8 @@ steps:
       route: check_replan_iteration
     - route: release_issue_failure
     on_failure: release_issue_failure
+    note: >-
+      __RECIPE_NOTE_PLAN_PARTS_BINDING__
   check_replan_iteration:
     tool: run_python
     with:
@@ -622,6 +623,8 @@ steps:
       route: retry_walkthrough
     - route: release_issue_failure
     on_failure: release_issue_failure
+    note: >-
+      __RECIPE_NOTE_PLAN_SET_RENEWAL_FAILURE__
   retry_walkthrough:
     tool: run_skill
     model: ''
@@ -664,10 +667,10 @@ steps:
       route: create_impl_worktree
     - route: release_issue_failure
     on_failure: release_issue_failure
-    note: "Bounded one-hop re-invoke of dry-walkthrough after a context-limit stumble\
-      \ on the primary dry_walkthrough step. Never routes back to dry_walkthrough\
-      \ \u2014 on_failure and on_context_limit both fall through to the original failure\
-      \ destination."
+    note: >-
+      Bounded one-hop re-invoke of dry-walkthrough after a context-limit stumble on the
+      primary dry_walkthrough step. Never routes back to dry_walkthrough — on_failure and
+      on_context_limit both fall through to the original failure destination. __RECIPE_NOTE_PLAN_SET_RENEWAL_FAILURE__
   create_impl_worktree:
     tool: run_cmd
     with:

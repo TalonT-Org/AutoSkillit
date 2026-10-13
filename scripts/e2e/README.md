@@ -202,9 +202,19 @@ The implementation pipeline installs synchronous command hooks for `SessionStart
 settings. These hooks follow the [Claude lifecycle schema](https://code.claude.com/docs/en/hooks).
 Each identity spans its first start through its final end, so compaction and resume yield
 a conservative upper bound. Half-open intervals end before simultaneous starts. The
-summary reconciles the dispatched root, managed lineage and enumerable native transcripts;
-missing endpoints, identities or owned transcripts fail coverage. Transcript activity is
-never used to infer a lifetime. A peak exceeding capacity fails validation.
+summary reconciles the dispatched root, managed lineage and enumerable native transcripts.
+AutoSkillit writes `logs/sessions.jsonl` and each session's `summary.json`; their dispatch
+and parent/caller fields are AutoSkillit provenance, separate from Claude Code transcript
+and lifecycle hook fields. Empty links do not imply a Claude Code schema guarantee.
+Managed sessions are adopted through declared parent fields or receipted `run_skill`,
+`complete_run_skill_result` or `recover_run_skill_result` replies in an owned transcript.
+Each must have exactly one index row with the run's `dispatch_id`. Parentless sessions
+without receipts, missing or ambiguous index rows, and receipt-named sessions absent
+from both trace and index fail coverage. Shared dispatch IDs or overlapping lifetimes
+never adopt a session. Missing endpoints, identities or owned transcripts fail coverage;
+transcript activity never infers a lifetime. An auto-compacted root can leave an unmatched
+`SubagentStop`, which still fails coverage and is tracked separately. A peak exceeding
+capacity fails validation.
 
 Commission with a successful MiniMax CI run and repeat against the same seed. Inspect
 planning, dry-walkthrough, implementation, test, integration, audit GO and open-PR evidence,
@@ -226,9 +236,19 @@ and are often `0600`, so a second container run copies `out/` and `data/logs/` i
 fails if any secret survives. Only `upload/` is uploaded, and only when redaction
 succeeded.
 
+When a test does not pass, the harness preserves plans from each pipeline clone under
+`out/pipeline-artifacts/<clone>/<make-plan|rectify>/` and Claude Code JSONL under
+`out/transcripts/`, retaining relative paths. The transcripts include the orchestrator,
+skill sessions and their subagents; the orchestrator's transcript holds each raw
+`bind_plan_set` response and its `plan_parts` argument. These files go through the same
+redaction and upload steps as the other output artifacts. Collection also runs for an
+expected failure or a harness exception. A container killed before or during collection
+may leave no evidence or only partial evidence.
+
 Pipeline evidence includes `session-events.jsonl`, `session-concurrency.json`, compact
 `ownership.json`, the seed, effective configuration, fleet stdout/stderr/envelope, captured
-PR metadata/files, detached-head test commands and associated CI runs/jobs. Collection
+PR metadata/files, detached-head test commands, associated CI runs/jobs, and sandbox head-ref
+listings before the run and after cleanup (`head-refs-before.*`, `head-refs-after.*`). Collection
 occurs inside the container before transcript paths disappear. Incomplete evidence is
 retained and fails the scenario; redaction and upload still run after failure.
 
@@ -302,7 +322,19 @@ must be `main`. No caller `base_branch` ingredient is sent. Sandbox setup and ba
 must succeed before launch.
 
 Paired root transcript tool calls/results prove the created branch; paired root/managed
-claim results prove any added claim label. Discovery paginates through the PR baseline
+claim results prove any added claim label. The collector accepts the direct
+`mcp__autoskillit__` and plugin `mcp__plugin_autoskillit_autoskillit__` namespaces;
+a tracked tool under any other namespace fails the proof. Claude Code persisted
+transcripts carry replies in row-level `mcpMeta.structuredContent` when `mcpMeta`
+is present, otherwise in JSON block content. Malformed metadata or metadata on a
+row with several results fails the paired resource call. Hook display text never
+replaces unusable metadata. The pretty-output hook emits `updatedMCPToolOutput`;
+`_result_object` remains the shared envelope decoder, and metadata presence alone
+does not identify whether the hook ran. These shapes are pinned by
+`tests/infra/fixtures/e2e_sessions/` from Claude Code 2.1.280; re-capture them when
+an otherwise successful call reports a failed branch or claim result.
+
+Discovery paginates through the PR baseline
 and leaves unrelated PRs untouched. Require exactly one owned open, unmerged sandbox PR
 targeting `main`, without auto-merge, with the canonical seed URL and non-removed changes
 under both `sandbox/` and `tests/`. Fetch and detach at the captured head before setup and
@@ -315,6 +347,17 @@ closes owned open PRs, deletes evidenced branches (including branches without a 
 removes only the effective claim label proven added by this run. The seed remains OPEN
 and other labels are preserved. Missing ownership proof preserves uncertain resources and
 fails cleanup. Cleanup errors remain fatal alongside the original failure.
+
+Branch reconciliation lists the sandbox's branches before the run and after cleanup.
+A branch created during the run that `ownership.json` does not explain is preserved
+and fails cleanup; baseline branches are excluded from unexplained-branch reports.
+Branches named by the ownership proof retain the existing cleanup rule. The original
+API stdout saved as `head-refs-before.stdout.txt` and `head-refs-after.stdout.txt` supplies
+the in-memory snapshots; accompanying stderr and command records diagnose failed requests.
+This check only detects unexplained branches: the creating run records the failure once,
+and the branch and any PR on it must be removed by hand. The next run includes it in
+its baseline. A manual run overlapping CI can trigger the check because CI serialization
+does not cover local runs.
 
 ## Catalog schema
 
@@ -410,6 +453,25 @@ docker run --rm \
   autoskillit-e2e:local \
   python3 /opt/e2e/e2e_harness.py run --test clean-install --out /artifacts
 ```
+
+### Check a real plan against the plan-set gate before dispatching a pipeline scenario
+
+After the plan-set changes have merged, perform this check before CI commissioning:
+
+1. Check out the #5255 branch revision containing both the `implementation` E2E scenario
+   and the evidence collector. Build and run that revision with the Docker
+   invocation above, selecting `--test implementation`. Use the same revision for
+   commissioning and record the model.
+2. If the run reaches implementation, the first bind succeeded. If the test does not
+   pass, inspect the orchestrator's `bind_plan_set` results in `out/transcripts/`.
+   An observed `success: true` on the first or second bind is the pass condition.
+   A `coverage_failed` result explains the rejection in `coverage_gaps`, and
+   `out/pipeline-artifacts/` retains the rejected plan. Missing evidence is inconclusive
+   and does not satisfy this gate: require an observed successful bind. When a run
+   replans, also confirm the second bind's `plan_parts` names only the replacement plan.
+3. Record the model, plan path and bind result in issue #5259's body using
+   `gh issue edit --body-file`, never as a comment. Only an observed successful bind
+   unblocks `gh workflow run e2e.yml -f tests=implementation`.
 
 ### Sandbox smoke with teardown
 

@@ -357,6 +357,14 @@ def is_generated_path(file_path: str) -> bool:
     return False
 
 
+def is_self_ignored(directory: Path) -> bool:
+    """Recognize a regular, non-symlink marker with a standalone ``*`` rule."""
+    marker = directory / ".gitignore"
+    if marker.is_symlink() or not marker.is_file():
+        return False
+    return "*" in marker.read_text(encoding="utf-8", errors="replace").splitlines()
+
+
 def _coerce_str_or_path(name: str, value: object) -> str | Path:
     """Reject non-str/Path inputs with a uniform error message.
 

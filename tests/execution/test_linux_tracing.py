@@ -6,10 +6,12 @@ import json
 import os
 import sys
 from datetime import datetime
+from unittest.mock import Mock
 
 import anyio
 import pytest
 
+from tests._helpers import make_rollout_marker
 from tests.conftest import production_interpreter_env
 
 pytestmark = [
@@ -450,26 +452,83 @@ async def test_start_linux_tracing_writes_enrollment_sidecar(tmp_path):
     import anyio
 
     from autoskillit.execution.evidence.linux_tracing import (
+        read_enrollment,
         start_linux_tracing,
         trace_target_from_pid,
     )
     from tests._helpers import make_tracing_config
 
     cfg = make_tracing_config(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
+    rollout = make_rollout_marker()
+    logical_run_start_ts = "2026-10-10T19:00:00+00:00"
     async with anyio.create_task_group() as tg:
         proc = await anyio.open_process(["sleep", "2"])
-        handle = start_linux_tracing(trace_target_from_pid(proc.pid), cfg, tg)
+        handle = start_linux_tracing(
+            trace_target_from_pid(proc.pid),
+            cfg,
+            tg,
+            rollout=rollout,
+            logical_run_start_ts=logical_run_start_ts,
+        )
         assert handle is not None
         enrollment = tmp_path / f"autoskillit_enrollment_{proc.pid}.json"
         assert enrollment.exists()
         data = json.loads(enrollment.read_text())
-        assert data["schema_version"] == 2
+        assert data["schema_version"] == 3
         assert data["pid"] == proc.pid
+        assert data["rollout"] == rollout
+        assert data["logical_run_start_ts"] == logical_run_start_ts
+        record = read_enrollment(enrollment)
+        assert record is not None
+        assert record.rollout == rollout
+        assert record.logical_run_start_ts == logical_run_start_ts
         try:
             handle.stop()
         finally:
             proc.kill()
     assert not enrollment.exists(), "Enrollment must be deleted by stop()"
+
+
+@pytest.mark.parametrize("schema_version", [1, 2])
+def test_read_enrollment_defaults_rollout_fields_for_historical_schemas(tmp_path, schema_version):
+    from autoskillit.execution.evidence.linux_tracing import read_enrollment
+
+    data = {"schema_version": schema_version, "pid": 12345}
+    if schema_version == 2:
+        data["comm"] = "claude"
+    enrollment = tmp_path / "enrollment.json"
+    enrollment.write_text(json.dumps(data))
+
+    record = read_enrollment(enrollment)
+
+    assert record is not None
+    assert record.schema_version == schema_version
+    assert record.rollout is None
+    assert record.logical_run_start_ts == ""
+
+
+@pytest.mark.parametrize("contents", [None, "{"])
+def test_read_enrollment_logs_invalid_sidecar_but_not_missing(tmp_path, monkeypatch, contents):
+    from autoskillit.execution.evidence import linux_tracing
+
+    enrollment = tmp_path / "enrollment.json"
+    if contents is not None:
+        enrollment.write_text(contents)
+    logger = Mock()
+    monkeypatch.setattr(linux_tracing, "logger", logger)
+
+    assert linux_tracing.read_enrollment(enrollment) is None
+
+    if contents is None:
+        logger.warning.assert_not_called()
+    else:
+        logger.warning.assert_called_once()
+        message, path, error_type, error = logger.warning.call_args.args
+        assert "Failed to read enrollment sidecar" in message
+        assert path == enrollment
+        assert error_type == "JSONDecodeError"
+        assert isinstance(error, json.JSONDecodeError)
+        assert str(error)
 
 
 # --- LinuxTracingConfig guard tests ---

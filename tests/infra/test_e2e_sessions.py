@@ -422,6 +422,29 @@ def test_summary_enumerates_native_agent_transcripts_and_requires_endpoints(
     ]
 
 
+def test_native_transcript_symlink_loop_is_reported_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    transcript = tmp_path / "agent-agent-a.jsonl"
+    transcript.symlink_to(transcript.name)
+
+    def resolve_loop(_path: Path) -> Path:
+        raise RuntimeError("Symlink loop")
+
+    monkeypatch.setattr(Path, "resolve", resolve_loop)
+    violations: list[str] = []
+    proof = sessions._verify_native_transcript(
+        ROOT_ID,
+        "agent-a",
+        transcript,
+        [{"event": "SubagentStart"}, {"event": "SubagentStop"}],
+        violations,
+    )
+
+    assert proof is None
+    assert violations == [f"native:{ROOT_ID}:agent-a:transcript_missing"]
+
+
 def test_indexed_owned_child_without_hooks_is_incomplete(tmp_path: Path) -> None:
     log_root, trace, _ = _base_sessions(tmp_path, child_id="missing-hooks")
     transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"

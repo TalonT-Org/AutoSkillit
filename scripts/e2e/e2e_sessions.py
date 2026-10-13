@@ -556,6 +556,9 @@ def _verify_native_transcript(
     if transcript is None:
         violations.append(f"{label}:transcript_unenumerated")
         return None
+    if not transcript.is_file():
+        violations.append(f"{label}:transcript_missing")
+        return None
     expected_path = str(transcript.resolve())
     paths = {
         str(Path(event["agent_transcript_path"]).resolve())
@@ -566,9 +569,6 @@ def _verify_native_transcript(
         violations.append(f"{label}:transcript_mismatch")
     if not paths:
         violations.append(f"{label}:transcript_path_missing")
-    if not transcript.is_file():
-        violations.append(f"{label}:transcript_missing")
-        return None
     _read_jsonl(transcript, f"transcript:{session_id}:{agent_id}", violations, collect=False)
     return {"session_id": session_id, "agent_id": agent_id, "transcript_path": expected_path}
 

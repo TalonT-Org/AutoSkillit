@@ -2,17 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-
-
-def _build_tracker_steps(
-    active_steps: Mapping[str, object], skipped: set[str]
-) -> dict[str, dict[str, str]]:
-    return {
-        name: {"status": "skipped"} if name in skipped else {"status": "pending"}
-        for name in active_steps
-    }
-
 
 def _compute_status_counts(
     steps: dict[str, dict[str, object]], dependencies: dict[str, list[str]]

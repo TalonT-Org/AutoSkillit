@@ -196,11 +196,18 @@ from .pipeline._step_context import current_step_name as current_step_name
 from .pipeline.pipeline_tracker import TrackerAuthorityReadResult as TrackerAuthorityReadResult
 from .pipeline.pipeline_tracker import TrackerAuthorityTarget as TrackerAuthorityTarget
 from .pipeline.pipeline_tracker import TrackerData as TrackerData
+from .pipeline.pipeline_tracker import (
+    TrackerDependencyAdmissionError as TrackerDependencyAdmissionError,
+)
+from .pipeline.pipeline_tracker import TrackerDependencyViolation as TrackerDependencyViolation
+from .pipeline.pipeline_tracker import TrackerInitialization as TrackerInitialization
 from .pipeline.pipeline_tracker import TrackerMutation as TrackerMutation
 from .pipeline.pipeline_tracker import TrackerOwnerKind as TrackerOwnerKind
 from .pipeline.pipeline_tracker import TrackerParticipantKey as TrackerParticipantKey
+from .pipeline.pipeline_tracker import dependency_cycle_members as dependency_cycle_members
 from .pipeline.pipeline_tracker import initialize_kitchen_tracker as initialize_kitchen_tracker
 from .pipeline.pipeline_tracker import initialize_manual_tracker as initialize_manual_tracker
+from .pipeline.pipeline_tracker import is_tracker_enforced_step as is_tracker_enforced_step
 from .pipeline.pipeline_tracker import mutate_tracker as mutate_tracker
 from .pipeline.pipeline_tracker import pipeline_tracker_directory as pipeline_tracker_directory
 from .pipeline.pipeline_tracker import pipeline_tracker_path as pipeline_tracker_path

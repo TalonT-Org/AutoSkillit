@@ -63,8 +63,8 @@ def _failed_session_json() -> str:
 
 def _dependency_recipe_steps() -> dict[str, RecipeStep]:
     return {
-        "rectify": RecipeStep(name="rectify", on_success="review_approach"),
-        "review_approach": RecipeStep(name="review_approach"),
+        "rectify": RecipeStep(name="rectify", tool="run_skill", on_success="review_approach"),
+        "review_approach": RecipeStep(name="review_approach", tool="run_skill"),
     }
 
 

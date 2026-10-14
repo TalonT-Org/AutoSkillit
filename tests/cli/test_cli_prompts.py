@@ -890,7 +890,7 @@ def test_campaign_context_exhaustion_uses_shared_clause_and_campaign_policy():
     assert "fleet_l3_context_exhausted" in prompt
     assert "do not resume or retry" in prompt.lower()
     assert "continue_on_failure" in prompt
-    assert "continue remaining" in lower_prompt
+    assert "proceed to other dispatches" in lower_prompt
     assert "halt" in lower_prompt
 
     start = prompt.index("## INFRASTRUCTURE FAILURE RECOVERY")

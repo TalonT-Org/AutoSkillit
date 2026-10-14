@@ -10,14 +10,13 @@ from typing import Any
 import pytest
 
 from tests.server._pipeline_test_helpers import _ack_direct_run_skill_result
+from tests.server._recipe_fixture_parameters import (
+    IMPLEMENTATION_OVERRIDES,
+    REVIEW_APPROACH_OVERRIDES,
+)
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
-_IMPLEMENTATION_OVERRIDES = {
-    "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/5256",
-    "task": "test task",
-}
-_REVIEW_APPROACH_OVERRIDES = {**_IMPLEMENTATION_OVERRIDES, "review_approach": "true"}
 _INPUT_REFERENCE = re.compile(r"\$\{\{\s*(inputs|context)\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
 _INPUT_DEFAULTS = {"adversarial_review_level": "auto"}
 
@@ -100,9 +99,9 @@ def _carrier_delivers_step(carrier: dict[str, Any], step_name: str) -> bool:
 @pytest.mark.parametrize(
     ("tool_ctx_ready_recipe", "review_approach"),
     [
-        pytest.param(("implementation", "plan", _IMPLEMENTATION_OVERRIDES), False, id="default"),
+        pytest.param(("implementation", "plan", IMPLEMENTATION_OVERRIDES), False, id="default"),
         pytest.param(
-            ("implementation", "plan", _REVIEW_APPROACH_OVERRIDES), True, id="review-approach"
+            ("implementation", "plan", REVIEW_APPROACH_OVERRIDES), True, id="review-approach"
         ),
     ],
     indirect=["tool_ctx_ready_recipe"],
@@ -132,7 +131,7 @@ async def test_plan_bind_verify_walk_uses_only_delivered_responses(
         "plan",
         ready.step_body,
         credential,
-        _IMPLEMENTATION_OVERRIDES,
+        IMPLEMENTATION_OVERRIDES,
         {},
     )
     assert plan_response["success"] is True
@@ -150,7 +149,7 @@ async def test_plan_bind_verify_walk_uses_only_delivered_responses(
             step_name="bind_plan_set",
             plan_parts=plan_parts,
             cwd=str(git_checkout),
-            issue_url=_IMPLEMENTATION_OVERRIDES["issue_url"],
+            issue_url=IMPLEMENTATION_OVERRIDES["issue_url"],
         )
     )
     assert bind_response["success"] is True, bind_response
@@ -186,7 +185,7 @@ async def test_plan_bind_verify_walk_uses_only_delivered_responses(
         "verify",
         verify_body,
         credential,
-        _IMPLEMENTATION_OVERRIDES,
+        IMPLEMENTATION_OVERRIDES,
         {key: value for key, value in verify_context.items() if isinstance(value, str)},
     )
     serialized = json.dumps(verify_response)

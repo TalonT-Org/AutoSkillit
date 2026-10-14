@@ -12,6 +12,9 @@ import autoskillit.server.git as server_git
 from autoskillit.core.types import MergeFailedStep, MergeState
 from autoskillit.server.tools.tools_git import merge_worktree
 from tests.conftest import _make_result
+from tests.server._recipe_fixture_parameters import (
+    IMPLEMENTATION_READY_PARAMETERS,
+)
 from tests.server._recipe_segment_test_helpers import (
     assert_delivery_outcome,
     assert_real_checkpoint_response_budget,
@@ -19,11 +22,6 @@ from tests.server._recipe_segment_test_helpers import (
 )
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
-
-_IMPLEMENTATION_OVERRIDES = {
-    "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/5256",
-    "task": "test task",
-}
 
 
 class TestMergeWorktree:
@@ -68,7 +66,7 @@ class TestMergeWorktree:
     @pytest.mark.anyio
     @pytest.mark.parametrize(
         "tool_ctx_ready_recipe",
-        [pytest.param(("implementation", "plan", _IMPLEMENTATION_OVERRIDES), id="implementation")],
+        IMPLEMENTATION_READY_PARAMETERS,
         indirect=True,
     )
     async def test_merge_worktree_merges_on_green(

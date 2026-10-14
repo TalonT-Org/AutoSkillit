@@ -37,20 +37,20 @@ from autoskillit.server.response._response_budget import (
     RESPONSE_SPILL_METADATA_KEY,
     enforce_response_budget,
 )
+from tests.server._recipe_fixture_parameters import (
+    IMPLEMENTATION_OVERRIDES,
+    REVIEW_APPROACH_OVERRIDES,
+)
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
-_IMPLEMENTATION_OVERRIDES = {
-    "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/5256",
-    "task": "test task",
-}
 _IMPLEMENTATION_READY_PARAMETERS = [
-    pytest.param(("implementation", "plan", _IMPLEMENTATION_OVERRIDES), id="default"),
+    pytest.param(("implementation", "plan", IMPLEMENTATION_OVERRIDES), id="default"),
     pytest.param(
         (
             "implementation",
             "plan",
-            {**_IMPLEMENTATION_OVERRIDES, "review_approach": "true"},
+            REVIEW_APPROACH_OVERRIDES,
         ),
         id="review-approach",
     ),

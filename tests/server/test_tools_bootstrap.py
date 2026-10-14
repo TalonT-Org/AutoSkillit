@@ -18,6 +18,9 @@ from autoskillit.server.tools.tools_git import create_and_publish_branch
 from autoskillit.server.tools.tools_issue_composite import claim_and_resolve_issue
 from autoskillit.workspace.clone import DefaultCloneManager
 from tests.conftest import _make_result
+from tests.server._recipe_fixture_parameters import (
+    IMPLEMENTATION_READY_PARAMETERS,
+)
 from tests.server._recipe_segment_test_helpers import (
     assert_delivery_outcome,
     assert_real_checkpoint_response_budget,
@@ -27,11 +30,6 @@ from tests.server._recipe_segment_test_helpers import (
 from tests.server.conftest import assert_step_timed
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
-
-_IMPLEMENTATION_OVERRIDES = {
-    "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/5256",
-    "task": "test task",
-}
 
 
 def _git_stdout(repo_path: Path, *args: str) -> str:
@@ -72,7 +70,7 @@ class TestBootstrapClone:
     @pytest.mark.anyio
     @pytest.mark.parametrize(
         "tool_ctx_ready_recipe",
-        [pytest.param(("implementation", "plan", _IMPLEMENTATION_OVERRIDES), id="implementation")],
+        IMPLEMENTATION_READY_PARAMETERS,
         indirect=True,
     )
     async def test_bootstrap_clone_success(

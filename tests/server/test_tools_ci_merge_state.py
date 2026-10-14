@@ -10,6 +10,9 @@ import pytest
 
 import autoskillit.server.tools.tools_ci as tools_ci
 from autoskillit.server.tools.tools_ci import check_repo_merge_state
+from tests.server._recipe_fixture_parameters import (
+    IMPLEMENTATION_READY_PARAMETERS,
+)
 from tests.server._recipe_segment_test_helpers import (
     assert_delivery_outcome,
     assert_real_checkpoint_response_budget,
@@ -17,11 +20,6 @@ from tests.server._recipe_segment_test_helpers import (
 )
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
-
-_IMPLEMENTATION_OVERRIDES = {
-    "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/5256",
-    "task": "test task",
-}
 
 
 # ---------------------------------------------------------------------------
@@ -32,7 +30,7 @@ _IMPLEMENTATION_OVERRIDES = {
 @pytest.mark.anyio
 @pytest.mark.parametrize(
     "tool_ctx_ready_recipe",
-    [pytest.param(("implementation", "plan", _IMPLEMENTATION_OVERRIDES), id="implementation")],
+    IMPLEMENTATION_READY_PARAMETERS,
     indirect=True,
 )
 async def test_check_repo_merge_state_uses_token_factory(

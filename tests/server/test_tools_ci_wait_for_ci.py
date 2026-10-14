@@ -12,6 +12,9 @@ import pytest
 from autoskillit.core import SubprocessResult, TerminationReason
 from autoskillit.server.tools.tools_ci_watch import wait_for_ci
 from tests.fakes import InMemoryCIWatcher
+from tests.server._recipe_fixture_parameters import (
+    IMPLEMENTATION_READY_PARAMETERS,
+)
 from tests.server._recipe_segment_test_helpers import (
     assert_delivery_outcome,
     assert_real_checkpoint_response_budget,
@@ -22,11 +25,6 @@ from tests.server.conftest import assert_no_timing, assert_step_timed
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
-_IMPLEMENTATION_OVERRIDES = {
-    "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/5256",
-    "task": "test task",
-}
-
 
 # ---------------------------------------------------------------------------
 # wait_for_ci success / failure responses
@@ -36,7 +34,7 @@ _IMPLEMENTATION_OVERRIDES = {
 @pytest.mark.anyio
 @pytest.mark.parametrize(
     "tool_ctx_ready_recipe",
-    [pytest.param(("implementation", "plan", _IMPLEMENTATION_OVERRIDES), id="implementation")],
+    IMPLEMENTATION_READY_PARAMETERS,
     indirect=True,
 )
 async def test_wait_for_ci_success_response(

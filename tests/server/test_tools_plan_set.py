@@ -12,6 +12,10 @@ import autoskillit.server._plan_set_materializer as materializer_module
 from autoskillit.core import PlanSetRejectReason, resolve_temp_dir
 from autoskillit.server._plan_set_materializer import DefaultPlanSetMaterializer
 from autoskillit.server.tools.tools_plan_set import bind_plan_set
+from tests.server._recipe_fixture_parameters import (
+    IMPLEMENTATION_OVERRIDES,
+    IMPLEMENTATION_READY_PARAMETERS,
+)
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
@@ -175,15 +179,9 @@ async def test_wrapper_classifies_inputs_and_failures(
         assert authority["inventory_mode"] == "no_issue"
 
 
-_IMPLEMENTATION_OVERRIDES = {
-    "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/5256",
-    "task": "test task",
-}
-
-
 @pytest.mark.parametrize(
     "tool_ctx_ready_recipe",
-    [pytest.param(("implementation", "plan", _IMPLEMENTATION_OVERRIDES), id="implementation")],
+    IMPLEMENTATION_READY_PARAMETERS,
     indirect=True,
 )
 async def test_bind_plan_set_coverage_failure_delivers_recovery(
@@ -204,7 +202,7 @@ async def test_bind_plan_set_coverage_failure_delivers_recovery(
             step_name="bind_plan_set",
             plan_parts=f"{first}\n{second}",
             cwd=str(git_checkout),
-            issue_url=_IMPLEMENTATION_OVERRIDES["issue_url"],
+            issue_url=IMPLEMENTATION_OVERRIDES["issue_url"],
         )
     )
 

@@ -19,6 +19,9 @@ from autoskillit.server.tools.tools_clone import (
 from autoskillit.workspace.clone import _registry as clone_registry
 from tests.conftest import bind_test_kitchen_identity
 from tests.server._pipeline_test_helpers import _seed_acknowledged_receipt
+from tests.server._recipe_fixture_parameters import (
+    IMPLEMENTATION_READY_PARAMETERS,
+)
 from tests.server._recipe_segment_test_helpers import (
     assert_delivery_outcome,
     assert_real_checkpoint_response_budget,
@@ -26,11 +29,6 @@ from tests.server._recipe_segment_test_helpers import (
 )
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
-
-_IMPLEMENTATION_OVERRIDES = {
-    "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/5256",
-    "task": "test task",
-}
 
 
 class TestCloneRepoTool:
@@ -191,7 +189,7 @@ class TestPushToRemoteTool:
     @pytest.mark.anyio
     @pytest.mark.parametrize(
         "tool_ctx_ready_recipe",
-        [pytest.param(("implementation", "plan", _IMPLEMENTATION_OVERRIDES), id="implementation")],
+        IMPLEMENTATION_READY_PARAMETERS,
         indirect=True,
     )
     async def test_delegates_to_workspace_clone_on_success(

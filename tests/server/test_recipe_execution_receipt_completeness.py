@@ -10,14 +10,13 @@ import pytest
 
 from autoskillit.core import FinalizedRecipeProjection, build_recipe_execution_credential
 from autoskillit.server.recipe._recipe_execution import get_recipe_execution
+from tests.server._recipe_fixture_parameters import (
+    IMPLEMENTATION_OVERRIDES,
+)
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_IMPLEMENTATION_OVERRIDES = {
-    "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/5256",
-    "task": "test task",
-}
 
 
 def _recipe_fixture_parameters() -> list[tuple[str, str, dict[str, str]]]:
@@ -42,7 +41,7 @@ def _recipe_fixture_parameters() -> list[tuple[str, str, dict[str, str]]]:
             if invocation.tool_name == "run_skill" and invocation.attested
         )
         overrides = (
-            _READY_RECIPE_OVERRIDES if recipe_name == "research" else _IMPLEMENTATION_OVERRIDES
+            _READY_RECIPE_OVERRIDES if recipe_name == "research" else IMPLEMENTATION_OVERRIDES
         )
         parameters.append((recipe_name, attested_step, overrides))
     return parameters

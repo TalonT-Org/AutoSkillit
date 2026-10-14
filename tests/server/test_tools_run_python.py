@@ -11,6 +11,9 @@ import structlog.testing
 
 import autoskillit.server.tools.tools_execution as tools_execution
 from autoskillit.server.tools.tools_execution import run_python
+from tests.server._recipe_fixture_parameters import (
+    IMPLEMENTATION_READY_PARAMETERS,
+)
 from tests.server._recipe_segment_test_helpers import (
     assert_delivery_outcome,
     assert_real_checkpoint_response_budget,
@@ -18,11 +21,6 @@ from tests.server._recipe_segment_test_helpers import (
 )
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
-
-_IMPLEMENTATION_OVERRIDES = {
-    "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/5256",
-    "task": "test task",
-}
 
 
 class TestRunPythonObservability:
@@ -62,7 +60,7 @@ class TestRunPythonObservability:
     )
     @pytest.mark.parametrize(
         "tool_ctx_ready_recipe",
-        [pytest.param(("implementation", "plan", _IMPLEMENTATION_OVERRIDES), id="implementation")],
+        IMPLEMENTATION_READY_PARAMETERS,
         indirect=True,
     )
     @pytest.mark.anyio

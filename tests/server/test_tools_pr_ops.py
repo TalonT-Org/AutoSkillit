@@ -29,6 +29,9 @@ from autoskillit.server.tools.tools_pr_ops import (
     post_pr_review,
     verify_review_receipt,
 )
+from tests.server._recipe_fixture_parameters import (
+    IMPLEMENTATION_READY_PARAMETERS,
+)
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
@@ -322,16 +325,10 @@ async def test_local_mode_gate_requires_explicit_local_marker(
     assert result == {"reviews_posted": expected}
 
 
-_IMPLEMENTATION_OVERRIDES = {
-    "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/5256",
-    "task": "test task",
-}
-
-
 @pytest.mark.anyio
 @pytest.mark.parametrize(
     "tool_ctx_ready_recipe",
-    [pytest.param(("implementation", "plan", _IMPLEMENTATION_OVERRIDES), id="implementation")],
+    IMPLEMENTATION_READY_PARAMETERS,
     indirect=True,
 )
 @pytest.mark.parametrize(

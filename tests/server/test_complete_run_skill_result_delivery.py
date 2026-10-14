@@ -7,12 +7,11 @@ from types import SimpleNamespace
 
 import pytest
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
+from tests.server._recipe_fixture_parameters import (
+    IMPLEMENTATION_READY_PARAMETERS,
+)
 
-_IMPLEMENTATION_OVERRIDES = {
-    "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/5256",
-    "task": "test task",
-}
+pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
 
 def _publish_receipt(tool_ctx, *, success: bool) -> str:
@@ -38,7 +37,7 @@ def _publish_receipt(tool_ctx, *, success: bool) -> str:
 
 @pytest.mark.parametrize(
     "tool_ctx_ready_recipe",
-    [pytest.param(("implementation", "plan", _IMPLEMENTATION_OVERRIDES), id="implementation")],
+    IMPLEMENTATION_READY_PARAMETERS,
     indirect=True,
 )
 @pytest.mark.parametrize(

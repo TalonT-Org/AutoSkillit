@@ -620,6 +620,7 @@ def load_recipe_artifact(
     identity: RecipeArtifactGeneration,
 ) -> dict[str, Any]:
     """Read and independently verify an exact immutable payload generation."""
+    require_kitchen_activation_id(activation_id)
     if not identity.has_valid_read_bounds():
         raise RecipeArtifactError("invalid recipe artifact identity bounds")
     directory = _generation_dir(

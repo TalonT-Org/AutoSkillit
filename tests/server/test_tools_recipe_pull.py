@@ -555,6 +555,15 @@ def test_recipe_artifact_namespace_rejects_lineage_string(tmp_path: Path) -> Non
     assert not (tmp_path / "recipe-delivery").exists()
 
 
+def test_recipe_artifact_load_rejects_lineage_string_before_reading(tmp_path: Path) -> None:
+    identity = _persist(tmp_path, _payload())
+    shutil.rmtree(tmp_path / "recipe-delivery")
+
+    with pytest.raises(TypeError, match="a KitchenActivationId is required"):
+        load_recipe_artifact(tmp_path, activation_id="kitchen-test", identity=identity)
+    assert not (tmp_path / "recipe-delivery").exists()
+
+
 def test_persistence_rejects_missing_required_content(tmp_path: Path) -> None:
     payload = _payload()
     payload.pop("content")

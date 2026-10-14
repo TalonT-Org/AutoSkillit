@@ -49,9 +49,15 @@ def _skill_inputs(
             continue
         source, name = match.groups()
         if source == "inputs":
-            values[key] = (
-                ingredient_values[name] if name in ingredient_values else _INPUT_DEFAULTS[name]
-            )
+            try:
+                values[key] = (
+                    ingredient_values[name] if name in ingredient_values else _INPUT_DEFAULTS[name]
+                )
+            except KeyError as exc:
+                raise KeyError(
+                    f"Step {step_name!r}, skill input {key!r}: "
+                    f"no value or default for inputs.{name}"
+                ) from exc
         else:
             values[key] = context_values[name] if name in context_values else absence_values[key]
     return values

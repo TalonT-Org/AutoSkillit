@@ -20,6 +20,98 @@ pytestmark = [pytest.mark.layer("workspace"), pytest.mark.medium]
 
 
 class TestPushToRemote:
+    @pytest.mark.parametrize("conflicting_upstream", [False, True])
+    def test_push_uses_resolved_destination_from_worktree(
+        self,
+        tmp_path: Path,
+        local_with_remote: Path,
+        bare_remote: Path,
+        conflicting_upstream: bool,
+    ) -> None:
+        worktree = tmp_path / "smoke-worktree"
+        branch = "e2e-smoke"
+        subprocess.run(
+            ["git", "-C", str(local_with_remote), "worktree", "add", "-b", branch, str(worktree)],
+            check=True,
+            capture_output=True,
+        )
+        wrong_remote = tmp_path / "wrong.git"
+        if conflicting_upstream:
+            subprocess.run(
+                ["git", "init", "--bare", str(wrong_remote)], check=True, capture_output=True
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(local_with_remote),
+                    "remote",
+                    "add",
+                    "upstream",
+                    str(wrong_remote),
+                ],
+                check=True,
+                capture_output=True,
+            )
+        before_remotes = subprocess.run(
+            ["git", "-C", str(worktree), "remote", "-v"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+
+        result = push_to_remote(
+            str(worktree), branch=branch, remote_url=str(bare_remote), protected_branches=[]
+        )
+
+        assert result["success"] is True, result
+        expected = subprocess.run(
+            ["git", "-C", str(worktree), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        published = subprocess.run(
+            ["git", "--git-dir", str(bare_remote), "rev-parse", f"refs/heads/{branch}"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        assert published == expected
+        assert (
+            subprocess.run(
+                ["git", "-C", str(worktree), "remote", "-v"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout
+            == before_remotes
+        )
+        assert (
+            subprocess.run(
+                ["git", "-C", str(worktree), "rev-parse", "@{upstream}"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            == expected
+        )
+        if conflicting_upstream:
+            assert (
+                subprocess.run(
+                    [
+                        "git",
+                        "--git-dir",
+                        str(wrong_remote),
+                        "show-ref",
+                        "--verify",
+                        f"refs/heads/{branch}",
+                    ],
+                    capture_output=True,
+                ).returncode
+                != 0
+            )
+
     def test_push_to_remote_propagates_to_upstream(self, tmp_path: Path) -> None:
         # 1. Create bare remote (simulates GitHub)
         remote = tmp_path / "remote.git"
@@ -205,7 +297,7 @@ class TestPushToRemoteProtectedBranch:
 
 class TestPushToRemoteMocked:
     def test_ds6_push_to_remote_calls_get_url_then_push(self) -> None:
-        """T_DS6: push_to_remote calls git remote get-url origin then git push -u upstream."""
+        """T_DS6: push_to_remote resolves origin, then pushes directly to that URL."""
         mock_url = MagicMock()
         mock_url.returncode = 0
         mock_url.stdout = "git@github.com:org/repo.git\n"
@@ -227,9 +319,16 @@ class TestPushToRemoteMocked:
         first_call = mock_run.call_args_list[0]
         assert first_call[0][0] == ["git", "remote", "get-url", "origin"]
         assert first_call[1]["cwd"] == "/source"
-        # Second call: git push -u upstream <branch> from clone_path — no --force-with-lease
+        # Push from clone_path to the resolved destination without --force-with-lease.
         second_call = mock_run.call_args_list[1]
-        assert second_call[0][0] == ["git", "push", "-u", "upstream", "main"]
+        assert second_call[0][0] == [
+            "git",
+            "push",
+            "-u",
+            "--",
+            "git@github.com:org/repo.git",
+            "main",
+        ]
         assert second_call[1]["cwd"] == "/clone"
 
     def test_ds7_push_to_remote_fails_when_no_origin(self) -> None:
@@ -270,7 +369,7 @@ class TestPushToRemoteMocked:
         assert "--force-with-lease" in cmd
         assert "git" in cmd
         assert "push" in cmd
-        assert "upstream" in cmd
+        assert "git@github.com:org/repo.git" in cmd
         assert "main" in cmd
         assert second_call[1]["cwd"] == "/clone"
 
@@ -295,7 +394,7 @@ class TestPushToRemoteMocked:
         assert result == {"success": True, "stderr": ""}
         second_call = mock_run.call_args_list[1]
         cmd = second_call[0][0]
-        assert cmd == ["git", "push", "-u", "upstream", "main"]
+        assert cmd == ["git", "push", "-u", "--", "git@github.com:org/repo.git", "main"]
 
     def test_default_clone_manager_push_to_remote_accepts_force_param(self) -> None:
         """T5: DefaultCloneManager.push_to_remote has force keyword param with default False."""

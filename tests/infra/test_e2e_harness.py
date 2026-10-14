@@ -1934,21 +1934,22 @@ class TestRecipeFlow:
     ) -> None:
         events: list[str] = []
         original_check = harness.check_session_windows
+        original_format_exc = harness.traceback.format_exc
 
         def check_session_windows(*args, **kwargs):
             events.append("window gate")
             return original_check(*args, **kwargs)
 
-        class RecordedRuntimeError(RuntimeError):
-            def __str__(self) -> str:
-                events.append("exception recorded")
-                return super().__str__()
+        def format_exc(*args, **kwargs):
+            events.append("exception recorded")
+            return original_format_exc(*args, **kwargs)
 
         monkeypatch.setattr(harness, "check_session_windows", check_session_windows)
+        monkeypatch.setattr(harness.traceback, "format_exc", format_exc)
         runner = FakeRunner(
             _recipe_handler(
                 log_dir=_log_dir(tmp_path),
-                fleet=RecordedRuntimeError("unexpected fleet error"),
+                fleet=RuntimeError("unexpected fleet error"),
             )
         )
         failures, result = _run_recipe(tmp_path, runner)

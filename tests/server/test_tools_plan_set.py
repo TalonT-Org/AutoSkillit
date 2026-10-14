@@ -16,25 +16,41 @@ from autoskillit.server.tools.tools_plan_set import bind_plan_set
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
 _FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "plan_set" / "split_r1_r2"
+_MISSING_R2_FIXTURE = _FIXTURE.parent / "missing_r2"
 
 
 class _GitHub:
-    def __init__(self, *, success: bool = True) -> None:
+    def __init__(self, *, success: bool = True, fixture_dir: Path = _FIXTURE) -> None:
         self.success = success
+        self.fixture_dir = fixture_dir
 
     async def fetch_issue(self, *_args: object, **_kwargs: object) -> dict[str, object]:
         if not self.success:
             return {"success": False, "error": "offline"}
-        return {"success": True, "issue_number": 1, "body": (_FIXTURE / "issue.md").read_text()}
+        return {
+            "success": True,
+            "issue_number": 1,
+            "body": (self.fixture_dir / "issue.md").read_text(),
+        }
 
 
-def _parts(tmp_path: Path, tool_ctx, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path, Path]:
+def _parts(
+    tmp_path: Path,
+    tool_ctx,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    fixture_dir: Path = _FIXTURE,
+) -> tuple[Path, Path, Path]:
     root = resolve_temp_dir(tmp_path, tool_ctx.config.workspace.temp_dir)
     root.mkdir(parents=True, exist_ok=True)
     parts = (root / "part_a.md", root / "part_b.md")
     for part in parts:
-        part.write_text((_FIXTURE / part.name).read_text(), encoding="utf-8")
-    monkeypatch.setattr(tool_ctx, "plan_set_materializer", DefaultPlanSetMaterializer(_GitHub()))
+        part.write_text((fixture_dir / part.name).read_text(), encoding="utf-8")
+    monkeypatch.setattr(
+        tool_ctx,
+        "plan_set_materializer",
+        DefaultPlanSetMaterializer(_GitHub(fixture_dir=fixture_dir)),
+    )
     return root, *parts
 
 
@@ -157,3 +173,43 @@ async def test_wrapper_classifies_inputs_and_failures(
         assert result["success"] is True
         authority = json.loads(Path(result["plan_set_authority_path"]).read_text())
         assert authority["inventory_mode"] == "no_issue"
+
+
+_IMPLEMENTATION_OVERRIDES = {
+    "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/5256",
+    "task": "test task",
+}
+
+
+@pytest.mark.parametrize(
+    "tool_ctx_ready_recipe",
+    [pytest.param(("implementation", "plan", _IMPLEMENTATION_OVERRIDES), id="implementation")],
+    indirect=True,
+)
+async def test_bind_plan_set_coverage_failure_delivers_recovery(
+    tool_ctx_ready_recipe,
+    git_checkout: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tests.server._recipe_segment_test_helpers import assert_delivery_outcome
+
+    _, first, second = _parts(
+        git_checkout,
+        tool_ctx_ready_recipe.tool_ctx,
+        monkeypatch,
+        fixture_dir=_MISSING_R2_FIXTURE,
+    )
+    result = json.loads(
+        await bind_plan_set(
+            step_name="bind_plan_set",
+            plan_parts=f"{first}\n{second}",
+            cwd=str(git_checkout),
+            issue_url=_IMPLEMENTATION_OVERRIDES["issue_url"],
+        )
+    )
+
+    assert result["reason"] == PlanSetRejectReason.COVERAGE_FAILED.value
+    assert_delivery_outcome("bind_plan_set", result, expected=False)
+    segment = result["recipe_segment"]
+    assert segment["kind"] == "recovery"
+    assert "release_issue_failure" in segment["target_steps"]

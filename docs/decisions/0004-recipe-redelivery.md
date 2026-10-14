@@ -60,7 +60,8 @@ snapshot, while the public `open_kitchen` response contains only the segment ove
 initial bodies. Each mapped checkpoint tool verifies READY against that exact durable
 generation before its effect and then returns `recipe_segment` with either authenticated
 future bodies or an ordered manual `recipe_pull` closure. No raw YAML, LRU lookup, runtime
-skip carrier, or separately persisted projection participates in recovery.
+skip carrier, or separately persisted projection participates in recovery. Carriers are
+attached by the shared response wrapper from each tool's registry outcome declaration.
 
 Acknowledged `run_skill` receipts are replayable only for the same kitchen, request
 session, and receipt identity. Their tracker effect remains one-shot and cached, so a

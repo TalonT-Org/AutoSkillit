@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -11,9 +13,12 @@ from autoskillit.core import (
     RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
     FinalizedRecipeProjection,
     RecipeArtifactGeneration,
+    RecipeDeliveryOutcomeDef,
     RecipeExecutionSnapshot,
     RecipeFlowEdge,
+    ToolDef,
     build_recipe_execution_credential,
+    get_logger,
     get_tool_def,
     load_yaml,
 )
@@ -25,9 +30,12 @@ from autoskillit.server.recipe._recipe_artifact import (
     extract_recipe_step_bodies,
     load_recipe_artifact,
 )
+from autoskillit.server.tools._types import deny_envelope
 
 if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
+
+logger = get_logger(__name__)
 
 RECIPE_SEGMENT_MAX_BYTES = 10_000
 _SEGMENTED_STARTUP_SURFACES = frozenset({"open_kitchen", "open_kitchen_deferred_recall"})
@@ -63,7 +71,8 @@ class PreparedRecipeSegmentDelivery:
     """Pre-effect carriers for one mapped checkpoint source."""
 
     step_name: str
-    success_carrier: dict[str, Any]
+    success_carrier: dict[str, Any] | None
+    success_pull_carrier: dict[str, Any] | None
     recovery_carrier: dict[str, Any]
 
 
@@ -399,6 +408,7 @@ def _checkpoint_carrier(
     success: bool,
     target_index: int | None = None,
     recovery_target: str | None = None,
+    pull_only: bool = False,
 ) -> dict[str, Any]:
     projection = ready.finalized_projection
     target_indices = (
@@ -408,9 +418,13 @@ def _checkpoint_carrier(
     )
     generation = ready.artifact_generation
     if success:
-        body_indices = [
-            index for index in target_indices if index < len(projection.delivery_segments) - 1
-        ]
+        body_indices = (
+            []
+            if pull_only
+            else [
+                index for index in target_indices if index < len(projection.delivery_segments) - 1
+            ]
+        )
         while True:
             target_segments = tuple(projection.delivery_segments[index] for index in body_indices)
             target_steps = tuple(
@@ -483,6 +497,77 @@ def _checkpoint_carrier(
     )
 
 
+def _recovery_only_success_carrier(
+    projection: FinalizedRecipeProjection,
+    step_name: str,
+    recovery_carrier: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Reuse recovery delivery only when a recovery-only tool has a success crossing."""
+    tool_name = _delivery_tool_name(projection, step_name)
+    definition = get_tool_def(tool_name) if tool_name is not None else None
+    if definition is None or definition.automatic_recipe_delivery:
+        return None
+    segment_indices = _segment_index(projection)
+    source_index = segment_indices.get(step_name)
+    if source_index is None:
+        return None
+    crosses = any(
+        edge.source == step_name
+        and edge.edge_type == "success"
+        and segment_indices.get(edge.target, -1) > source_index
+        for edge in projection.ordered_flow_edges
+    )
+    return recovery_carrier if crosses else None
+
+
+def _prepare_checkpoint_carriers(
+    persisted: dict[str, Any],
+    *,
+    ready: ReadyRecipe,
+    step_name: str,
+    tool_name: str,
+    definition: ToolDef | None,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any]]:
+    projection = ready.finalized_projection
+    recovery_carrier = _checkpoint_carrier(
+        persisted,
+        ready=ready,
+        step_name=step_name,
+        tool_name=tool_name,
+        success=False,
+    )
+    success_carrier: dict[str, Any] | None
+    success_pull_carrier: dict[str, Any] | None
+    if definition is not None and definition.automatic_recipe_delivery:
+        success_carrier = _checkpoint_carrier(
+            persisted,
+            ready=ready,
+            step_name=step_name,
+            tool_name=tool_name,
+            success=True,
+        )
+        success_pull_carrier = _checkpoint_carrier(
+            persisted,
+            ready=ready,
+            step_name=step_name,
+            tool_name=tool_name,
+            success=True,
+            pull_only=True,
+        )
+    else:
+        success_carrier = _recovery_only_success_carrier(
+            projection,
+            step_name,
+            recovery_carrier,
+        )
+        success_pull_carrier = success_carrier
+    if success_carrier is not None:
+        build_post_effect_segment_failure(success_carrier, tool_name=tool_name)
+    if recovery_carrier is not success_carrier:
+        build_post_effect_segment_failure(recovery_carrier, tool_name=tool_name)
+    return success_carrier, success_pull_carrier, recovery_carrier
+
+
 def prepare_recipe_segment_delivery(
     tool_ctx: ToolContext,
     step_name: str | None,
@@ -528,25 +613,18 @@ def prepare_recipe_segment_delivery(
         raise RecipeSegmentDeliveryError("READY compile identity differs from artifact")
     validate_segment_delivery_projection(state.finalized_projection)
     tool_name = _delivery_tool_name(state.finalized_projection, step_name) or "unknown"
-    success_carrier = _checkpoint_carrier(
+    definition = get_tool_def(tool_name)
+    success_carrier, success_pull_carrier, recovery_carrier = _prepare_checkpoint_carriers(
         persisted,
         ready=state,
         step_name=step_name,
         tool_name=tool_name,
-        success=True,
+        definition=definition,
     )
-    recovery_carrier = _checkpoint_carrier(
-        persisted,
-        ready=state,
-        step_name=step_name,
-        tool_name=tool_name,
-        success=False,
-    )
-    build_post_effect_segment_failure(success_carrier, tool_name=tool_name)
-    build_post_effect_segment_failure(recovery_carrier, tool_name=tool_name)
     return PreparedRecipeSegmentDelivery(
         step_name=step_name,
         success_carrier=success_carrier,
+        success_pull_carrier=success_pull_carrier,
         recovery_carrier=recovery_carrier,
     )
 
@@ -560,7 +638,104 @@ def attach_recipe_segment(
     """Return a fresh result mapping with the selected pre-rendered carrier."""
     if prepared is None:
         return result
+    carrier = prepared.success_carrier if success else prepared.recovery_carrier
+    if carrier is None:
+        return result
+    if (
+        success
+        and len(_serialized_bytes({**result, "recipe_segment": carrier}))
+        >= RECIPE_SEGMENT_MAX_BYTES
+    ):
+        carrier = prepared.success_pull_carrier
+        if carrier is None:
+            return result
     return {
         **result,
-        "recipe_segment": (prepared.success_carrier if success else prepared.recovery_carrier),
+        "recipe_segment": carrier,
     }
+
+
+def prepare_checkpoint(
+    tool_ctx: ToolContext | None,
+    fn: Callable[..., Any],
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> tuple[PreparedRecipeSegmentDelivery | None, str | None]:
+    """Prepare registry-declared delivery before an argument-sourced tool effect."""
+    outcome = _recipe_delivery_outcome(fn)
+    if outcome is None or tool_ctx is None:
+        return None, None
+    if outcome.step_name_field is not None:
+        return None, None
+    try:
+        step_name = inspect.signature(fn).bind_partial(*args, **kwargs).arguments.get("step_name")
+    except TypeError:
+        return None, None
+    if not step_name:
+        return None, None
+    try:
+        return prepare_recipe_segment_delivery(tool_ctx, step_name), None
+    except Exception as exc:
+        logger.warning("recipe_segment_pre_effect_preparation_failed", exc_info=True)
+        return None, json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+
+
+def _recipe_delivery_outcome(
+    fn: Callable[..., Any],
+) -> RecipeDeliveryOutcomeDef | None:
+    definition = get_tool_def(fn.__name__)
+    if definition is None or not (
+        definition.automatic_recipe_delivery or definition.recovery_recipe_delivery
+    ):
+        return None
+    return definition.recipe_delivery_outcome
+
+
+def _prepare_result_sourced_checkpoint(
+    tool_ctx: ToolContext | None,
+    fn: Callable[..., Any],
+    step_name: str,
+) -> tuple[PreparedRecipeSegmentDelivery | None, str | None]:
+    if tool_ctx is None:
+        return None, None
+    try:
+        return prepare_recipe_segment_delivery(tool_ctx, step_name), None
+    except Exception as exc:
+        logger.warning("recipe_segment_post_effect_preparation_failed", exc_info=True)
+        response = deny_envelope(
+            f"{fn.__name__}: recipe segment delivery failed: {type(exc).__name__}: {exc}",
+            stage="recipe_segment_delivery",
+            retriable=True,
+        )
+        return None, json.dumps(response, ensure_ascii=False, separators=(",", ":"))
+
+
+def attach_checkpoint(
+    tool_ctx: ToolContext | None,
+    fn: Callable[..., Any],
+    result: Any,
+    prepared: PreparedRecipeSegmentDelivery | None,
+) -> Any:
+    """Attach the registry-selected carrier to a delivery tool's JSON response."""
+    outcome = _recipe_delivery_outcome(fn)
+    if outcome is None or not isinstance(result, str):
+        return result
+    try:
+        payload = json.loads(result)
+    except json.JSONDecodeError:
+        return result
+    if not isinstance(payload, dict):
+        return result
+    if outcome.step_name_field is not None:
+        step_name = payload.get(outcome.step_name_field)
+        if not step_name:
+            return result
+        prepared, early = _prepare_result_sourced_checkpoint(tool_ctx, fn, step_name)
+        if early is not None:
+            return early
+    if prepared is None:
+        return result
+    attached = attach_recipe_segment(payload, prepared, success=outcome.succeeded(payload))
+    if attached is payload:
+        return result
+    return json.dumps(attached, ensure_ascii=False, separators=(",", ":"))

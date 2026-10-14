@@ -16,6 +16,7 @@ from mcp.types import CallToolRequestParams, TextContent
 from autoskillit.core.types import RetryReason
 from autoskillit.core.types.results._type_results import SkillResult
 from autoskillit.server import _notify
+from autoskillit.server.recipe import _recipe_segment_delivery as delivery_module
 from autoskillit.server.recipe._recipe_segment_delivery import PreparedRecipeSegmentDelivery
 from autoskillit.server.response._run_skill_completion import RunSkillCompletionMiddleware
 from autoskillit.server.tools import tools_pipeline_tracker
@@ -119,6 +120,7 @@ def _prepared_delivery() -> PreparedRecipeSegmentDelivery:
     return PreparedRecipeSegmentDelivery(
         step_name="rectify",
         success_carrier=_SUCCESS_CARRIER,
+        success_pull_carrier=_SUCCESS_CARRIER,
         recovery_carrier=_RECOVERY_CARRIER,
     )
 
@@ -321,7 +323,7 @@ class TestAcknowledgedReceiptReplay:
                 raise RuntimeError("response enforcement failed")
             return original_enforce_response_budget(*args, **kwargs)
 
-        monkeypatch.setattr(tools_pipeline_tracker, "prepare_recipe_segment_delivery", prepare)
+        monkeypatch.setattr(delivery_module, "prepare_recipe_segment_delivery", prepare)
         monkeypatch.setattr(_notify, "enforce_response_budget", enforce_response_budget)
         request_context = SimpleNamespace(session_id="request-session")
 
@@ -367,7 +369,7 @@ class TestAcknowledgedReceiptReplay:
             _FAIL_RESULT,
         )
         monkeypatch.setattr(
-            tools_pipeline_tracker,
+            delivery_module,
             "prepare_recipe_segment_delivery",
             lambda *_args, **_kwargs: _prepared_delivery(),
         )
@@ -403,7 +405,7 @@ class TestAcknowledgedReceiptReplay:
             _SUCCESS_RESULT,
         )
         monkeypatch.setattr(
-            tools_pipeline_tracker,
+            delivery_module,
             "prepare_recipe_segment_delivery",
             lambda *_args, **_kwargs: _prepared_delivery(),
         )

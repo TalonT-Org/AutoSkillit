@@ -9,13 +9,21 @@ from unittest.mock import patch
 import pytest
 
 import autoskillit.server.git as server_git
-import autoskillit.server.tools.tools_git as tools_git
 from autoskillit.core.types import MergeFailedStep, MergeState
 from autoskillit.server.tools.tools_git import merge_worktree
 from tests.conftest import _make_result
-from tests.server._recipe_segment_test_helpers import install_prepared_recipe_segment
+from tests.server._recipe_segment_test_helpers import (
+    assert_delivery_outcome,
+    assert_real_checkpoint_response_budget,
+    install_prepared_recipe_segment,
+)
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
+
+_IMPLEMENTATION_OVERRIDES = {
+    "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/5256",
+    "task": "test task",
+}
 
 
 class TestMergeWorktree:
@@ -48,18 +56,25 @@ class TestMergeWorktree:
         tool_ctx_kitchen_open.runner.push(
             _make_result(1, "FAIL\n= 3 failed, 97 passed =", "")
         )  # test-check
-        install_prepared_recipe_segment(monkeypatch, tools_git, step_name="merge")
+        install_prepared_recipe_segment(monkeypatch, step_name="merge")
         result = json.loads(await merge_worktree(str(wt), "dev", step_name="merge"))
         assert "error" in result
         assert result["failed_step"] == MergeFailedStep.TEST_GATE
         assert result["state"] == MergeState.WORKTREE_INTACT
         assert "test_summary" not in result
         assert result["recipe_segment"]["kind"] == "recovery"
+        assert_delivery_outcome("merge_worktree", result, expected=False)
 
     @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "tool_ctx_ready_recipe",
+        [pytest.param(("implementation", "plan", _IMPLEMENTATION_OVERRIDES), id="implementation")],
+        indirect=True,
+    )
     async def test_merge_worktree_merges_on_green(
         self,
         tool_ctx_kitchen_open,
+        tool_ctx_ready_recipe,
         tmp_path,
         monkeypatch: pytest.MonkeyPatch,
     ):
@@ -103,7 +118,7 @@ class TestMergeWorktree:
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # git merge
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # worktree remove
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # branch -D
-        install_prepared_recipe_segment(monkeypatch, tools_git, step_name="merge")
+        install_prepared_recipe_segment(monkeypatch, step_name="merge")
         with patch.object(server_git, "resolve_main_worktree", return_value=Path("/repo")):
             result = json.loads(await merge_worktree(str(wt), "dev", step_name="merge"))
         assert result["merge_succeeded"] is True
@@ -115,6 +130,10 @@ class TestMergeWorktree:
         assert "test_stderr" not in result
         assert "raw_output_artifact_path" not in result
         assert result["recipe_segment"]["kind"] == "success"
+        assert_delivery_outcome("merge_worktree", result, expected=True)
+        await assert_real_checkpoint_response_budget(
+            tool_ctx_ready_recipe, "merge_worktree", result, tmp_path
+        )
         assert not (wt / ".autoskillit" / "temp" / "merge_worktree").exists()
         # Verify merge command cwd is the main_repo (/repo)
         merge_call = next(

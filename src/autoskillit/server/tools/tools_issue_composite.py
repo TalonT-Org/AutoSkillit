@@ -16,11 +16,6 @@ from autoskillit.server import mcp
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.lifecycle._guards import _require_enabled
 from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
-from autoskillit.server.recipe._recipe_segment_delivery import (
-    PreparedRecipeSegmentDelivery,
-    attach_recipe_segment,
-    prepare_recipe_segment_delivery,
-)
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._claim_helpers import (
     _claim_fetched_issue,
@@ -58,19 +53,13 @@ async def claim_and_resolve_issue(
         issue_url: Full GitHub issue URL or shorthand (owner/repo#42).
         label: Label name to apply. Defaults to github.in_progress_label from config.
         allow_reentry: When True and label already present, returns claimed=True.
-        step_name: Exact YAML step key used for recovery segment delivery.
+        step_name: Exact recipe step key; selects recipe-segment delivery and timing.
 
     Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        prepared_segment: PreparedRecipeSegmentDelivery | None = None
-
-        def _render(result: dict[str, Any]) -> str:
-            success = result.get("success") is True and result.get("claimed") is True
-            return json.dumps(attach_recipe_segment(result, prepared_segment, success=success))
-
         with structlog.contextvars.bound_contextvars(
             tool="claim_and_resolve_issue", issue_url=issue_url
         ):
@@ -81,9 +70,8 @@ async def claim_and_resolve_issue(
             )  # circular-break: server-internal circular dependency
 
             tool_ctx = _get_ctx()
-            prepared_segment = prepare_recipe_segment_delivery(tool_ctx, step_name)
             if tool_ctx.github_client is None:
-                return _render(
+                return json.dumps(
                     {"success": False, "error": "GitHub token required for label management"}
                 )
 
@@ -92,17 +80,17 @@ async def claim_and_resolve_issue(
             try:
                 owner, repo, issue_number = _parse_issue_ref(issue_url)
             except ValueError as exc:
-                return _render({"success": False, "error": str(exc)})
+                return json.dumps({"success": False, "error": str(exc)})
 
             if err := tool_ctx.config.github.check_label_allowed(effective_label):
-                return _render({"success": False, "error": err})
+                return json.dumps({"success": False, "error": err})
 
             _fetch_title_start = time.monotonic()
             title_result = await tool_ctx.github_client.fetch_title(issue_url)
             fetch_title_ms = int((time.monotonic() - _fetch_title_start) * 1000)
 
             if not title_result.get("success"):
-                return _render(
+                return json.dumps(
                     {"success": False, "error": title_result.get("error", "fetch_title failed")}
                 )
 
@@ -117,7 +105,7 @@ async def claim_and_resolve_issue(
             )
             if not fetch_result.get("success"):
                 claim_ms = int((time.monotonic() - _claim_start) * 1000)
-                return _render(
+                return json.dumps(
                     {
                         "success": False,
                         "error": fetch_result.get("error", "fetch_issue failed"),
@@ -147,7 +135,7 @@ async def claim_and_resolve_issue(
             claim_result["issue_title"] = issue_title
             claim_result["issue_slug"] = issue_slug
             claim_result["timings"] = {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms}
-            return _render(dict(claim_result))
+            return json.dumps(dict(claim_result))
     except Exception as exc:
         logger.error("claim_and_resolve_issue unhandled exception", exc_info=True)
-        return _render({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})

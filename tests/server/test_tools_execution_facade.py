@@ -86,7 +86,6 @@ _RE_EXPORTED_NAMES = (
     "_explorer_launch_identity",
     "find_caller_session_id",
     "logger",
-    "prepare_recipe_segment_delivery",
     "shutil",
 )
 

@@ -2,11 +2,6 @@
 
 from __future__ import annotations
 
-# Re-exports for tests that patch symbols via the package facade.
-from autoskillit.server.recipe._recipe_segment_delivery import (
-    prepare_recipe_segment_delivery,  # noqa: F401
-)
-
 # Side-effect imports: register @mcp.tool() decorators on the FastMCP server.
 from autoskillit.server.tools.tools_pipeline_tracker import (  # noqa: F401
     _handlers,

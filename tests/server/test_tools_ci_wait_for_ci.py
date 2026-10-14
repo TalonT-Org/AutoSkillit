@@ -9,14 +9,23 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-import autoskillit.server.tools.tools_ci_watch as tools_ci_watch
 from autoskillit.core import SubprocessResult, TerminationReason
 from autoskillit.server.tools.tools_ci_watch import wait_for_ci
 from tests.fakes import InMemoryCIWatcher
-from tests.server._recipe_segment_test_helpers import install_prepared_recipe_segment
+from tests.server._recipe_segment_test_helpers import (
+    assert_delivery_outcome,
+    assert_real_checkpoint_response_budget,
+    assert_recovery_recipe_segment,
+    install_prepared_recipe_segment,
+)
 from tests.server.conftest import assert_no_timing, assert_step_timed
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
+
+_IMPLEMENTATION_OVERRIDES = {
+    "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/5256",
+    "task": "test task",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -25,8 +34,15 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "tool_ctx_ready_recipe",
+    [pytest.param(("implementation", "plan", _IMPLEMENTATION_OVERRIDES), id="implementation")],
+    indirect=True,
+)
 async def test_wait_for_ci_success_response(
     tool_ctx_kitchen_open,
+    tool_ctx_ready_recipe,
+    tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ):
     watcher = InMemoryCIWatcher(
@@ -42,7 +58,7 @@ async def test_wait_for_ci_success_response(
             pid=0,
         )
     )
-    install_prepared_recipe_segment(monkeypatch, tools_ci_watch, step_name="ci")
+    install_prepared_recipe_segment(monkeypatch, step_name="ci")
 
     result = json.loads(await wait_for_ci("main", cwd="/some/repo", step_name="ci"))
 
@@ -50,6 +66,10 @@ async def test_wait_for_ci_success_response(
     assert result["conclusion"] == "success"
     assert result["failed_jobs"] == []
     assert result["recipe_segment"]["kind"] == "success"
+    assert_delivery_outcome("wait_for_ci", result, expected=True)
+    await assert_real_checkpoint_response_budget(
+        tool_ctx_ready_recipe, "wait_for_ci", result, tmp_path
+    )
 
 
 @pytest.mark.anyio
@@ -74,13 +94,31 @@ async def test_wait_for_ci_failure_response(
             pid=0,
         )
     )
-    install_prepared_recipe_segment(monkeypatch, tools_ci_watch, step_name="ci")
+    install_prepared_recipe_segment(monkeypatch, step_name="ci")
 
     result = json.loads(await wait_for_ci("main", cwd="/some/repo", step_name="ci"))
 
     assert result["conclusion"] == "failure"
     assert sorted(result["failed_jobs"]) == ["lint", "test"]
     assert result["recipe_segment"]["kind"] == "recovery"
+    assert_delivery_outcome("wait_for_ci", result, expected=False)
+
+
+@pytest.mark.anyio
+async def test_wait_for_ci_invalid_event_returns_recovery_carrier(
+    tool_ctx_kitchen_open,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    install_prepared_recipe_segment(monkeypatch, step_name="ci")
+
+    result = json.loads(
+        await wait_for_ci("main", event="invalid-event", cwd="/some/repo", step_name="ci")
+    )
+
+    assert result["conclusion"] == "error"
+    assert "Invalid event" in result["error"]
+    assert_recovery_recipe_segment(result, step_name="ci")
+    assert_delivery_outcome("wait_for_ci", result, expected=False)
 
 
 # ---------------------------------------------------------------------------

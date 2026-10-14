@@ -10,9 +10,18 @@ import pytest
 
 import autoskillit.server.tools.tools_ci as tools_ci
 from autoskillit.server.tools.tools_ci import check_repo_merge_state
-from tests.server._recipe_segment_test_helpers import install_prepared_recipe_segment
+from tests.server._recipe_segment_test_helpers import (
+    assert_delivery_outcome,
+    assert_real_checkpoint_response_budget,
+    install_prepared_recipe_segment,
+)
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
+
+_IMPLEMENTATION_OVERRIDES = {
+    "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/5256",
+    "task": "test task",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -21,7 +30,14 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 @pytest.mark.anyio
-async def test_check_repo_merge_state_uses_token_factory(tool_ctx_kitchen_open, monkeypatch):
+@pytest.mark.parametrize(
+    "tool_ctx_ready_recipe",
+    [pytest.param(("implementation", "plan", _IMPLEMENTATION_OVERRIDES), id="implementation")],
+    indirect=True,
+)
+async def test_check_repo_merge_state_uses_token_factory(
+    tool_ctx_kitchen_open, tool_ctx_ready_recipe, monkeypatch, tmp_path
+):
     """check_repo_merge_state calls token_factory() when set, not config.github.token."""
     resolved_calls = []
 
@@ -50,12 +66,16 @@ async def test_check_repo_merge_state_uses_token_factory(tool_ctx_kitchen_open, 
         "resolve_repo_from_remote",
         AsyncMock(return_value="owner/repo"),
     )
-    install_prepared_recipe_segment(monkeypatch, tools_ci, step_name="merge_state")
+    install_prepared_recipe_segment(monkeypatch, step_name="merge_state")
 
     result = json.loads(await check_repo_merge_state(branch="main", step_name="merge_state"))
     assert captured_tokens == ["factory-token"]
     assert resolved_calls == [1]
     assert result["recipe_segment"]["kind"] == "success"
+    assert_delivery_outcome("check_repo_merge_state", result, expected=True)
+    await assert_real_checkpoint_response_budget(
+        tool_ctx_ready_recipe, "check_repo_merge_state", result, tmp_path
+    )
 
 
 @pytest.mark.anyio
@@ -108,8 +128,9 @@ async def test_check_repo_merge_state_error_includes_http_status(
         "resolve_repo_from_remote",
         AsyncMock(return_value="owner/repo"),
     )
-    install_prepared_recipe_segment(monkeypatch, tools_ci, step_name="merge_state")
+    install_prepared_recipe_segment(monkeypatch, step_name="merge_state")
 
     result = json.loads(await check_repo_merge_state(branch="main", step_name="merge_state"))
     assert result["http_status"] == 403
     assert result["recipe_segment"]["kind"] == "recovery"
+    assert_delivery_outcome("check_repo_merge_state", result, expected=False)

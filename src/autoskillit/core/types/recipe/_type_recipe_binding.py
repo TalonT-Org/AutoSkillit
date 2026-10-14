@@ -35,6 +35,7 @@ __all__ = [
     "RecipeFlowEdge",
     "RUNTIME_ADMISSION_BY_ROLE",
     "RuntimeAdmission",
+    "RecipeDeliveryOutcomeDef",
     "ToolDef",
     "ToolInitializationOperation",
     "ToolParamDef",
@@ -162,6 +163,23 @@ class ToolParamDef:
 
 
 @dataclass(frozen=True, slots=True)
+class RecipeDeliveryOutcomeDef:
+    """How the response wrapper reads a delivery tool's outcome from its response."""
+
+    success_field: str | None = None
+    success_value: bool | str = True
+    step_name_field: str | None = None
+
+    def succeeded(self, payload: Mapping[str, object]) -> bool:
+        if self.success_field is None:
+            return "error" not in payload and payload.get("success") is not False
+        actual = payload.get(self.success_field)
+        if isinstance(self.success_value, bool):
+            return actual is self.success_value
+        return actual == self.success_value
+
+
+@dataclass(frozen=True, slots=True)
 class ToolDef:
     """Static definition of one registered MCP tool."""
 
@@ -172,6 +190,7 @@ class ToolDef:
     automatic_recipe_delivery: bool = False
     # Failure edges may carry a recovery segment; this can be enabled independently.
     recovery_recipe_delivery: bool = False
+    recipe_delivery_outcome: RecipeDeliveryOutcomeDef | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.initialization_operation, ToolInitializationOperation):
@@ -195,6 +214,29 @@ class ToolDef:
             )
         if structured and self.name != "run_skill":
             raise ValueError("Only run_skill may declare structured skill_inputs")
+        self._validate_recipe_delivery_outcome()
+
+    def _validate_recipe_delivery_outcome(self) -> None:
+        delivery_enabled = self.automatic_recipe_delivery or self.recovery_recipe_delivery
+        if not delivery_enabled:
+            if self.recipe_delivery_outcome is not None:
+                raise ValueError(
+                    f"ToolDef {self.name!r} declares a recipe delivery outcome "
+                    "without a delivery flag"
+                )
+            return
+        if self.recipe_delivery_outcome is None:
+            raise ValueError(
+                f"ToolDef {self.name!r} enables recipe delivery without an outcome declaration"
+            )
+        if (
+            self.recipe_delivery_outcome.step_name_field is None
+            and "step_name" not in self.param_set
+        ):
+            raise ValueError(
+                f"ToolDef {self.name!r} uses argument-sourced recipe delivery "
+                "without a step_name parameter"
+            )
 
     @property
     def param_names(self) -> tuple[str, ...]:

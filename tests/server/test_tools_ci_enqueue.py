@@ -9,14 +9,30 @@ import pytest
 
 import autoskillit.server.tools.tools_ci_merge_queue as tools_ci_merge_queue
 from tests.fakes import InMemoryMergeQueueWatcher
-from tests.server._recipe_segment_test_helpers import install_prepared_recipe_segment
+from tests.server._recipe_segment_test_helpers import (
+    assert_delivery_outcome,
+    assert_real_checkpoint_response_budget,
+    install_prepared_recipe_segment,
+)
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
+
+_IMPLEMENTATION_OVERRIDES = {
+    "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/5256",
+    "task": "test task",
+}
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "tool_ctx_ready_recipe",
+    [pytest.param(("implementation", "plan", _IMPLEMENTATION_OVERRIDES), id="implementation")],
+    indirect=True,
+)
 async def test_enqueue_pr_delegates_to_watcher_enqueue(
     tool_ctx_kitchen_open,
+    tool_ctx_ready_recipe,
+    tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ):
     """enqueue_pr tool passes auto_merge_available to watcher.enqueue()."""
@@ -28,7 +44,7 @@ async def test_enqueue_pr_delegates_to_watcher_enqueue(
         },
     )
     tool_ctx_kitchen_open.merge_queue_watcher = watcher
-    install_prepared_recipe_segment(monkeypatch, tools_ci_merge_queue, step_name="enqueue")
+    install_prepared_recipe_segment(monkeypatch, step_name="enqueue")
 
     with patch.object(
         tools_ci_merge_queue,
@@ -49,6 +65,10 @@ async def test_enqueue_pr_delegates_to_watcher_enqueue(
     assert result["success"] is True
     assert result["enrollment_method"] == "direct_enqueue"
     assert result["recipe_segment"]["kind"] == "success"
+    assert_delivery_outcome("enqueue_pr", result, expected=True)
+    await assert_real_checkpoint_response_budget(
+        tool_ctx_ready_recipe, "enqueue_pr", result, tmp_path
+    )
     assert len(watcher.enqueue_calls) == 1
     call = watcher.enqueue_calls[0]
     assert call["auto_merge_available"] is False
@@ -61,7 +81,7 @@ async def test_enqueue_pr_returns_structured_error_when_watcher_none(
 ):
     """enqueue_pr returns {"success": false} when merge_queue_watcher is None."""
     tool_ctx_kitchen_open.merge_queue_watcher = None
-    install_prepared_recipe_segment(monkeypatch, tools_ci_merge_queue, step_name="enqueue")
+    install_prepared_recipe_segment(monkeypatch, step_name="enqueue")
 
     from autoskillit.server.tools.tools_ci_merge_queue import enqueue_pr
 
@@ -76,3 +96,4 @@ async def test_enqueue_pr_returns_structured_error_when_watcher_none(
     assert result["success"] is False
     assert "error" in result
     assert result["recipe_segment"]["kind"] == "recovery"
+    assert_delivery_outcome("enqueue_pr", result, expected=False)

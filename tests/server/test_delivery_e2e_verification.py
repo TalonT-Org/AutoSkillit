@@ -65,6 +65,9 @@ async def _record_implementation_bounded_path(
             delivery_shape="SEGMENTED_CHECKPOINT",
             segment_or_section=step_name,
         )
+        if step_name in {"claim_and_resolve", "create_and_publish"}:
+            assert "recipe_segment" not in shaped
+            continue
         segment = shaped["recipe_segment"]
         assert isinstance(segment, dict)
         assert segment["kind"] == "success"
@@ -251,9 +254,9 @@ async def test_implementation_bounded_path_counts_automatic_and_advertised_deliv
     # Pin normalized delivery costs to detect drift in the bundled recipe.
     # These measured totals are not production-safe thresholds.
     assert totals == {
-        "raw_chars": 18_800,
-        "utf8_bytes": 18_802,
-        "client_serialized_chars": 20_871,
-        "estimated_tokens": 4_698,
+        "raw_chars": 16_831,
+        "utf8_bytes": 16_833,
+        "client_serialized_chars": 18_754,
+        "estimated_tokens": 4_206,
         "responses": 5,
     }

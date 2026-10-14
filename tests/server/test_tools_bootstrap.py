@@ -13,20 +13,25 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 import autoskillit.server.tools.tools_clone as tools_clone
-import autoskillit.server.tools.tools_git as tools_git
-import autoskillit.server.tools.tools_issue_composite as tools_issue_composite
 from autoskillit.server.tools.tools_clone import bootstrap_clone
 from autoskillit.server.tools.tools_git import create_and_publish_branch
 from autoskillit.server.tools.tools_issue_composite import claim_and_resolve_issue
 from autoskillit.workspace.clone import DefaultCloneManager
 from tests.conftest import _make_result
 from tests.server._recipe_segment_test_helpers import (
+    assert_delivery_outcome,
+    assert_real_checkpoint_response_budget,
     assert_recovery_recipe_segment,
     install_prepared_recipe_segment,
 )
 from tests.server.conftest import assert_step_timed
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
+
+_IMPLEMENTATION_OVERRIDES = {
+    "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/5256",
+    "task": "test task",
+}
 
 
 def _git_stdout(repo_path: Path, *args: str) -> str:
@@ -65,11 +70,18 @@ def _record_clone_removals(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, s
 
 class TestBootstrapClone:
     @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "tool_ctx_ready_recipe",
+        [pytest.param(("implementation", "plan", _IMPLEMENTATION_OVERRIDES), id="implementation")],
+        indirect=True,
+    )
     async def test_bootstrap_clone_success(
         self,
         tool_ctx_kitchen_open,
+        tool_ctx_ready_recipe,
         monkeypatch: pytest.MonkeyPatch,
         remote_only_base_clone: tuple[Path, str],
+        tmp_path,
     ):
         """bootstrap_clone returns work_dir, remote_url, base_sha, merge_target."""
         clone_path, upstream_url = remote_only_base_clone
@@ -78,7 +90,7 @@ class TestBootstrapClone:
             clone_path, "rev-parse", "refs/remotes/origin/develop^{commit}"
         )
         assert isinstance(tool_ctx_kitchen_open.clone_mgr, DefaultCloneManager)
-        install_prepared_recipe_segment(monkeypatch, tools_clone, step_name="bootstrap")
+        install_prepared_recipe_segment(monkeypatch, step_name="bootstrap")
         result = json.loads(
             await bootstrap_clone(
                 source_dir=str(clone_path),
@@ -92,6 +104,10 @@ class TestBootstrapClone:
         assert result["base_sha"] == expected_base_sha
         assert result["merge_target"] == "develop"
         assert result["recipe_segment"]["kind"] == "success"
+        assert_delivery_outcome("bootstrap_clone", result, expected=True)
+        await assert_real_checkpoint_response_budget(
+            tool_ctx_ready_recipe, "bootstrap_clone", result, tmp_path
+        )
 
     @pytest.mark.anyio
     async def test_bootstrap_clone_gate_closed(self, tool_ctx):
@@ -110,7 +126,7 @@ class TestBootstrapClone:
         mock_mgr = MagicMock()
         mock_mgr.clone_repo.side_effect = RuntimeError("disk full")
         tool_ctx_kitchen_open.clone_mgr = mock_mgr
-        install_prepared_recipe_segment(monkeypatch, tools_clone, step_name="bootstrap")
+        install_prepared_recipe_segment(monkeypatch, step_name="bootstrap")
         result = json.loads(
             await bootstrap_clone(
                 source_dir="/src",
@@ -122,6 +138,7 @@ class TestBootstrapClone:
         assert "error" in result
         assert "disk full" in result["error"]
         assert result["recipe_segment"]["kind"] == "recovery"
+        assert_delivery_outcome("bootstrap_clone", result, expected=False)
 
     @pytest.mark.anyio
     async def test_bootstrap_clone_unresolvable_base_preserves_error_contract(
@@ -394,8 +411,8 @@ class TestClaimAndResolveIssue:
         tool_ctx_kitchen_open.github_client.swap_labels = AsyncMock(return_value={"success": True})
         install_prepared_recipe_segment(
             monkeypatch,
-            tools_issue_composite,
             step_name="claim",
+            success_carrier=None,
         )
         result = json.loads(
             await claim_and_resolve_issue(issue_url="owner/repo#42", step_name="claim")
@@ -404,11 +421,8 @@ class TestClaimAndResolveIssue:
         assert result["issue_number"] == 42
         assert result["issue_title"] == "Fix bug"
         assert result["issue_slug"] == "fix-bug"
-        assert result["recipe_segment"] == {
-            "kind": "success",
-            "source_step": "claim",
-            "bodies": [{"step": "next", "body": "next:\n  action: stop\n"}],
-        }
+        assert "recipe_segment" not in result
+        assert_delivery_outcome("claim_and_resolve_issue", result, expected=True)
 
     @pytest.mark.anyio
     async def test_claim_and_resolve_issue_already_claimed(
@@ -430,7 +444,6 @@ class TestClaimAndResolveIssue:
         )
         install_prepared_recipe_segment(
             monkeypatch,
-            tools_issue_composite,
             step_name="claim",
         )
         result = json.loads(
@@ -441,6 +454,7 @@ class TestClaimAndResolveIssue:
         assert result["issue_title"] == "Fix bug"
         assert result["issue_slug"] == "fix-bug"
         assert_recovery_recipe_segment(result, step_name="claim")
+        assert_delivery_outcome("claim_and_resolve_issue", result, expected=False)
 
     @pytest.mark.anyio
     async def test_claim_and_resolve_issue_reentry(self, tool_ctx_kitchen_open):
@@ -706,7 +720,7 @@ class TestCreateAndPublishBranch:
         mock_mgr = MagicMock()
         mock_mgr.push_to_remote.return_value = {"success": True, "stderr": ""}
         tool_ctx_kitchen_open.clone_mgr = mock_mgr
-        install_prepared_recipe_segment(monkeypatch, tools_git, step_name="publish")
+        install_prepared_recipe_segment(monkeypatch, step_name="publish", success_carrier=None)
         result = json.loads(
             await create_and_publish_branch(
                 issue_slug="fix-bug",
@@ -719,6 +733,7 @@ class TestCreateAndPublishBranch:
         )
         assert result["merge_target"] == "fix-bug/42"
         assert "recipe_segment" not in result
+        assert_delivery_outcome("create_and_publish_branch", result, expected=True)
 
     @pytest.mark.anyio
     async def test_create_and_publish_branch_collision(self, tool_ctx_kitchen_open, tmp_path):
@@ -778,7 +793,7 @@ class TestCreateAndPublishBranch:
             "error_type": "",
         }
         tool_ctx_kitchen_open.clone_mgr = mock_mgr
-        install_prepared_recipe_segment(monkeypatch, tools_git, step_name="publish")
+        install_prepared_recipe_segment(monkeypatch, step_name="publish")
         result = json.loads(
             await create_and_publish_branch(
                 issue_slug="fix-bug",
@@ -791,6 +806,7 @@ class TestCreateAndPublishBranch:
         )
         assert "error" in result
         assert_recovery_recipe_segment(result, step_name="publish")
+        assert_delivery_outcome("create_and_publish_branch", result, expected=False)
 
     @pytest.mark.anyio
     async def test_create_and_publish_branch_gate_closed(self, tool_ctx):

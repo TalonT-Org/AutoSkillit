@@ -23,11 +23,6 @@ from autoskillit.server._misc import clone_registry, ensure_base_branch_local
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server.lifecycle._guards import _require_enabled, _require_no_infrastructure_fault
 from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
-from autoskillit.server.recipe._recipe_segment_delivery import (
-    PreparedRecipeSegmentDelivery,
-    attach_recipe_segment,
-    prepare_recipe_segment_delivery,
-)
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
@@ -224,7 +219,7 @@ async def push_to_remote(
     source_dir via git remote get-url (read-only). source_dir is never modified
     — clone isolation is preserved.
 
-    Returns {"success": "true", "stderr": str} on success.
+    Returns {"success": bool, "stderr": str} on success.
     Returns {"error": str, "stderr": str, "error_type": str} on failure
     (triggers on_failure routing).
 
@@ -233,14 +228,13 @@ async def push_to_remote(
         branch: Branch name to push (e.g. "develop").
         source_dir: Source repo path (read-only URL lookup when remote_url is empty).
         remote_url: Pre-resolved upstream remote URL. When provided, source_dir is skipped.
-        step_name: Optional YAML step key for wall-clock timing accumulation.
+        step_name: Exact recipe step key; selects recipe-segment delivery and timing.
 
     Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        prepared_segment: PreparedRecipeSegmentDelivery | None = None
         with structlog.contextvars.bound_contextvars(tool="push_to_remote", clone_path=clone_path):
             logger.info(
                 "push_to_remote",
@@ -267,16 +261,9 @@ async def push_to_remote(
             )  # circular-break: server-internal circular dependency
 
             tool_ctx = _get_ctx()
-            prepared_segment = prepare_recipe_segment_delivery(tool_ctx, step_name)
             clone_mgr = tool_ctx.clone_mgr
             if clone_mgr is None:
-                return json.dumps(
-                    attach_recipe_segment(
-                        {"error": "Clone manager not configured", "stderr": ""},
-                        prepared_segment,
-                        success=False,
-                    )
-                )
+                return json.dumps({"error": "Clone manager not configured", "stderr": ""})
 
             _start = time.monotonic()
             try:
@@ -303,36 +290,22 @@ async def push_to_remote(
                         },
                     )
                     return json.dumps(
-                        attach_recipe_segment(
-                            {
-                                "success": False,
-                                "error": "push failed",
-                                "stderr": result.get("stderr", ""),
-                                "error_type": result.get("error_type", ""),
-                            },
-                            prepared_segment,
-                            success=False,
-                        )
+                        {
+                            "success": False,
+                            "error": "push failed",
+                            "stderr": result.get("stderr", ""),
+                            "error_type": result.get("error_type", ""),
+                        }
                     )
 
-                return json.dumps(
-                    attach_recipe_segment(
-                        result,
-                        prepared_segment,
-                        success=bool(result.get("success")),
-                    )
-                )
+                return json.dumps(result)
             finally:
                 if step_name:
                     tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
         logger.error("push_to_remote unhandled exception", exc_info=True)
         return json.dumps(
-            attach_recipe_segment(
-                {"success": False, "error": f"{type(exc).__name__}: {exc}", "stderr": ""},
-                prepared_segment,
-                success=False,
-            )
+            {"success": False, "error": f"{type(exc).__name__}: {exc}", "stderr": ""}
         )
 
 
@@ -575,14 +548,13 @@ async def bootstrap_clone(
         strategy: On uncommitted changes: "" = return warning, "proceed" = clone
                   remote committed state, "clone_local" = copytree.
         remote_url: Override remote URL for clone's origin.
-        step_name: Optional YAML step key for wall-clock timing accumulation.
+        step_name: Exact recipe step key; selects recipe-segment delivery and timing.
 
     Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        prepared_segment: PreparedRecipeSegmentDelivery | None = None
         with structlog.contextvars.bound_contextvars(
             tool="bootstrap_clone", source_dir=source_dir, base_branch=base_branch
         ):
@@ -611,15 +583,8 @@ async def bootstrap_clone(
             )  # circular-break: server-internal circular dependency
 
             tool_ctx = _get_ctx()
-            prepared_segment = prepare_recipe_segment_delivery(tool_ctx, step_name)
             if tool_ctx.clone_mgr is None:
-                return json.dumps(
-                    attach_recipe_segment(
-                        {"error": "Clone manager not configured"},
-                        prepared_segment,
-                        success=False,
-                    )
-                )
+                return json.dumps({"error": "Clone manager not configured"})
 
             _total_start = time.monotonic()
 
@@ -641,22 +606,14 @@ async def bootstrap_clone(
                     "autoskillit.bootstrap_clone",
                     extra={"reason": str(exc)},
                 )
-                return json.dumps(
-                    attach_recipe_segment({"error": str(exc)}, prepared_segment, success=False)
-                )
+                return json.dumps({"error": str(exc)})
             finally:
                 clone_ms = int((time.monotonic() - _clone_start) * 1000)
 
             gate_error = _require_clone_success(clone_result, source_dir)
             if gate_error is not None:
                 gate_payload = json.loads(gate_error)
-                return json.dumps(
-                    attach_recipe_segment(
-                        gate_payload,
-                        prepared_segment,
-                        success=False,
-                    )
-                )
+                return json.dumps(gate_payload)
 
             success = cast("CloneSuccessResult", clone_result)
             clone_path: str = success["clone_path"]
@@ -697,13 +654,7 @@ async def bootstrap_clone(
                         clone_path=clone_path,
                         exc_info=True,
                     )
-                return json.dumps(
-                    attach_recipe_segment(
-                        {"error": base_resolution.failure_reason},
-                        prepared_segment,
-                        success=False,
-                    )
-                )
+                return json.dumps({"error": base_resolution.failure_reason})
 
             base_sha = base_resolution.resolved.sha
 
@@ -711,27 +662,17 @@ async def bootstrap_clone(
                 tool_ctx.timing_log.record(step_name, time.monotonic() - _total_start)
 
             return json.dumps(
-                attach_recipe_segment(
-                    {
-                        "work_dir": clone_path,
-                        "remote_url": resolved_remote_url,
-                        "base_sha": base_sha,
-                        "merge_target": base_branch,
-                        "timings": {
-                            "clone_ms": clone_ms,
-                            "rev_parse_ms": rev_parse_ms,
-                        },
+                {
+                    "work_dir": clone_path,
+                    "remote_url": resolved_remote_url,
+                    "base_sha": base_sha,
+                    "merge_target": base_branch,
+                    "timings": {
+                        "clone_ms": clone_ms,
+                        "rev_parse_ms": rev_parse_ms,
                     },
-                    prepared_segment,
-                    success=True,
-                )
+                }
             )
     except Exception as exc:
         logger.error("bootstrap_clone unhandled exception", exc_info=True)
-        return json.dumps(
-            attach_recipe_segment(
-                {"error": f"{type(exc).__name__}: {exc}"},
-                prepared_segment,
-                success=False,
-            )
-        )
+        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})

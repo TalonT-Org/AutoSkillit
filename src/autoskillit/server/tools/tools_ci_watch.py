@@ -18,11 +18,6 @@ from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.lifecycle._guards import _require_enabled
 from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
-from autoskillit.server.recipe._recipe_segment_delivery import (
-    PreparedRecipeSegmentDelivery,
-    attach_recipe_segment,
-    prepare_recipe_segment_delivery,
-)
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
@@ -113,7 +108,7 @@ async def wait_for_ci(
                If omitted, falls back to the project-level ci.event config.
         timeout_seconds: Maximum time to wait (default 300s).
         cwd: Working directory for git operations.
-        step_name: Optional YAML step key for wall-clock timing accumulation.
+        step_name: Exact recipe step key; selects recipe-segment delivery and timing.
         auto_trigger: When True and ci_watcher returns "no_runs", performs an active
                       self-healing sequence: checks PR mergeability, creates an empty
                       commit, and force-pushes the branch to re-trigger webhook delivery,
@@ -131,7 +126,6 @@ async def wait_for_ci(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        prepared_segment: PreparedRecipeSegmentDelivery | None = None
         _start = time.monotonic()
         _timing_ctx = None
         event = _coerce_none_string(event, tool="wait_for_ci")
@@ -153,21 +147,16 @@ async def wait_for_ci(
 
             tool_ctx = _get_ctx()
             _timing_ctx = tool_ctx
-            prepared_segment = prepare_recipe_segment_delivery(tool_ctx, step_name)
             if tool_ctx.ci_watcher is None:
                 if step_name:
                     tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
                 return json.dumps(
-                    attach_recipe_segment(
-                        {
-                            "run_id": None,
-                            "conclusion": "error",
-                            "failed_jobs": [],
-                            "error": "CI watcher not configured",
-                        },
-                        prepared_segment,
-                        success=False,
-                    )
+                    {
+                        "run_id": None,
+                        "conclusion": "error",
+                        "failed_jobs": [],
+                        "error": "CI watcher not configured",
+                    }
                 )
 
             head_sha = await _infer_ci_head_sha(head_sha, branch=branch, cwd=cwd)
@@ -229,26 +218,16 @@ async def wait_for_ci(
                     extra={"run_id": result.get("run_id")},
                 )
 
-                return json.dumps(
-                    attach_recipe_segment(
-                        result,
-                        prepared_segment,
-                        success=conclusion == "success",
-                    )
-                )
+                return json.dumps(result)
             except Exception as exc:
                 logger.error("wait_for_ci failed", exc_info=True)
                 return json.dumps(
-                    attach_recipe_segment(
-                        {
-                            "run_id": None,
-                            "conclusion": "error",
-                            "failed_jobs": [],
-                            "error": f"{type(exc).__name__}: {exc}",
-                        },
-                        prepared_segment,
-                        success=False,
-                    )
+                    {
+                        "run_id": None,
+                        "conclusion": "error",
+                        "failed_jobs": [],
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
                 )
             finally:
                 if step_name:
@@ -258,16 +237,12 @@ async def wait_for_ci(
         if step_name and _timing_ctx is not None:
             _timing_ctx.timing_log.record(step_name, time.monotonic() - _start)
         return json.dumps(
-            attach_recipe_segment(
-                {
-                    "run_id": None,
-                    "conclusion": "error",
-                    "failed_jobs": [],
-                    "error": f"{type(exc).__name__}: {exc}",
-                },
-                prepared_segment,
-                success=False,
-            )
+            {
+                "run_id": None,
+                "conclusion": "error",
+                "failed_jobs": [],
+                "error": f"{type(exc).__name__}: {exc}",
+            }
         )
 
 

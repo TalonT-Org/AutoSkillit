@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from types import MappingProxyType
 
 from .types.recipe._type_recipe_binding import (
+    RecipeDeliveryOutcomeDef,
     ToolDef,
     ToolInitializationOperation,
     ToolParamDef,
@@ -139,6 +140,38 @@ def _initialization_operation(name: str) -> ToolInitializationOperation:
     )
 
 
+_RECIPE_DELIVERY_OUTCOMES: Mapping[str, RecipeDeliveryOutcomeDef] = MappingProxyType(
+    {
+        "check_repo_merge_state": RecipeDeliveryOutcomeDef(),
+        "enqueue_pr": RecipeDeliveryOutcomeDef(success_field="success"),
+        "wait_for_merge_queue": RecipeDeliveryOutcomeDef(success_field="success"),
+        "wait_for_ci": RecipeDeliveryOutcomeDef(
+            success_field="conclusion",
+            success_value="success",
+        ),
+        "push_to_remote": RecipeDeliveryOutcomeDef(success_field="success"),
+        "bootstrap_clone": RecipeDeliveryOutcomeDef(),
+        "run_python": RecipeDeliveryOutcomeDef(success_field="success"),
+        "complete_run_skill_result": RecipeDeliveryOutcomeDef(
+            success_field="run_skill_success",
+            step_name_field="step_name",
+        ),
+        "merge_worktree": RecipeDeliveryOutcomeDef(success_field="merge_succeeded"),
+        "check_pr_mergeable": RecipeDeliveryOutcomeDef(),
+        "test_check": RecipeDeliveryOutcomeDef(success_field="passed"),
+        "bind_plan_set": RecipeDeliveryOutcomeDef(success_field="success"),
+        "run_cmd": RecipeDeliveryOutcomeDef(success_field="success"),
+        "create_and_publish_branch": RecipeDeliveryOutcomeDef(),
+        "claim_and_resolve_issue": RecipeDeliveryOutcomeDef(success_field="claimed"),
+        "release_issue": RecipeDeliveryOutcomeDef(success_field="success"),
+        "verify_review_receipt": RecipeDeliveryOutcomeDef(
+            success_field="reviews_posted",
+            success_value="true",
+        ),
+    }
+)
+
+
 def _tool(
     name: str,
     params: tuple[str, ...] = (),
@@ -171,6 +204,7 @@ def _tool(
         initialization_operation=_initialization_operation(name),
         automatic_recipe_delivery=automatic_recipe_delivery,
         recovery_recipe_delivery=recovery_recipe_delivery,
+        recipe_delivery_outcome=_RECIPE_DELIVERY_OUTCOMES.get(name),
     )
 
 

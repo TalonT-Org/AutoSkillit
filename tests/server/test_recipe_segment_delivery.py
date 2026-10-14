@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -25,12 +27,34 @@ from autoskillit.server.recipe._recipe_artifact import (
 )
 from autoskillit.server.recipe._recipe_generation import RecipeGenerationStore
 from autoskillit.server.recipe._recipe_segment_delivery import (
+    RECIPE_SEGMENT_MAX_BYTES,
     RecipeSegmentDeliveryError,
+    attach_recipe_segment,
     prepare_recipe_segment_delivery,
     uses_segmented_startup,
 )
+from autoskillit.server.response._response_budget import (
+    RESPONSE_SPILL_METADATA_KEY,
+    enforce_response_budget,
+)
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
+
+_IMPLEMENTATION_OVERRIDES = {
+    "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/5256",
+    "task": "test task",
+}
+_IMPLEMENTATION_READY_PARAMETERS = [
+    pytest.param(("implementation", "plan", _IMPLEMENTATION_OVERRIDES), id="default"),
+    pytest.param(
+        (
+            "implementation",
+            "plan",
+            {**_IMPLEMENTATION_OVERRIDES, "review_approach": "true"},
+        ),
+        id="review-approach",
+    ),
+]
 
 
 def _projection(*, segmented: bool) -> FinalizedRecipeProjection:
@@ -169,6 +193,7 @@ async def test_checkpoint_delivery_reads_ready_exact_durable_artifact(
     )
 
     assert prepared is not None
+    assert prepared.success_carrier is not None
     assert prepared.success_carrier["source_step"] == "scope"
     assert [body["step"] for body in prepared.success_carrier["bodies"]] == ["select_directions"]
     credential = prepared.success_carrier[RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY]
@@ -198,10 +223,13 @@ async def test_checkpoint_delivery_sizes_failure_with_actual_tool_name(
         else invocation.tool_name
     )
     seen_tool_names: list[str] = []
+    validated_carriers: list[dict[str, object]] = []
+    build_failure = segment_delivery_module.build_post_effect_segment_failure
 
     def record_tool_name(carrier, *, tool_name: str):
         seen_tool_names.append(tool_name)
-        return carrier
+        validated_carriers.append(carrier)
+        return build_failure(carrier, tool_name=tool_name)
 
     monkeypatch.setattr(
         segment_delivery_module,
@@ -209,9 +237,22 @@ async def test_checkpoint_delivery_sizes_failure_with_actual_tool_name(
         record_tool_name,
     )
 
-    prepare_recipe_segment_delivery(tool_ctx_ready_recipe.tool_ctx, "scope")
+    prepared = prepare_recipe_segment_delivery(tool_ctx_ready_recipe.tool_ctx, "scope")
 
-    assert seen_tool_names == [expected_tool_name, expected_tool_name, expected_tool_name]
+    assert prepared is not None
+    assert prepared.success_carrier is not None
+    assert prepared.success_pull_carrier is not None
+    assert prepared.recovery_carrier is not None
+    assert seen_tool_names
+    assert all(tool_name == expected_tool_name for tool_name in seen_tool_names)
+    assert all(
+        carrier in validated_carriers
+        for carrier in (
+            prepared.success_carrier,
+            prepared.success_pull_carrier,
+            prepared.recovery_carrier,
+        )
+    )
 
 
 @pytest.mark.anyio
@@ -332,4 +373,122 @@ async def test_checkpoint_delivery_survives_ready_generation_lru_eviction(
     prepared = prepare_recipe_segment_delivery(tool_ctx_ready_recipe.tool_ctx, "scope")
 
     assert prepared is not None
+    assert prepared.success_carrier is not None
     assert prepared.success_carrier["recipe_pull"] == state.artifact_generation.pull_identity()
+
+
+@pytest.mark.parametrize("tool_ctx_ready_recipe", _IMPLEMENTATION_READY_PARAMETERS, indirect=True)
+@pytest.mark.anyio
+async def test_recovery_only_success_carrier_follows_success_crossings(
+    tool_ctx_ready_recipe,
+) -> None:
+    tool_ctx = tool_ctx_ready_recipe.tool_ctx
+
+    close_issue = prepare_recipe_segment_delivery(tool_ctx, "close_issue_no_changes")
+    assert close_issue is not None
+    assert close_issue.success_carrier is not None
+    assert close_issue.success_carrier["kind"] == "recovery"
+    assert "register_clone_no_changes" in close_issue.success_carrier["target_steps"]
+
+    claim_issue = prepare_recipe_segment_delivery(tool_ctx, "claim_and_resolve")
+    assert claim_issue is not None
+    assert claim_issue.success_carrier is None
+
+
+@pytest.mark.parametrize("tool_ctx_ready_recipe", _IMPLEMENTATION_READY_PARAMETERS, indirect=True)
+@pytest.mark.anyio
+async def test_success_carrier_degrades_to_pull_only_when_response_would_not_fit(
+    tool_ctx_ready_recipe,
+    tmp_path: Path,
+) -> None:
+    tool_ctx = tool_ctx_ready_recipe.tool_ctx
+    prepared = prepare_recipe_segment_delivery(tool_ctx, "bind_plan_set")
+    assert prepared is not None
+    assert prepared.success_carrier is not None
+    assert prepared.success_pull_carrier is not None
+
+    base = {
+        "success": True,
+        "plan_set_authority_path": "/tmp/plan-set-authority.json",
+        "base_marker": "retained",
+        "auxiliary": "",
+    }
+    inline_size = len(
+        segment_delivery_module._serialized_bytes(
+            {**base, "recipe_segment": prepared.success_carrier}
+        )
+    )
+    assert inline_size < RECIPE_SEGMENT_MAX_BYTES
+    base["auxiliary"] = "x" * (RECIPE_SEGMENT_MAX_BYTES - inline_size)
+    assert (
+        len(
+            segment_delivery_module._serialized_bytes(
+                {**base, "recipe_segment": prepared.success_carrier}
+            )
+        )
+        >= RECIPE_SEGMENT_MAX_BYTES
+    )
+
+    attached = attach_recipe_segment(base, prepared, success=True)
+    assert attached["recipe_segment"] == prepared.success_pull_carrier
+    shaped = enforce_response_budget(
+        attached,
+        tool_name="bind_plan_set",
+        artifact_dir=tmp_path,
+        config=tool_ctx.config.output_budget,
+    )
+    payload = json.loads(shaped) if isinstance(shaped, str) else shaped
+
+    assert payload["success"] is True
+    assert payload["recipe_segment"] == prepared.success_pull_carrier
+    assert all(payload[key] == value for key, value in base.items())
+
+
+@pytest.mark.parametrize("tool_ctx_ready_recipe", _IMPLEMENTATION_READY_PARAMETERS, indirect=True)
+@pytest.mark.anyio
+async def test_pull_only_success_survives_oversized_bind_response_spill(
+    tool_ctx_ready_recipe,
+    tmp_path: Path,
+) -> None:
+    tool_ctx = tool_ctx_ready_recipe.tool_ctx
+    state = tool_ctx.recipe_initialization_state
+    assert isinstance(state, ReadyRecipe)
+    prepared = prepare_recipe_segment_delivery(tool_ctx, "bind_plan_set")
+    assert prepared is not None
+    assert prepared.success_pull_carrier is not None
+    base = {
+        "success": True,
+        "plan_set_state": "sealed",
+        "plan_set_authority_path": "/tmp/plan-set-authority.json",
+        "plan_set_authority_digest": "sha256:" + ("a" * 64),
+        "auxiliary": "spill-sentinel:" + ("x" * 20_000),
+    }
+
+    attached = attach_recipe_segment(base, prepared, success=True)
+    assert attached["recipe_segment"] == prepared.success_pull_carrier
+    shaped = enforce_response_budget(
+        attached,
+        tool_name="bind_plan_set",
+        artifact_dir=tmp_path,
+        config=tool_ctx.config.output_budget,
+    )
+    payload = json.loads(shaped) if isinstance(shaped, str) else shaped
+
+    assert payload.get("subtype") != "recipe_segment_post_effect_delivery_failure"
+    assert "do_not_repeat" not in payload
+    assert payload["success"] is True
+    assert payload["plan_set_authority_path"] == base["plan_set_authority_path"]
+    assert payload["recipe_segment"] == prepared.success_pull_carrier
+    assert payload["recipe_segment"]["source_step"] == "bind_plan_set"
+    assert payload["recipe_segment"]["recipe_pull"] == state.artifact_generation.pull_identity()
+    pull_requests = [
+        request
+        for closure in payload["recipe_segment"]["pull_closures"]
+        for request in closure["pull_requests"]
+    ]
+    assert {"section": "verify", "part": 0} in pull_requests
+    assert RESPONSE_SPILL_METADATA_KEY in payload
+
+    metadata = payload[RESPONSE_SPILL_METADATA_KEY]
+    spilled_base = json.loads(Path(metadata["artifact_path"]).read_text(encoding="utf-8"))
+    assert spilled_base == base

@@ -58,9 +58,6 @@ from autoskillit.server._subprocess import (
 from autoskillit.server.recipe._recipe_execution import (
     complete_audit_finalization_effects as _complete_audit_finalization_effects,
 )
-from autoskillit.server.recipe._recipe_segment_delivery import (
-    prepare_recipe_segment_delivery,
-)
 from autoskillit.server.tools._backend_compat import (
     _check_backend_compat,
 )
@@ -182,7 +179,6 @@ __all__ = [
     "is_feature_enabled",
     "logger",
     "mark_step_skipped",
-    "prepare_recipe_segment_delivery",
     "progress_heartbeat",
     "read_fixed_batch_result",
     "read_overlay",

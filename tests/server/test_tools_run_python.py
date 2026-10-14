@@ -11,9 +11,18 @@ import structlog.testing
 
 import autoskillit.server.tools.tools_execution as tools_execution
 from autoskillit.server.tools.tools_execution import run_python
-from tests.server._recipe_segment_test_helpers import install_prepared_recipe_segment
+from tests.server._recipe_segment_test_helpers import (
+    assert_delivery_outcome,
+    assert_real_checkpoint_response_budget,
+    install_prepared_recipe_segment,
+)
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
+
+_IMPLEMENTATION_OVERRIDES = {
+    "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/5256",
+    "task": "test task",
+}
 
 
 class TestRunPythonObservability:
@@ -51,17 +60,24 @@ class TestRunPythonObservability:
             ("nonexistent.module.func", {}, "recovery"),
         ],
     )
+    @pytest.mark.parametrize(
+        "tool_ctx_ready_recipe",
+        [pytest.param(("implementation", "plan", _IMPLEMENTATION_OVERRIDES), id="implementation")],
+        indirect=True,
+    )
     @pytest.mark.anyio
     async def test_run_python_selects_carrier_from_result_success(
         self,
         tool_ctx_kitchen_open,
+        tool_ctx_ready_recipe,
+        tmp_path,
         mock_ctx,
         monkeypatch: pytest.MonkeyPatch,
         callable_name: str,
         args: dict[str, object],
         expected_kind: str,
     ) -> None:
-        install_prepared_recipe_segment(monkeypatch, tools_execution, step_name="python")
+        install_prepared_recipe_segment(monkeypatch, step_name="python")
 
         result = json.loads(
             await run_python(
@@ -74,6 +90,12 @@ class TestRunPythonObservability:
 
         assert result["success"] is (expected_kind == "success")
         assert result["recipe_segment"]["kind"] == expected_kind
+        succeeded = expected_kind == "success"
+        assert_delivery_outcome("run_python", result, expected=succeeded)
+        if succeeded:
+            await assert_real_checkpoint_response_budget(
+                tool_ctx_ready_recipe, "run_python", result, tmp_path
+            )
 
     @pytest.mark.anyio
     async def test_run_python_selects_carrier_from_shaped_failure(
@@ -82,7 +104,7 @@ class TestRunPythonObservability:
         mock_ctx,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        install_prepared_recipe_segment(monkeypatch, tools_execution, step_name="python")
+        install_prepared_recipe_segment(monkeypatch, step_name="python")
         monkeypatch.setattr(
             tools_execution,
             "shape_execution_response",
@@ -102,6 +124,7 @@ class TestRunPythonObservability:
 
         assert result["success"] is False
         assert result["recipe_segment"]["kind"] == "recovery"
+        assert_delivery_outcome("run_python", result, expected=False)
 
 
 class TestRunPythonHeadlessGate:

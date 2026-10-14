@@ -1205,6 +1205,7 @@ from .types import RecipeDeliveryBudgetError as RecipeDeliveryBudgetError
 from .types import RecipeDeliveryDecision as RecipeDeliveryDecision
 from .types import RecipeDeliveryEvidenceDef as RecipeDeliveryEvidenceDef
 from .types import RecipeDeliveryMode as RecipeDeliveryMode
+from .types import RecipeDeliveryOutcomeDef as RecipeDeliveryOutcomeDef
 from .types import RecipeDeliveryRequest as RecipeDeliveryRequest
 from .types import RecipeDeliverySurfaceDef as RecipeDeliverySurfaceDef
 from .types import RecipeExecutionCredential as RecipeExecutionCredential

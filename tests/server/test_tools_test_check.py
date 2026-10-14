@@ -14,6 +14,7 @@ from autoskillit.server.tools.tools_workspace import test_check
 from tests.conftest import _make_result
 from tests.server._outcome_ledger_fakes import _FailingLedger, _RecordingLedger
 from tests.server._recipe_segment_test_helpers import (
+    assert_delivery_outcome,
     assert_recovery_recipe_segment,
     install_prepared_recipe_segment,
 )
@@ -38,6 +39,7 @@ async def test_wire_passed_value_records_one_realpath_utc_outcome(tool_ctx, tmp_
     result = json.loads(await test_check(str(worktree / ".")))
 
     assert result["passed"] is True
+    assert_delivery_outcome("test_check", result, expected=True)
     assert len(ledger.records) == 1
     record = ledger.records[0]
     assert record.workspace == os.path.realpath(worktree)
@@ -72,6 +74,7 @@ async def test_accounting_uses_wire_passed_instead_of_internal_effective_value(
     result = json.loads(await test_check(str(worktree)))
 
     assert result["passed"] is False
+    assert_delivery_outcome("test_check", result, expected=False)
     assert len(ledger.records) == 1
     assert ledger.records[0].succeeded is False
 
@@ -102,7 +105,6 @@ async def test_ledger_failure_returns_recovery_envelope_without_recursive_retry(
     tool_ctx.runner.push(_make_result(0, "= 1 passed =\n", ""))
     install_prepared_recipe_segment(
         monkeypatch,
-        tools_workspace,
         step_name="gate",
     )
 
@@ -111,6 +113,7 @@ async def test_ledger_failure_returns_recovery_envelope_without_recursive_retry(
     assert result["passed"] is False
     assert "outcome recording failed" in result["error"]
     assert_recovery_recipe_segment(result, step_name="gate")
+    assert_delivery_outcome("test_check", result, expected=False)
     assert ledger.calls == 1
     assert len(tool_ctx.runner.call_args_list) == 1
     assert any(entry["step_name"] == "gate" for entry in tool_ctx.timing_log.get_report())

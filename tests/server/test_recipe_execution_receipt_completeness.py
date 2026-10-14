@@ -12,17 +12,26 @@ from autoskillit.core import FinalizedRecipeProjection, build_recipe_execution_c
 from autoskillit.server.recipe._recipe_execution import get_recipe_execution
 from tests.server._recipe_fixture_parameters import (
     IMPLEMENTATION_OVERRIDES,
+    RESEARCH_OVERRIDES,
 )
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_RECIPE_INPUT_OVERRIDES = {
+    "full-audit": {"workspace": ".", "branch": "develop"},
+    "implementation": IMPLEMENTATION_OVERRIDES,
+    "implementation-groups": {"source_doc": "test source document", "source_dir": "."},
+    "merge-prs": {"source_dir": "."},
+    "planner": {"task": "test task", "source_dir": "."},
+    "remediation": IMPLEMENTATION_OVERRIDES,
+    "research": RESEARCH_OVERRIDES,
+}
 
 
 def _recipe_fixture_parameters() -> list[tuple[str, str, dict[str, str]]]:
     from autoskillit.recipe import load_and_validate
     from tests._tracked_recipes import delivery_recipe_names
-    from tests.server._recipe_fixture_parameters import RESEARCH_OVERRIDES
 
     parameters = []
     for recipe_name in delivery_recipe_names(_PROJECT_ROOT):
@@ -33,14 +42,17 @@ def _recipe_fixture_parameters() -> list[tuple[str, str, dict[str, str]]]:
         )
         projection = loaded["_finalized_projection"]
         assert isinstance(projection, FinalizedRecipeProjection)
-        if not projection.delivery_segments and recipe_name != "research":
-            continue
         attested_step = next(
-            step_name
-            for step_name, invocation in projection.binding_projection.invocations.items()
-            if invocation.tool_name == "run_skill" and invocation.attested
+            (
+                step_name
+                for step_name, invocation in projection.binding_projection.invocations.items()
+                if invocation.tool_name == "run_skill" and invocation.attested
+            ),
+            None,
         )
-        overrides = RESEARCH_OVERRIDES if recipe_name == "research" else IMPLEMENTATION_OVERRIDES
+        if attested_step is None:
+            continue
+        overrides = _RECIPE_INPUT_OVERRIDES[recipe_name]
         parameters.append((recipe_name, attested_step, overrides))
     return parameters
 

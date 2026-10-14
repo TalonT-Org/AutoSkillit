@@ -173,11 +173,12 @@ def test_unknown_or_out_of_order_phase_is_rejected() -> None:
         advance_kitchen_phase(_state(), KitchenOpenPhase.COMMITTED)
 
 
-def test_kitchen_activation_id_rejects_empty_value_and_untyped_identity() -> None:
+@pytest.mark.parametrize("value", ["", " ", "\t\n"])
+def test_kitchen_activation_id_rejects_blank_value_and_untyped_identity(value: str) -> None:
     from autoskillit.pipeline import KitchenActivationId, require_kitchen_activation_id
 
     with pytest.raises(ValueError):
-        KitchenActivationId("")
+        KitchenActivationId(value)
     with pytest.raises(TypeError):
         require_kitchen_activation_id("k")
 

@@ -57,8 +57,8 @@ class KitchenActivationId:
     value: str
 
     def __post_init__(self) -> None:
-        if not isinstance(self.value, str) or not self.value:
-            raise ValueError("KitchenActivationId.value must be a non-empty string")
+        if not isinstance(self.value, str) or not self.value.strip():
+            raise ValueError("KitchenActivationId.value must contain non-whitespace characters")
 
 
 def require_kitchen_activation_id(value: object) -> KitchenActivationId:

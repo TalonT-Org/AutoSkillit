@@ -287,6 +287,36 @@ def _persist_finalized_generation(
     return finalized.artifact_generation, finalized
 
 
+def test_finalize_persistence_failure_logs_cause(tool_ctx_kitchen_open, monkeypatch) -> None:
+    from structlog.testing import capture_logs
+
+    from autoskillit.server.recipe._recipe_delivery import _finalize
+
+    monkeypatch.setattr(
+        _finalize,
+        "persist_recipe_artifact",
+        MagicMock(side_effect=RecipeArtifactError("boom")),
+    )
+    with capture_logs() as logs:
+        finalized = _finalize_recipe_delivery(
+            _payload(),
+            surface="open_kitchen",
+            recipe_name="remediation",
+            tool_ctx=tool_ctx_kitchen_open,
+            finalized_projection=_test_projection(),
+        )
+
+    assert json.loads(finalized.rendered) == {
+        "success": False,
+        "error": "recipe_artifact_unavailable",
+    }
+    warnings = [log for log in logs if log["event"] == "recipe_artifact_persistence_failed"]
+    assert len(warnings) == 1
+    assert warnings[0]["log_level"] == "warning"
+    assert warnings[0]["error_type"] == "RecipeArtifactError"
+    assert warnings[0]["exc_info"] is True
+
+
 def test_finalized_response_rejects_stale_kitchen_transition_owner(tool_ctx) -> None:
     bind_test_kitchen_identity(tool_ctx, kitchen_id="transition-owner")
     tool_ctx.kitchen_open_state = start_kitchen_effect(

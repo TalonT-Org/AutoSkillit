@@ -20,7 +20,15 @@ SRC_ROOT = Path(__file__).parents[2] / "src" / "autoskillit"
 Location = tuple[str, str]
 
 _REFERENCE_TARGETS = frozenset({"resolve_kitchen_id"})
-_CALL_TARGETS = frozenset({"new_kitchen_open_state", "activate_kitchen", "KitchenOpenState"})
+_CALL_TARGETS = frozenset(
+    {
+        "new_kitchen_open_state",
+        "activate_kitchen",
+        "KitchenOpenState",
+        "KitchenActivationId",
+        "retire_recipe_artifacts",
+    }
+)
 
 
 class _KitchenIdentityOccurrenceCollector(ast.NodeVisitor):
@@ -32,6 +40,7 @@ class _KitchenIdentityOccurrenceCollector(ast.NodeVisitor):
         self.references: defaultdict[str, Counter[Location]] = defaultdict(Counter)
         self.calls: defaultdict[str, Counter[Location]] = defaultdict(Counter)
         self.replace_kitchen_id_keywords: Counter[Location] = Counter()
+        self.replace_activation_id_keywords: Counter[Location] = Counter()
 
     def _location(self) -> Location:
         return (
@@ -86,6 +95,10 @@ class _KitchenIdentityOccurrenceCollector(ast.NodeVisitor):
             self._record(self.calls, symbol)
         if symbol == "replace" and any(keyword.arg == "kitchen_id" for keyword in node.keywords):
             self.replace_kitchen_id_keywords[self._location()] += 1
+        if symbol == "replace" and any(
+            keyword.arg == "activation_id" for keyword in node.keywords
+        ):
+            self.replace_activation_id_keywords[self._location()] += 1
         self.generic_visit(node)
 
 
@@ -103,11 +116,13 @@ def _collect_occurrences(
     dict[str, Counter[Location]],
     dict[str, Counter[Location]],
     Counter[Location],
+    Counter[Location],
 ]:
     assert sources, "kitchen identity collector scanned no source files"
     references: defaultdict[str, Counter[Location]] = defaultdict(Counter)
     calls: defaultdict[str, Counter[Location]] = defaultdict(Counter)
     replace_kitchen_id_keywords: Counter[Location] = Counter()
+    replace_activation_id_keywords: Counter[Location] = Counter()
 
     for relative_path, source in sources:
         collector = _KitchenIdentityOccurrenceCollector(relative_path)
@@ -117,13 +132,20 @@ def _collect_occurrences(
         for symbol, counts in collector.calls.items():
             calls[symbol].update(counts)
         replace_kitchen_id_keywords.update(collector.replace_kitchen_id_keywords)
+        replace_activation_id_keywords.update(collector.replace_activation_id_keywords)
 
-    return dict(references), dict(calls), replace_kitchen_id_keywords
+    return (
+        dict(references),
+        dict(calls),
+        replace_kitchen_id_keywords,
+        replace_activation_id_keywords,
+    )
 
 
 def _collect_source_tree() -> tuple[
     dict[str, Counter[Location]],
     dict[str, Counter[Location]],
+    Counter[Location],
     Counter[Location],
 ]:
     sources = [
@@ -145,7 +167,9 @@ def _assert_exact_counter(
 
 
 def test_kitchen_identity_authority_matches_exact_occurrence_counts() -> None:
-    references, calls, replace_kitchen_id_keywords = _collect_source_tree()
+    references, calls, replace_kitchen_id_keywords, replace_activation_id_keywords = (
+        _collect_source_tree()
+    )
 
     _assert_exact_counter(
         references.get("resolve_kitchen_id", Counter()),
@@ -177,6 +201,16 @@ def test_kitchen_identity_authority_matches_exact_occurrence_counts() -> None:
         "activate_kitchen calls",
     )
     _assert_exact_counter(
+        calls.get("KitchenActivationId", Counter()),
+        Counter({("server/lifecycle/_kitchen_identity.py", "establish_kitchen_identity"): 1}),
+        "KitchenActivationId calls",
+    )
+    _assert_exact_counter(
+        calls.get("retire_recipe_artifacts", Counter()),
+        Counter({("server/lifecycle/_kitchen_identity.py", "retire_kitchen_identity"): 1}),
+        "retire_recipe_artifacts calls",
+    )
+    _assert_exact_counter(
         calls.get("KitchenOpenState", Counter()),
         Counter(
             {
@@ -188,6 +222,10 @@ def test_kitchen_identity_authority_matches_exact_occurrence_counts() -> None:
     )
     assert not replace_kitchen_id_keywords, (
         f"dataclasses.replace must not change kitchen identity: {replace_kitchen_id_keywords}"
+    )
+    assert not replace_activation_id_keywords, (
+        "dataclasses.replace must not change kitchen activation identity: "
+        f"{replace_activation_id_keywords}"
     )
 
 
@@ -224,6 +262,7 @@ from autoskillit.core.runtime import resolve_kitchen_id
 
 def establish_kitchen_identity():
     resolve_kitchen_id()
+    KitchenActivationId("first-activation")
     new_kitchen_open_state(kitchen_id="first", context_id="ctx")
     new_kitchen_open_state(kitchen_id="second", context_id="ctx")
     activate_kitchen("first")
@@ -231,19 +270,29 @@ def establish_kitchen_identity():
     replace(state, kitchen_id="forged")
 
 
+def retire_kitchen_identity():
+    retire_recipe_artifacts("temp", activation_id=activation_id)
+
+
 def unregistered_boot():
     resolve_kitchen_id()
+    KitchenActivationId("rogue-activation")
     new_kitchen_open_state(kitchen_id="rogue", context_id="ctx")
     activate_kitchen("rogue")
     KitchenOpenState(phase=None, kitchen_id="rogue", operation_id="", context_id="ctx")
+    retire_recipe_artifacts("temp", activation_id=activation_id)
     replace(state, kitchen_id="forged")
+    replace(state, activation_id="forged")
 """
 
 
 def test_forged_source_canary_trips_counting_guards() -> None:
-    references, calls, replace_kitchen_id_keywords = _collect_occurrences(
-        [("synthetic/boot.py", _FORGED_SOURCE)]
-    )
+    (
+        references,
+        calls,
+        replace_kitchen_id_keywords,
+        replace_activation_id_keywords,
+    ) = _collect_occurrences([("synthetic/boot.py", _FORGED_SOURCE)])
 
     with pytest.raises(AssertionError, match="duplicate occurrences|occurrences changed"):
         _assert_exact_counter(
@@ -269,6 +318,33 @@ def test_forged_source_canary_trips_counting_guards() -> None:
                 Counter({("synthetic/boot.py", "establish_kitchen_identity"): 1}),
                 f"synthetic {symbol} calls",
             )
+
+    activation_creation = calls.get("KitchenActivationId", Counter())
+    assert activation_creation[("synthetic/boot.py", "establish_kitchen_identity")] == 1
+    assert activation_creation[("synthetic/boot.py", "unregistered_boot")] == 1
+    with pytest.raises(AssertionError, match="duplicate occurrences|occurrences changed"):
+        _assert_exact_counter(
+            activation_creation,
+            Counter({("synthetic/boot.py", "establish_kitchen_identity"): 1}),
+            "synthetic KitchenActivationId calls",
+        )
+
+    artifact_retirement = calls.get("retire_recipe_artifacts", Counter())
+    assert artifact_retirement[("synthetic/boot.py", "retire_kitchen_identity")] == 1
+    assert artifact_retirement[("synthetic/boot.py", "unregistered_boot")] == 1
+    with pytest.raises(AssertionError, match="duplicate occurrences|occurrences changed"):
+        _assert_exact_counter(
+            artifact_retirement,
+            Counter({("synthetic/boot.py", "retire_kitchen_identity"): 1}),
+            "synthetic retire_recipe_artifacts calls",
+        )
+
+    assert replace_activation_id_keywords[("synthetic/boot.py", "unregistered_boot")] == 1
+    with pytest.raises(AssertionError, match="replace must not change activation identity"):
+        assert not replace_activation_id_keywords, (
+            "dataclasses.replace must not change activation identity: "
+            f"{replace_activation_id_keywords}"
+        )
 
     with pytest.raises(AssertionError, match="replace must not change kitchen identity"):
         assert not replace_kitchen_id_keywords, (

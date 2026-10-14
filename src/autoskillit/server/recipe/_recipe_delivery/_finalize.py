@@ -224,7 +224,15 @@ def finalize_recipe_delivery(
         RecipeGenerationError,
         TypeError,
         ValueError,
-    ):
+    ) as exc:
+        get_logger(__name__).warning(
+            "recipe_artifact_persistence_failed",
+            producer=surface_definition.producer_tool,
+            recipe_name=recipe_name,
+            surface=surface,
+            error_type=type(exc).__name__,
+            exc_info=True,
+        )
         decision = _failure_decision(
             producer=surface_definition.producer_tool,
             reason="recipe_artifact_persistence_failed",

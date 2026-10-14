@@ -237,6 +237,7 @@ def _bind_open_kitchen_transition(
             ):
                 tool_ctx.kitchen_open_state = new_kitchen_open_state(
                     kitchen_id=active.kitchen_id,
+                    activation_id=tool_ctx.kitchen_activation_id,
                     context_id=active.context_id,
                 )
         try:

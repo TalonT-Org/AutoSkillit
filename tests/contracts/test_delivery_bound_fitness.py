@@ -34,6 +34,7 @@ from autoskillit.core import (
     resolve_general_output_token_limit,
 )
 from autoskillit.execution.backends import BACKEND_REGISTRY, CODEX_HISTORY_RETENTION_TOKEN_LIMIT
+from autoskillit.pipeline import KitchenActivationId
 from autoskillit.recipe import (
     NON_INTERACTIVE_KINDS,
     load_and_validate,
@@ -171,6 +172,7 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
             backend=BACKEND_REGISTRY[backend_name](),
             config=SimpleNamespace(output_budget=OutputBudgetConfig()),
             kitchen_id=f"fitness-{backend_name}-{recipe_name}",
+            kitchen_activation_id=KitchenActivationId(f"fitness-{backend_name}-{recipe_name}"),
             temp_dir=tmp_path,
         ),
     )

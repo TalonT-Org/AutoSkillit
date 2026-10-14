@@ -19,6 +19,7 @@ from autoskillit.core import (
     client_serialized_char_len,
 )
 from autoskillit.execution.backends import BACKEND_REGISTRY
+from autoskillit.pipeline import KitchenActivationId
 from autoskillit.pipeline.recipe_initialization import NoActiveRecipe
 from autoskillit.recipe import load_and_validate
 from autoskillit.server.recipe._recipe_delivery import (
@@ -104,6 +105,7 @@ def _resolve_delivery(
             backend=BACKEND_REGISTRY[backend_name](),
             config=SimpleNamespace(output_budget=OutputBudgetConfig()),
             kitchen_id=f"ledger-{backend_name}-{recipe_path.stem}",
+            kitchen_activation_id=KitchenActivationId(f"ledger-{backend_name}-{recipe_path.stem}"),
             recipe_execution_lock=threading.RLock(),
             recipe_initialization_state=NoActiveRecipe(),
             temp_dir=tmp_path,

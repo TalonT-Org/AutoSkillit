@@ -22,6 +22,7 @@ from autoskillit.core import (
     resolve_general_output_token_limit,
 )
 from autoskillit.execution.backends import BACKEND_REGISTRY
+from autoskillit.pipeline import KitchenActivationId
 from autoskillit.pipeline.recipe_initialization import NoActiveRecipe
 from autoskillit.recipe import load_and_validate
 from autoskillit.server.recipe._recipe_delivery import (
@@ -109,6 +110,7 @@ def test_implementation_flow_records_real_page_within_115k(
             backend=backend,
             config=SimpleNamespace(output_budget=OutputBudgetConfig()),
             kitchen_id="flow-pin-test",
+            kitchen_activation_id=KitchenActivationId("flow-pin-test"),
             recipe_execution_lock=threading.RLock(),
             recipe_initialization_state=NoActiveRecipe(),
             temp_dir=tmp_path,
@@ -125,7 +127,7 @@ def test_implementation_flow_records_real_page_within_115k(
     # Build the artifact so we have a RecipeArtifactGeneration
     generation = persist_recipe_artifact(
         tmp_path,
-        kitchen_id="flow-pin-test",
+        activation_id=KitchenActivationId("flow-pin-test"),
         producer_tool="open_kitchen",
         recipe_name="implementation",
         payload=prepared.canonical_artifact_payload,
@@ -148,7 +150,6 @@ def test_implementation_flow_records_real_page_within_115k(
     )
 
     page_plan = build_recipe_section_page_plan(
-        kitchen_id="flow-pin-test",
         generation=generation,
         selected=selected,
         recipe_section_bound_bytes=bound_bytes,

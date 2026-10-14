@@ -32,7 +32,6 @@ from autoskillit.server.recipe._recipe_artifact import (
     prepare_recipe_delivery_generation,
     recipe_pull_producers,
     recipe_recreation_producers,
-    retire_recipe_artifacts,
 )
 from autoskillit.server.recipe._recipe_delivery._completion import (
     complete_finalized_recipe_response,
@@ -76,7 +75,6 @@ __all__ = [
     "prepare_recipe_delivery_generation",
     "recipe_pull_producers",
     "recipe_recreation_producers",
-    "retire_recipe_artifacts",
     "validate_compiled_recipe_delivery_budget",
     "validate_recipe_exemption_fitness",
 ]

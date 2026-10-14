@@ -34,6 +34,7 @@ from autoskillit.core import (
     load_yaml,
     validate_recipe_artifact_sections,
 )
+from autoskillit.pipeline import KitchenActivationId
 from autoskillit.server.recipe._recipe_generation import (
     RecipeGenerationError,
     RecipeGenerationRecord,
@@ -307,7 +308,8 @@ def prepare_recipe_delivery_generation(
         flow_generation=flow_generation,
     )
     store = get_recipe_generation_store()
-    existing = store.lookup_compile(tool_ctx.kitchen_id, normalized_compile_key)
+    activation_id = tool_ctx.kitchen_activation_id
+    existing = store.lookup_compile(activation_id, normalized_compile_key)
     if existing is not None:
         if (
             existing.recipe_name != recipe_name
@@ -366,7 +368,7 @@ def prepare_recipe_delivery_generation(
     )
     admitted = store.put(
         RecipeGenerationRecord(
-            kitchen_id=tool_ctx.kitchen_id,
+            activation_id=activation_id,
             normalized_compile_key=normalized_compile_key,
             recipe_name=recipe_name,
             finalized_projection=finalized_projection,
@@ -459,10 +461,16 @@ def _artifact_root(temp_dir: Path) -> Path:
     return temp_dir / "recipe-delivery"
 
 
+def _namespace_component(activation_id: KitchenActivationId) -> str:
+    if not isinstance(activation_id, KitchenActivationId):
+        raise RecipeArtifactError("recipe artifact namespace requires a kitchen activation id")
+    return _safe_component(activation_id.value)
+
+
 def _generation_dir(
     temp_dir: Path,
     *,
-    kitchen_id: str,
+    activation_id: KitchenActivationId,
     producer_tool: str,
     recipe_name: str,
     descriptor_version: int,
@@ -471,7 +479,7 @@ def _generation_dir(
 ) -> Path:
     return (
         _artifact_root(temp_dir)
-        / _safe_component(kitchen_id)
+        / _namespace_component(activation_id)
         / _safe_component(producer_tool)
         / _safe_component(recipe_name)
         / f"descriptor-{descriptor_version}-schema-{schema_version}"
@@ -479,8 +487,8 @@ def _generation_dir(
     )
 
 
-def _retired_namespace_marker(temp_dir: Path, *, kitchen_id: str) -> Path:
-    return _artifact_root(temp_dir) / ".retired" / f"{_safe_component(kitchen_id)}.retired"
+def _retired_namespace_marker(temp_dir: Path, *, activation_id: KitchenActivationId) -> Path:
+    return _artifact_root(temp_dir) / ".retired" / f"{_namespace_component(activation_id)}.retired"
 
 
 @contextmanager
@@ -544,7 +552,7 @@ def _generation_from_payload(
 def persist_recipe_artifact(
     temp_dir: Path,
     *,
-    kitchen_id: str,
+    activation_id: KitchenActivationId,
     producer_tool: str,
     recipe_name: str,
     payload: dict[str, Any],
@@ -568,7 +576,7 @@ def persist_recipe_artifact(
     )
     directory = _generation_dir(
         temp_dir,
-        kitchen_id=kitchen_id,
+        activation_id=activation_id,
         producer_tool=producer_tool,
         recipe_name=recipe_name,
         descriptor_version=generation.descriptor_version,
@@ -577,7 +585,7 @@ def persist_recipe_artifact(
     )
     descriptor = _canonical_payload(generation.pull_identity())
     with _generation_lock(temp_dir, exclusive=True):
-        if _retired_namespace_marker(temp_dir, kitchen_id=kitchen_id).exists():
+        if _retired_namespace_marker(temp_dir, activation_id=activation_id).exists():
             raise RecipeArtifactError("recipe artifact namespace is retired")
         directory.mkdir(parents=True, exist_ok=True)
         blob_path = directory / "payload.json"
@@ -608,7 +616,7 @@ def persist_recipe_artifact(
 def load_recipe_artifact(
     temp_dir: Path,
     *,
-    kitchen_id: str,
+    activation_id: KitchenActivationId,
     identity: RecipeArtifactGeneration,
 ) -> dict[str, Any]:
     """Read and independently verify an exact immutable payload generation."""
@@ -616,7 +624,7 @@ def load_recipe_artifact(
         raise RecipeArtifactError("invalid recipe artifact identity bounds")
     directory = _generation_dir(
         temp_dir,
-        kitchen_id=kitchen_id,
+        activation_id=activation_id,
         producer_tool=identity.producer_tool,
         recipe_name=identity.recipe_name,
         descriptor_version=identity.descriptor_version,
@@ -667,11 +675,11 @@ def load_recipe_artifact(
     return payload
 
 
-def retire_recipe_artifacts(temp_dir: Path, *, kitchen_id: str) -> bool:
-    """Retire one kitchen namespace after all shared-lock readers finish."""
+def retire_recipe_artifacts(temp_dir: Path, *, activation_id: KitchenActivationId) -> bool:
+    """Retire one activation namespace after all shared-lock readers finish."""
     try:
-        namespace = _artifact_root(temp_dir) / _safe_component(kitchen_id)
-        retired_marker = _retired_namespace_marker(temp_dir, kitchen_id=kitchen_id)
+        namespace = _artifact_root(temp_dir) / _namespace_component(activation_id)
+        retired_marker = _retired_namespace_marker(temp_dir, activation_id=activation_id)
         with _generation_lock(temp_dir, exclusive=True):
             retired_marker.parent.mkdir(parents=True, exist_ok=True)
             atomic_write(retired_marker, "retired\n")
@@ -680,11 +688,11 @@ def retire_recipe_artifacts(temp_dir: Path, *, kitchen_id: str) -> bool:
     except (OSError, RecipeArtifactError, TypeError):
         return False
     try:
-        notify_kitchen_retired(kitchen_id)
+        notify_kitchen_retired(activation_id)
     except Exception:
         get_logger(__name__).warning(
             "recipe_section_cache_retirement_eviction_failed",
-            kitchen_id=kitchen_id,
+            activation_id=activation_id.value,
             exc_info=True,
         )
     return True

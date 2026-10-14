@@ -254,7 +254,6 @@ generation = RecipeArtifactGeneration(
     flow_record_count=2,
 )
 plan = build_recipe_section_page_plan(
-    kitchen_id="kitchen-test",
     generation=generation,
     selected=select_recipe_section(payload, "warnings"),
     recipe_section_bound_bytes=2000,

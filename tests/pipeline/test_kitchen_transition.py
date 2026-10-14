@@ -14,6 +14,7 @@ from autoskillit.pipeline import (
     bind_kitchen_intent,
     canonical_kitchen_intent_fingerprint,
     claim_kitchen_request,
+    closed_kitchen_open_state,
     commit_kitchen_response,
     confirm_kitchen_effect,
     mark_kitchen_effect_ambiguous,
@@ -26,8 +27,11 @@ pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
 
 
 def _state():
+    from autoskillit.pipeline import KitchenActivationId
+
     return new_kitchen_open_state(
         kitchen_id="kitchen-1",
+        activation_id=KitchenActivationId("kitchen-1"),
         operation_id="operation-1",
         context_id="context-1",
     )
@@ -167,3 +171,63 @@ def test_confirmed_progress_converges_to_cached_exact_response() -> None:
 def test_unknown_or_out_of_order_phase_is_rejected() -> None:
     with pytest.raises(ValueError, match="illegal kitchen transition"):
         advance_kitchen_phase(_state(), KitchenOpenPhase.COMMITTED)
+
+
+def test_kitchen_activation_id_rejects_empty_value_and_untyped_identity() -> None:
+    from autoskillit.pipeline import KitchenActivationId, require_kitchen_activation_id
+
+    with pytest.raises(ValueError):
+        KitchenActivationId("")
+    with pytest.raises(TypeError):
+        require_kitchen_activation_id("k")
+
+
+def test_new_kitchen_open_state_requires_typed_activation_id() -> None:
+    from autoskillit.pipeline import KitchenActivationId
+
+    with pytest.raises(TypeError):
+        new_kitchen_open_state(kitchen_id="kitchen-1", context_id="context-1")
+    with pytest.raises(TypeError):
+        new_kitchen_open_state(
+            kitchen_id="kitchen-1",
+            activation_id="activation-1",
+            context_id="context-1",
+        )
+    state = new_kitchen_open_state(
+        kitchen_id="kitchen-1",
+        activation_id=KitchenActivationId("activation-1"),
+        context_id="context-1",
+    )
+    assert state.activation_id == KitchenActivationId("activation-1")
+
+
+def test_closed_kitchen_state_has_no_activation_id() -> None:
+    assert closed_kitchen_open_state().activation_id is None
+
+
+def test_lifecycle_transitions_preserve_activation_id() -> None:
+    from autoskillit.pipeline import KitchenActivationId
+
+    activation_id = KitchenActivationId("activation-1")
+    state = new_kitchen_open_state(
+        kitchen_id="kitchen-1",
+        activation_id=activation_id,
+        context_id="context-1",
+    )
+    bound = bind_kitchen_intent(state, fingerprint=_fingerprint())
+    advanced = advance_kitchen_phase(state, KitchenOpenPhase.REQUEST_BOUND)
+    started = start_kitchen_effect(bound, "recipe_serving")
+    ambiguous = mark_kitchen_effect_ambiguous(
+        started,
+        "recipe_serving",
+        evidence="connection lost after dispatch",
+    )
+    committed = commit_kitchen_response(
+        bound,
+        response='{"success":true}',
+    )
+
+    assert all(
+        item.activation_id == activation_id
+        for item in (bound, advanced, started, ambiguous, committed)
+    )

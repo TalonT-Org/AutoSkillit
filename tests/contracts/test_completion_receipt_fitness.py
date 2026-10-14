@@ -19,6 +19,7 @@ from autoskillit.core import (
     build_recipe_execution_credential,
     resolve_general_output_token_limit,
 )
+from autoskillit.pipeline import KitchenActivationId
 from autoskillit.server.recipe._recipe_delivery import (
     persist_recipe_artifact,
     prepare_recipe_delivery_generation,
@@ -107,6 +108,7 @@ def test_implementation_shape_supplies_unavailable_context(
         SimpleNamespace(
             backend=None,
             kitchen_id=f"implementation-{step_name}-shape",
+            kitchen_activation_id=KitchenActivationId(f"implementation-{step_name}-shape"),
             temp_dir=tmp_path,
         ),
     )
@@ -163,6 +165,7 @@ def test_completion_receipt_fits_every_delivery_bound(
         SimpleNamespace(
             backend=None,
             kitchen_id=f"receipt-fitness-{recipe_name}",
+            kitchen_activation_id=KitchenActivationId(f"receipt-fitness-{recipe_name}"),
             temp_dir=tmp_path,
         ),
     )
@@ -174,7 +177,7 @@ def test_completion_receipt_fits_every_delivery_bound(
     )
     generation = persist_recipe_artifact(
         tmp_path,
-        kitchen_id=tool_ctx.kitchen_id,
+        activation_id=tool_ctx.kitchen_activation_id,
         producer_tool="open_kitchen",
         recipe_name=recipe_name,
         payload=prepared.canonical_artifact_payload,

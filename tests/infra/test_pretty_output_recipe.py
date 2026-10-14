@@ -33,6 +33,7 @@ from autoskillit.hooks.formatters.pretty_output_hook import (
     _format_response,
     _strip_yaml_ingredients_block,
 )
+from autoskillit.pipeline import KitchenActivationId
 from autoskillit.recipe import load_and_validate
 from autoskillit.recipe.api import _api_cache
 from autoskillit.recipe.api._api_cache import LoadCache
@@ -522,7 +523,7 @@ def test_attested_recipe_delivery_region_is_preserved_byte_for_byte(
     payload["recipe_flow"] = flow_generation.identity()
     generation = persist_recipe_artifact(
         tmp_path,
-        kitchen_id="formatter-contract",
+        activation_id=KitchenActivationId("formatter-contract"),
         producer_tool=tool_name,
         recipe_name="remediation",
         payload=payload,
@@ -1189,7 +1190,7 @@ def _measure_persisted_envelope(
     payload["recipe_flow"] = flow_generation.identity()
     generation = persist_recipe_artifact(
         tmp_path,
-        kitchen_id="pretty-output",
+        activation_id=KitchenActivationId("pretty-output"),
         producer_tool="open_kitchen",
         recipe_name=recipe_name,
         payload=payload,

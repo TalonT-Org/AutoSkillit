@@ -74,7 +74,6 @@ def test_array_section_content_is_structured_not_string(section: str) -> None:
     payload = _payload()
     selected = select_recipe_section(payload, section)
     plan = build_recipe_section_page_plan(
-        kitchen_id="contract-flat-array",
         generation=_generation(),
         selected=selected,
         recipe_section_bound_bytes=8_192,
@@ -92,7 +91,6 @@ def test_non_array_section_content_remains_a_string(section: str) -> None:
     payload = _payload()
     selected = select_recipe_section(payload, section)
     plan = build_recipe_section_page_plan(
-        kitchen_id="contract-flat-array",
         generation=_generation(),
         selected=selected,
         recipe_section_bound_bytes=8_192,
@@ -111,7 +109,6 @@ def test_complete_array_page_has_no_nested_json_strings(section: str) -> None:
     payload = _payload()
     selected = select_recipe_section(payload, section)
     plan = build_recipe_section_page_plan(
-        kitchen_id="contract-flat-array-nesting",
         generation=_generation(),
         selected=selected,
         recipe_section_bound_bytes=8_192,
@@ -175,7 +172,6 @@ def test_fragment_pages_preserve_string_content() -> None:
 
     selected = select_recipe_section(dict(payload), "flow_records")
     plan = build_recipe_section_page_plan(
-        kitchen_id="contract-fragment",
         generation=_generation(),
         selected=selected,
         recipe_section_bound_bytes=2_048,  # force fragmentation of the large element

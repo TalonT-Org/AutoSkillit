@@ -202,17 +202,18 @@ def finalize_recipe_delivery(
         surface_payload[generation_field] = candidate_payload[generation_field]
     initialization_id = uuid4().hex if surface_definition.initialization_activating else None
     active_requirements: tuple[RecipeInitializationRequirement, ...] | None = None
+    activation_id = tool_ctx.kitchen_activation_id
     try:
         generation = persist_recipe_artifact(
             tool_ctx.temp_dir,
-            kitchen_id=tool_ctx.kitchen_id,
+            activation_id=activation_id,
             producer_tool=surface_definition.producer_tool,
             recipe_name=recipe_name,
             payload=candidate_payload,
             flow_generation=flow_generation,
         )
         get_recipe_generation_store().bind_surface(
-            tool_ctx.kitchen_id,
+            activation_id,
             normalized_compile_key,
             surface,
             generation,

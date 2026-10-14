@@ -17,6 +17,7 @@ from autoskillit.core import (
     RecipeSource,
 )
 from autoskillit.execution.backends import BACKEND_REGISTRY
+from autoskillit.pipeline import KitchenActivationId
 from autoskillit.pipeline.recipe_initialization import NoActiveRecipe
 from autoskillit.recipe import load_and_validate
 from autoskillit.recipe.io import builtin_recipes_dir
@@ -100,6 +101,9 @@ def compile_bounded_page_plan(
             backend=BACKEND_REGISTRY[backend_name](),
             config=SimpleNamespace(output_budget=resolved_output_budget),
             kitchen_id=f"contract-{surface}-{backend_name}-{recipe_path.stem}",
+            kitchen_activation_id=KitchenActivationId(
+                f"contract-{surface}-{backend_name}-{recipe_path.stem}"
+            ),
             recipe_execution_lock=threading.RLock(),
             recipe_initialization_state=NoActiveRecipe(),
             temp_dir=temp_dir,

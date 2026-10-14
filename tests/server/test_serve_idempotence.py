@@ -345,7 +345,7 @@ async def test_all_surfaces_share_canonical_flow_artifact_and_execution_identity
         pull_identity = dict(response["recipe_pull"])
         pull_identity.pop("pull_tool")
         record = get_recipe_generation_store().lookup_artifact(
-            tool_ctx_kitchen_open.kitchen_id,
+            tool_ctx_kitchen_open.kitchen_activation_id,
             RecipeArtifactGeneration(**pull_identity),
         )
         assert record is not None

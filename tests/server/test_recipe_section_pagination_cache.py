@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 
+from autoskillit.pipeline import KitchenActivationId
 from autoskillit.server.recipe import _recipe_section_pagination as pagination
 from autoskillit.server.recipe import _recipe_section_planning as planning
 from autoskillit.server.recipe._recipe_section_pagination import (
@@ -42,7 +43,7 @@ def test_cached_plans_are_reused_and_cache_clear_forces_a_rebuild(
 ) -> None:
     selected = select_recipe_section(_payload(content="cache me " * 500), "content")
     kwargs: dict[str, Any] = {
-        "kitchen_id": "kitchen-test",
+        "activation_id": KitchenActivationId("kitchen-test"),
         "generation": _generation(),
         "selected": selected,
         "recipe_section_bound_bytes": _PAGE_TEST_BOUND,
@@ -74,7 +75,7 @@ def test_concurrent_same_key_requests_share_one_page_plan_build(
 ) -> None:
     selected = select_recipe_section(_payload(content="single flight"), "content")
     kwargs: dict[str, Any] = {
-        "kitchen_id": "kitchen-single-flight",
+        "activation_id": KitchenActivationId("kitchen-single-flight"),
         "generation": _generation(),
         "selected": selected,
         "recipe_section_bound_bytes": _PAGE_TEST_BOUND,
@@ -113,7 +114,7 @@ def test_retirement_during_build_prevents_stale_cache_admission(
     selected = select_recipe_section(_payload(content="retirement race"), "content")
     generation = _generation()
     kwargs: dict[str, Any] = {
-        "kitchen_id": "kitchen-retirement-race",
+        "activation_id": KitchenActivationId("kitchen-retirement-race"),
         "generation": generation,
         "selected": selected,
         "recipe_section_bound_bytes": _PAGE_TEST_BOUND,
@@ -132,7 +133,7 @@ def test_retirement_during_build_prevents_stale_cache_admission(
 
     def retire_kitchen() -> None:
         retirement_started.set()
-        cache.evict_kitchen("kitchen-retirement-race")
+        cache.evict_kitchen(KitchenActivationId("kitchen-retirement-race"))
 
     monkeypatch.setattr(pagination, "build_recipe_section_page_plan", blocked_builder)
     with ThreadPoolExecutor(max_workers=2) as executor:
@@ -168,7 +169,7 @@ def test_every_cache_key_dimension_prevents_aliasing(
 ) -> None:
     baseline_selected = select_recipe_section(_payload(content="same"), "content")
     kwargs: dict[str, Any] = {
-        "kitchen_id": "kitchen-a",
+        "activation_id": KitchenActivationId("kitchen-a"),
         "generation": _generation(),
         "selected": baseline_selected,
         "recipe_section_bound_bytes": _PAGE_TEST_BOUND,
@@ -176,7 +177,7 @@ def test_every_cache_key_dimension_prevents_aliasing(
     baseline = get_or_build_recipe_section_page_plan(**kwargs)
 
     if dimension == "kitchen":
-        kwargs["kitchen_id"] = "kitchen-b"
+        kwargs["activation_id"] = KitchenActivationId("kitchen-b")
     elif dimension == "generation":
         kwargs["generation"] = replace(_generation(), body_size_bytes=2049)
     elif dimension == "section":
@@ -234,21 +235,21 @@ def test_cache_entry_limit_evicts_oldest_plan() -> None:
     selected = select_recipe_section(_payload(content="entry eviction"), "content")
     generation = _generation()
     first = get_or_build_recipe_section_page_plan(
-        kitchen_id="kitchen-0",
+        activation_id=KitchenActivationId("kitchen-0"),
         generation=generation,
         selected=selected,
         recipe_section_bound_bytes=_PAGE_TEST_BOUND,
     )
     for index in range(1, pagination.PAGE_PLAN_CACHE_MAX_ENTRIES + 1):
         get_or_build_recipe_section_page_plan(
-            kitchen_id=f"kitchen-{index}",
+            activation_id=KitchenActivationId(f"kitchen-{index}"),
             generation=generation,
             selected=selected,
             recipe_section_bound_bytes=_PAGE_TEST_BOUND,
         )
 
     rebuilt = get_or_build_recipe_section_page_plan(
-        kitchen_id="kitchen-0",
+        activation_id=KitchenActivationId("kitchen-0"),
         generation=generation,
         selected=selected,
         recipe_section_bound_bytes=_PAGE_TEST_BOUND,
@@ -262,7 +263,7 @@ def test_cache_rejects_a_single_plan_over_its_byte_limit() -> None:
     generation = _generation()
     plan = _build(_payload(content="overweight"), "content", bound=_PAGE_TEST_BOUND)
     key = pagination._cache_key(
-        kitchen_id="kitchen-overweight",
+        activation_id=KitchenActivationId("kitchen-overweight"),
         generation=generation,
         selected=selected,
         recipe_section_bound_bytes=_PAGE_TEST_BOUND,
@@ -284,7 +285,7 @@ def test_cache_byte_limit_evicts_oldest_plan() -> None:
     )
     keys = [
         pagination._cache_key(
-            kitchen_id=f"kitchen-{index}",
+            activation_id=KitchenActivationId(f"kitchen-{index}"),
             generation=generation,
             selected=selected,
             recipe_section_bound_bytes=_PAGE_TEST_BOUND,
@@ -310,13 +311,13 @@ def test_cache_replacement_subtracts_the_previous_plan_weight() -> None:
     replacement = dataclasses.replace(base_plan, cache_weight_bytes=3)
     other = dataclasses.replace(base_plan, cache_weight_bytes=7)
     key = pagination._cache_key(
-        kitchen_id="kitchen-replacement",
+        activation_id=KitchenActivationId("kitchen-replacement"),
         generation=generation,
         selected=selected,
         recipe_section_bound_bytes=_PAGE_TEST_BOUND,
     )
     other_key = pagination._cache_key(
-        kitchen_id="kitchen-other",
+        activation_id=KitchenActivationId("kitchen-other"),
         generation=generation,
         selected=selected,
         recipe_section_bound_bytes=_PAGE_TEST_BOUND,
@@ -341,7 +342,7 @@ def test_cache_kitchen_eviction_subtracts_every_matching_plan_weight() -> None:
     )
     retired_keys = [
         pagination._cache_key(
-            kitchen_id="retired-kitchen",
+            activation_id=KitchenActivationId("retired-kitchen"),
             generation=generation,
             selected=selected,
             recipe_section_bound_bytes=bound,
@@ -349,7 +350,7 @@ def test_cache_kitchen_eviction_subtracts_every_matching_plan_weight() -> None:
         for bound in (_PAGE_TEST_BOUND, _PAGE_TEST_BOUND + 1)
     ]
     retained_key = pagination._cache_key(
-        kitchen_id="retained-kitchen",
+        activation_id=KitchenActivationId("retained-kitchen"),
         generation=generation,
         selected=selected,
         recipe_section_bound_bytes=_PAGE_TEST_BOUND,
@@ -358,7 +359,7 @@ def test_cache_kitchen_eviction_subtracts_every_matching_plan_weight() -> None:
     for key in (*retired_keys, retained_key):
         cache.put(key, plan)
 
-    cache.evict_kitchen("retired-kitchen")
+    cache.evict_kitchen(KitchenActivationId("retired-kitchen"))
 
     assert all(cache.get(key) is None for key in retired_keys)
     assert cache.get(retained_key) is plan

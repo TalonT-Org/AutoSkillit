@@ -27,6 +27,7 @@ from autoskillit.core import (
     RecipeFlowGeneration,
     compute_recipe_execution_snapshot_digest,
 )
+from autoskillit.pipeline import KitchenActivationId
 from autoskillit.server.recipe._recipe_generation import (
     RecipeGenerationCapacityError,
     RecipeGenerationConflictError,
@@ -100,14 +101,14 @@ def _flow_generation(*, entrypoint: str = "step") -> RecipeFlowGeneration:
 
 def _record(
     *,
-    kitchen_id: str = "kitchen-a",
+    activation_id: KitchenActivationId = KitchenActivationId("kitchen-a"),
     compile_key: str = "compile-a",
     recipe_name: str = "recipe",
     payload_marker: str = "a",
 ) -> RecipeGenerationRecord:
     execution_id = f"execution-{compile_key}"
     return RecipeGenerationRecord(
-        kitchen_id=kitchen_id,
+        activation_id=activation_id,
         normalized_compile_key=compile_key,
         recipe_name=recipe_name,
         finalized_projection=_projection(),
@@ -146,9 +147,19 @@ def _generation(
     )
 
 
-def test_record_rejects_empty_kitchen_id() -> None:
-    with pytest.raises(ValueError, match="kitchen_id must be a non-empty string"):
-        _record(kitchen_id="")
+def test_record_rejects_bare_activation_id() -> None:
+    with pytest.raises(TypeError, match="a KitchenActivationId is required"):
+        _record(activation_id="k")  # type: ignore[arg-type]
+
+
+def test_generation_store_lookups_reject_bare_activation_strings() -> None:
+    store = RecipeGenerationStore()
+    artifact = _generation("wrong-activation-type")
+
+    with pytest.raises(TypeError, match="a KitchenActivationId is required"):
+        store.lookup_compile("k", "key")
+    with pytest.raises(TypeError, match="a KitchenActivationId is required"):
+        store.lookup_artifact("k", artifact)
 
 
 def test_surface_binding_rejects_a_different_flow_generation() -> None:
@@ -158,7 +169,7 @@ def test_surface_binding_rejects_a_different_flow_generation() -> None:
 
     with pytest.raises(ValueError, match="must match the record flow generation"):
         store.bind_surface(
-            record.kitchen_id,
+            record.activation_id,
             record.normalized_compile_key,
             "open_kitchen",
             _generation(
@@ -182,7 +193,7 @@ def test_record_owns_canonical_immutable_primitive_copies() -> None:
 
     store = RecipeGenerationStore()
     stored = store.put(record)
-    fetched = store.lookup_compile("kitchen-a", "compile-a")
+    fetched = store.lookup_compile(KitchenActivationId("kitchen-a"), "compile-a")
 
     assert fetched is not None
     assert fetched is not stored
@@ -214,13 +225,13 @@ def test_surface_binding_is_exact_idempotent_and_dually_indexed() -> None:
     artifact = _generation("one")
 
     bound = store.bind_surface(
-        record.kitchen_id,
+        record.activation_id,
         record.normalized_compile_key,
         "open_kitchen",
         artifact,
     )
     replay = store.bind_surface(
-        record.kitchen_id,
+        record.activation_id,
         record.normalized_compile_key,
         "open_kitchen",
         artifact,
@@ -228,10 +239,10 @@ def test_surface_binding_is_exact_idempotent_and_dually_indexed() -> None:
 
     assert replay == bound
     assert bound.surface_bindings == {"open_kitchen": artifact}
-    assert store.lookup_artifact(record.kitchen_id, artifact) == bound
+    assert store.lookup_artifact(record.activation_id, artifact) == bound
     with pytest.raises(RecipeGenerationConflictError):
         store.bind_surface(
-            record.kitchen_id,
+            record.activation_id,
             record.normalized_compile_key,
             "open_kitchen",
             _generation("different"),
@@ -244,7 +255,7 @@ def test_artifact_generation_cannot_alias_another_compile_generation() -> None:
     second = store.put(_record(compile_key="second"))
     artifact = _generation("shared")
     store.bind_surface(
-        first.kitchen_id,
+        first.activation_id,
         first.normalized_compile_key,
         "open_kitchen",
         artifact,
@@ -252,7 +263,7 @@ def test_artifact_generation_cannot_alias_another_compile_generation() -> None:
 
     with pytest.raises(RecipeGenerationConflictError):
         store.bind_surface(
-            second.kitchen_id,
+            second.activation_id,
             second.normalized_compile_key,
             "load_recipe",
             artifact,
@@ -271,7 +282,7 @@ def test_entry_lru_eviction_removes_every_artifact_alias() -> None:
         strict=True,
     ):
         store.bind_surface(
-            first.kitchen_id,
+            first.activation_id,
             first.normalized_compile_key,
             surface,
             artifact,
@@ -282,23 +293,23 @@ def test_entry_lru_eviction_removes_every_artifact_alias() -> None:
         strict=True,
     ):
         store.bind_surface(
-            second.kitchen_id,
+            second.activation_id,
             second.normalized_compile_key,
             surface,
             artifact,
         )
     for artifact in first_artifacts:
-        assert store.lookup_artifact(first.kitchen_id, artifact) is not None
+        assert store.lookup_artifact(first.activation_id, artifact) is not None
 
     store.put(_record(compile_key="third"))
 
-    assert store.lookup_compile(second.kitchen_id, second.normalized_compile_key) is None
+    assert store.lookup_compile(second.activation_id, second.normalized_compile_key) is None
     for artifact in second_artifacts:
-        assert store.lookup_artifact(second.kitchen_id, artifact) is None
-    retained = store.lookup_compile(first.kitchen_id, first.normalized_compile_key)
+        assert store.lookup_artifact(second.activation_id, artifact) is None
+    retained = store.lookup_compile(first.activation_id, first.normalized_compile_key)
     assert retained is not None
     for artifact in first_artifacts:
-        assert store.lookup_artifact(first.kitchen_id, artifact) == retained
+        assert store.lookup_artifact(first.activation_id, artifact) == retained
 
 
 def test_canonical_weight_drives_byte_admission_and_lru_eviction() -> None:
@@ -314,8 +325,8 @@ def test_canonical_weight_drives_byte_admission_and_lru_eviction() -> None:
     store.put(first)
     store.put(second)
 
-    assert store.lookup_compile(first.kitchen_id, first.normalized_compile_key) is None
-    assert store.lookup_compile(second.kitchen_id, second.normalized_compile_key) is not None
+    assert store.lookup_compile(first.activation_id, first.normalized_compile_key) is None
+    assert store.lookup_compile(second.activation_id, second.normalized_compile_key) is not None
     assert store.weight_bytes == second_weight
 
     too_small = RecipeGenerationStore(
@@ -335,16 +346,16 @@ def test_retirement_callback_removes_kitchen_and_permanently_rejects_writes(
     record = store.put(_record())
     artifact = _generation("retired")
     store.bind_surface(
-        record.kitchen_id,
+        record.activation_id,
         record.normalized_compile_key,
         "open_kitchen",
         artifact,
     )
 
-    notify_kitchen_retired(record.kitchen_id)
+    notify_kitchen_retired(record.activation_id)
 
-    assert store.lookup_compile(record.kitchen_id, record.normalized_compile_key) is None
-    assert store.lookup_artifact(record.kitchen_id, artifact) is None
+    assert store.lookup_compile(record.activation_id, record.normalized_compile_key) is None
+    assert store.lookup_artifact(record.activation_id, artifact) is None
     assert store.entry_count == 0
     assert store.weight_bytes == 0
     with pytest.raises(RecipeGenerationRetiredError):
@@ -360,16 +371,16 @@ def test_authoritative_store_rejects_never_activated_kitchen(
     )
 
     store = RecipeGenerationStore()
-    active = _record(kitchen_id="A")
-    store.activate_kitchen(active.kitchen_id)
+    active = _record(activation_id=KitchenActivationId("A"))
+    store.activate_kitchen(active.activation_id)
     store.put(active)
 
     with pytest.raises(RecipeGenerationKitchenNotActiveError, match="B") as error:
         if write == "put":
-            store.put(_record(kitchen_id="B"))
+            store.put(_record(activation_id=KitchenActivationId("B")))
         else:
             store.bind_surface(
-                "B",
+                KitchenActivationId("B"),
                 active.normalized_compile_key,
                 "open_kitchen",
                 _generation("never-active"),
@@ -382,17 +393,17 @@ def test_authoritative_store_rejects_never_activated_kitchen(
 
 def test_lifecycle_authority_bounds_retirement_history_without_stale_reactivation() -> None:
     store = RecipeGenerationStore(max_retired_kitchens=1)
-    first = _record(kitchen_id="first-kitchen", compile_key="first")
-    second = _record(kitchen_id="second-kitchen", compile_key="second")
+    first = _record(activation_id=KitchenActivationId("first-kitchen"), compile_key="first")
+    second = _record(activation_id=KitchenActivationId("second-kitchen"), compile_key="second")
 
-    store.activate_kitchen(first.kitchen_id)
+    store.activate_kitchen(first.activation_id)
     store.put(first)
-    store.retire_kitchen(first.kitchen_id)
+    store.retire_kitchen(first.activation_id)
     with pytest.raises(RecipeGenerationRetiredError):
         store.put(first)
-    store.activate_kitchen(second.kitchen_id)
+    store.activate_kitchen(second.activation_id)
     store.put(second)
-    store.retire_kitchen(second.kitchen_id)
+    store.retire_kitchen(second.activation_id)
 
     assert store.retired_kitchen_count == 1
     from autoskillit.server.recipe._recipe_generation import (
@@ -403,8 +414,8 @@ def test_lifecycle_authority_bounds_retirement_history_without_stale_reactivatio
         store.put(first)
     assert "retired" not in str(error.value)
 
-    store.activate_kitchen(first.kitchen_id)
-    assert store.put(first).kitchen_id == first.kitchen_id
+    store.activate_kitchen(first.activation_id)
+    assert store.put(first).activation_id == first.activation_id
 
 
 def test_concurrent_conflicting_surface_bind_has_one_winner() -> None:
@@ -417,7 +428,7 @@ def test_concurrent_conflicting_surface_bind_has_one_winner() -> None:
         barrier.wait()
         try:
             store.bind_surface(
-                record.kitchen_id,
+                record.activation_id,
                 record.normalized_compile_key,
                 "open_kitchen",
                 artifact,
@@ -430,7 +441,7 @@ def test_concurrent_conflicting_surface_bind_has_one_winner() -> None:
         outcomes = list(executor.map(bind, generations))
 
     assert sorted(outcomes) == ["bound", "conflict"]
-    stored = store.lookup_compile(record.kitchen_id, record.normalized_compile_key)
+    stored = store.lookup_compile(record.activation_id, record.normalized_compile_key)
     assert stored is not None
     winner = stored.surface_bindings["open_kitchen"]
-    assert store.lookup_artifact(record.kitchen_id, winner) == stored
+    assert store.lookup_artifact(record.activation_id, winner) == stored

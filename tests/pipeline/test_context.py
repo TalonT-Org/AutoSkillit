@@ -359,6 +359,21 @@ def test_tool_context_kitchen_id_is_read_only_and_derived(tmp_path) -> None:
     assert ctx.kitchen_id == ctx.kitchen_open_state.kitchen_id == "test-kitchen"
 
 
+def test_tool_context_kitchen_activation_id_is_read_only_and_derived(tmp_path) -> None:
+    from tests.conftest import bind_test_kitchen_identity
+
+    ctx = _make_ctx(tmp_path)
+
+    assert "kitchen_activation_id" not in {field.name for field in dataclasses.fields(ToolContext)}
+    with pytest.raises(RuntimeError, match="no kitchen activation is live"):
+        _ = ctx.kitchen_activation_id
+    with pytest.raises(AttributeError):
+        ctx.kitchen_activation_id = "forged"
+
+    bind_test_kitchen_identity(ctx, "test-kitchen")
+    assert ctx.kitchen_activation_id == ctx.kitchen_open_state.activation_id
+
+
 def test_toolcontext_github_client_annotated_with_protocol():
     """github_client annotation must reference GitHubFetcher protocol."""
     hints = get_type_hints(ToolContext)

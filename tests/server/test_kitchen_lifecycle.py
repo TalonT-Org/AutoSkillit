@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import psutil
@@ -215,29 +216,41 @@ async def test_close_kitchen_preserves_peer_tracker_and_lease_sidecar(monkeypatc
         lease.close_preserving()
 
 
-async def test_back_to_back_open_close_open_resets_infrastructure(monkeypatch, tmp_path):
-    """Close resets identity, and a real reopen establishes a new usable identity."""
-    import json
+@pytest.fixture
+def campaign_id(request, monkeypatch) -> str | None:
+    value = getattr(request, "param", None)
+    if value is not None:
+        monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", value)
+    return value
 
-    from autoskillit.pipeline import KitchenOpenPhase
+
+@pytest.fixture
+def real_kitchen_lifecycle(monkeypatch, tmp_path, campaign_id):
+    """Build real contexts with the lifecycle effects isolated to this test."""
     from autoskillit.server import _misc
     from autoskillit.server.lifecycle import _lifespan
-    from autoskillit.server.tools.tools_kitchen import open_kitchen
+    from autoskillit.server.recipe import _recipe_generation, _recipe_section_pagination
+    from autoskillit.server.recipe._recipe_generation import RecipeGenerationStore
+    from autoskillit.server.recipe._recipe_section_pagination import PagePlanCache
     from autoskillit.server.tools.tools_kitchen._open_kitchen import _gate as open_gate
-    from autoskillit.server.tools.tools_recipe import load_recipe
     from tests.server._helpers import _mock_fmcp_ctx
     from tests.server.conftest import _READY_RECIPE_OVERRIDES
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "0")
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+    monkeypatch.setattr(_recipe_generation, "_RECIPE_GENERATION_STORE", RecipeGenerationStore())
+    monkeypatch.setattr(_recipe_section_pagination, "_PAGE_PLAN_CACHE", PagePlanCache())
 
-    ctx = make_context(
-        AutomationConfig(),
-        runner=None,
-        plugin_authority=FakePluginArtifactAuthority(tmp_path),
-        project_dir=tmp_path,
-    )
+    def make_context_for_lifecycle():
+        return make_context(
+            AutomationConfig(),
+            runner=None,
+            plugin_authority=FakePluginArtifactAuthority(tmp_path),
+            project_dir=tmp_path,
+        )
+
+    ctx = make_context_for_lifecycle()
     monkeypatch.setattr(_state, "_ctx", ctx)
     monkeypatch.setattr(_state, "_startup_ready", None)
     overrides = {
@@ -245,6 +258,9 @@ async def test_back_to_back_open_close_open_resets_infrastructure(monkeypatch, t
         "source_dir": str(ctx.project_dir.resolve()),
     }
     fmcp_ctx = _mock_fmcp_ctx()
+
+    def new_context():
+        return make_context_for_lifecycle()
 
     with (
         patch.object(tools_kitchen, "_prime_quota_cache", new_callable=AsyncMock),
@@ -260,40 +276,282 @@ async def test_back_to_back_open_close_open_resets_infrastructure(monkeypatch, t
         patch.object(_tracker_authority, "register_active_kitchen", return_value=True),
         patch.object(_tracker_authority, "unregister_active_kitchen", return_value=True),
     ):
-        result1 = json.loads(
-            await open_kitchen(name="research", overrides=overrides, ctx=fmcp_ctx)
+        yield SimpleNamespace(
+            ctx=ctx,
+            overrides=overrides,
+            fmcp_ctx=fmcp_ctx,
+            new_context=new_context,
         )
-        assert result1["success"] is True, result1
-        assert ctx.kitchen_open_state.phase is KitchenOpenPhase.COMMITTED
-        assert ctx.gate_infrastructure_ready is True
-        first_id = ctx.kitchen_id
-        first_identity = ctx.kitchen_process_identity
-        assert first_identity is not None
-        assert first_identity.kitchen_id == first_id
 
-        _close_kitchen_handler()
-        assert ctx.gate_infrastructure_ready is False
-        assert ctx.kitchen_open_state.phase is KitchenOpenPhase.CLOSED
-        assert ctx.kitchen_id == ""
-        assert ctx.kitchen_process_identity is None
 
-        result2 = json.loads(
-            await open_kitchen(name="research", overrides=overrides, ctx=fmcp_ctx)
-        )
-        assert result2["success"] is True, result2
-        assert ctx.kitchen_open_state.phase is KitchenOpenPhase.COMMITTED
-        assert ctx.gate_infrastructure_ready is True
-        second_id = ctx.kitchen_id
+@pytest.mark.parametrize(
+    "campaign_id",
+    [None, "campaign-5270"],
+    indirect=True,
+    ids=["ephemeral", "campaign"],
+)
+async def test_back_to_back_open_close_open_resets_infrastructure(
+    campaign_id,
+    real_kitchen_lifecycle,
+):
+    """Close resets identity, and a real reopen establishes a new usable identity."""
+    from autoskillit.pipeline import KitchenOpenPhase
+    from autoskillit.server.tools.tools_kitchen import open_kitchen
+    from autoskillit.server.tools.tools_recipe import load_recipe
+
+    ctx = real_kitchen_lifecycle.ctx
+    overrides = real_kitchen_lifecycle.overrides
+    fmcp_ctx = real_kitchen_lifecycle.fmcp_ctx
+
+    result1 = json.loads(await open_kitchen(name="research", overrides=overrides, ctx=fmcp_ctx))
+    assert result1["success"] is True, result1
+    assert ctx.kitchen_open_state.phase is KitchenOpenPhase.COMMITTED
+    assert ctx.gate_infrastructure_ready is True
+    first_id = ctx.kitchen_id
+    first_activation_id = ctx.kitchen_activation_id
+    first_identity = ctx.kitchen_process_identity
+    assert first_identity is not None
+    assert first_identity.kitchen_id == first_id
+
+    _close_kitchen_handler()
+    assert ctx.gate_infrastructure_ready is False
+    assert ctx.kitchen_open_state.phase is KitchenOpenPhase.CLOSED
+    assert ctx.kitchen_id == ""
+    assert ctx.kitchen_process_identity is None
+
+    result2 = json.loads(await open_kitchen(name="research", overrides=overrides, ctx=fmcp_ctx))
+    assert result2["success"] is True, result2
+    assert ctx.kitchen_open_state.phase is KitchenOpenPhase.COMMITTED
+    assert ctx.gate_infrastructure_ready is True
+    second_id = ctx.kitchen_id
+    assert ctx.kitchen_activation_id != first_activation_id
+    if campaign_id is None:
         assert second_id != first_id
-        second_identity = ctx.kitchen_process_identity
-        assert second_identity is not None
-        assert second_identity.kitchen_id == second_id
+    else:
+        assert first_id == second_id == campaign_id
+    second_identity = ctx.kitchen_process_identity
+    assert second_identity is not None
+    assert second_identity.kitchen_id == second_id
 
-        loaded = json.loads(await load_recipe(name="research", overrides=overrides))
-        assert loaded["success"] is True, loaded
+    loaded = json.loads(await load_recipe(name="research", overrides=overrides))
+    assert loaded["success"] is True, loaded
 
-        _close_kitchen_handler()
-        await asyncio.sleep(0)
+    _close_kitchen_handler()
+    await asyncio.sleep(0)
+
+
+@pytest.mark.parametrize("campaign_id", ["campaign-5270"], indirect=True)
+async def test_same_campaign_reopen_issues_fresh_recipe_authority(
+    campaign_id,
+    real_kitchen_lifecycle,
+):
+    import json
+
+    from autoskillit.fleet import (
+        DispatchRecord,
+        DispatchStatus,
+        read_all_campaign_captures,
+        write_captured_values,
+        write_initial_state,
+    )
+    from autoskillit.pipeline import ReadyRecipe
+    from autoskillit.server.recipe._recipe_execution import (
+        RecipeExecutionAdmissionError,
+        bind_attested_runtime_invocation,
+    )
+    from autoskillit.server.tools.tools_kitchen import open_kitchen
+    from autoskillit.server.tools.tools_recipe import (
+        complete_recipe_initialization,
+        get_recipe_section,
+    )
+    from tests.server._helpers import _credit_initialization_sections, _resolve_recipe_section
+
+    ctx = real_kitchen_lifecycle.ctx
+    overrides = real_kitchen_lifecycle.overrides
+    fmcp_ctx = real_kitchen_lifecycle.fmcp_ctx
+
+    first = json.loads(await open_kitchen(name="research", overrides=overrides, ctx=fmcp_ctx))
+    assert first["success"] is True, first
+    await _credit_initialization_sections(first)
+    first_state = ctx.recipe_initialization_state
+    assert isinstance(first_state, ReadyRecipe)
+    first_execution_id = first_state.installed_execution.snapshot.execution_id
+
+    prior_state = ctx.temp_dir / "dispatches" / "prior.json"
+    write_initial_state(
+        prior_state,
+        campaign_id=ctx.kitchen_id,
+        campaign_name="c",
+        manifest_path="",
+        dispatches=[DispatchRecord(name="a", status=DispatchStatus.SUCCESS)],
+    )
+    write_captured_values(prior_state, {"k": "v"})
+
+    _close_kitchen_handler()
+    recipe_root = ctx.temp_dir / "recipe-delivery"
+    retired_markers = list((recipe_root / ".retired").glob("*.retired"))
+    assert len(retired_markers) == 1
+    retired_marker = retired_markers[0]
+
+    second = json.loads(await open_kitchen(name="research", overrides=overrides, ctx=fmcp_ctx))
+    assert second["success"] is True, second
+    assert ctx.kitchen_id == campaign_id
+    await _credit_initialization_sections(second)
+    second_state = ctx.recipe_initialization_state
+    assert isinstance(second_state, ReadyRecipe)
+    assert await _resolve_recipe_section(second, section="content") is not None
+    second_execution_id = second_state.installed_execution.snapshot.execution_id
+    assert second_execution_id != first_execution_id
+    assert second["initialization_id"] != first["initialization_id"]
+
+    stale_identity = {
+        key: value for key, value in first["recipe_pull"].items() if key != "pull_tool"
+    }
+    stale_pull = json.loads(await get_recipe_section(section="content", **stale_identity))
+    assert stale_pull == {
+        "success": False,
+        "error": "invalid_recipe_artifact_identity",
+    }
+    stale_completion = json.loads(
+        await complete_recipe_initialization(initialization_id=first["initialization_id"])
+    )
+    assert stale_completion == {
+        "success": False,
+        "error": "recipe_initialization_stale",
+    }
+
+    installed = second_state.installed_execution
+    with pytest.raises(RecipeExecutionAdmissionError) as error:
+        bind_attested_runtime_invocation(
+            installed,
+            execution_id=first_execution_id,
+            step_name="scope",
+            template_digest="",
+            skill_command="",
+            skill_inputs=None,
+            actual_mcp_kwargs={},
+        )
+    assert error.value.code == "recipe_execution_id_mismatch"
+
+    assert retired_marker.exists()
+    active_namespaces = [
+        path for path in recipe_root.iterdir() if path.is_dir() and path.name != ".retired"
+    ]
+    assert len(active_namespaces) == 1
+    assert active_namespaces[0].name != retired_marker.stem
+    assert read_all_campaign_captures(ctx.temp_dir / "dispatches", ctx.kitchen_id) == {"k": "v"}
+    _close_kitchen_handler()
+
+
+@pytest.mark.parametrize("campaign_id", ["campaign-5270"], indirect=True)
+async def test_same_campaign_anonymous_reopen_then_load_recipe_and_get_recipe(
+    campaign_id,
+    real_kitchen_lifecycle,
+):
+    import json
+
+    from autoskillit.server.tools.tools_kitchen import get_recipe, open_kitchen
+    from autoskillit.server.tools.tools_recipe import load_recipe
+    from tests.server._helpers import _resolve_recipe_section
+
+    overrides = real_kitchen_lifecycle.overrides
+    fmcp_ctx = real_kitchen_lifecycle.fmcp_ctx
+
+    named = json.loads(await open_kitchen(name="research", overrides=overrides, ctx=fmcp_ctx))
+    assert named["success"] is True, named
+    _close_kitchen_handler()
+
+    anonymous = json.loads(await open_kitchen(ctx=fmcp_ctx))
+    assert anonymous["success"] is True, anonymous
+    assert real_kitchen_lifecycle.ctx.kitchen_id == campaign_id
+    loaded = json.loads(await load_recipe(name="research", overrides=overrides))
+    assert loaded["success"] is True, loaded
+    resource = json.loads(get_recipe("research"))
+    assert "error" not in resource, resource
+    assert await _resolve_recipe_section(resource) is not None
+    _close_kitchen_handler()
+
+
+@pytest.mark.parametrize(
+    "campaign_id",
+    [None, "campaign-5270"],
+    indirect=True,
+    ids=["ephemeral", "campaign"],
+)
+async def test_reopen_with_new_arguments_stays_in_one_activation(
+    campaign_id,
+    real_kitchen_lifecycle,
+):
+    import json
+
+    from autoskillit.server.tools.tools_kitchen import open_kitchen
+    from tests.server._helpers import _resolve_recipe_section
+
+    ctx = real_kitchen_lifecycle.ctx
+    fmcp_ctx = real_kitchen_lifecycle.fmcp_ctx
+    overrides = real_kitchen_lifecycle.overrides
+
+    first = json.loads(await open_kitchen(name="research", overrides=overrides, ctx=fmcp_ctx))
+    assert first["success"] is True, first
+    first_id = ctx.kitchen_id
+    second_overrides = {**overrides, "task_description": "changed task"}
+    second = json.loads(
+        await open_kitchen(name="research", overrides=second_overrides, ctx=fmcp_ctx)
+    )
+    assert second["success"] is True, second
+    assert ctx.kitchen_id == first_id
+    if campaign_id is not None:
+        assert ctx.kitchen_id == campaign_id
+    assert await _resolve_recipe_section(first, section="content") is not None
+
+    _close_kitchen_handler()
+    recipe_root = ctx.temp_dir / "recipe-delivery"
+    namespaces = [
+        path for path in recipe_root.iterdir() if path.is_dir() and path.name != ".retired"
+    ]
+    assert namespaces == []
+    assert len(list((recipe_root / ".retired").glob("*.retired"))) == 1
+
+
+@pytest.mark.parametrize("campaign_id", ["campaign-5270"], indirect=True)
+async def test_sibling_contexts_sharing_campaign_and_temp_dir_are_isolated(
+    monkeypatch,
+    campaign_id,
+    real_kitchen_lifecycle,
+):
+    import json
+
+    from autoskillit.server.tools.tools_kitchen import open_kitchen
+    from autoskillit.server.tools.tools_recipe import get_recipe_section
+
+    ctx_a = real_kitchen_lifecycle.ctx
+    ctx_b = real_kitchen_lifecycle.new_context()
+    assert ctx_b.temp_dir == ctx_a.temp_dir
+    overrides = real_kitchen_lifecycle.overrides
+    fmcp_ctx = real_kitchen_lifecycle.fmcp_ctx
+
+    first = json.loads(await open_kitchen(name="research", overrides=overrides, ctx=fmcp_ctx))
+    assert first["success"] is True, first
+    monkeypatch.setattr(_state, "_ctx", ctx_b)
+    second = json.loads(await open_kitchen(name="research", overrides=overrides, ctx=fmcp_ctx))
+    assert second["success"] is True, second
+    assert ctx_a.kitchen_id == ctx_b.kitchen_id == campaign_id
+
+    monkeypatch.setattr(_state, "_ctx", ctx_a)
+    _close_kitchen_handler()
+    monkeypatch.setattr(_state, "_ctx", ctx_b)
+    b_identity = {key: value for key, value in second["recipe_pull"].items() if key != "pull_tool"}
+    pulled = json.loads(await get_recipe_section(section="content", **b_identity))
+    assert pulled["success"] is True, pulled
+
+    recipe_root = ctx_b.temp_dir / "recipe-delivery"
+    active_namespaces = [
+        path for path in recipe_root.iterdir() if path.is_dir() and path.name != ".retired"
+    ]
+    assert len(active_namespaces) == 1
+    retired_markers = list((recipe_root / ".retired").glob("*.retired"))
+    assert all(marker.stem != active_namespaces[0].name for marker in retired_markers)
+    _close_kitchen_handler()
 
 
 def _write_tracker(tracker_dir, kitchen_id, *, initialized_at=None):

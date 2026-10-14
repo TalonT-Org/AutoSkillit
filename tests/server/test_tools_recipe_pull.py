@@ -946,11 +946,11 @@ def test_kitchen_retirement_notifies_callbacks_after_one_fails(
 
     monkeypatch.setattr(
         recipe_section_lifecycle,
-        "_KITCHEN_RETIREMENT_CALLBACKS",
+        "_ACTIVATION_RETIREMENT_CALLBACKS",
         (failing_callback, succeeding_callback),
     )
 
-    recipe_section_lifecycle.notify_kitchen_retired(activation_id)
+    recipe_section_lifecycle.notify_activation_retired(activation_id)
 
     assert notified == [activation_id]
 
@@ -1040,7 +1040,7 @@ def test_kitchen_retirement_evicts_after_generation_lock_exits(
         evicted.append(retired_activation_id)
 
     monkeypatch.setattr(recipe_artifact, "_generation_lock", _tracked_lock)
-    monkeypatch.setattr(pagination, "evict_kitchen", _evict)
+    monkeypatch.setattr(pagination, "evict_activation", _evict)
 
     assert retire_recipe_artifacts(tmp_path, activation_id=activation_id) is True
     assert evicted == [activation_id]
@@ -1065,7 +1065,7 @@ def test_kitchen_retirement_eviction_is_success_only_and_nonthrowing(
     tmp_path: Path,
 ) -> None:
     evict = MagicMock(side_effect=RuntimeError("cache unavailable"))
-    monkeypatch.setattr(pagination, "evict_kitchen", evict)
+    monkeypatch.setattr(pagination, "evict_activation", evict)
 
     successful_activation = KitchenActivationId("successful-kitchen")
     assert retire_recipe_artifacts(tmp_path, activation_id=successful_activation) is True

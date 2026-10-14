@@ -39,7 +39,7 @@ from autoskillit.server.recipe.section._contracts import (
     RecipeSectionRequestState,
     SelectedRecipeSection,
 )
-from autoskillit.server.recipe.section._lifecycle import register_kitchen_retirement_callback
+from autoskillit.server.recipe.section._lifecycle import register_activation_retirement_callback
 from autoskillit.server.recipe.section._rendering import render_recipe_section_failure
 from autoskillit.server.recipe.section._verification import (
     verify_finalized_recipe_section_plan,
@@ -72,7 +72,7 @@ __all__ = [
     "RecipeSectionRequestState",
     "SelectedRecipeSection",
     "build_recipe_section_page_plan",
-    "evict_kitchen",
+    "evict_activation",
     "get_or_build_recipe_section_page_plan",
     "render_recipe_section_failure",
     "render_recipe_section_page",
@@ -124,7 +124,7 @@ class PagePlanCache:
         self._entries: OrderedDict[_PagePlanCacheKey, RecipeSectionPagePlan] = OrderedDict()
         self._weight_bytes = 0
         self._builds: dict[_PagePlanCacheKey, _PagePlanBuildState] = {}
-        self._retired_kitchens: set[KitchenActivationId] = set()
+        self._retired_activations: set[KitchenActivationId] = set()
         self._lock = RLock()
 
     def get(self, key: _PagePlanCacheKey) -> RecipeSectionPagePlan | None:
@@ -148,7 +148,7 @@ class PagePlanCache:
 
     def put(self, key: _PagePlanCacheKey, plan: RecipeSectionPagePlan) -> None:
         with self._lock:
-            if key.activation_id not in self._retired_kitchens:
+            if key.activation_id not in self._retired_activations:
                 self._put_locked(key, plan)
 
     def get_or_build(
@@ -156,7 +156,7 @@ class PagePlanCache:
         key: _PagePlanCacheKey,
         builder: Callable[[], RecipeSectionPagePlan],
     ) -> RecipeSectionPagePlan:
-        """Share a key build and admit it only while its kitchen remains active."""
+        """Share a key build and admit it only while its activation remains active."""
         with self._lock:
             cached = self._entries.get(key)
             if cached is not None:
@@ -178,7 +178,7 @@ class PagePlanCache:
                     build_state.completed.set()
                 raise
             with self._lock:
-                if key.activation_id not in self._retired_kitchens:
+                if key.activation_id not in self._retired_activations:
                     self._put_locked(key, plan)
                 build_state.plan = plan
                 self._builds.pop(key, None)
@@ -196,11 +196,11 @@ class PagePlanCache:
         with self._lock:
             self._entries.clear()
             self._weight_bytes = 0
-            self._retired_kitchens.clear()
+            self._retired_activations.clear()
 
-    def evict_kitchen(self, activation_id: KitchenActivationId) -> None:
+    def evict_activation(self, activation_id: KitchenActivationId) -> None:
         with self._lock:
-            self._retired_kitchens.add(activation_id)
+            self._retired_activations.add(activation_id)
             keys = [key for key in self._entries if key.activation_id == activation_id]
             for key in keys:
                 self._weight_bytes -= self._entries.pop(key).cache_weight_bytes
@@ -218,13 +218,13 @@ def _page_plan_cache() -> PagePlanCache:
         return _PAGE_PLAN_CACHE
 
 
-def evict_kitchen(activation_id: KitchenActivationId) -> None:
+def evict_activation(activation_id: KitchenActivationId) -> None:
     """Best-effort idempotent eviction for a retired activation namespace."""
     try:
         with _PAGE_PLAN_CACHE_LOCK:
             cache = _PAGE_PLAN_CACHE
         if cache is not None:
-            cache.evict_kitchen(activation_id)
+            cache.evict_activation(activation_id)
     except Exception:
         logger.warning(
             "recipe_section_cache_eviction_failed",
@@ -233,11 +233,11 @@ def evict_kitchen(activation_id: KitchenActivationId) -> None:
         )
 
 
-def _evict_retired_kitchen(activation_id: KitchenActivationId) -> None:
-    evict_kitchen(activation_id)
+def _evict_retired_activation(activation_id: KitchenActivationId) -> None:
+    evict_activation(activation_id)
 
 
-register_kitchen_retirement_callback(_evict_retired_kitchen)
+register_activation_retirement_callback(_evict_retired_activation)
 
 
 def resolve_recipe_section_bound_bytes(

@@ -41,7 +41,7 @@ from autoskillit.server.recipe._recipe_generation import (
     generation_json_primitive,
     get_recipe_generation_store,
 )
-from autoskillit.server.recipe.section._lifecycle import notify_kitchen_retired
+from autoskillit.server.recipe.section._lifecycle import notify_activation_retired
 
 if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
@@ -689,7 +689,7 @@ def retire_recipe_artifacts(temp_dir: Path, *, activation_id: KitchenActivationI
     except (OSError, RecipeArtifactError, TypeError):
         return False
     try:
-        notify_kitchen_retired(activation_id)
+        notify_activation_retired(activation_id)
     except Exception:
         get_logger(__name__).warning(
             "recipe_section_cache_retirement_eviction_failed",

@@ -10,21 +10,21 @@ from autoskillit.pipeline import KitchenActivationId
 
 logger = get_logger(__name__)
 
-_KitchenRetirementCallback = Callable[[KitchenActivationId], None]
-_KITCHEN_RETIREMENT_CALLBACKS: set[_KitchenRetirementCallback] = set()
-_KITCHEN_RETIREMENT_LOCK = RLock()
+_ActivationRetirementCallback = Callable[[KitchenActivationId], None]
+_ACTIVATION_RETIREMENT_CALLBACKS: set[_ActivationRetirementCallback] = set()
+_ACTIVATION_RETIREMENT_LOCK = RLock()
 
 
-def register_kitchen_retirement_callback(callback: _KitchenRetirementCallback) -> None:
+def register_activation_retirement_callback(callback: _ActivationRetirementCallback) -> None:
     """Register an idempotent recipe-section cleanup callback."""
-    with _KITCHEN_RETIREMENT_LOCK:
-        _KITCHEN_RETIREMENT_CALLBACKS.add(callback)
+    with _ACTIVATION_RETIREMENT_LOCK:
+        _ACTIVATION_RETIREMENT_CALLBACKS.add(callback)
 
 
-def notify_kitchen_retired(activation_id: KitchenActivationId) -> None:
+def notify_activation_retired(activation_id: KitchenActivationId) -> None:
     """Notify registered supporting state when a kitchen activation is retired."""
-    with _KITCHEN_RETIREMENT_LOCK:
-        callbacks = tuple(_KITCHEN_RETIREMENT_CALLBACKS)
+    with _ACTIVATION_RETIREMENT_LOCK:
+        callbacks = tuple(_ACTIVATION_RETIREMENT_CALLBACKS)
     for callback in callbacks:
         try:
             callback(activation_id)

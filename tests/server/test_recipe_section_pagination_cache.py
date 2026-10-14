@@ -131,15 +131,15 @@ def test_retirement_during_build_prevents_stale_cache_admission(
         assert release_build.wait(timeout=5)
         return real_builder(**builder_kwargs)  # type: ignore[arg-type]
 
-    def retire_kitchen() -> None:
+    def retire_activation() -> None:
         retirement_started.set()
-        cache.evict_kitchen(KitchenActivationId("kitchen-retirement-race"))
+        cache.evict_activation(KitchenActivationId("kitchen-retirement-race"))
 
     monkeypatch.setattr(pagination, "build_recipe_section_page_plan", blocked_builder)
     with ThreadPoolExecutor(max_workers=2) as executor:
         build_future = executor.submit(get_or_build_recipe_section_page_plan, **kwargs)
         build_started.wait(timeout=5)
-        retirement_future = executor.submit(retire_kitchen)
+        retirement_future = executor.submit(retire_activation)
         assert retirement_started.wait(timeout=5)
         release_build.set()
         plan = build_future.result(timeout=5)
@@ -359,7 +359,7 @@ def test_cache_kitchen_eviction_subtracts_every_matching_plan_weight() -> None:
     for key in (*retired_keys, retained_key):
         cache.put(key, plan)
 
-    cache.evict_kitchen(KitchenActivationId("retired-kitchen"))
+    cache.evict_activation(KitchenActivationId("retired-kitchen"))
 
     assert all(cache.get(key) is None for key in retired_keys)
     assert cache.get(retained_key) is plan

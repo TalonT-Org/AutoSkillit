@@ -322,7 +322,7 @@ def test_retirement_preserves_artifact_error_when_notification_also_fails(tool_c
     monkeypatch.setattr(
         _recipe_artifact, "retire_recipe_artifacts", Mock(side_effect=artifact_error)
     )
-    monkeypatch.setattr(_lifecycle, "notify_kitchen_retired", notify)
+    monkeypatch.setattr(_lifecycle, "notify_activation_retired", notify)
 
     with capture_logs() as logs, pytest.raises(RuntimeError) as exc_info:
         _kitchen_identity.retire_kitchen_identity(tool_ctx)
@@ -346,7 +346,7 @@ def test_establish_kitchen_identity_activates_and_resets_owner_cache(tool_ctx):
     from tests.server.test_recipe_generation import _record
 
     store = get_recipe_generation_store()
-    store.activate_kitchen(KitchenActivationId("other"))
+    store.activate_activation(KitchenActivationId("other"))
     owner_identity = get_kitchen_process_identity(tool_ctx, "owner-before-establishment")
     assert owner_identity.kitchen_id == "owner-before-establishment"
 
@@ -374,7 +374,7 @@ def test_establish_kitchen_identity_rejects_whitespace_before_activation(
     from autoskillit.server.recipe import _recipe_generation
 
     activate = Mock()
-    monkeypatch.setattr(_recipe_generation, "activate_kitchen", activate)
+    monkeypatch.setattr(_recipe_generation, "activate_activation", activate)
     monkeypatch.setattr(_kitchen_identity, "resolve_kitchen_id", lambda: " \t\n")
     state = tool_ctx.kitchen_open_state
     cached_identity = tool_ctx.kitchen_process_identity

@@ -1,4 +1,4 @@
-"""Focused contracts for the kitchen-scoped recipe generation store."""
+"""Focused contracts for the recipe generation store scoped by activation."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ from autoskillit.server.recipe._recipe_generation import (
     RecipeGenerationStore,
     recipe_generation_weight_bytes,
 )
-from autoskillit.server.recipe.section._lifecycle import notify_kitchen_retired
+from autoskillit.server.recipe.section._lifecycle import notify_activation_retired
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -352,7 +352,7 @@ def test_retirement_callback_removes_kitchen_and_permanently_rejects_writes(
         artifact,
     )
 
-    notify_kitchen_retired(record.activation_id)
+    notify_activation_retired(record.activation_id)
 
     assert store.lookup_compile(record.activation_id, record.normalized_compile_key) is None
     assert store.lookup_artifact(record.activation_id, artifact) is None
@@ -367,15 +367,15 @@ def test_authoritative_store_rejects_never_activated_kitchen(
     write: str,
 ) -> None:
     from autoskillit.server.recipe._recipe_generation import (
-        RecipeGenerationKitchenNotActiveError,
+        RecipeGenerationActivationNotActiveError,
     )
 
     store = RecipeGenerationStore()
     active = _record(activation_id=KitchenActivationId("A"))
-    store.activate_kitchen(active.activation_id)
+    store.activate_activation(active.activation_id)
     store.put(active)
 
-    with pytest.raises(RecipeGenerationKitchenNotActiveError, match="B") as error:
+    with pytest.raises(RecipeGenerationActivationNotActiveError, match="B") as error:
         if write == "put":
             store.put(_record(activation_id=KitchenActivationId("B")))
         else:
@@ -392,29 +392,29 @@ def test_authoritative_store_rejects_never_activated_kitchen(
 
 
 def test_lifecycle_authority_bounds_retirement_history_without_stale_reactivation() -> None:
-    store = RecipeGenerationStore(max_retired_kitchens=1)
+    store = RecipeGenerationStore(max_retired_activations=1)
     first = _record(activation_id=KitchenActivationId("first-kitchen"), compile_key="first")
     second = _record(activation_id=KitchenActivationId("second-kitchen"), compile_key="second")
 
-    store.activate_kitchen(first.activation_id)
+    store.activate_activation(first.activation_id)
     store.put(first)
-    store.retire_kitchen(first.activation_id)
+    store.retire_activation(first.activation_id)
     with pytest.raises(RecipeGenerationRetiredError):
         store.put(first)
-    store.activate_kitchen(second.activation_id)
+    store.activate_activation(second.activation_id)
     store.put(second)
-    store.retire_kitchen(second.activation_id)
+    store.retire_activation(second.activation_id)
 
-    assert store.retired_kitchen_count == 1
+    assert store.retired_activation_count == 1
     from autoskillit.server.recipe._recipe_generation import (
-        RecipeGenerationKitchenNotActiveError,
+        RecipeGenerationActivationNotActiveError,
     )
 
-    with pytest.raises(RecipeGenerationKitchenNotActiveError, match="not active") as error:
+    with pytest.raises(RecipeGenerationActivationNotActiveError, match="not active") as error:
         store.put(first)
     assert "retired" not in str(error.value)
 
-    store.activate_kitchen(first.activation_id)
+    store.activate_activation(first.activation_id)
     assert store.put(first).activation_id == first.activation_id
 
 

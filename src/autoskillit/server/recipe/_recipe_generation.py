@@ -1,4 +1,4 @@
-"""Kitchen-scoped ownership of compiled and persisted recipe generations."""
+"""Ownership of compiled and persisted recipe generations by activation."""
 
 from __future__ import annotations
 
@@ -23,29 +23,29 @@ from autoskillit.pipeline import (
     require_kitchen_activation_id,
 )
 from autoskillit.server.recipe.section._lifecycle import (
-    register_kitchen_retirement_callback,
+    register_activation_retirement_callback,
 )
 
 RECIPE_GENERATION_STORE_MAX_ENTRIES = 8
 RECIPE_GENERATION_STORE_MAX_BYTES = 32 * 1024 * 1024
-RECIPE_GENERATION_STORE_MAX_RETIRED_KITCHENS = 1_024
+RECIPE_GENERATION_STORE_MAX_RETIRED_ACTIVATIONS = 1_024
 
 __all__ = [
     "RECIPE_GENERATION_STORE_MAX_BYTES",
     "RECIPE_GENERATION_STORE_MAX_ENTRIES",
-    "RECIPE_GENERATION_STORE_MAX_RETIRED_KITCHENS",
+    "RECIPE_GENERATION_STORE_MAX_RETIRED_ACTIVATIONS",
     "RecipeGenerationCapacityError",
     "RecipeGenerationConflictError",
     "RecipeGenerationError",
-    "RecipeGenerationKitchenNotActiveError",
+    "RecipeGenerationActivationNotActiveError",
     "RecipeGenerationRecord",
     "RecipeGenerationRetiredError",
     "RecipeGenerationStore",
-    "activate_kitchen",
+    "activate_activation",
     "generation_json_primitive",
     "get_recipe_generation_store",
     "recipe_generation_weight_bytes",
-    "retire_kitchen",
+    "retire_activation",
     "thaw_recipe_generation_mapping",
 ]
 
@@ -63,11 +63,11 @@ class RecipeGenerationCapacityError(RecipeGenerationError):
 
 
 class RecipeGenerationRetiredError(RecipeGenerationError):
-    """A write targeted a kitchen whose generation namespace is retired."""
+    """A write targeted an activation whose generation namespace is retired."""
 
 
-class RecipeGenerationKitchenNotActiveError(RecipeGenerationError):
-    """A write targeted an inactive kitchen without retained retirement evidence."""
+class RecipeGenerationActivationNotActiveError(RecipeGenerationError):
+    """A write targeted an inactive activation without retained retirement evidence."""
 
 
 def _freeze_primitive(value: object, *, path: str) -> object:
@@ -279,22 +279,22 @@ class RecipeGenerationStore:
         *,
         max_entries: int = RECIPE_GENERATION_STORE_MAX_ENTRIES,
         max_bytes: int = RECIPE_GENERATION_STORE_MAX_BYTES,
-        max_retired_kitchens: int = RECIPE_GENERATION_STORE_MAX_RETIRED_KITCHENS,
+        max_retired_activations: int = RECIPE_GENERATION_STORE_MAX_RETIRED_ACTIVATIONS,
     ) -> None:
         if max_entries < 0:
             raise ValueError("generation store max_entries must not be negative")
         if max_bytes < 0:
             raise ValueError("generation store max_bytes must not be negative")
-        if max_retired_kitchens < 0:
-            raise ValueError("generation store max_retired_kitchens must not be negative")
+        if max_retired_activations < 0:
+            raise ValueError("generation store max_retired_activations must not be negative")
         self._max_entries = max_entries
         self._max_bytes = max_bytes
-        self._max_retired_kitchens = max_retired_kitchens
+        self._max_retired_activations = max_retired_activations
         self._compile_index: OrderedDict[_CompileIndexKey, RecipeGenerationRecord] = OrderedDict()
         self._artifact_index: dict[_ArtifactIndexKey, _CompileIndexKey] = {}
         self._weight_bytes = 0
-        self._retired_kitchens: OrderedDict[KitchenActivationId, None] = OrderedDict()
-        self._active_kitchens: set[KitchenActivationId] = set()
+        self._retired_activations: OrderedDict[KitchenActivationId, None] = OrderedDict()
+        self._active_activations: set[KitchenActivationId] = set()
         self._lifecycle_authoritative = False
         self._lock = RLock()
 
@@ -309,26 +309,26 @@ class RecipeGenerationStore:
             return self._weight_bytes
 
     @property
-    def retired_kitchen_count(self) -> int:
+    def retired_activation_count(self) -> int:
         with self._lock:
-            return len(self._retired_kitchens)
+            return len(self._retired_activations)
 
-    def activate_kitchen(self, activation_id: KitchenActivationId) -> None:
+    def activate_activation(self, activation_id: KitchenActivationId) -> None:
         """Mark one new lifecycle activation active without clearing retirement history."""
         require_kitchen_activation_id(activation_id)
         with self._lock:
             self._lifecycle_authoritative = True
-            self._active_kitchens.add(activation_id)
+            self._active_activations.add(activation_id)
 
     def _require_active_locked(self, activation_id: KitchenActivationId) -> None:
-        if activation_id in self._retired_kitchens:
+        if activation_id in self._retired_activations:
             raise RecipeGenerationRetiredError(
                 f"recipe generation activation is retired: {activation_id.value}"
             )
-        if self._lifecycle_authoritative and activation_id not in self._active_kitchens:
-            raise RecipeGenerationKitchenNotActiveError(
+        if self._lifecycle_authoritative and activation_id not in self._active_activations:
+            raise RecipeGenerationActivationNotActiveError(
                 "recipe generation activation is not active in this process: "
-                f"{activation_id.value} ({len(self._active_kitchens)} active)"
+                f"{activation_id.value} ({len(self._active_activations)} active)"
             )
 
     def _deindex_artifacts_locked(
@@ -484,16 +484,16 @@ class RecipeGenerationStore:
             self._compile_index.move_to_end(key)
             return _copy_record(record)
 
-    def retire_kitchen(self, activation_id: KitchenActivationId) -> None:
+    def retire_activation(self, activation_id: KitchenActivationId) -> None:
         """Remove entries and reject writes while retirement evidence is retained."""
         require_kitchen_activation_id(activation_id)
         with self._lock:
-            self._active_kitchens.discard(activation_id)
-            if self._max_retired_kitchens > 0:
-                self._retired_kitchens[activation_id] = None
-                self._retired_kitchens.move_to_end(activation_id)
-                while len(self._retired_kitchens) > self._max_retired_kitchens:
-                    self._retired_kitchens.popitem(last=False)
+            self._active_activations.discard(activation_id)
+            if self._max_retired_activations > 0:
+                self._retired_activations[activation_id] = None
+                self._retired_activations.move_to_end(activation_id)
+                while len(self._retired_activations) > self._max_retired_activations:
+                    self._retired_activations.popitem(last=False)
             keys = [key for key in self._compile_index if key[0] == activation_id]
             for key in keys:
                 self._remove_locked(key)
@@ -504,8 +504,8 @@ class RecipeGenerationStore:
             self._compile_index.clear()
             self._artifact_index.clear()
             self._weight_bytes = 0
-            self._retired_kitchens.clear()
-            self._active_kitchens.clear()
+            self._retired_activations.clear()
+            self._active_activations.clear()
             self._lifecycle_authoritative = False
 
 
@@ -522,14 +522,14 @@ def get_recipe_generation_store() -> RecipeGenerationStore:
         return _RECIPE_GENERATION_STORE
 
 
-def activate_kitchen(activation_id: KitchenActivationId) -> None:
+def activate_activation(activation_id: KitchenActivationId) -> None:
     """Activate generation state for one current kitchen activation."""
-    get_recipe_generation_store().activate_kitchen(activation_id)
+    get_recipe_generation_store().activate_activation(activation_id)
 
 
-def retire_kitchen(activation_id: KitchenActivationId) -> None:
+def retire_activation(activation_id: KitchenActivationId) -> None:
     """Retire generation state when a kitchen activation is retired."""
-    get_recipe_generation_store().retire_kitchen(activation_id)
+    get_recipe_generation_store().retire_activation(activation_id)
 
 
-register_kitchen_retirement_callback(retire_kitchen)
+register_activation_retirement_callback(retire_activation)

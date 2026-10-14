@@ -23,7 +23,7 @@ _REFERENCE_TARGETS = frozenset({"resolve_kitchen_id"})
 _CALL_TARGETS = frozenset(
     {
         "new_kitchen_open_state",
-        "activate_kitchen",
+        "activate_activation",
         "KitchenOpenState",
         "KitchenActivationId",
         "retire_recipe_artifacts",
@@ -86,9 +86,9 @@ class _KitchenIdentityOccurrenceCollector(ast.NodeVisitor):
         # Its public wrapper delegates to the store method; count callers of
         # the API, not that implementation detail as a second authority site.
         delegated_activation = (
-            symbol == "activate_kitchen"
+            symbol == "activate_activation"
             and self._relative_path == "server/recipe/_recipe_generation.py"
-            and self._scope_stack == ["activate_kitchen"]
+            and self._scope_stack == ["activate_activation"]
             and isinstance(node.func, ast.Attribute)
         )
         if symbol in _CALL_TARGETS and not delegated_activation:
@@ -196,9 +196,9 @@ def test_kitchen_identity_authority_matches_exact_occurrence_counts() -> None:
         "new_kitchen_open_state calls",
     )
     _assert_exact_counter(
-        calls.get("activate_kitchen", Counter()),
+        calls.get("activate_activation", Counter()),
         Counter({("server/lifecycle/_kitchen_identity.py", "establish_kitchen_identity"): 1}),
-        "activate_kitchen calls",
+        "activate_activation calls",
     )
     _assert_exact_counter(
         calls.get("KitchenActivationId", Counter()),
@@ -265,7 +265,7 @@ def establish_kitchen_identity():
     KitchenActivationId("first-activation")
     new_kitchen_open_state(kitchen_id="first", context_id="ctx")
     new_kitchen_open_state(kitchen_id="second", context_id="ctx")
-    activate_kitchen("first")
+    activate_activation("first")
     KitchenOpenState(phase=None, kitchen_id="first", operation_id="", context_id="ctx")
     replace(state, kitchen_id="forged")
 
@@ -278,7 +278,7 @@ def unregistered_boot():
     resolve_kitchen_id()
     KitchenActivationId("rogue-activation")
     new_kitchen_open_state(kitchen_id="rogue", context_id="ctx")
-    activate_kitchen("rogue")
+    activate_activation("rogue")
     KitchenOpenState(phase=None, kitchen_id="rogue", operation_id="", context_id="ctx")
     retire_recipe_artifacts("temp", activation_id=activation_id)
     replace(state, kitchen_id="forged")
@@ -311,7 +311,7 @@ def test_forged_source_canary_trips_counting_guards() -> None:
     assert (
         calls["new_kitchen_open_state"][("synthetic/boot.py", "establish_kitchen_identity")] == 2
     )
-    for symbol in ("new_kitchen_open_state", "activate_kitchen", "KitchenOpenState"):
+    for symbol in ("new_kitchen_open_state", "activate_activation", "KitchenOpenState"):
         with pytest.raises(AssertionError, match="duplicate occurrences|occurrences changed"):
             _assert_exact_counter(
                 calls[symbol],

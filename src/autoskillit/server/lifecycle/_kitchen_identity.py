@@ -29,7 +29,7 @@ def establish_kitchen_identity(ctx: ToolContext, *, campaign_id: str | None = No
             if not kitchen_id.strip():
                 raise ValueError("kitchen_id must contain non-whitespace characters")
             activation_id = KitchenActivationId(uuid4().hex)
-            _recipe_generation.activate_kitchen(activation_id)
+            _recipe_generation.activate_activation(activation_id)
             ctx.kitchen_process_identity = None
             state = new_kitchen_open_state(
                 kitchen_id=kitchen_id,
@@ -54,7 +54,7 @@ def retire_kitchen_identity(ctx: ToolContext) -> None:
                 return
         except Exception:
             try:
-                _lifecycle.notify_kitchen_retired(activation_id)
+                _lifecycle.notify_activation_retired(activation_id)
             except Exception:
                 logger.warning(
                     "kitchen_activation_retirement_notification_failed",
@@ -67,4 +67,4 @@ def retire_kitchen_identity(ctx: ToolContext) -> None:
             kitchen_id=state.kitchen_id,
             activation_id=activation_id.value,
         )
-    _lifecycle.notify_kitchen_retired(activation_id)
+    _lifecycle.notify_activation_retired(activation_id)

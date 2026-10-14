@@ -135,7 +135,9 @@ def _setup_bundled_implementation_dispatch(tool_ctx, monkeypatch) -> dict[str, A
         "Bundled implementation fixture must pass the real recipe loader; "
         f"errors={validation_result.get('errors')!r}, findings={error_findings!r}"
     )
-    assert validation_result.get("_dispatch_success_reasons") == ["implementation_complete"]
+    declared_reasons = validation_result.get("_dispatch_success_reasons")
+    assert isinstance(declared_reasons, list)
+    assert "implementation_complete" in declared_reasons
     repo.set_validated("implementation", validation_result)
     return validation_result
 

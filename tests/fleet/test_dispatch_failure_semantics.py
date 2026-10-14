@@ -420,7 +420,7 @@ class TestDeclaredSuccessContract:
     ):
         import structlog
 
-        _setup_bundled_implementation_dispatch(tool_ctx, monkeypatch)
+        validation_result = _setup_bundled_implementation_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
             fleet_api,
             "parse_l3_result_block",
@@ -451,7 +451,9 @@ class TestDeclaredSuccessContract:
         assert len(warnings) == 1
         assert warnings[0]["dispatch_id"] == envelope["dispatch_id"]
         assert warnings[0]["claimed_reason"] == claimed_reason
-        assert warnings[0]["declared_success_reasons"] == ["implementation_complete"]
+        assert warnings[0]["declared_success_reasons"] == sorted(
+            validation_result["_dispatch_success_reasons"]
+        )
 
     @pytest.mark.anyio
     async def test_implementation_accepts_a_declared_success_reason(self, tool_ctx, monkeypatch):

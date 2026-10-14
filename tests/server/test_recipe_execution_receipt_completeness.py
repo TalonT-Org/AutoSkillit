@@ -8,7 +8,11 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import FinalizedRecipeProjection, build_recipe_execution_credential
+from autoskillit.core import (
+    PACK_REGISTRY,
+    FinalizedRecipeProjection,
+    build_recipe_execution_credential,
+)
 from autoskillit.server.recipe._recipe_execution import get_recipe_execution
 from tests.server._recipe_fixture_parameters import (
     IMPLEMENTATION_OVERRIDES,
@@ -60,6 +64,12 @@ def _recipe_fixture_parameters() -> list[tuple[str, str, dict[str, str]]]:
 _RECIPE_FIXTURE_PARAMETERS = [
     pytest.param(parameters, id=parameters[0]) for parameters in _recipe_fixture_parameters()
 ]
+
+
+@pytest.fixture(autouse=True)
+def _enable_attested_skill_dependency_packs(tool_ctx, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep dependency visibility from short-circuiting the credential admission tests."""
+    monkeypatch.setattr(tool_ctx.config.packs, "enabled", list(PACK_REGISTRY))
 
 
 def _skill_command(tool_ctx, step_name: str) -> str:

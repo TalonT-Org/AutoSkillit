@@ -180,6 +180,7 @@ async def test_following_the_recovery_yields_an_admitted_digest(
             "recipe_execution_attestation_missing",
         )
         receipt = json.loads(await complete_recipe_initialization(initialization_id=recovery_id))
+        assert receipt["success"] is True, receipt
         credential = receipt["recipe_execution"]
         admitted = await _run_attested_call(
             ready,

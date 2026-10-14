@@ -110,8 +110,10 @@ async def test_completion_receipt_carries_every_attested_step_credential(
 
     credential = ready.receipt["recipe_execution"]
     assert credential["invocation_template_digests"] == dict(installed.snapshot.template_digests)
-    expected_shapes = build_recipe_execution_credential(installed.snapshot).skill_input_shapes
-    assert set(credential["skill_input_shapes"]) == set(expected_shapes)
+    expected_shapes = build_recipe_execution_credential(installed.snapshot).as_wire_block()[
+        "skill_input_shapes"
+    ]
+    assert credential["skill_input_shapes"] == expected_shapes
 
 
 @pytest.mark.parametrize("tool_ctx_ready_recipe", _RECIPE_FIXTURE_PARAMETERS, indirect=True)

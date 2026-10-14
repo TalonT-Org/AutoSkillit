@@ -2168,7 +2168,10 @@ async def test_negative_part_is_rejected_before_artifact_load(
 
     tool_ctx_kitchen_open.backend = CodexBackend()
     bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="kitchen-test")
-    generation = _persist(tool_ctx_kitchen_open.temp_dir)
+    generation = _persist(
+        tool_ctx_kitchen_open.temp_dir,
+        activation_id=tool_ctx_kitchen_open.kitchen_activation_id,
+    )
     artifact_load = MagicMock(side_effect=AssertionError("negative part reached artifact load"))
     monkeypatch.setattr(recipe_section_handler, "load_recipe_artifact", artifact_load)
     kwargs = generation.pull_identity()
@@ -2186,7 +2189,10 @@ async def test_oversized_part_is_rejected_after_page_planning(
 ) -> None:
     tool_ctx_kitchen_open.backend = CodexBackend()
     bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="kitchen-test")
-    generation = _persist(tool_ctx_kitchen_open.temp_dir)
+    generation = _persist(
+        tool_ctx_kitchen_open.temp_dir,
+        activation_id=tool_ctx_kitchen_open.kitchen_activation_id,
+    )
     kwargs = generation.pull_identity()
     kwargs.pop("pull_tool")
 
@@ -2212,7 +2218,10 @@ async def test_request_specific_floor_returns_exact_bounded_failure(
             ),
         ),
     )
-    generation = _persist(tool_ctx_kitchen_open.temp_dir)
+    generation = _persist(
+        tool_ctx_kitchen_open.temp_dir,
+        activation_id=tool_ctx_kitchen_open.kitchen_activation_id,
+    )
     kwargs = generation.pull_identity()
     kwargs.pop("pull_tool")
 

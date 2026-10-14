@@ -17,6 +17,7 @@ import structlog.contextvars
 import structlog.testing
 
 from tests.conftest import bind_test_kitchen_identity
+from tests.server._recipe_fixture_parameters import RESEARCH_OVERRIDES
 
 if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
@@ -397,18 +398,12 @@ def forbid_artifact_reads(monkeypatch: pytest.MonkeyPatch):
 
 _READY_RECIPE_NAME = "research"
 _READY_RECIPE_ATTESTED_STEP = "scope"
-_READY_RECIPE_OVERRIDES = {
-    "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/4411",
-    "source_dir": ".",
-    "task": "test task",
-    "task_description": "test task",
-}
 # Default-preserving: every existing tool_ctx_ready_recipe consumer requests
 # it without parametrization and must keep getting exactly this triple.
 _READY_RECIPE_DEFAULT_PARAM = (
     _READY_RECIPE_NAME,
     _READY_RECIPE_ATTESTED_STEP,
-    _READY_RECIPE_OVERRIDES,
+    RESEARCH_OVERRIDES,
 )
 
 

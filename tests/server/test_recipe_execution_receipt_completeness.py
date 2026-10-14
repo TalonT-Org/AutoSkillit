@@ -22,7 +22,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 def _recipe_fixture_parameters() -> list[tuple[str, str, dict[str, str]]]:
     from autoskillit.recipe import load_and_validate
     from tests.contracts.test_delivery_bound_fitness import _delivery_recipe_names
-    from tests.server.conftest import _READY_RECIPE_OVERRIDES
+    from tests.server._recipe_fixture_parameters import RESEARCH_OVERRIDES
 
     parameters = []
     for recipe_name in _delivery_recipe_names():
@@ -40,9 +40,7 @@ def _recipe_fixture_parameters() -> list[tuple[str, str, dict[str, str]]]:
             for step_name, invocation in projection.binding_projection.invocations.items()
             if invocation.tool_name == "run_skill" and invocation.attested
         )
-        overrides = (
-            _READY_RECIPE_OVERRIDES if recipe_name == "research" else IMPLEMENTATION_OVERRIDES
-        )
+        overrides = RESEARCH_OVERRIDES if recipe_name == "research" else IMPLEMENTATION_OVERRIDES
         parameters.append((recipe_name, attested_step, overrides))
     return parameters
 

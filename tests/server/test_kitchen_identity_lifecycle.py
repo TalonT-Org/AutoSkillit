@@ -59,7 +59,7 @@ async def test_boot_open_load_share_one_kitchen_identity(
     from autoskillit.server.tools.tools_kitchen._open_kitchen import _gate as open_gate
     from autoskillit.server.tools.tools_recipe import load_recipe
     from tests.server._helpers import _mock_fmcp_ctx
-    from tests.server.conftest import _READY_RECIPE_OVERRIDES
+    from tests.server._recipe_fixture_parameters import RESEARCH_OVERRIDES
 
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", headless)
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", session_type)
@@ -83,7 +83,7 @@ async def test_boot_open_load_share_one_kitchen_identity(
 
     tool_ctx.quota_refresh_task = None
     overrides = {
-        **_READY_RECIPE_OVERRIDES,
+        **RESEARCH_OVERRIDES,
         "source_dir": str(tool_ctx.project_dir.resolve()),
     }
     fmcp_ctx = _mock_fmcp_ctx()

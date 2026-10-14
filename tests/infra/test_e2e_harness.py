@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import shlex
 import stat
 import subprocess
 import tempfile
@@ -17,6 +18,7 @@ from urllib.parse import quote
 
 import pytest
 
+from tests._hook_protocol_oracle import claude_matcher_admits
 from tests.infra._complexity_helpers import load_check_script
 from tests.infra._e2e_evidence import load_provenance, materialize_run
 
@@ -2095,6 +2097,92 @@ class TestRecipeFlow:
 
 
 class TestPipelineRecipeFlow:
+    def test_session_hooks_install_the_declared_policy_and_keep_existing_settings(
+        self, tmp_path: Path
+    ) -> None:
+        home = tmp_path / "home"
+        settings_path = home / ".claude" / "settings.json"
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        foreign_subagent_stop = {
+            "matcher": "ForeignAgent",
+            "hooks": [{"type": "command", "command": "foreign"}],
+        }
+        other_pre_tool_use = {
+            "matcher": "Bash",
+            "hooks": [{"type": "command", "command": "other"}],
+        }
+        settings_path.write_text(
+            json.dumps(
+                {
+                    "theme": "dark",
+                    "env": {"KEEP1": "1"},
+                    "hooks": {
+                        "SubagentStop": [foreign_subagent_stop],
+                        "PreToolUse": [other_pre_tool_use],
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        trace = tmp_path / "trace with space" / "events.jsonl"
+
+        harness.install_session_hooks(home, trace)
+
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        lifecycle_events = {"SessionStart", "SessionEnd", "SubagentStart", "SubagentStop"}
+        declarations = harness.e2e_sessions.LIFECYCLE_HOOK_MATCHERS
+        assert set(declarations) == lifecycle_events
+        assert set(settings["hooks"]) == lifecycle_events | {"PreToolUse"}
+        assert settings["theme"] == "dark"
+        assert settings["env"] == {"KEEP1": "1"}
+        assert settings["hooks"]["PreToolUse"] == [other_pre_tool_use]
+        assert settings["hooks"]["SubagentStop"][0] == foreign_subagent_stop
+
+        expected_command_hook = {
+            "type": "command",
+            "command": f"python3 /opt/e2e/e2e_sessions.py {shlex.quote(str(trace))}",
+            "timeout": 10,
+        }
+        for event in lifecycle_events:
+            installed = settings["hooks"][event]
+            if event == "SubagentStop":
+                installed = installed[1:]
+            assert len(installed) == 1
+            entry = installed[0]
+            assert entry["hooks"] == [expected_command_hook]
+            declared_matcher = declarations[event]
+            if declared_matcher is None:
+                assert "matcher" not in entry
+            else:
+                assert entry["matcher"] == declared_matcher
+                assert not claude_matcher_admits(entry["matcher"], "")
+
+    def test_session_hooks_refuse_a_custom_main_agent(self, tmp_path: Path) -> None:
+        home = tmp_path / "home"
+        settings_path = home / ".claude" / "settings.json"
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        settings_path.write_bytes(b'{"agent":"custom-main"}')
+        original = settings_path.read_bytes()
+
+        with pytest.raises(ValueError, match="main agent"):
+            harness.install_session_hooks(home, tmp_path / "events.jsonl")
+
+        assert settings_path.read_bytes() == original
+
+    def test_custom_main_agent_setting_fails_preflight(self, tmp_path: Path, monkeypatch) -> None:
+        settings_path = tmp_path / "home" / ".claude" / "settings.json"
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        settings_path.write_text('{"agent":"custom-main"}', encoding="utf-8")
+        runner, state = _pipeline_runner()
+
+        failures, result, _out, _home, _catalog, _observed = _run_pipeline(
+            tmp_path, runner, state, monkeypatch
+        )
+
+        assert failures == ["preflight: session hooks: settings.json sets a main agent"]
+        assert result["outcome"] == "failed"
+        assert not any(call.argv[:3] == ["autoskillit", "fleet", "run"] for call in runner.calls)
+
     def test_pipeline_uses_the_seed_issue_and_cleans_only_its_owned_pr(
         self, tmp_path: Path, monkeypatch
     ) -> None:
@@ -2214,7 +2302,7 @@ class TestPipelineRecipeFlow:
         assert settings["env"] == _EXPECTED_SETTINGS_ENV
         assert all(
             len(settings["hooks"][event]) == 1
-            for event in ("SessionStart", "SessionEnd", "SubagentStart", "SubagentStop")
+            for event in harness.e2e_sessions.LIFECYCLE_HOOK_MATCHERS
         )
 
         close = next(call for call in calls if call.argv[:3] == ["gh", "pr", "close"])

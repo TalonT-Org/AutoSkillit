@@ -200,6 +200,19 @@ pipeline this declares capacity, not a measured fan-out. The child limit stays s
 The implementation pipeline installs synchronous command hooks for `SessionStart`,
 `SessionEnd`, `SubagentStart` and `SubagentStop`, preserving existing hooks and MiniMax
 settings. These hooks follow the [Claude lifecycle schema](https://code.claude.com/docs/en/hooks).
+The agent hooks use `.+` to require a non-empty agent type: under the default main
+agent, Claude Code also fires `SubagentStop` for internal agents with an empty type.
+An omitted or empty matcher admits those callbacks; `.+` accepts every non-empty
+built-in, custom or namespaced plugin agent name without an allowlist or product-registry
+imports in these stdlib-only scripts. Session hooks have no matcher.
+Sessions must run with the default main agent. The harness fails preflight if the
+user-level settings file has an `agent` key; the fleet command builders pass neither
+`--agent` nor `--settings`, and the bundled plugin sets no main agent. Project/local
+settings in the sandbox, managed settings and other enabled plugins' main-agent defaults
+are not checked. A main agent from those sources makes internal stops carry its name:
+they fail coverage as a named stop without a start, without the blank-type `capture:` code.
+Claude Code 2.1.275 fixed specific matchers admitting blank-type stops; the image's
+2.1.280 pin includes that fix.
 Each identity spans its first start through its final end, so compaction and resume yield
 a conservative upper bound. Half-open intervals end before simultaneous starts. The
 summary reconciles the dispatched root, managed lineage and enumerable native transcripts.
@@ -212,9 +225,13 @@ Each must have exactly one index row with the run's `dispatch_id`. Parentless se
 without receipts, missing or ambiguous index rows, and receipt-named sessions absent
 from both trace and index fail coverage. Shared dispatch IDs or overlapping lifetimes
 never adopt a session. Missing endpoints, identities or owned transcripts fail coverage;
-transcript activity never infers a lifetime. An auto-compacted root can leave an unmatched
-`SubagentStop`, which still fails coverage and is tracked separately. A peak exceeding
-capacity fails validation.
+transcript activity never infers a lifetime. The captured pre-fix trace contains a blank-type
+stop immediately before a compact-source session start; its producing feature is unproven.
+An owned agent record without a named type fails coverage with a `capture:` violation.
+A named stop without its start or transcript still fails coverage, as do traces captured
+before the matcher was installed. The collector retains delivered callbacks and adds
+violations; it does not filter them out. Individual codes are in `out/session-concurrency.json`
+under `violations`. A peak exceeding capacity fails validation.
 
 Commission with a successful MiniMax CI run and repeat against the same seed. Inspect
 planning, dry-walkthrough, implementation, test, integration, audit GO and open-PR evidence,

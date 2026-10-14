@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Literal, NamedTuple
@@ -445,6 +446,24 @@ def codex_verdict(
 
 # These keys and event exceptions come from Claude's JSON output and
 # per-event decision-control tables in hooks.md.
+_EXACT_MATCHER = re.compile(r"[A-Za-z0-9_\- ,|]*")
+
+
+def claude_matcher_admits(matcher: str | None, value: str) -> bool:
+    """Apply Claude Code's documented hook-matcher rule to one candidate value.
+
+    Source: the "Matcher patterns" section of the page named by
+    ``CLAUDE_PROTOCOL_SOURCE``, re-read 2026-10-13. Python's ``re.search`` stands in
+    for ``RegExp.prototype.test``. ``FileChanged`` and ``StopFailure`` use a narrower
+    exact-match set and are not modelled.
+    """
+    if matcher is None or matcher in ("", "*"):
+        return True
+    if _EXACT_MATCHER.fullmatch(matcher):
+        return value in {item.strip() for item in re.split(r"[|,]", matcher)}
+    return re.search(matcher, value) is not None
+
+
 CLAUDE_HOOK_SPECIFIC_OUTPUT_FIELDS: Mapping[str, frozenset[str]] = {
     "PreToolUse": frozenset(
         {

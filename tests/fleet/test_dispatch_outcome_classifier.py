@@ -75,7 +75,12 @@ class TestClassifyDispatchOutcomeCompletedClean:
             source="stdout",
         )
         skill_result = dataclasses.replace(_DEFAULT_SKILL_RESULT)
-        status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=False)
+        status, reason = classify_dispatch_outcome(
+            parsed,
+            skill_result,
+            sidecar_exists=False,
+            success_reasons=None,
+        )
         assert status == DispatchStatus.SUCCESS
         assert reason == ""
 
@@ -415,7 +420,7 @@ class TestClassifyDispatchOutcomeSidecarSynthesis:
         assert result.source == "sidecar"
 
     def test_sidecar_synthesized_completed_clean_is_success(self):
-        """completed_clean from sidecar synthesis with success=True → SUCCESS with reason."""
+        """The reserved sidecar reason is accepted outside recipe declarations."""
         parsed = L3ParseResult(
             outcome="completed_clean",
             payload={"success": True, "reason": "sidecar_recovery"},
@@ -424,14 +429,44 @@ class TestClassifyDispatchOutcomeSidecarSynthesis:
             source="sidecar",
         )
         skill_result = dataclasses.replace(_DEFAULT_SKILL_RESULT)
-        status, reason = classify_dispatch_outcome(parsed, skill_result)
+        status, reason = classify_dispatch_outcome(
+            parsed,
+            skill_result,
+            success_reasons=frozenset({"implementation_complete"}),
+        )
         assert status == DispatchStatus.SUCCESS
         assert reason == "sidecar_recovery"
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            pytest.param({"success": True}, id="missing"),
+            pytest.param({"success": True, "reason": ""}, id="empty"),
+            pytest.param({"success": True, "reason": "other_recovery"}, id="different"),
+        ],
+    )
+    def test_reasonless_recipe_sidecar_requires_exact_reserved_reason(self, payload):
+        parsed = L3ParseResult(
+            outcome="completed_clean",
+            payload=payload,
+            raw_body=None,
+            parse_error=None,
+            source="sidecar",
+        )
+
+        status, reason = classify_dispatch_outcome(
+            parsed,
+            dataclasses.replace(_DEFAULT_SKILL_RESULT),
+            success_reasons=None,
+        )
+
+        assert status == DispatchStatus.FAILURE
+        assert reason == FleetErrorCode.FLEET_L3_RESULT_CONTRACT_VIOLATION
 
 
 class TestCompletedCleanSuccessPreservesReason:
     def test_completed_clean_success_preserves_reason(self):
-        """completed_clean with success=True preserves reason from payload."""
+        """A wholly reasonless recipe keeps a supplied success reason."""
         parsed = L3ParseResult(
             outcome="completed_clean",
             payload={"success": True, "reason": "implementation_complete"},
@@ -440,7 +475,11 @@ class TestCompletedCleanSuccessPreservesReason:
             source="stdout",
         )
         skill_result = dataclasses.replace(_DEFAULT_SKILL_RESULT)
-        status, reason = classify_dispatch_outcome(parsed, skill_result)
+        status, reason = classify_dispatch_outcome(
+            parsed,
+            skill_result,
+            success_reasons=None,
+        )
         assert status == DispatchStatus.SUCCESS
         assert reason == "implementation_complete"
 
@@ -456,12 +495,16 @@ class TestCompletedCleanSuccessPreservesReason:
                 source="stdout",
             )
             skill_result = dataclasses.replace(_DEFAULT_SKILL_RESULT)
-            status, reason = classify_dispatch_outcome(parsed, skill_result)
+            status, reason = classify_dispatch_outcome(
+                parsed,
+                skill_result,
+                success_reasons=None,
+            )
             assert status == DispatchStatus.SUCCESS
             assert reason == expected_reason
 
     def test_completed_clean_success_empty_reason_returns_empty(self):
-        """Backward compat: success with no reason key returns empty string."""
+        """Wholly reasonless recipes retain the supplied empty-reason behavior."""
         parsed = L3ParseResult(
             outcome="completed_clean",
             payload={"success": True},
@@ -470,9 +513,129 @@ class TestCompletedCleanSuccessPreservesReason:
             source="stdout",
         )
         skill_result = dataclasses.replace(_DEFAULT_SKILL_RESULT)
-        status, reason = classify_dispatch_outcome(parsed, skill_result)
+        status, reason = classify_dispatch_outcome(
+            parsed,
+            skill_result,
+            success_reasons=None,
+        )
         assert status == DispatchStatus.SUCCESS
         assert reason == ""
+
+
+class TestDeclaredSuccessReasonContract:
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            pytest.param({"success": True}, id="missing"),
+            pytest.param({"success": True, "reason": ""}, id="empty"),
+            pytest.param({"success": True, "reason": "already_done"}, id="undeclared"),
+            pytest.param(
+                {"success": True, "reason": " implementation_complete "},
+                id="whitespace-is-not-trimmed-for-admission",
+            ),
+        ],
+    )
+    def test_declared_recipe_rejects_missing_empty_or_nonexact_reason(self, payload):
+        parsed = L3ParseResult(
+            outcome="completed_clean",
+            payload=payload,
+            raw_body=None,
+            parse_error=None,
+            source="stdout",
+        )
+
+        status, reason = classify_dispatch_outcome(
+            parsed,
+            dataclasses.replace(_DEFAULT_SKILL_RESULT),
+            success_reasons=frozenset({"implementation_complete"}),
+        )
+
+        assert status == DispatchStatus.FAILURE
+        assert reason == FleetErrorCode.FLEET_L3_RESULT_CONTRACT_VIOLATION
+
+    def test_declared_reason_is_accepted_exactly(self):
+        parsed = L3ParseResult(
+            outcome="completed_clean",
+            payload={"success": True, "reason": "implementation_complete"},
+            raw_body=None,
+            parse_error=None,
+            source="stdout",
+        )
+
+        status, reason = classify_dispatch_outcome(
+            parsed,
+            dataclasses.replace(_DEFAULT_SKILL_RESULT),
+            success_reasons=frozenset({"implementation_complete"}),
+        )
+
+        assert status == DispatchStatus.SUCCESS
+        assert reason == "implementation_complete"
+
+    def test_failure_payload_is_not_subject_to_success_reason_admission(self):
+        parsed = L3ParseResult(
+            outcome="completed_clean",
+            payload={"success": False, "reason": "implementation_complete"},
+            raw_body=None,
+            parse_error=None,
+            source="stdout",
+        )
+
+        status, reason = classify_dispatch_outcome(
+            parsed,
+            dataclasses.replace(_DEFAULT_SKILL_RESULT),
+            success_reasons=frozenset({"implementation_complete"}),
+        )
+
+        assert status == DispatchStatus.FAILURE
+        assert reason == "implementation_complete"
+
+    def test_stdout_cannot_claim_the_sidecar_reserved_reason(self):
+        parsed = L3ParseResult(
+            outcome="completed_clean",
+            payload={"success": True, "reason": "sidecar_recovery"},
+            raw_body=None,
+            parse_error=None,
+            source="stdout",
+        )
+
+        status, reason = classify_dispatch_outcome(
+            parsed,
+            dataclasses.replace(_DEFAULT_SKILL_RESULT),
+            success_reasons=frozenset({"implementation_complete"}),
+        )
+
+        assert status == DispatchStatus.FAILURE
+        assert reason == FleetErrorCode.FLEET_L3_RESULT_CONTRACT_VIOLATION
+
+    def test_every_bundled_declared_reason_is_admitted_from_fresh_recipe_data(self):
+        from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+
+        checked_reasons = 0
+        for recipe_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+            recipe = load_recipe(recipe_path)
+            declared_reasons = recipe.declared_success_reasons()
+            if declared_reasons is None:
+                continue
+
+            for declared_reason in declared_reasons:
+                parsed = L3ParseResult(
+                    outcome="completed_clean",
+                    payload={"success": True, "reason": declared_reason},
+                    raw_body=None,
+                    parse_error=None,
+                    source="stdout",
+                )
+                status, reason = classify_dispatch_outcome(
+                    parsed,
+                    dataclasses.replace(_DEFAULT_SKILL_RESULT),
+                    success_reasons=declared_reasons,
+                )
+
+                assert status == DispatchStatus.SUCCESS, recipe_path.name
+                assert reason == declared_reason, recipe_path.name
+                checked_reasons += 1
+
+        assert checked_reasons > 0
 
 
 class TestClassifyDispatchOutcomeParsedNone:

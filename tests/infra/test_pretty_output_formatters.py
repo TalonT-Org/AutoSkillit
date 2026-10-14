@@ -1039,14 +1039,14 @@ def test_dispatch_food_truck_error_envelope_preserves_diagnostics():
     assert "dispatch_id: d-rejected-001" in text
 
 
-# PHK-FMT-DISPATCH-COMPLETED-FAIL: DispatchCompleted(success=False) must not be conflated
+# PHK-FMT-DISPATCH-COMPLETED-FAIL: completed failure envelopes must retain their fields
 def test_completed_failure_through_formatter_preserves_all_fields():
-    """A DispatchCompleted(success=False) envelope carries critical fields that
+    """A DispatchCompleted with FAILURE status carries critical fields that
     distinguish it from DispatchRejected: dispatched_session_id, dispatch_status,
     reason, token_usage, elapsed_seconds, lifespan_started. These fields must ALL
     survive formatting — they prove the subprocess actually ran. The bug: the
     formatter's `if not success:` branch strips these fields because it conflates
-    DispatchCompleted(success=False) with DispatchRejected.
+    completed failures with DispatchRejected.
     """
     from tests.infra._pretty_output_helpers import _wrap_for_claude_code
 

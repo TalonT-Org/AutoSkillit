@@ -12,6 +12,7 @@ from tests.fleet._helpers import (
     _make_no_sentinel,
     _mock_backend_with_locator,
     _noop_quota_refresher,
+    _setup_bundled_implementation_dispatch,
     _setup_dispatch,
 )
 
@@ -119,11 +120,12 @@ class TestResumeJSONLPreflight:
         )
         from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state
         from autoskillit.fleet._api import execute_dispatch
+        from autoskillit.fleet._prompts import _build_food_truck_prompt
         from autoskillit.fleet.campaign_state.state import upsert_dispatch_record_by_name
         from autoskillit.fleet.campaign_state.state_outcomes import DispatchRejected
         from tests.fakes import _DEFAULT_SKILL_RESULT
 
-        _setup_dispatch(tool_ctx, monkeypatch)
+        _setup_bundled_implementation_dispatch(tool_ctx, monkeypatch)
 
         dispatches_dir = tool_ctx.temp_dir / "dispatches"
         dispatches_dir.mkdir(parents=True, exist_ok=True)
@@ -149,12 +151,12 @@ class TestResumeJSONLPreflight:
             tool_ctx.kitchen_id,
             "camp",
             "",
-            [DispatchRecord(name="test-recipe")],
+            [DispatchRecord(name="implementation")],
         )
         upsert_dispatch_record_by_name(
             prev_state_path,
             DispatchRecord(
-                name="test-recipe",
+                name="implementation",
                 status=DispatchStatus.RESUMABLE,
                 dispatched_session_id="nonexistent-primary",
                 session_chain=["chain-session-id"],
@@ -188,12 +190,15 @@ class TestResumeJSONLPreflight:
         with structlog.testing.capture_logs() as logs:
             result = await execute_dispatch(
                 tool_ctx=tool_ctx,
-                recipe="test-recipe",
+                recipe="implementation",
                 task="t",
                 ingredients=None,
                 dispatch_name=None,
                 timeout_sec=None,
-                prompt_builder=lambda **_: "prompt",
+                prompt_builder=lambda **kwargs: _build_food_truck_prompt(
+                    mcp_prefix="mcp__autoskillit__",
+                    **kwargs,
+                ),
                 quota_refresher=_noop_quota_refresher,
                 resume_session_id="nonexistent-primary",
                 prior_dispatch_id=prior_id,
@@ -204,6 +209,9 @@ class TestResumeJSONLPreflight:
         )
         assert len(tool_ctx.executor.dispatch_calls) == 1
         assert tool_ctx.executor.dispatch_calls[0].resume_session_id == "chain-session-id"
+        assert "implementation_complete" in tool_ctx.executor.dispatch_calls[0].orchestrator_prompt
+        assert "fleet_quota_exhausted" in tool_ctx.executor.dispatch_calls[0].orchestrator_prompt
+        assert '"quota_exhausted"' not in tool_ctx.executor.dispatch_calls[0].orchestrator_prompt
         continuity_logs = [
             log for log in logs if log.get("event") == "session_id_continuity_mismatch"
         ]
@@ -312,6 +320,120 @@ class TestResumeSuccessGuard:
         assert result.outcome.dispatched_session_id == "completed-session-id"
         assert result.outcome.reason == "completed_clean"
         assert len(tool_ctx.executor.dispatch_calls) == 0
+
+    @pytest.mark.parametrize(
+        ("stored_reason", "message_fragment"),
+        [
+            pytest.param("", "missing", id="empty-reason"),
+            pytest.param("other_recipe_complete", "not declared", id="undeclared-reason"),
+        ],
+    )
+    @pytest.mark.anyio
+    async def test_resume_rejects_invalid_declared_historical_success_before_commit(
+        self, tool_ctx, monkeypatch, stored_reason, message_fragment
+    ):
+        from autoskillit.core import FleetErrorCode
+        from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state
+        from autoskillit.fleet._api import execute_dispatch
+        from autoskillit.fleet.campaign_state.state_outcomes import DispatchRejected
+
+        _setup_bundled_implementation_dispatch(tool_ctx, monkeypatch)
+
+        dispatches_dir = tool_ctx.temp_dir / "dispatches"
+        dispatches_dir.mkdir(parents=True, exist_ok=True)
+        prior_id = "00000000-0000-0000-0000-000000000107"
+        state_path = dispatches_dir / f"{prior_id}.json"
+        write_initial_state(
+            state_path,
+            tool_ctx.kitchen_id,
+            "camp",
+            "",
+            [
+                DispatchRecord(
+                    name="implementation",
+                    status=DispatchStatus.SUCCESS,
+                    dispatch_id="historical-implementation-dispatch",
+                    dispatched_session_id="historical-implementation-session",
+                    reason=stored_reason,
+                )
+            ],
+        )
+        original_state = state_path.read_bytes()
+
+        result = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="implementation",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=lambda **_: "prompt",
+            quota_refresher=_noop_quota_refresher,
+            resume_session_id="historical-implementation-session",
+            prior_dispatch_id=prior_id,
+        )
+
+        assert isinstance(result.outcome, DispatchRejected)
+        assert result.outcome.error_code == FleetErrorCode.FLEET_L3_RESULT_CONTRACT_VIOLATION
+        assert result.outcome.dispatch_id == "historical-implementation-dispatch"
+        assert message_fragment in result.outcome.message
+        assert result.per_dispatch_state_path is None
+        assert len(tool_ctx.executor.dispatch_calls) == 0
+        assert state_path.read_bytes() == original_state
+        assert list(dispatches_dir.glob("*.json")) == [state_path]
+        assert not any(
+            effect["name"] == "commit"
+            for effect in result.outcome.effect_provenance.to_dict()["effects"]
+        )
+
+    @pytest.mark.anyio
+    async def test_resume_reuses_the_stored_declared_success_reason(self, tool_ctx, monkeypatch):
+        from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state
+        from autoskillit.fleet._api import execute_dispatch
+        from autoskillit.fleet.campaign_state.state_outcomes import DispatchCompleted
+
+        _setup_bundled_implementation_dispatch(tool_ctx, monkeypatch)
+
+        dispatches_dir = tool_ctx.temp_dir / "dispatches"
+        dispatches_dir.mkdir(parents=True, exist_ok=True)
+        prior_id = "00000000-0000-0000-0000-000000000108"
+        state_path = dispatches_dir / f"{prior_id}.json"
+        write_initial_state(
+            state_path,
+            tool_ctx.kitchen_id,
+            "camp",
+            "",
+            [
+                DispatchRecord(
+                    name="implementation",
+                    status=DispatchStatus.SUCCESS,
+                    dispatch_id="historical-implementation-dispatch",
+                    dispatched_session_id="historical-implementation-session",
+                    reason="implementation_complete",
+                )
+            ],
+        )
+        original_state = state_path.read_bytes()
+
+        result = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="implementation",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=lambda **_: "prompt",
+            quota_refresher=_noop_quota_refresher,
+            resume_session_id="historical-implementation-session",
+            prior_dispatch_id=prior_id,
+        )
+
+        assert isinstance(result.outcome, DispatchCompleted)
+        assert result.outcome.success is True
+        assert result.outcome.dispatch_status is DispatchStatus.SUCCESS
+        assert result.outcome.reason == "implementation_complete"
+        assert len(tool_ctx.executor.dispatch_calls) == 0
+        assert state_path.read_bytes() == original_state
 
     @pytest.mark.anyio
     async def test_resume_proceeds_when_prior_dispatch_resumable(

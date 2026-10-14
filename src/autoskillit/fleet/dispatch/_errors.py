@@ -57,7 +57,6 @@ def complete_failure_with_state(
     the returned `DispatchResult.per_dispatch_state_path` is `None`.
     """
     completed = DispatchCompleted(
-        success=False,
         dispatch_status=dispatch_status,
         dispatch_id=dispatch_id or "",
         dispatched_session_id=dispatched_session_id,

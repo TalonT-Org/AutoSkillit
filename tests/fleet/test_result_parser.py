@@ -484,7 +484,7 @@ def test_parse_additional_jsonl_paths_scanned_oldest_first(tmp_path: Path) -> No
         tmp_path,
         [
             f"---l3-result::{DISPATCH_ID}---\n"
-            f'{{"summary": "older"}}\n'
+            f'{{"success": true, "summary": "older"}}\n'
             f"---end-l3-result::{DISPATCH_ID}---"
         ],
         "older.jsonl",
@@ -493,7 +493,7 @@ def test_parse_additional_jsonl_paths_scanned_oldest_first(tmp_path: Path) -> No
         tmp_path,
         [
             f"---l3-result::{DISPATCH_ID}---\n"
-            f'{{"summary": "newer"}}\n'
+            f'{{"success": true, "summary": "newer"}}\n'
             f"---end-l3-result::{DISPATCH_ID}---"
         ],
         "newer.jsonl",
@@ -516,7 +516,7 @@ def test_parse_primary_jsonl_wins_over_additional(tmp_path: Path) -> None:
         tmp_path,
         [
             f"---l3-result::{DISPATCH_ID}---\n"
-            f'{{"summary": "primary"}}\n'
+            f'{{"success": true, "summary": "primary"}}\n'
             f"---end-l3-result::{DISPATCH_ID}---"
         ],
         "primary.jsonl",
@@ -525,7 +525,7 @@ def test_parse_primary_jsonl_wins_over_additional(tmp_path: Path) -> None:
         tmp_path,
         [
             f"---l3-result::{DISPATCH_ID}---\n"
-            f'{{"summary": "additional"}}\n'
+            f'{{"success": true, "summary": "additional"}}\n'
             f"---end-l3-result::{DISPATCH_ID}---"
         ],
         "additional.jsonl",
@@ -546,7 +546,7 @@ def test_parse_additional_jsonl_paths_nonexistent_skipped(tmp_path: Path) -> Non
         tmp_path,
         [
             f"---l3-result::{DISPATCH_ID}---\n"
-            f'{{"summary": "existing"}}\n'
+            f'{{"success": true, "summary": "existing"}}\n'
             f"---end-l3-result::{DISPATCH_ID}---"
         ],
         "existing.jsonl",
@@ -581,7 +581,7 @@ def test_ansi_only_stdout_no_sentinel() -> None:
 
 def test_hr_split_open_sentinel_recovered() -> None:
     """HR-split open sentinel (--- on own line before dispatch_id---) is recovered."""
-    payload = {"status": "ok"}
+    payload = {"success": True, "status": "ok"}
     stdout = f"output text\n---\nl3-result::{DISPATCH_ID}---\n{json.dumps(payload)}\n{_close()}"
     result = parse_l3_result_block(stdout=stdout, expected_dispatch_id=DISPATCH_ID)
     assert result.outcome == "completed_clean"
@@ -590,7 +590,7 @@ def test_hr_split_open_sentinel_recovered() -> None:
 
 def test_clean_sentinel_regression_guard() -> None:
     """Clean (non-split) sentinels continue to work after normalization is applied."""
-    payload = {"status": "ok"}
+    payload = {"success": True, "status": "ok"}
     stdout = f"output\n{_open()}\n{json.dumps(payload)}\n{_close()}\n"
     result = parse_l3_result_block(stdout=stdout, expected_dispatch_id=DISPATCH_ID)
     assert result.outcome == "completed_clean"
@@ -702,3 +702,44 @@ def test_resume_line_offset_zero_preserves_existing_behavior(tmp_path: Path) -> 
     )
     # Without offset, the prior-ID sentinel IS found (existing behavior)
     assert result.outcome == "completed_clean"
+
+
+@pytest.mark.parametrize(
+    ("payload_json", "field"),
+    [
+        pytest.param('{"reason":"finished"}', "success", id="missing-success"),
+        pytest.param('{"success":1}', "success", id="integer-success"),
+        pytest.param('{"success":"false"}', "success", id="string-success"),
+        pytest.param('{"success":true,"reason":7}', "reason", id="integer-reason"),
+        pytest.param('{"success":false,"reason":null}', "reason", id="null-reason"),
+    ],
+)
+def test_invalid_success_or_reason_fields_are_dirty_with_field_specific_error(
+    payload_json: str, field: str
+) -> None:
+    result = parse_l3_result_block(
+        stdout=make_stdout(payload_json),
+        expected_dispatch_id=DISPATCH_ID,
+    )
+
+    assert result.outcome == "completed_dirty"
+    assert result.parse_error is not None
+    assert field in result.parse_error
+
+
+@pytest.mark.parametrize(
+    "payload_json",
+    [
+        pytest.param('{"success":true}', id="missing-reason"),
+        pytest.param('{"success":true,"reason":""}', id="empty-reason"),
+    ],
+)
+def test_missing_or_empty_string_reason_remains_parse_clean(payload_json: str) -> None:
+    result = parse_l3_result_block(
+        stdout=make_stdout(payload_json),
+        expected_dispatch_id=DISPATCH_ID,
+    )
+
+    assert result.outcome == "completed_clean"
+    assert result.payload == json.loads(payload_json)
+    assert result.parse_error is None

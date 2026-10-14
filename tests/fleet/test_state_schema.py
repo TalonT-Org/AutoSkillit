@@ -925,7 +925,6 @@ class TestDispatchCompletedEnvelopeCoverage:
         from autoskillit.fleet import DispatchCompleted, DispatchStatus
 
         completed = DispatchCompleted(
-            success=True,
             dispatch_status=DispatchStatus.SUCCESS,
             dispatch_id="test-dispatch-id",
             dispatched_session_id="test-session-id",

@@ -50,3 +50,16 @@ class TestAllFleetErrorCodesHaveCategory:
                     FaultDomain.INFRASTRUCTURE,
                     FaultDomain.LOGIC,
                 ), f"{code} has no explicit category"
+
+    def test_success_contract_violation_is_logic_not_infrastructure_recovery(self):
+        from autoskillit.fleet.campaign_state.state_error_codes import (
+            _ERROR_CODE_CATEGORIES,
+            _INFRASTRUCTURE_FAILURE_REASONS,
+            get_error_category,
+        )
+
+        code = FEC.FLEET_L3_RESULT_CONTRACT_VIOLATION
+
+        assert _ERROR_CODE_CATEGORIES[code] is FaultDomain.LOGIC
+        assert get_error_category(code) is FaultDomain.LOGIC
+        assert code not in _INFRASTRUCTURE_FAILURE_REASONS

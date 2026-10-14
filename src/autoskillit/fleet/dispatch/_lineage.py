@@ -35,11 +35,17 @@ from autoskillit.fleet._native_shell_capture import (
     prepare_food_truck_lineage,
     resolve_dispatch_timeout,
 )
-from autoskillit.fleet._outcome import build_success_short_circuit as _build_success_short_circuit
+from autoskillit.fleet._outcome import (
+    build_success_short_circuit as _build_success_short_circuit,
+)
+from autoskillit.fleet._outcome import (
+    success_reason_contract_error,
+)
 from autoskillit.fleet.campaign_state.state import (
     DispatchIdentity,
     DispatchRecord,
     DispatchStateHandle,
+    DispatchStatus,
     read_all_campaign_captures,
     read_state,
 )
@@ -47,7 +53,11 @@ from autoskillit.fleet.campaign_state.state_effects import (
     DispatchEffectName,
     DispatchProvenanceTracker,
 )
-from autoskillit.fleet.campaign_state.state_outcomes import DispatchResult
+from autoskillit.fleet.campaign_state.state_outcomes import (
+    DispatchCompleted,
+    DispatchRejected,
+    DispatchResult,
+)
 from autoskillit.fleet.campaign_state.state_recovery import ResumePreflight, prepare_resume
 from autoskillit.fleet.dispatch._errors import complete_failure_with_state
 from autoskillit.workspace import default_skill_resolver, prepare_skill_projection
@@ -118,6 +128,62 @@ class ReadyLineageResult:
 LineagePreparationResult = PriorSuccessLineageResult | ReadyLineageResult
 
 
+def _reuse_prior_success_candidate(
+    *,
+    candidate: DispatchRecord,
+    success_reasons: frozenset[str] | None,
+    provenance: DispatchProvenanceTracker,
+) -> PriorSuccessLineageResult | DispatchResult:
+    """Validate and return a campaign success without allocating dispatch state."""
+    reason_error = success_reason_contract_error(candidate.reason, success_reasons)
+    if reason_error is not None:
+        return DispatchResult(
+            outcome=DispatchRejected(
+                error_code=FleetErrorCode.FLEET_L3_RESULT_CONTRACT_VIOLATION,
+                dispatch_id=candidate.dispatch_id,
+                message=f"Stored successful dispatch cannot be reused: {reason_error}",
+                effect_provenance=provenance.snapshot(),
+            ),
+            per_dispatch_state_path=None,
+        )
+
+    identities: dict[str, object] = {
+        "dispatch_id": candidate.dispatch_id,
+        "dispatched_session_id": candidate.dispatched_session_id,
+    }
+    provenance.start(
+        DispatchEffectName.PRIOR_DISPATCH_BINDING,
+        retry_relevant=False,
+        identities=identities,
+    )
+    provenance.confirm(
+        DispatchEffectName.PRIOR_DISPATCH_BINDING,
+        receipt="campaign state reported prior success",
+        retry_relevant=False,
+        identities=identities,
+    )
+    provenance.start(DispatchEffectName.COMMIT, identities=identities)
+    provenance.confirm(
+        DispatchEffectName.COMMIT,
+        receipt="reused committed campaign dispatch",
+        identities=identities,
+    )
+    return PriorSuccessLineageResult(
+        outcome="prior_success_short_circuit",
+        prior_success_dispatch_result=DispatchResult(
+            outcome=DispatchCompleted(
+                dispatch_status=DispatchStatus.SUCCESS,
+                dispatch_id=candidate.dispatch_id,
+                dispatched_session_id=candidate.dispatched_session_id,
+                reason=candidate.reason,
+                token_usage=dict(candidate.token_usage),
+                effect_provenance=provenance.snapshot(),
+            ),
+            per_dispatch_state_path=None,
+        ),
+    )
+
+
 def create_fresh_handle(
     *,
     dispatches_dir: Path,
@@ -162,6 +228,7 @@ def prepare_launch(
     effective_backend: CodingAgentBackend | None,
     tool_ctx: ToolContext,
     adaptation_context: SemanticAdaptationContext | None = None,
+    success_reasons: frozenset[str] | None = None,
 ) -> tuple[str, Any, Any, Path]:
     """Build the (prompt, plugin_authority, capability_preparation, authoritative_cwd) tuple.
 
@@ -184,6 +251,7 @@ def prepare_launch(
         l3_timeout_sec=int(l3_timeout_sec) if l3_timeout_sec is not None else 0,
         capture=capture,
         caller_instructions=caller_instructions,
+        success_reasons=sorted(success_reasons or ()),
     )
     plugin_authority = capability_preparation = None
     if effective_backend is not None:
@@ -305,6 +373,8 @@ async def run_lineage_preparation(
     timeout_sec: int | None,
     managed_join_parent_id: str | None = None,
     adaptation_context: SemanticAdaptationContext | None = None,
+    success_reasons: frozenset[str] | None = None,
+    prior_success_candidate: DispatchRecord | None = None,
 ) -> LineagePreparationResult | DispatchResult:
     """Mint the per-dispatch state handle, prepare the managed lineage, build the launch tuple.
 
@@ -322,6 +392,13 @@ async def run_lineage_preparation(
     fires BEFORE the post-try assignment.
     """
     effective_name = dispatch_name or effective_name
+    if prior_success_candidate is not None:
+        return _reuse_prior_success_candidate(
+            candidate=prior_success_candidate,
+            success_reasons=success_reasons,
+            provenance=provenance,
+        )
+
     dispatches_dir = tool_ctx.temp_dir / "dispatches"
     dispatches_dir.mkdir(parents=True, exist_ok=True)
     campaign_id = tool_ctx.kitchen_id
@@ -373,6 +450,21 @@ async def run_lineage_preparation(
     )
     handle = identity_preparation.handle
     if identity_preparation.prior_success_record is not None:
+        prior_success_record = identity_preparation.prior_success_record
+        reason_error = success_reason_contract_error(
+            prior_success_record.reason,
+            success_reasons,
+        )
+        if reason_error is not None:
+            return DispatchResult(
+                outcome=DispatchRejected(
+                    error_code=FleetErrorCode.FLEET_L3_RESULT_CONTRACT_VIOLATION,
+                    dispatch_id=prior_success_record.dispatch_id,
+                    message=f"Stored successful dispatch cannot be reused: {reason_error}",
+                    effect_provenance=provenance.snapshot(),
+                ),
+                per_dispatch_state_path=None,
+            )
         logger.info(
             "resume_skipped_prior_success",
             dispatch_name=effective_name,
@@ -384,6 +476,14 @@ async def run_lineage_preparation(
             identities={
                 "dispatch_id": identity_preparation.prior_success_record.dispatch_id,
                 "state_path": handle.state_path,
+            },
+        )
+        provenance.start(
+            DispatchEffectName.PRIOR_DISPATCH_BINDING,
+            retry_relevant=False,
+            identities={
+                "dispatch_id": prior_success_record.dispatch_id,
+                "dispatched_session_id": prior_success_record.dispatched_session_id,
             },
         )
         provenance.confirm(
@@ -499,6 +599,7 @@ async def run_lineage_preparation(
                 effective_backend=effective_backend,
                 tool_ctx=tool_ctx,
                 adaptation_context=adaptation_context,
+                success_reasons=success_reasons,
             ),
             prepare_launch=lambda for_dispatch_id: prepare_launch(
                 for_dispatch_id=for_dispatch_id,
@@ -513,6 +614,7 @@ async def run_lineage_preparation(
                 effective_backend=effective_backend,
                 tool_ctx=tool_ctx,
                 adaptation_context=adaptation_context,
+                success_reasons=success_reasons,
             ),
             create_fresh_handle=lambda: create_fresh_handle(
                 dispatches_dir=dispatches_dir,

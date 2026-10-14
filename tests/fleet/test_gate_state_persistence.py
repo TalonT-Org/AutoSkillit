@@ -155,7 +155,6 @@ class TestDispatchFoodTruckCampaignState:
         async def _fake_execute(**kwargs):
             return DispatchResult(
                 DispatchCompleted(
-                    success=True,
                     dispatch_status=DispatchStatus.SUCCESS,
                     dispatch_id="d1",
                     dispatched_session_id="s1",
@@ -189,7 +188,6 @@ class TestDispatchFoodTruckCampaignState:
         async def _fake_execute(**kwargs):
             return DispatchResult(
                 DispatchCompleted(
-                    success=False,
                     dispatch_status=DispatchStatus.FAILURE,
                     dispatch_id="d1",
                     dispatched_session_id="s1",
@@ -222,7 +220,6 @@ class TestDispatchFoodTruckCampaignState:
         async def _fake_execute(**kwargs):
             return DispatchResult(
                 DispatchCompleted(
-                    success=True,
                     dispatch_status=DispatchStatus.SUCCESS,
                     dispatch_id="d1",
                     dispatched_session_id="s1",
@@ -258,7 +255,6 @@ class TestDispatchFoodTruckCampaignState:
         async def _fake_execute(**kwargs):
             return DispatchResult(
                 DispatchCompleted(
-                    success=True,
                     dispatch_status=DispatchStatus.SUCCESS,
                     dispatch_id="d1",
                     dispatched_session_id="s1",
@@ -330,7 +326,6 @@ class TestCampaignStateFieldCompleteness:
         async def _fake_execute(**kwargs):
             return DispatchResult(
                 DispatchCompleted(
-                    success=True,
                     dispatch_status=DispatchStatus.SUCCESS,
                     dispatch_id="d-timing",
                     dispatched_session_id="s-timing",
@@ -400,7 +395,6 @@ class TestCampaignStateFieldCompleteness:
         async def _fake_execute(**kwargs):
             return DispatchResult(
                 DispatchCompleted(
-                    success=True,
                     dispatch_status=DispatchStatus.SUCCESS,
                     dispatch_id="d-token",
                     dispatched_session_id="s-token",
@@ -470,7 +464,6 @@ class TestCampaignStateFieldCompleteness:
         async def _fake_execute(**kwargs):
             return DispatchResult(
                 DispatchCompleted(
-                    success=True,
                     dispatch_status=DispatchStatus.SUCCESS,
                     dispatch_id="d-field",
                     dispatched_session_id="s-field",
@@ -515,7 +508,6 @@ class TestCampaignStateFieldCompleteness:
         async def _fake_execute(**kwargs):
             return DispatchResult(
                 DispatchCompleted(
-                    success=True,
                     dispatch_status=DispatchStatus.SUCCESS,
                     dispatch_id="d-fallback",
                     dispatched_session_id="s-fallback",
@@ -795,7 +787,6 @@ class TestValidationFailureCampaignState:
         async def _fake_execute(**kwargs):
             return DispatchResult(
                 DispatchCompleted(
-                    success=False,
                     dispatch_status=DispatchStatus.FAILURE,
                     dispatch_id="d1",
                     dispatched_session_id="s1",

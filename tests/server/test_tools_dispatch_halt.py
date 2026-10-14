@@ -39,6 +39,45 @@ def _write_campaign_state(state_path: Path, dispatches: list[dict]) -> None:
     )
 
 
+def _setup_declared_campaign_dispatch(tool_ctx, recipe_name: str) -> None:
+    from autoskillit.recipe.repository import DefaultRecipeRepository
+
+    tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
+    recipe_dir = tool_ctx.project_dir / ".autoskillit" / "recipes"
+    recipe_dir.mkdir(parents=True, exist_ok=True)
+    (recipe_dir / f"{recipe_name}.yaml").write_text(
+        f"""\
+name: {recipe_name}
+description: A recipe with one declared success terminal.
+kind: standard
+kitchen_rules: [Stop after the successful terminal is reached.]
+ingredients: {{}}
+steps:
+  complete:
+    action: stop
+    message: 'Example sentinel: {{"success": true, "reason": "campaign_recipe_complete"}}'
+"""
+    )
+    repo = DefaultRecipeRepository()
+    tool_ctx.recipes = repo
+    tool_ctx.executor = InMemoryHeadlessExecutor()
+    validation_result = repo.load_and_validate(
+        recipe_name,
+        tool_ctx.project_dir,
+        temp_dir=tool_ctx.temp_dir,
+    )
+    error_findings = [
+        item
+        for item in validation_result.get("suggestions", [])
+        if item.get("severity") == "error"
+    ]
+    assert validation_result.get("valid") is True, (
+        "Historical-success fixture must pass the real recipe loader; "
+        f"errors={validation_result.get('errors')!r}, findings={error_findings!r}"
+    )
+    assert validation_result.get("_dispatch_success_reasons") == ["campaign_recipe_complete"]
+
+
 class TestDispatchFoodTruckHaltEnforcement:
     @pytest.fixture(autouse=True)
     def _set_fleet_session(self, monkeypatch):
@@ -105,6 +144,110 @@ class TestDispatchFoodTruckHaltEnforcement:
         result = json.loads(await dispatch_food_truck(recipe="test-recipe", task="t"))
         assert "dispatch_id" in result
 
+    @pytest.mark.parametrize(
+        ("stored_reason", "message_fragment"),
+        [
+            pytest.param("", "missing", id="empty-reason"),
+            pytest.param("other_recipe_complete", "not declared", id="undeclared-reason"),
+        ],
+    )
+    @pytest.mark.anyio
+    async def test_campaign_shortcut_rejects_invalid_success_without_mutation_or_commit(
+        self,
+        tool_ctx_kitchen_open,
+        monkeypatch,
+        tmp_path,
+        stored_reason,
+        message_fragment,
+    ):
+        from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+        recipe_name = "declared-campaign-recipe"
+        state_path = tmp_path / "campaign-state.json"
+        monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(state_path))
+        monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
+        _setup_declared_campaign_dispatch(tool_ctx_kitchen_open, recipe_name)
+        write_initial_state(
+            state_path,
+            tool_ctx_kitchen_open.kitchen_id,
+            "test-campaign",
+            "/fake/manifest.yaml",
+            [
+                DispatchRecord(
+                    name=recipe_name,
+                    status=DispatchStatus.SUCCESS,
+                    dispatch_id="historical-campaign-dispatch",
+                    dispatched_session_id="historical-campaign-session",
+                    reason=stored_reason,
+                )
+            ],
+        )
+        original_state = state_path.read_bytes()
+
+        envelope = json.loads(
+            await dispatch_food_truck(
+                recipe=recipe_name,
+                task="t",
+                dispatch_name=recipe_name,
+            )
+        )
+
+        assert envelope["success"] is False
+        assert envelope["error"] == "fleet_l3_result_contract_violation"
+        assert envelope["dispatch_id"] == "historical-campaign-dispatch"
+        assert message_fragment in envelope["user_visible_message"]
+        assert tool_ctx_kitchen_open.executor.dispatch_calls == []
+        assert state_path.read_bytes() == original_state
+        assert not any(
+            effect["name"] == "commit" and effect["phase"] == "confirmed"
+            for effect in envelope["effect_provenance"]["effects"]
+        )
+
+    @pytest.mark.anyio
+    async def test_campaign_shortcut_reuses_declared_reason_without_rewriting_history(
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
+    ):
+        from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+        recipe_name = "declared-campaign-recipe"
+        state_path = tmp_path / "campaign-state.json"
+        monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(state_path))
+        monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
+        _setup_declared_campaign_dispatch(tool_ctx_kitchen_open, recipe_name)
+        write_initial_state(
+            state_path,
+            tool_ctx_kitchen_open.kitchen_id,
+            "test-campaign",
+            "/fake/manifest.yaml",
+            [
+                DispatchRecord(
+                    name=recipe_name,
+                    status=DispatchStatus.SUCCESS,
+                    dispatch_id="historical-campaign-dispatch",
+                    dispatched_session_id="historical-campaign-session",
+                    reason="campaign_recipe_complete",
+                )
+            ],
+        )
+        original_state = state_path.read_bytes()
+
+        envelope = json.loads(
+            await dispatch_food_truck(
+                recipe=recipe_name,
+                task="t",
+                dispatch_name=recipe_name,
+            )
+        )
+
+        assert envelope["success"] is True
+        assert envelope["dispatch_status"] == "success"
+        assert envelope["reason"] == "campaign_recipe_complete"
+        assert envelope["dispatch_id"] == "historical-campaign-dispatch"
+        assert tool_ctx_kitchen_open.executor.dispatch_calls == []
+        assert state_path.read_bytes() == original_state
+
     @pytest.mark.anyio
     async def test_dispatch_proceeds_when_state_file_missing(
         self, tool_ctx_kitchen_open, monkeypatch, tmp_path
@@ -150,7 +293,6 @@ class TestDispatchFoodTruckHaltEnforcement:
             AsyncMock(
                 return_value=DispatchResult(
                     outcome=DispatchCompleted(
-                        success=False,
                         dispatch_status=_DS.RESUMABLE,
                         dispatch_id="test-dispatch-id",
                         dispatched_session_id="sess-abc",

@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any
 import autoskillit.fleet._api as _facade
 from autoskillit.core import (
     CaptureEntrySpec,
+    FleetErrorCode,
     ManagedHeadlessSessionTerminalState,
     SessionCheckpoint,
     SkillResult,
@@ -34,6 +35,7 @@ from autoskillit.core import (
 from autoskillit.fleet._native_shell_capture import set_lineage_terminal_state
 from autoskillit.fleet._outcome import (
     _checkpoint_to_dict,
+    _sanitize_managed_capture_diagnostics,
     build_dispatch_result,
     classify_dispatch_outcome,
 )
@@ -74,7 +76,6 @@ class ClassificationResult:
     extended_chain: list[str]
     dispatched_session_id: str | None  # for finalize to override skill_result.session_id
     skill_result: SkillResult  # for finalize_state_write
-    result_success: bool
     dispatch_checkpoint: SessionCheckpoint | None  # for finalize resume_checkpoint serialization
 
 
@@ -236,6 +237,32 @@ async def _cleanup_non_success_non_resumable_labels(
     return labels_cleaned
 
 
+def _log_success_reason_contract_violation(
+    *,
+    reason: str,
+    parsed_result: Any,
+    dispatch_id: str,
+    success_reasons: frozenset[str] | None,
+) -> None:
+    """Log sanitized evidence when a successful result violates its reason contract."""
+    if reason != FleetErrorCode.FLEET_L3_RESULT_CONTRACT_VIOLATION:
+        return
+    payload = parsed_result.payload if parsed_result is not None else None
+    claimed_reason = payload.get("reason") if payload is not None else None
+    if isinstance(claimed_reason, str):
+        claimed_reason = _sanitize_managed_capture_diagnostics(claimed_reason)
+    elif claimed_reason is not None:
+        claimed_reason = f"<{type(claimed_reason).__name__}>"
+    logger.warning(
+        "dispatch_success_reason_contract_violation",
+        dispatch_id=dispatch_id,
+        claimed_reason=claimed_reason,
+        declared_success_reasons=sorted(
+            _sanitize_managed_capture_diagnostics(item) for item in (success_reasons or ())
+        ),
+    )
+
+
 async def run_outcome_classification(
     *,
     skill_result: SkillResult,
@@ -256,6 +283,7 @@ async def run_outcome_classification(
     dispatch_sidecar_path: str,
     resume_line_offset: int = 0,
     prior_dispatch_ids: list[str] | None = None,
+    success_reasons: frozenset[str] | None = None,
 ) -> ClassificationResult:
     """Phase E — classifies the dispatch outcome.
 
@@ -292,17 +320,17 @@ async def run_outcome_classification(
         sidecar_exists=sidecar_file.exists(),
         checkpoint=dispatch_checkpoint,
         subtype=skill_result.subtype,
+        success_reasons=success_reasons,
     )
-    result_success = bool(
-        parsed_result is not None
-        and parsed_result.outcome == "completed_clean"
-        and parsed_result.payload
-        and parsed_result.payload.get("success", False)
+    _log_success_reason_contract_violation(
+        reason=reason,
+        parsed_result=parsed_result,
+        dispatch_id=dispatch_id,
+        success_reasons=success_reasons,
     )
     if tracker_authority_error is not None:
         final_status = DispatchStatus.FAILURE
         reason = tracker_authority_error
-        result_success = False
 
     if final_status != DispatchStatus.RESUMABLE:
         terminal_state = (
@@ -399,7 +427,6 @@ async def run_outcome_classification(
             else skill_result.session_id
         ),
         skill_result=skill_result,
-        result_success=result_success,
         dispatch_checkpoint=dispatch_checkpoint,
     )
 
@@ -512,7 +539,6 @@ async def finalize_state_write(
     # Build and return the DispatchResult envelope.
     return build_dispatch_result(
         parsed_result=parsed_result,
-        result_success=classification.result_success,
         final_status=final_status,
         reason=reason or "",
         dispatch_id=dispatch_id,

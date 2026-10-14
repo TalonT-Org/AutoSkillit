@@ -15,6 +15,7 @@ from autoskillit.core import (
     SkillResult,
     truncate_text,
 )
+from autoskillit.fleet._sidecar_synthesis import SIDECAR_RECOVERY_REASON
 from autoskillit.fleet.campaign_state.state import (
     DispatchRecord,
     DispatchStateHandle,
@@ -86,6 +87,25 @@ def _sanitize_managed_capture_diagnostics(value: str) -> str:
     )
 
 
+def success_reason_contract_error(
+    reason: object,
+    success_reasons: frozenset[str] | None,
+) -> str | None:
+    """Return a sanitized diagnostic when a success reason violates declarations."""
+    if success_reasons is None:
+        return None
+    if not isinstance(reason, str):
+        return "Dispatch success reason must be a string."
+    if not reason:
+        return "Dispatch success is missing its declared reason."
+    if reason not in success_reasons:
+        sanitized_reason = _sanitize_managed_capture_diagnostics(reason)
+        if sanitized_reason:
+            return f"Dispatch success reason {sanitized_reason!r} is not declared."
+        return "Dispatch success reason is not declared."
+    return None
+
+
 def _sanitize_failed_managed_capture_reason(value: str) -> str:
     """Redact private lineage details while retaining failure causes."""
     normalized = _MANAGED_LINEAGE_PATH_RE.sub("<redacted>", value)
@@ -132,6 +152,34 @@ def _classify_missing_result(
     return DispatchStatus.FAILURE, error_code
 
 
+def _classify_clean_result(
+    parsed: L3ParseResult,
+    *,
+    success_reasons: frozenset[str] | None,
+) -> tuple[DispatchStatus, str]:
+    """Classify a decoded result block, including success-reason enforcement."""
+    payload = parsed.payload
+    if payload and payload.get("success") is True:
+        raw_reason = payload.get("reason", "")
+        if parsed.source == "sidecar":
+            if raw_reason != SIDECAR_RECOVERY_REASON:
+                return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_RESULT_CONTRACT_VIOLATION
+            return DispatchStatus.SUCCESS, _sanitize_managed_capture_diagnostics(raw_reason)
+        if success_reason_contract_error(raw_reason, success_reasons) is not None:
+            return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_RESULT_CONTRACT_VIOLATION
+        return DispatchStatus.SUCCESS, _sanitize_managed_capture_diagnostics(str(raw_reason))
+    if payload and payload.get("reason", "") == FleetErrorCode.FLEET_QUOTA_EXHAUSTED:
+        return DispatchStatus.RESUMABLE, FleetErrorCode.FLEET_QUOTA_EXHAUSTED
+
+    raw_reason = str(payload.get("reason", "")) if payload else ""
+    reason = _sanitize_managed_capture_diagnostics(
+        _sanitize_failed_managed_capture_reason(raw_reason)
+    )
+    if raw_reason and not reason:
+        reason = FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH
+    return DispatchStatus.FAILURE, reason
+
+
 def classify_dispatch_outcome(
     parsed: L3ParseResult | None,
     skill_result: SkillResult,
@@ -139,6 +187,7 @@ def classify_dispatch_outcome(
     sidecar_exists: bool = False,
     checkpoint: SessionCheckpoint | None = None,
     subtype: str = "",
+    success_reasons: frozenset[str] | None = None,
 ) -> tuple[DispatchStatus, str]:
     """Map L2 food truck subprocess signals to a (DispatchStatus, reason) pair.
 
@@ -148,7 +197,7 @@ def classify_dispatch_outcome(
       1. timeout + session_id + lifespan_started + (checkpoint or sidecar)
          + not abandon → RESUMABLE
       2. timeout (any other case) → FAILURE
-      3. completed_clean + success flag → SUCCESS
+      3. completed_clean + true success + valid reason contract → SUCCESS
       4. completed_clean + no success → FAILURE
       5. completed_dirty → FAILURE (fleet_l3_parse_failed)
       6. no_sentinel + session_id + lifespan_started + (checkpoint or sidecar)
@@ -174,21 +223,11 @@ def classify_dispatch_outcome(
             error_code=FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK,
         )
 
-    if parsed.outcome == "completed_clean" and parsed.payload and parsed.payload.get("success"):
-        reason = _sanitize_managed_capture_diagnostics(str(parsed.payload.get("reason", "")))
-        return DispatchStatus.SUCCESS, reason
-    if parsed.outcome == "completed_clean" and parsed.payload:
-        reason = parsed.payload.get("reason", "")
-        if reason == FleetErrorCode.FLEET_QUOTA_EXHAUSTED:
-            return DispatchStatus.RESUMABLE, FleetErrorCode.FLEET_QUOTA_EXHAUSTED
     if parsed.outcome == "completed_clean":
-        raw_reason = str(parsed.payload.get("reason", "")) if parsed.payload else ""
-        reason = _sanitize_managed_capture_diagnostics(
-            _sanitize_failed_managed_capture_reason(raw_reason)
+        return _classify_clean_result(
+            parsed,
+            success_reasons=success_reasons,
         )
-        if raw_reason and not reason:
-            reason = FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH
-        return DispatchStatus.FAILURE, reason
     if parsed.outcome == "completed_dirty":
         return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_PARSE_FAILED
     return _classify_missing_result(
@@ -202,7 +241,6 @@ def classify_dispatch_outcome(
 def build_dispatch_result(
     *,
     parsed_result: L3ParseResult | None,
-    result_success: bool,
     final_status: DispatchStatus,
     reason: str,
     dispatch_id: str,
@@ -234,7 +272,6 @@ def build_dispatch_result(
     if parsed_result is not None and parsed_result.outcome == "completed_clean":
         return DispatchResult(
             DispatchCompleted(
-                success=result_success,
                 dispatch_status=final_status,
                 reason=reason,
                 l3_payload=parsed_result.payload,
@@ -246,9 +283,8 @@ def build_dispatch_result(
     if parsed_result is not None and parsed_result.outcome == "completed_dirty":
         return DispatchResult(
             DispatchCompleted(
-                success=False,
                 dispatch_status=final_status,
-                reason=FleetErrorCode.FLEET_L3_PARSE_FAILED,
+                reason=reason,
                 l3_payload=None,
                 l3_raw_body=parsed_result.raw_body,
                 l3_parse_error=parsed_result.parse_error,
@@ -259,7 +295,6 @@ def build_dispatch_result(
         )
     return DispatchResult(
         DispatchCompleted(
-            success=False,
             dispatch_status=final_status,
             reason=reason,
             l3_payload=None,
@@ -279,7 +314,6 @@ def build_success_short_circuit(
     """Mirror a prior succeeded dispatch without launching a new subprocess."""
     return DispatchResult(
         outcome=DispatchCompleted(
-            success=True,
             dispatch_status=DispatchStatus.SUCCESS,
             dispatch_id=record.dispatch_id,
             dispatched_session_id=record.dispatched_session_id,

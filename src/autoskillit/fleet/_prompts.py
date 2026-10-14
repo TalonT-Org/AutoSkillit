@@ -7,6 +7,7 @@ from both server and CLI layers without introducing cross-L3 coupling.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 
 import regex as re
 
@@ -77,6 +78,7 @@ def _build_food_truck_prompt(
     caller_instructions: str | None = None,
     has_unguarded_filesystem_access: bool = False,
     projected_sous_chef: str = "",
+    success_reasons: Sequence[str] = (),
 ) -> str:
     """Build the system prompt for an L2 food truck headless session.
 
@@ -97,6 +99,18 @@ def _build_food_truck_prompt(
         )
 
     dispatch_id_short = dispatch_id[:8]
+    declared_success_reasons = sorted(success_reasons)
+    if declared_success_reasons:
+        success_reason_guidance = (
+            "use exactly the reason declared by the reached success stop. "
+            f"Declared success reasons: {json.dumps(declared_success_reasons)}. "
+            "Do not substitute a generic reason such as 'completed'."
+        )
+    else:
+        success_reason_guidance = (
+            "use a concise completion reason such as 'completed'; the active recipe graph "
+            "declares no success reasons."
+        )
     ingredients_json = json.dumps(ingredients)
     ingredients_pretty_json = json.dumps(ingredients, indent=2)
 
@@ -164,6 +178,7 @@ H3b — STOP STEP SEMANTICS:
   Emit the L3 sentinel.
 {STOP_STEP_EVIDENCE_DOCTRINE_INDENTED}
   Set success=true for completion terminals, success=false for failure/escalation terminals.
+  For success, {success_reason_guidance}
   Do NOT call any MCP tools after a stop step.
   Do NOT attempt recovery, error reporting, or off-recipe actions after a stop step.
   A stop step is an INTENTIONAL terminus — the recipe author designed this as the endpoint.
@@ -330,8 +345,9 @@ as your final output. No other text after the sentinel.
 
 Fields:
 - success: true if all mandatory steps completed without unresolved failures
-- reason: "completed", "failed", "quota_exhausted", "timeout",
-  "open_kitchen_failed", "missing_on_failure", "degraded_tool_response"
+- reason: for success, {success_reason_guidance} For failure, report the observed
+  failure reason. Reserved failure reasons are "fleet_quota_exhausted", "timeout",
+  "open_kitchen_failed", "missing_on_failure", and "degraded_tool_response".
 - summary: One-line description of what happened{extra_fields_docs}
 - Failure terminals may also include optional evidence fields reason_kind,
   outcome_fields, and diagnostic_result. Include only observed values and never invent

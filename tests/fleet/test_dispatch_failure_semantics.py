@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock
 
 import pytest
@@ -15,8 +16,10 @@ from tests.fleet._helpers import (
     _make_completed_clean,
     _make_completed_dirty,
     _make_no_sentinel,
+    _noop_quota_refresher,
     _read_dispatch_record,
     _run,
+    _setup_bundled_implementation_dispatch,
     _setup_dispatch,
 )
 
@@ -302,6 +305,367 @@ class TestCompletedCleanPath:
 
         record = _read_dispatch_record(tool_ctx)
         assert record["reason"] == "my-failure-reason"
+
+    @pytest.mark.anyio
+    async def test_context_exhausted_session_cannot_become_success_from_payload(
+        self, tool_ctx, monkeypatch
+    ):
+        import dataclasses
+
+        from autoskillit.core import RetryReason
+        from tests.fakes import _DEFAULT_SKILL_RESULT
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        tool_ctx.executor = InMemoryHeadlessExecutor(
+            default_result=dataclasses.replace(
+                _DEFAULT_SKILL_RESULT,
+                success=True,
+                retry_reason=RetryReason.CONTEXT_EXHAUSTED,
+            )
+        )
+        monkeypatch.setattr(
+            fleet_api,
+            "parse_l3_result_block",
+            lambda **_: _make_completed_clean(success=True, reason="done"),
+        )
+
+        envelope = await _run(tool_ctx)
+        record = _read_dispatch_record(tool_ctx)
+
+        assert envelope["success"] is False
+        assert envelope["dispatch_status"] == "failure"
+        assert envelope["reason"] == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK.value
+        assert record["status"] == "failure"
+        assert record["reason"] == envelope["reason"]
+
+
+class TestTrackerAuthorityEnvelope:
+    @pytest.mark.anyio
+    async def test_tracker_authority_error_overrides_clean_success_envelope(
+        self, tool_ctx, monkeypatch
+    ):
+        _setup_dispatch(tool_ctx, monkeypatch)
+        monkeypatch.setattr(
+            fleet_api,
+            "load_dispatch_progress",
+            lambda **_: (
+                tool_ctx.temp_dir / "missing-sidecar.jsonl",
+                [],
+                None,
+                "tracker_state_authority_error",
+            ),
+        )
+        monkeypatch.setattr(
+            fleet_api,
+            "parse_l3_result_block",
+            lambda **_: _make_completed_clean(success=True, reason="done"),
+        )
+
+        envelope = await _run(tool_ctx)
+        record = _read_dispatch_record(tool_ctx)
+
+        assert envelope["success"] is False
+        assert envelope["dispatch_status"] == "failure"
+        assert envelope["reason"] == "tracker_state_authority_error"
+        assert envelope["error"] == "tracker_state_authority_error"
+        assert record["status"] == "failure"
+        assert record["reason"] == envelope["reason"]
+
+    @pytest.mark.anyio
+    async def test_dirty_parse_diagnostics_survive_tracker_reason_override(
+        self, tool_ctx, monkeypatch
+    ):
+        _setup_dispatch(tool_ctx, monkeypatch)
+        monkeypatch.setattr(
+            fleet_api,
+            "load_dispatch_progress",
+            lambda **_: (
+                tool_ctx.temp_dir / "missing-sidecar.jsonl",
+                [],
+                None,
+                "tracker_state_authority_error",
+            ),
+        )
+        monkeypatch.setattr(
+            fleet_api,
+            "parse_l3_result_block",
+            lambda **_: _make_completed_dirty(),
+        )
+
+        envelope = await _run(tool_ctx)
+        record = _read_dispatch_record(tool_ctx)
+
+        assert envelope["success"] is False
+        assert envelope["dispatch_status"] == "failure"
+        assert envelope["reason"] == "tracker_state_authority_error"
+        assert envelope["error"] == "tracker_state_authority_error"
+        assert envelope["l3_raw_body"] == "garbled"
+        assert envelope["l3_parse_error"] == "json decode error"
+        assert record["status"] == "failure"
+        assert record["reason"] == envelope["reason"]
+
+
+class TestDeclaredSuccessContract:
+    @pytest.mark.parametrize(
+        ("reason", "include_reason", "claimed_reason"),
+        [
+            pytest.param("", False, None, id="missing"),
+            pytest.param("", True, "", id="empty"),
+            pytest.param("unlisted_reason", True, "unlisted_reason", id="undeclared"),
+        ],
+    )
+    @pytest.mark.anyio
+    async def test_implementation_rejects_success_without_its_declared_reason(
+        self, tool_ctx, monkeypatch, reason, include_reason, claimed_reason
+    ):
+        import structlog
+
+        _setup_bundled_implementation_dispatch(tool_ctx, monkeypatch)
+        monkeypatch.setattr(
+            fleet_api,
+            "parse_l3_result_block",
+            lambda **_: _make_completed_clean(
+                success=True,
+                reason=reason,
+                include_reason=include_reason,
+            ),
+        )
+
+        with structlog.testing.capture_logs() as logs:
+            envelope = await _run(tool_ctx, recipe="implementation")
+
+        record = _read_dispatch_record(tool_ctx)
+        error_code = FleetErrorCode.FLEET_L3_RESULT_CONTRACT_VIOLATION.value
+        assert envelope["success"] is False
+        assert envelope["dispatch_status"] == "failure"
+        assert envelope["reason"] == error_code
+        assert envelope["error"] == error_code
+        assert record["status"] == "failure"
+        assert record["reason"] == envelope["reason"]
+
+        warnings = [
+            item
+            for item in logs
+            if item.get("event") == "dispatch_success_reason_contract_violation"
+        ]
+        assert len(warnings) == 1
+        assert warnings[0]["dispatch_id"] == envelope["dispatch_id"]
+        assert warnings[0]["claimed_reason"] == claimed_reason
+        assert warnings[0]["declared_success_reasons"] == ["implementation_complete"]
+
+    @pytest.mark.anyio
+    async def test_implementation_accepts_a_declared_success_reason(self, tool_ctx, monkeypatch):
+        _setup_bundled_implementation_dispatch(tool_ctx, monkeypatch)
+        monkeypatch.setattr(
+            fleet_api,
+            "parse_l3_result_block",
+            lambda **_: _make_completed_clean(
+                success=True,
+                reason="implementation_complete",
+            ),
+        )
+
+        envelope = await _run(tool_ctx, recipe="implementation")
+        record = _read_dispatch_record(tool_ctx)
+
+        assert envelope["success"] is True
+        assert envelope["dispatch_status"] == "success"
+        assert envelope["reason"] == "implementation_complete"
+        assert record["status"] == "success"
+        assert record["reason"] == envelope["reason"]
+
+
+def _setup_composed_declaration_recipe(tool_ctx, monkeypatch, recipe_name: str):
+    from autoskillit.recipe.repository import DefaultRecipeRepository
+
+    _setup_dispatch(tool_ctx, monkeypatch, recipe_name=recipe_name)
+    recipe_dir = tool_ctx.project_dir / ".autoskillit" / "recipes"
+    sub_recipe_dir = recipe_dir / "sub-recipes"
+    sub_recipe_dir.mkdir(parents=True, exist_ok=True)
+    (recipe_dir / f"{recipe_name}.yaml").write_text(
+        f"""\
+name: {recipe_name}
+description: A parent with a reasonless success stop and an optional child.
+kitchen_rules: [Follow the active recipe routes and stop when complete.]
+ingredients:
+  include_child:
+    description: Include the child recipe.
+    default: "true"
+    hidden: true
+steps:
+  child:
+    sub_recipe: declaration-child
+    gate: include_child
+    on_success: parent_done
+    on_failure: escalate
+  parent_done:
+    action: stop
+    message: 'Example sentinel: {{"success": true}}'
+"""
+    )
+    (sub_recipe_dir / "declaration-child.yaml").write_text(
+        """\
+name: declaration-child
+description: A child with a declared success stop.
+kitchen_rules: [Stop only after the child work is complete.]
+steps:
+  work:
+    action: confirm
+    message: Complete the child work.
+    on_success: child_done
+    on_failure: done
+  child_done:
+    action: stop
+    message: 'Example sentinel: {"success": true, "reason": "child_complete"}'
+"""
+    )
+    repo = DefaultRecipeRepository()
+    tool_ctx.recipes = repo
+    return repo
+
+
+class TestComposedSuccessDeclarations:
+    @pytest.mark.parametrize(
+        (
+            "include_child",
+            "success_reason",
+            "include_reason",
+            "expected_reasons",
+            "expected_success",
+        ),
+        [
+            pytest.param(
+                "true",
+                "",
+                False,
+                frozenset({"child_complete"}),
+                False,
+                id="active-child-needs-reason",
+            ),
+            pytest.param(
+                "true",
+                "child_complete",
+                True,
+                frozenset({"child_complete"}),
+                True,
+                id="active-child-declared-reason",
+            ),
+            pytest.param(
+                "false",
+                "",
+                False,
+                None,
+                True,
+                id="pruned-child-reasonless-parent",
+            ),
+        ],
+    )
+    @pytest.mark.anyio
+    async def test_active_composed_declarations_reach_context_prompt_and_classifier(
+        self,
+        tool_ctx,
+        monkeypatch,
+        include_child,
+        success_reason,
+        include_reason,
+        expected_reasons,
+        expected_success,
+    ):
+        from autoskillit.fleet._prompts import _build_food_truck_prompt
+        from autoskillit.fleet.campaign_state.state_effects import DispatchProvenanceTracker
+        from autoskillit.fleet.dispatch import _classification
+        from autoskillit.fleet.dispatch._validation import RecipeContext, run_pre_launch_gating
+
+        recipe_name = "composed-declaration-dispatch"
+        repo = _setup_composed_declaration_recipe(tool_ctx, monkeypatch, recipe_name)
+        ingredients = {"include_child": include_child}
+        validation_result = repo.load_and_validate(
+            recipe_name,
+            tool_ctx.project_dir,
+            temp_dir=tool_ctx.temp_dir,
+            ingredient_overrides=ingredients,
+        )
+        error_findings = [
+            item
+            for item in validation_result.get("suggestions", [])
+            if item.get("severity") == "error"
+        ]
+        assert validation_result.get("valid") is True, (
+            "Composed fixture must pass the real recipe loader; "
+            f"errors={validation_result.get('errors')!r}, findings={error_findings!r}"
+        )
+        expected_list = sorted(expected_reasons) if expected_reasons is not None else None
+        assert validation_result.get("_dispatch_success_reasons") == expected_list
+
+        gating_result = await run_pre_launch_gating(
+            tool_ctx=tool_ctx,
+            recipe=recipe_name,
+            task="dispatch the composed recipe",
+            ingredients=ingredients,
+            dispatch_name=None,
+            provenance=DispatchProvenanceTracker(),
+        )
+        assert isinstance(gating_result, RecipeContext)
+        assert gating_result.success_reasons == expected_reasons
+
+        prompt_args: list[dict] = []
+
+        def prompt_builder(**kwargs):
+            prompt_args.append(kwargs)
+            return _build_food_truck_prompt(
+                mcp_prefix="mcp__autoskillit__",
+                **kwargs,
+            )
+
+        classifier_calls: list[dict] = []
+        classify = _classification.classify_dispatch_outcome
+
+        def capture_classifier(*args, **kwargs):
+            classifier_calls.append(kwargs)
+            return classify(*args, **kwargs)
+
+        monkeypatch.setattr(_classification, "classify_dispatch_outcome", capture_classifier)
+        monkeypatch.setattr(
+            fleet_api,
+            "parse_l3_result_block",
+            lambda **_: _make_completed_clean(
+                success=True,
+                reason=success_reason,
+                include_reason=include_reason,
+            ),
+        )
+
+        result = await fleet_api.execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe=recipe_name,
+            task="dispatch the composed recipe",
+            ingredients=ingredients,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=prompt_builder,
+            quota_refresher=_noop_quota_refresher,
+        )
+
+        envelope = json.loads(result.outcome.to_envelope())
+        record = _read_dispatch_record(tool_ctx)
+        assert prompt_args
+        assert prompt_args[0]["success_reasons"] == sorted(expected_reasons or ())
+        if expected_reasons:
+            prompt = tool_ctx.executor.dispatch_calls[0].orchestrator_prompt
+            assert "child_complete" in prompt
+        else:
+            prompt = tool_ctx.executor.dispatch_calls[0].orchestrator_prompt
+            assert "child_complete" not in prompt
+        assert classifier_calls[0]["success_reasons"] == expected_reasons
+        assert envelope["success"] is expected_success
+        assert record["status"] == ("success" if expected_success else "failure")
+        if not expected_success:
+            error_code = FleetErrorCode.FLEET_L3_RESULT_CONTRACT_VIOLATION.value
+            assert envelope["reason"] == error_code
+            assert record["reason"] == error_code
+        else:
+            assert envelope["reason"] == success_reason
+            assert record["reason"] == success_reason
 
 
 _SIDECAR_INGREDIENTS = {"issue_urls": RecipeIngredient(description="Issue URLs")}

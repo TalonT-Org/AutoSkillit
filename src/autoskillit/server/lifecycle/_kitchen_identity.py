@@ -62,7 +62,14 @@ def retire_kitchen_identity(ctx: ToolContext) -> None:
             if retire_recipe_artifacts(ctx.temp_dir, activation_id=activation_id):
                 return
         except Exception:
-            notify_kitchen_retired(activation_id)
+            try:
+                notify_kitchen_retired(activation_id)
+            except Exception:
+                logger.warning(
+                    "kitchen_activation_retirement_notification_failed",
+                    activation_id=activation_id.value,
+                    exc_info=True,
+                )
             raise
         logger.warning(
             "kitchen_activation_artifact_retirement_failed",

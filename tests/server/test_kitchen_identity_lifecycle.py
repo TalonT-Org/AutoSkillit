@@ -307,6 +307,34 @@ def test_retire_kitchen_identity_closes_and_retires_memory_stores_on_artifact_fa
     assert cache.get(key) is None
 
 
+def test_retirement_preserves_artifact_error_when_notification_also_fails(tool_ctx, monkeypatch):
+    from structlog.testing import capture_logs
+
+    from autoskillit.pipeline import KitchenOpenPhase
+    from autoskillit.server.lifecycle import _kitchen_identity
+    from autoskillit.server.recipe import _recipe_artifact
+    from autoskillit.server.recipe.section import _lifecycle
+
+    _kitchen_identity.establish_kitchen_identity(tool_ctx)
+    activation_id = tool_ctx.kitchen_activation_id
+    artifact_error = RuntimeError("tombstone write failed")
+    notify = Mock(side_effect=RuntimeError("notification lock failed"))
+    monkeypatch.setattr(
+        _recipe_artifact, "retire_recipe_artifacts", Mock(side_effect=artifact_error)
+    )
+    monkeypatch.setattr(_lifecycle, "notify_kitchen_retired", notify)
+
+    with capture_logs() as logs, pytest.raises(RuntimeError) as exc_info:
+        _kitchen_identity.retire_kitchen_identity(tool_ctx)
+
+    assert exc_info.value is artifact_error
+    assert tool_ctx.kitchen_open_state.phase is KitchenOpenPhase.CLOSED
+    notify.assert_called_once_with(activation_id)
+    assert any(
+        event.get("event") == "kitchen_activation_retirement_notification_failed" for event in logs
+    )
+
+
 def test_establish_kitchen_identity_activates_and_resets_owner_cache(tool_ctx):
     from autoskillit.pipeline import (
         KitchenActivationId,

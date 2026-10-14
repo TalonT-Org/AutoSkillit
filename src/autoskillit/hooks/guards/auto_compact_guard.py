@@ -17,6 +17,7 @@ if _RUNTIME_DIR not in sys.path:
 
 from _hook_constants import CODEX_AUTO_COMPACTION_DENIED_REASON  # noqa: E402
 from _hook_output import block, halt_session  # noqa: E402
+from _hook_settings import hook_session_shape  # noqa: E402
 
 _SYSTEM_MESSAGE = (
     "AutoSkillit blocked automatic compaction before changing history. Start a new session, "
@@ -39,8 +40,10 @@ def main() -> None:
         return
     if backend == "codex":
         halt_session(CODEX_AUTO_COMPACTION_DENIED_REASON, system_message=_SYSTEM_MESSAGE)
-    elif os.environ.get("AUTOSKILLIT_SESSION_TYPE") == "orchestrator":
-        block(_SYSTEM_MESSAGE)
+    else:
+        _, session_type = hook_session_shape()
+        if session_type == "orchestrator":
+            block(_SYSTEM_MESSAGE)
 
 
 if __name__ == "__main__":

@@ -127,7 +127,6 @@ The separate manual matcher remains available. Codex continues to use its native
 Files with no registration support their folder; files with several registrations group one related concern.
 
 - `__init__.py` — Support module: PreToolUse guard scripts — invoked as standalone python3 commands.
-- `auto_compact_guard.py` — Published Claude `PreCompact` block for orchestrator auto compaction plus the runtime-only Codex halt registration.
 - `branch_protection_guard.py` — Groups 2 registrations: PreToolUse hook: branch protection guard for merge_worktree and push_to_remote.
 - `ingredient_lock_guard.py` — Groups 2 registrations: PreToolUse guard: deny run_skill calls for steps locked by lock_ingredients.
 - `join_settle_guard.py` — Groups 2 registrations: PostToolUse / PostToolUseFailure settlement — record claimed handle outcomes.

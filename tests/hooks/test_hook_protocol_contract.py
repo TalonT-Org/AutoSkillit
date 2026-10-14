@@ -21,6 +21,13 @@ from tests._hook_protocol_oracle import KNOWN_UNSUPPORTED_CHANNELS
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 
 _EMITTER = "autoskillit.hooks._runtime._hook_output"
+
+# The static scanner sees both backend branches of this shared guard. Each pair
+# marks the channel that cannot execute for that registered backend.
+_UNREACHABLE_CHANNELS_BY_BACKEND_SCRIPT: dict[tuple[str, str], frozenset[str]] = {
+    ("claude", "guards/auto_compact_guard.py"): frozenset({"halt"}),
+    ("codex", "guards/auto_compact_guard.py"): frozenset({"block"}),
+}
 _CODEX_ROUTES: tuple[tuple[str, str | None], ...] = (
     ("unmanaged", None),
     ("parent", "parent"),
@@ -281,11 +288,21 @@ def test_known_unsupported_channels_are_declared() -> None:
     violations = []
     for backend, _route, hook_def in _emitted_hooks():
         for script in hook_def.scripts:
+            unreachable_channels = _UNREACHABLE_CHANNELS_BY_BACKEND_SCRIPT.get(
+                (backend, script), frozenset()
+            )
             for channel, events in scan_script_channels(script).items():
                 event = hook_def.event_type
-                if (backend, channel, event) in KNOWN_UNSUPPORTED_CHANNELS and (
-                    None in events or event in events
-                ):
+                event_is_emitted = None in events or event in events
+                if not event_is_emitted:
+                    continue
+                if channel in unreachable_channels:
+                    assert (backend, channel, event) in KNOWN_UNSUPPORTED_CHANNELS, (
+                        f"{backend} {script} can only bypass {channel}/{event} because its "
+                        "backend branch is unreachable; keep that protocol limitation declared"
+                    )
+                    continue
+                if (backend, channel, event) in KNOWN_UNSUPPORTED_CHANNELS:
                     violations.append((backend, channel, event, script))
 
     assert not violations, f"unsupported hook channels are still emitted: {sorted(violations)}"

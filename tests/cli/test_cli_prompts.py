@@ -768,6 +768,29 @@ def test_fleet_dispatch_infrastructure_section_uses_provenance_disposition():
     assert "[reconcile-ambiguity]" in section
 
 
+def test_fleet_dispatch_context_exhaustion_is_terminal_and_reported():
+    from autoskillit.cli.prompts._prompts import CONTEXT_EXHAUSTION_RECOVERY_CLAUSE
+
+    prompt = _build_fleet_dispatch_prompt(mcp_prefix="mcp__autoskillit__")
+    lower_prompt = prompt.lower()
+
+    assert CONTEXT_EXHAUSTION_RECOVERY_CLAUSE in prompt
+    assert "fleet_l3_context_exhausted" in CONTEXT_EXHAUSTION_RECOVERY_CLAUSE
+    assert "do not resume or retry" in CONTEXT_EXHAUSTION_RECOVERY_CLAUSE.lower()
+    assert "dispatched_session_id" in CONTEXT_EXHAUSTION_RECOVERY_CLAUSE
+    assert "resume_session_id" in CONTEXT_EXHAUSTION_RECOVERY_CLAUSE
+    assert "dispatch_name" in CONTEXT_EXHAUSTION_RECOVERY_CLAUSE
+    assert "reset" in CONTEXT_EXHAUSTION_RECOVERY_CLAUSE.lower()
+    assert "retry_disposition" in CONTEXT_EXHAUSTION_RECOVERY_CLAUSE
+    assert "continue_on_failure" in CONTEXT_EXHAUSTION_RECOVERY_CLAUSE
+    assert "report" in lower_prompt
+    assert "terminal" in lower_prompt
+
+    start = prompt.index("## INFRASTRUCTURE FAILURE RECOVERY")
+    section = prompt[start:]
+    assert "fleet_l3_context_exhausted" not in section
+
+
 def test_campaign_prompt_includes_infrastructure_failure_section():
     """T4: Campaign prompt has an INFRASTRUCTURE FAILURE section."""
     from autoskillit.cli.prompts import _build_fleet_campaign_prompt
@@ -840,6 +863,39 @@ def test_campaign_prompt_infrastructure_section_uses_provenance_disposition():
     assert "[resume-confirmed-effect]" in section
     assert "[reconcile-ambiguity]" in section
     assert "continue_on_failure=False" in section
+
+
+def test_campaign_context_exhaustion_uses_shared_clause_and_campaign_policy():
+    from autoskillit.cli.prompts import _build_fleet_campaign_prompt
+    from autoskillit.cli.prompts._prompts import CONTEXT_EXHAUSTION_RECOVERY_CLAUSE
+    from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind
+
+    recipe = Recipe(
+        name="context-campaign",
+        description="test context exhaustion handling",
+        kind=RecipeKind.CAMPAIGN,
+        dispatches=[CampaignDispatch(name="d1", recipe="impl", task="do it")],
+        continue_on_failure=True,
+    )
+    prompt = _build_fleet_campaign_prompt(
+        campaign_recipe=recipe,
+        manifest_yaml="dispatches:\n  - name: d1",
+        completed_dispatches="",
+        mcp_prefix="mcp__autoskillit__",
+        campaign_id="context-campaign-123",
+    )
+    lower_prompt = prompt.lower()
+
+    assert CONTEXT_EXHAUSTION_RECOVERY_CLAUSE in prompt
+    assert "fleet_l3_context_exhausted" in prompt
+    assert "do not resume or retry" in prompt.lower()
+    assert "continue_on_failure" in prompt
+    assert "continue remaining" in lower_prompt
+    assert "halt" in lower_prompt
+
+    start = prompt.index("## INFRASTRUCTURE FAILURE RECOVERY")
+    section = prompt[start:]
+    assert "fleet_l3_context_exhausted" not in section
 
 
 def test_campaign_prompt_includes_gate_dispatch_handling_section():

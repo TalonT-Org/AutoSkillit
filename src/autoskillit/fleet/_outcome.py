@@ -24,7 +24,10 @@ from autoskillit.fleet.campaign_state.state import (
 )
 from autoskillit.fleet.campaign_state.state_effects import DispatchEffectProvenance
 from autoskillit.fleet.campaign_state.state_outcomes import DispatchCompleted, DispatchResult
-from autoskillit.fleet.campaign_state.state_transitions import _ABANDON_REASONS
+from autoskillit.fleet.campaign_state.state_transitions import (
+    _ABANDON_REASONS,
+    is_context_exhausted,
+)
 from autoskillit.fleet.result_parser import L3ParseResult
 
 ENVELOPE_STDERR_MAX = 2000
@@ -33,6 +36,7 @@ ENVELOPE_STDERR_MAX = 2000
 class _DispatchCommonFields(TypedDict):
     dispatch_id: str
     dispatched_session_id: str
+    diagnostic_message: str
     token_usage: dict[str, Any]
     lifespan_started: bool
     stderr: str
@@ -188,12 +192,13 @@ def classify_dispatch_outcome(
     checkpoint: SessionCheckpoint | None = None,
     subtype: str = "",
     success_reasons: frozenset[str] | None = None,
+    context_compacted: bool = False,
 ) -> tuple[DispatchStatus, str]:
     """Map L2 food truck subprocess signals to a (DispatchStatus, reason) pair.
 
     Pure function — no filesystem access, no side effects.
     Apply these ordered rules:
-      0. controlled context exhaustion → FAILURE
+      0. context exhaustion or compaction attempt → terminal context FAILURE
       1. timeout + session_id + lifespan_started + (checkpoint or sidecar)
          + not abandon → RESUMABLE
       2. timeout (any other case) → FAILURE
@@ -204,8 +209,12 @@ def classify_dispatch_outcome(
          + not abandon → RESUMABLE
       7. no_sentinel (any other case) → FAILURE (fleet_l3_no_result_block)
     """
-    if skill_result.retry_reason == RetryReason.CONTEXT_EXHAUSTED:
-        return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
+    if context_compacted or is_context_exhausted(
+        skill_result.retry_reason or "",
+        skill_result.infra.exit_category or "",
+        skill_result.compaction_attempted,
+    ):
+        return DispatchStatus.FAILURE, FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED
 
     if subtype == "timeout":
         return _classify_missing_result(
@@ -251,11 +260,13 @@ def build_dispatch_result(
     ended_at: float,
     state_path: Path,
     effect_provenance: DispatchEffectProvenance,
+    diagnostic_message: str = "",
 ) -> DispatchResult:
     """Build the bounded fleet envelope without exposing managed diagnostics."""
     common: _DispatchCommonFields = {
         "dispatch_id": dispatch_id,
         "dispatched_session_id": skill_result.session_id or "",
+        "diagnostic_message": diagnostic_message,
         "token_usage": normalize_dispatch_token_usage(
             skill_result.token_usage or {},
             backend=backend_name,

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from autoskillit.core import RetryReason
+from autoskillit.core import InfraExitCategory, RetryReason
 
 
 class DispatchStatus(StrEnum):
@@ -110,6 +110,20 @@ TERMINAL_UNCLEANED_STATUSES: frozenset[DispatchStatus] = frozenset(
     {DispatchStatus.FAILURE, DispatchStatus.INTERRUPTED}
 )
 
+
+def is_context_exhausted(
+    retry_reason: str,
+    infra_exit_category: str,
+    compaction_attempted: bool = False,
+) -> bool:
+    """Return whether retained session evidence makes this dispatch non-resumable."""
+    return (
+        compaction_attempted
+        or retry_reason == RetryReason.CONTEXT_EXHAUSTED
+        or infra_exit_category == InfraExitCategory.CONTEXT_EXHAUSTED
+    )
+
+
 _ABANDON_REASONS: frozenset[str] = frozenset(
     {
         RetryReason.STALE,
@@ -131,5 +145,6 @@ __all__ = [
     "_VISIBLE_IN_BLOCK_STATUSES",
     "TERMINAL_DISPATCH_STATUSES",
     "TERMINAL_UNCLEANED_STATUSES",
+    "is_context_exhausted",
     "_ABANDON_REASONS",
 ]

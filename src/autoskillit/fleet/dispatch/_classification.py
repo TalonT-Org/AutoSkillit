@@ -51,6 +51,7 @@ from autoskillit.fleet.campaign_state.state_effects import (
     DispatchProvenanceTracker,
 )
 from autoskillit.fleet.campaign_state.state_outcomes import DispatchResult
+from autoskillit.fleet.campaign_state.state_transitions import is_context_exhausted
 from autoskillit.fleet.dispatch._cleanup import _post_dispatch_cleanup
 from autoskillit.fleet.dispatch._execution import SpawnContext
 
@@ -89,6 +90,7 @@ class _OutcomeMaterialization:
     tracker_authority_error: str | None
     parsed_result: Any
     extended_chain: list[str]
+    context_compacted: bool
 
 
 def _materialize_outcome(
@@ -128,6 +130,11 @@ def _materialize_outcome(
         incoming_resume_checkpoint
         if incoming_resume_checkpoint is not None
         else loaded_tracker_checkpoint
+    )
+    context_compacted = is_context_exhausted(
+        skill_result.retry_reason or "",
+        skill_result.infra.exit_category or "",
+        skill_result.compaction_attempted,
     )
 
     extended_chain = prior_session_chain[:]
@@ -176,6 +183,7 @@ def _materialize_outcome(
             parsed_result is not None
             and parsed_result.outcome == "no_sentinel"
             and sidecar_entries
+            and not context_compacted
         ):
             from autoskillit.fleet._sidecar_synthesis import (
                 synthesize_from_sidecar,
@@ -194,6 +202,7 @@ def _materialize_outcome(
         tracker_authority_error=tracker_authority_error,
         parsed_result=parsed_result,
         extended_chain=extended_chain,
+        context_compacted=context_compacted,
     )
 
 
@@ -312,6 +321,7 @@ async def run_outcome_classification(
     tracker_authority_error = materialization.tracker_authority_error
     parsed_result = materialization.parsed_result
     extended_chain = materialization.extended_chain
+    context_compacted = materialization.context_compacted
     _issue_urls_raw = spawn_ctx.issue_urls_raw
 
     final_status, reason = classify_dispatch_outcome(
@@ -321,6 +331,7 @@ async def run_outcome_classification(
         checkpoint=dispatch_checkpoint,
         subtype=skill_result.subtype,
         success_reasons=success_reasons,
+        context_compacted=context_compacted,
     )
     _log_success_reason_contract_violation(
         reason=reason,
@@ -328,7 +339,7 @@ async def run_outcome_classification(
         dispatch_id=dispatch_id,
         success_reasons=success_reasons,
     )
-    if tracker_authority_error is not None:
+    if tracker_authority_error is not None and reason != FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED:
         final_status = DispatchStatus.FAILURE
         reason = tracker_authority_error
 
@@ -462,6 +473,7 @@ async def finalize_state_write(
     project_log_dir = classification.project_log_dir
     _issue_urls_raw = spawn_ctx.issue_urls_raw
     dispatch_checkpoint = classification.dispatch_checkpoint
+    diagnostic_message = classification.tracker_authority_error or ""
 
     # Build the DispatchRecord.
     record = DispatchRecord(
@@ -483,6 +495,7 @@ async def finalize_state_write(
         if spawn_ctx.dispatched_create_time
         else 0.0,
         reason=reason or "",
+        diagnostic_message=diagnostic_message,
         retry_reason=skill_result.retry_reason or "",
         infra_exit_category=skill_result.infra.exit_category or "",
         token_usage=normalize_dispatch_token_usage(
@@ -541,6 +554,7 @@ async def finalize_state_write(
         parsed_result=parsed_result,
         final_status=final_status,
         reason=reason or "",
+        diagnostic_message=diagnostic_message,
         dispatch_id=dispatch_id,
         skill_result=skill_result,
         backend_name=effective_backend_name,

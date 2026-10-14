@@ -36,6 +36,7 @@ class TestFleetErrorCodeEnum:
             "fleet_lock_not_initialized",
             "fleet_l3_timeout",
             "fleet_l3_no_result_block",
+            "fleet_l3_context_exhausted",
             "fleet_l3_parse_failed",
             "fleet_l3_result_contract_violation",
             "fleet_l3_startup_or_crash",

@@ -562,6 +562,7 @@ class FleetErrorCode(StrEnum):
     FLEET_L3_NO_RESULT_BLOCK = "fleet_l3_no_result_block"
     FLEET_L3_PARSE_FAILED = "fleet_l3_parse_failed"
     FLEET_L3_RESULT_CONTRACT_VIOLATION = "fleet_l3_result_contract_violation"
+    FLEET_L3_CONTEXT_EXHAUSTED = "fleet_l3_context_exhausted"
     FLEET_L3_STARTUP_OR_CRASH = "fleet_l3_startup_or_crash"
     FLEET_BUDGET_EXCEEDED = "fleet_budget_exceeded"
     FLEET_QUOTA_EXHAUSTED = "fleet_quota_exhausted"

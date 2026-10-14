@@ -272,6 +272,62 @@ class TestSessionChainContinuity:
 
 class TestResumeSuccessGuard:
     @pytest.mark.anyio
+    async def test_context_exhausted_prior_id_is_refused_without_reset_or_spawn(
+        self, tool_ctx, monkeypatch
+    ):
+        from autoskillit.core import FleetErrorCode
+        from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state
+        from autoskillit.fleet._api import execute_dispatch
+        from autoskillit.fleet.campaign_state.state import read_state
+        from autoskillit.fleet.campaign_state.state_outcomes import DispatchRejected
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+
+        dispatches_dir = tool_ctx.temp_dir / "dispatches"
+        dispatches_dir.mkdir(parents=True, exist_ok=True)
+        prior_id = "00000000-0000-0000-0000-000000000109"
+        state_path = dispatches_dir / f"{prior_id}.json"
+        write_initial_state(
+            state_path,
+            tool_ctx.kitchen_id,
+            "camp",
+            "",
+            [
+                DispatchRecord(
+                    name="test-recipe",
+                    status=DispatchStatus.FAILURE,
+                    dispatch_id="context-exhausted-dispatch",
+                    dispatched_session_id="context-exhausted-session",
+                    reason=FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED,
+                )
+            ],
+        )
+        original_state = state_path.read_bytes()
+
+        result = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=lambda **_: "prompt",
+            quota_refresher=_noop_quota_refresher,
+            resume_session_id="context-exhausted-session",
+            prior_dispatch_id=prior_id,
+        )
+
+        assert isinstance(result.outcome, DispatchRejected)
+        assert result.outcome.dispatch_id == "context-exhausted-dispatch"
+        assert len(tool_ctx.executor.dispatch_calls) == 0
+        assert state_path.read_bytes() == original_state
+        state = read_state(state_path)
+        assert state is not None
+        prior = next(d for d in state.dispatches if d.name == "test-recipe")
+        assert prior.status is DispatchStatus.FAILURE
+        assert prior.reason == FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED
+
+    @pytest.mark.anyio
     async def test_resume_rejected_when_prior_dispatch_succeeded(self, tool_ctx, monkeypatch):
         """_run_dispatch returns cached SUCCESS when prior dispatch already succeeded."""
         from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state

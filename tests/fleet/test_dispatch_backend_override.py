@@ -250,7 +250,7 @@ class TestDispatchBackendOverrideThreadsToExecutor:
             ),
         )
         assert status is DispatchStatus.FAILURE
-        assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
+        assert reason == FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED
 
     @pytest.mark.anyio
     async def test_dispatch_backend_override_threads_to_executor(self, tool_ctx, monkeypatch):

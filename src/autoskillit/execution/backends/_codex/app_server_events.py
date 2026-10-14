@@ -29,6 +29,7 @@ from functools import partial
 from typing import Any
 
 from autoskillit.core import (
+    CODEX_CONTEXT_EXHAUSTION_MARKER,
     BackendEventKind,
     CodexEventData,
     CodexEventType,
@@ -92,14 +93,35 @@ def _handle_turn_started(params: Mapping[str, Any]) -> dict[str, Any]:
     return {"type": CodexEventType.TURN_STARTED.value}
 
 
+def _native_error_fields(
+    error_payload: Any,
+    *,
+    fallback_message: str = "",
+) -> tuple[Any, Any]:
+    if not isinstance(error_payload, Mapping):
+        return fallback_message, ""
+    message = error_payload.get("message") or fallback_message
+    code = error_payload.get("code") or ""
+    if error_payload.get("codexErrorInfo") == "contextWindowExceeded":
+        raw_message = error_payload.get("message")
+        message = raw_message if isinstance(raw_message, str) else fallback_message
+        code = CODEX_CONTEXT_EXHAUSTION_MARKER
+    return message, code
+
+
 def _handle_turn_completed(params: Mapping[str, Any]) -> dict[str, Any]:
     turn = params.get("turn")
     status = turn.get("status") if isinstance(turn, Mapping) else None
     if status == "completed":
         return {"type": CodexEventType.TURN_COMPLETED.value}
+    turn_error = turn.get("error") if isinstance(turn, Mapping) else None
+    message, code = _native_error_fields(
+        turn_error,
+        fallback_message=status if isinstance(status, str) else "",
+    )
     return {
         "type": CodexEventType.TURN_FAILED.value,
-        "error": {"message": status or "", "code": ""},
+        "error": {"message": message, "code": code},
     }
 
 
@@ -108,12 +130,7 @@ def _handle_error(params: Mapping[str, Any]) -> dict[str, Any]:
         # An unavailable-but-retryable server error is not a session event at
         # all -- ignored exactly like item/started, never terminal.
         return {"type": CodexEventType.ITEM_STARTED.value}
-    error_payload = params.get("error")
-    message = ""
-    code = ""
-    if isinstance(error_payload, Mapping):
-        message = error_payload.get("message") or ""
-        code = error_payload.get("code") or ""
+    message, code = _native_error_fields(params.get("error"))
     return {"type": CodexEventType.ERROR.value, "message": message, "code": code}
 
 

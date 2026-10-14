@@ -97,6 +97,7 @@ class ClaudeSessionResult:
     seen_ndjson_unknown_event_count: int = 0
     seen_ndjson_unknown_item_count: int = 0
     denied_tool_use_ids: frozenset[str] = field(default_factory=frozenset)
+    compaction_attempted: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.result, str):
@@ -122,8 +123,8 @@ class ClaudeSessionResult:
             )
         if not isinstance(self.session_id, str):
             self.session_id = "" if self.session_id is None else str(self.session_id)
-        if not isinstance(self.jsonl_context_exhausted, bool):
-            self.jsonl_context_exhausted = bool(self.jsonl_context_exhausted)
+        self.jsonl_context_exhausted = bool(self.jsonl_context_exhausted)
+        self.compaction_attempted = bool(self.compaction_attempted)
 
     def _is_context_exhausted(self) -> bool:
         """True when the session hit Claude's context window limit."""
@@ -489,6 +490,7 @@ def parse_session_result(stdout: str, *, provider_used: str = "anthropic") -> Cl
         assistant_messages=acc.assistant_messages,
         tool_uses=acc.tool_uses,
         jsonl_context_exhausted=acc.jsonl_context_exhausted,
+        compaction_attempted=acc.compaction_attempted,
         stop_reasons=acc.stop_reasons,
         has_thinking_only_turn=acc.has_thinking_only_turn,
         seen_block_types=frozenset(acc.seen_block_types),

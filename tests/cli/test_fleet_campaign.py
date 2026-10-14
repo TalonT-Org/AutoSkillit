@@ -86,8 +86,10 @@ def test_fleet_run_resume_reads_existing_state(
     assert captured["env"]["AUTOSKILLIT_CAMPAIGN_ID"] == campaign_id
 
 
-def test_fleet_run_exit_code_passthrough(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """fleet run propagates subprocess exit code."""
+def test_fleet_run_exits_1_when_campaign_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """fleet run exits 1 when the campaign subprocess reports failure."""
     import subprocess
 
     _stub_guards(monkeypatch)
@@ -97,11 +99,11 @@ def test_fleet_run_exit_code_passthrough(monkeypatch: pytest.MonkeyPatch, tmp_pa
     monkeypatch.setattr(
         subprocess,
         "Popen",
-        lambda *a, **kw: InteractiveProcessStub(2),
+        lambda *a, **kw: InteractiveProcessStub(1),
     )
     with pytest.raises(SystemExit) as exc_info:
         _fleet_campaign("test-campaign")
-    assert exc_info.value.code == 2
+    assert exc_info.value.code == 1
 
 
 def test_fleet_campaign_exits_when_disabled(

@@ -52,6 +52,7 @@ SKILL_RESULT_PERSISTENCE: tuple[tuple[str, str, str], ...] = (
     ("branch_name", "branch_name", "live-only:ephemeral-path"),
     ("candidate_exhausted", "candidate_exhausted", "live-only:derived-elsewhere"),
     ("cli_subtype", "cli_subtype", "persisted"),
+    ("compaction_attempted", "compaction_attempted", "live-only:derived-elsewhere"),
     ("completion_required", "completion_required", "live-only:derived-elsewhere"),
     ("contamination.retry_reason", "contamination_retry_reason", "live-only:derived-elsewhere"),
     ("contamination.subtype", "contamination_subtype", "live-only:derived-elsewhere"),

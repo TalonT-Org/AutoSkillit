@@ -334,7 +334,7 @@ class TestCompletedCleanPath:
 
         assert envelope["success"] is False
         assert envelope["dispatch_status"] == "failure"
-        assert envelope["reason"] == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK.value
+        assert envelope["reason"] == FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED.value
         assert record["status"] == "failure"
         assert record["reason"] == envelope["reason"]
 
@@ -403,6 +403,54 @@ class TestTrackerAuthorityEnvelope:
         assert envelope["l3_parse_error"] == "json decode error"
         assert record["status"] == "failure"
         assert record["reason"] == envelope["reason"]
+
+    @pytest.mark.anyio
+    async def test_context_exhaustion_keeps_reason_and_tracker_diagnostics(
+        self, tool_ctx, monkeypatch
+    ):
+        import dataclasses
+
+        from autoskillit.core import FleetErrorCode, RetryReason
+        from tests.fakes import _DEFAULT_SKILL_RESULT
+
+        tracker_error = "tracker_state_authority_error"
+        _setup_dispatch(tool_ctx, monkeypatch)
+        tool_ctx.executor = InMemoryHeadlessExecutor(
+            default_result=dataclasses.replace(
+                _DEFAULT_SKILL_RESULT,
+                retry_reason=RetryReason.CONTEXT_EXHAUSTED,
+            )
+        )
+        monkeypatch.setattr(
+            fleet_api,
+            "load_dispatch_progress",
+            lambda **_: (
+                tool_ctx.temp_dir / "missing-sidecar.jsonl",
+                [],
+                None,
+                tracker_error,
+            ),
+        )
+        monkeypatch.setattr(
+            fleet_api,
+            "parse_l3_result_block",
+            lambda **_: _make_completed_dirty(),
+        )
+
+        envelope = await _run(tool_ctx)
+        record = _read_dispatch_record(tool_ctx)
+
+        context_reason = FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED.value
+        assert envelope["success"] is False
+        assert envelope["dispatch_status"] == "failure"
+        assert envelope["reason"] == context_reason
+        assert envelope["error"] == context_reason
+        assert envelope["user_visible_message"] == tracker_error
+        assert envelope["l3_raw_body"] == "garbled"
+        assert envelope["l3_parse_error"] == "json decode error"
+        assert record["status"] == "failure"
+        assert record["reason"] == context_reason
+        assert record["diagnostic_message"] == tracker_error
 
 
 class TestDeclaredSuccessContract:
@@ -711,6 +759,65 @@ class TestSidecarBasedResultSynthesis:
 
         result = await _run(tool_ctx, ingredients={"issue_urls": issue_url})
         assert result["dispatch_status"] == "success"
+
+    @pytest.mark.anyio
+    async def test_compaction_attempt_with_successful_sidecar_and_progress_stays_failed(
+        self, tool_ctx, monkeypatch
+    ):
+        import dataclasses
+
+        from autoskillit.core import (
+            DispatchIdentity,
+            FleetErrorCode,
+            RetryReason,
+        )
+        from autoskillit.fleet.sidecar import IssueSidecarEntry, append_sidecar_entry
+        from tests.fakes import _DEFAULT_SKILL_RESULT
+
+        _setup_dispatch(tool_ctx, monkeypatch, ingredients=_SIDECAR_INGREDIENTS)
+
+        fixed_dispatch_id = "aaaabbbb-2222-3333-4444-ffffffffffff"
+        fixed_identity = DispatchIdentity.from_dispatch_id(fixed_dispatch_id)
+
+        class _FixedDispatchIdentity:
+            @classmethod
+            def fresh(cls) -> DispatchIdentity:
+                return fixed_identity
+
+        monkeypatch.setattr(campaign_state, "DispatchIdentity", _FixedDispatchIdentity)
+        tool_ctx.executor = InMemoryHeadlessExecutor(
+            default_result=dataclasses.replace(
+                _DEFAULT_SKILL_RESULT,
+                success=True,
+                retry_reason=RetryReason.NONE,
+                compaction_attempted=True,
+            )
+        )
+
+        issue_url = "https://github.com/org/repo/issues/2"
+        entry = IssueSidecarEntry(
+            issue_url=issue_url,
+            status="completed",
+            ts="2026-05-27T00:00:00Z",
+            pr_url="https://github.com/org/repo/pull/101",
+        )
+        append_sidecar_entry(fixed_dispatch_id, entry, tool_ctx.project_dir)
+        monkeypatch.setattr(
+            fleet_api,
+            "parse_l3_result_block",
+            lambda **_: _make_no_sentinel(),
+        )
+
+        result = await _run(tool_ctx, ingredients={"issue_urls": issue_url})
+        record = _read_dispatch_record(tool_ctx)
+
+        context_reason = FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED.value
+        assert result["success"] is False
+        assert result["dispatch_status"] == "failure"
+        assert result["reason"] == context_reason
+        assert result["l3_parse_source"] == "stdout"
+        assert record["status"] == "failure"
+        assert record["reason"] == context_reason
 
     @pytest.mark.anyio
     async def test_no_sentinel_with_failed_sidecar_entries_remains_failure(

@@ -257,6 +257,7 @@ def _make_terminated_result(
         evidence=evidence,
         kill_reason=result.kill_reason,
         last_stop_reason=session.last_stop_reason,
+        compaction_attempted=session.compaction_attempted,
         lifespan_started=session.lifespan_started,
         provider=ProviderOutcome(provider_used=provider_used, fallback_activated=False),
         infra=infra,

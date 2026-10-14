@@ -74,6 +74,24 @@ def _turn_failed_ndjson(error_message: str, *, error_code: str = "") -> str:
     return json.dumps({"type": "turn.failed", "error": error})
 
 
+def _app_server_context_exhaustion_payload() -> str:
+    """Synthetic Codex app-server v2 failure used to exercise native enum normalization."""
+    return json.dumps(
+        {
+            "method": "turn/completed",
+            "params": {
+                "turn": {
+                    "status": "failed",
+                    "error": {
+                        "message": "synthetic app-server context failure",
+                        "codexErrorInfo": "contextWindowExceeded",
+                    },
+                }
+            },
+        }
+    )
+
+
 class TestClassifyInfraExit:
     def test_context_exhausted_from_jsonl_flag(self):
         """jsonl_context_exhausted=True → CONTEXT_EXHAUSTED."""
@@ -605,6 +623,35 @@ class TestCodexContextExhaustionFromTurnFailed:
         assert (
             classify_infra_exit(adapted, result, capabilities=_CAPS)
             == InfraExitCategory.CONTEXT_EXHAUSTED
+        )
+
+    def test_app_server_context_window_exceeded_reaches_infra_classifier(self) -> None:
+        agent_result = CodexResultParser().parse_stdout(
+            _app_server_context_exhaustion_payload(), exit_code=1
+        )
+        adapted = _adapt_agent_result(agent_result)
+
+        assert adapted._is_context_exhausted() is True
+        assert (
+            classify_infra_exit(
+                adapted,
+                _sr(returncode=1),
+                capabilities=CodexBackend().capabilities,
+            )
+            == InfraExitCategory.CONTEXT_EXHAUSTED
+        )
+
+    def test_app_server_context_window_exceeded_remains_capability_gated(self) -> None:
+        agent_result = CodexResultParser().parse_stdout(
+            _app_server_context_exhaustion_payload(), exit_code=1
+        )
+        adapted = _adapt_agent_result(agent_result)
+        capabilities = BackendCapabilities(supports_context_exhaustion_detection=False)
+
+        assert adapted._is_context_exhausted() is True
+        assert (
+            classify_infra_exit(adapted, _sr(returncode=1), capabilities=capabilities)
+            != InfraExitCategory.CONTEXT_EXHAUSTED
         )
 
     def test_turn_failed_rate_limit_exceeded_jsonl_context_exhausted_false(self) -> None:

@@ -30,6 +30,20 @@ from autoskillit.workspace import (
 _PRE_DISPATCH_SCOPE = "pre_dispatch"
 _POST_RECEIPT_SCOPE = "post_receipt"
 
+CONTEXT_EXHAUSTION_RECOVERY_CLAUSE = """## CONTEXT EXHAUSTION FAILURE
+
+A dispatch failure with reason `fleet_l3_context_exhausted` is terminal for its
+failed identity. Do not resume or retry it, pass its `dispatched_session_id` as
+`resume_session_id`, reuse its `dispatch_name`, or reset it to clear the failure,
+regardless of `effect_provenance.retry_disposition` or campaign
+`continue_on_failure`.
+
+For a campaign, apply `continue_on_failure` only to whether you halt the campaign
+or proceed to other dispatches; never retry the failed identity. For an ad-hoc
+dispatch, report the terminal failure to the human caller and do not retry. A
+separately authorized fresh dispatch has a new identity and must not reuse the
+failed session or dispatch ID."""
+
 
 @dataclass(frozen=True, slots=True)
 class _McpStartupRecoveryClause:

@@ -748,6 +748,7 @@ def _build_skill_result(
         ),
         session_error=SessionErrorOutcome.from_errors(session.errors),
         completion_required=completion_required,
+        compaction_attempted=session.compaction_attempted,
     )
     if is_path_contamination and not controlled_context_exhaustion:
         sr = dataclasses.replace(

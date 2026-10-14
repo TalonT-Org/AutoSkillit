@@ -101,7 +101,7 @@ class TestClassifyDispatchOutcomeCompletedClean:
         status, reason = classify_dispatch_outcome(parsed, skill_result)
 
         assert status == DispatchStatus.FAILURE
-        assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
+        assert reason == FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED
 
     def test_completed_clean_failure(self):
         parsed = L3ParseResult(
@@ -115,6 +115,170 @@ class TestClassifyDispatchOutcomeCompletedClean:
         status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=False)
         assert status == DispatchStatus.FAILURE
         assert reason == "my-error"
+
+
+@pytest.mark.parametrize(
+    (
+        "outcome",
+        "payload",
+        "source",
+        "retry_reason",
+        "infra_exit_category",
+        "compaction_attempted",
+        "sidecar_exists",
+        "with_checkpoint",
+        "subtype",
+    ),
+    [
+        pytest.param(
+            None,
+            None,
+            "stdout",
+            RetryReason.CONTEXT_EXHAUSTED,
+            "unclassified",
+            False,
+            True,
+            True,
+            "",
+            id="retry-context-parsed-none-progress",
+        ),
+        pytest.param(
+            "no_sentinel",
+            None,
+            "stdout",
+            RetryReason.RESUME,
+            "context_exhausted",
+            False,
+            False,
+            True,
+            "",
+            id="context-category-resume-no-sentinel-checkpoint",
+        ),
+        pytest.param(
+            "completed_clean",
+            {"success": True, "reason": "done"},
+            "stdout",
+            RetryReason.NONE,
+            "context_exhausted",
+            False,
+            False,
+            False,
+            "",
+            id="context-category-none-valid-success",
+        ),
+        pytest.param(
+            "completed_clean",
+            {"success": True, "reason": "sidecar_recovery"},
+            "sidecar",
+            RetryReason.CONTEXT_EXHAUSTED,
+            "unclassified",
+            False,
+            True,
+            False,
+            "",
+            id="retry-context-sidecar-success",
+        ),
+        pytest.param(
+            "completed_clean",
+            {"success": False, "reason": "implementation_failed"},
+            "stdout",
+            RetryReason.NONE,
+            "context_exhausted",
+            False,
+            True,
+            True,
+            "",
+            id="context-category-none-failure-with-progress",
+        ),
+        pytest.param(
+            "completed_dirty",
+            None,
+            "stdout",
+            RetryReason.RESUME,
+            "context_exhausted",
+            False,
+            False,
+            True,
+            "",
+            id="context-category-resume-dirty-with-checkpoint",
+        ),
+        pytest.param(
+            "completed_clean",
+            {"success": True, "reason": "done"},
+            "stdout",
+            RetryReason.NONE,
+            "unclassified",
+            True,
+            True,
+            True,
+            "",
+            id="veto-at-threshold-later-success-with-progress",
+        ),
+        pytest.param(
+            None,
+            None,
+            "stdout",
+            RetryReason.NONE,
+            "context_exhausted",
+            False,
+            True,
+            True,
+            "timeout",
+            id="context-category-none-timeout-with-checkpoint",
+        ),
+    ],
+)
+def test_context_exhaustion_dominates_parsed_results_and_progress(
+    outcome,
+    payload,
+    source,
+    retry_reason,
+    infra_exit_category,
+    compaction_attempted,
+    sidecar_exists,
+    with_checkpoint,
+    subtype,
+):
+    parsed = (
+        None
+        if outcome is None
+        else L3ParseResult(
+            outcome=outcome,
+            payload=payload,
+            raw_body="garbled" if outcome == "completed_dirty" else None,
+            parse_error="invalid JSON" if outcome == "completed_dirty" else None,
+            source=source,
+        )
+    )
+    skill_result = dataclasses.replace(
+        _DEFAULT_SKILL_RESULT,
+        retry_reason=retry_reason,
+        infra=InfraOutcome(exit_category=infra_exit_category),
+        compaction_attempted=compaction_attempted,
+        session_id="sess-context-exhausted" if with_checkpoint or sidecar_exists else "",
+        lifespan_started=with_checkpoint or sidecar_exists,
+    )
+    checkpoint = (
+        SessionCheckpoint(
+            completed_items=["plan", "implement"],
+            step_name="implement",
+            progress_pct=0.5,
+            ts="2026-10-14T00:00:00Z",
+        )
+        if with_checkpoint
+        else None
+    )
+
+    status, reason = classify_dispatch_outcome(
+        parsed,
+        skill_result,
+        sidecar_exists=sidecar_exists,
+        checkpoint=checkpoint,
+        subtype=subtype,
+    )
+
+    assert status is DispatchStatus.FAILURE
+    assert reason == FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED
 
 
 class TestQuotaExhaustedOutcome:
@@ -340,7 +504,7 @@ class TestReasonAwareResumePolicy:
         )
         status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=True)
         assert status == DispatchStatus.FAILURE
-        assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
+        assert reason == FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED
 
     def test_api_error_with_progress_is_resumable(self):
         parsed, skill_result = _no_sentinel(session_id="sess-abc", lifespan_started=True)

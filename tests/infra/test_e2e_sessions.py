@@ -85,6 +85,7 @@ def _event(
     *,
     transcript: Path | None = None,
     agent_id: str | None = None,
+    agent_type: str | None = None,
     agent_transcript: Path | None = None,
 ) -> dict[str, Any]:
     row: dict[str, Any] = {
@@ -96,6 +97,8 @@ def _event(
         row["transcript_path"] = str(transcript)
     if agent_id is not None:
         row["agent_id"] = agent_id
+    if agent_type is not None:
+        row["agent_type"] = agent_type
     if agent_transcript is not None:
         row["agent_transcript_path"] = str(agent_transcript)
     return row
@@ -292,6 +295,38 @@ def test_hook_capture_appends_concurrent_allow_listed_records(tmp_path: Path) ->
     assert len(trace.read_text(encoding="utf-8").splitlines()) == 32
 
 
+@pytest.mark.parametrize("agent_type", ["general-purpose", ""])
+def test_hook_capture_preserves_agent_type_and_strips_stop_message(
+    tmp_path: Path, agent_type: str
+) -> None:
+    trace = tmp_path / "events.jsonl"
+    captured = sessions.capture_hook_event(
+        trace,
+        {
+            "hook_event_name": "SubagentStop",
+            "session_id": ROOT_ID,
+            "agent_id": "agent-x",
+            "agent_type": agent_type,
+            "transcript_path": "/tmp/root.jsonl",
+            "agent_transcript_path": "/tmp/agent-x.jsonl",
+            "last_assistant_message": "must not be persisted",
+        },
+    )
+
+    assert captured is True
+    [record] = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+    assert record["agent_type"] == agent_type
+    assert set(record) == {
+        "event",
+        "timestamp",
+        "session_id",
+        "agent_id",
+        "agent_type",
+        "transcript_path",
+        "agent_transcript_path",
+    }
+
+
 def test_summary_collapses_repeated_events_excludes_unrelated_and_sweeps_half_open(
     tmp_path: Path,
 ) -> None:
@@ -401,9 +436,20 @@ def test_summary_enumerates_native_agent_transcripts_and_requires_endpoints(
         trace,
         [
             _event("SessionStart", ROOT_ID, 1, transcript=root_transcript),
-            _event("SubagentStart", ROOT_ID, 2, agent_id="agent-a"),
             _event(
-                "SubagentStop", ROOT_ID, 4, agent_id="agent-a", agent_transcript=agent_transcript
+                "SubagentStart",
+                ROOT_ID,
+                2,
+                agent_id="agent-a",
+                agent_type="general-purpose",
+            ),
+            _event(
+                "SubagentStop",
+                ROOT_ID,
+                4,
+                agent_id="agent-a",
+                agent_type="general-purpose",
+                agent_transcript=agent_transcript,
             ),
             _event("SessionEnd", ROOT_ID, 5, transcript=root_transcript),
         ],
@@ -420,6 +466,76 @@ def test_summary_enumerates_native_agent_transcripts_and_requires_endpoints(
             "transcript_path": str(agent_transcript.resolve()),
         }
     ]
+
+
+@pytest.mark.parametrize(
+    ("agent_type", "extra_violation"),
+    [
+        pytest.param("custom-main", None, id="named-custom-main"),
+        pytest.param("", f"capture:{ROOT_ID}:agent-x:agent_type_missing", id="blank-type"),
+        pytest.param(None, f"capture:{ROOT_ID}:agent-x:agent_type_missing", id="missing-type"),
+    ],
+)
+def test_orphan_agent_stop_is_reported_even_without_an_admitted_type(
+    tmp_path: Path,
+    agent_type: str | None,
+    extra_violation: str | None,
+) -> None:
+    log_root, trace, _ = _base_sessions(tmp_path)
+    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    missing_agent_transcript = (
+        log_root / "transcripts" / ROOT_ID / "subagents" / "agent-agent-x.jsonl"
+    )
+    _trace(
+        trace,
+        [
+            _event("SessionStart", ROOT_ID, 1, transcript=root_transcript),
+            _event(
+                "SubagentStop",
+                ROOT_ID,
+                2,
+                agent_id="agent-x",
+                agent_type=agent_type,
+                agent_transcript=missing_agent_transcript,
+            ),
+            _event("SessionEnd", ROOT_ID, 3, transcript=root_transcript),
+        ],
+    )
+
+    summary = sessions.summarize(trace, _envelope(), log_root)
+
+    expected_violations = [
+        f"lifecycle:agent:{ROOT_ID}:agent-x:orphan_end",
+        f"native:{ROOT_ID}:agent-x:lifecycle_incomplete",
+        f"native:{ROOT_ID}:agent-x:transcript_unenumerated",
+    ]
+    if extra_violation is not None:
+        expected_violations.append(extra_violation)
+    assert summary["coverage"]["complete"] is False
+    assert summary["violations"] == sorted(expected_violations)
+    assert summary["peak_sessions"] == 1
+
+
+def test_enumerated_native_transcript_without_agent_hooks_is_incomplete(
+    tmp_path: Path,
+) -> None:
+    log_root, trace, _ = _base_sessions(tmp_path)
+    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    agent_transcript = log_root / "transcripts" / ROOT_ID / "subagents" / "agent-agent-a.jsonl"
+    agent_transcript.parent.mkdir(parents=True)
+    agent_transcript.write_text("{}\n", encoding="utf-8")
+    _trace(
+        trace,
+        [
+            _event("SessionStart", ROOT_ID, 1, transcript=root_transcript),
+            _event("SessionEnd", ROOT_ID, 3, transcript=root_transcript),
+        ],
+    )
+
+    summary = sessions.summarize(trace, _envelope(), log_root)
+
+    assert summary["coverage"]["complete"] is False
+    assert f"native:{ROOT_ID}:agent-a:lifecycle_incomplete" in summary["violations"]
 
 
 def test_native_transcript_symlink_loop_is_reported_missing(

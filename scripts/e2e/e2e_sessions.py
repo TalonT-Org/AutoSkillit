@@ -17,6 +17,13 @@ from urllib.parse import urlsplit
 _SESSION_EVENTS = frozenset({"SessionStart", "SessionEnd"})
 _AGENT_EVENTS = frozenset({"SubagentStart", "SubagentStop"})
 _LIFECYCLE_EVENTS = _SESSION_EVENTS | _AGENT_EVENTS
+# With the default main agent, internal agents have an empty agent_type.
+# Session matchers filter source/reason, so keep session endpoints unfiltered.
+_NATIVE_AGENT_MATCHER = ".+"
+LIFECYCLE_HOOK_MATCHERS: Mapping[str, str | None] = {
+    **{event: None for event in sorted(_SESSION_EVENTS)},
+    **{event: _NATIVE_AGENT_MATCHER for event in sorted(_AGENT_EVENTS)},
+}
 # Pinned to product prefixes by tests/arch/test_e2e_sessions_contract.py.
 _AUTOSKILLIT_SERVERS = frozenset(
     {("mcp", "autoskillit"), ("mcp", "plugin_autoskillit_autoskillit")}
@@ -494,6 +501,8 @@ def _check_transcript_coverage(
         elif event["event"] in _AGENT_EVENTS:
             key = (session_id, event["agent_id"])
             observed.setdefault(key, []).append(event)
+            if not event.get("agent_type"):
+                violations.append(f"capture:{session_id}:{event['agent_id']}:agent_type_missing")
     for session_id, paths in session_paths.items():
         if len(paths) > 1:
             violations.append(f"lifecycle:{session_id}:transcript_mismatch")
@@ -551,7 +560,7 @@ def _verify_native_transcript(
 ) -> dict[str, str] | None:
     label = f"native:{session_id}:{agent_id}"
     names = {event["event"] for event in events}
-    if not {"SubagentStart", "SubagentStop"} <= names:
+    if not _AGENT_EVENTS <= names:
         violations.append(f"{label}:lifecycle_incomplete")
     if transcript is None:
         violations.append(f"{label}:transcript_unenumerated")

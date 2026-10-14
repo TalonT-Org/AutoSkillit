@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 
 from autoskillit.core import PLUGIN_PREFIX
+from tests._hook_protocol_oracle import claude_matcher_admits
 from tests.infra._complexity_helpers import load_check_script
 from tests.infra._e2e_evidence import load_provenance, materialize_run
 
@@ -195,6 +196,7 @@ def test_captured_run_accounts_for_successful_and_failed_workers(
             f"lifecycle:agent:{ROOT_SESSION_ID}:{UNMATCHED_AGENT_ID}:orphan_end",
             f"native:{ROOT_SESSION_ID}:{UNMATCHED_AGENT_ID}:lifecycle_incomplete",
             f"native:{ROOT_SESSION_ID}:{UNMATCHED_AGENT_ID}:transcript_unenumerated",
+            f"capture:{ROOT_SESSION_ID}:{UNMATCHED_AGENT_ID}:agent_type_missing",
         ]
     )
     assert envelope["l3_payload"] is None
@@ -215,7 +217,7 @@ def test_captured_run_accounts_for_successful_and_failed_workers(
     )
 
 
-def test_captured_run_is_complete_once_the_unmatched_stop_is_removed(
+def test_captured_run_is_complete_under_the_declared_capture_policy(
     tmp_path: Path,
 ) -> None:
     trace = tmp_path / "trace" / "session-events.jsonl"
@@ -227,17 +229,20 @@ def test_captured_run_is_complete_once_the_unmatched_stop_is_removed(
         projects=tmp_path / "projects",
     )
     events = _rows(trace)
-    unmatched_stops = [
-        event
-        for event in events
-        if event.get("event") == "SubagentStop" and event.get("agent_id") == UNMATCHED_AGENT_ID
-    ]
-    assert len(unmatched_stops) == 1
+    admitted = []
+    excluded: list[tuple[str, str, str]] = []
+    for event in events:
+        matcher = sessions.LIFECYCLE_HOOK_MATCHERS[event["event"]]
+        agent_type = event.get("agent_type", "")
+        if claude_matcher_admits(matcher, agent_type):
+            admitted.append(event)
+        else:
+            excluded.append((event["event"], event.get("agent_id", ""), agent_type))
+    assert excluded == [("SubagentStop", UNMATCHED_AGENT_ID, "")]
     trace.write_text(
         "".join(
             json.dumps(event, separators=(",", ":"), ensure_ascii=False) + "\n"
-            for event in events
-            if event not in unmatched_stops
+            for event in admitted
         ),
         encoding="utf-8",
     )
@@ -246,3 +251,6 @@ def test_captured_run_is_complete_once_the_unmatched_stop_is_removed(
     assert summary["coverage"]["complete"] is True
     assert summary["violations"] == []
     assert summary["peak_sessions"] == 5
+    assert {
+        agent["agent_id"] for agent in summary["coverage"]["native_agents"]
+    } == NATIVE_AGENT_IDS

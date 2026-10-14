@@ -656,7 +656,11 @@ async def complete_run_skill_result(
     receipt_id: str,
     ctx: Context = CurrentContext(),
 ) -> str:
-    """Acknowledge one exactly delivered ``run_skill`` result. Never raises."""
+    """Acknowledge one exactly delivered ``run_skill`` result. Never raises.
+
+    Successful acknowledgments include ``step_name`` from the completion receipt,
+    which identifies the step used to attach its success or recovery recipe segment.
+    """
     if (gate := _require_enabled()) is not None:
         return gate
     try:

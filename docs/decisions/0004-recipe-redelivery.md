@@ -127,8 +127,10 @@ Four invariants are non-negotiable:
   for envelope responses, `get_recipe_section`).
 - Terminal-page delivery enforces the four invariants above while preserving the
   separate completion call as a compatibility fallback for non-receipt responses.
-- Segmented recipes recover from the latest `recipe_segment`; the startup credential is
-  intentionally scoped to delivered bodies rather than the full future recipe.
+- Segmented recipes recover from the latest `recipe_segment`; the startup carrier's
+  credential is scoped to the first segment's bodies by the carrier byte cap, while the
+  completion receipt (invariant 4) always carries the complete credential and is
+  re-requestable while the recipe is READY.
 - The delivery-reachability suite verifies `load_recipe` / `open_kitchen` /
   `get_recipe_section` re-delivery restores pipeline execution capability, including
   complete-envelope and bounded-envelope per-step pulls.

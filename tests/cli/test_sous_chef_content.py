@@ -75,14 +75,16 @@ def test_sous_chef_requires_progressive_segment_consumption() -> None:
     for required in (
         "recipe_segment",
         "body_sha256",
-        "segment-scoped",
+        "every named step",
+        "re-requested",
         "pull_closure",
         "recipe_segment_post_effect_delivery_failure",
         "operation already ran",
         "do not repeat it",
-        "full recipe horizon",
     ):
         assert required in content
+    assert "segment-scoped" not in content
+    assert "full recipe horizon" not in content
 
 
 def test_sous_chef_preserves_attested_skill_input_shape_and_falsey_defaults() -> None:

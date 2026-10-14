@@ -1336,6 +1336,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_bundled_dispatch_write_scope_admission.py",
             "server/test_serve_idempotence.py",
             "server/test_attestation_delivery_reachability.py",
+            "server/test_recipe_execution_receipt_completeness.py",
             "server/test_tools_status_kitchen.py",
             "server/test_open_kitchen_deferred_recall.py",
             "server/test_factory_context_construction.py",

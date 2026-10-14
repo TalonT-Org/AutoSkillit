@@ -22,7 +22,14 @@ _EMITTER = "autoskillit.hooks._runtime._hook_output"
 _EXPECTED_CHANNEL_EVENTS = {
     "deny": frozenset({"PreToolUse"}),
     "block": frozenset(
-        {"PreToolUse", "PostToolUse", "PostToolUseFailure", "Stop", "SubagentStop"}
+        {
+            "PreToolUse",
+            "PostToolUse",
+            "PostToolUseFailure",
+            "Stop",
+            "SubagentStop",
+            "PreCompact",
+        }
     ),
     "context": frozenset({"SessionStart", "PreToolUse", "PostToolUse", "UserPromptExpansion"}),
     "rewrite_input": frozenset({"PreToolUse"}),

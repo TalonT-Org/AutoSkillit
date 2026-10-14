@@ -114,12 +114,20 @@ mechanism for detecting subagent context in hook scripts.
 
 Used by: `skill_load_guard.py`, `skill_load_post_hook.py`
 
+## Automatic compaction scope
+
+`auto_compact_guard.py` has a published Claude `PreCompact`/`auto` registration and
+the existing runtime-only Codex registration. Claude's automatic matcher covers
+threshold-triggered and idle compaction; exit 2 blocks it only in orchestrator sessions.
+The separate manual matcher remains available. Codex continues to use its native
+`continue: false` halt output.
+
 ## Multi-concern files
 
 Files with no registration support their folder; files with several registrations group one related concern.
 
 - `__init__.py` — Support module: PreToolUse guard scripts — invoked as standalone python3 commands.
-- `auto_compact_guard.py` — Runtime-only Codex `PreCompact` guard registered outside the generated Claude hooks manifest.
+- `auto_compact_guard.py` — Published Claude `PreCompact` block for orchestrator auto compaction plus the runtime-only Codex halt registration.
 - `branch_protection_guard.py` — Groups 2 registrations: PreToolUse hook: branch protection guard for merge_worktree and push_to_remote.
 - `ingredient_lock_guard.py` — Groups 2 registrations: PreToolUse guard: deny run_skill calls for steps locked by lock_ingredients.
 - `join_settle_guard.py` — Groups 2 registrations: PostToolUse / PostToolUseFailure settlement — record claimed handle outcomes.

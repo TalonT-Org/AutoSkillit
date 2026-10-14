@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import tomllib
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
 
 import pytest
 
-from autoskillit.execution import _serialize_toml
+from autoskillit.execution import BACKEND_REGISTRY, _serialize_toml
 from autoskillit.execution.backends._codex_hooks import (
     generate_codex_hooks_config,
     sync_managed_codex_hooks_to_config,
@@ -15,6 +18,49 @@ from autoskillit.hook_registry import HOOK_REGISTRY, generate_hooks_json
 from tests.fixtures.hook_topology import projection_shaped_hook_root
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
+
+
+def _generate_claude_hooks_config(_tmp_path: Path) -> dict[str, Any]:
+    return generate_hooks_json()["hooks"]
+
+
+def _generate_codex_runtime_hooks_config(tmp_path: Path) -> dict[str, Any]:
+    config_path = tmp_path / "config.toml"
+    root = projection_shaped_hook_root(tmp_path)
+    sync_managed_codex_hooks_to_config(
+        config_path,
+        route="parent",
+        plugin_dir=root.plugin_dir,
+    )
+    return tomllib.loads(config_path.read_text(encoding="utf-8"))["hooks"]
+
+
+_BACKEND_BLOCKING_CONFIG_GENERATORS: dict[str, Callable[[Path], dict[str, Any]]] = {
+    "claude-code": _generate_claude_hooks_config,
+    "codex": _generate_codex_runtime_hooks_config,
+}
+
+
+def test_generated_precompact_blocker_covers_every_registered_backend(tmp_path: Path) -> None:
+    assert set(_BACKEND_BLOCKING_CONFIG_GENERATORS) == set(BACKEND_REGISTRY)
+
+    for backend_name, generate_config in _BACKEND_BLOCKING_CONFIG_GENERATORS.items():
+        hooks = generate_config(tmp_path)
+        entries = hooks.get("PreCompact", [])
+        assert len(entries) == 1, f"{backend_name} must generate exactly one PreCompact entry"
+
+        entry = entries[0]
+        assert entry["matcher"] == "auto"
+        assert "async" not in entry
+        commands = entry["hooks"]
+        assert len(commands) == 1
+        command = commands[0]
+        assert command["type"] == "command"
+        assert "auto_compact_guard" in command["command"]
+
+        if backend_name == "codex":
+            assert all("async" not in hook for hook in commands)
+            assert len(command["trusted_hash"]) == 64
 
 
 class TestCodexTomlFormatContract:
@@ -83,15 +129,8 @@ class TestCodexTomlFormatContract:
     def test_runtime_precompact_hook_is_synchronous_and_destination_only(self, tmp_path):
         assert "PreCompact" not in generate_codex_hooks_config()
 
-        config_path = tmp_path / "config.toml"
-        root = projection_shaped_hook_root(tmp_path)
-        sync_managed_codex_hooks_to_config(
-            config_path,
-            route="parent",
-            plugin_dir=root.plugin_dir,
-        )
-        config = tomllib.loads(config_path.read_text(encoding="utf-8"))
-        entries = config["hooks"]["PreCompact"]
+        config = _generate_codex_runtime_hooks_config(tmp_path)
+        entries = config["PreCompact"]
         assert len(entries) == 1
         entry = entries[0]
         assert entry["matcher"] == "auto"

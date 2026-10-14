@@ -803,6 +803,7 @@ class TestSandboxSmokeFixture:
         assert worker.skill_name == "smoke-task"
         prompt = worker.with_args["skill_command"].lower()
         assert "one new commit" in prompt and "only sandbox/text.py" in prompt
+        assert "report the commit hash" in prompt and "changed file paths" in prompt
         discipline = " ".join(recipe.kitchen_rules).lower()
         assert "child agents" in discipline and "replay" in discipline
         assert recipe.steps["setup"].with_args["cwd"] == "${{ context.worktree_path }}"

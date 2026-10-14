@@ -34,7 +34,7 @@ from autoskillit.core import (
     load_yaml,
     validate_recipe_artifact_sections,
 )
-from autoskillit.pipeline import KitchenActivationId
+from autoskillit.pipeline import KitchenActivationId, require_kitchen_activation_id
 from autoskillit.server.recipe._recipe_generation import (
     RecipeGenerationError,
     RecipeGenerationRecord,
@@ -677,6 +677,7 @@ def load_recipe_artifact(
 
 def retire_recipe_artifacts(temp_dir: Path, *, activation_id: KitchenActivationId) -> bool:
     """Retire one activation namespace after all shared-lock readers finish."""
+    require_kitchen_activation_id(activation_id)
     try:
         namespace = _artifact_root(temp_dir) / _namespace_component(activation_id)
         retired_marker = _retired_namespace_marker(temp_dir, activation_id=activation_id)

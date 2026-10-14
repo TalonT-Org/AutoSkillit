@@ -550,7 +550,9 @@ def test_recipe_artifact_namespace_rejects_lineage_string(tmp_path: Path) -> Non
             payload=payload,
             flow_generation=flow_generation,
         )
-    assert retire_recipe_artifacts(tmp_path, activation_id="kitchen-test") is False
+    with pytest.raises(TypeError, match="a KitchenActivationId is required"):
+        retire_recipe_artifacts(tmp_path, activation_id="kitchen-test")
+    assert not (tmp_path / "recipe-delivery").exists()
 
 
 def test_persistence_rejects_missing_required_content(tmp_path: Path) -> None:

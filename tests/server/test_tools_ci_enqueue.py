@@ -65,7 +65,6 @@ async def test_enqueue_pr_delegates_to_watcher_enqueue(
     assert result["success"] is True
     assert result["enrollment_method"] == "direct_enqueue"
     assert result["recipe_segment"]["kind"] == "success"
-    assert_delivery_outcome("enqueue_pr", result, expected=True)
     await assert_real_checkpoint_response_budget(
         tool_ctx_ready_recipe, "enqueue_pr", result, tmp_path
     )

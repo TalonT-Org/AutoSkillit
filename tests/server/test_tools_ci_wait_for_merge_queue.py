@@ -70,7 +70,6 @@ async def test_delegates_to_merge_queue_watcher(
     assert watcher.wait_calls[-1]["pr_number"] == 42
     assert watcher.wait_calls[-1]["target_branch"] == "develop"
     assert result["recipe_segment"]["kind"] == "success"
-    assert_delivery_outcome("wait_for_merge_queue", result, expected=True)
     await assert_real_checkpoint_response_budget(
         tool_ctx_ready_recipe, "wait_for_merge_queue", result, tmp_path
     )

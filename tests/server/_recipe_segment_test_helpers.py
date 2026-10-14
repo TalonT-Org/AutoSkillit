@@ -127,6 +127,7 @@ def _real_success_delivery(ready, tool_name: str) -> PreparedRecipeSegmentDelive
 async def assert_real_checkpoint_response_budget(
     ready, tool_name: str, result: dict[str, Any], artifact_dir: Path
 ) -> None:
+    assert_delivery_outcome(tool_name, result, expected=True)
     prepared = _real_success_delivery(ready, tool_name)
     assert prepared.success_carrier is not None
     assert prepared.success_pull_carrier is not None

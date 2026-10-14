@@ -66,7 +66,6 @@ async def test_wait_for_ci_success_response(
     assert result["conclusion"] == "success"
     assert result["failed_jobs"] == []
     assert result["recipe_segment"]["kind"] == "success"
-    assert_delivery_outcome("wait_for_ci", result, expected=True)
     await assert_real_checkpoint_response_budget(
         tool_ctx_ready_recipe, "wait_for_ci", result, tmp_path
     )

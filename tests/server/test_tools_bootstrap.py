@@ -104,7 +104,6 @@ class TestBootstrapClone:
         assert result["base_sha"] == expected_base_sha
         assert result["merge_target"] == "develop"
         assert result["recipe_segment"]["kind"] == "success"
-        assert_delivery_outcome("bootstrap_clone", result, expected=True)
         await assert_real_checkpoint_response_budget(
             tool_ctx_ready_recipe, "bootstrap_clone", result, tmp_path
         )

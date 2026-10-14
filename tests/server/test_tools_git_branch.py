@@ -159,7 +159,6 @@ class TestCheckPrMergeable:
         assert result["merge_state_status"] == "CLEAN"
         assert result["mergeable_status"] == "MERGEABLE"
         assert result["recipe_segment"]["kind"] == "success"
-        assert_delivery_outcome("check_pr_mergeable", result, expected=True)
         await assert_real_checkpoint_response_budget(
             tool_ctx_ready_recipe, "check_pr_mergeable", result, tmp_path
         )

@@ -72,7 +72,6 @@ async def test_check_repo_merge_state_uses_token_factory(
     assert captured_tokens == ["factory-token"]
     assert resolved_calls == [1]
     assert result["recipe_segment"]["kind"] == "success"
-    assert_delivery_outcome("check_repo_merge_state", result, expected=True)
     await assert_real_checkpoint_response_budget(
         tool_ctx_ready_recipe, "check_repo_merge_state", result, tmp_path
     )

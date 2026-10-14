@@ -216,7 +216,6 @@ class TestPushToRemoteTool:
         assert result["success"] is True
         assert "error" not in result
         assert result["recipe_segment"]["kind"] == "success"
-        assert_delivery_outcome("push_to_remote", result, expected=True)
         await assert_real_checkpoint_response_budget(
             tool_ctx_ready_recipe, "push_to_remote", result, tmp_path
         )

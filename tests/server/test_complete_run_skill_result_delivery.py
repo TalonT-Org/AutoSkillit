@@ -69,7 +69,8 @@ async def test_completion_receipt_delivery_carries_plan_step_name(
     assert response["success"] is True
     assert response["step_name"] == "plan"
     assert response["run_skill_success"] is run_skill_success
-    assert_delivery_outcome("complete_run_skill_result", response, expected=run_skill_success)
+    if not run_skill_success:
+        assert_delivery_outcome("complete_run_skill_result", response, expected=False)
     assert response["recipe_segment"]["kind"] == expected_segment
     if run_skill_success:
         await assert_real_checkpoint_response_budget(

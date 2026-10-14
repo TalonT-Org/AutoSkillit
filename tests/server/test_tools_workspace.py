@@ -283,7 +283,8 @@ class TestTestCheck:
         assert result["passed"] is (expected_kind == "success")
         assert result["recipe_segment"]["kind"] == expected_kind
         succeeded = expected_kind == "success"
-        assert_delivery_outcome("test_check", result, expected=succeeded)
+        if not succeeded:
+            assert_delivery_outcome("test_check", result, expected=False)
         if succeeded:
             await assert_real_checkpoint_response_budget(
                 tool_ctx_ready_recipe, "test_check", result, tmp_path

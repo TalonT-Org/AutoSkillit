@@ -130,7 +130,6 @@ class TestMergeWorktree:
         assert "test_stderr" not in result
         assert "raw_output_artifact_path" not in result
         assert result["recipe_segment"]["kind"] == "success"
-        assert_delivery_outcome("merge_worktree", result, expected=True)
         await assert_real_checkpoint_response_budget(
             tool_ctx_ready_recipe, "merge_worktree", result, tmp_path
         )

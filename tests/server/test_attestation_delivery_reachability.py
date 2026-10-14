@@ -24,7 +24,7 @@ from autoskillit.core import (
     build_recipe_execution_credential,
 )
 from autoskillit.execution import CODEX_RECIPE_DELIVERY_BUDGET
-from autoskillit.pipeline import KitchenActivationId, ReadyRecipe
+from autoskillit.pipeline import ReadyRecipe
 from autoskillit.server.recipe._recipe_delivery import (
     load_recipe_artifact,
     persist_recipe_artifact,
@@ -41,6 +41,7 @@ from autoskillit.server.recipe._recipe_initialization import (
     build_embedded_completion_response,
     recipe_initialization_receipt,
 )
+from tests._helpers import kitchen_identity_fields
 from tests.conftest import _make_result
 from tests.contracts.test_delivery_bound_fitness import _full_open_kitchen_generation
 from tests.server._pipeline_test_helpers import _write_tracker
@@ -611,8 +612,7 @@ async def test_delivery_modes_preserve_one_snapshot_skill_input_shapes(
     payload, projection = _full_open_kitchen_generation("implementation")
     tool_ctx = SimpleNamespace(
         backend=None,
-        kitchen_id="same-snapshot-delivery",
-        kitchen_activation_id=KitchenActivationId("same-snapshot-delivery"),
+        **kitchen_identity_fields("same-snapshot-delivery"),
         temp_dir=tmp_path,
     )
     prepared = prepare_recipe_delivery_generation(

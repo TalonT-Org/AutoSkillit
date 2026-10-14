@@ -19,7 +19,6 @@ from autoskillit.core import (
     client_serialized_char_len,
 )
 from autoskillit.execution.backends import BACKEND_REGISTRY
-from autoskillit.pipeline import KitchenActivationId
 from autoskillit.pipeline.recipe_initialization import NoActiveRecipe
 from autoskillit.recipe import load_and_validate
 from autoskillit.server.recipe._recipe_delivery import (
@@ -28,6 +27,7 @@ from autoskillit.server.recipe._recipe_delivery import (
 )
 from autoskillit.server.recipe._recipe_generation import RecipeGenerationStore
 from autoskillit.server.tools._serve_helpers import build_open_kitchen_recipe_payload
+from tests._helpers import kitchen_identity_fields
 from tests.contracts.fixtures.recipes import BUNDLED_RECIPE_PATHS
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
@@ -104,8 +104,7 @@ def _resolve_delivery(
         SimpleNamespace(
             backend=BACKEND_REGISTRY[backend_name](),
             config=SimpleNamespace(output_budget=OutputBudgetConfig()),
-            kitchen_id=f"ledger-{backend_name}-{recipe_path.stem}",
-            kitchen_activation_id=KitchenActivationId(f"ledger-{backend_name}-{recipe_path.stem}"),
+            **kitchen_identity_fields(f"ledger-{backend_name}-{recipe_path.stem}"),
             recipe_execution_lock=threading.RLock(),
             recipe_initialization_state=NoActiveRecipe(),
             temp_dir=tmp_path,

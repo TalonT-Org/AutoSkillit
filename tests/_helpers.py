@@ -12,7 +12,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
-from typing import TypeVar
+from typing import Any, TypeVar
 from unittest.mock import MagicMock
 
 import pytest
@@ -37,6 +37,16 @@ T = TypeVar("T")
 # ``MagicMock`` is included because ``Path(...)`` accepts it via ``__fspath__``;
 # the explicit ``isinstance`` guard is what keeps the rejection test honest.
 INVALID_PATH_INPUTS: tuple[object, ...] = (None, 0, b"", object(), MagicMock())
+
+
+def kitchen_identity_fields(kitchen_id: str) -> dict[str, Any]:
+    """Build deterministic, distinct lineage and activation fields for test contexts."""
+    from autoskillit.pipeline import KitchenActivationId
+
+    return {
+        "kitchen_id": kitchen_id,
+        "kitchen_activation_id": KitchenActivationId(f"activation-{kitchen_id}"),
+    }
 
 
 def make_rollout_marker(*, backends: tuple[str, ...] = ("claude-code", "codex")) -> RolloutMarker:

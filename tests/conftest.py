@@ -49,7 +49,11 @@ from autoskillit.core.types import (
     SubprocessResult,
     TerminationReason,
 )
-from tests._helpers import _collect_structlog_proxies, _flush_structlog_proxy_caches
+from tests._helpers import (
+    _collect_structlog_proxies,
+    _flush_structlog_proxy_caches,
+    kitchen_identity_fields,
+)
 from tests.arch._policy_gate_plumbing import TEST_BASE_KEY, BaseRefContext
 
 # Mirror the standalone hook process import mode: runtime sibling modules
@@ -893,13 +897,12 @@ def tool_ctx_kitchen_open(tool_ctx):
 
 
 def bind_test_kitchen_identity(ctx, kitchen_id: str) -> None:
-    """Bind test identities using one literal for lineage and activation.
+    """Bind deterministic, distinct lineage and activation identities.
 
     Tests of identity separation or activation freshness must use the real
     ``establish_kitchen_identity`` authority.
     """
     from autoskillit.pipeline import (
-        KitchenActivationId,
         closed_kitchen_open_state,
         new_kitchen_open_state,
     )
@@ -909,7 +912,7 @@ def bind_test_kitchen_identity(ctx, kitchen_id: str) -> None:
         ctx.kitchen_open_state = (
             new_kitchen_open_state(
                 kitchen_id=kitchen_id,
-                activation_id=KitchenActivationId(kitchen_id),
+                activation_id=kitchen_identity_fields(kitchen_id)["kitchen_activation_id"],
                 context_id=context_id,
             )
             if kitchen_id

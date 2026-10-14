@@ -21,11 +21,11 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 def _recipe_fixture_parameters() -> list[tuple[str, str, dict[str, str]]]:
     from autoskillit.recipe import load_and_validate
-    from tests.contracts.test_delivery_bound_fitness import _delivery_recipe_names
+    from tests._tracked_recipes import delivery_recipe_names
     from tests.server._recipe_fixture_parameters import RESEARCH_OVERRIDES
 
     parameters = []
-    for recipe_name in _delivery_recipe_names():
+    for recipe_name in delivery_recipe_names(_PROJECT_ROOT):
         loaded = load_and_validate(
             recipe_name,
             project_dir=_PROJECT_ROOT,

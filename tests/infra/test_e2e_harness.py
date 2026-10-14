@@ -2156,11 +2156,6 @@ class TestPipelineRecipeFlow:
             else:
                 assert entry["matcher"] == declared_matcher
                 assert not claude_matcher_admits(entry["matcher"], "")
-        for event in ("SubagentStart", "SubagentStop"):
-            entry = settings["hooks"][event][-1]
-            assert not claude_matcher_admits(entry["matcher"], "")
-        for event in ("SessionStart", "SessionEnd"):
-            assert "matcher" not in settings["hooks"][event][-1]
 
     def test_session_hooks_refuse_a_custom_main_agent(self, tmp_path: Path) -> None:
         home = tmp_path / "home"

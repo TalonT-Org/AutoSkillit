@@ -72,6 +72,29 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class _SkillResultContext:
+    """Fields _build_skill_result forwards to _build_stall_result unchanged."""
+
+    backend: CodingAgentBackend
+    completion_marker: str
+    skill_command: str
+    audit: AuditLog | None
+    max_consecutive_retries: int
+    expected_output_patterns: Sequence[str]
+    completion_required: bool
+    provider_used: str
+    write_behavior: WriteBehaviorSpec | None
+    skill_contract: SkillContract | None
+    cwd: str
+    fs_writes_detected: bool
+    git_writes_detected: bool
+    file_changes: Sequence[str]
+    write_watch_dirs: Sequence[Path]
+    backend_resume_session_id: str
+    outcome_ledger: WorkspaceOutcomeLedger | None
+
+
 def _resolve_skill_session_id(
     session: ClaudeSessionResult | None,
     result: SubprocessResult,

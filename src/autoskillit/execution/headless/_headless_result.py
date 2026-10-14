@@ -43,6 +43,7 @@ from autoskillit.execution.headless._headless_adjudication import (
     _resolve_skill_session_id,
     _select_parsed_session,
     _should_flag_cleanup_incomplete,
+    _SkillResultContext,
     _StallOutcomeSpec,
 )
 from autoskillit.execution.headless._headless_evidence import (
@@ -141,29 +142,6 @@ def _apply_infra_retry_policy(
             return outcome, needs_retry, retry_reason
         case _ as unreachable:
             assert_never(unreachable)
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class _SkillResultContext:
-    """Fields _build_skill_result forwards to _build_stall_result unchanged."""
-
-    backend: CodingAgentBackend
-    completion_marker: str
-    skill_command: str
-    audit: AuditLog | None
-    max_consecutive_retries: int
-    expected_output_patterns: Sequence[str]
-    completion_required: bool
-    provider_used: str
-    write_behavior: WriteBehaviorSpec | None
-    skill_contract: SkillContract | None
-    cwd: str
-    fs_writes_detected: bool
-    git_writes_detected: bool
-    file_changes: Sequence[str]
-    write_watch_dirs: Sequence[Path]
-    backend_resume_session_id: str
-    outcome_ledger: WorkspaceOutcomeLedger | None
 
 
 def _build_stall_result(

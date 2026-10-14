@@ -120,14 +120,14 @@ steps:
     tool: run_cmd
     with:
       cmd: >-
-        body_file="{{AUTOSKILLIT_TEMP}}/sandbox-smoke-pr-body.md" &&
         mkdir -p "{{AUTOSKILLIT_TEMP}}" &&
-        printf '%s\n' 'Headless sandbox smoke canary.' > "$body_file" &&
+        printf '%s\n' 'Headless sandbox smoke canary.' >
+        "{{AUTOSKILLIT_TEMP}}/sandbox-smoke-pr-body.md" &&
         gh pr create --repo "${{ inputs.repository }}"
         --head "${{ context.branch_name }}"
         --base "${{ inputs.base_branch }}"
         --title 'Automated smoke test (DO NOT MERGE)'
-        --body-file "$body_file"
+        --body-file "{{AUTOSKILLIT_TEMP}}/sandbox-smoke-pr-body.md"
       cwd: "${{ context.worktree_path }}"
       step_name: create_pull_request
     on_success: close_pull_request

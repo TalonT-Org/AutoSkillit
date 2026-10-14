@@ -48,8 +48,9 @@ must have:
 
 - a pull-request CI workflow, so `wait_for_ci` has something to wait for;
 - a `Taskfile.yml` with `install-worktree` and `test-check` tasks;
-- a `.autoskillit/config.yaml` that sets none of `features`, `quota_guard` or
-  `agent_backend` — as the project layer it outranks the harness's user-layer config;
+- a `.autoskillit/config.yaml` that sets none of `features`, `quota_guard`,
+  `agent_backend`, `model` or `linux_tracing` — the project layer outranks the harness's
+  user-layer config, and a tracing log directory would move logs away from the gate;
 - no committed `.claude/settings.json` or `.claude/settings.local.json` with `env` provider
   or model keys — project and local settings outrank user settings.
 
@@ -69,18 +70,40 @@ The harness writes that block (mode `0600`):
 | `CLAUDE_CODE_AUTO_COMPACT_WINDOW` | `1000000` |
 | `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` | `6` |
 
-The values follow MiniMax's Claude Code guide
-(<https://platform.minimax.io/docs/token-plan/claude-code>) and the repository's own
-`providers.profiles.minimax`. The `[1m]` suffix makes Claude Code assume a 1M-token window
-for the unrecognized model id; the compact window is capped at it. Six concurrent subagents
+The env model values carry `[1m]` so sessions resolved through them are sized at 1M;
+they differ from [MiniMax's current Claude Code guide](https://platform.minimax.io/docs/m-plan/claude-code),
+whose manual example uses `MiniMax-M3.1-Flash-Preview[1m]` and a 524,288 compact window
+(checked 2026-10-14). Six concurrent subagents
 covers `implement` (four children) and `resolve-review` (three to six); a spawn past the
 limit fails without retry.
 
+| Setting | Sessions it governs in E2E |
+|---|---|
+| `--model claude-sonnet-5[1m]` (from `model.default: sonnet[1m]`) | Fleet food truck and `run_skill` workers, fresh and resumed; also the canary and in-session `sonnet` subagents, which inherit the parent's id. A recipe step's own `model:` replaces this default. Subagent windows are not in turn rows, so the gate does not observe them |
+| `ANTHROPIC_MODEL` | Contract-nudge resumes, which pass no `--model` and resolve to `MiniMax-M3[1m]`. Their single-envelope output records no turn row, so the gate does not observe it |
+| `ANTHROPIC_DEFAULT_HAIKU_MODEL` | A `haiku`-class step (`--model haiku`) and in-session `haiku` subagents |
+| `ANTHROPIC_DEFAULT_OPUS_MODEL` | In-session `opus` subagents. AutoSkillit's `opus` class passes `claude-opus-5-5`, not the alias |
+| `ANTHROPIC_DEFAULT_SONNET_MODEL` | Provider fallback: AutoSkillit passes no bare `sonnet`, and `sonnet` subagents inherit the parent's id |
+| `CLAUDE_CODE_AUTO_COMPACT_WINDOW` | Every session, capped at that session's model window |
+
+The live probe confirms the explicit `[1m]` declaration yields 1M on the pinned
+2.1.280/custom-endpoint path. [Claude Code 2.1.285](https://github.com/anthropics/claude-code/releases/tag/v2.1.285)
+changed custom-endpoint sessions to use Sonnet 5's native 1M window; the
+[current model-config docs](https://code.claude.com/docs/en/model-config) describe
+`[1m]` as having no effect when Sonnet already has a native 1M window. The harness
+retains the suffix while supporting the pinned path.
+
+[Claude Code 2.1.295](https://github.com/anthropics/claude-code/releases/tag/v2.1.295)
+documents retrying without a rejected context-1m beta. Do not assume that fallback
+exists at the pinned floor or that every older release had the same defect;
+attribute failures from the probe's actual responses. The floor change belongs to #5276.
+
 The harness relies on this provider contract: the Anthropic Messages API at
 `ANTHROPIC_BASE_URL`, Bearer authentication from `ANTHROPIC_AUTH_TOKEN`, tool use, and
-acceptance of the explicit `claude-*` model ids AutoSkillit passes with `--model`. The
-canary passes no `--model`, so `ANTHROPIC_MODEL` covers it; `ANTHROPIC_DEFAULT_HAIKU_MODEL`
-covers the bare `haiku` alias.
+successful calls using the exact `claude-sonnet-5[1m]` id that fleet sessions and the
+canary pass with `--model`, including any beta-header behavior of the pinned client.
+The canary passes `--model` `FLEET_MODEL` and fails unless
+`modelUsage[FLEET_MODEL].contextWindow` is 1,000,000.
 
 Every child process the harness starts gets an environment with `MINIMAX_API_KEY`,
 `E2E_SANDBOX_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN` and every `ANTHROPIC_*` variable removed, so
@@ -137,6 +160,8 @@ executes it explicitly.
 
 For model tests, `autoskillit-config.yaml` becomes `~/.autoskillit/config.yaml` in the container:
 
+- `model.default: sonnet[1m]` — puts the window declaration on the id AutoSkillit
+  passes with `--model`; `tests/infra/test_e2e_harness.py` derives `FLEET_MODEL` from it;
 - `quota_guard.enabled: false` — the guard measures Anthropic account quota through Claude
   credentials (`~/.claude/.credentials.json`) the container does not have; `fleet run` also
   gets `--disable-quota-guard`;
@@ -196,7 +221,8 @@ cleanup and redaction never depend on GitHub cancelling the job.
 ## Artifacts and redaction
 
 For model tests, the container's AutoSkillit data directory (`~/.local/share/autoskillit`) is bind-mounted
-from the runner, so session logs survive a killed container. Those files belong to uid 1000
+from the runner, so session logs survive a killed container; the harness also reads this
+log tree after fleet runs. Those files belong to uid 1000
 and are often `0600`, so a second container run copies `out/` and `data/logs/` into
 `upload/` world-readable with both secrets replaced by `[REDACTED]`, skips symlinks, and
 fails if any secret survives. Only `upload/` is uploaded, and only when redaction
@@ -232,6 +258,14 @@ line, since earlier lines can be plain-text notices — reports `"success": true
 one sandbox pull request numbered above the pre-run baseline exists in the catalog's
 `expected_pull_request_state` with a non-empty diff. `gh` reports states in upper case; the
 harness lower-cases them. Its existing cleanup closes newly opened PRs with their branches.
+
+After `fleet run`, the harness reads `sessions.jsonl` from the directory it gave the
+fleet through `AUTOSKILLIT_LOG_DIR`. Every session new in this run must have
+`turn_usage.jsonl` rows at 1,000,000, and a successful envelope must have at least
+one new session. Missing windows fail closed, and window failures survive an
+expected-failure match. This checks the CLI-reported budget: failures retain the
+session `dir_name` and observed value rather than inferring a cause or substituting
+the expected value.
 
 `headless-smoke` exercises one orchestrator and one recipe worker (`peak_sessions: 2`). The
 harness stages `sandbox-smoke.yaml` from the read-only `/opt/e2e` mount into the disposable

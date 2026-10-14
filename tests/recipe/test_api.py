@@ -1545,7 +1545,7 @@ steps:
     sub_recipe: declaration-child
     gate: include_child
     on_success: parent_done
-    on_failure: parent_done
+    on_failure: escalate
   parent_done:
     action: stop
     message: >-
@@ -1565,7 +1565,7 @@ steps:
     action: confirm
     message: Complete the child work.
     on_success: child_done
-    on_failure: escalate
+    on_failure: done
   child_done:
     action: stop
     message: >-
@@ -1627,7 +1627,7 @@ steps:
     on_failure: escalate
   done:
     action: stop
-    message: "Example sentinel: {\"success\": true}"
+    message: 'Example sentinel: {"success": true}'
 """,
     )
     sub_recipes = tmp_path / ".autoskillit" / "recipes" / "sub-recipes"
@@ -1657,7 +1657,7 @@ kitchen_rules: [Follow routes.]
 steps:
   done:
     action: stop
-    message: "Example sentinel: {\"success\": true, \"reason\": \"leaf_complete\"}"
+    message: 'Example sentinel: {"success": true, "reason": "leaf_complete"}'
 """
     )
 

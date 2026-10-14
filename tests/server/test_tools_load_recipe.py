@@ -157,7 +157,7 @@ class TestLoadRecipeTools:
         response = json.loads(await load_recipe(name="dispatch-reason"))
 
         assert loaded["_dispatch_success_reasons"] == ["dispatch_reason_complete"]
-        assert response["success"] is True
+        assert response["valid"] is True
         assert "_dispatch_success_reasons" not in response
 
     # SS3

@@ -462,8 +462,6 @@ def _artifact_root(temp_dir: Path) -> Path:
 
 
 def _namespace_component(activation_id: KitchenActivationId) -> str:
-    if not isinstance(activation_id, KitchenActivationId):
-        raise RecipeArtifactError("recipe artifact namespace requires a kitchen activation id")
     return _safe_component(activation_id.value)
 
 

@@ -246,14 +246,41 @@ class ClaudeSessionResult:
         return bool(self.tool_uses)
 
 
+def _record_model_windows(model_usage: object, model_windows: dict[str, set[int]]) -> None:
+    """Retain requested model keys even when their reported windows are invalid."""
+    if not isinstance(model_usage, dict):
+        return
+    for model, metadata in model_usage.items():
+        if not isinstance(model, str) or not model:
+            continue
+        windows = model_windows.setdefault(model, set())
+        if not isinstance(metadata, dict):
+            continue
+        window = valid_context_window(metadata.get("contextWindow"))
+        if window is not None:
+            windows.add(window)
+
+
+def _requested_window_key(
+    requested_models: set[str], model_windows: dict[str, set[int]]
+) -> str | None:
+    """Use the parent's exact init request, or the sole requested modelUsage key."""
+    if len(requested_models) == 1 and (model := next(iter(requested_models))) in model_windows:
+        return model
+    if len(model_windows) == 1:
+        return next(iter(model_windows))
+    return None
+
+
 def _collect_token_usage_evidence(
     stdout: str,
     provider_used: str,
-) -> tuple[dict[str, int | None] | None, list[TurnTokenEntry], dict[str, set[int]]]:
-    """Collect result totals, assistant rows, and model windows from NDJSON stdout."""
+) -> tuple[dict[str, int | None] | None, list[TurnTokenEntry], dict[str, set[int]], set[str]]:
+    """Collect result totals, parent rows, reported windows, and init model requests."""
     result_usage: dict[str, int | None] | None = None
     candidate_rows: list[TurnTokenEntry] = []
     model_windows: dict[str, set[int]] = {}
+    requested_models: set[str] = set()
 
     for line in stdout.strip().splitlines():
         line = line.strip()
@@ -267,6 +294,9 @@ def _collect_token_usage_evidence(
             continue
 
         record_type = obj.get("type")
+        if record_type == "system" and obj.get("subtype") == "init":
+            if model := first_nonempty_string(obj.get("model")):
+                requested_models.add(model)
         if is_parent_assistant_record(obj):
             msg = obj.get("message")
             if not isinstance(msg, dict):
@@ -301,16 +331,9 @@ def _collect_token_usage_evidence(
                     canon_f: first_valid_token_count(usage, api_f, canon_f)
                     for api_f, canon_f in zip(_API_TOKEN_FIELDS, _CANONICAL_TOKEN_FIELDS)
                 }
-            model_usage = obj.get("modelUsage")
-            if isinstance(model_usage, dict):
-                for model, metadata in model_usage.items():
-                    if not isinstance(model, str) or not model or not isinstance(metadata, dict):
-                        continue
-                    window = valid_context_window(metadata.get("contextWindow"))
-                    if window is not None:
-                        model_windows.setdefault(model, set()).add(window)
+            _record_model_windows(obj.get("modelUsage"), model_windows)
 
-    return result_usage, candidate_rows, model_windows
+    return result_usage, candidate_rows, model_windows, requested_models
 
 
 def extract_token_usage(
@@ -326,7 +349,7 @@ def extract_token_usage(
     if not stdout.strip():
         return None, []
 
-    result_usage, candidate_rows, model_windows = _collect_token_usage_evidence(
+    result_usage, candidate_rows, model_windows, requested_models = _collect_token_usage_evidence(
         stdout, provider_used
     )
     raw_rows = merge_turn_usage(candidate_rows)
@@ -334,7 +357,10 @@ def extract_token_usage(
         return None, []
 
     model_buckets, peak_context, turn_usage = _build_turn_usage_and_model_buckets(
-        raw_rows, provider_used, model_windows
+        raw_rows,
+        provider_used,
+        model_windows,
+        _requested_window_key(requested_models, model_windows),
     )
 
     totals: dict[str, TokenMeasure]
@@ -371,6 +397,7 @@ def _build_turn_usage_and_model_buckets(
     raw_rows: list[TurnTokenEntry],
     provider_used: str,
     model_windows: dict[str, set[int]],
+    window_key: str | None,
 ) -> tuple[dict[str, dict[str, TokenMeasure]], TokenMeasure | None, list[TurnTokenEntry]]:
     model_buckets: dict[str, dict[str, TokenMeasure]] = {}
     peak_context: TokenMeasure | None = None
@@ -412,7 +439,7 @@ def _build_turn_usage_and_model_buckets(
         cache_read = row["cache_read_tokens"]
         cache_creation = row["cache_creation_tokens"]
         inclusive_input = claude_inclusive_input_tokens(raw_input, cache_read, cache_creation)
-        windows = model_windows.get(model, set()) if model is not None else set()
+        windows = model_windows.get(window_key, set()) if window_key is not None else set()
         context_window = next(iter(windows)) if len(windows) == 1 else None
         turn_usage.append(
             build_turn_token_entry(

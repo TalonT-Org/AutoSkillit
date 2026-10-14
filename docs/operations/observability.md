@@ -65,6 +65,13 @@ observation. `context_window_tokens` is positive capacity metadata, not a
 measure; `context_fraction` exists only with observed cache-read usage and a
 known capacity.
 
+For Claude turns, the window is the CLI-reported context budget from
+`modelUsage[<the session's requested model>].contextWindow`. The init record
+identifies that request; otherwise the sole `modelUsage` key is used. Ambiguous,
+invalid or conflicting evidence leaves the window unknown. The turn's `model`
+is still the served name. This reports the CLI's budget, without independently
+verifying the provider's maximum accepted input or correcting upstream reports.
+
 ## Mid-run accessors
 
 The orchestrator can read accumulators mid-run via the status MCP tools:

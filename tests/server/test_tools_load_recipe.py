@@ -102,6 +102,10 @@ kitchen_rules:
 _DISPATCH_REASON_RECIPE = """\
 name: dispatch-reason
 description: Recipe declaring an allowed successful dispatch result
+kitchen_rules:
+  - >-
+    Never use native Read, Grep, Glob, Edit, Write, Bash, Agent, WebFetch, WebSearch,
+    or NotebookEdit.
 steps:
   done:
     action: stop
@@ -156,6 +160,9 @@ class TestLoadRecipeTools:
         )
         response = json.loads(await load_recipe(name="dispatch-reason"))
 
+        assert loaded["valid"] is True, (
+            f"errors={loaded.get('errors')!r}; suggestions={loaded.get('suggestions')!r}"
+        )
         assert loaded["_dispatch_success_reasons"] == ["dispatch_reason_complete"]
         assert response["valid"] is True
         assert "_dispatch_success_reasons" not in response

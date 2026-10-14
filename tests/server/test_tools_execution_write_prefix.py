@@ -141,6 +141,47 @@ def test_non_worktree_skill_no_worktree_prefix(tmp_path: Path) -> None:
     assert worktree_parent_str not in all_prefixes
 
 
+def test_smoke_recipe_grants_only_its_owned_worktree(tmp_path: Path) -> None:
+    from types import SimpleNamespace
+
+    from autoskillit.core import SkillSource, load_yaml
+    from autoskillit.server.tools.tools_execution._run_skill_session import (
+        _extend_closure_write_scope,
+        _prepare_owned_write_scope,
+        _resolve_dispatch_paths,
+    )
+    from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+    repo_root = Path(__file__).resolve().parents[2]
+    recipe = load_yaml(repo_root / "scripts/e2e/recipes/sandbox-smoke.yaml")
+    worker = recipe["steps"]["implement"]["with"]
+    clone_root, worktree = _make_worktree_layout(tmp_path)
+    info = _skill_info_from_frontmatter(
+        "smoke-task",
+        SkillSource.BUNDLED_EXTENDED,
+        repo_root / "src/autoskillit/skills_extended/smoke-task/SKILL.md",
+    )
+    assert not info.invalidities
+    state = SimpleNamespace(
+        cwd=str(worktree),
+        output_dir=worker["output_dir"].replace("${{ context.worktree_path }}", str(worktree)),
+        skill_command="/autoskillit:smoke-task write the canary",
+        target_name="smoke-task",
+        closure_spec="",
+        invocation=SimpleNamespace(root=info, closure=(info,)),
+        is_read_only=False,
+    )
+
+    assert _resolve_dispatch_paths(state, base_cwd=worktree) is None
+    assert _extend_closure_write_scope(state) is None
+    assert _prepare_owned_write_scope(state) is None
+    assert scope_covers_cwd(state.allowed_write_prefixes, str(worktree / "sandbox/text.py"))
+    assert scope_covers_cwd(
+        state.allowed_write_prefixes, str(worktree / "tests/test_smoke_canary.py")
+    )
+    assert not scope_covers_cwd(state.allowed_write_prefixes, str(clone_root))
+
+
 # ---------------------------------------------------------------------------
 # AC2: dispatch preflight tests
 # ---------------------------------------------------------------------------

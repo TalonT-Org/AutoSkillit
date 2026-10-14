@@ -11,6 +11,8 @@ from autoskillit.pipeline import (
     closed_kitchen_open_state,
     new_kitchen_open_state,
 )
+from autoskillit.server.recipe import _recipe_artifact, _recipe_generation
+from autoskillit.server.recipe.section import _lifecycle
 
 logger = get_logger(__name__)
 
@@ -23,15 +25,11 @@ def establish_kitchen_identity(ctx: ToolContext, *, campaign_id: str | None = No
     with ctx.kitchen_transition_lock:
         state = ctx.kitchen_open_state
         if state.phase is KitchenOpenPhase.CLOSED:
-            from autoskillit.server.recipe._recipe_generation import (  # circular-break
-                activate_kitchen,
-            )
-
             kitchen_id = campaign_id or resolve_kitchen_id()
             if not kitchen_id.strip():
                 raise ValueError("kitchen_id must contain non-whitespace characters")
             activation_id = KitchenActivationId(uuid4().hex)
-            activate_kitchen(activation_id)
+            _recipe_generation.activate_kitchen(activation_id)
             ctx.kitchen_process_identity = None
             state = new_kitchen_open_state(
                 kitchen_id=kitchen_id,
@@ -44,13 +42,6 @@ def establish_kitchen_identity(ctx: ToolContext, *, campaign_id: str | None = No
 
 def retire_kitchen_identity(ctx: ToolContext) -> None:
     """Return the lifecycle to CLOSED, then permanently retire its activation."""
-    from autoskillit.server.recipe._recipe_artifact import (  # circular-break
-        retire_recipe_artifacts,
-    )
-    from autoskillit.server.recipe.section._lifecycle import (  # circular-break
-        notify_kitchen_retired,
-    )
-
     with ctx.kitchen_transition_lock:
         state = ctx.kitchen_open_state
         ctx.kitchen_open_state = closed_kitchen_open_state(context_id=state.context_id)
@@ -59,11 +50,11 @@ def retire_kitchen_identity(ctx: ToolContext) -> None:
         return
     if isinstance(ctx.temp_dir, Path):
         try:
-            if retire_recipe_artifacts(ctx.temp_dir, activation_id=activation_id):
+            if _recipe_artifact.retire_recipe_artifacts(ctx.temp_dir, activation_id=activation_id):
                 return
         except Exception:
             try:
-                notify_kitchen_retired(activation_id)
+                _lifecycle.notify_kitchen_retired(activation_id)
             except Exception:
                 logger.warning(
                     "kitchen_activation_retirement_notification_failed",
@@ -76,4 +67,4 @@ def retire_kitchen_identity(ctx: ToolContext) -> None:
             kitchen_id=state.kitchen_id,
             activation_id=activation_id.value,
         )
-    notify_kitchen_retired(activation_id)
+    _lifecycle.notify_kitchen_retired(activation_id)

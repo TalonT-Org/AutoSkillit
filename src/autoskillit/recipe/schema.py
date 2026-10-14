@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -333,6 +334,24 @@ class Recipe:
     # When True, this sub-recipe is excluded from fleet dispatch listings and MCP
     # list_recipes. It is only loaded via campaign dispatch by name.
     delivery_segments: tuple[RecipeDeliverySegment, ...] = field(default_factory=tuple)
+
+    def declared_success_reasons(self) -> frozenset[str] | None:
+        """Collect valid success reasons declared by this graph's stop examples."""
+        reasons: set[str] = set()
+        for step in self.steps.values():
+            if step.action != "stop" or not step.message:
+                continue
+            for block in extract_sentinel_json_blocks(step.message):
+                try:
+                    payload = json.loads(block)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(payload, dict) or payload.get("success") is not True:
+                    continue
+                reason = payload.get("reason")
+                if isinstance(reason, str) and reason.strip():
+                    reasons.add(reason.strip())
+        return frozenset(reasons) if reasons else None
 
     def __post_init__(self) -> None:
         self.name = self.name.strip()

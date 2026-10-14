@@ -99,6 +99,17 @@ kitchen_rules:
   - "Use AutoSkillit tools only"
 """
 
+_DISPATCH_REASON_RECIPE = """\
+name: dispatch-reason
+description: Recipe declaring an allowed successful dispatch result
+steps:
+  done:
+    action: stop
+    message: >-
+      Done. Example sentinel:
+      {"success": true, "reason": "dispatch_reason_complete"}
+"""
+
 
 class TestLoadRecipeTools:
     """Tests for kitchen-gated load_recipe tool."""
@@ -120,6 +131,34 @@ class TestLoadRecipeTools:
         assert "suggestions" in result
         assert "name: test" in result["content"]
         assert "description: Test recipe" in result["content"]
+
+    @pytest.mark.anyio
+    async def test_dispatch_success_reasons_are_server_carrier_only(
+        self, tmp_path, monkeypatch, tool_ctx_kitchen_open
+    ):
+        """Server callers can read declared reasons while load_recipe omits the carrier."""
+        monkeypatch.chdir(tmp_path)
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        (recipes_dir / "dispatch-reason.yaml").write_text(_DISPATCH_REASON_RECIPE)
+
+        from autoskillit.server.tools._serve_helpers import serve_recipe
+
+        loaded = serve_recipe(
+            tool_ctx_kitchen_open,
+            "dispatch-reason",
+            caller_overrides=None,
+            config_default={},
+            session_overrides={},
+            config_layer={},
+            resolved_defaults={},
+            temp_dir=tool_ctx_kitchen_open.temp_dir,
+        )
+        response = json.loads(await load_recipe(name="dispatch-reason"))
+
+        assert loaded["_dispatch_success_reasons"] == ["dispatch_reason_complete"]
+        assert response["success"] is True
+        assert "_dispatch_success_reasons" not in response
 
     # SS3
     @pytest.mark.anyio
@@ -270,12 +309,10 @@ class TestLoadRecipeIngredientsOnly:
         monkeypatch.chdir(tmp_path)
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         recipes_dir.mkdir(parents=True)
-        (recipes_dir / "test.yaml").write_text(
-            "name: test\ndescription: Test recipe\nsteps:\n"
-            "  done:\n    action: stop\n    message: Done\n"
-        )
-        result = json.loads(await load_recipe(name="test", ingredients_only=True))
+        (recipes_dir / "dispatch-reason.yaml").write_text(_DISPATCH_REASON_RECIPE)
+        result = json.loads(await load_recipe(name="dispatch-reason", ingredients_only=True))
         assert "content" not in result
         assert "orchestration_rules" not in result
         assert "stop_step_semantics" not in result
+        assert "_dispatch_success_reasons" not in result
         assert "suggestions" in result

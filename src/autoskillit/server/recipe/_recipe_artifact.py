@@ -139,6 +139,7 @@ class PreparedRecipeGeneration:
 
 _RECIPE_GENERATION_SOURCE_EXCLUDED_FIELDS = frozenset(
     {
+        "_dispatch_success_reasons",
         "_finalized_projection",
         "delivery_bound_spill",
         "finalized_recipe_projection",

@@ -171,6 +171,10 @@ def _assemble_load_result(
         active_recipe, stop_semantics=_stop_semantics
     )
     result["stop_step_semantics"] = _stop_semantics
+    success_reasons = active_recipe.declared_success_reasons() if active_recipe else None
+    result["_dispatch_success_reasons"] = (
+        sorted(success_reasons) if success_reasons is not None else None
+    )
     result["content_hash"] = recipe.content_hash if recipe else ""
     result["composite_hash"] = recipe.composite_hash if recipe else ""
     result["recipe_version"] = recipe.recipe_version if recipe else None

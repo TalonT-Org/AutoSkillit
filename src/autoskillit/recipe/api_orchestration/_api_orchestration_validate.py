@@ -222,6 +222,11 @@ def _run_validation_pipeline(
         if _post_sweep_errors:
             errors.extend(f"[post-prune] {error}" for error in _post_sweep_errors)
             raw = ""
+        errors.extend(
+            f"[post-prune] unresolved sub_recipe {step.sub_recipe!r} at step {step_name!r}"
+            for step_name, step in active_recipe.steps.items()
+            if step.sub_recipe is not None
+        )
         _effective_analysis_edges = _analysis_edges_from_effective_routes(
             active_recipe, _effective_flow_edges
         )

@@ -243,15 +243,13 @@ async def test_checkpoint_delivery_sizes_failure_with_actual_tool_name(
     assert prepared.success_carrier is not None
     assert prepared.success_pull_carrier is not None
     assert prepared.recovery_carrier is not None
-    assert seen_tool_names == [expected_tool_name] * 3
-    assert all(
-        carrier in validated_carriers
-        for carrier in (
-            prepared.success_carrier,
-            prepared.success_pull_carrier,
-            prepared.recovery_carrier,
-        )
-    )
+    assert seen_tool_names == [expected_tool_name] * 4
+    assert validated_carriers == [
+        prepared.success_carrier,
+        prepared.success_pull_carrier,
+        prepared.success_carrier,
+        prepared.recovery_carrier,
+    ]
 
 
 @pytest.mark.anyio

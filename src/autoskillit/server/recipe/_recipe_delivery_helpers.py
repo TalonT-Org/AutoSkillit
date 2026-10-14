@@ -97,8 +97,9 @@ def _initialization_requirements(
             raise RecipeArtifactSchemaError(
                 f"required recipe initialization section is absent: {section}"
             )
+        activation_id = tool_ctx.kitchen_activation_id
         page_plan = get_or_build_recipe_section_page_plan(
-            kitchen_id=tool_ctx.kitchen_id,
+            activation_id=activation_id,
             generation=generation,
             selected=selected,
             recipe_section_bound_bytes=bound_bytes,

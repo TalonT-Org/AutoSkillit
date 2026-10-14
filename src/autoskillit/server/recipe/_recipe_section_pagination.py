@@ -21,6 +21,7 @@ from autoskillit.core import (
     recipe_section_plan_digest,
     resolve_recipe_section_response_bound,
 )
+from autoskillit.pipeline import KitchenActivationId
 from autoskillit.server.recipe._recipe_section_planning import (
     _render_candidate,
     plan_pages,
@@ -38,7 +39,7 @@ from autoskillit.server.recipe.section._contracts import (
     RecipeSectionRequestState,
     SelectedRecipeSection,
 )
-from autoskillit.server.recipe.section._lifecycle import register_kitchen_retirement_callback
+from autoskillit.server.recipe.section._lifecycle import register_activation_retirement_callback
 from autoskillit.server.recipe.section._rendering import render_recipe_section_failure
 from autoskillit.server.recipe.section._verification import (
     verify_finalized_recipe_section_plan,
@@ -71,7 +72,7 @@ __all__ = [
     "RecipeSectionRequestState",
     "SelectedRecipeSection",
     "build_recipe_section_page_plan",
-    "evict_kitchen",
+    "evict_activation",
     "get_or_build_recipe_section_page_plan",
     "render_recipe_section_failure",
     "render_recipe_section_page",
@@ -84,7 +85,7 @@ __all__ = [
 
 @dataclass(frozen=True, slots=True)
 class _PagePlanCacheKey:
-    kitchen_id: str
+    activation_id: KitchenActivationId
     generation: RecipeArtifactGeneration
     initialization_id: str | None
     section: str
@@ -123,7 +124,7 @@ class PagePlanCache:
         self._entries: OrderedDict[_PagePlanCacheKey, RecipeSectionPagePlan] = OrderedDict()
         self._weight_bytes = 0
         self._builds: dict[_PagePlanCacheKey, _PagePlanBuildState] = {}
-        self._retired_kitchens: set[str] = set()
+        self._retired_activations: set[KitchenActivationId] = set()
         self._lock = RLock()
 
     def get(self, key: _PagePlanCacheKey) -> RecipeSectionPagePlan | None:
@@ -147,7 +148,7 @@ class PagePlanCache:
 
     def put(self, key: _PagePlanCacheKey, plan: RecipeSectionPagePlan) -> None:
         with self._lock:
-            if key.kitchen_id not in self._retired_kitchens:
+            if key.activation_id not in self._retired_activations:
                 self._put_locked(key, plan)
 
     def get_or_build(
@@ -155,7 +156,7 @@ class PagePlanCache:
         key: _PagePlanCacheKey,
         builder: Callable[[], RecipeSectionPagePlan],
     ) -> RecipeSectionPagePlan:
-        """Share a key build and admit it only while its kitchen remains active."""
+        """Share a key build and admit it only while its activation remains active."""
         with self._lock:
             cached = self._entries.get(key)
             if cached is not None:
@@ -177,7 +178,7 @@ class PagePlanCache:
                     build_state.completed.set()
                 raise
             with self._lock:
-                if key.kitchen_id not in self._retired_kitchens:
+                if key.activation_id not in self._retired_activations:
                     self._put_locked(key, plan)
                 build_state.plan = plan
                 self._builds.pop(key, None)
@@ -195,12 +196,12 @@ class PagePlanCache:
         with self._lock:
             self._entries.clear()
             self._weight_bytes = 0
-            self._retired_kitchens.clear()
+            self._retired_activations.clear()
 
-    def evict_kitchen(self, kitchen_id: str) -> None:
+    def evict_activation(self, activation_id: KitchenActivationId) -> None:
         with self._lock:
-            self._retired_kitchens.add(kitchen_id)
-            keys = [key for key in self._entries if key.kitchen_id == kitchen_id]
+            self._retired_activations.add(activation_id)
+            keys = [key for key in self._entries if key.activation_id == activation_id]
             for key in keys:
                 self._weight_bytes -= self._entries.pop(key).cache_weight_bytes
 
@@ -217,24 +218,26 @@ def _page_plan_cache() -> PagePlanCache:
         return _PAGE_PLAN_CACHE
 
 
-def evict_kitchen(kitchen_id: str) -> None:
-    """Best-effort idempotent eviction for a retired kitchen namespace."""
+def evict_activation(activation_id: KitchenActivationId) -> None:
+    """Best-effort idempotent eviction for a retired activation namespace."""
     try:
         with _PAGE_PLAN_CACHE_LOCK:
             cache = _PAGE_PLAN_CACHE
         if cache is not None:
-            cache.evict_kitchen(kitchen_id)
+            cache.evict_activation(activation_id)
     except Exception:
         logger.warning(
-            "recipe_section_cache_eviction_failed", kitchen_id=kitchen_id, exc_info=True
+            "recipe_section_cache_eviction_failed",
+            activation_id=activation_id.value,
+            exc_info=True,
         )
 
 
-def _evict_retired_kitchen(kitchen_id: str) -> None:
-    evict_kitchen(kitchen_id)
+def _evict_retired_activation(activation_id: KitchenActivationId) -> None:
+    evict_activation(activation_id)
 
 
-register_kitchen_retirement_callback(_evict_retired_kitchen)
+register_activation_retirement_callback(_evict_retired_activation)
 
 
 def resolve_recipe_section_bound_bytes(
@@ -314,14 +317,12 @@ def select_recipe_section(
 
 def build_recipe_section_page_plan(
     *,
-    kitchen_id: str,
     generation: RecipeArtifactGeneration,
     selected: SelectedRecipeSection,
     recipe_section_bound_bytes: int,
     char_ceiling: int | None = None,
 ) -> RecipeSectionPagePlan:
     """Build, finalize, and verify one deterministic immutable page plan."""
-    del kitchen_id  # Identity participates in the cache key, not the manifest.
     if recipe_section_bound_bytes <= 0:
         raise RecipeSectionBoundError("recipe section bound must be positive")
     section_sha256 = selected_section_sha256(selected)
@@ -411,14 +412,14 @@ def build_recipe_section_page_plan(
 
 def _cache_key(
     *,
-    kitchen_id: str,
+    activation_id: KitchenActivationId,
     generation: RecipeArtifactGeneration,
     selected: SelectedRecipeSection,
     recipe_section_bound_bytes: int,
     char_ceiling: int | None = None,
 ) -> _PagePlanCacheKey:
     return _PagePlanCacheKey(
-        kitchen_id=kitchen_id,
+        activation_id=activation_id,
         generation=generation,
         initialization_id=selected.initialization_id,
         section=selected.section,
@@ -433,7 +434,7 @@ def _cache_key(
 
 def get_or_build_recipe_section_page_plan(
     *,
-    kitchen_id: str,
+    activation_id: KitchenActivationId,
     generation: RecipeArtifactGeneration,
     selected: SelectedRecipeSection,
     recipe_section_bound_bytes: int,
@@ -441,7 +442,7 @@ def get_or_build_recipe_section_page_plan(
 ) -> RecipeSectionPagePlan:
     """Return a verified cached plan or build and admit one."""
     key = _cache_key(
-        kitchen_id=kitchen_id,
+        activation_id=activation_id,
         generation=generation,
         selected=selected,
         recipe_section_bound_bytes=recipe_section_bound_bytes,
@@ -451,7 +452,6 @@ def get_or_build_recipe_section_page_plan(
     return cache.get_or_build(
         key,
         lambda: build_recipe_section_page_plan(
-            kitchen_id=kitchen_id,
             generation=generation,
             selected=selected,
             recipe_section_bound_bytes=recipe_section_bound_bytes,

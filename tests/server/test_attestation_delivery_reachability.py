@@ -41,6 +41,7 @@ from autoskillit.server.recipe._recipe_initialization import (
     build_embedded_completion_response,
     recipe_initialization_receipt,
 )
+from tests._helpers import kitchen_identity_fields
 from tests.conftest import _make_result
 from tests.contracts.test_delivery_bound_fitness import _full_open_kitchen_generation
 from tests.server._pipeline_test_helpers import _write_tracker
@@ -611,7 +612,7 @@ async def test_delivery_modes_preserve_one_snapshot_skill_input_shapes(
     payload, projection = _full_open_kitchen_generation("implementation")
     tool_ctx = SimpleNamespace(
         backend=None,
-        kitchen_id="same-snapshot-delivery",
+        **kitchen_identity_fields("same-snapshot-delivery"),
         temp_dir=tmp_path,
     )
     prepared = prepare_recipe_delivery_generation(
@@ -622,7 +623,7 @@ async def test_delivery_modes_preserve_one_snapshot_skill_input_shapes(
     )
     generation = persist_recipe_artifact(
         tmp_path,
-        kitchen_id=tool_ctx.kitchen_id,
+        activation_id=tool_ctx.kitchen_activation_id,
         producer_tool="open_kitchen",
         recipe_name="implementation",
         payload=prepared.canonical_artifact_payload,
@@ -643,7 +644,7 @@ async def test_delivery_modes_preserve_one_snapshot_skill_input_shapes(
     ]
     spilled = load_recipe_artifact(
         tmp_path,
-        kitchen_id=tool_ctx.kitchen_id,
+        activation_id=tool_ctx.kitchen_activation_id,
         identity=generation,
     )[RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY]
     embedded_completion = build_embedded_completion_response(

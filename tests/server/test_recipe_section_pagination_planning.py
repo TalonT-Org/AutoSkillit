@@ -182,7 +182,6 @@ def test_terminal_initialization_page_carries_progress_and_completion_receipt() 
         },
     )
     plan = build_recipe_section_page_plan(
-        kitchen_id="kitchen-test",
         generation=generation,
         selected=selected,
         recipe_section_bound_bytes=90_000,
@@ -213,7 +212,6 @@ def test_char_ceiling_accepts_a_page_within_it() -> None:
     )
 
     replan = build_recipe_section_page_plan(
-        kitchen_id="kitchen-test",
         generation=_generation(),
         selected=select_recipe_section(
             _payload(orchestration_rules="follow the graph exactly"), "orchestration_rules"
@@ -243,7 +241,6 @@ def test_char_ceiling_rejects_a_page_that_exceeds_it() -> None:
 
     with pytest.raises(RecipeSectionBoundError, match="cannot fit progress"):
         build_recipe_section_page_plan(
-            kitchen_id="kitchen-test",
             generation=_generation(),
             selected=select_recipe_section(payload, "orchestration_rules"),
             recipe_section_bound_bytes=_PAGE_TEST_BOUND,
@@ -324,7 +321,6 @@ def test_string_scalar_strategy_rejects_non_string_values() -> None:
 
     with pytest.raises((TypeError, ValueError), match="string"):
         build_recipe_section_page_plan(
-            kitchen_id="kitchen-test",
             generation=_generation(),
             selected=selected,
             recipe_section_bound_bytes=_PAGE_TEST_BOUND,

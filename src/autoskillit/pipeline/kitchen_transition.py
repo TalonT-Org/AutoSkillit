@@ -18,6 +18,7 @@ __all__ = [
     "KITCHEN_EFFECT_RESPONSE_ENFORCEMENT",
     "KitchenEffectPhase",
     "KitchenEffectRecord",
+    "KitchenActivationId",
     "KitchenIntentConflict",
     "KitchenOpenPhase",
     "KitchenOpenState",
@@ -35,6 +36,7 @@ __all__ = [
     "mark_kitchen_effect_ambiguous",
     "mark_kitchen_effect_degraded",
     "new_kitchen_open_state",
+    "require_kitchen_activation_id",
     "prepare_kitchen_response",
     "release_kitchen_request",
     "start_kitchen_effect",
@@ -46,6 +48,24 @@ __all__ = [
 
 KITCHEN_EFFECT_RECIPE_SERVING = "recipe_serving"
 KITCHEN_EFFECT_RESPONSE_ENFORCEMENT = "response_enforcement"
+
+
+@dataclass(frozen=True, slots=True)
+class KitchenActivationId:
+    """Identity of one CLOSED -> INFRASTRUCTURE_READY activation. Never reused."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.value, str) or not self.value.strip():
+            raise ValueError("KitchenActivationId.value must contain non-whitespace characters")
+
+
+def require_kitchen_activation_id(value: object) -> KitchenActivationId:
+    """Return ``value`` when it is an activation identity; reject anything else."""
+    if not isinstance(value, KitchenActivationId):
+        raise TypeError("a KitchenActivationId is required")
+    return value
 
 
 class KitchenOpenPhase(StrEnum):
@@ -107,6 +127,7 @@ class KitchenOpenState:
 
     phase: KitchenOpenPhase
     kitchen_id: str
+    activation_id: KitchenActivationId | None
     operation_id: str
     context_id: str
     intent_fingerprint: str | None = None
@@ -156,6 +177,7 @@ def closed_kitchen_open_state(*, context_id: str | None = None) -> KitchenOpenSt
     return KitchenOpenState(
         phase=KitchenOpenPhase.CLOSED,
         kitchen_id="",
+        activation_id=None,
         operation_id="",
         context_id=(context_id if isinstance(context_id, str) and context_id else str(uuid4())),
     )
@@ -164,15 +186,18 @@ def closed_kitchen_open_state(*, context_id: str | None = None) -> KitchenOpenSt
 def new_kitchen_open_state(
     *,
     kitchen_id: str,
+    activation_id: KitchenActivationId,
     context_id: str,
     operation_id: str | None = None,
 ) -> KitchenOpenState:
     """Mint the infrastructure transition before request arguments are bound."""
     if not kitchen_id:
         raise ValueError("kitchen_id must be non-empty")
+    activation_id = require_kitchen_activation_id(activation_id)
     return KitchenOpenState(
         phase=KitchenOpenPhase.INFRASTRUCTURE_READY,
         kitchen_id=kitchen_id,
+        activation_id=activation_id,
         operation_id=operation_id or str(uuid4()),
         context_id=context_id,
     )

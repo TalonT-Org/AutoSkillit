@@ -107,7 +107,6 @@ def _build(
     *,
     bound: int,
     generation: RecipeArtifactGeneration | None = None,
-    kitchen_id: str = "kitchen-test",
     dynamic_content: str | None = None,
 ) -> Any:
     """Select a section and build a page plan."""
@@ -117,7 +116,6 @@ def _build(
         dynamic_content=dynamic_content,
     )
     return build_recipe_section_page_plan(
-        kitchen_id=kitchen_id,
         generation=generation or _generation(),
         selected=selected,
         recipe_section_bound_bytes=bound,

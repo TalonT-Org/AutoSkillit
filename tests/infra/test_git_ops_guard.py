@@ -1133,6 +1133,39 @@ class TestCheckedOutRefWriteTargets:
 
 
 class TestCheckedOutRefAllows:
+    @pytest.mark.parametrize("write_to_owned_ref", [False, True], ids=["pr-body", "owned-ref"])
+    def test_smoke_pr_creation_command_preserves_ref_protection(
+        self, linked_repo: dict[str, Path | str], write_to_owned_ref: bool
+    ) -> None:
+        from autoskillit.core import load_yaml
+
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        recipe_path = (
+            Path(__file__).resolve().parents[2] / "scripts/e2e/recipes/sandbox-smoke.yaml"
+        )
+        command = load_yaml(recipe_path)["steps"]["create_pull_request"]["with"]["cmd"]
+        temp_dir = linked / ".autoskillit" / "temp"
+        replacements = {
+            "{{AUTOSKILLIT_TEMP}}": str(temp_dir),
+            "${{ inputs.repository }}": "example/sandbox",
+            "${{ context.branch_name }}": "review",
+            "${{ inputs.base_branch }}": "develop",
+        }
+        for source, value in replacements.items():
+            command = command.replace(source, value)
+        assert "{{" not in command
+        if write_to_owned_ref:
+            command = command.replace(
+                str(temp_dir / "sandbox-smoke-pr-body.md"),
+                str(Path(str(linked_repo["common_git_dir"])) / "refs/heads/review"),
+            )
+
+        output = _run_guard(command, kitchen_open=True, tmpdir=linked, session_type="orchestrator")
+
+        assert _is_denied(output) is write_to_owned_ref
+        _assert_ref_unchanged(linked, "refs/heads/review", str(linked_repo["old_sha"]))
+
     @pytest.mark.parametrize(
         "command_template",
         [

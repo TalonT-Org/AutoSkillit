@@ -12,6 +12,7 @@ from autoskillit.core import (
     AUTOSKILLIT_ATTESTED_META_SUPPORT,
     CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,
 )
+from tests._helpers import kitchen_identity_fields
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -270,7 +271,7 @@ def test_implementation_recipe_segments_public_startup_but_persists_full_authori
             SimpleNamespace(
                 backend=BACKEND_REGISTRY["claude-code"](),
                 config=SimpleNamespace(output_budget=OutputBudgetConfig()),
-                kitchen_id="impl-envelope-proof",
+                **kitchen_identity_fields("impl-envelope-proof"),
                 recipe_execution_lock=threading.RLock(),
                 recipe_initialization_state=NoActiveRecipe(),
                 temp_dir=tmp_path,
@@ -307,7 +308,7 @@ def test_implementation_recipe_segments_public_startup_but_persists_full_authori
         assert finalized.artifact_generation is not None
         persisted = load_recipe_artifact(
             tmp_path,
-            kitchen_id=tool_ctx.kitchen_id,
+            activation_id=tool_ctx.kitchen_activation_id,
             identity=finalized.artifact_generation,
         )
         assert persisted["content"] == prepared.canonical_artifact_payload["content"]

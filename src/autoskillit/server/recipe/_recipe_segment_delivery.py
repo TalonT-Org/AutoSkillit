@@ -500,9 +500,10 @@ def prepare_recipe_segment_delivery(
     ):
         return None
     artifact_dir = tool_ctx.temp_dir
+    activation_id = tool_ctx.kitchen_activation_id
     persisted = load_recipe_artifact(
         artifact_dir,
-        kitchen_id=tool_ctx.kitchen_id,
+        activation_id=activation_id,
         identity=state.artifact_generation,
     )
     expected_projection = _finalized_projection_payload(state.finalized_projection)

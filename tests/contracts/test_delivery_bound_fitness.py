@@ -50,6 +50,7 @@ from autoskillit.server.response._response_budget import (
 from autoskillit.server.tools._serve_helpers import (
     build_open_kitchen_recipe_payload,
 )
+from tests._helpers import kitchen_identity_fields
 from tests._tracked_recipes import tracked_recipe_load_result, tracked_recipe_names
 from tests.contracts._delivery_constants import (
     CALIBRATED_PAGES_PER_SECTION,
@@ -170,7 +171,7 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
         SimpleNamespace(
             backend=BACKEND_REGISTRY[backend_name](),
             config=SimpleNamespace(output_budget=OutputBudgetConfig()),
-            kitchen_id=f"fitness-{backend_name}-{recipe_name}",
+            **kitchen_identity_fields(f"fitness-{backend_name}-{recipe_name}"),
             temp_dir=tmp_path,
         ),
     )

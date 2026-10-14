@@ -15,7 +15,7 @@ from autoskillit.core import (
     FinalizedRecipeStep,
     RecipeBindingProjection,
 )
-from autoskillit.pipeline import NoActiveRecipe, ReadyRecipe
+from autoskillit.pipeline import KitchenActivationId, NoActiveRecipe, ReadyRecipe
 from autoskillit.server.recipe._recipe_artifact import (
     _finalized_projection_payload,
     _normalized_recipe_compile_identity,
@@ -127,7 +127,7 @@ def _install_segmented_ready(ready_context):
     )
     persisted = load_recipe_artifact(
         tool_ctx.temp_dir,
-        kitchen_id=tool_ctx.kitchen_id,
+        activation_id=tool_ctx.kitchen_activation_id,
         identity=state.artifact_generation,
     )
     persisted["finalized_recipe_projection"] = _finalized_projection_payload(projection)
@@ -141,7 +141,7 @@ def _install_segmented_ready(ready_context):
     )
     artifact = persist_recipe_artifact(
         tool_ctx.temp_dir,
-        kitchen_id=tool_ctx.kitchen_id,
+        activation_id=tool_ctx.kitchen_activation_id,
         producer_tool=state.artifact_generation.producer_tool,
         recipe_name=state.recipe_name,
         payload=persisted,
@@ -223,7 +223,7 @@ async def test_persisted_generation_recomputes_original_compile_identity(
     assert isinstance(state, ReadyRecipe)
     persisted = load_recipe_artifact(
         tool_ctx.temp_dir,
-        kitchen_id=tool_ctx.kitchen_id,
+        activation_id=tool_ctx.kitchen_activation_id,
         identity=state.artifact_generation,
     )
 
@@ -298,7 +298,7 @@ async def test_checkpoint_delivery_survives_ready_generation_lru_eviction(
     original_state = tool_ctx_ready_recipe.tool_ctx.recipe_initialization_state
     assert isinstance(original_state, ReadyRecipe)
     base_record = original_store.lookup_compile(
-        original_state.kitchen_id,
+        tool_ctx_ready_recipe.tool_ctx.kitchen_activation_id,
         original_state.generation_store_key,
     )
     assert base_record is not None
@@ -316,12 +316,18 @@ async def test_checkpoint_delivery_survives_ready_generation_lru_eviction(
         store.put(
             replace(
                 ready_record,
-                kitchen_id=f"unrelated-kitchen-{index}",
+                activation_id=KitchenActivationId(f"unrelated-kitchen-{index}"),
                 normalized_compile_key=f"unrelated-compile-{index}",
                 surface_bindings={},
             )
         )
-    assert store.lookup_compile(state.kitchen_id, state.generation_store_key) is None
+    assert (
+        store.lookup_compile(
+            tool_ctx_ready_recipe.tool_ctx.kitchen_activation_id,
+            state.generation_store_key,
+        )
+        is None
+    )
 
     prepared = prepare_recipe_segment_delivery(tool_ctx_ready_recipe.tool_ctx, "scope")
 

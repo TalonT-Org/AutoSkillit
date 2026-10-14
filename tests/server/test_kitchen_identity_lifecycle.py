@@ -125,14 +125,228 @@ async def test_boot_open_load_share_one_kitchen_identity(
         assert tool_ctx.kitchen_id == campaign_id
 
 
+def _install_fresh_recipe_stores(monkeypatch):
+    from autoskillit.server.recipe import _recipe_generation, _recipe_section_pagination
+
+    store = _recipe_generation.RecipeGenerationStore()
+    cache = _recipe_section_pagination.PagePlanCache()
+    monkeypatch.setattr(_recipe_generation, "_RECIPE_GENERATION_STORE", store)
+    monkeypatch.setattr(_recipe_section_pagination, "_PAGE_PLAN_CACHE", cache)
+    return store, cache, _recipe_section_pagination
+
+
+def _build_page_plan_for_activation(payload, activation_id, generation, pagination):
+    from tests.server._recipe_section_pagination_test_helpers import _build
+
+    selected = pagination.select_recipe_section(payload, "content")
+    plan = _build(payload, "content", bound=4096, generation=generation)
+    key = pagination._cache_key(
+        activation_id=activation_id,
+        generation=generation,
+        selected=selected,
+        recipe_section_bound_bytes=4096,
+    )
+    return key, plan
+
+
+@pytest.mark.parametrize("campaign_mode", [False, True], ids=["anonymous", "campaign"])
+def test_recipe_stores_agree_across_retire_and_reactivate(tool_ctx, monkeypatch, campaign_mode):
+    from autoskillit.core import CAMPAIGN_ID_ENV_VAR
+    from autoskillit.pipeline import KitchenOpenPhase
+    from autoskillit.server.lifecycle import _kitchen_identity
+    from autoskillit.server.recipe._recipe_artifact import persist_recipe_artifact
+    from tests.server.test_recipe_generation import _record
+    from tests.server.test_tools_recipe_pull import _payload
+
+    store, cache, pagination = _install_fresh_recipe_stores(monkeypatch)
+    if campaign_mode:
+        monkeypatch.setenv(CAMPAIGN_ID_ENV_VAR, "campaign-store-agreement")
+    else:
+        monkeypatch.delenv(CAMPAIGN_ID_ENV_VAR, raising=False)
+
+    first_kitchen_id = _kitchen_identity.establish_kitchen_identity(tool_ctx)
+    first_activation_id = tool_ctx.kitchen_activation_id
+    assert first_activation_id.value != first_kitchen_id
+
+    payload = _payload()
+    generation = persist_recipe_artifact(
+        tool_ctx.temp_dir,
+        activation_id=first_activation_id,
+        producer_tool="load_recipe",
+        recipe_name="remediation",
+        payload=payload,
+    )
+    first_record = _record(
+        activation_id=first_activation_id,
+        compile_key=f"compile-{first_activation_id.value}",
+    )
+    assert store.put(first_record).activation_id == first_activation_id
+    first_key, first_plan = _build_page_plan_for_activation(
+        payload,
+        first_activation_id,
+        generation,
+        pagination,
+    )
+    cache.put(first_key, first_plan)
+    assert cache.get(first_key) is first_plan
+
+    _kitchen_identity.retire_kitchen_identity(tool_ctx)
+
+    from autoskillit.server.recipe._recipe_artifact import RecipeArtifactError
+    from autoskillit.server.recipe._recipe_generation import RecipeGenerationRetiredError
+
+    assert tool_ctx.kitchen_open_state.phase is KitchenOpenPhase.CLOSED
+    with pytest.raises(RecipeArtifactError, match="namespace is retired"):
+        persist_recipe_artifact(
+            tool_ctx.temp_dir,
+            activation_id=first_activation_id,
+            producer_tool="load_recipe",
+            recipe_name="remediation",
+            payload=payload,
+        )
+    with pytest.raises(RecipeGenerationRetiredError):
+        store.put(first_record)
+    assert cache.get(first_key) is None
+    cache.put(first_key, first_plan)
+    assert cache.get(first_key) is None
+
+    second_kitchen_id = _kitchen_identity.establish_kitchen_identity(tool_ctx)
+    second_activation_id = tool_ctx.kitchen_activation_id
+    assert second_activation_id != first_activation_id
+    assert second_activation_id.value != second_kitchen_id
+    if campaign_mode:
+        assert second_kitchen_id == first_kitchen_id
+    else:
+        assert second_kitchen_id != first_kitchen_id
+
+    second_generation = persist_recipe_artifact(
+        tool_ctx.temp_dir,
+        activation_id=second_activation_id,
+        producer_tool="load_recipe",
+        recipe_name="remediation",
+        payload=payload,
+    )
+    second_record = _record(
+        activation_id=second_activation_id,
+        compile_key=f"compile-{second_activation_id.value}",
+    )
+    assert store.put(second_record).activation_id == second_activation_id
+    second_key, second_plan = _build_page_plan_for_activation(
+        payload,
+        second_activation_id,
+        second_generation,
+        pagination,
+    )
+    cache.put(second_key, second_plan)
+    assert cache.get(second_key) is second_plan
+
+
+@pytest.mark.parametrize("retirement_result", ["raise", "false"], ids=["exception", "false"])
+def test_retire_kitchen_identity_closes_and_retires_memory_stores_on_artifact_failure(
+    tool_ctx, monkeypatch, retirement_result
+):
+    from structlog.testing import capture_logs
+
+    from autoskillit.pipeline import KitchenOpenPhase
+    from autoskillit.server.lifecycle import _kitchen_identity
+    from autoskillit.server.recipe import _recipe_artifact
+    from autoskillit.server.recipe._recipe_artifact import persist_recipe_artifact
+    from autoskillit.server.recipe._recipe_generation import RecipeGenerationRetiredError
+    from tests.server.test_recipe_generation import _record
+    from tests.server.test_tools_recipe_pull import _payload
+
+    store, cache, pagination = _install_fresh_recipe_stores(monkeypatch)
+    _kitchen_identity.establish_kitchen_identity(tool_ctx)
+    activation_id = tool_ctx.kitchen_activation_id
+    payload = _payload()
+    generation = persist_recipe_artifact(
+        tool_ctx.temp_dir,
+        activation_id=activation_id,
+        producer_tool="load_recipe",
+        recipe_name="remediation",
+        payload=payload,
+    )
+    record = _record(
+        activation_id=activation_id,
+        compile_key=f"compile-{activation_id.value}",
+    )
+    store.put(record)
+    key, plan = _build_page_plan_for_activation(
+        payload,
+        activation_id,
+        generation,
+        pagination,
+    )
+    cache.put(key, plan)
+    assert cache.get(key) is plan
+
+    retirement_error = RuntimeError("tombstone write failed")
+    if retirement_result == "raise":
+        monkeypatch.setattr(
+            _recipe_artifact,
+            "retire_recipe_artifacts",
+            Mock(side_effect=retirement_error),
+        )
+        with pytest.raises(RuntimeError, match="tombstone write failed") as exc_info:
+            _kitchen_identity.retire_kitchen_identity(tool_ctx)
+        assert exc_info.value is retirement_error
+    else:
+        monkeypatch.setattr(_recipe_artifact, "retire_recipe_artifacts", Mock(return_value=False))
+        with capture_logs() as logs:
+            _kitchen_identity.retire_kitchen_identity(tool_ctx)
+        assert any(
+            event.get("event") == "kitchen_activation_artifact_retirement_failed" for event in logs
+        )
+
+    assert tool_ctx.kitchen_open_state.phase is KitchenOpenPhase.CLOSED
+    assert store.lookup_compile(activation_id, record.normalized_compile_key) is None
+    with pytest.raises(RecipeGenerationRetiredError):
+        store.put(record)
+    assert cache.get(key) is None
+    cache.put(key, plan)
+    assert cache.get(key) is None
+
+
+def test_retirement_preserves_artifact_error_when_notification_also_fails(tool_ctx, monkeypatch):
+    from structlog.testing import capture_logs
+
+    from autoskillit.pipeline import KitchenOpenPhase
+    from autoskillit.server.lifecycle import _kitchen_identity
+    from autoskillit.server.recipe import _recipe_artifact
+    from autoskillit.server.recipe.section import _lifecycle
+
+    _kitchen_identity.establish_kitchen_identity(tool_ctx)
+    activation_id = tool_ctx.kitchen_activation_id
+    artifact_error = RuntimeError("tombstone write failed")
+    notify = Mock(side_effect=RuntimeError("notification lock failed"))
+    monkeypatch.setattr(
+        _recipe_artifact, "retire_recipe_artifacts", Mock(side_effect=artifact_error)
+    )
+    monkeypatch.setattr(_lifecycle, "notify_activation_retired", notify)
+
+    with capture_logs() as logs, pytest.raises(RuntimeError) as exc_info:
+        _kitchen_identity.retire_kitchen_identity(tool_ctx)
+
+    assert exc_info.value is artifact_error
+    assert tool_ctx.kitchen_open_state.phase is KitchenOpenPhase.CLOSED
+    notify.assert_called_once_with(activation_id)
+    assert any(
+        event.get("event") == "kitchen_activation_retirement_notification_failed" for event in logs
+    )
+
+
 def test_establish_kitchen_identity_activates_and_resets_owner_cache(tool_ctx):
-    from autoskillit.pipeline import KitchenOpenPhase, get_kitchen_process_identity
+    from autoskillit.pipeline import (
+        KitchenActivationId,
+        KitchenOpenPhase,
+        get_kitchen_process_identity,
+    )
     from autoskillit.server.lifecycle._kitchen_identity import establish_kitchen_identity
     from autoskillit.server.recipe._recipe_generation import get_recipe_generation_store
     from tests.server.test_recipe_generation import _record
 
     store = get_recipe_generation_store()
-    store.activate_kitchen("other")
+    store.activate_activation(KitchenActivationId("other"))
     owner_identity = get_kitchen_process_identity(tool_ctx, "owner-before-establishment")
     assert owner_identity.kitchen_id == "owner-before-establishment"
 
@@ -142,8 +356,14 @@ def test_establish_kitchen_identity_activates_and_resets_owner_cache(tool_ctx):
     assert tool_ctx.kitchen_open_state.phase is KitchenOpenPhase.INFRASTRUCTURE_READY
     assert tool_ctx.kitchen_open_state.kitchen_id == kitchen_id
     assert tool_ctx.kitchen_process_identity is None
-    stored = store.put(_record(kitchen_id=kitchen_id, compile_key=f"compile-{kitchen_id}"))
-    assert stored.kitchen_id == kitchen_id
+    activation_id = tool_ctx.kitchen_activation_id
+    stored = store.put(
+        _record(
+            activation_id=activation_id,
+            compile_key=f"compile-{activation_id.value}",
+        )
+    )
+    assert stored.activation_id == activation_id
 
 
 @pytest.mark.parametrize("source", ["campaign", "resolver"])
@@ -154,7 +374,7 @@ def test_establish_kitchen_identity_rejects_whitespace_before_activation(
     from autoskillit.server.recipe import _recipe_generation
 
     activate = Mock()
-    monkeypatch.setattr(_recipe_generation, "activate_kitchen", activate)
+    monkeypatch.setattr(_recipe_generation, "activate_activation", activate)
     monkeypatch.setattr(_kitchen_identity, "resolve_kitchen_id", lambda: " \t\n")
     state = tool_ctx.kitchen_open_state
     cached_identity = tool_ctx.kitchen_process_identity

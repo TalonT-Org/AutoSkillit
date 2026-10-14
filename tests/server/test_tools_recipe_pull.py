@@ -539,16 +539,16 @@ def test_persistence_rejects_malformed_pullable_sections(
         _persist(tmp_path, payload)
 
 
-def test_recipe_artifact_namespace_rejects_lineage_string(tmp_path: Path) -> None:
-    payload, flow_generation = _with_flow(_payload())
-    with pytest.raises(RecipeArtifactError, match="requires a kitchen activation id"):
+def test_recipe_artifact_namespace_rejects_lineage_string_before_schema_checks(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(TypeError, match="a KitchenActivationId is required"):
         persist_recipe_artifact(
             tmp_path,
             activation_id="kitchen-test",
             producer_tool="open_kitchen",
             recipe_name="remediation",
-            payload=payload,
-            flow_generation=flow_generation,
+            payload={},
         )
     with pytest.raises(TypeError, match="a KitchenActivationId is required"):
         retire_recipe_artifacts(tmp_path, activation_id="kitchen-test")

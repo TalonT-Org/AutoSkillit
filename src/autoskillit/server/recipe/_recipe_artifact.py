@@ -559,6 +559,7 @@ def persist_recipe_artifact(
     flow_generation: RecipeFlowGeneration | None = None,
 ) -> RecipeArtifactGeneration:
     """Publish an immutable canonical payload and its generation descriptor."""
+    require_kitchen_activation_id(activation_id)
     _validate_recipe_artifact_schema(payload)
     canonical_flow_generation = _flow_generation_from_payload(payload)
     if flow_generation is not None and canonical_flow_generation != flow_generation:

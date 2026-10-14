@@ -514,10 +514,9 @@ def push_to_remote(
         }
 
     destination = _matching_push_remote(Path(clone_path), resolved_url)
-    push_cmd = ["git", "push", "-u"]
+    push_cmd = ["git", "push", "-u", "--", destination, branch]
     if force:
-        push_cmd.append("--force-with-lease")
-    push_cmd.extend(["--", destination, branch])
+        push_cmd.insert(3, "--force-with-lease")
     push_result = subprocess.run(
         push_cmd,
         cwd=clone_path,

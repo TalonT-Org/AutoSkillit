@@ -20,13 +20,18 @@ pytestmark = [pytest.mark.layer("workspace"), pytest.mark.medium]
 
 
 class TestPushToRemote:
-    @pytest.mark.parametrize("conflicting_upstream", [False, True])
+    @pytest.mark.parametrize(
+        ("conflicting_upstream", "multiple_push_urls"),
+        [(False, False), (True, False), (False, True)],
+        ids=["origin-only", "conflicting-upstream", "multiple-push-urls"],
+    )
     def test_push_uses_resolved_destination_from_worktree(
         self,
         tmp_path: Path,
         local_with_remote: Path,
         bare_remote: Path,
         conflicting_upstream: bool,
+        multiple_push_urls: bool,
     ) -> None:
         worktree = tmp_path / "smoke-worktree"
         branch = "e2e-smoke"
@@ -36,10 +41,11 @@ class TestPushToRemote:
             capture_output=True,
         )
         wrong_remote = tmp_path / "wrong.git"
-        if conflicting_upstream:
+        if conflicting_upstream or multiple_push_urls:
             subprocess.run(
                 ["git", "init", "--bare", str(wrong_remote)], check=True, capture_output=True
             )
+        if conflicting_upstream:
             subprocess.run(
                 [
                     "git",
@@ -53,6 +59,21 @@ class TestPushToRemote:
                 check=True,
                 capture_output=True,
             )
+        if multiple_push_urls:
+            for url in (bare_remote, wrong_remote):
+                subprocess.run(
+                    [
+                        "git",
+                        "-C",
+                        str(local_with_remote),
+                        "config",
+                        "--add",
+                        "remote.origin.pushurl",
+                        str(url),
+                    ],
+                    check=True,
+                    capture_output=True,
+                )
         before_remotes = subprocess.run(
             ["git", "-C", str(worktree), "remote", "-v"],
             check=True,
@@ -87,16 +108,17 @@ class TestPushToRemote:
             ).stdout
             == before_remotes
         )
-        assert (
-            subprocess.run(
-                ["git", "-C", str(worktree), "rev-parse", "@{upstream}"],
-                check=True,
-                capture_output=True,
-                text=True,
-            ).stdout.strip()
-            == expected
-        )
-        if conflicting_upstream:
+        if not multiple_push_urls:
+            assert (
+                subprocess.run(
+                    ["git", "-C", str(worktree), "rev-parse", "@{upstream}"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout.strip()
+                == expected
+            )
+        if conflicting_upstream or multiple_push_urls:
             assert (
                 subprocess.run(
                     [
@@ -296,6 +318,13 @@ class TestPushToRemoteProtectedBranch:
 
 
 class TestPushToRemoteMocked:
+    @pytest.fixture(autouse=True)
+    def _use_url_destination(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "autoskillit.workspace.clone._matching_push_remote",
+            lambda checkout, url: url,
+        )
+
     def test_ds6_push_to_remote_calls_get_url_then_push(self) -> None:
         """T_DS6: push_to_remote resolves origin, then pushes directly to that URL."""
         mock_url = MagicMock()

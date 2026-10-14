@@ -47,6 +47,7 @@ from ._registry import (
 from ._remote import (
     CloneSourceResolution,
     _ensure_origin_isolated,
+    _matching_push_remote,
     _probe_clone_source_url,
 )
 from ._worktree import (
@@ -431,6 +432,10 @@ def push_to_remote(
     is not accessed for URL lookup. This is the preferred calling convention when
     remote_url has been captured from clone_repo at pipeline start.
 
+    A configured remote is used only when all its push URLs match the resolved
+    destination, preserving branch tracking without changing remote configuration.
+    Otherwise, the resolved URL is passed to git push directly.
+
     When remote_url is empty, falls back to reading the upstream URL from
     source_dir via 'git remote get-url origin' (read-only — no writes to source_dir).
 
@@ -508,10 +513,11 @@ def push_to_remote(
             ),
         }
 
+    destination = _matching_push_remote(Path(clone_path), resolved_url)
     push_cmd = ["git", "push", "-u"]
     if force:
         push_cmd.append("--force-with-lease")
-    push_cmd.extend(["--", resolved_url, branch])
+    push_cmd.extend(["--", destination, branch])
     push_result = subprocess.run(
         push_cmd,
         cwd=clone_path,

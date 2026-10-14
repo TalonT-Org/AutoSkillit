@@ -20,6 +20,55 @@ pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature
 
 
 class TestResumeJSONLPreflight:
+    def test_unreadable_exact_resume_log_does_not_select_prior_fallback(self, tmp_path):
+        from typing import NoReturn
+
+        from autoskillit.core import FleetErrorCode
+        from autoskillit.fleet.dispatch._execution import _resolve_resume_log
+
+        primary_id = "unreadable-primary"
+        fallback_id = "readable-fallback"
+        primary_log = tmp_path / "primary.jsonl"
+        fallback_log = tmp_path / "fallback.jsonl"
+        primary_log.touch()
+        fallback_log.touch()
+
+        class _UnreadableLocator:
+            def __init__(self) -> None:
+                self.session_ids: list[str] = []
+
+            def session_log_path(self, _cwd: str, session_id: str) -> Path:
+                self.session_ids.append(session_id)
+                return {
+                    primary_id: primary_log,
+                    fallback_id: fallback_log,
+                }[session_id]
+
+            def session_context_was_compacted(self, _cwd: str, session_id: str) -> bool:
+                assert session_id == primary_id
+                raise PermissionError("selected session log cannot be read")
+
+        locator = _UnreadableLocator()
+        fail_closed_calls: list[tuple[FleetErrorCode, str, str]] = []
+
+        def fail_closed(
+            error_code: FleetErrorCode, message: str, selected_failed_id: str
+        ) -> NoReturn:
+            fail_closed_calls.append((error_code, message, selected_failed_id))
+            raise AssertionError("unreadable log must not reach the resume fallback")
+
+        with pytest.raises(PermissionError, match="cannot be read"):
+            _resolve_resume_log(
+                locator=locator,
+                project_dir=str(tmp_path),
+                resume_session_id=primary_id,
+                prior_session_chain=[fallback_id],
+                fail_closed=fail_closed,
+            )
+
+        assert locator.session_ids == [primary_id]
+        assert fail_closed_calls == []
+
     @pytest.mark.anyio
     async def test_missing_lineage_degrades_to_fresh_capture_before_jsonl_preflight(
         self, tool_ctx, monkeypatch, tmp_path
@@ -216,6 +265,132 @@ class TestResumeJSONLPreflight:
             log for log in logs if log.get("event") == "session_id_continuity_mismatch"
         ]
         assert continuity_logs[0]["resume_session_id"] == "chain-session-id"
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize("selected_location", ["primary", "fallback"])
+    async def test_compacted_selected_resume_is_refused_with_exact_identity(
+        self, tool_ctx, monkeypatch, tmp_path, selected_location
+    ):
+        from autoskillit.core import (
+            FleetErrorCode,
+            ManagedHeadlessSessionKind,
+            NativeShellCaptureMode,
+            new_managed_launch_id,
+            resolve_native_shell_capture_decision,
+        )
+        from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state
+        from autoskillit.fleet._api import execute_dispatch
+        from autoskillit.fleet._prompts import _build_food_truck_prompt
+        from autoskillit.fleet.campaign_state.state import (
+            read_state,
+            upsert_dispatch_record_by_name,
+        )
+        from autoskillit.fleet.campaign_state.state_outcomes import DispatchCompleted
+        from autoskillit.fleet.dispatch import _api as dispatch_api
+        from autoskillit.fleet.dispatch._execution import ExecutionResult
+
+        _setup_bundled_implementation_dispatch(tool_ctx, monkeypatch)
+
+        primary_id = "compacted-primary-session"
+        fallback_id = "compacted-fallback-session"
+        selected_id = primary_id if selected_location == "primary" else fallback_id
+        primary_log = tmp_path / "primary.jsonl"
+        fallback_log = tmp_path / "fallback.jsonl"
+        fallback_log.touch()
+        if selected_location == "primary":
+            primary_log.touch()
+
+        prior_id = "00000000-0000-0000-0000-000000000107"
+        dispatches_dir = tool_ctx.temp_dir / "dispatches"
+        dispatches_dir.mkdir(parents=True, exist_ok=True)
+        state_path = dispatches_dir / f"{prior_id}.json"
+        lineage = tool_ctx.managed_headless_session_lineage_store.create(
+            lineage_anchor=tool_ctx.project_dir.resolve(),
+            launch_id=new_managed_launch_id(),
+            decision=resolve_native_shell_capture_decision(NativeShellCaptureMode.CAPTURE),
+            backend="mock-backend",
+            session_kind=ManagedHeadlessSessionKind.FOOD_TRUCK,
+            dispatch_id=prior_id,
+        )
+        lineage = tool_ctx.managed_headless_session_lineage_store.bind_final_native_session_id(
+            lineage_anchor=tool_ctx.project_dir.resolve(),
+            launch_id=lineage.launch_id,
+            session_id=primary_id,
+            expected_generation=lineage.generation,
+            expected_record_digest=lineage.record_digest,
+        )
+        write_initial_state(
+            state_path,
+            tool_ctx.kitchen_id,
+            "camp",
+            "",
+            [DispatchRecord(name="implementation")],
+        )
+        upsert_dispatch_record_by_name(
+            state_path,
+            DispatchRecord(
+                name="implementation",
+                status=DispatchStatus.RESUMABLE,
+                dispatched_session_id=primary_id,
+                session_chain=[fallback_id],
+                managed_lineage_ref=lineage.reference,
+            ),
+        )
+
+        tool_ctx.backend = _mock_backend_with_locator(
+            project_log_dir=tmp_path,
+            session_log_path_side_effect=lambda _cwd, session_id: {
+                primary_id: primary_log,
+                fallback_id: fallback_log,
+            }.get(session_id),
+        )
+        locator = tool_ctx.backend.session_locator.return_value
+        locator.session_context_was_compacted.side_effect = lambda _cwd, session_id: (
+            session_id == selected_id
+        )
+
+        execution_results: list[ExecutionResult] = []
+        original_run_execution = dispatch_api.run_execution
+
+        async def capture_execution_result(**kwargs):
+            result = await original_run_execution(**kwargs)
+            execution_results.append(result)
+            return result
+
+        monkeypatch.setattr(dispatch_api, "run_execution", capture_execution_result)
+
+        result = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="implementation",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=lambda **kwargs: _build_food_truck_prompt(
+                mcp_prefix="mcp__autoskillit__",
+                **kwargs,
+            ),
+            quota_refresher=_noop_quota_refresher,
+            resume_session_id=primary_id,
+            prior_dispatch_id=prior_id,
+        )
+
+        assert isinstance(result.outcome, DispatchCompleted)
+        assert result.outcome.dispatch_status is DispatchStatus.REFUSED
+        assert result.outcome.reason == FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED
+        assert result.outcome.dispatched_session_id == selected_id
+        assert tool_ctx.executor.dispatch_calls == []
+        assert len(execution_results) == 1
+        assert execution_results[0].effective_resume_session_id == selected_id
+        locator.session_context_was_compacted.assert_called_once_with(
+            str(tool_ctx.project_dir), selected_id
+        )
+        state = read_state(state_path)
+        assert state is not None
+        dispatch = next(d for d in state.dispatches if d.name == "implementation")
+        assert dispatch.status is DispatchStatus.REFUSED
+        assert dispatch.reason == FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED
+        assert dispatch.dispatched_session_id == selected_id
 
 
 class TestSessionChainContinuity:

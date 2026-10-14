@@ -224,6 +224,7 @@ def _mock_backend_with_locator(
     mock_locator = Mock()
     if project_log_dir is not None:
         mock_locator.project_log_dir.return_value = project_log_dir
+    mock_locator.session_context_was_compacted.return_value = False
     if session_log_path_side_effect is not None:
         mock_locator.session_log_path.side_effect = session_log_path_side_effect
     elif session_log_path is not _SENTINEL:

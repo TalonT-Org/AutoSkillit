@@ -26,6 +26,7 @@ def _mock_backend(name: str = "claude-code", *, food_truck_capable: bool = True)
     backend.session_locator.return_value = Mock(
         project_log_dir=Mock(return_value=Path("/tmp/logs")),
         session_log_path=Mock(return_value=None),
+        session_context_was_compacted=Mock(return_value=False),
     )
     backend.ensure_pre_launch.return_value = PreLaunchReadiness((), {})
     backend.build_food_truck_cmd.return_value = Mock(
@@ -355,6 +356,7 @@ class TestDispatchBackendOverrideSessionLocatorUsesDispatchBackend:
         ctx_locator = M()
         ctx_locator.project_log_dir.return_value = Path("/claude-logs")
         ctx_locator.session_log_path.return_value = None
+        ctx_locator.session_context_was_compacted.return_value = False
         ctx_backend = _mock_backend("claude-code")
         ctx_backend.session_locator.return_value = ctx_locator
         tool_ctx.backend = ctx_backend
@@ -362,6 +364,7 @@ class TestDispatchBackendOverrideSessionLocatorUsesDispatchBackend:
         dispatch_locator = M()
         dispatch_locator.project_log_dir.return_value = Path("/codex-logs")
         dispatch_locator.session_log_path.return_value = None
+        dispatch_locator.session_context_was_compacted.return_value = False
         dispatch_be = _mock_backend("codex")
         dispatch_be.session_locator.return_value = dispatch_locator
 

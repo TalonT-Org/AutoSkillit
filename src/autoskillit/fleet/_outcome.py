@@ -254,6 +254,7 @@ def build_dispatch_result(
     reason: str,
     dispatch_id: str,
     skill_result: SkillResult,
+    dispatched_session_id: str,
     backend_name: str,
     dispatch_checkpoint: SessionCheckpoint | None,
     started_at: float,
@@ -265,7 +266,7 @@ def build_dispatch_result(
     """Build the bounded fleet envelope without exposing managed diagnostics."""
     common: _DispatchCommonFields = {
         "dispatch_id": dispatch_id,
-        "dispatched_session_id": skill_result.session_id or "",
+        "dispatched_session_id": dispatched_session_id,
         "diagnostic_message": diagnostic_message,
         "token_usage": normalize_dispatch_token_usage(
             skill_result.token_usage or {},

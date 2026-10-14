@@ -75,7 +75,7 @@ class ClassificationResult:
     labels_cleaned: bool
     project_log_dir: str
     extended_chain: list[str]
-    dispatched_session_id: str | None  # for finalize to override skill_result.session_id
+    dispatched_session_id: str
     skill_result: SkillResult  # for finalize_state_write
     dispatch_checkpoint: SessionCheckpoint | None  # for finalize resume_checkpoint serialization
 
@@ -96,6 +96,7 @@ class _OutcomeMaterialization:
 def _materialize_outcome(
     *,
     skill_result: SkillResult,
+    dispatched_session_id: str,
     spawn_ctx: SpawnContext,
     tool_ctx: ToolContext,
     tracker_lease: Any,
@@ -136,6 +137,12 @@ def _materialize_outcome(
         skill_result.infra.exit_category or "",
         skill_result.compaction_attempted,
     )
+    locator = effective_backend.session_locator() if effective_backend is not None else None
+    if locator is not None and dispatched_session_id:
+        context_compacted = (
+            locator.session_context_was_compacted(str(tool_ctx.project_dir), dispatched_session_id)
+            or context_compacted
+        )
 
     extended_chain = prior_session_chain[:]
     parsed_result: Any = None
@@ -143,7 +150,6 @@ def _materialize_outcome(
         if prior_dispatched_session_id and prior_dispatched_session_id not in extended_chain:
             extended_chain.append(prior_dispatched_session_id)
 
-        locator = effective_backend.session_locator() if effective_backend is not None else None
         additional_jsonl_paths = [
             path
             for session_id in extended_chain
@@ -157,16 +163,16 @@ def _materialize_outcome(
             is not None
         ]
         jsonl_path = (
-            locator.session_log_path(str(tool_ctx.project_dir), skill_result.session_id or "")
+            locator.session_log_path(str(tool_ctx.project_dir), dispatched_session_id)
             if locator is not None
             else None
         )
-        if resume_line_offset and skill_result.session_id and resume_session_id:
-            if skill_result.session_id != resume_session_id:
+        if resume_line_offset and dispatched_session_id and resume_session_id:
+            if dispatched_session_id != resume_session_id:
                 logger.warning(
                     "resume_line_offset_invalidated",
                     resume_session_id=resume_session_id,
-                    actual_session_id=skill_result.session_id,
+                    actual_session_id=dispatched_session_id,
                 )
                 resume_line_offset = 0
         parsed_result = _facade.parse_l3_result_block(
@@ -299,8 +305,14 @@ async def run_outcome_classification(
     Returns a ``ClassificationResult`` carrying every field the orchestrator's
     finalize shard needs.
     """
+    dispatched_session_id = (
+        spawn_ctx.dispatched_session_id[0]
+        if spawn_ctx.dispatched_session_id
+        else skill_result.session_id or ""
+    )
     materialization = _materialize_outcome(
         skill_result=skill_result,
+        dispatched_session_id=dispatched_session_id,
         spawn_ctx=spawn_ctx,
         tool_ctx=tool_ctx,
         tracker_lease=tracker_lease,
@@ -393,15 +405,11 @@ async def run_outcome_classification(
     # The orchestrator threads the dispatched backend's log directory through.
     project_log_dir = str(dispatched_log_dir) if dispatched_log_dir is not None else ""
 
-    if (
-        resume_session_id
-        and skill_result.session_id
-        and resume_session_id != skill_result.session_id
-    ):
+    if resume_session_id and dispatched_session_id and resume_session_id != dispatched_session_id:
         logger.warning(
             "session_id_continuity_mismatch",
             resume_session_id=resume_session_id,
-            returned_session_id=skill_result.session_id,
+            returned_session_id=dispatched_session_id,
         )
 
     # SUCCESS → COMMIT provenance.
@@ -410,7 +418,7 @@ async def run_outcome_classification(
             DispatchEffectName.COMMIT,
             identities={
                 "dispatch_id": dispatch_id,
-                "dispatched_session_id": skill_result.session_id or "",
+                "dispatched_session_id": dispatched_session_id,
             },
         )
         provenance.confirm(
@@ -418,7 +426,7 @@ async def run_outcome_classification(
             receipt="dispatch outcome classifier confirmed success",
             identities={
                 "dispatch_id": dispatch_id,
-                "dispatched_session_id": skill_result.session_id or "",
+                "dispatched_session_id": dispatched_session_id,
             },
         )
 
@@ -432,11 +440,7 @@ async def run_outcome_classification(
         labels_cleaned=_labels_cleaned,
         project_log_dir=project_log_dir,
         extended_chain=extended_chain,
-        dispatched_session_id=(
-            spawn_ctx.dispatched_session_id[0]
-            if spawn_ctx.dispatched_session_id
-            else skill_result.session_id
-        ),
+        dispatched_session_id=dispatched_session_id,
         skill_result=skill_result,
         dispatch_checkpoint=dispatch_checkpoint,
     )
@@ -483,7 +487,7 @@ async def finalize_state_write(
         campaign_id=campaign_id,
         caller_session_id=caller_session_id,
         caller_backend_name=caller_backend_name,
-        dispatched_session_id=classification.dispatched_session_id or "",
+        dispatched_session_id=classification.dispatched_session_id,
         session_chain=extended_chain,
         dispatched_session_log_dir=project_log_dir,
         dispatched_pid=spawn_ctx.dispatched_pid[0] if spawn_ctx.dispatched_pid else 0,
@@ -557,6 +561,7 @@ async def finalize_state_write(
         diagnostic_message=diagnostic_message,
         dispatch_id=dispatch_id,
         skill_result=skill_result,
+        dispatched_session_id=classification.dispatched_session_id,
         backend_name=effective_backend_name,
         dispatch_checkpoint=dispatch_checkpoint,
         started_at=started_at,

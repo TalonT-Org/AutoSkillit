@@ -16,6 +16,7 @@ from tests.fleet._helpers import (
     _make_completed_clean,
     _make_completed_dirty,
     _make_no_sentinel,
+    _mock_backend_with_locator,
     _noop_quota_refresher,
     _read_dispatch_record,
     _run,
@@ -452,6 +453,79 @@ class TestTrackerAuthorityEnvelope:
         assert record["reason"] == context_reason
         assert record["diagnostic_message"] == tracker_error
 
+    @pytest.mark.anyio
+    @pytest.mark.parametrize("returned_session_id", ["different-session-id", ""])
+    async def test_compacted_callback_identity_dominates_success_and_tracker_error(
+        self, tool_ctx, monkeypatch, returned_session_id
+    ):
+        import dataclasses
+
+        from tests.fakes import _DEFAULT_SKILL_RESULT
+
+        callback_session_id = "callback-session-id"
+        tracker_error = "tracker_state_authority_error"
+        _setup_dispatch(tool_ctx, monkeypatch)
+        tool_ctx.executor = InMemoryHeadlessExecutor()
+
+        async def _dispatch_food_truck(**kwargs):
+            kwargs["on_session_id_resolved"](callback_session_id)
+            return dataclasses.replace(
+                _DEFAULT_SKILL_RESULT,
+                success=True,
+                session_id=returned_session_id,
+            )
+
+        tool_ctx.executor.dispatch_food_truck = _dispatch_food_truck
+        tool_ctx.backend = _mock_backend_with_locator(project_log_dir=tool_ctx.project_dir)
+        locator = tool_ctx.backend.session_locator.return_value
+        locator.session_context_was_compacted.side_effect = lambda _cwd, session_id: (
+            session_id == callback_session_id
+        )
+        monkeypatch.setattr(
+            fleet_api,
+            "load_dispatch_progress",
+            lambda **_: (
+                tool_ctx.temp_dir / "missing-sidecar.jsonl",
+                [],
+                None,
+                tracker_error,
+            ),
+        )
+        monkeypatch.setattr(
+            fleet_api,
+            "parse_l3_result_block",
+            lambda **_: _make_completed_clean(success=True, reason="done"),
+        )
+
+        envelope = await _run(tool_ctx)
+        record = _read_dispatch_record(tool_ctx)
+        process_spawn = next(
+            effect
+            for effect in record["effect_provenance"]["effects"]
+            if effect["name"] == "process_spawn"
+        )
+
+        context_reason = FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED.value
+        locator.session_context_was_compacted.assert_called_once_with(
+            str(tool_ctx.project_dir), callback_session_id
+        )
+        locator.session_log_path.assert_called_once_with(
+            str(tool_ctx.project_dir), callback_session_id
+        )
+        assert envelope["success"] is False
+        assert envelope["reason"] == context_reason
+        assert envelope["error"] == context_reason
+        assert envelope["user_visible_message"] == tracker_error
+        assert envelope["dispatched_session_id"] == callback_session_id
+        assert record["status"] == "failure"
+        assert record["reason"] == context_reason
+        assert record["diagnostic_message"] == tracker_error
+        assert record["dispatched_session_id"] == callback_session_id
+        assert (
+            process_spawn["known_downstream_identities"]["dispatched_session_id"]
+            == callback_session_id
+        )
+
 
 class TestDeclaredSuccessContract:
     @pytest.mark.parametrize(
@@ -802,6 +876,68 @@ class TestSidecarBasedResultSynthesis:
             pr_url="https://github.com/org/repo/pull/101",
         )
         append_sidecar_entry(fixed_dispatch_id, entry, tool_ctx.project_dir)
+        monkeypatch.setattr(
+            fleet_api,
+            "parse_l3_result_block",
+            lambda **_: _make_no_sentinel(),
+        )
+
+        result = await _run(tool_ctx, ingredients={"issue_urls": issue_url})
+        record = _read_dispatch_record(tool_ctx)
+
+        context_reason = FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED.value
+        assert result["success"] is False
+        assert result["dispatch_status"] == "failure"
+        assert result["reason"] == context_reason
+        assert result["l3_parse_source"] == "stdout"
+        assert record["status"] == "failure"
+        assert record["reason"] == context_reason
+
+    @pytest.mark.anyio
+    async def test_compacted_session_log_blocks_successful_sidecar_synthesis(
+        self, tool_ctx, monkeypatch
+    ):
+        import dataclasses
+
+        from autoskillit.core import DispatchIdentity, FleetErrorCode, RetryReason
+        from autoskillit.fleet.sidecar import IssueSidecarEntry, append_sidecar_entry
+        from tests.fakes import _DEFAULT_SKILL_RESULT
+
+        _setup_dispatch(tool_ctx, monkeypatch, ingredients=_SIDECAR_INGREDIENTS)
+
+        fixed_dispatch_id = "aaaabbbb-3333-4444-5555-ffffffffffff"
+        fixed_identity = DispatchIdentity.from_dispatch_id(fixed_dispatch_id)
+
+        class _FixedDispatchIdentity:
+            @classmethod
+            def fresh(cls) -> DispatchIdentity:
+                return fixed_identity
+
+        monkeypatch.setattr(campaign_state, "DispatchIdentity", _FixedDispatchIdentity)
+        tool_ctx.backend = _mock_backend_with_locator(project_log_dir=tool_ctx.project_dir)
+        locator = tool_ctx.backend.session_locator.return_value
+        locator.session_context_was_compacted.return_value = True
+        tool_ctx.executor = InMemoryHeadlessExecutor(
+            default_result=dataclasses.replace(
+                _DEFAULT_SKILL_RESULT,
+                success=True,
+                session_id="compacted-session",
+                retry_reason=RetryReason.NONE,
+                compaction_attempted=False,
+            )
+        )
+
+        issue_url = "https://github.com/org/repo/issues/3"
+        append_sidecar_entry(
+            fixed_dispatch_id,
+            IssueSidecarEntry(
+                issue_url=issue_url,
+                status="completed",
+                ts="2026-05-27T00:00:00Z",
+                pr_url="https://github.com/org/repo/pull/102",
+            ),
+            tool_ctx.project_dir,
+        )
         monkeypatch.setattr(
             fleet_api,
             "parse_l3_result_block",

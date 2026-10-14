@@ -28,6 +28,12 @@ Two defenses exist:
 The re-delivery path remains necessary when model-visible recipe content is lost for any
 reason. It re-acquires recipe knowledge without reading raw files.
 
+Current dispatched-root backends use synchronous native controls to block automatic
+compaction before transcript history is replaced: Claude Code's exit-2 hook and Codex's
+trusted `PreCompact` veto. A detected legacy or unexpected `compact_boundary` transcript
+is a terminal failure and is never resumed. The transcript check runs after dispatch or
+before resume; it detects prior history replacement and does not stop a running session.
+
 ## Decision
 
 > **`load_recipe` / `open_kitchen` (the MCP tools exposed by `server/tools/tools_recipe.py`)

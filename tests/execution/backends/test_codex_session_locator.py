@@ -257,6 +257,25 @@ class TestCodexSessionLocator:
     def test_isinstance_session_locator(self) -> None:
         assert isinstance(CodexSessionLocator(), SessionLocator)
 
+    def test_session_context_was_compacted_returns_false_for_synthetic_boundary(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Codex's synchronous veto precedes replacement, so the transcript is never
+        legacy-compacted.
+        """
+        transcript = tmp_path / "synthetic-codex-compact-boundary.jsonl"
+        transcript.write_text(
+            json.dumps({"type": "system", "subtype": "compact_boundary"}) + "\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(
+            CodexSessionLocator,
+            "session_log_path",
+            lambda _self, _cwd, _session_id: transcript,
+        )
+
+        assert not CodexSessionLocator().session_context_was_compacted("/project", "thread")
+
     def test_locate_session_finds_session_meta_format(self, tmp_path: Path) -> None:
         session_dir = tmp_path / "codex-sessions" / "2026" / "05" / "26"
         session_dir.mkdir(parents=True)

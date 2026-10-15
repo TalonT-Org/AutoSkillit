@@ -26,11 +26,23 @@ from autoskillit.fleet.campaign_state.state_effects import DispatchEffectProvena
 from autoskillit.fleet.campaign_state.state_outcomes import DispatchCompleted, DispatchResult
 from autoskillit.fleet.campaign_state.state_transitions import (
     _ABANDON_REASONS,
-    is_context_exhausted,
 )
 from autoskillit.fleet.result_parser import L3ParseResult
 
 ENVELOPE_STDERR_MAX = 2000
+
+
+def is_context_exhausted(
+    retry_reason: str,
+    infra_exit_category: str,
+    compaction_attempted: bool = False,
+) -> bool:
+    """Return whether retained session evidence makes this dispatch non-resumable."""
+    return (
+        compaction_attempted
+        or retry_reason == RetryReason.CONTEXT_EXHAUSTED
+        or infra_exit_category == InfraExitCategory.CONTEXT_EXHAUSTED
+    )
 
 
 class _DispatchCommonFields(TypedDict):

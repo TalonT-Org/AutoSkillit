@@ -38,6 +38,7 @@ from autoskillit.fleet._outcome import (
     _sanitize_managed_capture_diagnostics,
     build_dispatch_result,
     classify_dispatch_outcome,
+    is_context_exhausted,
 )
 from autoskillit.fleet.campaign_state.state import (
     DispatchRecord,
@@ -51,7 +52,6 @@ from autoskillit.fleet.campaign_state.state_effects import (
     DispatchProvenanceTracker,
 )
 from autoskillit.fleet.campaign_state.state_outcomes import DispatchResult
-from autoskillit.fleet.campaign_state.state_transitions import is_context_exhausted
 from autoskillit.fleet.dispatch._cleanup import _post_dispatch_cleanup
 from autoskillit.fleet.dispatch._execution import SpawnContext
 

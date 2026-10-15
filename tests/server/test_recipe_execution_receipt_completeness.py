@@ -231,7 +231,7 @@ async def test_wrong_execution_id_rejection_names_the_call(
     installed = get_recipe_execution(ready.tool_ctx)
     assert installed is not None
     actual_id = ready.credential["execution_id"]
-    wrong_id = "0" * 32 if actual_id != "0" * 32 else "1" * 32
+    wrong_id = f"{int(actual_id[0], 16) ^ 1:x}" + actual_id[1:]
 
     for step_name in installed.snapshot.template_digests:
         response = await _run_attested_call(

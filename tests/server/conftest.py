@@ -17,7 +17,7 @@ import structlog.contextvars
 import structlog.testing
 
 from tests.conftest import bind_test_kitchen_identity
-from tests.server._recipe_fixture_parameters import RESEARCH_OVERRIDES
+from tests.server._recipe_fixture_parameters import RESEARCH_READY_DEFAULT
 
 if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
@@ -396,17 +396,6 @@ def forbid_artifact_reads(monkeypatch: pytest.MonkeyPatch):
     return lambda: monkeypatch.setattr(recipe_section_handler, "load_recipe_artifact", _forbidden)
 
 
-_READY_RECIPE_NAME = "research"
-_READY_RECIPE_ATTESTED_STEP = "scope"
-# Default-preserving: every existing tool_ctx_ready_recipe consumer requests
-# it without parametrization and must keep getting exactly this triple.
-_READY_RECIPE_DEFAULT_PARAM = (
-    _READY_RECIPE_NAME,
-    _READY_RECIPE_ATTESTED_STEP,
-    RESEARCH_OVERRIDES,
-)
-
-
 @dataclass(frozen=True)
 class ReadyRecipeContext:
     """A real attested ToolContext plus the delivered credential and step body.
@@ -422,7 +411,7 @@ class ReadyRecipeContext:
     tool_ctx: ToolContext
     receipt: dict[str, Any]
     step_body: dict[str, Any]
-    step_name: str = _READY_RECIPE_ATTESTED_STEP
+    step_name: str = RESEARCH_READY_DEFAULT[1]
 
     @property
     def credential(self) -> dict[str, Any]:
@@ -492,10 +481,8 @@ async def tool_ctx_ready_recipe(
 
     Indirectly parametrizable over ``(recipe_name, attested_step, ingredient_overrides)``
     via ``@pytest.mark.parametrize("tool_ctx_ready_recipe", [(...)], indirect=True)``.
-    Requesting the fixture without parametrization (every pre-existing consumer)
-    defaults to today's values — ``_READY_RECIPE_DEFAULT_PARAM`` — so
-    ``test_attestation_delivery_reachability.py`` and ``test_recipe_segment_delivery.py``
-    are source-compatible.
+    Without parametrization, the fixture uses ``RESEARCH_READY_DEFAULT`` from
+    the shared recipe inputs module.
     """
     from autoskillit.server.tools.tools_recipe import complete_recipe_initialization
     from tests.server._helpers import (
@@ -505,7 +492,7 @@ async def tool_ctx_ready_recipe(
     )
 
     recipe_name, attested_step, ingredient_overrides = getattr(
-        request, "param", _READY_RECIPE_DEFAULT_PARAM
+        request, "param", RESEARCH_READY_DEFAULT
     )
 
     monkeypatch.chdir(tmp_path)

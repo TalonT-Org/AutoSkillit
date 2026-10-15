@@ -21,3 +21,5 @@ RESEARCH_OVERRIDES = {
     "task": "test task",
     "task_description": "test task",
 }
+
+RESEARCH_READY_DEFAULT = ("research", "scope", RESEARCH_OVERRIDES)

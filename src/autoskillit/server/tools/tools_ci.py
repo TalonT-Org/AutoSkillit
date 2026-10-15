@@ -22,6 +22,20 @@ from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 logger = get_logger(__name__)
 
 
+def _merge_state_error(error: str, *, http_status: int | None = None) -> str:
+    envelope: dict[str, object] = {
+        "error": error,
+        "queue_available": False,
+        "merge_group_trigger": False,
+        "auto_merge_available": False,
+        "ci_event": None,
+        "ci_applicable": False,
+    }
+    if http_status is not None:
+        envelope["http_status"] = http_status
+    return json.dumps(envelope)
+
+
 def _validate_commit_status_inputs(sha: str, context: str, description: str) -> str | None:
     """Return the first commit-status input error, if any."""
     if not sha:
@@ -165,16 +179,7 @@ async def check_repo_merge_state(
         try:
             resolved_repo = await resolve_repo_from_remote(cwd, hint=remote_url or None)
             if not resolved_repo or "/" not in resolved_repo:
-                return json.dumps(
-                    {
-                        "error": f"Could not resolve owner/repo from cwd={cwd!r}",
-                        "queue_available": False,
-                        "merge_group_trigger": False,
-                        "auto_merge_available": False,
-                        "ci_event": None,
-                        "ci_applicable": False,
-                    }
-                )
+                return _merge_state_error(f"Could not resolve owner/repo from cwd={cwd!r}")
             owner, repo = resolved_repo.split("/", 1)
             resolved_token = (
                 tool_ctx.token_factory()
@@ -191,29 +196,15 @@ async def check_repo_merge_state(
             return json.dumps(state)
         except Exception as exc:
             logger.error("autoskillit.check_repo_merge_state failed", exc_info=True)
-            envelope: dict[str, object] = {
-                "error": f"{type(exc).__name__}: {exc}",
-                "queue_available": False,
-                "merge_group_trigger": False,
-                "auto_merge_available": False,
-                "ci_event": None,
-                "ci_applicable": False,
-            }
-            if isinstance(exc, httpx.HTTPStatusError):
-                envelope["http_status"] = exc.response.status_code
-            return json.dumps(envelope)
+            return _merge_state_error(
+                f"{type(exc).__name__}: {exc}",
+                http_status=(
+                    exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+                ),
+            )
         finally:
             if step_name:
                 tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
         logger.error("check_repo_merge_state unhandled exception", exc_info=True)
-        return json.dumps(
-            {
-                "error": f"{type(exc).__name__}: {exc}",
-                "queue_available": False,
-                "merge_group_trigger": False,
-                "auto_merge_available": False,
-                "ci_event": None,
-                "ci_applicable": False,
-            }
-        )
+        return _merge_state_error(f"{type(exc).__name__}: {exc}")

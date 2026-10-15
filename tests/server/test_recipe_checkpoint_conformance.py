@@ -14,7 +14,7 @@ from autoskillit.pipeline.gate import gate_error_result
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.tools._types import deny_envelope
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
 _SUCCESS_CARRIER: dict[str, Any] = {"kind": "success", "marker": "S"}
 _PULL_SUCCESS_CARRIER: dict[str, Any] = {"kind": "success", "marker": "P"}
@@ -129,7 +129,6 @@ def _success_carrier_for(tool_name: str) -> dict[str, Any] | None:
 
 
 @pytest.mark.parametrize("tool_name", _READER_SHAPE_TOOLS, ids=_READER_SHAPE_TOOLS)
-@pytest.mark.anyio
 async def test_success_payload_gets_declared_carrier(
     tool_name: str,
     tool_ctx,
@@ -159,7 +158,6 @@ async def test_success_payload_gets_declared_carrier(
 
 
 @pytest.mark.parametrize("tool_name", _READER_SHAPE_TOOLS, ids=_READER_SHAPE_TOOLS)
-@pytest.mark.anyio
 async def test_failure_payload_gets_recovery_carrier(
     tool_name: str,
     tool_ctx,
@@ -185,7 +183,6 @@ async def test_failure_payload_gets_recovery_carrier(
 
 
 @pytest.mark.parametrize("tool_name", _READER_SHAPE_TOOLS, ids=_READER_SHAPE_TOOLS)
-@pytest.mark.anyio
 async def test_handler_exception_gets_recovery_carrier(
     tool_name: str,
     tool_ctx,
@@ -211,7 +208,6 @@ async def test_handler_exception_gets_recovery_carrier(
 
 
 @pytest.mark.parametrize("tool_name", _READER_SHAPE_TOOLS, ids=_READER_SHAPE_TOOLS)
-@pytest.mark.anyio
 async def test_deny_and_gate_errors_get_recovery_carrier(
     tool_name: str,
     tool_ctx,
@@ -239,7 +235,6 @@ async def test_deny_and_gate_errors_get_recovery_carrier(
 
 
 @pytest.mark.parametrize("tool_name", _READER_SHAPE_TOOLS, ids=_READER_SHAPE_TOOLS)
-@pytest.mark.anyio
 async def test_missing_step_name_is_byte_identical_passthrough(
     tool_name: str,
     tool_ctx,
@@ -261,7 +256,6 @@ async def test_missing_step_name_is_byte_identical_passthrough(
     _ARGUMENT_SOURCED_READER_TOOLS,
     ids=_ARGUMENT_SOURCED_READER_TOOLS,
 )
-@pytest.mark.anyio
 async def test_pre_effect_prepare_failure_prevents_handler(
     tool_name: str,
     tool_ctx,
@@ -292,7 +286,6 @@ async def test_pre_effect_prepare_failure_prevents_handler(
     _RESULT_SOURCED_READER_TOOLS,
     ids=_RESULT_SOURCED_READER_TOOLS,
 )
-@pytest.mark.anyio
 async def test_result_sourced_prepare_failure_is_retriable_after_handler(
     tool_name: str,
     tool_ctx,
@@ -321,7 +314,6 @@ async def test_result_sourced_prepare_failure_is_retriable_after_handler(
     assert "do_not_repeat" not in parsed
 
 
-@pytest.mark.anyio
 async def test_unflagged_tools_never_prepare_or_attach(
     tool_ctx,
     monkeypatch: pytest.MonkeyPatch,

@@ -12,7 +12,7 @@ import pytest
 from tests.server._pipeline_test_helpers import _ack_direct_run_skill_result
 from tests.server._recipe_fixture_parameters import (
     IMPLEMENTATION_OVERRIDES,
-    REVIEW_APPROACH_OVERRIDES,
+    IMPLEMENTATION_REVIEW_READY_PARAMETERS,
 )
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
@@ -103,20 +103,12 @@ def _carrier_delivers_step(carrier: dict[str, Any], step_name: str) -> bool:
 
 
 @pytest.mark.parametrize(
-    ("tool_ctx_ready_recipe", "review_approach"),
-    [
-        pytest.param(("implementation", "plan", IMPLEMENTATION_OVERRIDES), False, id="default"),
-        pytest.param(
-            ("implementation", "plan", REVIEW_APPROACH_OVERRIDES), True, id="review-approach"
-        ),
-    ],
-    indirect=["tool_ctx_ready_recipe"],
+    "tool_ctx_ready_recipe", IMPLEMENTATION_REVIEW_READY_PARAMETERS, indirect=True
 )
 async def test_plan_bind_verify_walk_uses_only_delivered_responses(
     tool_ctx_ready_recipe,
     git_checkout: Path,
     monkeypatch: pytest.MonkeyPatch,
-    review_approach: bool,
 ) -> None:
     from autoskillit.core.io import load_yaml
     from tests.fakes import InMemoryHeadlessExecutor

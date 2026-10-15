@@ -38,23 +38,10 @@ from autoskillit.server.response._response_budget import (
     enforce_response_budget,
 )
 from tests.server._recipe_fixture_parameters import (
-    IMPLEMENTATION_OVERRIDES,
-    REVIEW_APPROACH_OVERRIDES,
+    IMPLEMENTATION_REVIEW_READY_PARAMETERS,
 )
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
-
-_IMPLEMENTATION_READY_PARAMETERS = [
-    pytest.param(("implementation", "plan", IMPLEMENTATION_OVERRIDES), id="default"),
-    pytest.param(
-        (
-            "implementation",
-            "plan",
-            REVIEW_APPROACH_OVERRIDES,
-        ),
-        id="review-approach",
-    ),
-]
 
 
 def _projection(*, segmented: bool) -> FinalizedRecipeProjection:
@@ -374,7 +361,9 @@ async def test_checkpoint_delivery_survives_ready_generation_lru_eviction(
     assert prepared.success_carrier["recipe_pull"] == state.artifact_generation.pull_identity()
 
 
-@pytest.mark.parametrize("tool_ctx_ready_recipe", _IMPLEMENTATION_READY_PARAMETERS, indirect=True)
+@pytest.mark.parametrize(
+    "tool_ctx_ready_recipe", IMPLEMENTATION_REVIEW_READY_PARAMETERS, indirect=True
+)
 @pytest.mark.anyio
 async def test_recovery_only_success_carrier_follows_success_crossings(
     tool_ctx_ready_recipe,
@@ -392,7 +381,9 @@ async def test_recovery_only_success_carrier_follows_success_crossings(
     assert claim_issue.success_carrier is None
 
 
-@pytest.mark.parametrize("tool_ctx_ready_recipe", _IMPLEMENTATION_READY_PARAMETERS, indirect=True)
+@pytest.mark.parametrize(
+    "tool_ctx_ready_recipe", IMPLEMENTATION_REVIEW_READY_PARAMETERS, indirect=True
+)
 @pytest.mark.anyio
 async def test_success_carrier_degrades_to_pull_only_when_response_would_not_fit(
     tool_ctx_ready_recipe,
@@ -441,7 +432,9 @@ async def test_success_carrier_degrades_to_pull_only_when_response_would_not_fit
     assert all(payload[key] == value for key, value in base.items())
 
 
-@pytest.mark.parametrize("tool_ctx_ready_recipe", _IMPLEMENTATION_READY_PARAMETERS, indirect=True)
+@pytest.mark.parametrize(
+    "tool_ctx_ready_recipe", IMPLEMENTATION_REVIEW_READY_PARAMETERS, indirect=True
+)
 @pytest.mark.anyio
 async def test_pull_only_success_survives_oversized_bind_response_spill(
     tool_ctx_ready_recipe,

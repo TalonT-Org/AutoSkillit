@@ -364,6 +364,10 @@ async def test_verify_review_receipt_delivers_ready_checkpoint(
         target_steps = segment["target_steps"]
         assert isinstance(target_steps, list)
         assert "release_issue_failure" in target_steps
+        assert segment["source_step"] == "check_review_posted"
+        assert "release_issue_failure" in segment["pull_closure"]
+        assert {"section": "release_issue_failure", "part": 0} in segment["pull_requests"]
+        assert segment["recipe_pull"] == tool_ctx_ready_recipe.receipt["recipe_pull"]
 
 
 @pytest.mark.anyio

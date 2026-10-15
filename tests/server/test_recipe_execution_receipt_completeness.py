@@ -108,6 +108,7 @@ async def _run_attested_call(
 def _assert_digest_recovery(
     response: dict[str, object], step_name: str, initialization_id: str, code: str
 ) -> str:
+    assert response["success"] is False, response
     serialized = response["error"]
     assert isinstance(serialized, str)
     assert "Recovery:" in serialized

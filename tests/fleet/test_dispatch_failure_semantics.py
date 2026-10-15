@@ -773,7 +773,7 @@ class TestComposedSuccessDeclarations:
         envelope = json.loads(result.outcome.to_envelope())
         record = _read_dispatch_record(tool_ctx)
         assert prompt_args
-        assert prompt_args[0]["success_reasons"] == sorted(expected_reasons or ())
+        assert prompt_args[0]["success_reasons"] == expected_reasons
         if expected_reasons:
             prompt = tool_ctx.executor.dispatch_calls[0].orchestrator_prompt
             assert "child_complete" in prompt

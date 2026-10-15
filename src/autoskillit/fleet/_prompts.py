@@ -7,7 +7,6 @@ from both server and CLI layers without introducing cross-L3 coupling.
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
 
 import regex as re
 
@@ -78,7 +77,7 @@ def _build_food_truck_prompt(
     caller_instructions: str | None = None,
     has_unguarded_filesystem_access: bool = False,
     projected_sous_chef: str = "",
-    success_reasons: Sequence[str] = (),
+    success_reasons: frozenset[str] | None = None,
 ) -> str:
     """Build the system prompt for an L2 food truck headless session.
 
@@ -99,7 +98,7 @@ def _build_food_truck_prompt(
         )
 
     dispatch_id_short = dispatch_id[:8]
-    declared_success_reasons = sorted(success_reasons)
+    declared_success_reasons = sorted(success_reasons or ())
     if declared_success_reasons:
         success_reason_guidance = (
             "use exactly the reason declared by the reached success stop. "

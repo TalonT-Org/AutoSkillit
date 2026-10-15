@@ -338,7 +338,7 @@ def prepare_launch(
         l3_timeout_sec=int(l3_timeout_sec) if l3_timeout_sec is not None else 0,
         capture=capture,
         caller_instructions=caller_instructions,
-        success_reasons=sorted(success_reasons or ()),
+        success_reasons=success_reasons,
     )
     plugin_authority = capability_preparation = None
     if effective_backend is not None:

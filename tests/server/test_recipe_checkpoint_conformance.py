@@ -340,10 +340,9 @@ async def test_unflagged_tools_never_prepare_or_attach(
         tool_def = TOOL_REGISTRY[tool_name]
         if tool_def.automatic_recipe_delivery or tool_def.recovery_recipe_delivery:
             continue
-        result = await _wrapped(
-            tool_name,
-            json.dumps({"success": False}),
-        )(step_name=_STEP_NAME)
-        assert "recipe_segment" not in json.loads(result), tool_name
+        for success in (True, False):
+            payload = {"success": success}
+            result = await _wrapped(tool_name, json.dumps(payload))(step_name=_STEP_NAME)
+            assert json.loads(result) == payload, (tool_name, success)
 
     assert calls == []

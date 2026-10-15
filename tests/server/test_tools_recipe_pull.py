@@ -271,19 +271,14 @@ def test_compile_identity_and_artifact_share_one_source_projection(tool_ctx) -> 
     assert "_dispatch_success_reasons" not in source_payload
     assert "_dispatch_success_reasons" not in prepared.canonical_artifact_payload
 
-    generation = persist_recipe_artifact(
-        tool_ctx.temp_dir,
-        kitchen_id=tool_ctx.kitchen_id,
-        producer_tool="open_kitchen",
-        recipe_name="remediation",
-        payload=prepared.canonical_artifact_payload,
-        flow_generation=prepared.flow_generation,
-    )
-    persisted = load_recipe_artifact(
-        tool_ctx.temp_dir,
-        kitchen_id=tool_ctx.kitchen_id,
-        identity=generation,
-    )
+    _, finalized = _persist_finalized_generation(tool_ctx, payload)
+    assert finalized.normalized_compile_key == prepared.normalized_compile_key
+
+    artifact_root = recipe_artifact._artifact_root(tool_ctx.temp_dir)
+    payload_files = list(artifact_root.rglob("payload.json"))
+    assert len(payload_files) == 1
+    persisted = json.loads(payload_files[0].read_text(encoding="utf-8"))
+    assert persisted == prepared.canonical_artifact_payload
     assert "_dispatch_success_reasons" not in persisted
 
 

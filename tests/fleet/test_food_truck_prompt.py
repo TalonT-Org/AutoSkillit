@@ -2,13 +2,32 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from autoskillit.core._plugin_ids import DIRECT_PREFIX
+from autoskillit.core.types.launch._type_dispatch_identity import DispatchIdentity
 from autoskillit.fleet._prompts import _build_food_truck_prompt
 from tests.contracts._anti_fab_helpers import FABRICATION_GUARD_RE
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
+
+_RESERVED_FAILURE_REASONS = {
+    "fleet_quota_exhausted",
+    "timeout",
+    "open_kitchen_failed",
+    "missing_on_failure",
+    "degraded_tool_response",
+}
+
+
+def _reserved_failure_reasons(contract: str) -> set[str]:
+    marker = "reserved failure reasons are "
+    lower_contract = contract.lower()
+    start = lower_contract.index(marker) + len(marker)
+    end = lower_contract.index(".", start)
+    return set(re.findall(r'"([^"]+)"', contract[start:end]))
 
 
 def test_food_truck_prompt_documents_stop_action():
@@ -309,7 +328,7 @@ def test_food_truck_prompt_degraded_rule_triggers_sentinel_on_empty_content():
     )
 
 
-def test_food_truck_prompt_degraded_reason_in_reason_enum():
+def test_food_truck_prompt_reserved_failure_codes_match_sentinel_contract():
     prompt = _build_food_truck_prompt(
         recipe="test-recipe",
         task="Test task",
@@ -319,11 +338,12 @@ def test_food_truck_prompt_degraded_reason_in_reason_enum():
         campaign_id="test-campaign",
         l3_timeout_sec=300,
     )
-    fields_idx = prompt.index("Fields:", prompt.index("--- SECTION 8:"))
-    reason_region = prompt[fields_idx : fields_idx + 300]
-    assert "degraded_tool_response" in reason_region, (
-        "degraded_tool_response must appear in Section 8 reason enum"
-    )
+    section_start = prompt.index("--- SECTION 8:")
+    section_end = prompt.index("The sentinel markers", section_start)
+    launch_contract = prompt[section_start:section_end]
+    resume_contract = DispatchIdentity.fresh().sentinel_contract
+    assert _reserved_failure_reasons(launch_contract) == _RESERVED_FAILURE_REASONS
+    assert _reserved_failure_reasons(resume_contract) == _RESERVED_FAILURE_REASONS
     ok_idx = prompt.index("FAILURE PREDICATE — open_kitchen")
     deg_idx = prompt.index("FAILURE PREDICATE — DEGRADED RESPONSE")
     assert ok_idx != deg_idx, "Degraded and open_kitchen predicates must be distinct blocks"

@@ -51,7 +51,6 @@ def _make_test_config(
 def _mock_success_result(dispatch_id="test-dispatch-001", session_id="test-session-001"):
     return DispatchResult(
         outcome=DispatchCompleted(
-            success=True,
             dispatch_status=DispatchStatus.SUCCESS,
             dispatch_id=dispatch_id,
             dispatched_session_id=session_id,
@@ -64,7 +63,6 @@ def _mock_success_result(dispatch_id="test-dispatch-001", session_id="test-sessi
 def _mock_failure_result(status=DispatchStatus.FAILURE):
     return DispatchResult(
         outcome=DispatchCompleted(
-            success=False,
             dispatch_status=status,
             dispatch_id="test-dispatch-002",
             dispatched_session_id="test-session-002",

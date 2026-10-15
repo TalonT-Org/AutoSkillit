@@ -33,9 +33,7 @@ from autoskillit.core import (
     get_logger,
     release_tracker_lease,
 )
-from autoskillit.fleet._outcome import (
-    _sanitize_managed_capture_diagnostics,
-)
+from autoskillit.fleet._outcome import _sanitize_managed_capture_diagnostics
 from autoskillit.fleet._startup_warm import warm_failure_path_imports
 from autoskillit.fleet.campaign_state import state as _fleet_state
 from autoskillit.fleet.campaign_state.state import DispatchRecord, DispatchStatus
@@ -196,7 +194,6 @@ def _build_dispatch_crash_result(
                 )
         return DispatchResult(
             DispatchCompleted(
-                success=False,
                 dispatch_status=failure_status,
                 dispatch_id=identities.get("dispatch_id", ""),
                 dispatched_session_id=identities.get("dispatched_session_id", ""),
@@ -301,6 +298,7 @@ async def execute_dispatch(
     native_shell_capture_mode: NativeShellCaptureMode | None = None,
     managed_join_parent_id: str | None = None,
     adaptation_context: SemanticAdaptationContext | None = None,
+    prior_success_candidate: DispatchRecord | None = None,
 ) -> DispatchResult:
     """Execute a single food truck dispatch.
 
@@ -351,6 +349,7 @@ async def execute_dispatch(
             native_shell_capture_mode=native_shell_capture_mode,
             managed_join_parent_id=managed_join_parent_id,
             adaptation_context=adaptation_context,
+            prior_success_candidate=prior_success_candidate,
         )
     except asyncio.CancelledError:
         raise
@@ -393,6 +392,7 @@ async def _run_dispatch(
     native_shell_capture_mode: NativeShellCaptureMode | None = None,
     managed_join_parent_id: str | None = None,
     adaptation_context: SemanticAdaptationContext | None = None,
+    prior_success_candidate: DispatchRecord | None = None,
 ) -> DispatchResult:
     """Inner dispatch body — acquires capacity after durable dispatch identity.
 
@@ -441,6 +441,8 @@ async def _run_dispatch(
         timeout_sec=timeout_sec,
         managed_join_parent_id=managed_join_parent_id,
         adaptation_context=adaptation_context,
+        success_reasons=recipe_ctx.success_reasons,
+        prior_success_candidate=prior_success_candidate,
     )
     if isinstance(lineage_result, DispatchResult):
         return lineage_result
@@ -573,6 +575,7 @@ async def _run_dispatch(
             effective_backend=recipe_ctx.effective_backend,
             dispatch_sidecar_path=execution_result.dispatch_sidecar_path,
             prior_dispatch_ids=[prior_dispatch_id] if prior_dispatch_id else None,
+            success_reasons=recipe_ctx.success_reasons,
         )
         result = await finalize_state_write(
             classification=classification,

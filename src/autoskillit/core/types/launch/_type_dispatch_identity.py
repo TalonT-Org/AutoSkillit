@@ -41,8 +41,11 @@ as your final output. No other text after the sentinel.
 
 Fields:
 - success: true if all mandatory steps completed without unresolved failures
-- reason: "completed", "failed", "fleet_quota_exhausted", "timeout",
-  "open_kitchen_failed", "missing_on_failure", "degraded_tool_response"
+- reason: when successful, use exactly the reason declared by the reached success stop
+  whenever the active recipe graph declares success reasons. Use a concise completion
+  reason only when the graph has no declarations. On failure, report the observed cause;
+  reserved failure reasons are "fleet_quota_exhausted", "timeout",
+  "open_kitchen_failed", "missing_on_failure", and "degraded_tool_response".
 - summary: One-line description of what happened
 
 The sentinel markers ---l3-result::{dispatch_id}--- and ---end-l3-result::{dispatch_id}---

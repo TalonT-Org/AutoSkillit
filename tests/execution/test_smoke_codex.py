@@ -291,6 +291,9 @@ class TestCodexSmokeRecipeComposition:
             def read_child_task(self, child_id: str) -> None:
                 return None
 
+            def session_context_was_compacted(self, cwd: str, session_id: str) -> bool:
+                return False
+
             def list_sessions(self, cwd: str) -> tuple:
                 return ()
 
@@ -332,6 +335,9 @@ class TestCodexSmokeRecipeComposition:
 
             def read_child_task(self, child_id: str) -> None:
                 return None
+
+            def session_context_was_compacted(self, cwd: str, session_id: str) -> bool:
+                return False
 
             def list_sessions(self, cwd: str) -> tuple:
                 return ()

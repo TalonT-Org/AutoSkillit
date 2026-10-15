@@ -1510,6 +1510,198 @@ steps:
     assert "stop_child_child_done" in result["orchestration_rules"]
 
 
+@pytest.mark.parametrize(
+    ("include_child", "expected_reasons", "child_stop_active"),
+    [
+        ("true", ["child_complete"], True),
+        ("false", None, False),
+    ],
+    ids=["composed-child", "pruned-child"],
+)
+def test_load_result_success_reasons_follow_composed_and_pruned_graph(
+    tmp_path: Path,
+    fresh_load_cache,
+    include_child: str,
+    expected_reasons: list[str] | None,
+    child_stop_active: bool,
+) -> None:
+    """Declarations track the finalized graph and cached copies stay isolated."""
+    from autoskillit.recipe._api import load_and_validate
+
+    _setup_project_recipe(
+        tmp_path,
+        "declaration-parent",
+        """\
+name: declaration-parent
+description: parent with a reasonless terminal and optional child
+kitchen_rules: [Follow routes.]
+ingredients:
+  include_child:
+    description: Include the child terminal.
+    default: "false"
+    hidden: true
+steps:
+  child:
+    sub_recipe: declaration-child
+    gate: include_child
+    on_success: parent_done
+    on_failure: escalate
+  parent_done:
+    action: stop
+    message: >-
+      Parent terminal.
+      Example sentinel: {"success": true}
+""",
+    )
+    sub_recipes = tmp_path / ".autoskillit" / "recipes" / "sub-recipes"
+    sub_recipes.mkdir()
+    (sub_recipes / "declaration-child.yaml").write_text(
+        """\
+name: declaration-child
+description: child with a declared success terminal
+kitchen_rules: [Stop at the child terminal.]
+steps:
+  work:
+    action: confirm
+    message: Complete the child work.
+    on_success: child_done
+    on_failure: done
+  child_done:
+    action: stop
+    message: >-
+      Child terminal.
+      Example sentinel: {"success": true, "reason": "child_complete"}
+"""
+    )
+
+    def load_result() -> dict[str, Any]:
+        return load_and_validate(
+            "declaration-parent",
+            project_dir=tmp_path,
+            temp_dir=tmp_path / "cache",
+            ingredient_overrides={"include_child": include_child},
+        )
+
+    first = load_result()
+
+    assert first["valid"], first["errors"]
+    assert first["_dispatch_success_reasons"] == expected_reasons
+    semantics = first["stop_step_semantics"]
+    assert "For stop step 'parent_done'" in semantics
+    assert ("For stop step 'declaration_child_child_done'" in semantics) is child_stop_active
+
+    if first["_dispatch_success_reasons"] is not None:
+        first["_dispatch_success_reasons"].append("caller_mutation")
+
+    cached = load_result()
+
+    assert cached["_dispatch_success_reasons"] == expected_reasons
+    assert cached["stop_step_semantics"] == semantics
+    if cached["_dispatch_success_reasons"] is not None:
+        cached["_dispatch_success_reasons"].append("second_caller_mutation")
+        third = load_result()
+        assert third["_dispatch_success_reasons"] == expected_reasons
+
+
+def test_surviving_nested_sub_recipe_placeholder_invalidates_load(tmp_path: Path) -> None:
+    """One-level composition cannot serve an unchecked nested placeholder."""
+    from autoskillit.recipe._api import load_and_validate
+
+    _setup_project_recipe(
+        tmp_path,
+        "nested-placeholder-parent",
+        """\
+name: nested-placeholder-parent
+description: parent with a composed child
+kitchen_rules: [Follow routes.]
+ingredients:
+  include_child:
+    description: Include the child.
+    default: "true"
+    hidden: true
+steps:
+  child:
+    sub_recipe: nested-placeholder-child
+    gate: include_child
+    on_success: done
+    on_failure: escalate
+  done:
+    action: stop
+    message: 'Example sentinel: {"success": true}'
+""",
+    )
+    sub_recipes = tmp_path / ".autoskillit" / "recipes" / "sub-recipes"
+    sub_recipes.mkdir()
+    (sub_recipes / "nested-placeholder-child.yaml").write_text(
+        """\
+name: nested-placeholder-child
+description: child with an unresolved nested placeholder
+kitchen_rules: [Follow routes.]
+ingredients:
+  include_nested:
+    description: Include the nested leaf.
+    default: "false"
+steps:
+  nested:
+    sub_recipe: nested-placeholder-leaf
+    gate: include_nested
+    on_success: done
+    on_failure: escalate
+"""
+    )
+    (sub_recipes / "nested-placeholder-leaf.yaml").write_text(
+        """\
+name: nested-placeholder-leaf
+description: leaf that composition does not recursively expand
+kitchen_rules: [Follow routes.]
+steps:
+  done:
+    action: stop
+    message: 'Example sentinel: {"success": true, "reason": "leaf_complete"}'
+"""
+    )
+
+    result = load_and_validate(
+        "nested-placeholder-parent",
+        project_dir=tmp_path,
+        temp_dir=tmp_path / "cache",
+        ingredient_overrides={"include_child": "true"},
+    )
+
+    assert result["valid"] is False
+    assert any("sub_recipe" in error.lower() for error in result["errors"])
+    assert result.get("_dispatch_success_reasons") is None
+
+
+def test_recipe_repository_result_keeps_internal_success_reasons(
+    tmp_path: Path, fresh_load_cache
+) -> None:
+    """The fleet-facing repository retains the loader's internal declaration list."""
+    from autoskillit.recipe.repository import DefaultRecipeRepository
+
+    _setup_project_recipe(
+        tmp_path,
+        "repository-declaration",
+        """\
+name: repository-declaration
+description: recipe result used by repository callers
+kitchen_rules: [Follow routes.]
+steps:
+  done:
+    action: stop
+    message: 'Example sentinel: {"success": true, "reason": "repository_done"}'
+""",
+    )
+
+    result = DefaultRecipeRepository().load_and_validate(
+        "repository-declaration",
+        tmp_path,
+        temp_dir=tmp_path / "cache",
+    )
+
+    assert result["_dispatch_success_reasons"] == ["repository_done"]
+
+
 def test_load_result_excludes_pruned_stop_semantics(tmp_path: Path) -> None:
     """Stop guidance excludes guarded stops removed from the active recipe."""
     from autoskillit.recipe._api import load_and_validate

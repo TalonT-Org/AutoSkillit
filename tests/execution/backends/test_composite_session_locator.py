@@ -25,10 +25,14 @@ class _StubLocator:
         locate_result: Path | None = None,
         log_dir: Path | None = None,
         summaries: tuple[SessionSummary, ...] = (),
+        context_compacted: bool = False,
+        compaction_error: Exception | None = None,
     ):
         self._locate = locate_result
         self._log_dir = log_dir or Path("/stub")
         self._summaries = summaries
+        self._context_compacted = context_compacted
+        self._compaction_error = compaction_error
 
     def locate_session(self, session_id: str) -> Path | None:
         return self._locate
@@ -44,6 +48,11 @@ class _StubLocator:
 
     def list_sessions(self, cwd: str) -> tuple[SessionSummary, ...]:
         return self._summaries
+
+    def session_context_was_compacted(self, cwd: str, session_id: str) -> bool:
+        if self._compaction_error is not None:
+            raise self._compaction_error
+        return self._context_compacted
 
 
 def _summary(backend_name: str, session_id: str, cwd: str) -> SessionSummary:
@@ -100,6 +109,9 @@ class TestLocateSession:
             def read_child_task(self, child_id):
                 return None
 
+            def session_context_was_compacted(self, cwd, session_id):
+                return False
+
         hit = Path("/found/session.jsonl")
         registry = {
             "broken": _fake_backend(_FailLocator()),
@@ -110,6 +122,34 @@ class TestLocateSession:
         monkeypatch.setattr(backends_mod, "BACKEND_REGISTRY", registry)
 
         assert CompositeSessionLocator().locate_session("sid-1") == hit
+
+    def test_context_compaction_uses_first_locator_that_resolves(self):
+        unresolved = _StubLocator(
+            context_compacted=True,
+            compaction_error=AssertionError("unresolved locator must not be queried"),
+        )
+        first_resolved = _StubLocator(Path("/first/session.jsonl"), context_compacted=False)
+        later_resolved = _StubLocator(Path("/later/session.jsonl"), context_compacted=True)
+        locator = CompositeSessionLocator((unresolved, first_resolved, later_resolved))
+
+        assert not locator.session_context_was_compacted("/project", "sid-1")
+
+    def test_context_compaction_preserves_first_resolved_locator_error(self):
+        first_resolved = _StubLocator(
+            Path("/unreadable/session.jsonl"),
+            context_compacted=True,
+            compaction_error=OSError("transcript unreadable"),
+        )
+        later_resolved = _StubLocator(Path("/later/session.jsonl"), context_compacted=True)
+        locator = CompositeSessionLocator((first_resolved, later_resolved))
+
+        with pytest.raises(OSError, match="transcript unreadable"):
+            locator.session_context_was_compacted("/project", "sid-1")
+
+    def test_context_compaction_returns_false_when_no_locator_resolves(self):
+        locator = CompositeSessionLocator((_StubLocator(None, context_compacted=True),))
+
+        assert not locator.session_context_was_compacted("/project", "sid-1")
 
 
 class TestProjectLogDirFor:

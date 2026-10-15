@@ -597,6 +597,15 @@ def _build_hook_registry() -> list[HookDef]:
             enforcement_strength={"claude_code": "not-applicable", "codex": "works-as-is"},
             runtime_only=True,
         ),
+        HookDef(
+            matcher="auto",
+            event_type="PreCompact",
+            scripts=["guards/auto_compact_guard.py"],
+            codex_status="not-applicable",
+            mechanism="deny",
+            enforcement_strength={"claude_code": "hard", "codex": "not-applicable"},
+            runtime_only=False,
+        ),
         # Child terminal-reason observation (issue #4623). Purely observational
         # (mechanism="side-effect"): records durable child-outcome evidence,
         # never denies. SubagentStart/SubagentStop/SessionEnd are Claude-only

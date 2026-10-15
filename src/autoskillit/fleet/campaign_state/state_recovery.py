@@ -20,6 +20,7 @@ from autoskillit.fleet.campaign_state.state_records import (
     CampaignState,
     DispatchRecord,
     ResumeDecision,
+    _clear_dispatch_for_retry,
 )
 from autoskillit.fleet.campaign_state.state_transitions import (
     _ABANDON_REASONS,
@@ -45,8 +46,8 @@ class ResumePreflight(NamedTuple):
             can short-circuit to ``_build_success_short_circuit``.
         reset_performed: True when the chokepoint auto-reset a blocking status
             (FAILURE/INTERRUPTED/REFUSED) to PENDING via ``reset_blocking_dispatch``.
-        halt: True when ``continue_on_failure=False`` and the prior status was
-            terminal — caller must refuse the resume.
+        halt: True when campaign policy or a non-resumable context failure
+            refuses the resume.
         halted_reason: Populated when halt=True; describes why the resume was
             refused.
     """
@@ -123,8 +124,8 @@ class _MatchedResumeResult(NamedTuple):
             caller can short-circuit to ``_build_success_short_circuit``.
         reset_performed: True when the policy auto-reset a blocking status to
             PENDING via ``reset_blocking_dispatch``.
-        halt: True when ``continue_on_failure=False`` and the prior status was
-            terminal — caller must refuse the resume.
+        halt: True when campaign policy or a non-resumable context failure
+            refuses the resume.
         halted_reason: Populated when ``halt=True``; describes the refusal.
     """
 
@@ -142,6 +143,13 @@ def _prepare_matched_resume(
     continue_on_failure: bool,
 ) -> _MatchedResumeResult:
     """Apply resume policy to one matched dispatch without rebuilding its lineage."""
+    if dispatch.reason == FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED:
+        return _MatchedResumeResult(
+            None,
+            False,
+            True,
+            f"Context exhaustion prevents resuming {dispatch_name!r}",
+        )
     if dispatch.status == DispatchStatus.UNKNOWN:
         return _MatchedResumeResult(
             short_circuit=None,
@@ -187,6 +195,26 @@ class _RecoveryResetResult(NamedTuple):
     halted: ResumeDecision | None
 
 
+def _apply_retriable_dispatch_policy(
+    dispatch: DispatchRecord,
+    mutator: CampaignStateMutator,
+    *,
+    continue_on_failure: bool,
+    reset_on_retry: bool,
+) -> bool:
+    """Apply reset policy to one failed dispatch; return whether campaign halts."""
+    if dispatch.status not in _RETRIABLE_NON_SUCCESS:
+        return False
+    if dispatch.reason == FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED:
+        return not continue_on_failure
+    if not continue_on_failure and not reset_on_retry:
+        return True
+    if reset_on_retry and (not continue_on_failure or dispatch.status != DispatchStatus.FAILURE):
+        _clear_dispatch_for_retry(dispatch)
+        mutator.mark_dirty()
+    return False
+
+
 def prepare_resume(
     state_path: Path,
     dispatch_name: str,
@@ -203,9 +231,9 @@ def prepare_resume(
         - ``ResumePreflight`` with ``reset_performed=True`` when the prior
           dispatch was in ``{FAILURE, INTERRUPTED, REFUSED}`` and was
           auto-reset to PENDING via ``reset_blocking_dispatch``.
-        - ``ResumePreflight`` with ``halt=True`` when ``continue_on_failure``
-          is False and the prior dispatch was in a terminal status
-          (campaign-level halt semantic preserved).
+        - ``ResumePreflight`` with ``halt=True`` when campaign policy refuses
+          a terminal prior status or the prior reason is non-resumable context
+          exhaustion, regardless of ``continue_on_failure``.
         - ``ResumePreflight`` with ``prior_session_chain`` populated when the
           dispatch is in ``PENDING`` or ``RESUMABLE`` (caller proceeds with
           existing resume flow; cap enforcement happens in
@@ -445,8 +473,13 @@ def _run_locked_recovery_reset_pass(
 ) -> _RecoveryResetResult:
     """Recover stale dispatches and apply campaign-level reset policy under one lock."""
     from autoskillit.fleet.campaign_state.state import CampaignStateMutator
-    from autoskillit.fleet.campaign_state.state_records import (
-        _clear_dispatch_for_retry,
+
+    halted = _RecoveryResetResult(
+        state_missing=False,
+        halted=ResumeDecision(
+            next_dispatch_name="",
+            completed_dispatches_block=FLEET_HALTED_SENTINEL,
+        ),
     )
 
     with CampaignStateMutator(state_path) as m:
@@ -455,35 +488,18 @@ def _run_locked_recovery_reset_pass(
         if m.state.opaque_dispatches or any(
             d.status == DispatchStatus.UNKNOWN for d in m.state.dispatches
         ):
-            return _RecoveryResetResult(
-                state_missing=False,
-                halted=ResumeDecision(
-                    next_dispatch_name="",
-                    completed_dispatches_block=FLEET_HALTED_SENTINEL,
-                ),
-            )
+            return halted
         for d in m.state.dispatches:
             if d.status == DispatchStatus.RUNNING:
                 resolve_stale_running(d, m, reason="stale_running_on_resume")
         for d in m.state.dispatches:
-            if d.status in _RETRIABLE_NON_SUCCESS:
-                if not continue_on_failure:
-                    if reset_on_retry:
-                        _clear_dispatch_for_retry(d)
-                        m.mark_dirty()
-                    else:
-                        return _RecoveryResetResult(
-                            state_missing=False,
-                            halted=ResumeDecision(
-                                next_dispatch_name="",
-                                completed_dispatches_block=FLEET_HALTED_SENTINEL,
-                            ),
-                        )
-                elif reset_on_retry and d.status != DispatchStatus.FAILURE:
-                    # INTERRUPTED / REFUSED reset on reset_on_retry=True.
-                    # FAILURE stays as FAILURE (continue_on_failure=True semantics).
-                    _clear_dispatch_for_retry(d)
-                    m.mark_dirty()
+            if _apply_retriable_dispatch_policy(
+                d,
+                m,
+                continue_on_failure=continue_on_failure,
+                reset_on_retry=reset_on_retry,
+            ):
+                return halted
     return _RecoveryResetResult(state_missing=False, halted=None)
 
 
@@ -518,24 +534,13 @@ def resume_campaign_from_state(
     *,
     reset_on_retry: bool = False,
 ) -> ResumeDecision | None:
-    """Determine the next dispatch for a resumed campaign.
+    """Select the next pending or resumable dispatch from campaign state.
 
-    Algorithm:
-      1. Read state.json; return None if absent or corrupted.
-      2. Find first dispatch not in {success, skipped}.
-      3. If running exists and stale, mark it interrupted; skip alive ones.
-      4. If failure exists and continue_on_failure=False, return None
-         with reason fleet_halted_on_failure (encoded via a sentinel).
-         When reset_on_retry=True, reset all FAILURE dispatches to PENDING instead.
-      5. Return ResumeDecision with next_dispatch_name and completed block.
-
-    The per-dispatch precondition gate is delegated to ``prepare_resume`` so
-    this function composes a campaign-level ``ResumeDecision`` from one or
-    more ``ResumePreflight`` results.
-
-    Returns None if the state file is missing/corrupted. Returns a
-    ResumeDecision with next_dispatch_name="" if all dispatches are
-    complete or the campaign is halted.
+    A locked pass recovers stale sessions and applies reset policy; a second
+    pass composes completed dispatches and the next eligible name. The
+    continuation policy never clears a dedicated context-exhaustion failure.
+    Return ``None`` for missing or corrupt state and a halted sentinel when
+    policy refuses continuation.
     """
     # Pass 1: stale-RUNNING recovery + per-dispatch halt/reset for the FAILURE /
     # INTERRUPTED / REFUSED statuses. This pass mutates the file (closes the

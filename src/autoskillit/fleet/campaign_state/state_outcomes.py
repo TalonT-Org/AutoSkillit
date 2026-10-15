@@ -55,7 +55,6 @@ class DispatchRejected:
 class DispatchCompleted:
     """Dispatch that reached subprocess phase — may have succeeded or failed."""
 
-    success: bool
     dispatch_status: DispatchStatus
     dispatch_id: str
     dispatched_session_id: str
@@ -72,6 +71,10 @@ class DispatchCompleted:
     stderr: str = ""
     elapsed_seconds: float = 0.0
     health_report: dict[str, Any] | None = None
+
+    @property
+    def success(self) -> bool:
+        return self.dispatch_status is DispatchStatus.SUCCESS
 
     def to_envelope(self) -> str:
         reason_text = str(self.reason)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deny Codex automatic compaction before it can replace session history."""
+"""Block automatic compaction before it can replace session history."""
 
 from __future__ import annotations
 
@@ -16,7 +16,8 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 from _hook_constants import CODEX_AUTO_COMPACTION_DENIED_REASON  # noqa: E402
-from _hook_output import halt_session  # noqa: E402
+from _hook_output import block, halt_session  # noqa: E402
+from _hook_settings import hook_session_shape  # noqa: E402
 
 _SYSTEM_MESSAGE = (
     "AutoSkillit blocked automatic compaction before changing history. Start a new session, "
@@ -25,8 +26,9 @@ _SYSTEM_MESSAGE = (
 
 
 def main() -> None:
-    """Emit Codex's synchronous veto only for its registered automatic trigger."""
-    if os.environ.get("AUTOSKILLIT_AGENT_BACKEND") != "codex":
+    """Block Claude orchestrator compaction and preserve Codex's synchronous veto."""
+    backend = os.environ.get("AUTOSKILLIT_AGENT_BACKEND")
+    if backend not in {"codex", "claude-code"}:
         return
     try:
         event = json.load(sys.stdin)
@@ -36,7 +38,12 @@ def main() -> None:
         return
     if event.get("hook_event_name") != "PreCompact" or event.get("trigger") != "auto":
         return
-    halt_session(CODEX_AUTO_COMPACTION_DENIED_REASON, system_message=_SYSTEM_MESSAGE)
+    if backend == "codex":
+        halt_session(CODEX_AUTO_COMPACTION_DENIED_REASON, system_message=_SYSTEM_MESSAGE)
+    else:
+        _, session_type = hook_session_shape()
+        if session_type == "orchestrator":
+            block(_SYSTEM_MESSAGE)
 
 
 if __name__ == "__main__":

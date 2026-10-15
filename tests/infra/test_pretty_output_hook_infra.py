@@ -586,9 +586,8 @@ def test_shape_field_obligations_per_kind():
 
 
 def test_json_producer_includes_completed_failure():
-    """_dispatch_food_truck_json_producer must include a DispatchCompleted(success=False)
-    shape so the coverage contract exercises both success states and the union of keys
-    includes 'kind'.
+    """_dispatch_food_truck_json_producer must include a FAILURE-status completion
+    so the coverage contract exercises both success states and includes 'kind'.
 
     Asserts on the individual completed_failure envelope (not the merged dict)
     to catch regressions where this specific shape drops 'kind'.
@@ -603,7 +602,6 @@ def test_json_producer_includes_completed_failure():
         f"_dispatch_food_truck_json_producer must emit 'kind' field: {sorted(keys)}"
     )
     failure = DispatchCompleted(
-        success=False,
         dispatch_status=DispatchStatus.FAILURE,
         dispatch_id="d-verify",
         dispatched_session_id="s-verify",
@@ -612,6 +610,5 @@ def test_json_producer_includes_completed_failure():
     )
     failure_env = json.loads(failure.to_envelope())
     assert "kind" in failure_env, (
-        f"DispatchCompleted(success=False).to_envelope() must emit 'kind': "
-        f"{sorted(failure_env.keys())}"
+        f"DispatchCompleted with FAILURE status must emit 'kind': {sorted(failure_env.keys())}"
     )

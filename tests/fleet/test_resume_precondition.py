@@ -183,6 +183,35 @@ class TestPrepareResume:
         assert preflight.halt is True
         assert preflight.halted_reason is not None
 
+    def test_context_exhausted_failure_cannot_be_reset_on_resume(self, tmp_path: Path) -> None:
+        prepare_resume = self._prepare_resume()
+        reason = FEC.FLEET_L3_CONTEXT_EXHAUSTED
+        sp = _seed_state(
+            tmp_path,
+            [
+                DispatchRecord(
+                    name="d1",
+                    status=DispatchStatus.FAILURE,
+                    reason=reason,
+                    dispatched_session_id="context-exhausted-session",
+                )
+            ],
+        )
+        original_state = sp.read_bytes()
+
+        preflight = prepare_resume(sp, "d1", continue_on_failure=True)
+
+        assert preflight is not None
+        assert preflight.halt is True
+        assert preflight.reset_performed is False
+        assert preflight.halted_reason is not None
+        assert sp.read_bytes() == original_state
+        state = read_state(sp)
+        assert state is not None
+        d1 = next(d for d in state.dispatches if d.name == "d1")
+        assert d1.status is DispatchStatus.FAILURE
+        assert d1.reason == reason
+
 
 # ----------------------------------------------------------------------------
 # Universal-coverage tests — TestPrepareResumeIsUniversal

@@ -21,6 +21,127 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
 class TestClaudeSessionLocator:
+    @pytest.mark.parametrize(
+        "record",
+        [
+            pytest.param(
+                {"type": "system", "subtype": "compact_boundary"},
+                id="synthetic-without-optional-metadata",
+            ),
+            pytest.param(
+                {
+                    "type": "system",
+                    "subtype": "compact_boundary",
+                    "renamed_compaction_metadata": {"synthetic": True},
+                },
+                id="synthetic-with-renamed-optional-metadata",
+            ),
+        ],
+    )
+    def test_session_context_was_compacted_matches_exact_pair_without_metadata(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        record: dict[str, object],
+    ) -> None:
+        """Synthetic JSONL records need only the exact top-level type/subtype pair."""
+        transcript = tmp_path / "synthetic-compact-boundary.jsonl"
+        transcript.write_text(json.dumps(record) + "\n", encoding="utf-8")
+        monkeypatch.setattr(
+            ClaudeSessionLocator,
+            "session_log_path",
+            lambda _self, _cwd, _session_id: transcript,
+        )
+
+        assert ClaudeSessionLocator().session_context_was_compacted("/project", "session")
+
+    def test_session_context_was_compacted_ignores_misleading_and_malformed_candidates(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Synthetic malformed, non-object, nested, and substring candidates are ignored."""
+        candidates = [
+            "not JSON",
+            '{"subtype":"compact_boundary",',
+            json.dumps(None),
+            json.dumps([]),
+            json.dumps({"type": "systemish", "subtype": "compact_boundary"}),
+            json.dumps({"type": "system", "subtype": "pre_compact_boundary"}),
+            json.dumps({"nested": {"type": "system", "subtype": "compact_boundary"}}),
+        ]
+        transcript = tmp_path / "synthetic-non-boundary-candidates.jsonl"
+        transcript.write_text("\n".join(candidates) + "\n", encoding="utf-8")
+        monkeypatch.setattr(
+            ClaudeSessionLocator,
+            "session_log_path",
+            lambda _self, _cwd, _session_id: transcript,
+        )
+
+        assert not ClaudeSessionLocator().session_context_was_compacted("/project", "session")
+
+    @pytest.mark.parametrize("transcript_kind", ["unresolved", "missing", "clean"])
+    def test_session_context_was_compacted_returns_false_for_missing_or_clean_transcripts(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        transcript_kind: str,
+    ) -> None:
+        if transcript_kind == "unresolved":
+            transcript_path = None
+        elif transcript_kind == "missing":
+            transcript_path = tmp_path / "missing-synthetic-transcript.jsonl"
+        else:
+            transcript_path = tmp_path / "synthetic-clean-transcript.jsonl"
+            transcript_path.write_text(
+                json.dumps({"type": "assistant", "text": "ordinary response"}) + "\n",
+                encoding="utf-8",
+            )
+        monkeypatch.setattr(
+            ClaudeSessionLocator,
+            "session_log_path",
+            lambda _self, _cwd, _session_id: transcript_path,
+        )
+
+        assert not ClaudeSessionLocator().session_context_was_compacted("/project", "session")
+
+    def test_session_context_was_compacted_propagates_unreadable_transcript(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        transcript = tmp_path / "synthetic-unreadable-transcript.jsonl"
+        transcript.write_text(
+            json.dumps({"type": "system", "subtype": "compact_boundary"}) + "\n",
+            encoding="utf-8",
+        )
+        original_open = Path.open
+
+        def _raise_permission_error(path: Path, *args, **kwargs):
+            if path == transcript:
+                raise PermissionError("synthetic transcript unreadable")
+            return original_open(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "open", _raise_permission_error)
+        monkeypatch.setattr(
+            ClaudeSessionLocator,
+            "session_log_path",
+            lambda _self, _cwd, _session_id: transcript,
+        )
+
+        with pytest.raises(PermissionError, match="synthetic transcript unreadable"):
+            ClaudeSessionLocator().session_context_was_compacted("/project", "session")
+
+    def test_session_context_was_compacted_propagates_invalid_utf8(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        transcript = tmp_path / "synthetic-invalid-utf8-transcript.jsonl"
+        transcript.write_bytes(b"\xff\n")
+        monkeypatch.setattr(
+            ClaudeSessionLocator,
+            "session_log_path",
+            lambda _self, _cwd, _session_id: transcript,
+        )
+
+        with pytest.raises(UnicodeDecodeError):
+            ClaudeSessionLocator().session_context_was_compacted("/project", "session")
+
     def test_list_sessions_translates_native_index_and_normalizes_cwd(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:

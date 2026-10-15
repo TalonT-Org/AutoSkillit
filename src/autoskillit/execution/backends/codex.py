@@ -249,7 +249,7 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
             completion_record_types=frozenset({"turn.completed", "turn.failed", "error"}),
             session_record_types=frozenset({"item.completed"}),
             triage_capable=False,
-            supports_context_exhaustion_detection=False,
+            supports_context_exhaustion_detection=True,
             supports_model_capacity_error_detection=True,
             supports_tool_list_changed=False,
             required_skill_fields=frozenset({"name", "description"}),

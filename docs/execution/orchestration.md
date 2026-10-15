@@ -64,10 +64,10 @@ tool result. The routing rules per tool:
 - `clone_repo` / `remove_clone` — read `clone_id` and stash for later
   cleanup via `register_clone_status` and `batch_cleanup_clones`.
 
-## The 20 `retry_reason` values
+## `retry_reason` values
 
-`RetryReason` is a `StrEnum` in `src/autoskillit/core/types/foundation/_type_enums.py` with
-20 distinct values. Each value triggers a different recovery route:
+`RetryReason` is a `StrEnum` in `src/autoskillit/core/types/foundation/_type_enums.py`.
+Each value triggers a different recovery route:
 
 | Value | When the orchestrator sets it | Recovery |
 |-------|-------------------------------|----------|
@@ -87,13 +87,28 @@ tool result. The routing rules per tool:
 | `thinking_stall` | Thinking-only final turn: model consumed tokens (thinking blocks present) but produced no text or tool output | If lifespan_started, route to on_context_limit; else route to on_failure |
 | `rate_limited` | HTTP 429 rate-limit response detected in session output or exit status | Route to `on_rate_limit` if defined; fall back to `on_context_limit` |
 | `async_obligation` | Claude skill completion left owned tasks, a scheduled wakeup, a bounded-drain expiry, or no authoritative lifecycle evidence | Start fresh through `on_failure`; never poll or resume the prior session |
-| `context_exhausted` | A correlated Codex automatic-compaction veto interrupted the turn | Terminal; start an explicit new session, or compact manually and deliberately resume |
+| `context_exhausted` | A correlated Codex automatic-compaction veto interrupted the turn | Terminal for the failed session identity; do not resume or retry it |
 | `cancelled` | Transport teardown cancelled the worker | Terminal; do not retry |
 | `outcome_invariant` | Skill-emitted outcome fields violated their declared relationship | Route to `on_failure` |
 | `outcome_report_malformed` | Skill's terminal outcome report could not be parsed | Route to `on_failure`; do not add a label |
 
 `recipe/rules_isolation.py` enforces matching `clone_contamination` and
 `path_contamination` defenses at recipe-validation time.
+
+Fleet dispatches also use the dedicated reason `fleet_l3_context_exhausted` when retained
+context evidence or a native maximum-window failure makes the result non-resumable. It
+outranks payload, timeout, and sidecar outcomes, while dirty-result parse diagnostics are
+preserved. Neither `retry_disposition` nor `continue_on_failure` authorizes resuming or
+retrying that failed identity. A campaign may proceed to other dispatches according to
+`continue_on_failure`; an ad-hoc caller reports the terminal failure. Any separately
+authorized fresh dispatch has a new identity and must not reuse the failed session ID.
+
+Backend-native controls prevent automatic root compaction. Resume-time detection of a
+previously compacted legacy root is a refusal fallback; it does not stop a compaction that
+is already underway. Codex maximum-window recognition is covered with schema-backed
+fixtures based on the [Codex v2 app-server schema](https://github.com/openai/codex/blob/main/codex-rs/app-server-protocol/schema/json/v2/ThreadStartResponse.json),
+not a captured live maximum-window incident. Record the CLI version if a live
+reproduction becomes available.
 
 ## Wavefront scheduling
 

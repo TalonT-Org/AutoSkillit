@@ -199,33 +199,11 @@ def _resolve_prior_or_skipped_dispatch(
     effective_name: str,
     skip_when: str | None,
     ingredients: dict[str, str] | None,
-) -> str | None:
+) -> str | DispatchRecord | None:
     if campaign_path:
         prior_record = find_completed_dispatch(Path(campaign_path), effective_name)
         if prior_record is not None:
-            identities: dict[str, object] = {
-                "dispatch_id": prior_record.dispatch_id,
-                "dispatched_session_id": prior_record.dispatched_session_id,
-            }
-            provenance.confirm(
-                DispatchEffectName.PRIOR_DISPATCH_BINDING,
-                receipt="campaign state reported prior success",
-                retry_relevant=False,
-                identities=identities,
-            )
-            provenance.confirm(
-                DispatchEffectName.COMMIT,
-                receipt="reused committed campaign dispatch",
-                identities=identities,
-            )
-            return DispatchCompleted(
-                success=True,
-                dispatch_status=DispatchStatus.SUCCESS,
-                dispatch_id=prior_record.dispatch_id,
-                dispatched_session_id=prior_record.dispatched_session_id,
-                reason="prior dispatch already succeeded",
-                effect_provenance=provenance.snapshot(),
-            ).to_envelope()
+            return prior_record
 
     if skip_when:
         dispatches_dir = tool_ctx.temp_dir / "dispatches"
@@ -252,7 +230,6 @@ def _resolve_prior_or_skipped_dispatch(
                 )
                 _confirm_campaign_state_write(provenance, campaign_path, effective_name)
             return DispatchCompleted(
-                success=False,
                 dispatch_status=DispatchStatus.SKIPPED,
                 dispatch_id="",
                 dispatched_session_id="",
@@ -308,6 +285,7 @@ def _prepare_dispatch(
     effective_name: str,
     resume_session_id: str | None,
     prior_dispatch_id: str | None,
+    prepare_managed_join: bool = True,
 ) -> (
     tuple[
         dict[str, str] | None,
@@ -340,12 +318,16 @@ def _prepare_dispatch(
             FleetErrorCode.FLEET_INVALID_BACKEND,
             "Fleet dispatch requires a configured backend.",
         )
-    managed_join_parent_id, adaptation_context = _prepare_managed_join(
-        tool_ctx,
-        effective_backend,
-        effective_name,
-        resume_session_id,
-        prior_dispatch_id,
+    managed_join_parent_id, adaptation_context = (
+        _prepare_managed_join(
+            tool_ctx,
+            effective_backend,
+            effective_name,
+            resume_session_id,
+            prior_dispatch_id,
+        )
+        if prepare_managed_join
+        else (None, None)
     )
     return effective_backend_map, effective_backend, managed_join_parent_id, adaptation_context
 
@@ -358,8 +340,20 @@ def _finish_dispatch(
     effective_name: str,
     continue_on_failure: bool,
     dispatch_name: str | None,
+    prior_success_candidate: DispatchRecord | None = None,
 ) -> str:
-    if campaign_path and isinstance(result, DispatchResult):
+    rejected_historical_success = (
+        isinstance(result, DispatchResult)
+        and isinstance(result.outcome, DispatchRejected)
+        and result.outcome.error_code == FleetErrorCode.FLEET_L3_RESULT_CONTRACT_VIOLATION
+        and bool(result.outcome.dispatch_id)
+    )
+    if (
+        campaign_path
+        and prior_success_candidate is None
+        and not rejected_historical_success
+        and isinstance(result, DispatchResult)
+    ):
         provenance.start(
             DispatchEffectName.CAMPAIGN_STATE_WRITE,
             identities={"campaign_state_path": campaign_path},
@@ -454,7 +448,6 @@ async def _run_dispatch_with_timeout(
                 effect_provenance=snapshot,
             ).to_envelope()
         return DispatchCompleted(
-            success=False,
             dispatch_status=DispatchStatus.INTERRUPTED,
             dispatch_id=identities.get("dispatch_id", ""),
             dispatched_session_id=identities.get("dispatched_session_id", ""),
@@ -600,8 +593,11 @@ async def dispatch_food_truck(
             skip_when,
             ingredients,
         )
-        if prior_or_skip is not None:
+        if isinstance(prior_or_skip, str):
             return prior_or_skip
+        prior_success_candidate = (
+            prior_or_skip if isinstance(prior_or_skip, DispatchRecord) else None
+        )
 
         prepared = _prepare_dispatch(
             tool_ctx,
@@ -611,6 +607,7 @@ async def dispatch_food_truck(
             effective_name,
             resume_session_id,
             prior_dispatch_id,
+            prepare_managed_join=prior_success_candidate is None,
         )
         if isinstance(prepared, str):
             return prepared
@@ -658,6 +655,7 @@ async def dispatch_food_truck(
                 native_shell_capture_mode=native_shell_capture_mode,
                 managed_join_parent_id=managed_join_parent_id,
                 adaptation_context=adaptation_context,
+                prior_success_candidate=prior_success_candidate,
             ),
         )
         if isinstance(result, str):
@@ -670,6 +668,7 @@ async def dispatch_food_truck(
             effective_name,
             continue_on_failure,
             dispatch_name,
+            prior_success_candidate=prior_success_candidate,
         )
     except Exception as exc:
         logger.error("dispatch_food_truck unhandled exception", exc_info=True)

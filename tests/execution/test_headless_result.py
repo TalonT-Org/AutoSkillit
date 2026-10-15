@@ -40,6 +40,7 @@ from autoskillit.execution.headless._headless_evidence import (
     _stdout_mentions_write_tools,
 )
 from autoskillit.execution.session import ClaudeSessionResult
+from autoskillit.execution.session._exit_classification import classify_infra_exit
 from autoskillit.execution.session._session_outcome import _compute_outcome
 from autoskillit.execution.session.turn_usage import build_turn_token_entry
 from tests.execution.conftest import (
@@ -501,6 +502,67 @@ class TestIdleStallLifespanStarted:
         result = _idle_stall_result("")
         skill_result = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert skill_result.lifespan_started is False
+
+
+class TestCompactionAttemptedPropagation:
+    @staticmethod
+    def _compacting_status() -> str:
+        return json.dumps({"type": "system", "subtype": "status", "status": "compacting"})
+
+    @classmethod
+    def _stdout(cls) -> str:
+        return cls._compacting_status() + "\n" + _success_result_json()
+
+    def test_normal_result_propagates_compaction_without_changing_success(self) -> None:
+        result = _sr(0, self._stdout(), "", TerminationReason.NATURAL_EXIT)
+
+        skill_result = _build_skill_result(result, backend=ClaudeCodeBackend())
+
+        assert skill_result.compaction_attempted is True
+        assert skill_result.success is True
+        assert skill_result.needs_retry is False
+        assert skill_result.retry_reason is RetryReason.NONE
+
+    def test_terminated_result_propagates_compaction_and_stale_retry_reason(self) -> None:
+        result = _stale_result(stdout=self._compacting_status())
+
+        skill_result = _build_skill_result(result, backend=ClaudeCodeBackend())
+
+        assert skill_result.compaction_attempted is True
+        assert skill_result.success is False
+        assert skill_result.needs_retry is True
+        assert skill_result.retry_reason is RetryReason.STALE
+
+
+class TestClaudeNativeContextLimitHeadlessParsing:
+    @pytest.mark.parametrize(
+        ("fixture_name", "terminal_reason"),
+        [
+            ("claude_context_limit_legacy_control.jsonl", "blocking_limit"),
+            ("claude_context_limit_2_1_285.jsonl", "prompt_too_long"),
+        ],
+        ids=["legacy-blocking-limit", "claude-code-2.1.285-prompt-too-long"],
+    )
+    def test_headless_parse_path_classifies_observed_limit_as_context_exhausted(
+        self, fixture_name: str, terminal_reason: str
+    ) -> None:
+        """Reduced legacy and 2.1.285 parser shapes use the Claude headless parse path."""
+        stdout = (Path(__file__).parent / "fixtures" / fixture_name).read_text()
+        backend = ClaudeCodeBackend()
+        subprocess_result = _sr(1, stdout, "", TerminationReason.NATURAL_EXIT)
+
+        session = _parse_stdout(subprocess_result, backend=backend)
+
+        assert session.terminal_reason == terminal_reason
+        assert session._is_context_exhausted() is True
+        assert (
+            classify_infra_exit(
+                session,
+                subprocess_result,
+                capabilities=backend.capabilities,
+            )
+            == InfraExitCategory.CONTEXT_EXHAUSTED
+        )
 
 
 class TestKillReasonPropagation:

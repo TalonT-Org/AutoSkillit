@@ -7,15 +7,26 @@ types in `src/autoskillit/hook_registry/` via the `HOOK_REGISTRY` list of
 `HookDef` entries; `generate_hooks_json()` then materializes the canonical
 `hooks.json` that Claude Code reads.
 
-## Codex runtime-only hook
+## Automatic compaction guard
 
-`auto_compact_guard.py` is a runtime-only Codex `PreCompact` hook with matcher `auto`.
-It is synchronous and trusted in wrapper-owned Codex homes. Before Codex replaces
-history automatically, it returns `continue: false`, the
+`auto_compact_guard.py` handles the `PreCompact`/`auto` matcher on both backends.
+Claude publishes the hook in generated `hooks.json`; it blocks only when
+`AUTOSKILLIT_SESSION_TYPE=orchestrator`, returning exit 2 with the reason on stderr.
+Claude's `auto` matcher covers automatic compaction at the auto-compact window and idle
+compaction. The separate `manual` matcher remains unblocked, so users may compact
+deliberately. If Claude invokes automatic compaction to recover from a context-limit
+error, blocking it surfaces that error and fails the current request.
+
+The root food-truck launch also sets `DISABLE_AUTO_COMPACT=1` after provider extras to
+suppress normal compaction attempts. The hook remains the blocking control if Claude
+settings override that environment value. Worker and interactive sessions do not match
+the orchestrator session check.
+
+Codex keeps its runtime-only `PreCompact`/`auto` registration in wrapper-owned homes.
+Before Codex replaces history automatically, the hook returns `continue: false`, the
 `autoskillit_auto_compaction_denied` stop reason, and a visible `systemMessage` that
 explains the terminal headless result and explicit TUI continuation. A `manual` trigger
-does not match, so users may compact manually. This hook is excluded from the Claude
-Code registry.
+does not match this Codex hook.
 
 ## PreToolUse hooks
 
@@ -570,7 +581,7 @@ Hook scripts emit protocol output only through the channel functions in
 | Channel | Events | Output |
 |---------|--------|--------|
 | `deny` | PreToolUse | Nested `permissionDecision: deny` and reason, exit 0 |
-| `block` | PreToolUse, PostToolUse, PostToolUseFailure, Stop, SubagentStop | Exit 2 with a non-empty reason on stderr; stdout is empty |
+| `block` | PreToolUse, PostToolUse, PostToolUseFailure, Stop, SubagentStop, PreCompact (Claude) | Exit 2 with a non-empty reason on stderr; stdout is empty |
 | `context` | SessionStart, PreToolUse, PostToolUse, UserPromptExpansion | Nested `additionalContext`, exit 0 |
 | `rewrite_input` | PreToolUse | Nested `permissionDecision: allow` with non-empty `updatedInput`, exit 0 |
 | `rewrite_mcp_output` | PostToolUse | Nested `updatedMCPToolOutput`, exit 0; Claude-only |
@@ -578,11 +589,12 @@ Hook scripts emit protocol output only through the channel functions in
 | `halt` | PreCompact | `continue: false`, `stopReason`, and `systemMessage`, exit 0; Codex-only |
 
 Blocking uses exit 2 plus stderr. Claude's PostToolUse and PostToolUseFailure
-hooks deliver the reason as feedback after the tool has run. Codex's blocking
-events require non-empty stderr, which becomes the continuation prompt.
-`pretty_output_hook` is Claude-only because Codex refuses `updatedMCPToolOutput`.
-Claude discards PreCompact's `continue` and `systemMessage`, so
-`auto_compact_guard` remains runtime-only for Codex.
+hooks deliver the reason as feedback after the tool has run. Codex block events require
+non-empty stderr, which becomes the continuation prompt; Codex `PreCompact` uses its
+separate `halt` channel. `pretty_output_hook` is Claude-only because Codex refuses
+`updatedMCPToolOutput`. Claude discards `PreCompact`'s `continue` and `systemMessage`,
+so its published automatic-compaction guard uses exit 2, while Codex keeps the runtime-only
+`halt` registration.
 
 The [backend oracles](../../tests/_hook_protocol_oracle.py) interpret output using
 the vendored schemas in `tests/fixtures/codex_hook_protocol/`, pinned to

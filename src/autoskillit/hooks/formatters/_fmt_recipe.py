@@ -65,6 +65,7 @@ _FMT_LOAD_RECIPE_SUPPRESSED: frozenset[str] = frozenset(
         "unreachable_step_names",  # internal execution-graph normalization metadata
         "post_prune_routing_edges",  # internal preflight field; not displayed to agent
         "_finalized_projection",  # internal host-attested finalized recipe carrier
+        "_dispatch_success_reasons",
     }
 )
 

@@ -24,7 +24,14 @@ CHANNEL_EVENTS: Mapping[str, frozenset[str]] = MappingProxyType(
     {
         "deny": frozenset({"PreToolUse"}),
         "block": frozenset(
-            {"PreToolUse", "PostToolUse", "PostToolUseFailure", "Stop", "SubagentStop"}
+            {
+                "PreToolUse",
+                "PostToolUse",
+                "PostToolUseFailure",
+                "Stop",
+                "SubagentStop",
+                "PreCompact",
+            }
         ),
         "context": frozenset({"SessionStart", "PreToolUse", "PostToolUse", "UserPromptExpansion"}),
         "rewrite_input": frozenset({"PreToolUse"}),

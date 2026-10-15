@@ -138,16 +138,33 @@ def _resolve_resume_log(
     project_dir: str,
     resume_session_id: str | None,
     prior_session_chain: list[str],
-    fail_closed: Callable[[str], ExecutionResult],
+    fail_closed: Callable[[FleetErrorCode, str, str], ExecutionResult],
 ) -> str | None | ExecutionResult:
     """Resolve the resume log, falling back to the newest prior session when present."""
     if not resume_session_id:
         return None
 
+    def _refuse_compacted_session(
+        selected_session_id: str, *, original_session_id: str | None = None
+    ) -> ExecutionResult | None:
+        if not locator.session_context_was_compacted(project_dir, selected_session_id):
+            return None
+        log_fields = {"selected_session_id": selected_session_id}
+        if original_session_id is not None:
+            log_fields["original_session_id"] = original_session_id
+        logger.warning("resume_session_context_compacted", **log_fields)
+        return fail_closed(
+            FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED,
+            f"Session {selected_session_id} has a compacted context; automatic resume is refused.",
+            selected_session_id,
+        )
+
     primary_jsonl = (
         locator.session_log_path(project_dir, resume_session_id) if locator is not None else None
     )
     if primary_jsonl is not None and primary_jsonl.exists():
+        if (refusal := _refuse_compacted_session(resume_session_id)) is not None:
+            return refusal
         return resume_session_id
 
     logger.warning(
@@ -163,6 +180,12 @@ def _resolve_resume_log(
             else None
         )
         if fallback_jsonl is not None and fallback_jsonl.exists():
+            if (
+                refusal := _refuse_compacted_session(
+                    fallback_session_id, original_session_id=resume_session_id
+                )
+            ) is not None:
+                return refusal
             logger.info(
                 "resume_session_fallback",
                 original_session_id=resume_session_id,
@@ -170,7 +193,11 @@ def _resolve_resume_log(
             )
             return fallback_session_id
 
-    return fail_closed(f"JSONL log for session {resume_session_id} not found")
+    return fail_closed(
+        FleetErrorCode.FLEET_RESUME_SESSION_MISSING,
+        f"JSONL log for session {resume_session_id} not found",
+        "",
+    )
 
 
 async def run_execution(
@@ -287,11 +314,11 @@ async def run_execution(
         project_dir=str(tool_ctx.project_dir),
         resume_session_id=resume_session_id,
         prior_session_chain=prior_session_chain,
-        fail_closed=lambda message: _failed_execution_result(
-            error_code=FleetErrorCode.FLEET_RESUME_SESSION_MISSING,
+        fail_closed=lambda error_code, message, selected_failed_id: _failed_execution_result(
+            error_code=error_code,
             message=message,
             dispatch_status=DispatchStatus.REFUSED,
-            dispatched_session_id="",
+            dispatched_session_id=selected_failed_id,
             dispatch_id=dispatch_id,
             managed_lineage_ref=managed_lineage_ref,
             provenance=provenance,
@@ -301,7 +328,7 @@ async def run_execution(
             started_at=started_at,
             dispatched_log_dir=dispatched_log_dir,
             dispatch_sidecar_path=dispatch_sidecar_path,
-            effective_resume_session_id=resume_session_id,
+            effective_resume_session_id=selected_failed_id or resume_session_id,
         ),
     )
     if isinstance(effective_resume_session_id, ExecutionResult):

@@ -68,6 +68,9 @@ class LoadCache:
             r["requires_features"] = list(r["requires_features"])
         if "deferred_guards" in r:
             r["deferred_guards"] = list(r["deferred_guards"])
+        success_reasons = r.get("_dispatch_success_reasons")
+        if success_reasons is not None:
+            r["_dispatch_success_reasons"] = list(success_reasons)
         return r
 
     def put(self, key: tuple, entry: _LoadCacheEntry) -> None:

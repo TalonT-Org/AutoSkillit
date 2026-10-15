@@ -49,6 +49,7 @@ async def test_open_kitchen_with_recipe_returns_combined_response(tmp_path, monk
         "valid": True,
         "suggestions": [],
         "diagram": None,
+        "_dispatch_success_reasons": ["recipe_complete"],
     }
     mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
         mock_ctx.recipes.load_and_validate.return_value,
@@ -68,6 +69,7 @@ async def test_open_kitchen_with_recipe_returns_combined_response(tmp_path, monk
     result = json.loads(result_str)
     assert result["success"] is True
     assert result["kitchen"] == "open"
+    assert "_dispatch_success_reasons" not in result
     assert "version" in result
     assert "content" in result
     assert "test-recipe" in result["content"]

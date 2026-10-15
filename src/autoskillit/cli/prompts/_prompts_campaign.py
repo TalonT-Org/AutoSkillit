@@ -6,6 +6,7 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.cli.prompts._prompts import (
+    CONTEXT_EXHAUSTION_RECOVERY_CLAUSE,
     _backend_supplement,
     _ingredient_table_display_instruction,
 )
@@ -330,6 +331,8 @@ is started — the L2 food truck agent always receives concrete values.
 If the user provided extra guidance at campaign launch, pass it to each dispatch via
 `caller_instructions=<guidance>`. The L2 food truck treats it as authoritative.
 {gate_section}{dynamic_dispatch_section}
+{CONTEXT_EXHAUSTION_RECOVERY_CLAUSE}
+
 ## RESUME DISCIPLINE
 
 When a dispatch is killed (no result block received), the infrastructure classifies it:

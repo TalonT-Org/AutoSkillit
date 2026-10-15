@@ -557,6 +557,7 @@ class SkillResult:
     last_stop_reason: str = ""
     lifespan_started: bool = False
     """True when the headless session called an MCP tool (heuristic for server lifespan)."""
+    compaction_attempted: bool = False
     provider: ProviderOutcome = field(default_factory=ProviderOutcome.none_used)
     """Provider execution outcome bundle."""
     execution_selection: ExecutionSelection | None = None

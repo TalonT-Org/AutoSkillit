@@ -135,6 +135,20 @@ def _parse_body(
             source=source,
         )
 
+    error = None
+    if type(parsed.get("success")) is not bool:
+        error = "success must be a JSON boolean"
+    elif "reason" in parsed and not isinstance(parsed["reason"], str):
+        error = "reason must be a string when present"
+    if error is not None:
+        return L3ParseResult(
+            outcome="completed_dirty",
+            payload=None,
+            raw_body=body,
+            parse_error=error,
+            source=source,
+        )
+
     return L3ParseResult(
         outcome="completed_clean",
         payload=parsed,

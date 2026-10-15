@@ -75,7 +75,6 @@ async def test_dispatch_food_truck_reports_progress_during_blocking_span(
         await anyio.sleep(0.03)
         return DispatchResult(
             DispatchCompleted(
-                success=True,
                 dispatch_status=DispatchStatus.SUCCESS,
                 dispatch_id="d1",
                 dispatched_session_id="s1",

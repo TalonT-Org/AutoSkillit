@@ -64,6 +64,7 @@ _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
             DispatchStatus.SUCCESS,
             DispatchStatus.FAILURE,
             DispatchStatus.INTERRUPTED,
+            DispatchStatus.REFUSED,
         }
     ),
     DispatchStatus.FAILURE: frozenset({DispatchStatus.PENDING}),
@@ -109,6 +110,7 @@ TERMINAL_DISPATCH_STATUSES: frozenset[str] = frozenset(
 TERMINAL_UNCLEANED_STATUSES: frozenset[DispatchStatus] = frozenset(
     {DispatchStatus.FAILURE, DispatchStatus.INTERRUPTED}
 )
+
 
 _ABANDON_REASONS: frozenset[str] = frozenset(
     {

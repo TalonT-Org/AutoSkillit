@@ -372,11 +372,20 @@ AutoSkillit provisions an isolated, wrapper-owned Codex home for each launch. It
 trusted synchronous `PreCompact` hook for the `auto` trigger; the hook reports
 `autoskillit_auto_compaction_denied` and a visible `systemMessage`. Headless execution
 ends with that terminal, non-retryable outcome. In the TUI the message is visible and a
-user may continue explicitly or compact manually; manual compaction is not vetoed.
+user may continue explicitly or compact manually; manual compaction is not vetoed. This
+interactive choice does not make a failed fleet dispatch identity resumable.
 This requires Codex hook support from the configured minimum version and a trusted hook
 environment. A native `~/.codex/config.toml` that still contains the old `999999999`
 sentinel is left untouched, clamped upstream, and stripped from wrapper destinations,
 so it neither protects nor affects AutoSkillit launches.
+
+The `PreCompact` veto is the prevention control for automatic compaction. If Codex instead
+reports a native maximum-window failure, the fleet records
+`fleet_l3_context_exhausted` and refuses to resume or retry that failed dispatch identity.
+Coverage for the Codex error detail uses schema-backed fixtures based on the [Codex v2
+app-server schema](https://github.com/openai/codex/blob/main/codex-rs/app-server-protocol/schema/json/v2/ThreadStartResponse.json),
+not a captured live maximum-window incident. If a live reproduction becomes available,
+record the actual Codex CLI version; these fixtures do not establish a new version floor.
 
 ## MCP Response Tracking
 

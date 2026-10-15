@@ -108,6 +108,40 @@ def _setup_dispatch(
     tool_ctx.managed_headless_session_lineage_store = DefaultManagedHeadlessSessionLineageStore()
 
 
+def _setup_bundled_implementation_dispatch(tool_ctx, monkeypatch) -> dict[str, Any]:
+    """Use the bundled implementation recipe and its real loader result in dispatch tests."""
+    from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+    from autoskillit.recipe.repository import DefaultRecipeRepository
+
+    _setup_dispatch(tool_ctx, monkeypatch, recipe_name="implementation")
+    repo = tool_ctx.recipes
+    recipe_info = repo.find("implementation", tool_ctx.project_dir)
+    assert recipe_info is not None
+
+    recipe_path = builtin_recipes_dir() / "implementation.yaml"
+    repo.add_full_recipe(recipe_info.path, load_recipe(recipe_path))
+    validation_result = DefaultRecipeRepository().load_and_validate(
+        "implementation",
+        tool_ctx.project_dir,
+        temp_dir=tool_ctx.temp_dir,
+        ingredient_overrides={"task": "dispatch contract regression"},
+    )
+    error_findings = [
+        item
+        for item in validation_result.get("suggestions", [])
+        if item.get("severity") == "error"
+    ]
+    assert validation_result.get("valid") is True, (
+        "Bundled implementation fixture must pass the real recipe loader; "
+        f"errors={validation_result.get('errors')!r}, findings={error_findings!r}"
+    )
+    declared_reasons = validation_result.get("_dispatch_success_reasons")
+    assert isinstance(declared_reasons, list)
+    assert "implementation_complete" in declared_reasons
+    repo.set_validated("implementation", validation_result)
+    return validation_result
+
+
 async def _run(
     tool_ctx, recipe: str = "test-recipe", ingredients: dict[str, str] | None = None
 ) -> dict:
@@ -158,11 +192,11 @@ def _make_completed_dirty():
     )
 
 
-def _make_completed_clean(success: bool, reason: str = ""):
+def _make_completed_clean(success: bool, reason: str = "", *, include_reason: bool = False):
     from autoskillit.fleet.result_parser import L3ParseResult
 
     payload: dict = {"success": success}
-    if reason:
+    if reason or include_reason:
         payload["reason"] = reason
     return L3ParseResult(
         outcome="completed_clean",
@@ -190,6 +224,7 @@ def _mock_backend_with_locator(
     mock_locator = Mock()
     if project_log_dir is not None:
         mock_locator.project_log_dir.return_value = project_log_dir
+    mock_locator.session_context_was_compacted.return_value = False
     if session_log_path_side_effect is not None:
         mock_locator.session_log_path.side_effect = session_log_path_side_effect
     elif session_log_path is not _SENTINEL:

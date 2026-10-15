@@ -192,6 +192,7 @@ def finalize_recipe_delivery(
     ):
         raise ValueError("canonical artifact payload does not match prepared flow generation")
     surface_payload = dict(payload)
+    surface_payload.pop("_dispatch_success_reasons", None)
     if "success" not in surface_payload:
         surface_payload["success"] = True
     for generation_field in (

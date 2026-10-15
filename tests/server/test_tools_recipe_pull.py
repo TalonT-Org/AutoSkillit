@@ -254,6 +254,7 @@ def test_compile_identity_and_artifact_share_one_source_projection(tool_ctx) -> 
     payload = _payload()
     payload["custom_generation_input"] = {"value": 3}
     payload["initialization_id"] = "caller-owned-stale-id"
+    payload["_dispatch_success_reasons"] = ["recipe_complete"]
 
     prepared = prepare_recipe_delivery_generation(
         payload,
@@ -268,6 +269,18 @@ def test_compile_identity_and_artifact_share_one_source_projection(tool_ctx) -> 
     assert prepared.canonical_artifact_payload["custom_generation_input"] == {"value": 3}
     assert "initialization_id" not in source_payload
     assert "initialization_id" not in prepared.canonical_artifact_payload
+    assert "_dispatch_success_reasons" not in source_payload
+    assert "_dispatch_success_reasons" not in prepared.canonical_artifact_payload
+
+    _, finalized = _persist_finalized_generation(tool_ctx, payload)
+    assert finalized.normalized_compile_key == prepared.normalized_compile_key
+
+    artifact_root = recipe_artifact._artifact_root(tool_ctx.temp_dir)
+    payload_files = list(artifact_root.rglob("payload.json"))
+    assert len(payload_files) == 1
+    persisted = json.loads(payload_files[0].read_text(encoding="utf-8"))
+    assert persisted == prepared.canonical_artifact_payload
+    assert "_dispatch_success_reasons" not in persisted
 
 
 def _persist_finalized_generation(

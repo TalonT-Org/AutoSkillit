@@ -142,6 +142,7 @@ class LoadRecipeResult(TypedDict, total=False):
     required_sections: list[dict[str, Any]]
     recovery: dict[str, Any]
     warnings: NotRequired[list[str]]
+    _dispatch_success_reasons: list[str] | None
     # Internal-only. Recipe API callers receive this only when they explicitly
     # request the attested server-delivery carrier.
     _finalized_projection: FinalizedRecipeProjection

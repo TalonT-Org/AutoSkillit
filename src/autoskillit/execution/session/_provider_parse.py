@@ -27,6 +27,14 @@ _HANDLED_RECORD_TYPES: frozenset[str] = frozenset(
 )
 
 
+def _is_compaction_status_record(obj: Mapping[str, Any]) -> bool:
+    return (
+        obj.get("type") == "system"
+        and obj.get("subtype") == "status"
+        and obj.get("status") == "compacting"
+    )
+
+
 def _provider_field(obj: Mapping[str, Any], *names: str) -> Any:
     """Return the first retained provider field across its observed spellings."""
     for name in names:
@@ -43,6 +51,7 @@ class _ProviderParseAccumulator:
     tool_uses: list[dict[str, Any]] = field(default_factory=list)
     assistant_messages: list[str] = field(default_factory=list)
     jsonl_context_exhausted: bool = False
+    compaction_attempted: bool = False
     stop_reasons: list[str] = field(default_factory=list)
     seen_block_types: set[str] = field(default_factory=set)
     has_thinking_only_turn: bool = False
@@ -108,6 +117,7 @@ def _accumulate_provider_record(obj: dict[str, Any], acc: _ProviderParseAccumula
         return
     if not isinstance(record_type, str) or record_type not in _HANDLED_RECORD_TYPES:
         return
+    acc.compaction_attempted = acc.compaction_attempted or _is_compaction_status_record(obj)
     if record_type == "system" and obj.get("subtype") == "api_retry":
         acc.api_retry_count += 1
         acc.api_retry_last_error = str(_provider_field(obj, "error") or "")

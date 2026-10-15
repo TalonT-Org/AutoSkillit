@@ -454,6 +454,30 @@ def test_fmt_open_kitchen_combined_response():
     assert "run_cmd" in formatted
 
 
+@pytest.mark.parametrize("tool_name", ["load_recipe", "open_kitchen"])
+def test_dispatch_success_reasons_are_omitted_from_formatted_recipe_text(
+    tool_name: str,
+) -> None:
+    payload = {
+        "content": "name: my-recipe\nsteps:\n  done:\n    action: stop\n",
+        "valid": True,
+        "suggestions": [],
+        "kitchen": "open",
+        "version": "1.0.0",
+        "_dispatch_success_reasons": ["dispatch_reason_complete"],
+    }
+
+    formatted = _format_response(
+        f"mcp__autoskillit__{tool_name}",
+        json.dumps(payload),
+        pipeline=False,
+    )
+
+    assert formatted is not None
+    assert "_dispatch_success_reasons" not in formatted
+    assert "dispatch_reason_complete" not in formatted
+
+
 def test_fmt_open_kitchen_combined_includes_ingredients_table():
     """Combined open_kitchen response includes pre-formatted ingredients table."""
     payload = {

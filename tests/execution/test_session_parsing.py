@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 import structlog
@@ -809,6 +810,12 @@ class TestSkillResult:
         }
         assert set(parsed.keys()) == expected
 
+    def test_compaction_attempted_is_not_part_of_public_json(self):
+        sr = self._make(compaction_attempted=True)
+
+        assert sr.compaction_attempted is True
+        assert "compaction_attempted" not in json.loads(sr.to_json())
+
     def test_to_json_retry_reason_serializes_as_string(self):
         sr = self._make(needs_retry=True, retry_reason=RetryReason.RESUME)
         parsed = json.loads(sr.to_json())
@@ -978,6 +985,64 @@ class TestAccumulatorPreservesState:
         assert session.subtype == CliSubtype.CONTEXT_EXHAUSTION
         assert session.jsonl_context_exhausted is True
         assert len(session.tool_uses) == 1
+
+
+class TestClaudeNativeContextLimitParsing:
+    # Both inputs are reduced parser shapes, not full raw stream records. The
+    # legacy shape comes from authentic raw lines 47-48 in
+    # probe_5272/out_a0_autocompact_off_blocking_limit/stdout.jsonl; that run
+    # does not record a CLI version. The 2.1.285 shape is minimized from the
+    # latest native output projection, f52c43adb6d51bbe0f42f0a4, on guard
+    # SHA 9dbfaef8ad508c6b11a5df096b82f268a22d1d19d050c8efe691d3b2c477b4a4.
+    @pytest.mark.parametrize(
+        ("fixture_name", "terminal_reason"),
+        [
+            ("claude_context_limit_legacy_control.jsonl", "blocking_limit"),
+            ("claude_context_limit_2_1_285.jsonl", "prompt_too_long"),
+        ],
+        ids=["legacy-blocking-limit", "claude-code-2.1.285-prompt-too-long"],
+    )
+    def test_observed_result_terminal_reason_is_retained_as_context_evidence(
+        self, fixture_name: str, terminal_reason: str
+    ) -> None:
+        """Reduced native-limit shapes retain the terminal reason from each capture."""
+        stdout = (Path(__file__).parent / "fixtures" / fixture_name).read_text()
+
+        session = parse_session_result(stdout)
+
+        assert session.terminal_reason == terminal_reason
+        assert session._is_context_exhausted() is True
+
+
+class TestClaudeCompactionAttemptedParsing:
+    def test_exact_status_compacting_latches_across_later_success(self) -> None:
+        """A synthetic native-shaped reset does not clear prior compacting evidence."""
+        compacting = json.dumps({"type": "system", "subtype": "status", "status": "compacting"})
+        status_reset = json.dumps({"type": "system", "subtype": "status", "status": None})
+        completed = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "done",
+                "session_id": "s1",
+            }
+        )
+
+        session = parse_session_result("\n".join((compacting, status_reset, completed)))
+
+        assert session.compaction_attempted is True
+        assert session.is_error is False
+        assert session.jsonl_context_exhausted is False
+
+    @pytest.mark.parametrize("status", ["idle", "compacted", "not-compacting"])
+    def test_other_system_status_values_do_not_latch(self, status: str) -> None:
+        """Synthetic non-compacting status values do not create compaction evidence."""
+        line = json.dumps({"type": "system", "subtype": "status", "status": status})
+
+        session = parse_session_result(line)
+
+        assert session.compaction_attempted is False
 
 
 # ---------------------------------------------------------------------------

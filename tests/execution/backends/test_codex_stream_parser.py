@@ -13,6 +13,7 @@ from autoskillit.core import (
     CodexItemType,
     StreamParser,
 )
+from autoskillit.core.types import CODEX_CONTEXT_EXHAUSTION_MARKER
 from autoskillit.execution.backends._codex.app_server_events import _app_server_to_exec_event
 from autoskillit.execution.backends._codex_parse import (
     CodexStreamParser,
@@ -712,6 +713,103 @@ class TestAppServerToExecEventAdapter:
         )
         assert adapted is not None
         assert adapted["type"] == "turn.failed"
+
+    @pytest.mark.parametrize(
+        ("method", "params", "expected"),
+        [
+            (
+                "turn/completed",
+                {
+                    "turn": {
+                        "status": "failed",
+                        "error": {
+                            "message": "synthetic context failure",
+                            "codexErrorInfo": "contextWindowExceeded",
+                        },
+                    }
+                },
+                {
+                    "type": "turn.failed",
+                    "error": {
+                        "message": "synthetic context failure",
+                        "code": CODEX_CONTEXT_EXHAUSTION_MARKER,
+                    },
+                },
+            ),
+            (
+                "error",
+                {
+                    "willRetry": False,
+                    "error": {
+                        "message": "synthetic context failure",
+                        "codexErrorInfo": "contextWindowExceeded",
+                    },
+                },
+                {
+                    "type": "error",
+                    "message": "synthetic context failure",
+                    "code": CODEX_CONTEXT_EXHAUSTION_MARKER,
+                },
+            ),
+        ],
+        ids=["turn-completed-failed", "terminal-error"],
+    )
+    def test_context_window_exceeded_metadata_maps_to_codex_context_code(
+        self, method: str, params: dict[str, object], expected: dict[str, object]
+    ) -> None:
+        """Synthetic app-server v2 events preserve the message and normalize the scalar code."""
+        adapted = _app_server_to_exec_event({"method": method, "params": params})
+
+        assert adapted == expected
+
+    @pytest.mark.parametrize(
+        ("error", "expected_code"),
+        [
+            (
+                {
+                    "message": "synthetic unrelated failure",
+                    "code": "E42",
+                    "codexErrorInfo": "notContextWindowExceeded",
+                },
+                "E42",
+            ),
+            (
+                {"message": "native context failure", "code": "context_length_exceeded"},
+                "context_length_exceeded",
+            ),
+        ],
+        ids=["non-context-codex-error-info", "native-context-length-code"],
+    )
+    def test_context_code_normalization_preserves_other_native_codes(
+        self, error: dict[str, str], expected_code: str
+    ) -> None:
+        """Only the exact Codex app-server context enum overrides the native code."""
+        adapted = _app_server_to_exec_event(
+            {"method": "error", "params": {"willRetry": False, "error": error}}
+        )
+
+        assert adapted == {
+            "type": "error",
+            "message": error["message"],
+            "code": expected_code,
+        }
+
+    def test_context_error_with_will_retry_remains_nonterminal(self) -> None:
+        """Retryable app-server errors stay nonterminal even when context-coded."""
+        adapted = _app_server_to_exec_event(
+            {
+                "method": "error",
+                "params": {
+                    "willRetry": True,
+                    "error": {
+                        "message": "synthetic retryable failure",
+                        "codexErrorInfo": "contextWindowExceeded",
+                    },
+                },
+            }
+        )
+
+        assert adapted == {"type": "item.started"}
 
     def test_error_will_retry_true_maps_to_ignored_item_started_equivalent(self) -> None:
         adapted = _app_server_to_exec_event(

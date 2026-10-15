@@ -321,6 +321,7 @@ class ClaudeSessionCommandMixin(BackendCmdBuilderBase):
             for k, v in env_extras.items():
                 if k not in _PROVIDER_EXTRAS_BASE_DENYLIST:
                     extras[k] = v
+        extras["DISABLE_AUTO_COMPACT"] = "1"
 
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         spec = self.build_headless_cmd(

@@ -5,6 +5,8 @@ from __future__ import annotations
 from autoskillit.fleet.result_parser import L3ParseResult
 from autoskillit.fleet.sidecar import IssueSidecarEntry
 
+SIDECAR_RECOVERY_REASON = "sidecar_recovery"
+
 _FAILURE_TERMINAL_PATTERNS = frozenset({"escalate", "failure", "error", "reject"})
 
 
@@ -33,7 +35,7 @@ def synthesize_from_sidecar(
         outcome="completed_clean",
         payload={
             "success": True,
-            "reason": "sidecar_recovery",
+            "reason": SIDECAR_RECOVERY_REASON,
             "pr_urls": pr_urls,
             "issue_count": len(completed),
         },

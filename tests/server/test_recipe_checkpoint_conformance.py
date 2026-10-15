@@ -277,7 +277,13 @@ async def test_pre_effect_prepare_failure_prevents_handler(
     assert calls == [_STEP_NAME]
     assert json.loads(result) == {
         "success": False,
-        "error": "RecipeSegmentDeliveryError: unavailable",
+        "is_error": True,
+        "error": (
+            f"{tool_name}: recipe segment preparation failed: "
+            "RecipeSegmentDeliveryError: unavailable"
+        ),
+        "stage": "recipe_segment_delivery",
+        "retriable": True,
     }
 
 

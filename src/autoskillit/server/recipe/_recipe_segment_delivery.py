@@ -677,7 +677,12 @@ def prepare_checkpoint(
         return prepare_recipe_segment_delivery(tool_ctx, step_name), None
     except Exception as exc:
         logger.warning("recipe_segment_pre_effect_preparation_failed", exc_info=True)
-        return None, json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+        response = deny_envelope(
+            f"{fn.__name__}: recipe segment preparation failed: {type(exc).__name__}: {exc}",
+            stage="recipe_segment_delivery",
+            retriable=True,
+        )
+        return None, json.dumps(response, ensure_ascii=False, separators=(",", ":"))
 
 
 def _recipe_delivery_outcome(

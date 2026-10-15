@@ -319,13 +319,14 @@ class TestPushToRemoteProtectedBranch:
 
 class TestPushToRemoteMocked:
     @pytest.fixture(autouse=True)
-    def _use_url_destination(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
+    def upstream_remote(self):
+        with patch(
             "autoskillit.workspace.clone._matching_push_remote",
-            lambda checkout, url: url,
-        )
+            side_effect=lambda checkout, url: url,
+        ) as remote:
+            yield remote
 
-    def test_ds6_push_to_remote_calls_get_url_then_push(self) -> None:
+    def test_ds6_push_to_remote_calls_get_url_then_push(self, upstream_remote) -> None:
         """T_DS6: push_to_remote resolves origin, then pushes directly to that URL."""
         mock_url = MagicMock()
         mock_url.returncode = 0
@@ -344,6 +345,7 @@ class TestPushToRemoteMocked:
             )
 
         assert result == {"success": True, "stderr": ""}
+        upstream_remote.assert_called_once_with(Path("/clone"), "git@github.com:org/repo.git")
         # First call: git remote get-url origin from source_dir
         first_call = mock_run.call_args_list[0]
         assert first_call[0][0] == ["git", "remote", "get-url", "origin"]
@@ -359,6 +361,28 @@ class TestPushToRemoteMocked:
             "main",
         ]
         assert second_call[1]["cwd"] == "/clone"
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            RuntimeError("destination lookup failed"),
+            OSError("destination lookup failed"),
+            subprocess.TimeoutExpired(["git", "remote", "-v"], 30),
+        ],
+    )
+    def test_push_returns_failure_when_destination_lookup_fails(
+        self, upstream_remote, error: Exception
+    ) -> None:
+        upstream_remote.side_effect = error
+        with patch("autoskillit.workspace.clone.subprocess.run") as run:
+            result = push_to_remote(
+                "/clone",
+                remote_url="https://github.com/org/repo.git",
+                branch="topic",
+                protected_branches=[],
+            )
+        assert result == {"success": False, "stderr": str(error)}
+        run.assert_not_called()
 
     def test_ds7_push_to_remote_fails_when_no_origin(self) -> None:
         """T_DS7: push_to_remote returns error when git remote get-url fails, no push attempted."""

@@ -220,7 +220,7 @@ _EXPECTED_GIT_REF_SITES: tuple[tuple[str, str, int, str, str], ...] = (
         "<unresolved>",
         "UNRESOLVABLE",
     ),
-    ("workspace/clone/__init__.py", "push_to_remote", 517, "push", "BARE"),
+    ("workspace/clone/__init__.py", "push_to_remote", 521, "push", "BARE"),
 )
 _DEFERRED_REF_SITES: dict[tuple[str, str, int, str, str], TrackedDeferral] = {}
 

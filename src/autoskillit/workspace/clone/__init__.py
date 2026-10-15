@@ -513,7 +513,11 @@ def push_to_remote(
             ),
         }
 
-    destination = _matching_push_remote(Path(clone_path), resolved_url)
+    try:
+        destination = _matching_push_remote(Path(clone_path), resolved_url)
+    except (RuntimeError, OSError, subprocess.SubprocessError) as exc:
+        return {"success": False, "stderr": str(exc)}
+
     push_cmd = ["git", "push", "-u", "--", destination, branch]
     if force:
         push_cmd.insert(3, "--force-with-lease")

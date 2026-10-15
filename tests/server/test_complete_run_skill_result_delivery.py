@@ -71,6 +71,13 @@ async def test_completion_receipt_delivery_carries_plan_step_name(
     if not run_skill_success:
         assert_delivery_outcome("complete_run_skill_result", response, expected=False)
     assert response["recipe_segment"]["kind"] == expected_segment
+    if not run_skill_success:
+        carrier = response["recipe_segment"]
+        assert carrier["source_step"] == "plan"
+        assert "release_issue_failure" in carrier["target_steps"]
+        assert "release_issue_failure" in carrier["pull_closure"]
+        assert {"section": "release_issue_failure", "part": 0} in carrier["pull_requests"]
+        assert carrier["recipe_pull"] == tool_ctx_ready_recipe.receipt["recipe_pull"]
     if run_skill_success:
         await assert_real_checkpoint_response_budget(
             tool_ctx_ready_recipe,

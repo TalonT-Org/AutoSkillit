@@ -163,12 +163,33 @@ async def test_plan_bind_verify_walk_uses_only_delivered_responses(
     assert carrier["kind"] == "success"
     assert _carrier_delivers_step(carrier, "verify")
 
-    verify_record = next(body for body in carrier["bodies"] if body["step"] == "verify")
-    verify_body = load_yaml(verify_record["body"])["verify"]
-    assert (
-        verify_record["invocation_template_digest"]
-        == credential["invocation_template_digests"]["verify"]
-    )
+    verify_record = next((body for body in carrier["bodies"] if body["step"] == "verify"), None)
+    if verify_record is not None:
+        verify_yaml = verify_record["body"]
+        assert (
+            verify_record["invocation_template_digest"]
+            == credential["invocation_template_digests"]["verify"]
+        )
+    else:
+        from autoskillit.server.tools.tools_recipe import get_recipe_section
+
+        pull = {key: value for key, value in carrier["recipe_pull"].items() if key != "pull_tool"}
+        chunks = []
+        page_args = {"part": 0}
+        while True:
+            page = json.loads(await get_recipe_section(section="verify", **pull, **page_args))
+            assert page["success"] is True, page
+            assert page["payload_sha256"] == pull["payload_sha256"]
+            chunks.append(page["content"])
+            if not page["has_more"]:
+                break
+            page_args = {
+                "part": page["next_part"],
+                "page_plan_sha256": page["page_plan_sha256"],
+                "continuation": page["continuation"],
+            }
+        verify_yaml = "".join(chunks)
+    verify_body = load_yaml(verify_yaml)["verify"]
     verify_context = {
         **plan_response,
         "plan_path": plan_path,

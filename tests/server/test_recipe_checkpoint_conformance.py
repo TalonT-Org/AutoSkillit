@@ -148,7 +148,7 @@ async def test_success_payload_gets_declared_carrier(
     parsed = json.loads(result)
 
     if prepared.success_carrier is None:
-        assert "recipe_segment" not in parsed
+        assert parsed == payload
     else:
         assert parsed["recipe_segment"] == prepared.success_carrier
     expected_step = (

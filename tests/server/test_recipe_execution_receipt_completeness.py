@@ -13,6 +13,7 @@ from autoskillit.core import (
     FinalizedRecipeProjection,
     build_recipe_execution_credential,
 )
+from autoskillit.recipe import get_skill_contract, load_bundled_manifest
 from autoskillit.server.recipe._recipe_execution import (
     bind_attested_runtime_invocation,
     get_recipe_execution,
@@ -212,11 +213,22 @@ async def test_following_the_recovery_yields_an_admitted_digest(
         credential = receipt["recipe_execution"]
         expected_template = installed.snapshot.templates[step_name]
         invocation = expected_template.invocation
-        skill_inputs = {
-            value.name: value.effective_value
-            for value in invocation.skill_inputs
-            if value.is_present
-        }
+        contract = get_skill_contract(invocation.skill_name, load_bundled_manifest())
+        assert contract is not None
+        input_defs = {input_def.name: input_def for input_def in contract.inputs}
+        skill_inputs = {}
+        for value in invocation.skill_inputs:
+            if not value.is_present:
+                continue
+            actual = value.effective_value
+            if not input_defs[value.name].accepts(actual):
+                assert value.context_dependencies or value.input_dependencies
+                actual = next(
+                    sample
+                    for sample in ("fixture", 1, False)
+                    if input_defs[value.name].accepts(sample)
+                )
+            skill_inputs[value.name] = actual
         bound_inputs, admitted_template = bind_attested_runtime_invocation(
             installed,
             execution_id=credential["execution_id"],
@@ -225,7 +237,10 @@ async def test_following_the_recovery_yields_an_admitted_digest(
             skill_command=_skill_command(ready.tool_ctx, step_name),
             skill_inputs=skill_inputs,
             actual_mcp_kwargs={
-                value.name: value.effective_value for value in invocation.mcp_kwargs
+                **{value.name: value.effective_value for value in invocation.mcp_kwargs},
+                "step_name": step_name,
+                "recipe_execution_id": credential["execution_id"],
+                "invocation_template_digest": credential["invocation_template_digests"][step_name],
             },
         )
         assert admitted_template is expected_template

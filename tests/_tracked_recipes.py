@@ -27,6 +27,7 @@ from typing import NamedTuple
 from autoskillit.core import RecipeSource
 from autoskillit.core.paths import pkg_root
 from autoskillit.core.types import LoadResult
+from autoskillit.recipe import NON_INTERACTIVE_KINDS
 from autoskillit.recipe.io import (
     RECIPE_SCAN_DIRS,
     collect_recipes_from_candidates,
@@ -167,6 +168,15 @@ def tracked_recipe_names(
             info.name
             for info in _tracked_recipe_infos(project_root, source=source, scan_dirs=scan_dirs)
         )
+    )
+
+
+def delivery_recipe_names(project_root: Path) -> list[str]:
+    """Select tracked recipes that can be delivered to an interactive orchestrator."""
+    return sorted(
+        recipe.name
+        for recipe in tracked_recipe_load_result(project_root).items
+        if recipe.kind not in NON_INTERACTIVE_KINDS and not recipe.dispatch_only
     )
 
 

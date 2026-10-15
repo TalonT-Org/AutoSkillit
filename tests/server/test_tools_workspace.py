@@ -24,12 +24,18 @@ from autoskillit.core.types import (
 from autoskillit.server.tools.tools_workspace import reset_test_dir, reset_workspace, test_check
 from autoskillit.workspace import CleanupResult
 from tests.conftest import _make_result
+from tests.server._recipe_fixture_parameters import (
+    IMPLEMENTATION_READY_PARAMETERS,
+)
 from tests.server._recipe_segment_test_helpers import (
+    assert_delivery_outcome,
+    assert_real_checkpoint_response_budget,
     assert_recovery_recipe_segment,
     install_prepared_recipe_segment,
 )
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
+
 
 test_check.__test__ = False  # type: ignore[attr-defined]
 
@@ -206,7 +212,7 @@ class TestTestCheck:
         tool_ctx.config.output_budget.inline_max_chars = 20
         tool_ctx.config.output_budget.head_chars = 10
         tool_ctx.config.output_budget.tail_chars = 10
-        install_prepared_recipe_segment(monkeypatch, tools_workspace, step_name="gate")
+        install_prepared_recipe_segment(monkeypatch, step_name="gate")
 
         async def timed_out_runner(_cwd: Path) -> TestResult:
             return TestResult(
@@ -243,6 +249,7 @@ class TestTestCheck:
             {"worktree": self.wt},
         ) in notifications
         assert_recovery_recipe_segment(result, step_name="gate")
+        assert_delivery_outcome("test_check", result, expected=False)
 
     @pytest.mark.parametrize(
         ("returncode", "output", "expected_kind"),
@@ -251,22 +258,36 @@ class TestTestCheck:
             (1, "= 1 failed, 9 passed =\n", "recovery"),
         ],
     )
+    @pytest.mark.parametrize(
+        "tool_ctx_ready_recipe",
+        IMPLEMENTATION_READY_PARAMETERS,
+        indirect=True,
+    )
     @pytest.mark.anyio
     async def test_test_check_selects_carrier_only_from_passed_true(
         self,
-        tool_ctx,
+        tool_ctx_ready_recipe,
+        tmp_path,
         monkeypatch: pytest.MonkeyPatch,
         returncode: int,
         output: str,
         expected_kind: str,
     ) -> None:
-        install_prepared_recipe_segment(monkeypatch, tools_workspace, step_name="gate")
+        tool_ctx = tool_ctx_ready_recipe.tool_ctx
+        install_prepared_recipe_segment(monkeypatch, step_name="gate")
         tool_ctx.runner.push(_make_result(returncode, output, ""))
 
         result = json.loads(await test_check(worktree_path=self.wt, step_name="gate"))
 
         assert result["passed"] is (expected_kind == "success")
         assert result["recipe_segment"]["kind"] == expected_kind
+        succeeded = expected_kind == "success"
+        if not succeeded:
+            assert_delivery_outcome("test_check", result, expected=False)
+        if succeeded:
+            await assert_real_checkpoint_response_budget(
+                tool_ctx_ready_recipe, "test_check", result, tmp_path
+            )
 
     @pytest.mark.anyio
     async def test_cross_validates_exit_code_against_output(self, tool_ctx):

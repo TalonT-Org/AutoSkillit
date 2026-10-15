@@ -9,7 +9,8 @@ Compiled-recipe generation and its persisted artifacts are owned by
 `_recipe_generation` and `_recipe_artifact` respectively. Transactional
 finalization lives in the `_recipe_delivery/` sub-package, with its own
 decision-support helpers in `_recipe_delivery_helpers` and its segmented
-startup/checkpoint carriers in `_recipe_segment_delivery`. Server-owned
+startup/checkpoint carriers in `_recipe_segment_delivery`, which also owns checkpoint
+attachment through `track_response_size`. Server-owned
 execution and initialization commits are split across `_recipe_execution`
 and `_recipe_initialization`. Section pagination is split between the
 page-fitting engine (`_recipe_section_pagination`, `_recipe_section_planning`)

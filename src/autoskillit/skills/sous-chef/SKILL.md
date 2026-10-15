@@ -1035,9 +1035,9 @@ ingredient interpolation) before serving content to you.
 
 When a response contains `recipe_segment`, treat that carrier as mandatory recipe
 authority. For `kind: startup` or `kind: success`, install every canonical body in
-`bodies` in the advertised order, verify each `body_sha256`, and use the segment-scoped
-`recipe_execution.invocation_template_digests` for the newly delivered named steps. The
-segment overview is a table of contents, not permission to invent or read future bodies.
+`bodies` in the advertised order and verify each `body_sha256`; a carrier repeats the
+`recipe_execution` digests of the bodies it delivers. The segment overview is a table of
+contents, not permission to invent or read future bodies.
 For `kind: recovery`, use its ordered `pull_closure` and `pull_requests` with the carrier's
 unchanged `recipe_pull`; reconstruct every named body before continuing. A
 `recipe_segment_post_effect_delivery_failure`
@@ -1080,8 +1080,12 @@ response (top level, or under `recipe_delivery.payload_metadata` when the body i
 the same forwarding rule applies. Omitting these parameters or passing values that were not
 delivered in the response will cause `recipe_execution_attestation_missing` or
 `recipe_execution_inactive` denial.
-Segmented delivery narrows this lookup to the latest delivered carrier. Do not assume the
-startup credential contains invocation digests for the full recipe horizon.
+The complete_recipe_initialization(initialization_id) receipt carries every named step's `recipe_execution`
+credential. Use the delivered completion receipt when one is already present, including a terminal-page
+embedded receipt; otherwise call complete_recipe_initialization(initialization_id) before the first
+`run_skill`. The receipt can be re-requested at any time while the recipe is READY, and a digest rejection
+names that exact call. Absence of a top-level `recipe_execution` block alone does not identify segmented
+delivery.
 
 For structured child inputs, select `recipe_execution.skill_input_shapes[step_name]` and
 initialize `skill_inputs` with exactly its ordered keys; replace available values in place;

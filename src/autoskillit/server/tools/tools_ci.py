@@ -17,14 +17,23 @@ from autoskillit.server._notify import track_response_size
 from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.lifecycle._guards import _require_enabled
 from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
-from autoskillit.server.recipe._recipe_segment_delivery import (
-    PreparedRecipeSegmentDelivery,
-    attach_recipe_segment,
-    prepare_recipe_segment_delivery,
-)
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
+
+
+def _merge_state_error(error: str, *, http_status: int | None = None) -> str:
+    envelope: dict[str, object] = {
+        "error": error,
+        "queue_available": False,
+        "merge_group_trigger": False,
+        "auto_merge_available": False,
+        "ci_event": None,
+        "ci_applicable": False,
+    }
+    if http_status is not None:
+        envelope["http_status"] = http_status
+    return json.dumps(envelope)
 
 
 def _validate_commit_status_inputs(sha: str, context: str, description: str) -> str | None:
@@ -143,7 +152,7 @@ async def check_repo_merge_state(
         branch: Target branch name to check merge queue state for.
         cwd: Working directory for git remote resolution.
         remote_url: Full GitHub remote URL; parsed to owner/repo if provided.
-        step_name: Step name for timing telemetry.
+        step_name: Exact recipe step key; selects recipe-segment delivery and timing.
         base_branch: PR target branch; enables pull_request trigger detection.
             When empty, pull_request triggers are not evaluated (conservative).
 
@@ -161,31 +170,16 @@ async def check_repo_merge_state(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        prepared_segment: PreparedRecipeSegmentDelivery | None = None
         from autoskillit.server import (  # circular-break
             _get_ctx,
         )  # circular-break: server-internal circular dependency
 
         tool_ctx = _get_ctx()
-        prepared_segment = prepare_recipe_segment_delivery(tool_ctx, step_name)
         _start = time.monotonic()
         try:
             resolved_repo = await resolve_repo_from_remote(cwd, hint=remote_url or None)
             if not resolved_repo or "/" not in resolved_repo:
-                return json.dumps(
-                    attach_recipe_segment(
-                        {
-                            "error": f"Could not resolve owner/repo from cwd={cwd!r}",
-                            "queue_available": False,
-                            "merge_group_trigger": False,
-                            "auto_merge_available": False,
-                            "ci_event": None,
-                            "ci_applicable": False,
-                        },
-                        prepared_segment,
-                        success=False,
-                    )
-                )
+                return _merge_state_error(f"Could not resolve owner/repo from cwd={cwd!r}")
             owner, repo = resolved_repo.split("/", 1)
             resolved_token = (
                 tool_ctx.token_factory()
@@ -199,42 +193,18 @@ async def check_repo_merge_state(
                 token=resolved_token,
                 base_branch=base_branch or None,
             )
-            return json.dumps(
-                attach_recipe_segment(
-                    state,
-                    prepared_segment,
-                    success="error" not in state,
-                )
-            )
+            return json.dumps(state)
         except Exception as exc:
             logger.error("autoskillit.check_repo_merge_state failed", exc_info=True)
-            envelope: dict[str, object] = {
-                "error": f"{type(exc).__name__}: {exc}",
-                "queue_available": False,
-                "merge_group_trigger": False,
-                "auto_merge_available": False,
-                "ci_event": None,
-                "ci_applicable": False,
-            }
-            if isinstance(exc, httpx.HTTPStatusError):
-                envelope["http_status"] = exc.response.status_code
-            return json.dumps(attach_recipe_segment(envelope, prepared_segment, success=False))
+            return _merge_state_error(
+                f"{type(exc).__name__}: {exc}",
+                http_status=(
+                    exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+                ),
+            )
         finally:
             if step_name:
                 tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
         logger.error("check_repo_merge_state unhandled exception", exc_info=True)
-        return json.dumps(
-            attach_recipe_segment(
-                {
-                    "error": f"{type(exc).__name__}: {exc}",
-                    "queue_available": False,
-                    "merge_group_trigger": False,
-                    "auto_merge_available": False,
-                    "ci_event": None,
-                    "ci_applicable": False,
-                },
-                prepared_segment,
-                success=False,
-            )
-        )
+        return _merge_state_error(f"{type(exc).__name__}: {exc}")

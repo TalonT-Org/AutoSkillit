@@ -35,7 +35,6 @@ from autoskillit.core import (
 )
 from autoskillit.execution.backends import BACKEND_REGISTRY, CODEX_HISTORY_RETENTION_TOKEN_LIMIT
 from autoskillit.recipe import (
-    NON_INTERACTIVE_KINDS,
     load_and_validate,
 )
 from autoskillit.server.recipe._recipe_delivery import (
@@ -51,7 +50,7 @@ from autoskillit.server.tools._serve_helpers import (
     build_open_kitchen_recipe_payload,
 )
 from tests._helpers import kitchen_identity_fields
-from tests._tracked_recipes import tracked_recipe_load_result, tracked_recipe_names
+from tests._tracked_recipes import delivery_recipe_names, tracked_recipe_names
 from tests.contracts._delivery_constants import (
     CALIBRATED_PAGES_PER_SECTION,
     MAX_ENVELOPE_MANIFEST_BYTES,
@@ -66,14 +65,6 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 def _recipe_names() -> list[str]:
     return sorted(tracked_recipe_names(_PROJECT_ROOT))
-
-
-def _delivery_recipe_names() -> list[str]:
-    return sorted(
-        recipe.name
-        for recipe in tracked_recipe_load_result(_PROJECT_ROOT).items
-        if recipe.kind not in NON_INTERACTIVE_KINDS and not recipe.dispatch_only
-    )
 
 
 def _backend_capabilities():
@@ -141,7 +132,7 @@ def _full_open_kitchen_generation(
     return build_open_kitchen_recipe_payload(dict(result), version="0.0.0"), projection
 
 
-@pytest.mark.parametrize("recipe_name", _delivery_recipe_names(), ids=lambda n: n)
+@pytest.mark.parametrize("recipe_name", delivery_recipe_names(_PROJECT_ROOT), ids=lambda n: n)
 @pytest.mark.parametrize("backend_name", sorted(_backend_capabilities().keys()), ids=lambda n: n)
 def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
     recipe_name: str,

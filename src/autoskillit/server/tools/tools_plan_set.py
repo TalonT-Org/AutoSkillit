@@ -48,7 +48,13 @@ async def bind_plan_set(
     step_name: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
-    """Bind plan parts to one verified authority artifact. Never raises."""
+    """Bind plan parts to one verified authority artifact.
+
+    Args:
+        step_name: Exact recipe step key; selects recipe-segment delivery and timing.
+
+    Never raises.
+    """
     try:
         from autoskillit.server import _get_ctx  # circular-break: tool registration owns the app
         from autoskillit.server.recipe._recipe_execution import (  # circular-break

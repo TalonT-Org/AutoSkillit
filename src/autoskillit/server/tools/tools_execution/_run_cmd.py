@@ -27,7 +27,6 @@ from autoskillit.server.lifecycle._session_scope import (
     SCOPE_ORCHESTRATOR_OR_HIGHER,
     session_scoped,
 )
-from autoskillit.server.recipe._recipe_segment_delivery import attach_recipe_segment
 from autoskillit.server.tools import tools_execution as _te_pkg
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._execution_helpers import (
@@ -42,7 +41,6 @@ from autoskillit.server.tools._execution_helpers import (
 
 if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
-    from autoskillit.server.recipe._recipe_segment_delivery import PreparedRecipeSegmentDelivery
 
 logger = get_logger(__name__)
 
@@ -140,7 +138,7 @@ async def run_cmd(
         cmd: The full command to run (e.g. "make build").
         cwd: Working directory for the command.
         timeout: Max seconds before killing the process (default 600).
-        step_name: Optional YAML step key for wall-clock timing accumulation.
+        step_name: Exact recipe step key; selects recipe-segment delivery and timing.
 
     Never raises.
     """
@@ -153,12 +151,10 @@ async def run_cmd(
     ) is not None:
         return gate
     try:
-        prepared_segment: PreparedRecipeSegmentDelivery | None = None
         with structlog.contextvars.bound_contextvars(tool="run_cmd", cwd=cwd):
             from autoskillit.server import _get_ctx  # circular-break
 
             tool_ctx = _get_ctx()
-            prepared_segment = _te_pkg.prepare_recipe_segment_delivery(tool_ctx, step_name)
             configured_commands = tuple(tool_ctx.config.test_check.effective_commands)
             if contains_test_gate_command(cmd, configured_commands) and not (
                 _trusted_smoke_gate_provenance(tool_ctx, step_name)
@@ -201,13 +197,7 @@ async def run_cmd(
                         stderr="",
                         capture_error=str(exc),
                     )
-                    return json.dumps(
-                        attach_recipe_segment(
-                            result,
-                            prepared_segment,
-                            success=False,
-                        )
-                    )
+                    return json.dumps(result)
 
                 if not result.get("success"):
                     await _te_pkg._notify(
@@ -217,23 +207,17 @@ async def run_cmd(
                         "autoskillit.run_cmd",
                         extra={"exit_code": returncode},
                     )
-                if result.get("success") is True:
-                    return json.dumps(result)
-                return json.dumps(attach_recipe_segment(result, prepared_segment, success=False))
+                return json.dumps(result)
             finally:
                 if step_name:
                     tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
         logger.error("run_cmd unhandled exception", exc_info=True)
         return json.dumps(
-            attach_recipe_segment(
-                {
-                    "success": False,
-                    "exit_code": -1,
-                    "stdout": "",
-                    "stderr": f"{type(exc).__name__}: {exc}",
-                },
-                prepared_segment,
-                success=False,
-            )
+            {
+                "success": False,
+                "exit_code": -1,
+                "stdout": "",
+                "stderr": f"{type(exc).__name__}: {exc}",
+            }
         )

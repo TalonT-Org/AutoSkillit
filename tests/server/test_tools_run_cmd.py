@@ -9,11 +9,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 import structlog.testing
 
-import autoskillit.server.tools.tools_execution as tools_execution
 from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.tools.tools_execution import run_cmd, run_python
 from tests.conftest import _make_result, _make_timeout_result
 from tests.server._recipe_segment_test_helpers import (
+    assert_delivery_outcome,
     assert_recovery_recipe_segment,
     install_prepared_recipe_segment,
 )
@@ -55,17 +55,35 @@ class TestRunCmd:
         returncode: int,
         expected_success: bool,
     ) -> None:
-        install_prepared_recipe_segment(monkeypatch, tools_execution, step_name="command")
+        install_prepared_recipe_segment(monkeypatch, step_name="command", success_carrier=None)
         tool_ctx_kitchen_open.runner.push(_make_result(returncode, "stdout", "stderr"))
 
         result = json.loads(await run_cmd(cmd="command", cwd="/tmp", step_name="command"))
 
         assert result["success"] is expected_success
         assert result["exit_code"] == returncode
+        assert_delivery_outcome("run_cmd", result, expected=expected_success)
         if expected_success:
             assert "recipe_segment" not in result
         else:
             assert_recovery_recipe_segment(result, step_name="command")
+
+    @pytest.mark.anyio
+    async def test_test_gate_refusal_returns_recovery_carrier(
+        self,
+        tool_ctx_kitchen_open,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        install_prepared_recipe_segment(monkeypatch, step_name="command", success_carrier=None)
+
+        result = json.loads(await run_cmd(cmd="uv run pytest -q", cwd="/tmp", step_name="command"))
+
+        assert result["success"] is False
+        assert result["subtype"] == "gate_error"
+        assert "test_check" in json.dumps(result)
+        assert_recovery_recipe_segment(result, step_name="command")
+        assert_delivery_outcome("run_cmd", result, expected=False)
+        assert tool_ctx_kitchen_open.runner.call_args_list == []
 
     @pytest.mark.anyio
     async def test_custom_timeout(self, tool_ctx_kitchen_open):

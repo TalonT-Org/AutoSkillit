@@ -8,7 +8,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import autoskillit.server.tools.tools_clone as tools_clone
 from autoskillit.server.recipe._recipe_segment_delivery import RecipeSegmentDeliveryError
 from autoskillit.server.tools.tools_clone import (
     batch_cleanup_clones,
@@ -20,9 +19,16 @@ from autoskillit.server.tools.tools_clone import (
 from autoskillit.workspace.clone import _registry as clone_registry
 from tests.conftest import bind_test_kitchen_identity
 from tests.server._pipeline_test_helpers import _seed_acknowledged_receipt
-from tests.server._recipe_segment_test_helpers import install_prepared_recipe_segment
+from tests.server._recipe_fixture_parameters import (
+    IMPLEMENTATION_READY_PARAMETERS,
+)
+from tests.server._recipe_segment_test_helpers import (
+    assert_delivery_outcome,
+    assert_real_checkpoint_response_budget,
+    install_prepared_recipe_segment,
+)
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 
 class TestCloneRepoTool:
@@ -181,15 +187,22 @@ class TestPushToRemoteTool:
         assert result["subtype"] == "gate_error"
 
     @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "tool_ctx_ready_recipe",
+        IMPLEMENTATION_READY_PARAMETERS,
+        indirect=True,
+    )
     async def test_delegates_to_workspace_clone_on_success(
         self,
         tool_ctx_kitchen_open,
+        tool_ctx_ready_recipe,
+        tmp_path,
         monkeypatch: pytest.MonkeyPatch,
     ):
         mock_mgr = MagicMock()
-        mock_mgr.push_to_remote.return_value = {"success": "true", "stderr": ""}
+        mock_mgr.push_to_remote.return_value = {"success": True, "stderr": ""}
         tool_ctx_kitchen_open.clone_mgr = mock_mgr
-        install_prepared_recipe_segment(monkeypatch, tools_clone, step_name="push")
+        install_prepared_recipe_segment(monkeypatch, step_name="push")
         result = json.loads(
             await push_to_remote(
                 clone_path="/clone",
@@ -198,9 +211,12 @@ class TestPushToRemoteTool:
                 step_name="push",
             )
         )
-        assert result["success"] == "true"
+        assert result["success"] is True
         assert "error" not in result
         assert result["recipe_segment"]["kind"] == "success"
+        await assert_real_checkpoint_response_budget(
+            tool_ctx_ready_recipe, "push_to_remote", result, tmp_path
+        )
 
     @pytest.mark.anyio
     async def test_returns_error_key_when_push_fails(
@@ -211,7 +227,7 @@ class TestPushToRemoteTool:
         mock_mgr = MagicMock()
         mock_mgr.push_to_remote.return_value = {"success": False, "stderr": "remote rejected"}
         tool_ctx_kitchen_open.clone_mgr = mock_mgr
-        install_prepared_recipe_segment(monkeypatch, tools_clone, step_name="push")
+        install_prepared_recipe_segment(monkeypatch, step_name="push")
         result = json.loads(
             await push_to_remote(
                 clone_path="/clone",
@@ -223,6 +239,7 @@ class TestPushToRemoteTool:
         assert "error" in result
         assert "remote rejected" in result["stderr"]
         assert result["recipe_segment"]["kind"] == "recovery"
+        assert_delivery_outcome("push_to_remote", result, expected=False)
 
     @pytest.mark.anyio
     async def test_segment_identity_denial_prevents_push_effect(
@@ -236,7 +253,10 @@ class TestPushToRemoteTool:
         def _reject(*_args, **_kwargs):
             raise RecipeSegmentDeliveryError("READY compile identity differs from artifact")
 
-        monkeypatch.setattr(tools_clone, "prepare_recipe_segment_delivery", _reject)
+        monkeypatch.setattr(
+            "autoskillit.server.recipe._recipe_segment_delivery.prepare_recipe_segment_delivery",
+            _reject,
+        )
 
         result = json.loads(
             await push_to_remote(
@@ -249,9 +269,15 @@ class TestPushToRemoteTool:
 
         assert result == {
             "success": False,
-            "error": "RecipeSegmentDeliveryError: READY compile identity differs from artifact",
-            "stderr": "",
+            "is_error": True,
+            "error": (
+                "push_to_remote: recipe segment preparation failed: "
+                "RecipeSegmentDeliveryError: READY compile identity differs from artifact"
+            ),
+            "stage": "recipe_segment_delivery",
+            "retriable": True,
         }
+        assert_delivery_outcome("push_to_remote", result, expected=False)
         mock_mgr.push_to_remote.assert_not_called()
 
     @pytest.mark.anyio

@@ -550,6 +550,7 @@ def test_no_unintended_new_test_files_under_tests_core() -> None:
             "test_skill_discovery_route_def.py",
             "test_skill_semantic_plan.py",
             "test_stamp_constants.py",
+            "test_tool_def_delivery_outcome.py",
             "test_tool_sequence_analysis.py",
             "test_type_helpers.py",
             "test_type_protocol_shards.py",

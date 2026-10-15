@@ -9,39 +9,28 @@ from pathlib import Path
 import pytest
 
 import autoskillit.server._plan_set_materializer as materializer_module
-from autoskillit.core import PlanSetRejectReason, resolve_temp_dir
+from autoskillit.core import PlanSetRejectReason
 from autoskillit.server._plan_set_materializer import DefaultPlanSetMaterializer
 from autoskillit.server.tools.tools_plan_set import bind_plan_set
+from tests.server._plan_set_test_helpers import (
+    PLAN_SET_FIXTURE,
+    PlanSetGitHub,
+    write_plan_set_parts,
+)
+from tests.server._recipe_fixture_parameters import (
+    IMPLEMENTATION_OVERRIDES,
+    IMPLEMENTATION_READY_PARAMETERS,
+)
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
-_FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "plan_set" / "split_r1_r2"
-
-
-class _GitHub:
-    def __init__(self, *, success: bool = True) -> None:
-        self.success = success
-
-    async def fetch_issue(self, *_args: object, **_kwargs: object) -> dict[str, object]:
-        if not self.success:
-            return {"success": False, "error": "offline"}
-        return {"success": True, "issue_number": 1, "body": (_FIXTURE / "issue.md").read_text()}
-
-
-def _parts(tmp_path: Path, tool_ctx, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path, Path]:
-    root = resolve_temp_dir(tmp_path, tool_ctx.config.workspace.temp_dir)
-    root.mkdir(parents=True, exist_ok=True)
-    parts = (root / "part_a.md", root / "part_b.md")
-    for part in parts:
-        part.write_text((_FIXTURE / part.name).read_text(), encoding="utf-8")
-    monkeypatch.setattr(tool_ctx, "plan_set_materializer", DefaultPlanSetMaterializer(_GitHub()))
-    return root, *parts
+_MISSING_R2_FIXTURE = PLAN_SET_FIXTURE.parent / "missing_r2"
 
 
 async def test_headless_bind_writes_snapshot_and_tracks_response(
     tmp_path: Path, tool_ctx, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root, first, second = _parts(tmp_path, tool_ctx, monkeypatch)
+    root, first, second = write_plan_set_parts(tmp_path, tool_ctx, monkeypatch)
     assert not tool_ctx.gate.enabled
     encoded = await bind_plan_set(
         plan_parts=f"{first},{second}\n",
@@ -77,7 +66,7 @@ async def test_headless_bind_writes_snapshot_and_tracks_response(
 async def test_open_bind_and_mixed_parent_list(
     tmp_path: Path, tool_ctx, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _, first, second = _parts(tmp_path, tool_ctx, monkeypatch)
+    _, first, second = write_plan_set_parts(tmp_path, tool_ctx, monkeypatch)
     opened = json.loads(
         await bind_plan_set(plan_parts=str(first), cwd=str(tmp_path), seal="false")
     )
@@ -97,7 +86,7 @@ async def test_open_bind_and_mixed_parent_list(
 async def test_identical_bind_reconciles_existing_artifacts(
     tmp_path: Path, tool_ctx, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _, first, second = _parts(tmp_path, tool_ctx, monkeypatch)
+    _, first, second = write_plan_set_parts(tmp_path, tool_ctx, monkeypatch)
 
     class FrozenDatetime:
         @staticmethod
@@ -122,7 +111,7 @@ async def test_identical_bind_reconciles_existing_artifacts(
 async def test_wrapper_classifies_inputs_and_failures(
     tmp_path: Path, tool_ctx, monkeypatch: pytest.MonkeyPatch, case: str
 ) -> None:
-    root, first, _ = _parts(tmp_path, tool_ctx, monkeypatch)
+    root, first, _ = write_plan_set_parts(tmp_path, tool_ctx, monkeypatch)
     if case == "empty":
         result = json.loads(await bind_plan_set(plan_parts=" ,\n", cwd=str(tmp_path)))
         assert result["reason"] == PlanSetRejectReason.NO_PARTS.value
@@ -133,7 +122,9 @@ async def test_wrapper_classifies_inputs_and_failures(
         assert result["reason"] == PlanSetRejectReason.CONTAINMENT.value
     elif case == "fetch_failure":
         monkeypatch.setattr(
-            tool_ctx, "plan_set_materializer", DefaultPlanSetMaterializer(_GitHub(success=False))
+            tool_ctx,
+            "plan_set_materializer",
+            DefaultPlanSetMaterializer(PlanSetGitHub(success=False)),
         )
         result = json.loads(
             await bind_plan_set(plan_parts=str(first), cwd=str(tmp_path), issue_url="owner/repo#1")
@@ -157,3 +148,37 @@ async def test_wrapper_classifies_inputs_and_failures(
         assert result["success"] is True
         authority = json.loads(Path(result["plan_set_authority_path"]).read_text())
         assert authority["inventory_mode"] == "no_issue"
+
+
+@pytest.mark.parametrize(
+    "tool_ctx_ready_recipe",
+    IMPLEMENTATION_READY_PARAMETERS,
+    indirect=True,
+)
+async def test_bind_plan_set_coverage_failure_delivers_recovery(
+    tool_ctx_ready_recipe,
+    git_checkout: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tests.server._recipe_segment_test_helpers import assert_delivery_outcome
+
+    _, first, second = write_plan_set_parts(
+        git_checkout,
+        tool_ctx_ready_recipe.tool_ctx,
+        monkeypatch,
+        fixture_dir=_MISSING_R2_FIXTURE,
+    )
+    result = json.loads(
+        await bind_plan_set(
+            step_name="bind_plan_set",
+            plan_parts=f"{first}\n{second}",
+            cwd=str(git_checkout),
+            issue_url=IMPLEMENTATION_OVERRIDES["issue_url"],
+        )
+    )
+
+    assert result["reason"] == PlanSetRejectReason.COVERAGE_FAILED.value
+    assert_delivery_outcome("bind_plan_set", result, expected=False)
+    segment = result["recipe_segment"]
+    assert segment["kind"] == "recovery"
+    assert "release_issue_failure" in segment["target_steps"]

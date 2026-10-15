@@ -405,6 +405,8 @@ def _ready_recipe_segment_step(
         prepared = prepare_recipe_segment_delivery(tool_ctx, source_step)
         assert prepared is not None
         for carrier in (prepared.success_carrier, prepared.recovery_carrier):
+            if carrier is None:
+                continue
             for body in carrier.get("bodies", ()):
                 if body.get("step") != step_name:
                     continue

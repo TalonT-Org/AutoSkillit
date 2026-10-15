@@ -256,6 +256,9 @@ async def verify_review_receipt(
 ) -> str:
     """Verify a review effect against the server-owned publication ledger.
 
+    Args:
+        step_name: Exact recipe step key; selects recipe-segment delivery and timing.
+
     Never raises.
     """
 

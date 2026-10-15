@@ -7,9 +7,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-import autoskillit.server.tools.tools_issue_labels as tools_issue_labels
 from autoskillit.server.tools.tools_issue_labels import release_issue
 from tests.server._recipe_segment_test_helpers import (
+    assert_delivery_outcome,
     assert_recovery_recipe_segment,
     install_prepared_recipe_segment,
 )
@@ -30,7 +30,7 @@ class TestReleaseIssueTool:
         monkeypatch: pytest.MonkeyPatch,
     ):
         tool_ctx_kitchen_open.github_client = None
-        install_prepared_recipe_segment(monkeypatch, tools_issue_labels, step_name="release")
+        install_prepared_recipe_segment(monkeypatch, step_name="release")
         result = json.loads(
             await release_issue(
                 "https://github.com/owner/repo/issues/42",
@@ -40,9 +40,10 @@ class TestReleaseIssueTool:
         assert result["success"] is False
         assert "error" in result
         assert_recovery_recipe_segment(result, step_name="release")
+        assert_delivery_outcome("release_issue", result, expected=False)
 
     @pytest.mark.anyio
-    async def test_release_issue_success_returns_recovery_segment(
+    async def test_release_issue_success_has_no_success_carrier(
         self,
         tool_ctx_kitchen_open,
         monkeypatch: pytest.MonkeyPatch,
@@ -50,7 +51,7 @@ class TestReleaseIssueTool:
         mock_client = AsyncMock()
         mock_client.remove_label.return_value = {"success": True}
         tool_ctx_kitchen_open.github_client = mock_client
-        install_prepared_recipe_segment(monkeypatch, tools_issue_labels, step_name="release")
+        install_prepared_recipe_segment(monkeypatch, step_name="release", success_carrier=None)
         result = json.loads(
             await release_issue(
                 "https://github.com/owner/repo/issues/42",
@@ -59,7 +60,8 @@ class TestReleaseIssueTool:
         )
         assert result["success"] is True
         assert result["issue_number"] == 42
-        assert_recovery_recipe_segment(result, step_name="release")
+        assert "recipe_segment" not in result
+        assert_delivery_outcome("release_issue", result, expected=True)
 
     # P5F4-T2
     @pytest.mark.anyio

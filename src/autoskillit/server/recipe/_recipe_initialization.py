@@ -538,29 +538,6 @@ def _render_completion_receipt(
     )
 
 
-def _public_completion_credential(
-    credential: RecipeExecutionCredential,
-    projection: FinalizedRecipeProjection,
-) -> RecipeExecutionCredential:
-    if not projection.delivery_segments:
-        return credential
-    initial_steps = frozenset(projection.delivery_segments[0].ordered_step_names)
-    return RecipeExecutionCredential(
-        execution_id=credential.execution_id,
-        snapshot_digest=credential.snapshot_digest,
-        invocation_template_digests={
-            step_name: digest
-            for step_name, digest in credential.invocation_template_digests.items()
-            if step_name in initial_steps
-        },
-        skill_input_shapes={
-            step_name: shape
-            for step_name, shape in credential.skill_input_shapes.items()
-            if step_name in initial_steps
-        },
-    )
-
-
 def build_embedded_completion_response(
     *,
     initialization_id: str,
@@ -602,10 +579,7 @@ def build_completion_response(
                 recipe_name=state.recipe_name,
                 artifact_generation=state.artifact_generation,
                 flow_generation=state.flow_generation,
-                credential=_public_completion_credential(
-                    build_recipe_execution_credential(state.installed_execution.snapshot),
-                    state.finalized_projection,
-                ),
+                credential=build_recipe_execution_credential(state.installed_execution.snapshot),
             )
             return rendered
         if (
@@ -627,10 +601,7 @@ def build_completion_response(
             recipe_name=state.recipe_name,
             artifact_generation=state.artifact_generation,
             flow_generation=state.flow_generation,
-            credential=_public_completion_credential(
-                build_recipe_execution_credential(state.staged_snapshot),
-                state.finalized_projection,
-            ),
+            credential=build_recipe_execution_credential(state.staged_snapshot),
         )
         return FinalizedRecipeInitializationResponse(
             rendered=rendered,

@@ -39,6 +39,10 @@ from autoskillit.server.recipe._recipe_initialization import (
     complete_section_response,
 )
 from autoskillit.server.recipe._recipe_section_pagination import resolve_recipe_section_bound_bytes
+from autoskillit.server.recipe._recipe_segment_delivery import (
+    attach_checkpoint,
+    prepare_checkpoint,
+)
 from autoskillit.server.response._response_budget import (
     bounded_response_budget_failure,
     enforce_response_budget,
@@ -62,6 +66,31 @@ def _get_ctx_or_none() -> ToolContext | None:
     )
 
     return _ctx_none_fn()
+
+
+async def _invoke_handler(
+    fn: Callable[..., Awaitable[Any]],
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    tool_name: str,
+) -> Any:
+    try:
+        return await fn(*args, **kwargs)
+    except Exception as exc:
+        result = json.dumps(
+            {
+                "success": False,
+                "error": f"{type(exc).__name__}: {exc}",
+                "exit_code": -1,
+                "subtype": "tool_exception",
+                "user_visible_message": (
+                    f"An internal error occurred in {tool_name}: "
+                    f"{type(exc).__name__}. Run 'autoskillit doctor' or reinstall."
+                ),
+            }
+        )
+        logger.exception("track_response_size_handler_failed", tool_name=tool_name)
+        return result
 
 
 def _resolve_backend_capabilities(ctx: ToolContext | None) -> BackendCapabilities | None:
@@ -126,22 +155,12 @@ def track_response_size(
     def decorator(fn: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:
         @functools.wraps(fn)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            try:
-                result = await fn(*args, **kwargs)
-            except Exception as exc:
-                result = json.dumps(
-                    {
-                        "success": False,
-                        "error": f"{type(exc).__name__}: {exc}",
-                        "exit_code": -1,
-                        "subtype": "tool_exception",
-                        "user_visible_message": (
-                            f"An internal error occurred in {tool_name}: "
-                            f"{type(exc).__name__}. Run 'autoskillit doctor' or reinstall."
-                        ),
-                    }
-                )
-                logger.exception("track_response_size_handler_failed", tool_name=tool_name)
+            ctx = _get_ctx_or_none()
+            prepared, early = prepare_checkpoint(ctx, fn, args, kwargs)
+            result = (
+                early if early is not None else await _invoke_handler(fn, args, kwargs, tool_name)
+            )
+            result = attach_checkpoint(ctx, fn, result, prepared)
             finalized = (
                 result
                 if isinstance(
@@ -159,7 +178,6 @@ def track_response_size(
                 response_value = finalized.rendered
             else:
                 response_value = result
-            ctx = _get_ctx_or_none()
             try:
                 response_str = (
                     response_value

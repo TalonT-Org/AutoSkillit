@@ -29,8 +29,11 @@ from autoskillit.server.tools.tools_pr_ops import (
     post_pr_review,
     verify_review_receipt,
 )
+from tests.server._recipe_fixture_parameters import (
+    IMPLEMENTATION_READY_PARAMETERS,
+)
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 
 class _FakeReviewPoster:
@@ -194,7 +197,7 @@ def _write_receipt(cwd: Path, payload: dict[str, object]) -> Path:
     return path
 
 
-async def _verify_receipt(cwd: Path, receipt_path: Path, **overrides: object) -> dict[str, str]:
+async def _verify_receipt(cwd: Path, receipt_path: Path, **overrides: object) -> dict[str, object]:
     arguments: dict[str, object] = {
         "cwd": str(cwd.resolve()),
         "receipt_path": str(receipt_path),
@@ -320,6 +323,51 @@ async def test_local_mode_gate_requires_explicit_local_marker(
     )
 
     assert result == {"reviews_posted": expected}
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "tool_ctx_ready_recipe",
+    IMPLEMENTATION_READY_PARAMETERS,
+    indirect=True,
+)
+@pytest.mark.parametrize(
+    ("post_state", "expected", "expected_segment"),
+    [("", "false", "recovery"), ("LOCAL", "true", None)],
+    ids=("unposted", "posted"),
+)
+async def test_verify_review_receipt_delivers_ready_checkpoint(
+    tool_ctx_ready_recipe,
+    tmp_path: Path,
+    post_state: str,
+    expected: str,
+    expected_segment: str | None,
+) -> None:
+    from tests.server._recipe_segment_test_helpers import assert_delivery_outcome
+
+    result = await _verify_receipt(
+        tmp_path,
+        tmp_path / "missing.json",
+        mode="local",
+        post_state=post_state,
+        step_name="check_review_posted",
+    )
+
+    assert result["reviews_posted"] == expected
+    assert_delivery_outcome("verify_review_receipt", result, expected=post_state == "LOCAL")
+    if expected_segment is None:
+        assert "recipe_segment" not in result
+    else:
+        segment = result["recipe_segment"]
+        assert isinstance(segment, dict)
+        assert segment["kind"] == expected_segment
+        target_steps = segment["target_steps"]
+        assert isinstance(target_steps, list)
+        assert "release_issue_failure" in target_steps
+        assert segment["source_step"] == "check_review_posted"
+        assert "release_issue_failure" in segment["pull_closure"]
+        assert {"section": "release_issue_failure", "part": 0} in segment["pull_requests"]
+        assert segment["recipe_pull"] == tool_ctx_ready_recipe.receipt["recipe_pull"]
 
 
 @pytest.mark.anyio

@@ -234,7 +234,7 @@ def real_kitchen_lifecycle(monkeypatch, tmp_path, campaign_id):
     from autoskillit.server.recipe._recipe_section_pagination import PagePlanCache
     from autoskillit.server.tools.tools_kitchen._open_kitchen import _gate as open_gate
     from tests.server._helpers import _mock_fmcp_ctx
-    from tests.server.conftest import _READY_RECIPE_OVERRIDES
+    from tests.server._recipe_fixture_parameters import RESEARCH_OVERRIDES
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "0")
@@ -254,7 +254,7 @@ def real_kitchen_lifecycle(monkeypatch, tmp_path, campaign_id):
     monkeypatch.setattr(_state, "_ctx", ctx)
     monkeypatch.setattr(_state, "_startup_ready", None)
     overrides = {
-        **_READY_RECIPE_OVERRIDES,
+        **RESEARCH_OVERRIDES,
         "source_dir": str(ctx.project_dir.resolve()),
     }
     fmcp_ctx = _mock_fmcp_ctx()

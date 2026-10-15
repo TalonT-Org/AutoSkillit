@@ -163,9 +163,9 @@ _EXPECTED_GIT_REF_SITES: tuple[tuple[str, str, int, str, str], ...] = (
     ("server/git.py", "perform_merge", 565, "merge-base", "BARE"),
     ("server/git.py", "perform_merge", 617, "merge", "BARE"),
     ("core/install/install_detect.py", "_git", 64, "<unresolved>", "UNRESOLVABLE"),
-    ("server/tools/tools_ci_watch.py", "_auto_trigger_ci", 455, "push", "BARE"),
-    ("server/tools/tools_git.py", "classify_fix", 201, "fetch", "BARE"),
-    ("server/tools/tools_git.py", "classify_fix", 220, "diff", "BARE"),
+    ("server/tools/tools_ci_watch.py", "_auto_trigger_ci", 408, "push", "BARE"),
+    ("server/tools/tools_git.py", "classify_fix", 177, "fetch", "BARE"),
+    ("server/tools/tools_git.py", "classify_fix", 196, "diff", "BARE"),
     (
         "server/tools/_pre_commit_transaction.py",
         "_run_pre_commit_transaction",
@@ -178,7 +178,7 @@ _EXPECTED_GIT_REF_SITES: tuple[tuple[str, str, int, str, str], ...] = (
     (
         "server/tools/tools_workspace.py",
         "_run_commit_transaction",
-        68,
+        63,
         "<unresolved>",
         "UNRESOLVABLE",
     ),

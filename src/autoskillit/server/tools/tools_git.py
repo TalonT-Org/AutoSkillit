@@ -18,11 +18,6 @@ from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.lifecycle._guards import _require_enabled
 from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
-from autoskillit.server.recipe._recipe_segment_delivery import (
-    PreparedRecipeSegmentDelivery,
-    attach_recipe_segment,
-    prepare_recipe_segment_delivery,
-)
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 _BRANCH_DATE_FORMAT = "%Y%m%d"
@@ -39,15 +34,6 @@ def _compute_branch_name(issue_slug: str, run_name: str, issue_number: str) -> s
 
 
 logger = get_logger(__name__)
-
-
-def _render_segment_result(
-    result: dict[str, Any],
-    prepared: PreparedRecipeSegmentDelivery | None,
-    *,
-    success: bool,
-) -> str:
-    return json.dumps(attach_recipe_segment(result, prepared, success=success))
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
@@ -70,14 +56,13 @@ async def merge_worktree(
     Args:
         worktree_path: Absolute path to the git worktree.
         base_branch: Branch to merge into (e.g. "develop").
-        step_name: Optional YAML step key for wall-clock timing accumulation.
+        step_name: Exact recipe step key; selects recipe-segment delivery and timing.
 
     Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        prepared_segment: PreparedRecipeSegmentDelivery | None = None
         with structlog.contextvars.bound_contextvars(tool="merge_worktree", cwd=worktree_path):
             logger.info("merge_worktree", path=worktree_path, base=base_branch)
             await _notify(
@@ -93,7 +78,6 @@ async def merge_worktree(
             from autoskillit.server.git import perform_merge  # circular-break
 
             tool_ctx = _get_ctx()
-            prepared_segment = prepare_recipe_segment_delivery(tool_ctx, step_name)
             runner = tool_ctx.runner
             assert runner is not None, "No subprocess runner configured"
             _start = time.monotonic()
@@ -117,21 +101,13 @@ async def merge_worktree(
                         extra={"reason": result["error"]},
                     )
 
-                return _render_segment_result(
-                    result,
-                    prepared_segment,
-                    success=result.get("merge_succeeded") is True,
-                )
+                return json.dumps(result)
             finally:
                 if step_name:
                     tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
         logger.error("merge_worktree unhandled exception", exc_info=True)
-        return _render_segment_result(
-            {"success": False, "error": f"{type(exc).__name__}: {exc}"},
-            prepared_segment,
-            success=False,
-        )
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
@@ -412,14 +388,13 @@ async def check_pr_mergeable(
         pr_number: GitHub pull request number.
         cwd: Working directory for gh commands.
         repo: Repository as owner/repo. Passed as -R flag when provided.
-        step_name: Optional YAML step key for progressive recipe delivery.
+        step_name: Exact recipe step key; selects recipe-segment delivery and timing.
 
     Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        prepared_segment: PreparedRecipeSegmentDelivery | None = None
         with structlog.contextvars.bound_contextvars(tool="check_pr_mergeable", cwd=cwd):
             logger.info("check_pr_mergeable", pr_number=pr_number, repo=repo)
             await _notify(
@@ -430,15 +405,9 @@ async def check_pr_mergeable(
                 extra={"repo": repo},
             )
 
-            from autoskillit.server import _get_ctx  # circular-break
-
-            prepared_segment = prepare_recipe_segment_delivery(_get_ctx(), step_name)
-
             if not cwd or not os.path.isdir(cwd):
-                return _render_segment_result(
-                    {"success": False, "error": f"cwd is not a valid directory: {cwd!r}"},
-                    prepared_segment,
-                    success=False,
+                return json.dumps(
+                    {"success": False, "error": f"cwd is not a valid directory: {cwd!r}"}
                 )
 
             cmd = ["gh", "pr", "view", str(pr_number), "--json", "mergeable,mergeStateStatus"]
@@ -447,37 +416,25 @@ async def check_pr_mergeable(
 
             rc, stdout, stderr = await _run_subprocess(cmd, cwd=cwd, timeout=30)
             if rc != 0:
-                return _render_segment_result(
-                    {"success": False, "error": stderr.strip() or "gh command failed"},
-                    prepared_segment,
-                    success=False,
+                return json.dumps(
+                    {"success": False, "error": stderr.strip() or "gh command failed"}
                 )
 
             try:
                 data = json.loads(stdout)
             except json.JSONDecodeError:
-                return _render_segment_result(
-                    {"success": False, "error": "Failed to parse gh output"},
-                    prepared_segment,
-                    success=False,
-                )
+                return json.dumps({"success": False, "error": "Failed to parse gh output"})
 
-            return _render_segment_result(
+            return json.dumps(
                 {
                     "mergeable": data.get("mergeable") == "MERGEABLE",
                     "merge_state_status": data.get("mergeStateStatus", ""),
                     "mergeable_status": data.get("mergeable", ""),
-                },
-                prepared_segment,
-                success=True,
+                }
             )
     except Exception as exc:
         logger.error("check_pr_mergeable unhandled exception", exc_info=True)
-        return _render_segment_result(
-            {"success": False, "error": f"{type(exc).__name__}: {exc}"},
-            prepared_segment,
-            success=False,
-        )
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 async def _resolve_and_create_branch(
@@ -571,14 +528,13 @@ async def create_and_publish_branch(
         issue_number: GitHub issue number as a string. Empty string → date-based branch.
         work_dir: Absolute path to the clone directory.
         remote_url: Pre-resolved upstream remote URL for push isolation.
-        step_name: Optional YAML step key for wall-clock timing accumulation.
+        step_name: Exact recipe step key; selects recipe-segment delivery and timing.
 
     Never raises.
     """
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        prepared_segment: PreparedRecipeSegmentDelivery | None = None
         with structlog.contextvars.bound_contextvars(
             tool="create_and_publish_branch",
             work_dir=work_dir,
@@ -601,21 +557,12 @@ async def create_and_publish_branch(
             from autoskillit.server import _get_ctx  # circular-break
 
             tool_ctx = _get_ctx()
-            prepared_segment = prepare_recipe_segment_delivery(tool_ctx, step_name)
             clone_mgr = tool_ctx.clone_mgr
             if clone_mgr is None:
-                return _render_segment_result(
-                    {"error": "Clone manager not configured"},
-                    prepared_segment,
-                    success=False,
-                )
+                return json.dumps({"error": "Clone manager not configured"})
 
             if not work_dir or not os.path.isdir(work_dir):
-                return _render_segment_result(
-                    {"error": f"work_dir is not a valid directory: {work_dir!r}"},
-                    prepared_segment,
-                    success=False,
-                )
+                return json.dumps({"error": f"work_dir is not a valid directory: {work_dir!r}"})
 
             _total_start = time.monotonic()
 
@@ -631,7 +578,7 @@ async def create_and_publish_branch(
             branch_create_ms = int((time.monotonic() - _branch_start) * 1000)
 
             if "error" in branch_result:
-                return _render_segment_result(
+                return json.dumps(
                     {
                         "error": branch_result["error"],
                         "merge_target": base_name,
@@ -640,9 +587,7 @@ async def create_and_publish_branch(
                             "branch_create_ms": branch_create_ms,
                             "push_ms": 0,
                         },
-                    },
-                    prepared_segment,
-                    success=False,
+                    }
                 )
 
             branch_name: str = branch_result["branch_name"]
@@ -671,15 +616,13 @@ async def create_and_publish_branch(
                 tool_ctx.timing_log.record(step_name, time.monotonic() - _total_start)
 
             if not push_result.get("success"):
-                return _render_segment_result(
+                return json.dumps(
                     {
                         "error": push_result.get("stderr", "push failed"),
                         "error_type": push_result.get("error_type", ""),
                         "merge_target": branch_name,
                         "timings": timings,
-                    },
-                    prepared_segment,
-                    success=False,
+                    }
                 )
 
             return json.dumps(
@@ -691,8 +634,4 @@ async def create_and_publish_branch(
             )
     except Exception as exc:
         logger.error("create_and_publish_branch unhandled exception", exc_info=True)
-        return _render_segment_result(
-            {"error": f"{type(exc).__name__}: {exc}"},
-            prepared_segment,
-            success=False,
-        )
+        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})

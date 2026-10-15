@@ -13,7 +13,10 @@ from autoskillit.core import (
     FinalizedRecipeProjection,
     build_recipe_execution_credential,
 )
-from autoskillit.server.recipe._recipe_execution import get_recipe_execution
+from autoskillit.server.recipe._recipe_execution import (
+    bind_attested_runtime_invocation,
+    get_recipe_execution,
+)
 from tests.server._recipe_fixture_parameters import (
     IMPLEMENTATION_OVERRIDES,
     RESEARCH_OVERRIDES,
@@ -207,22 +210,26 @@ async def test_following_the_recovery_yields_an_admitted_digest(
         receipt = json.loads(await complete_recipe_initialization(initialization_id=recovery_id))
         assert receipt["success"] is True, receipt
         credential = receipt["recipe_execution"]
-        admitted = await _run_attested_call(
-            ready,
-            git_checkout,
-            step_name,
-            credential["execution_id"],
-            credential["invocation_template_digests"][step_name],
+        expected_template = installed.snapshot.templates[step_name]
+        invocation = expected_template.invocation
+        skill_inputs = {
+            value.name: value.effective_value
+            for value in invocation.skill_inputs
+            if value.is_present
+        }
+        bound_inputs, admitted_template = bind_attested_runtime_invocation(
+            installed,
+            execution_id=credential["execution_id"],
+            step_name=step_name,
+            template_digest=credential["invocation_template_digests"][step_name],
+            skill_command=_skill_command(ready.tool_ctx, step_name),
+            skill_inputs=skill_inputs,
+            actual_mcp_kwargs={
+                value.name: value.effective_value for value in invocation.mcp_kwargs
+            },
         )
-        assert admitted["success"] is True, admitted
-        serialized = json.dumps(admitted)
-        for code in (
-            "recipe_execution_attestation_missing",
-            "recipe_execution_id_mismatch",
-            "recipe_execution_step_mismatch",
-            "invocation_template_digest_mismatch",
-        ):
-            assert code not in serialized
+        assert admitted_template is expected_template
+        assert dict(bound_inputs) == skill_inputs
 
 
 @pytest.mark.parametrize("tool_ctx_ready_recipe", _RECIPE_FIXTURE_PARAMETERS, indirect=True)

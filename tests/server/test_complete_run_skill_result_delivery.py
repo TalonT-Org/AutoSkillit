@@ -14,13 +14,15 @@ from tests.server._recipe_fixture_parameters import (
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
+_REQUEST_SESSION_ID = "request-session"
+
 
 def _publish_receipt(tool_ctx: ToolContext, *, success: bool) -> str:
     authority = tool_ctx.run_skill_completion
     assert authority is not None
     invocation_id = authority.begin(
         kitchen_id=tool_ctx.kitchen_id,
-        request_session_id="request-session",
+        request_session_id=_REQUEST_SESSION_ID,
         tracker_order_id="",
         tracker_path="",
         tracker_kitchen_id="",
@@ -62,7 +64,7 @@ async def test_completion_receipt_delivery_carries_plan_step_name(
     response = json.loads(
         await complete_run_skill_result(
             receipt_id,
-            ctx=SimpleNamespace(session_id="request-session"),
+            ctx=SimpleNamespace(session_id=_REQUEST_SESSION_ID),
         )
     )
 

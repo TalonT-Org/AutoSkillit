@@ -1755,6 +1755,19 @@ class TestPullRequestAssertions:
 
 
 class TestSessionWindowGate:
+    def test_malformed_turn_usage_names_the_session_file_and_row(self, tmp_path: Path) -> None:
+        log_dir = tmp_path / "logs"
+        _seed_sessions(log_dir, {"broken-session": []})
+        path = log_dir / "sessions" / "broken-session" / "turn_usage.jsonl"
+        path.write_text("\n{broken\n", encoding="utf-8")
+
+        failures = harness.check_session_windows(log_dir, set(), sessions_required=True)
+
+        assert len(failures) == 1
+        assert failures[0].startswith(
+            f"session windows: broken-session: {path}:2: invalid turn usage JSON:"
+        )
+
     def test_all_new_sessions_must_report_the_required_window(self, tmp_path: Path) -> None:
         log_dir = tmp_path / "logs"
         _seed_sessions(

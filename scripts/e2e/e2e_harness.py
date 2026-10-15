@@ -339,7 +339,14 @@ def _check_session_turn_windows(log_dir: Path, dir_name: str) -> list[str]:
     prefix = f"session windows: {dir_name}: "
     if not path.exists():
         return [prefix + "no turn usage"]
-    rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    rows = []
+    for line_number, line in enumerate(path.read_text().splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError as exc:
+            return [prefix + f"{path}:{line_number}: invalid turn usage JSON: {exc}"]
     if not rows:
         return [prefix + "no turn usage"]
     if any(type(row.get("context_window_tokens")) is not int for row in rows):

@@ -36,5 +36,3 @@ def test_bundled_recipe_declarations_match_success_stop_examples() -> None:
     for recipe in recipes:
         actual = recipe.declared_success_reasons()
         assert actual == _EXPECTED_SUCCESS_REASONS.get(recipe.name), recipe.name
-        if recipe.name == "research-archive":
-            assert actual == frozenset({"no_pr_url", "research_archive_complete"})

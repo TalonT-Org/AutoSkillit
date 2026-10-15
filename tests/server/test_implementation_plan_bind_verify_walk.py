@@ -194,6 +194,7 @@ async def test_plan_bind_verify_walk_uses_only_delivered_responses(
         IMPLEMENTATION_OVERRIDES,
         {key: value for key, value in verify_context.items() if isinstance(value, str)},
     )
+    assert verify_response["success"] is True, verify_response
     serialized = json.dumps(verify_response)
     for code in (
         "recipe_execution_attestation_missing",

@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from autoskillit.pipeline import ToolContext
 from tests.server._recipe_fixture_parameters import (
     IMPLEMENTATION_READY_PARAMETERS,
 )
@@ -14,7 +15,7 @@ from tests.server._recipe_fixture_parameters import (
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
 
-def _publish_receipt(tool_ctx, *, success: bool) -> str:
+def _publish_receipt(tool_ctx: ToolContext, *, success: bool) -> str:
     authority = tool_ctx.run_skill_completion
     assert authority is not None
     invocation_id = authority.begin(

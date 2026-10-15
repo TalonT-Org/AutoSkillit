@@ -23,7 +23,7 @@ _STEP_NAME = "checkpoint"
 
 
 def _reader_shape_representatives() -> tuple[str, ...]:
-    representatives: dict[tuple[bool, bool, type, bool], str] = {}
+    representatives: dict[tuple[object, ...], str] = {}
     for name in sorted(TOOL_REGISTRY):
         tool_def = TOOL_REGISTRY[name]
         if not (tool_def.automatic_recipe_delivery or tool_def.recovery_recipe_delivery):
@@ -32,9 +32,10 @@ def _reader_shape_representatives() -> tuple[str, ...]:
         assert outcome is not None
         shape = (
             tool_def.automatic_recipe_delivery,
-            outcome.success_field is None,
+            outcome.success_field,
             type(outcome.success_value),
-            outcome.step_name_field is None,
+            outcome.success_value,
+            outcome.step_name_field,
         )
         representatives.setdefault(shape, name)
     return tuple(representatives.values())

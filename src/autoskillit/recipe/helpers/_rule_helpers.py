@@ -13,9 +13,6 @@ import regex as re
 from autoskillit.core import get_logger
 from autoskillit.recipe.analysis._analysis import ValidationContext
 from autoskillit.recipe.schema import (
-    _SENTINEL_TRIGGER_RE as _SENTINEL_TRIGGER_RE,
-)
-from autoskillit.recipe.schema import (
     extract_sentinel_json_blocks,
 )
 

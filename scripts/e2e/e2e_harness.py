@@ -28,6 +28,9 @@ import e2e_sessions
 MINIMAX_BASE_URL = "https://api.minimax.io/anthropic"
 MINIMAX_MODEL = "MiniMax-M3[1m]"
 MINIMAX_COMPACT_WINDOW_TOKENS = "1000000"
+# tests/infra/test_e2e_harness.py derives this --model value from the shipped config.
+FLEET_MODEL = "claude-sonnet-5[1m]"
+REQUIRED_CONTEXT_WINDOW_TOKENS = 1_000_000
 # implement runs four concurrent children and resolve-review three to six; a spawn past the
 # limit fails without retry.
 MAX_CONCURRENT_SUBAGENTS = "6"
@@ -175,6 +178,22 @@ def check_canary_output(stdout: str) -> list[str]:
     reply = payload.get("result")
     if not isinstance(reply, str) or CANARY_TOKEN not in reply:
         return [f"canary: reply does not contain {CANARY_TOKEN}"]
+    return _check_reported_window(payload)
+
+
+def _check_reported_window(payload: dict[str, Any]) -> list[str]:
+    model_usage = payload.get("modelUsage")
+    metadata = model_usage.get(FLEET_MODEL) if isinstance(model_usage, dict) else None
+    if not isinstance(metadata, dict):
+        return [f"canary: claude output has no modelUsage entry for {FLEET_MODEL}"]
+    window = metadata.get("contextWindow")
+    if type(window) is not int:
+        return [f"canary: {FLEET_MODEL} reported no integer context window"]
+    if window != REQUIRED_CONTEXT_WINDOW_TOKENS:
+        return [
+            f"canary: {FLEET_MODEL} reported a {window}-token context window; "
+            f"the harness requires {REQUIRED_CONTEXT_WINDOW_TOKENS}"
+        ]
     return []
 
 
@@ -184,7 +203,7 @@ def run_canary(
     workdir = Path(tempfile.mkdtemp(prefix="e2e-canary-"))
     result, failure = _call(
         runner,
-        ["claude", "-p", CANARY_PROMPT, "--output-format", "json"],
+        ["claude", "-p", CANARY_PROMPT, "--output-format", "json", "--model", FLEET_MODEL],
         what="claude -p",
         cwd=workdir,
         env=env,
@@ -352,6 +371,59 @@ def check_implementation_envelope(
     return failures, findings
 
 
+def session_index_dir_names(log_dir: Path) -> frozenset[str]:
+    index = log_dir / "sessions.jsonl"
+    if not index.exists():
+        return frozenset()
+    names = set()
+    for line_number, line in enumerate(index.read_text().splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"{index}:{line_number}: invalid session index JSON: {exc}") from exc
+        if isinstance(row.get("dir_name"), str):
+            names.add(row["dir_name"])
+    return frozenset(names)
+
+
+def _check_session_turn_windows(log_dir: Path, dir_name: str) -> list[str]:
+    path = log_dir / "sessions" / dir_name / "turn_usage.jsonl"
+    prefix = f"session windows: {dir_name}: "
+    if not path.exists():
+        return [prefix + "no turn usage"]
+    rows = []
+    for line_number, line in enumerate(path.read_text().splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError as exc:
+            return [prefix + f"{path}:{line_number}: invalid turn usage JSON: {exc}"]
+    if not rows:
+        return [prefix + "no turn usage"]
+    if any(type(row.get("context_window_tokens")) is not int for row in rows):
+        return [prefix + "no observed context window"]
+    windows = sorted({row["context_window_tokens"] for row in rows})
+    if windows != [REQUIRED_CONTEXT_WINDOW_TOKENS]:
+        return [prefix + f"observed {windows} != required {REQUIRED_CONTEXT_WINDOW_TOKENS}"]
+    return []
+
+
+def check_session_windows(
+    log_dir: Path, baseline: frozenset[str], *, sessions_required: bool
+) -> list[str]:
+    new_sessions = session_index_dir_names(log_dir) - baseline
+    if not new_sessions and sessions_required:
+        return [f"session windows: the fleet run recorded no sessions in {log_dir}"]
+    return [
+        failure
+        for dir_name in sorted(new_sessions)
+        for failure in _check_session_turn_windows(log_dir, dir_name)
+    ]
+
+
 def run_fleet(
     test: e2e_catalog.CatalogTest,
     out: Path,
@@ -360,42 +432,56 @@ def run_fleet(
     *,
     ingredients: Mapping[str, str] | None = None,
 ) -> tuple[dict[str, Any] | None, list[str], list[dict[str, str]]]:
-    result, failure = _call(
-        runner,
-        fleet_run_argv(test, ingredients=ingredients),
-        what="fleet run",
-        evidence=out / "fleet-run",
-        cwd=SANDBOX_CLONE,
-        env=env,
-        timeout=test.timeout_sec + e2e_catalog.HARNESS_GRACE_SEC,
-    )
-    stdout = (out / "fleet-run.stdout.txt").read_text(encoding="utf-8", errors="replace")
-    shutil.copyfile(out / "fleet-run.stdout.txt", out / "fleet-run.stdout.log")
-    shutil.copyfile(out / "fleet-run.stderr.txt", out / "fleet-run.stderr.log")
-    line = last_line(stdout)
-    (out / "envelope.json").write_text(line + "\n", encoding="utf-8")
-    if not test.pipeline:
-        if result is None:
-            return None, [str(failure)], []
-        envelope_failures, envelope = check_envelope(result.returncode, stdout)
-        return envelope, envelope_failures, []
+    log_dir = Path(env["AUTOSKILLIT_LOG_DIR"])
+    baseline = session_index_dir_names(log_dir)
     failures: list[str] = []
     findings: list[dict[str, str]] = []
+    envelope: dict[str, Any] | None = None
     try:
-        envelope = json.loads(line)
-    except json.JSONDecodeError:
-        envelope = None
-    if not isinstance(envelope, dict):
-        envelope = None
-        failures.append("fleet run: the last stdout line is not a JSON object envelope")
-    if result is None:
-        failures.append(str(failure))
-    elif envelope is not None and test.pipeline:
-        envelope_failures, findings = check_implementation_envelope(envelope)
-        failures += envelope_failures
-        if failure and not findings:
-            failures.append(failure)
-    return envelope, failures, findings
+        result, failure = _call(
+            runner,
+            fleet_run_argv(test, ingredients=ingredients),
+            what="fleet run",
+            evidence=out / "fleet-run",
+            cwd=SANDBOX_CLONE,
+            env=env,
+            timeout=test.timeout_sec + e2e_catalog.HARNESS_GRACE_SEC,
+        )
+        stdout = (out / "fleet-run.stdout.txt").read_text(encoding="utf-8", errors="replace")
+        shutil.copyfile(out / "fleet-run.stdout.txt", out / "fleet-run.stdout.log")
+        shutil.copyfile(out / "fleet-run.stderr.txt", out / "fleet-run.stderr.log")
+        line = last_line(stdout)
+        (out / "envelope.json").write_text(line + "\n", encoding="utf-8")
+        if not test.pipeline:
+            if result is None:
+                failures.append(str(failure))
+            else:
+                envelope_failures, envelope = check_envelope(result.returncode, stdout)
+                failures.extend(envelope_failures)
+            return envelope, failures, findings
+        try:
+            envelope = json.loads(line)
+        except json.JSONDecodeError:
+            envelope = None
+        if not isinstance(envelope, dict):
+            envelope = None
+            failures.append("fleet run: the last stdout line is not a JSON object envelope")
+        if result is None:
+            failures.append(str(failure))
+        elif envelope is not None:
+            envelope_failures, findings = check_implementation_envelope(envelope)
+            failures.extend(envelope_failures)
+            if failure and not findings:
+                failures.append(failure)
+        return envelope, failures, findings
+    finally:
+        failures.extend(
+            check_session_windows(
+                log_dir,
+                baseline,
+                sessions_required=envelope is not None and envelope.get("success") is True,
+            )
+        )
 
 
 def match_recipe_failure(
@@ -1731,7 +1817,11 @@ def _run_test(
     if test.kind == "canary":
         return run_canary(test, out, scrubbed, runner), []
     token = env["E2E_SANDBOX_TOKEN"]
-    return run_recipe(test, catalog.sandbox_repository, token, out, scrubbed, runner, home=home)
+    recipe_env = {
+        **scrubbed,
+        "AUTOSKILLIT_LOG_DIR": str(home / ".local" / "share" / "autoskillit" / "logs"),
+    }
+    return run_recipe(test, catalog.sandbox_repository, token, out, recipe_env, runner, home=home)
 
 
 def _copy_failure_files(

@@ -340,6 +340,17 @@ def test_claude_exit_two_blocks_documented_events(event: str) -> None:
     assert verdict.message == "blocked by policy"
 
 
+def test_claude_precompact_exit_two_blocks_with_stderr_reason() -> None:
+    verdict = claude_verdict(
+        "PreCompact",
+        exit_code=2,
+        stdout="",
+        stderr="automatic compaction blocked",
+    )
+    assert verdict.status == STATUS_BLOCKED
+    assert verdict.message == "automatic compaction blocked"
+
+
 def test_claude_exit_two_prefers_a_valid_json_block_reason() -> None:
     verdict = claude_verdict(
         "Stop",

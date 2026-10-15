@@ -1,4 +1,4 @@
-"""Kitchen-scoped ownership of compiled and persisted recipe generations."""
+"""Ownership of compiled and persisted recipe generations by activation."""
 
 from __future__ import annotations
 
@@ -18,30 +18,34 @@ from autoskillit.core import (
     RecipeExecutionSnapshot,
     RecipeFlowGeneration,
 )
+from autoskillit.pipeline import (
+    KitchenActivationId,
+    require_kitchen_activation_id,
+)
 from autoskillit.server.recipe.section._lifecycle import (
-    register_kitchen_retirement_callback,
+    register_activation_retirement_callback,
 )
 
 RECIPE_GENERATION_STORE_MAX_ENTRIES = 8
 RECIPE_GENERATION_STORE_MAX_BYTES = 32 * 1024 * 1024
-RECIPE_GENERATION_STORE_MAX_RETIRED_KITCHENS = 1_024
+RECIPE_GENERATION_STORE_MAX_RETIRED_ACTIVATIONS = 1_024
 
 __all__ = [
     "RECIPE_GENERATION_STORE_MAX_BYTES",
     "RECIPE_GENERATION_STORE_MAX_ENTRIES",
-    "RECIPE_GENERATION_STORE_MAX_RETIRED_KITCHENS",
+    "RECIPE_GENERATION_STORE_MAX_RETIRED_ACTIVATIONS",
     "RecipeGenerationCapacityError",
     "RecipeGenerationConflictError",
     "RecipeGenerationError",
-    "RecipeGenerationKitchenNotActiveError",
+    "RecipeGenerationActivationNotActiveError",
     "RecipeGenerationRecord",
     "RecipeGenerationRetiredError",
     "RecipeGenerationStore",
-    "activate_kitchen",
+    "activate_activation",
     "generation_json_primitive",
     "get_recipe_generation_store",
     "recipe_generation_weight_bytes",
-    "retire_kitchen",
+    "retire_activation",
     "thaw_recipe_generation_mapping",
 ]
 
@@ -59,11 +63,11 @@ class RecipeGenerationCapacityError(RecipeGenerationError):
 
 
 class RecipeGenerationRetiredError(RecipeGenerationError):
-    """A write targeted a kitchen whose generation namespace is retired."""
+    """A write targeted an activation whose generation namespace is retired."""
 
 
-class RecipeGenerationKitchenNotActiveError(RecipeGenerationError):
-    """A write targeted an inactive kitchen without retained retirement evidence."""
+class RecipeGenerationActivationNotActiveError(RecipeGenerationError):
+    """A write targeted an inactive activation without retained retirement evidence."""
 
 
 def _freeze_primitive(value: object, *, path: str) -> object:
@@ -139,7 +143,7 @@ def _canonical_json(value: object) -> str:
 class RecipeGenerationRecord:
     """One immutable compile generation and its exact persisted surface bindings."""
 
-    kitchen_id: str
+    activation_id: KitchenActivationId
     normalized_compile_key: str
     recipe_name: str
     finalized_projection: FinalizedRecipeProjection
@@ -151,7 +155,8 @@ class RecipeGenerationRecord:
     surface_bindings: Mapping[str, RecipeArtifactGeneration] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        for field_name in ("kitchen_id", "normalized_compile_key", "recipe_name", "execution_id"):
+        require_kitchen_activation_id(self.activation_id)
+        for field_name in ("normalized_compile_key", "recipe_name", "execution_id"):
             value = getattr(self, field_name)
             if not isinstance(value, str) or not value:
                 raise ValueError(f"RecipeGenerationRecord.{field_name} must be a non-empty string")
@@ -232,7 +237,7 @@ def _same_compile_generation(
     right: RecipeGenerationRecord,
 ) -> bool:
     return (
-        left.kitchen_id == right.kitchen_id
+        left.activation_id == right.activation_id
         and left.normalized_compile_key == right.normalized_compile_key
         and left.recipe_name == right.recipe_name
         and left.finalized_projection == right.finalized_projection
@@ -244,18 +249,17 @@ def _same_compile_generation(
     )
 
 
-_CompileIndexKey = tuple[str, str]
-_ArtifactIndexKey = tuple[str, RecipeArtifactGeneration]
+_CompileIndexKey = tuple[KitchenActivationId, str]
+_ArtifactIndexKey = tuple[KitchenActivationId, RecipeArtifactGeneration]
 
 
 def _validate_and_extract_compile_key(
-    kitchen_id: str,
+    activation_id: KitchenActivationId,
     normalized_compile_key: str,
     surface: str,
     generation: RecipeArtifactGeneration,
-) -> tuple[str, str]:
-    if not isinstance(kitchen_id, str):
-        raise TypeError("kitchen_id must be a string")
+) -> _CompileIndexKey:
+    require_kitchen_activation_id(activation_id)
     for name, value in (
         ("normalized_compile_key", normalized_compile_key),
         ("surface", surface),
@@ -264,7 +268,7 @@ def _validate_and_extract_compile_key(
             raise ValueError(f"{name} must be a non-empty string")
     if not isinstance(generation, RecipeArtifactGeneration):
         raise TypeError("generation must be a RecipeArtifactGeneration")
-    return (kitchen_id, normalized_compile_key)
+    return (activation_id, normalized_compile_key)
 
 
 class RecipeGenerationStore:
@@ -275,22 +279,22 @@ class RecipeGenerationStore:
         *,
         max_entries: int = RECIPE_GENERATION_STORE_MAX_ENTRIES,
         max_bytes: int = RECIPE_GENERATION_STORE_MAX_BYTES,
-        max_retired_kitchens: int = RECIPE_GENERATION_STORE_MAX_RETIRED_KITCHENS,
+        max_retired_activations: int = RECIPE_GENERATION_STORE_MAX_RETIRED_ACTIVATIONS,
     ) -> None:
         if max_entries < 0:
             raise ValueError("generation store max_entries must not be negative")
         if max_bytes < 0:
             raise ValueError("generation store max_bytes must not be negative")
-        if max_retired_kitchens < 0:
-            raise ValueError("generation store max_retired_kitchens must not be negative")
+        if max_retired_activations < 0:
+            raise ValueError("generation store max_retired_activations must not be negative")
         self._max_entries = max_entries
         self._max_bytes = max_bytes
-        self._max_retired_kitchens = max_retired_kitchens
+        self._max_retired_activations = max_retired_activations
         self._compile_index: OrderedDict[_CompileIndexKey, RecipeGenerationRecord] = OrderedDict()
         self._artifact_index: dict[_ArtifactIndexKey, _CompileIndexKey] = {}
         self._weight_bytes = 0
-        self._retired_kitchens: OrderedDict[str, None] = OrderedDict()
-        self._active_kitchens: set[str] = set()
+        self._retired_activations: OrderedDict[KitchenActivationId, None] = OrderedDict()
+        self._active_activations: set[KitchenActivationId] = set()
         self._lifecycle_authoritative = False
         self._lock = RLock()
 
@@ -305,28 +309,26 @@ class RecipeGenerationStore:
             return self._weight_bytes
 
     @property
-    def retired_kitchen_count(self) -> int:
+    def retired_activation_count(self) -> int:
         with self._lock:
-            return len(self._retired_kitchens)
+            return len(self._retired_activations)
 
-    def activate_kitchen(self, kitchen_id: str) -> None:
-        """Mark one current lifecycle identity active without retaining history."""
-        if not isinstance(kitchen_id, str) or not kitchen_id:
-            raise ValueError("kitchen_id must be a non-empty string")
+    def activate_activation(self, activation_id: KitchenActivationId) -> None:
+        """Mark one new lifecycle activation active without clearing retirement history."""
+        require_kitchen_activation_id(activation_id)
         with self._lock:
             self._lifecycle_authoritative = True
-            self._active_kitchens.add(kitchen_id)
-            self._retired_kitchens.pop(kitchen_id, None)
+            self._active_activations.add(activation_id)
 
-    def _require_active_locked(self, kitchen_id: str) -> None:
-        if kitchen_id in self._retired_kitchens:
+    def _require_active_locked(self, activation_id: KitchenActivationId) -> None:
+        if activation_id in self._retired_activations:
             raise RecipeGenerationRetiredError(
-                f"recipe generation kitchen is retired: {kitchen_id}"
+                f"recipe generation activation is retired: {activation_id.value}"
             )
-        if self._lifecycle_authoritative and kitchen_id not in self._active_kitchens:
-            raise RecipeGenerationKitchenNotActiveError(
-                "recipe generation kitchen is not active in this process: "
-                f"{kitchen_id} ({len(self._active_kitchens)} active)"
+        if self._lifecycle_authoritative and activation_id not in self._active_activations:
+            raise RecipeGenerationActivationNotActiveError(
+                "recipe generation activation is not active in this process: "
+                f"{activation_id.value} ({len(self._active_activations)} active)"
             )
 
     def _deindex_artifacts_locked(
@@ -335,7 +337,7 @@ class RecipeGenerationStore:
         record: RecipeGenerationRecord,
     ) -> None:
         for generation in record.surface_bindings.values():
-            artifact_key = (record.kitchen_id, generation)
+            artifact_key = (record.activation_id, generation)
             if self._artifact_index.get(artifact_key) == key:
                 self._artifact_index.pop(artifact_key)
 
@@ -350,7 +352,7 @@ class RecipeGenerationStore:
         record: RecipeGenerationRecord,
     ) -> None:
         for generation in record.surface_bindings.values():
-            owner = self._artifact_index.get((record.kitchen_id, generation))
+            owner = self._artifact_index.get((record.activation_id, generation))
             if owner is not None and owner != key:
                 raise RecipeGenerationConflictError(
                     "exact artifact generation is already bound to another compile generation"
@@ -368,7 +370,7 @@ class RecipeGenerationStore:
         self._compile_index[key] = record
         self._weight_bytes += weight
         for generation in record.surface_bindings.values():
-            self._artifact_index[(record.kitchen_id, generation)] = key
+            self._artifact_index[(record.activation_id, generation)] = key
         while len(self._compile_index) > self._max_entries or self._weight_bytes > self._max_bytes:
             oldest_key = next(iter(self._compile_index))
             self._remove_locked(oldest_key)
@@ -378,9 +380,9 @@ class RecipeGenerationStore:
         if not isinstance(record, RecipeGenerationRecord):
             raise TypeError("record must be a RecipeGenerationRecord")
         candidate = _copy_record(record)
-        key = (candidate.kitchen_id, candidate.normalized_compile_key)
+        key = (candidate.activation_id, candidate.normalized_compile_key)
         with self._lock:
-            self._require_active_locked(candidate.kitchen_id)
+            self._require_active_locked(candidate.activation_id)
             existing = self._compile_index.get(key)
             if existing is not None:
                 if not _same_compile_generation(existing, candidate):
@@ -407,20 +409,20 @@ class RecipeGenerationStore:
 
     def bind_surface(
         self,
-        kitchen_id: str,
+        activation_id: KitchenActivationId,
         normalized_compile_key: str,
         surface: str,
         generation: RecipeArtifactGeneration,
     ) -> RecipeGenerationRecord:
         """Atomically bind one surface to an exact persisted generation."""
         key = _validate_and_extract_compile_key(
-            kitchen_id, normalized_compile_key, surface, generation
+            activation_id, normalized_compile_key, surface, generation
         )
         with self._lock:
-            self._require_active_locked(kitchen_id)
+            self._require_active_locked(activation_id)
             existing = self._compile_index.get(key)
             if existing is None:
-                raise KeyError("normalized compile generation is not present for this kitchen")
+                raise KeyError("normalized compile generation is not present for this activation")
             if generation.recipe_name != existing.recipe_name:
                 raise RecipeGenerationConflictError(
                     "artifact generation recipe_name does not match compile generation"
@@ -433,7 +435,7 @@ class RecipeGenerationStore:
                     )
                 self._compile_index.move_to_end(key)
                 return _copy_record(existing)
-            owner = self._artifact_index.get((kitchen_id, generation))
+            owner = self._artifact_index.get((activation_id, generation))
             if owner is not None and owner != key:
                 raise RecipeGenerationConflictError(
                     "exact artifact generation is already bound to another compile generation"
@@ -452,11 +454,12 @@ class RecipeGenerationStore:
 
     def lookup_compile(
         self,
-        kitchen_id: str,
+        activation_id: KitchenActivationId,
         normalized_compile_key: str,
     ) -> RecipeGenerationRecord | None:
         """Return an immutable defensive copy for a normalized compile key."""
-        key = (kitchen_id, normalized_compile_key)
+        require_kitchen_activation_id(activation_id)
+        key = (activation_id, normalized_compile_key)
         with self._lock:
             record = self._compile_index.get(key)
             if record is None:
@@ -466,12 +469,13 @@ class RecipeGenerationStore:
 
     def lookup_artifact(
         self,
-        kitchen_id: str,
+        activation_id: KitchenActivationId,
         generation: RecipeArtifactGeneration,
     ) -> RecipeGenerationRecord | None:
         """Return the compile record owning one exact artifact descriptor."""
+        require_kitchen_activation_id(activation_id)
         with self._lock:
-            key = self._artifact_index.get((kitchen_id, generation))
+            key = self._artifact_index.get((activation_id, generation))
             if key is None:
                 return None
             record = self._compile_index.get(key)
@@ -480,18 +484,17 @@ class RecipeGenerationStore:
             self._compile_index.move_to_end(key)
             return _copy_record(record)
 
-    def retire_kitchen(self, kitchen_id: str) -> None:
-        """Permanently reject writes and remove all entries for one kitchen."""
-        if not isinstance(kitchen_id, str) or not kitchen_id:
-            raise ValueError("kitchen_id must be a non-empty string")
+    def retire_activation(self, activation_id: KitchenActivationId) -> None:
+        """Remove entries and reject writes while retirement evidence is retained."""
+        require_kitchen_activation_id(activation_id)
         with self._lock:
-            self._active_kitchens.discard(kitchen_id)
-            if self._max_retired_kitchens > 0:
-                self._retired_kitchens[kitchen_id] = None
-                self._retired_kitchens.move_to_end(kitchen_id)
-                while len(self._retired_kitchens) > self._max_retired_kitchens:
-                    self._retired_kitchens.popitem(last=False)
-            keys = [key for key in self._compile_index if key[0] == kitchen_id]
+            self._active_activations.discard(activation_id)
+            if self._max_retired_activations > 0:
+                self._retired_activations[activation_id] = None
+                self._retired_activations.move_to_end(activation_id)
+                while len(self._retired_activations) > self._max_retired_activations:
+                    self._retired_activations.popitem(last=False)
+            keys = [key for key in self._compile_index if key[0] == activation_id]
             for key in keys:
                 self._remove_locked(key)
 
@@ -501,8 +504,8 @@ class RecipeGenerationStore:
             self._compile_index.clear()
             self._artifact_index.clear()
             self._weight_bytes = 0
-            self._retired_kitchens.clear()
-            self._active_kitchens.clear()
+            self._retired_activations.clear()
+            self._active_activations.clear()
             self._lifecycle_authoritative = False
 
 
@@ -519,14 +522,14 @@ def get_recipe_generation_store() -> RecipeGenerationStore:
         return _RECIPE_GENERATION_STORE
 
 
-def activate_kitchen(kitchen_id: str) -> None:
-    """Activate generation state for one current kitchen lifecycle."""
-    get_recipe_generation_store().activate_kitchen(kitchen_id)
+def activate_activation(activation_id: KitchenActivationId) -> None:
+    """Activate generation state for one current kitchen activation."""
+    get_recipe_generation_store().activate_activation(activation_id)
 
 
-def retire_kitchen(kitchen_id: str) -> None:
-    """Retire generation state when the owning kitchen artifact is retired."""
-    get_recipe_generation_store().retire_kitchen(kitchen_id)
+def retire_activation(activation_id: KitchenActivationId) -> None:
+    """Retire generation state when a kitchen activation is retired."""
+    get_recipe_generation_store().retire_activation(activation_id)
 
 
-register_kitchen_retirement_callback(retire_kitchen)
+register_activation_retirement_callback(retire_activation)

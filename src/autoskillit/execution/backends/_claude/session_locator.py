@@ -65,6 +65,35 @@ class ClaudeSessionLocator(SessionLocator):
     def session_log_path(self, cwd: str, session_id: str) -> Path | None:
         return claude_code_log_path(cwd, session_id)
 
+    def session_context_was_compacted(self, cwd: str, session_id: str) -> bool:
+        """Detect Claude's observed compact-boundary transcript event.
+
+        The system/compact_boundary pair is an observed transcript format, not
+        a version-stable public schema.
+        """
+        path = self.session_log_path(cwd, session_id)
+        if path is None:
+            return False
+        try:
+            path.stat()
+            with path.open(encoding="utf-8") as transcript:
+                for line in transcript:
+                    if "compact_boundary" not in line:
+                        continue
+                    try:
+                        record = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if (
+                        isinstance(record, Mapping)
+                        and record.get("type") == "system"
+                        and record.get("subtype") == "compact_boundary"
+                    ):
+                        return True
+        except FileNotFoundError:
+            return False
+        return False
+
     def read_child_task(self, child_id: str) -> ChildTaskTranscript | None:
         if not is_valid_child_task_id(child_id):
             return None

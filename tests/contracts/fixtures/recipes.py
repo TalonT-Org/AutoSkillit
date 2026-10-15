@@ -26,6 +26,7 @@ from autoskillit.server.recipe._recipe_delivery import (
 )
 from autoskillit.server.recipe._recipe_generation import RecipeGenerationStore
 from autoskillit.server.tools._serve_helpers import build_open_kitchen_recipe_payload
+from tests._helpers import kitchen_identity_fields
 from tests._tracked_recipes import tracked_recipe_paths
 
 BUNDLED_RECIPE_PATHS = tracked_recipe_paths(
@@ -99,7 +100,7 @@ def compile_bounded_page_plan(
         SimpleNamespace(
             backend=BACKEND_REGISTRY[backend_name](),
             config=SimpleNamespace(output_budget=resolved_output_budget),
-            kitchen_id=f"contract-{surface}-{backend_name}-{recipe_path.stem}",
+            **kitchen_identity_fields(f"contract-{surface}-{backend_name}-{recipe_path.stem}"),
             recipe_execution_lock=threading.RLock(),
             recipe_initialization_state=NoActiveRecipe(),
             temp_dir=temp_dir,

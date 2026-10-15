@@ -10,6 +10,7 @@ import pytest
 from autoskillit.hook_registry import (
     HOOK_REGISTRY,
     HOOKS_DIR,
+    _count_hook_registry_drift,
     _extract_script_basenames,
     _is_own_hook,
     canonical_script_basenames,
@@ -57,6 +58,26 @@ def test_extract_script_basenames_canonical() -> None:
     result = _extract_script_basenames(canonical.get("hooks", {}))
     expected = canonical_script_basenames()
     assert result == expected
+
+
+def test_shared_published_and_runtime_hook_does_not_report_registry_drift(
+    tmp_path: Path,
+) -> None:
+    guard_script = "guards/auto_compact_guard.py"
+    guard_definitions = [hook for hook in HOOK_REGISTRY if guard_script in hook.scripts]
+
+    assert {hook.runtime_only for hook in guard_definitions} == {False, True}
+
+    deployed = generate_hooks_json()
+    deployed_scripts = _extract_script_basenames(deployed["hooks"])
+    assert guard_script in deployed_scripts
+
+    settings_path = tmp_path / "settings.json"
+    settings_path.write_text(json.dumps(deployed), encoding="utf-8")
+    drift = _count_hook_registry_drift(settings_path)
+
+    assert drift.missing == 0
+    assert drift.orphaned == 0
 
 
 # HR-BASENAME-2: different path prefixes -> returns same basenames

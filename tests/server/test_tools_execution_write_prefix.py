@@ -141,6 +141,47 @@ def test_non_worktree_skill_no_worktree_prefix(tmp_path: Path) -> None:
     assert worktree_parent_str not in all_prefixes
 
 
+def test_smoke_recipe_grants_only_its_owned_worktree(tmp_path: Path) -> None:
+    from types import SimpleNamespace
+
+    from autoskillit.core import SkillSource, load_yaml
+    from autoskillit.server.tools.tools_execution._run_skill_session import (
+        _extend_closure_write_scope,
+        _prepare_owned_write_scope,
+        _resolve_dispatch_paths,
+    )
+    from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+    repo_root = Path(__file__).resolve().parents[2]
+    recipe = load_yaml(repo_root / "scripts/e2e/recipes/sandbox-smoke.yaml")
+    worker = recipe["steps"]["implement"]["with"]
+    clone_root, worktree = _make_worktree_layout(tmp_path)
+    info = _skill_info_from_frontmatter(
+        "smoke-task",
+        SkillSource.BUNDLED_EXTENDED,
+        repo_root / "src/autoskillit/skills_extended/smoke-task/SKILL.md",
+    )
+    assert not info.invalidities
+    state = SimpleNamespace(
+        cwd=str(worktree),
+        output_dir=worker["output_dir"].replace("${{ context.worktree_path }}", str(worktree)),
+        skill_command="/autoskillit:smoke-task write the canary",
+        target_name="smoke-task",
+        closure_spec="",
+        invocation=SimpleNamespace(root=info, closure=(info,)),
+        is_read_only=False,
+    )
+
+    assert _resolve_dispatch_paths(state, base_cwd=worktree) is None
+    assert _extend_closure_write_scope(state) is None
+    assert _prepare_owned_write_scope(state) is None
+    assert scope_covers_cwd(state.allowed_write_prefixes, str(worktree / "sandbox/text.py"))
+    assert scope_covers_cwd(
+        state.allowed_write_prefixes, str(worktree / "tests/test_smoke_canary.py")
+    )
+    assert not scope_covers_cwd(state.allowed_write_prefixes, str(clone_root))
+
+
 # ---------------------------------------------------------------------------
 # AC2: dispatch preflight tests
 # ---------------------------------------------------------------------------
@@ -322,6 +363,40 @@ async def test_investigate_contract_runs_writable_with_report_watch_dir(
 # ---------------------------------------------------------------------------
 # Closure write scope and output_dir narrowing through the typed write scope
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("read_only", "output_dir"),
+    [(False, ""), (True, ""), (False, ".autoskillit/temp/smoke-output")],
+)
+async def test_unrestricted_skill_does_not_inherit_an_implicit_temp_write_limit(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path: Path, read_only: bool, output_dir: str
+) -> None:
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr(tool_ctx_kitchen_open, "read_only_resolver", lambda _command: read_only)
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    await run_skill(
+        "/autoskillit:smoke-task append a function to sandbox/text.py",
+        str(tmp_path),
+        output_dir=output_dir,
+    )
+
+    assert len(executor.calls) == 1
+    call = executor.calls[0]
+    assert call.readonly_skill is read_only
+    target = tmp_path / (output_dir or ".autoskillit/temp/smoke-task")
+    assert target in call.write_watch_dirs
+    if not read_only and not output_dir:
+        assert not call.allowed_write_prefix
+        assert not call.allowed_write_prefixes
+    else:
+        assert call.allowed_write_prefix == str(target) + "/"
+        assert call.allowed_write_prefixes == (str(target) + "/",)
 
 
 def _scoped_skill(tmp_path: Path, name: str, declaration: str):

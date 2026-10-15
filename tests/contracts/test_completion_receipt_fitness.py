@@ -28,9 +28,10 @@ from autoskillit.server.recipe._recipe_initialization import (
     _render_completion_receipt,
     recipe_initialization_receipt,
 )
+from tests._helpers import kitchen_identity_fields
+from tests._tracked_recipes import delivery_recipe_names
 from tests.contracts.test_delivery_bound_fitness import (
     _backend_capabilities,
-    _delivery_recipe_names,
     _full_open_kitchen_generation,
     _generic_backstop_bound_bytes,
 )
@@ -106,7 +107,7 @@ def test_implementation_shape_supplies_unavailable_context(
         Any,
         SimpleNamespace(
             backend=None,
-            kitchen_id=f"implementation-{step_name}-shape",
+            **kitchen_identity_fields(f"implementation-{step_name}-shape"),
             temp_dir=tmp_path,
         ),
     )
@@ -144,7 +145,9 @@ def test_implementation_shape_supplies_unavailable_context(
     assert dict(bound) == assembled
 
 
-@pytest.mark.parametrize("recipe_name", _delivery_recipe_names(), ids=lambda n: n)
+@pytest.mark.parametrize(
+    "recipe_name", delivery_recipe_names(Path(__file__).resolve().parents[2]), ids=lambda n: n
+)
 def test_completion_receipt_fits_every_delivery_bound(
     recipe_name: str,
     tmp_path: Path,
@@ -162,7 +165,7 @@ def test_completion_receipt_fits_every_delivery_bound(
         Any,
         SimpleNamespace(
             backend=None,
-            kitchen_id=f"receipt-fitness-{recipe_name}",
+            **kitchen_identity_fields(f"receipt-fitness-{recipe_name}"),
             temp_dir=tmp_path,
         ),
     )
@@ -174,7 +177,7 @@ def test_completion_receipt_fits_every_delivery_bound(
     )
     generation = persist_recipe_artifact(
         tmp_path,
-        kitchen_id=tool_ctx.kitchen_id,
+        activation_id=tool_ctx.kitchen_activation_id,
         producer_tool="open_kitchen",
         recipe_name=recipe_name,
         payload=prepared.canonical_artifact_payload,

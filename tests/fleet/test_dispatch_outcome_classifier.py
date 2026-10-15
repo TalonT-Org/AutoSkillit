@@ -75,7 +75,12 @@ class TestClassifyDispatchOutcomeCompletedClean:
             source="stdout",
         )
         skill_result = dataclasses.replace(_DEFAULT_SKILL_RESULT)
-        status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=False)
+        status, reason = classify_dispatch_outcome(
+            parsed,
+            skill_result,
+            sidecar_exists=False,
+            success_reasons=None,
+        )
         assert status == DispatchStatus.SUCCESS
         assert reason == ""
 
@@ -96,7 +101,7 @@ class TestClassifyDispatchOutcomeCompletedClean:
         status, reason = classify_dispatch_outcome(parsed, skill_result)
 
         assert status == DispatchStatus.FAILURE
-        assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
+        assert reason == FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED
 
     def test_completed_clean_failure(self):
         parsed = L3ParseResult(
@@ -110,6 +115,220 @@ class TestClassifyDispatchOutcomeCompletedClean:
         status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=False)
         assert status == DispatchStatus.FAILURE
         assert reason == "my-error"
+
+
+@pytest.mark.parametrize(
+    (
+        "outcome",
+        "payload",
+        "source",
+        "retry_reason",
+        "infra_exit_category",
+        "compaction_attempted",
+        "context_compacted",
+        "sidecar_exists",
+        "with_checkpoint",
+        "subtype",
+    ),
+    [
+        pytest.param(
+            None,
+            None,
+            "stdout",
+            RetryReason.CONTEXT_EXHAUSTED,
+            "unclassified",
+            False,
+            False,
+            True,
+            True,
+            "",
+            id="retry-context-parsed-none-progress",
+        ),
+        pytest.param(
+            "no_sentinel",
+            None,
+            "stdout",
+            RetryReason.RESUME,
+            "context_exhausted",
+            False,
+            False,
+            False,
+            True,
+            "",
+            id="context-category-resume-no-sentinel-checkpoint",
+        ),
+        pytest.param(
+            "completed_clean",
+            {"success": True, "reason": "done"},
+            "stdout",
+            RetryReason.NONE,
+            "context_exhausted",
+            False,
+            False,
+            False,
+            False,
+            "",
+            id="context-category-none-valid-success",
+        ),
+        pytest.param(
+            "completed_clean",
+            {"success": True, "reason": "sidecar_recovery"},
+            "sidecar",
+            RetryReason.CONTEXT_EXHAUSTED,
+            "unclassified",
+            False,
+            False,
+            True,
+            False,
+            "",
+            id="retry-context-sidecar-success",
+        ),
+        pytest.param(
+            "completed_clean",
+            {"success": False, "reason": "implementation_failed"},
+            "stdout",
+            RetryReason.NONE,
+            "context_exhausted",
+            False,
+            False,
+            True,
+            True,
+            "",
+            id="context-category-none-failure-with-progress",
+        ),
+        pytest.param(
+            "completed_dirty",
+            None,
+            "stdout",
+            RetryReason.RESUME,
+            "context_exhausted",
+            False,
+            False,
+            False,
+            True,
+            "",
+            id="context-category-resume-dirty-with-checkpoint",
+        ),
+        pytest.param(
+            "completed_clean",
+            {"success": True, "reason": "done"},
+            "stdout",
+            RetryReason.NONE,
+            "unclassified",
+            True,
+            False,
+            True,
+            True,
+            "",
+            id="veto-at-threshold-later-success-with-progress",
+        ),
+        pytest.param(
+            None,
+            None,
+            "stdout",
+            RetryReason.NONE,
+            "unclassified",
+            False,
+            True,
+            False,
+            False,
+            "",
+            id="log-compacted-parsed-none",
+        ),
+        pytest.param(
+            "completed_clean",
+            {"success": True, "reason": "done"},
+            "stdout",
+            RetryReason.NONE,
+            "unclassified",
+            False,
+            True,
+            False,
+            False,
+            "",
+            id="log-compacted-clean-success",
+        ),
+        pytest.param(
+            "completed_clean",
+            {"success": True, "reason": "sidecar_recovery"},
+            "sidecar",
+            RetryReason.NONE,
+            "unclassified",
+            False,
+            True,
+            True,
+            False,
+            "",
+            id="log-compacted-sidecar-success",
+        ),
+        pytest.param(
+            None,
+            None,
+            "stdout",
+            RetryReason.NONE,
+            "context_exhausted",
+            False,
+            False,
+            True,
+            True,
+            "timeout",
+            id="context-category-none-timeout-with-checkpoint",
+        ),
+    ],
+)
+def test_context_exhaustion_dominates_parsed_results_and_progress(
+    outcome,
+    payload,
+    source,
+    retry_reason,
+    infra_exit_category,
+    compaction_attempted,
+    context_compacted,
+    sidecar_exists,
+    with_checkpoint,
+    subtype,
+):
+    parsed = (
+        None
+        if outcome is None
+        else L3ParseResult(
+            outcome=outcome,
+            payload=payload,
+            raw_body="garbled" if outcome == "completed_dirty" else None,
+            parse_error="invalid JSON" if outcome == "completed_dirty" else None,
+            source=source,
+        )
+    )
+    skill_result = dataclasses.replace(
+        _DEFAULT_SKILL_RESULT,
+        retry_reason=retry_reason,
+        infra=InfraOutcome(exit_category=infra_exit_category),
+        compaction_attempted=compaction_attempted,
+        session_id="sess-context-exhausted" if with_checkpoint or sidecar_exists else "",
+        lifespan_started=with_checkpoint or sidecar_exists,
+    )
+    checkpoint = (
+        SessionCheckpoint(
+            completed_items=["plan", "implement"],
+            step_name="implement",
+            progress_pct=0.5,
+            ts="2026-10-14T00:00:00Z",
+        )
+        if with_checkpoint
+        else None
+    )
+
+    status, reason = classify_dispatch_outcome(
+        parsed,
+        skill_result,
+        sidecar_exists=sidecar_exists,
+        checkpoint=checkpoint,
+        subtype=subtype,
+        context_compacted=context_compacted,
+    )
+
+    assert status is DispatchStatus.FAILURE
+    assert reason == FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED
 
 
 class TestQuotaExhaustedOutcome:
@@ -335,7 +554,7 @@ class TestReasonAwareResumePolicy:
         )
         status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=True)
         assert status == DispatchStatus.FAILURE
-        assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
+        assert reason == FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED
 
     def test_api_error_with_progress_is_resumable(self):
         parsed, skill_result = _no_sentinel(session_id="sess-abc", lifespan_started=True)
@@ -415,7 +634,7 @@ class TestClassifyDispatchOutcomeSidecarSynthesis:
         assert result.source == "sidecar"
 
     def test_sidecar_synthesized_completed_clean_is_success(self):
-        """completed_clean from sidecar synthesis with success=True → SUCCESS with reason."""
+        """The reserved sidecar reason is accepted outside recipe declarations."""
         parsed = L3ParseResult(
             outcome="completed_clean",
             payload={"success": True, "reason": "sidecar_recovery"},
@@ -424,14 +643,44 @@ class TestClassifyDispatchOutcomeSidecarSynthesis:
             source="sidecar",
         )
         skill_result = dataclasses.replace(_DEFAULT_SKILL_RESULT)
-        status, reason = classify_dispatch_outcome(parsed, skill_result)
+        status, reason = classify_dispatch_outcome(
+            parsed,
+            skill_result,
+            success_reasons=frozenset({"implementation_complete"}),
+        )
         assert status == DispatchStatus.SUCCESS
         assert reason == "sidecar_recovery"
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            pytest.param({"success": True}, id="missing"),
+            pytest.param({"success": True, "reason": ""}, id="empty"),
+            pytest.param({"success": True, "reason": "other_recovery"}, id="different"),
+        ],
+    )
+    def test_reasonless_recipe_sidecar_requires_exact_reserved_reason(self, payload):
+        parsed = L3ParseResult(
+            outcome="completed_clean",
+            payload=payload,
+            raw_body=None,
+            parse_error=None,
+            source="sidecar",
+        )
+
+        status, reason = classify_dispatch_outcome(
+            parsed,
+            dataclasses.replace(_DEFAULT_SKILL_RESULT),
+            success_reasons=None,
+        )
+
+        assert status == DispatchStatus.FAILURE
+        assert reason == FleetErrorCode.FLEET_L3_RESULT_CONTRACT_VIOLATION
 
 
 class TestCompletedCleanSuccessPreservesReason:
     def test_completed_clean_success_preserves_reason(self):
-        """completed_clean with success=True preserves reason from payload."""
+        """A wholly reasonless recipe keeps a supplied success reason."""
         parsed = L3ParseResult(
             outcome="completed_clean",
             payload={"success": True, "reason": "implementation_complete"},
@@ -440,7 +689,11 @@ class TestCompletedCleanSuccessPreservesReason:
             source="stdout",
         )
         skill_result = dataclasses.replace(_DEFAULT_SKILL_RESULT)
-        status, reason = classify_dispatch_outcome(parsed, skill_result)
+        status, reason = classify_dispatch_outcome(
+            parsed,
+            skill_result,
+            success_reasons=None,
+        )
         assert status == DispatchStatus.SUCCESS
         assert reason == "implementation_complete"
 
@@ -456,12 +709,16 @@ class TestCompletedCleanSuccessPreservesReason:
                 source="stdout",
             )
             skill_result = dataclasses.replace(_DEFAULT_SKILL_RESULT)
-            status, reason = classify_dispatch_outcome(parsed, skill_result)
+            status, reason = classify_dispatch_outcome(
+                parsed,
+                skill_result,
+                success_reasons=None,
+            )
             assert status == DispatchStatus.SUCCESS
             assert reason == expected_reason
 
     def test_completed_clean_success_empty_reason_returns_empty(self):
-        """Backward compat: success with no reason key returns empty string."""
+        """Wholly reasonless recipes retain the supplied empty-reason behavior."""
         parsed = L3ParseResult(
             outcome="completed_clean",
             payload={"success": True},
@@ -470,9 +727,129 @@ class TestCompletedCleanSuccessPreservesReason:
             source="stdout",
         )
         skill_result = dataclasses.replace(_DEFAULT_SKILL_RESULT)
-        status, reason = classify_dispatch_outcome(parsed, skill_result)
+        status, reason = classify_dispatch_outcome(
+            parsed,
+            skill_result,
+            success_reasons=None,
+        )
         assert status == DispatchStatus.SUCCESS
         assert reason == ""
+
+
+class TestDeclaredSuccessReasonContract:
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            pytest.param({"success": True}, id="missing"),
+            pytest.param({"success": True, "reason": ""}, id="empty"),
+            pytest.param({"success": True, "reason": "already_done"}, id="undeclared"),
+            pytest.param(
+                {"success": True, "reason": " implementation_complete "},
+                id="whitespace-is-not-trimmed-for-admission",
+            ),
+        ],
+    )
+    def test_declared_recipe_rejects_missing_empty_or_nonexact_reason(self, payload):
+        parsed = L3ParseResult(
+            outcome="completed_clean",
+            payload=payload,
+            raw_body=None,
+            parse_error=None,
+            source="stdout",
+        )
+
+        status, reason = classify_dispatch_outcome(
+            parsed,
+            dataclasses.replace(_DEFAULT_SKILL_RESULT),
+            success_reasons=frozenset({"implementation_complete"}),
+        )
+
+        assert status == DispatchStatus.FAILURE
+        assert reason == FleetErrorCode.FLEET_L3_RESULT_CONTRACT_VIOLATION
+
+    def test_declared_reason_is_accepted_exactly(self):
+        parsed = L3ParseResult(
+            outcome="completed_clean",
+            payload={"success": True, "reason": "implementation_complete"},
+            raw_body=None,
+            parse_error=None,
+            source="stdout",
+        )
+
+        status, reason = classify_dispatch_outcome(
+            parsed,
+            dataclasses.replace(_DEFAULT_SKILL_RESULT),
+            success_reasons=frozenset({"implementation_complete"}),
+        )
+
+        assert status == DispatchStatus.SUCCESS
+        assert reason == "implementation_complete"
+
+    def test_failure_payload_is_not_subject_to_success_reason_admission(self):
+        parsed = L3ParseResult(
+            outcome="completed_clean",
+            payload={"success": False, "reason": "implementation_complete"},
+            raw_body=None,
+            parse_error=None,
+            source="stdout",
+        )
+
+        status, reason = classify_dispatch_outcome(
+            parsed,
+            dataclasses.replace(_DEFAULT_SKILL_RESULT),
+            success_reasons=frozenset({"implementation_complete"}),
+        )
+
+        assert status == DispatchStatus.FAILURE
+        assert reason == "implementation_complete"
+
+    def test_stdout_cannot_claim_the_sidecar_reserved_reason(self):
+        parsed = L3ParseResult(
+            outcome="completed_clean",
+            payload={"success": True, "reason": "sidecar_recovery"},
+            raw_body=None,
+            parse_error=None,
+            source="stdout",
+        )
+
+        status, reason = classify_dispatch_outcome(
+            parsed,
+            dataclasses.replace(_DEFAULT_SKILL_RESULT),
+            success_reasons=frozenset({"implementation_complete"}),
+        )
+
+        assert status == DispatchStatus.FAILURE
+        assert reason == FleetErrorCode.FLEET_L3_RESULT_CONTRACT_VIOLATION
+
+    def test_every_bundled_declared_reason_is_admitted_from_fresh_recipe_data(self):
+        from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+
+        checked_reasons = 0
+        for recipe_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+            recipe = load_recipe(recipe_path)
+            declared_reasons = recipe.declared_success_reasons()
+            if declared_reasons is None:
+                continue
+
+            for declared_reason in declared_reasons:
+                parsed = L3ParseResult(
+                    outcome="completed_clean",
+                    payload={"success": True, "reason": declared_reason},
+                    raw_body=None,
+                    parse_error=None,
+                    source="stdout",
+                )
+                status, reason = classify_dispatch_outcome(
+                    parsed,
+                    dataclasses.replace(_DEFAULT_SKILL_RESULT),
+                    success_reasons=declared_reasons,
+                )
+
+                assert status == DispatchStatus.SUCCESS, recipe_path.name
+                assert reason == declared_reason, recipe_path.name
+                checked_reasons += 1
+
+        assert checked_reasons > 0
 
 
 class TestClassifyDispatchOutcomeParsedNone:

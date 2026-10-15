@@ -192,6 +192,7 @@ def finalize_recipe_delivery(
     ):
         raise ValueError("canonical artifact payload does not match prepared flow generation")
     surface_payload = dict(payload)
+    surface_payload.pop("_dispatch_success_reasons", None)
     if "success" not in surface_payload:
         surface_payload["success"] = True
     for generation_field in (
@@ -202,17 +203,18 @@ def finalize_recipe_delivery(
         surface_payload[generation_field] = candidate_payload[generation_field]
     initialization_id = uuid4().hex if surface_definition.initialization_activating else None
     active_requirements: tuple[RecipeInitializationRequirement, ...] | None = None
+    activation_id = tool_ctx.kitchen_activation_id
     try:
         generation = persist_recipe_artifact(
             tool_ctx.temp_dir,
-            kitchen_id=tool_ctx.kitchen_id,
+            activation_id=activation_id,
             producer_tool=surface_definition.producer_tool,
             recipe_name=recipe_name,
             payload=candidate_payload,
             flow_generation=flow_generation,
         )
         get_recipe_generation_store().bind_surface(
-            tool_ctx.kitchen_id,
+            activation_id,
             normalized_compile_key,
             surface,
             generation,
@@ -223,7 +225,15 @@ def finalize_recipe_delivery(
         RecipeGenerationError,
         TypeError,
         ValueError,
-    ):
+    ) as exc:
+        get_logger(__name__).warning(
+            "recipe_artifact_persistence_failed",
+            producer=surface_definition.producer_tool,
+            recipe_name=recipe_name,
+            surface=surface,
+            error_type=type(exc).__name__,
+            exc_info=True,
+        )
         decision = _failure_decision(
             producer=surface_definition.producer_tool,
             reason="recipe_artifact_persistence_failed",

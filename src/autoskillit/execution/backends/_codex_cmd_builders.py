@@ -398,6 +398,10 @@ class CodexSessionLocator(SessionLocator):
             return None
         return self.locate_session(session_id)
 
+    def session_context_was_compacted(self, cwd: str, session_id: str) -> bool:
+        """Return false because Codex vetoes compaction before history replacement."""
+        return False
+
     def read_child_task(self, child_id: str) -> ChildTaskTranscript | None:
         if not is_valid_child_task_id(child_id):
             return None

@@ -1,4 +1,4 @@
-"""Tests for the Codex PreCompact automatic-compaction veto."""
+"""Tests for backend-specific PreCompact automatic-compaction blocking."""
 
 from __future__ import annotations
 
@@ -17,19 +17,28 @@ pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 SCRIPT = Path(__file__).resolve().parents[2] / "src/autoskillit/hooks/guards/auto_compact_guard.py"
 
 
-def _run(event: object, *, backend: str = "codex") -> tuple[int, str]:
+def _run(
+    event: object,
+    *,
+    backend: str = "codex",
+    session_type: str | None = None,
+) -> tuple[int, str, str]:
+    env = {**production_interpreter_env(), "AUTOSKILLIT_AGENT_BACKEND": backend}
+    env.pop("AUTOSKILLIT_SESSION_TYPE", None)
+    if session_type is not None:
+        env["AUTOSKILLIT_SESSION_TYPE"] = session_type
     result = subprocess.run(
         [sys.executable, str(SCRIPT)],
         input=json.dumps(event),
         capture_output=True,
         text=True,
-        env={**production_interpreter_env(), "AUTOSKILLIT_AGENT_BACKEND": backend},
+        env=env,
     )
-    return result.returncode, result.stdout
+    return result.returncode, result.stdout, result.stderr
 
 
-def test_auto_compact_guard_vetoes_only_the_codex_automatic_trigger() -> None:
-    code, stdout = _run({"hook_event_name": "PreCompact", "trigger": "auto"})
+def test_auto_compact_guard_preserves_codex_automatic_trigger_veto() -> None:
+    code, stdout, stderr = _run({"hook_event_name": "PreCompact", "trigger": "auto"})
 
     assert code == 0
     assert json.loads(stdout) == {
@@ -40,18 +49,42 @@ def test_auto_compact_guard_vetoes_only_the_codex_automatic_trigger() -> None:
             "Start a new session, or compact manually and resume deliberately."
         ),
     }
+    assert stderr == ""
+
+
+def test_auto_compact_guard_blocks_claude_orchestrator_automatic_trigger() -> None:
+    code, stdout, stderr = _run(
+        {"hook_event_name": "PreCompact", "trigger": "auto"},
+        backend="claude-code",
+        session_type="orchestrator",
+    )
+
+    assert code == 2
+    assert stdout == ""
+    assert "compaction" in stderr.lower()
 
 
 @pytest.mark.parametrize(
-    ("event", "backend"),
+    ("event", "backend", "session_type"),
     [
-        ({"hook_event_name": "PreCompact", "trigger": "manual"}, "codex"),
-        ({"hook_event_name": "PreCompact", "trigger": "auto"}, "claude-code"),
-        ({"trigger": "auto"}, "codex"),
+        ({"hook_event_name": "PreCompact", "trigger": "manual"}, "codex", None),
+        ({"hook_event_name": "PreCompact", "trigger": "auto"}, "claude-code", "skill"),
+        ({"hook_event_name": "PreCompact", "trigger": "auto"}, "claude-code", None),
+        (
+            {"hook_event_name": "PreCompact", "trigger": "manual"},
+            "claude-code",
+            "orchestrator",
+        ),
+        ({"trigger": "auto"}, "codex", None),
     ],
 )
-def test_auto_compact_guard_leaves_other_invocations_inert(event: object, backend: str) -> None:
-    code, stdout = _run(event, backend=backend)
+def test_auto_compact_guard_leaves_other_invocations_inert(
+    event: object,
+    backend: str,
+    session_type: str | None,
+) -> None:
+    code, stdout, stderr = _run(event, backend=backend, session_type=session_type)
 
     assert code == 0
     assert stdout == ""
+    assert stderr == ""

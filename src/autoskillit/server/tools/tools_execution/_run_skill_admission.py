@@ -31,6 +31,7 @@ from autoskillit.core import (
     normalize_declared_truth,
     resolve_temp_dir,
 )
+from autoskillit.pipeline import ReadyRecipe
 from autoskillit.server._audit_authority_materializer import (
     derive_initial_lifecycle_ids,
     load_current_prior_authority,
@@ -61,13 +62,53 @@ if TYPE_CHECKING:
     from autoskillit.server.tools.tools_execution._state import _RunSkillDispatchState
 
 
-def _recipe_execution_deny(code: str, message: str) -> str:
+_CREDENTIAL_REJECTION_CODES = frozenset(
+    {"recipe_execution_id_mismatch", "invocation_template_digest_mismatch"}
+)
+
+
+def _recipe_execution_deny(
+    code: str,
+    message: str,
+    *,
+    recovery: str | None = None,
+) -> str:
     return json.dumps(
         deny_envelope(
             f"RECIPE EXECUTION REJECTED [{code}]: {message}",
             stage="preflight:recipe_execution",
             retriable=False,
+            recovery=recovery,
         )
+    )
+
+
+def _credential_recovery(state: _RunSkillDispatchState) -> str | None:
+    with state.tool_ctx.recipe_execution_lock:
+        initialization = state.tool_ctx.recipe_initialization_state
+        if not isinstance(initialization, ReadyRecipe):
+            return None
+        step_name = state.step_name or "<step_name>"
+        return (
+            'call complete_recipe_initialization(initialization_id="'
+            f'{initialization.initialization_id}"); its recipe_execution block carries '
+            "every named step's credential: send "
+            "recipe_execution_id=recipe_execution.execution_id and "
+            "invocation_template_digest=recipe_execution.invocation_template_digests["
+            f'"{step_name}"]'
+        )
+
+
+def _credential_rejection(
+    state: _RunSkillDispatchState,
+    code: str,
+    message: str,
+) -> str:
+    step_context = f"step {state.step_name!r}: " if state.step_name else ""
+    return _recipe_execution_deny(
+        code,
+        f"{step_context}{message}",
+        recovery=_credential_recovery(state),
     )
 
 
@@ -489,7 +530,8 @@ def _admit_dynamic_recipe_invocation(state: _RunSkillDispatchState) -> str | Non
 def _admit_attested_recipe_invocation(state: _RunSkillDispatchState) -> str | None:
     assert state._installed_execution is not None
     if not state.recipe_execution_id or not state.invocation_template_digest:
-        return _recipe_execution_deny(
+        return _credential_rejection(
+            state,
             "recipe_execution_attestation_missing",
             RECIPE_EXECUTION_ATTESTATION_MISSING_MESSAGE,
         )
@@ -538,6 +580,8 @@ def _admit_attested_recipe_invocation(state: _RunSkillDispatchState) -> str | No
             actual_mcp_kwargs=_actual_mcp_kwargs,
         )
     except RecipeExecutionAdmissionError as exc:
+        if exc.code in _CREDENTIAL_REJECTION_CODES:
+            return _credential_rejection(state, exc.code, str(exc))
         return _recipe_execution_deny(exc.code, str(exc))
     if state.tool_ctx.config.safety.require_dry_walkthrough:
         bound_plan_path = dict(state._bound_recipe_inputs).get("plan_path")

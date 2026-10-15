@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import structlog
 from fastmcp import Context
@@ -21,7 +20,6 @@ from autoskillit.server.lifecycle._session_scope import (
     SCOPE_ORCHESTRATOR_OR_HIGHER,
     session_scoped,
 )
-from autoskillit.server.recipe._recipe_segment_delivery import attach_recipe_segment
 from autoskillit.server.tools import tools_execution as _te_pkg
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._execution_helpers import (
@@ -31,37 +29,7 @@ from autoskillit.server.tools._execution_helpers import (
     validate_path_arg_anchoring,
 )
 
-if TYPE_CHECKING:
-    from autoskillit.pipeline import ToolContext
-    from autoskillit.server.recipe._recipe_segment_delivery import PreparedRecipeSegmentDelivery
-
 logger = get_logger(__name__)
-
-
-def _finalize_run_python_response(
-    tool_ctx: ToolContext,
-    result: dict[str, object],
-    *,
-    work_dir: str,
-    prepared_segment: PreparedRecipeSegmentDelivery | None,
-) -> str:
-    """Shape an execution result and attach its prepared recipe segment."""
-    rendered = _te_pkg.shape_execution_response(
-        tool_ctx,
-        result,
-        tool_name="run_python",
-        work_dir=work_dir,
-    )
-    shaped = json.loads(rendered)
-    if not isinstance(shaped, dict):
-        raise TypeError("run_python response must be a JSON object")
-    return json.dumps(
-        attach_recipe_segment(
-            shaped,
-            prepared_segment,
-            success=shaped.get("success") is True,
-        )
-    )
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
@@ -92,7 +60,7 @@ async def run_python(
         timeout: Max seconds before aborting the call (default 30).
         work_dir: When set, relative path-like args (output_dir, etc.) are
             anchored to this directory before the callable is invoked.
-        step_name: Optional YAML step key for progressive recipe delivery.
+        step_name: Exact recipe step key; selects recipe-segment delivery and timing.
 
     Never raises.
     """
@@ -101,11 +69,9 @@ async def run_python(
     if (gate := _check_recipe_read_prohibition(callable_name=callable)) is not None:
         return gate
     try:
-        prepared_segment: PreparedRecipeSegmentDelivery | None = None
         from autoskillit.server import _get_ctx  # circular-break
 
         tool_ctx = _get_ctx()
-        prepared_segment = _te_pkg.prepare_recipe_segment_delivery(tool_ctx, step_name)
         with structlog.contextvars.bound_contextvars(tool="run_python"):
             logger.info("run_python", callable=callable, timeout=timeout)
             await _te_pkg._notify(
@@ -117,13 +83,7 @@ async def run_python(
             )
             anchor_err = validate_path_arg_anchoring(args, work_dir)
             if anchor_err:
-                return json.dumps(
-                    attach_recipe_segment(
-                        {"success": False, "error": anchor_err},
-                        prepared_segment,
-                        success=False,
-                    )
-                )
+                return json.dumps({"success": False, "error": anchor_err})
             promoted = maybe_promote_work_dir(args, work_dir)
             if promoted != work_dir:
                 logger.warning(
@@ -134,14 +94,10 @@ async def run_python(
                 work_dir = promoted
             if work_dir and not Path(work_dir).is_absolute():
                 return json.dumps(
-                    attach_recipe_segment(
-                        {
-                            "success": False,
-                            "error": f"run_python: work_dir must be absolute, got {work_dir!r}",
-                        },
-                        prepared_segment,
-                        success=False,
-                    )
+                    {
+                        "success": False,
+                        "error": f"run_python: work_dir must be absolute, got {work_dir!r}",
+                    }
                 )
             resolved_args = args
             if work_dir:
@@ -160,18 +116,16 @@ async def run_python(
                     "autoskillit.run_python",
                     extra={"callable": callable},
                 )
-            return _finalize_run_python_response(
+            rendered = _te_pkg.shape_execution_response(
                 tool_ctx,
                 result,
+                tool_name="run_python",
                 work_dir=work_dir,
-                prepared_segment=prepared_segment,
             )
+            shaped = json.loads(rendered)
+            if not isinstance(shaped, dict):
+                raise TypeError("run_python response must be a JSON object")
+            return json.dumps(shaped)
     except Exception as exc:
         logger.error("run_python unhandled exception", exc_info=True)
-        return json.dumps(
-            attach_recipe_segment(
-                {"success": False, "error": f"{type(exc).__name__}: {exc}"},
-                prepared_segment,
-                success=False,
-            )
-        )
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})

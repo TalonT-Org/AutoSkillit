@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import dataclasses
+import json
 import pathlib
 
 import pytest
@@ -176,6 +177,164 @@ def test_recipe_step_has_no_on_retry_field() -> None:
 
     field_names = {f.name for f in dataclasses.fields(RecipeStep)}
     assert "on_retry" not in field_names
+
+
+@pytest.mark.parametrize(
+    ("step_specs", "expected"),
+    [
+        (
+            [
+                ("valid", "stop", 'Example sentinel: {"success": true, "reason": "done"}'),
+                (
+                    "failed",
+                    "stop",
+                    'Example sentinel: {"success": false, "reason": "failure"}',
+                ),
+            ],
+            frozenset({"done"}),
+        ),
+        (
+            [
+                ("valid", "stop", 'Example sentinel: {"success": true, "reason": "done"}'),
+                ("reasonless", "stop", 'Example sentinel: {"success": true}'),
+            ],
+            frozenset({"done"}),
+        ),
+        (
+            [
+                ("valid", "stop", 'Example sentinel: {"success": true, "reason": "done"}'),
+                ("malformed", "stop", "Example sentinel: {not-json}"),
+            ],
+            frozenset({"done"}),
+        ),
+        (
+            [
+                ("valid", "stop", 'Example sentinel: {"success": true, "reason": "done"}'),
+                (
+                    "non_string_reason",
+                    "stop",
+                    'Example sentinel: {"success": true, "reason": 42}',
+                ),
+            ],
+            frozenset({"done"}),
+        ),
+        (
+            [("reasonless", "stop", 'Example sentinel: {"success": true}')],
+            None,
+        ),
+        (
+            [
+                (
+                    "string_success",
+                    "stop",
+                    'Example sentinel: {"success": "true", "reason": "ignored"}',
+                )
+            ],
+            None,
+        ),
+        (
+            [
+                (
+                    "numeric_success",
+                    "stop",
+                    'Example sentinel: {"success": 1, "reason": "ignored"}',
+                )
+            ],
+            None,
+        ),
+        (
+            [],
+            None,
+        ),
+        (
+            [
+                (
+                    "confirm",
+                    "confirm",
+                    'Example sentinel: {"success": true, "reason": "ignored"}',
+                )
+            ],
+            None,
+        ),
+        (
+            [("spaced", "stop", 'Example sentinel: {"success": true, "reason": "  done  "}')],
+            frozenset({"done"}),
+        ),
+        (
+            [("blank", "stop", 'Example sentinel: {"success": true, "reason": "  "}')],
+            None,
+        ),
+        (
+            [
+                ("first", "stop", 'Example sentinel: {"success": true, "reason": "done"}'),
+                ("duplicate", "stop", 'Example sentinel: {"success": true, "reason": "done"}'),
+            ],
+            frozenset({"done"}),
+        ),
+    ],
+    ids=[
+        "valid-plus-failure",
+        "valid-plus-reasonless-success",
+        "valid-plus-malformed-json",
+        "valid-plus-non-string-reason",
+        "reasonless-only",
+        "non-boolean-string-success",
+        "non-boolean-numeric-success",
+        "no-stops",
+        "non-stop-success-example",
+        "trim-declared-reason",
+        "blank-reason",
+        "duplicate-declaration",
+    ],
+)
+def test_recipe_declared_success_reasons(step_specs, expected) -> None:
+    """Only strict successful stop sentinels with usable reasons are declared."""
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    recipe = Recipe(
+        name="success-reasons",
+        description="success declaration extraction",
+        steps={
+            name: RecipeStep(action=action, message=message)
+            for name, action, message in step_specs
+        },
+    )
+
+    assert recipe.declared_success_reasons() == expected
+
+
+@pytest.mark.parametrize(
+    "reason",
+    ["closing } brace", "opening { brace", 'escaped " quote } and \\ backslash', "trailing \\"],
+)
+def test_declared_success_reasons_preserve_braces_and_escapes_in_strings(reason: str) -> None:
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    sentinel = json.dumps({"success": True, "reason": reason, "nested": {"values": [1, 2]}})
+    recipe = Recipe(
+        name="quoted-braces",
+        description="JSON string extraction",
+        steps={"done": RecipeStep(action="stop", message=f"Example sentinel: {sentinel}")},
+    )
+
+    assert recipe.declared_success_reasons() == frozenset({reason})
+
+
+@pytest.mark.parametrize("trigger", ["Sentinel:", "SENTINEL JSON:", "EXAMPLE SENTINEL:"])
+def test_declared_success_reasons_accept_case_variations_in_trigger(trigger: str) -> None:
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    recipe = Recipe(
+        name="capitalized-sentinel",
+        description="case-insensitive sentinel triggers",
+        steps={
+            "done": RecipeStep(
+                action="stop", message=f'{trigger} {{"success": true, "reason": "done"}}'
+            )
+        },
+    )
+
+    assert recipe.declared_success_reasons() == frozenset({"done"})
 
 
 def test_step_retry_dataclass_removed() -> None:

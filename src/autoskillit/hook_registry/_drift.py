@@ -84,7 +84,7 @@ def _count_hook_registry_drift(settings_path: Path) -> HookDriftResult:
     runtime_only_basenames = frozenset(
         script for hook in HOOK_REGISTRY if hook.runtime_only for script in hook.scripts
     )
-    deployed_basenames -= runtime_only_basenames
+    deployed_basenames -= runtime_only_basenames - canonical_basenames
     orphaned = deployed_basenames - canonical_basenames
     return HookDriftResult(
         missing=len(canonical_basenames - deployed_basenames),

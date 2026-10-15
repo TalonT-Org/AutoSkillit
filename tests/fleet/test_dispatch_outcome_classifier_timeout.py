@@ -238,6 +238,7 @@ class TestTimeoutContextExhaustedIsFailure:
             subtype="timeout",
         )
         assert status == DispatchStatus.FAILURE
+        assert reason == FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED
 
     def test_timeout_api_error_is_resumable(self):
         """Timeout + api_error infra category → RESUMABLE (infrastructure, not abandon)."""

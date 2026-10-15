@@ -189,6 +189,7 @@ def render_served_response(payload: dict[str, Any]) -> str:
     """Render the authoritative pre-backstop response used by recipe serve tools."""
     public_payload = dict(payload)
     public_payload.pop("_finalized_projection", None)
+    public_payload.pop("_dispatch_success_reasons", None)
     return json.dumps(public_payload, ensure_ascii=False, separators=(",", ":"))
 
 

@@ -488,6 +488,9 @@ class _ReadTaskLocator:
             raise self.error
         return self.result
 
+    def session_context_was_compacted(self, cwd: str, session_id: str) -> bool:
+        return False
+
 
 def _child_view(child_id: str) -> ChildTaskTranscript:
     return ChildTaskTranscript(

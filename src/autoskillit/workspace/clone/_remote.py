@@ -14,6 +14,26 @@ from ._detect import _is_not_file_url
 logger = get_logger(__name__)
 
 
+def _matching_push_remote(checkout: Path, url: str) -> str:
+    """Use a named remote only when it pushes solely to the requested URL."""
+    result = subprocess.run(
+        ["git", "remote", "-v"],
+        cwd=str(checkout),
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        return url
+    destinations: dict[str, set[str]] = {}
+    for line in result.stdout.splitlines():
+        name, _, entry = line.partition("\t")
+        destination, _, direction = entry.rpartition(" ")
+        if direction == "(push)":
+            destinations.setdefault(name, set()).add(destination)
+    return next((name for name, urls in destinations.items() if urls == {url}), url)
+
+
 def _add_or_set_upstream(clone_path: Path, url: str) -> None:
     """Add or update the upstream remote in the clone.
 

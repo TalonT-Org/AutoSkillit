@@ -234,6 +234,8 @@ MINIMAX_KEY = "minimax-test-key"
 SANDBOX_TOKEN = "sandbox-test-token"
 SANDBOX = "owner/sandbox"
 _MINIMAX_MODEL = "MiniMax-M3[1m]"
+_EXPECTED_FLEET_MODEL = "claude-sonnet-5[1m]"
+_EXPECTED_REQUIRED_CONTEXT_WINDOW_TOKENS = 1_000_000
 _EXPECTED_SETTINGS_ENV = {
     "ANTHROPIC_BASE_URL": "https://api.minimax.io/anthropic",
     "ANTHROPIC_AUTH_TOKEN": MINIMAX_KEY,
@@ -245,7 +247,14 @@ _EXPECTED_SETTINGS_ENV = {
     "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS": "6",
 }
 _CANARY_REPLY = json.dumps(
-    {"type": "result", "is_error": False, "result": "AUTOSKILLIT-E2E-CANARY-OK"}
+    {
+        "type": "result",
+        "is_error": False,
+        "result": "AUTOSKILLIT-E2E-CANARY-OK",
+        "modelUsage": {
+            _EXPECTED_FLEET_MODEL: {"contextWindow": _EXPECTED_REQUIRED_CONTEXT_WINDOW_TOKENS}
+        },
+    }
 )
 _SKILL_NOTICE = "2 skills unavailable on this backend (codex): a, b"
 _CLEAN_INSTALL_ISSUE = "https://github.com/TalonT-Org/AutoSkillit/issues/5231"
@@ -334,11 +343,18 @@ def _pr(number: int, state: str, additions: int = 3, deletions: int = 1) -> dict
 
 def _recipe_handler(
     *,
+    log_dir: Path,
     new_prs: list[dict] | None = None,
     fleet: subprocess.CompletedProcess[str] | BaseException | None = None,
+    sessions: dict[str, list[int | None] | None] | None = None,
     extra: Handler | None = None,
 ) -> Handler:
     listed = [_pr(8, "OPEN"), _pr(7, "MERGED")] if new_prs is None else new_prs
+    fleet_sessions = (
+        {"fleet-session": [_EXPECTED_REQUIRED_CONTEXT_WINDOW_TOKENS]}
+        if sessions is None
+        else sessions
+    )
 
     def handle(argv: list[str]):
         if extra is not None and (response := extra(argv)) is not None:
@@ -347,6 +363,7 @@ def _recipe_handler(
             baseline = argv[argv.index("--limit") + 1] == "1"
             return _completed(argv, json.dumps([{"number": 7}] if baseline else listed))
         if argv[:3] == ["autoskillit", "fleet", "run"]:
+            _seed_sessions(log_dir, fleet_sessions)
             return fleet or _completed(argv, f'{_SKILL_NOTICE}\n{{"success": true}}\n')
         return None
 
@@ -371,6 +388,27 @@ def _recipe_catalog(state: str = "open"):
             ],
         }
     )
+
+
+def _seed_sessions(log_dir: Path, sessions: dict[str, list[int | None] | None]) -> None:
+    log_dir.mkdir(parents=True, exist_ok=True)
+    with (log_dir / "sessions.jsonl").open("a", encoding="utf-8") as index:
+        for name, windows in sessions.items():
+            index.write(json.dumps({"dir_name": name, "session_id": name}) + "\n")
+            if windows is None:
+                continue
+            usage = log_dir / "sessions" / name / "turn_usage.jsonl"
+            usage.parent.mkdir(parents=True, exist_ok=True)
+            usage.write_text(
+                "".join(
+                    json.dumps({"context_window_tokens": window}) + "\n" for window in windows
+                ),
+                encoding="utf-8",
+            )
+
+
+def _log_dir(tmp_path: Path) -> Path:
+    return tmp_path / "home" / ".local" / "share" / "autoskillit" / "logs"
 
 
 def _env(**overrides: str) -> dict[str, str]:
@@ -661,6 +699,19 @@ def _run_pipeline(
     repository=SANDBOX,
 ):
     catalog = _pipeline_catalog(expected_failures, repository=repository)
+    original_handler = runner.handler
+
+    def handle(argv: list[str]):
+        if argv[:3] == ["autoskillit", "fleet", "run"]:
+            _seed_sessions(
+                _log_dir(tmp_path),
+                state.get(
+                    "sessions", {"pipeline-session": [_EXPECTED_REQUIRED_CONTEXT_WINDOW_TOKENS]}
+                ),
+            )
+        return original_handler(argv)
+
+    runner.handler = handle
     out = tmp_path / "out"
     home = tmp_path / "home"
     if real_measurement:
@@ -686,8 +737,21 @@ def _run_pipeline(
     )
 
 
-def _run_recipe(tmp_path: Path, runner: FakeRunner, *, state: str = "open", env=None):
+def _run_recipe(
+    tmp_path: Path,
+    runner: FakeRunner,
+    *,
+    state: str = "open",
+    expected_failures: list[dict[str, str]] | None = None,
+    env=None,
+):
     catalog = _recipe_catalog(state)
+    if expected_failures is not None:
+        test = replace(catalog.get("impl"), expected_failures=tuple(expected_failures))
+        catalog = replace(
+            catalog,
+            tests=tuple(test if entry.name == test.name else entry for entry in catalog.tests),
+        )
     out = tmp_path / "out"
     failures = harness.run_test(
         catalog.get("impl"),
@@ -784,6 +848,7 @@ def _smoke_fleet(
     out: Path,
     fleet: subprocess.CompletedProcess[str] | BaseException | None,
     state: dict[str, str],
+    sessions: dict[str, list[int | None] | None] | None = None,
 ) -> subprocess.CompletedProcess[str] | BaseException:
     assert argv[:3] == ["autoskillit", "fleet", "run"] and call.cwd == clone
     assert (clone / ".autoskillit" / "recipes" / "sandbox-smoke.yaml").is_file()
@@ -802,6 +867,13 @@ def _smoke_fleet(
         "base_branch": "main",
         "branch_name": descriptor["branch_name"],
     }
+    fleet_sessions = (
+        {"fleet-session": [_EXPECTED_REQUIRED_CONTEXT_WINDOW_TOKENS]}
+        if sessions is None
+        else sessions
+    )
+    assert call.env is not None
+    _seed_sessions(Path(call.env["AUTOSKILLIT_LOG_DIR"]), fleet_sessions)
     if isinstance(fleet, BaseException):
         return fleet
     if fleet is not None:
@@ -957,6 +1029,7 @@ def _smoke_runner(
     *,
     mode: str = "success",
     fleet: subprocess.CompletedProcess[str] | BaseException | None = None,
+    sessions: dict[str, list[int | None] | None] | None = None,
 ) -> tuple[FakeRunner, Path]:
     clone = tmp_path / "sandbox"
     clone.mkdir()
@@ -974,7 +1047,7 @@ def _smoke_runner(
         ("git", "branch"): lambda argv, _call: _smoke_metadata(argv, mode, state, remote_url),
         ("git", "ls-remote"): lambda argv, _call: _smoke_metadata(argv, mode, state, remote_url),
         ("autoskillit", "fleet"): lambda argv, call: _smoke_fleet(
-            argv, call, clone, out, fleet, state
+            argv, call, clone, out, fleet, state, sessions
         ),
         ("gh", "pr"): lambda argv, _call: _smoke_pr_list(argv, mode, state),
         ("gh", "api"): lambda argv, _call: _smoke_ref(argv, mode, state),
@@ -1085,10 +1158,12 @@ class TestSandboxSmokeFixture:
         assert worker.skill_name == "smoke-task"
         prompt = worker.with_args["skill_command"].lower()
         assert "one new commit" in prompt and "only sandbox/text.py" in prompt
+        assert "report the commit hash" in prompt and "changed file paths" in prompt
         discipline = " ".join(recipe.kitchen_rules).lower()
         assert "child agents" in discipline and "replay" in discipline
         assert recipe.steps["setup"].with_args["cwd"] == "${{ context.worktree_path }}"
         assert worker.with_args["cwd"] == "${{ context.worktree_path }}"
+        assert worker.with_args["output_dir"] == "${{ context.worktree_path }}"
         assert recipe.steps["test"].tool == "test_check"
         assert recipe.steps["test"].with_args["worktree_path"] == "${{ context.worktree_path }}"
         assert recipe.steps["push"].with_args["clone_path"] == "${{ context.worktree_path }}"
@@ -1324,6 +1399,21 @@ class TestSandboxSmokeFlow:
         assert (out / "smoke-lifecycle.json").exists() is False
         assert (out / "smoke-launched").exists() is False
         assert not any(call.argv[:3] == ["autoskillit", "fleet", "run"] for call in runner.calls)
+
+    def test_new_session_with_a_small_window_fails_the_smoke_run(self, tmp_path, monkeypatch):
+        runner, _clone = _smoke_runner(
+            tmp_path,
+            monkeypatch,
+            sessions={"too-small": [200000]},
+        )
+        failures, result, _out, _catalog = _run_smoke(tmp_path, runner, monkeypatch)
+
+        assert result["outcome"] == "failed"
+        assert (
+            f"session windows: too-small: observed [200000] != required "
+            f"{_EXPECTED_REQUIRED_CONTEXT_WINDOW_TOKENS}"
+        ) in result["failures"]
+        assert failures == result["failures"]
 
     def test_expected_failure_matches_only_the_exact_structured_envelope(
         self, tmp_path, monkeypatch
@@ -1874,9 +1964,94 @@ def test_shipped_config_routes_every_default_codex_step_to_claude_code(
     assert cfg.features["fleet_headless_run"] is True
 
 
+def test_fleet_launch_shape_matches_shipped_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from autoskillit.config import load_config
+    from autoskillit.execution.backends.claude import ClaudeCodeBackend
+
+    home = tmp_path / "home"
+    monkeypatch.setattr("pathlib.Path.home", lambda: home)
+    harness.install_autoskillit_config(home)
+    project = tmp_path / "project"
+    project.mkdir()
+    cfg = load_config(project)
+
+    assert harness.FLEET_MODEL == ClaudeCodeBackend().translate_model(cfg.model.default_model)
+    assert int(harness.MINIMAX_COMPACT_WINDOW_TOKENS) <= harness.REQUIRED_CONTEXT_WINDOW_TOKENS
+
+
 class TestCanaryOutput:
     def test_successful_reply_passes(self) -> None:
         assert harness.check_canary_output(_CANARY_REPLY) == []
+
+    def test_context_window_must_match_the_required_window(self) -> None:
+        reply = json.loads(_CANARY_REPLY)
+        reply["modelUsage"] = {_EXPECTED_FLEET_MODEL: {"contextWindow": 200000}}
+
+        assert harness.check_canary_output(json.dumps(reply)) == [
+            f"canary: {_EXPECTED_FLEET_MODEL} reported a 200000-token context window; "
+            f"the harness requires {_EXPECTED_REQUIRED_CONTEXT_WINDOW_TOKENS}"
+        ]
+
+    @pytest.mark.parametrize(
+        ("model_usage", "include_model_usage"),
+        [
+            pytest.param(
+                {"MiniMax-M3[1m]": {"contextWindow": _EXPECTED_REQUIRED_CONTEXT_WINDOW_TOKENS}},
+                True,
+                id="old-model-key",
+            ),
+            pytest.param(None, False, id="missing-model-usage"),
+            pytest.param(None, True, id="non-dict-model-usage"),
+            pytest.param({_EXPECTED_FLEET_MODEL: "invalid"}, True, id="non-dict-model-entry"),
+        ],
+    )
+    def test_missing_expected_model_usage_fails(
+        self, model_usage: object, include_model_usage: bool
+    ) -> None:
+        reply = json.loads(_CANARY_REPLY)
+        if include_model_usage:
+            reply["modelUsage"] = model_usage
+        else:
+            reply.pop("modelUsage")
+
+        assert harness.check_canary_output(json.dumps(reply)) == [
+            f"canary: claude output has no modelUsage entry for {_EXPECTED_FLEET_MODEL}"
+        ]
+
+    @pytest.mark.parametrize(
+        "model_usage",
+        [
+            {_EXPECTED_FLEET_MODEL: {"contextWindow": "1000000"}},
+            {_EXPECTED_FLEET_MODEL: {}},
+            {_EXPECTED_FLEET_MODEL: {"contextWindow": True}},
+        ],
+        ids=["string", "missing-window", "bool"],
+    )
+    def test_context_window_must_be_an_integer(self, model_usage: dict) -> None:
+        reply = json.loads(_CANARY_REPLY)
+        reply["modelUsage"] = model_usage
+
+        assert harness.check_canary_output(json.dumps(reply)) == [
+            f"canary: {_EXPECTED_FLEET_MODEL} reported no integer context window"
+        ]
+
+    def test_reply_and_error_checks_keep_their_messages_before_window_validation(self) -> None:
+        missing_token = json.loads(_CANARY_REPLY)
+        missing_token.pop("modelUsage")
+        missing_token["result"] = "missing token"
+        assert harness.check_canary_output(json.dumps(missing_token)) == [
+            "canary: reply does not contain AUTOSKILLIT-E2E-CANARY-OK"
+        ]
+
+        error_reply = json.loads(_CANARY_REPLY)
+        error_reply.pop("modelUsage")
+        error_reply["is_error"] = True
+        error_reply["result"] = "claude failed"
+        assert harness.check_canary_output(json.dumps(error_reply)) == [
+            "canary: claude reported an error: claude failed"
+        ]
 
     @pytest.mark.parametrize(
         "stdout",
@@ -1934,9 +2109,106 @@ class TestPullRequestAssertions:
         assert harness.check_pull_requests(prs, "merged")
 
 
+class TestSessionWindowGate:
+    def test_malformed_session_index_names_the_file_and_row(self, tmp_path: Path) -> None:
+        path = tmp_path / "sessions.jsonl"
+        path.write_text("\n{broken\n", encoding="utf-8")
+
+        with pytest.raises(ValueError) as error:
+            harness.session_index_dir_names(tmp_path)
+
+        assert str(error.value).startswith(f"{path}:2: invalid session index JSON:")
+
+    def test_malformed_turn_usage_names_the_session_file_and_row(self, tmp_path: Path) -> None:
+        log_dir = tmp_path / "logs"
+        _seed_sessions(log_dir, {"broken-session": []})
+        path = log_dir / "sessions" / "broken-session" / "turn_usage.jsonl"
+        path.write_text("\n{broken\n", encoding="utf-8")
+
+        failures = harness.check_session_windows(log_dir, set(), sessions_required=True)
+
+        assert len(failures) == 1
+        assert failures[0].startswith(
+            f"session windows: broken-session: {path}:2: invalid turn usage JSON:"
+        )
+
+    def test_all_new_sessions_must_report_the_required_window(self, tmp_path: Path) -> None:
+        log_dir = tmp_path / "logs"
+        _seed_sessions(
+            log_dir,
+            {
+                "session-a": [_EXPECTED_REQUIRED_CONTEXT_WINDOW_TOKENS],
+                "session-b": [
+                    _EXPECTED_REQUIRED_CONTEXT_WINDOW_TOKENS,
+                    _EXPECTED_REQUIRED_CONTEXT_WINDOW_TOKENS,
+                ],
+            },
+        )
+
+        assert harness.check_session_windows(log_dir, set(), sessions_required=True) == []
+
+    @pytest.mark.parametrize("sessions_required", [True, False])
+    def test_wrong_window_fails_for_a_new_session_even_when_none_are_required(
+        self, tmp_path: Path, sessions_required: bool
+    ) -> None:
+        log_dir = tmp_path / "logs"
+        _seed_sessions(log_dir, {"too-small": [200000]})
+
+        assert harness.check_session_windows(
+            log_dir, set(), sessions_required=sessions_required
+        ) == [
+            f"session windows: too-small: observed [200000] != required "
+            f"{_EXPECTED_REQUIRED_CONTEXT_WINDOW_TOKENS}"
+        ]
+
+    def test_missing_context_window_row_fails(self, tmp_path: Path) -> None:
+        log_dir = tmp_path / "logs"
+        _seed_sessions(log_dir, {"missing-window": [None]})
+
+        assert harness.check_session_windows(log_dir, set(), sessions_required=True) == [
+            "session windows: missing-window: no observed context window"
+        ]
+
+    def test_missing_turn_usage_file_fails(self, tmp_path: Path) -> None:
+        log_dir = tmp_path / "logs"
+        _seed_sessions(log_dir, {"missing-usage": None})
+
+        assert harness.check_session_windows(log_dir, set(), sessions_required=True) == [
+            "session windows: missing-usage: no turn usage"
+        ]
+
+    @pytest.mark.parametrize("sessions_required", [True, False])
+    def test_no_new_sessions_depends_on_whether_the_fleet_was_required(
+        self, tmp_path: Path, sessions_required: bool
+    ) -> None:
+        log_dir = tmp_path / "logs"
+        failures = harness.check_session_windows(
+            log_dir, set(), sessions_required=sessions_required
+        )
+
+        expected = (
+            [f"session windows: the fleet run recorded no sessions in {log_dir}"]
+            if sessions_required
+            else []
+        )
+        assert failures == expected
+
+    def test_bad_stale_session_is_ignored_by_dir_name(self, tmp_path: Path) -> None:
+        log_dir = tmp_path / "logs"
+        _seed_sessions(
+            log_dir,
+            {
+                "stale": [200000],
+                "new": [_EXPECTED_REQUIRED_CONTEXT_WINDOW_TOKENS],
+            },
+        )
+
+        assert harness.check_session_windows(log_dir, {"stale"}, sessions_required=True) == []
+
+
 class TestRecipeFlow:
     def test_steps_run_in_order_with_the_token_only_on_stdin(self, tmp_path: Path) -> None:
-        runner = FakeRunner(_recipe_handler())
+        runner = FakeRunner(_recipe_handler(log_dir=_log_dir(tmp_path)))
         failures, result = _run_recipe(tmp_path, runner)
 
         assert failures == []
@@ -1969,13 +2241,17 @@ class TestRecipeFlow:
         ]
         assert [call.input for call in runner.calls if call.input] == [SANDBOX_TOKEN]
         assert all(SANDBOX_TOKEN not in " ".join(call.argv) for call in runner.calls)
-        assert all(call.env == harness.child_env(_env()) for call in runner.calls)
+        expected_env = {
+            **harness.child_env(_env()),
+            "AUTOSKILLIT_LOG_DIR": str(_log_dir(tmp_path)),
+        }
+        assert all(call.env == expected_env for call in runner.calls)
         fleet_call = runner.calls[6]
         assert fleet_call.cwd == harness.SANDBOX_CLONE
         assert fleet_call.timeout == 600 + e2e_catalog.HARNESS_GRACE_SEC
 
     def test_outputs_keep_full_stdout_and_only_the_envelope_line(self, tmp_path: Path) -> None:
-        _run_recipe(tmp_path, FakeRunner(_recipe_handler()))
+        _run_recipe(tmp_path, FakeRunner(_recipe_handler(log_dir=_log_dir(tmp_path))))
         out = tmp_path / "out"
         stdout = (out / "fleet-run.stdout.log").read_text(encoding="utf-8")
         assert stdout == f'{_SKILL_NOTICE}\n{{"success": true}}\n'
@@ -1983,7 +2259,7 @@ class TestRecipeFlow:
         assert (out / "fleet-run.stderr.log").exists()
 
     def test_harness_writes_provider_settings_and_user_config(self, tmp_path: Path) -> None:
-        _run_recipe(tmp_path, FakeRunner(_recipe_handler()))
+        _run_recipe(tmp_path, FakeRunner(_recipe_handler(log_dir=_log_dir(tmp_path))))
         home = tmp_path / "home"
         settings = json.loads((home / ".claude" / "settings.json").read_text(encoding="utf-8"))
         assert settings["env"] == _EXPECTED_SETTINGS_ENV
@@ -1991,7 +2267,9 @@ class TestRecipeFlow:
         assert installed == harness.CONFIG_TEMPLATE.read_bytes()
 
     def test_merged_pull_request_is_not_closed(self, tmp_path: Path) -> None:
-        runner = FakeRunner(_recipe_handler(new_prs=[_pr(8, "MERGED")]))
+        runner = FakeRunner(
+            _recipe_handler(log_dir=_log_dir(tmp_path), new_prs=[_pr(8, "MERGED")])
+        )
         failures, _ = _run_recipe(tmp_path, runner, state="merged")
         assert failures == []
         assert ("gh", "pr", "close") not in runner.argv_prefixes()
@@ -2002,7 +2280,7 @@ class TestRecipeFlow:
                 return _completed(argv, returncode=1, stderr="bad credentials")
             return None
 
-        runner = FakeRunner(_recipe_handler(extra=reject_login))
+        runner = FakeRunner(_recipe_handler(log_dir=_log_dir(tmp_path), extra=reject_login))
         failures, result = _run_recipe(tmp_path, runner)
         prefixes = runner.argv_prefixes()
         assert result["passed"] is False
@@ -2011,23 +2289,54 @@ class TestRecipeFlow:
         assert ("gh", "pr", "close") not in prefixes
         assert ("autoskillit", "fleet", "run") not in prefixes
 
-    def test_fleet_timeout_is_a_failure_and_cleanup_still_runs(self, tmp_path: Path) -> None:
+    def test_fleet_timeout_and_window_failures_keep_cleanup(self, tmp_path: Path) -> None:
         timeout = subprocess.TimeoutExpired(
             ["autoskillit"], 720, output=b"partial stdout", stderr=b"partial stderr"
         )
-        runner = FakeRunner(_recipe_handler(fleet=timeout))
+        runner = FakeRunner(
+            _recipe_handler(
+                log_dir=_log_dir(tmp_path),
+                fleet=timeout,
+                sessions={"timed-out": [200000]},
+            )
+        )
         failures, result = _run_recipe(tmp_path, runner)
         assert result["passed"] is False
         assert any("fleet run: timed out" in failure for failure in failures)
+        assert (
+            f"session windows: timed-out: observed [200000] != required "
+            f"{_EXPECTED_REQUIRED_CONTEXT_WINDOW_TOKENS}"
+        ) in failures
         assert (tmp_path / "out" / "fleet-run.stdout.log").read_text() == "partial stdout"
         assert (tmp_path / "out" / "fleet-run.stderr.log").read_text() == "partial stderr"
         assert runner.calls[-1].argv[:4] == ["gh", "pr", "close", "8"]
 
     def test_unexpected_fleet_error_records_failure_and_still_cleans_up(
-        self, tmp_path: Path
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        runner = FakeRunner(_recipe_handler(fleet=RuntimeError("unexpected fleet error")))
+        events: list[str] = []
+        original_check = harness.check_session_windows
+        original_format_exc = harness.traceback.format_exc
+
+        def check_session_windows(*args, **kwargs):
+            events.append("window gate")
+            return original_check(*args, **kwargs)
+
+        def format_exc(*args, **kwargs):
+            events.append("exception recorded")
+            return original_format_exc(*args, **kwargs)
+
+        monkeypatch.setattr(harness, "check_session_windows", check_session_windows)
+        monkeypatch.setattr(harness.traceback, "format_exc", format_exc)
+        runner = FakeRunner(
+            _recipe_handler(
+                log_dir=_log_dir(tmp_path),
+                fleet=RuntimeError("unexpected fleet error"),
+            )
+        )
         failures, result = _run_recipe(tmp_path, runner)
+        assert events.index("window gate") < events.index("exception recorded")
+        assert events.count("window gate") == 1
         assert failures == ["harness error: RuntimeError: unexpected fleet error"]
         exception = result.pop("exception")
         assert "Traceback (most recent call last)" in exception
@@ -2050,7 +2359,7 @@ class TestRecipeFlow:
                 else None
             )
 
-        runner = FakeRunner(_recipe_handler(extra=no_gh))
+        runner = FakeRunner(_recipe_handler(log_dir=_log_dir(tmp_path), extra=no_gh))
         failures, result = _run_recipe(tmp_path, runner)
         assert result["passed"] is False
         assert failures[0].startswith("gh auth login:")
@@ -2064,7 +2373,7 @@ class TestRecipeFlow:
                 return _completed(argv, next(listings))
             return None
 
-        runner = FakeRunner(_recipe_handler(extra=flaky_listing))
+        runner = FakeRunner(_recipe_handler(log_dir=_log_dir(tmp_path), extra=flaky_listing))
         failures, _ = _run_recipe(tmp_path, runner)
         assert failures == ["gh pr list: output is not JSON"]
         assert runner.calls[-1].argv[:4] == ["gh", "pr", "close", "8"]
@@ -2076,7 +2385,7 @@ class TestRecipeFlow:
                 return _completed(argv, json.dumps([{"state": "OPEN"}]))
             return None
 
-        runner = FakeRunner(_recipe_handler(extra=malformed_listing))
+        runner = FakeRunner(_recipe_handler(log_dir=_log_dir(tmp_path), extra=malformed_listing))
         failures, result = _run_recipe(tmp_path, runner)
         assert "gh pr list: pull request number is missing or invalid" in failures
         assert result == {
@@ -2089,14 +2398,63 @@ class TestRecipeFlow:
         assert ("gh", "pr", "close") not in runner.argv_prefixes()
 
     def test_missing_sandbox_token_fails_before_any_launch(self, tmp_path: Path) -> None:
-        runner = FakeRunner(_recipe_handler())
+        runner = FakeRunner(_recipe_handler(log_dir=_log_dir(tmp_path)))
         failures, result = _run_recipe(tmp_path, runner, env=_env(E2E_SANDBOX_TOKEN=""))
         assert failures == ["E2E_SANDBOX_TOKEN is not set"]
         assert result["passed"] is False
         assert runner.calls == []
 
+    def test_expected_failure_keeps_a_window_failure(self, tmp_path: Path) -> None:
+        expected = _SMOKE_FAILURE
+        fleet = _completed(
+            ["autoskillit", "fleet", "run"],
+            json.dumps(
+                {
+                    "success": False,
+                    "kind": "completed",
+                    "dispatch_status": "failed",
+                    "error": "workflow_failed",
+                    "user_visible_message": "model reported failure",
+                }
+            ),
+            returncode=1,
+        )
+        runner = FakeRunner(
+            _recipe_handler(
+                log_dir=_log_dir(tmp_path),
+                fleet=fleet,
+                sessions={"too-small": [200000]},
+            )
+        )
+
+        failures, result = _run_recipe(tmp_path, runner, expected_failures=[expected])
+
+        assert (
+            f"session windows: too-small: observed [200000] != required "
+            f"{_EXPECTED_REQUIRED_CONTEXT_WINDOW_TOKENS}"
+        ) in failures
+        assert result["outcome"] == "failed"
+        assert result["expected_findings"] == [expected]
+
 
 class TestPipelineRecipeFlow:
+    def test_pipeline_rejects_small_context_window_and_still_cleans_up(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        runner, state = _pipeline_runner()
+        state["sessions"] = {"pipeline-session": [200000]}
+
+        failures, result, _out, _home, _catalog, _observed = _run_pipeline(
+            tmp_path, runner, state, monkeypatch
+        )
+
+        assert result["passed"] is False
+        assert (
+            "session windows: pipeline-session: observed [200000] != required "
+            f"{_EXPECTED_REQUIRED_CONTEXT_WINDOW_TOKENS}"
+        ) in failures
+        assert ("gh", "pr", "close", "8") in runner.argv_prefixes(4)
+
     def test_session_hooks_install_the_declared_policy_and_keep_existing_settings(
         self, tmp_path: Path
     ) -> None:
@@ -2211,9 +2569,10 @@ class TestPipelineRecipeFlow:
         calls = runner.calls
         config_call = _recorded_calls(calls, prefix=["autoskillit", "config", "show"])[0]
         assert config_call.cwd == harness.SANDBOX_CLONE
-        assert config_call.env == harness.child_env(
-            _env(E2E_IMPLEMENTATION_ISSUE_URL=_IMPLEMENTATION_ISSUE)
-        )
+        assert config_call.env == {
+            **harness.child_env(_env(E2E_IMPLEMENTATION_ISSUE_URL=_IMPLEMENTATION_ISSUE)),
+            "AUTOSKILLIT_LOG_DIR": str(_log_dir(tmp_path)),
+        }
         seed_call = _recorded_calls(calls, prefix=["gh", "issue", "view"])[0]
         repo_call = _recorded_calls(calls, prefix=["gh", "repo", "view"])[0]
         baseline_install = _recorded_calls(calls, exact=["task", "install-worktree"])[0]
@@ -2286,10 +2645,7 @@ class TestPipelineRecipeFlow:
         assert fleet_call.cwd == harness.SANDBOX_CLONE
         assert [call.input for call in calls if call.input] == [SANDBOX_TOKEN]
         assert all(SANDBOX_TOKEN not in " ".join(call.argv) for call in calls)
-        assert all(
-            call.env == harness.child_env(_env(E2E_IMPLEMENTATION_ISSUE_URL=_IMPLEMENTATION_ISSUE))
-            for call in calls
-        )
+        assert all(call.env == config_call.env for call in calls)
 
         trace = out / "session-events.jsonl"
         log_root = home / ".local" / "share" / "autoskillit" / "logs"
@@ -2823,7 +3179,15 @@ class TestCanaryFlow:
         assert failures == []
         assert result == {"test": "canary", "passed": True, "failures": []}
         assert [call.argv for call in runner.calls] == [
-            ["claude", "-p", harness.CANARY_PROMPT, "--output-format", "json"]
+            [
+                "claude",
+                "-p",
+                harness.CANARY_PROMPT,
+                "--output-format",
+                "json",
+                "--model",
+                harness.FLEET_MODEL,
+            ]
         ]
         assert runner.calls[0].env == harness.child_env(_env())
         assert (tmp_path / "out" / "canary.json").read_text(encoding="utf-8") == _CANARY_REPLY

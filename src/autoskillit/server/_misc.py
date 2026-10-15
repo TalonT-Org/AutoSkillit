@@ -245,7 +245,9 @@ async def _apply_triage_gate(
     )
 
 
-_INGREDIENTS_ONLY_EXCLUDE = frozenset({"content", "orchestration_rules", "stop_step_semantics"})
+_INGREDIENTS_ONLY_EXCLUDE = frozenset(
+    {"content", "orchestration_rules", "stop_step_semantics", "_dispatch_success_reasons"}
+)
 
 
 def strip_ingredients_only_keys(result: Any) -> dict[str, Any]:

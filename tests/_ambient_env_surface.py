@@ -1025,7 +1025,7 @@ FORWARDING_SITES: dict[str, str] = {
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for a"
         "headless Claude Code skill-session launch."
     ),
-    "execution/backends/_claude/session_commands.py:325": (
+    "execution/backends/_claude/session_commands.py:326": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for a"
         "headless Claude Code food-truck orchestrator-session launch."
     ),

@@ -13,31 +13,47 @@ logger = get_logger(__name__)
 class CompositeSessionLocator:
     _locators: tuple[SessionLocator, ...] = field(default=(), repr=False)
 
-    def locate_session(self, session_id: str) -> Path | None:
-        if not session_id or session_id.startswith(("no_session_", "crashed_")):
-            return None
+    def _locator_sources(
+        self,
+    ) -> Iterable[tuple[str | None, Callable[[], SessionLocator]]]:
         if self._locators:
-            locators: tuple[SessionLocator, ...] = self._locators
-            for locator in locators:
-                try:
-                    result = locator.locate_session(session_id)
-                except Exception:
-                    logger.debug("session_locate_failed", exc_info=True)
-                    continue
-                if result is not None:
-                    return result
-            return None
+            return tuple((None, lambda locator=locator: locator) for locator in self._locators)
         from autoskillit.execution.backends import BACKEND_REGISTRY
 
-        for backend_name, cls in BACKEND_REGISTRY.items():
+        return tuple(
+            (backend_name, lambda cls=cls: cls().session_locator())
+            for backend_name, cls in BACKEND_REGISTRY.items()
+        )
+
+    def _first_resolved_session(self, session_id: str) -> tuple[SessionLocator, Path] | None:
+        if not session_id or session_id.startswith(("no_session_", "crashed_")):
+            return None
+        for backend_name, locator_factory in self._locator_sources():
             try:
-                result = cls().session_locator().locate_session(session_id)
+                locator = locator_factory()
+                result = locator.locate_session(session_id)
             except Exception:
-                logger.debug("session_locate_failed", backend=backend_name, exc_info=True)
+                if backend_name is None:
+                    logger.debug("session_locate_failed", exc_info=True)
+                else:
+                    logger.debug("session_locate_failed", backend=backend_name, exc_info=True)
                 continue
             if result is not None:
-                return result
+                return locator, result
         return None
+
+    def locate_session(self, session_id: str) -> Path | None:
+        resolved = self._first_resolved_session(session_id)
+        return resolved[1] if resolved is not None else None
+
+    def session_context_was_compacted(self, cwd: str, session_id: str) -> bool:
+        resolved = self._first_resolved_session(session_id)
+        if resolved is None:
+            return False
+        locator, _ = resolved
+        # Once the exact session is found, propagate transcript read errors;
+        # another backend cannot provide authoritative evidence for that session.
+        return locator.session_context_was_compacted(cwd, session_id)
 
     def project_log_dir(self, cwd: str) -> Path:
         return self.project_log_dir_for(cwd, "claude-code")

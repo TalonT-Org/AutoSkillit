@@ -3448,7 +3448,10 @@ def test_capture_capacity_spec_exercises_each_field(field_name: str) -> None:
         CaptureCapacitySpec(**values)
 
 
-def test_store_open_contention_uses_the_hot_path_lock_wait(tmp_path: Path) -> None:
+def test_store_open_contention_uses_the_hot_path_lock_wait(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The no-budget factory shape still has a bounded lock acquisition."""
     project = tmp_path / "project"
     anchor, root, _store = _open_store(project, _Clock())
@@ -3457,6 +3460,15 @@ def test_store_open_contention_uses_the_hot_path_lock_wait(tmp_path: Path) -> No
     )
     assert acquired.wait(timeout=1)
     assert holder_failures == []
+
+    lock_attempt_started = threading.Event()
+    acquire_flock = CaptureLifecycleStore._acquire_flock
+
+    def signal_lock_attempt(store: CaptureLifecycleStore, fd: int) -> None:
+        lock_attempt_started.set()
+        acquire_flock(store, fd)
+
+    monkeypatch.setattr(CaptureLifecycleStore, "_acquire_flock", signal_lock_attempt)
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     future = executor.submit(
         CaptureLifecycleStore.from_open_authorities,
@@ -3465,11 +3477,13 @@ def test_store_open_contention_uses_the_hot_path_lock_wait(tmp_path: Path) -> No
         lock_wait=HOT_PATH_LOCK_WAIT,
     )
     try:
-        started = time.monotonic()
+        # Start the observation only once the worker reaches the contended
+        # acquisition; executor startup and factory setup are outside the lock
+        # wait budget. The extra second allows for scheduler delay under xdist.
+        result_timeout = HOT_PATH_LOCK_WAIT.max_wait_seconds + 1.0
+        assert lock_attempt_started.wait(timeout=result_timeout)
         with pytest.raises(LockContended):
-            future.result(timeout=2.5)
-        elapsed = time.monotonic() - started
-        assert elapsed < 2.25, f"store-open lock contention was not bounded: {elapsed}s"
+            future.result(timeout=result_timeout)
     finally:
         release.set()
         try:

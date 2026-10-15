@@ -1180,6 +1180,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # file-level: the Docker pin guard compares CODEX_CLI_MIN_VERSION from
             # execution.backends with the Dockerfile's CODEX_VERSION pin.
             "infra/test_docker_image.py",
+            # imports execution.backends.claude.ClaudeCodeBackend for FLEET_MODEL derivation.
+            "infra/test_e2e_harness.py",
             # file-level: the deck column drift guard imports
             # execution._report_index_types.ReportSessionRow.
             "report/test_deck_registry.py",
@@ -1336,6 +1338,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_bundled_dispatch_write_scope_admission.py",
             "server/test_serve_idempotence.py",
             "server/test_attestation_delivery_reachability.py",
+            "server/test_recipe_execution_receipt_completeness.py",
             "server/test_tools_status_kitchen.py",
             "server/test_open_kitchen_deferred_recall.py",
             "server/test_factory_context_construction.py",
@@ -1420,6 +1423,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "skills/test_phoropter_structural.py",
             "skills/test_compose_pr_retry.py",
             "smoke_utils",
+            "fleet/test_dispatch_outcome_classifier.py",
+            "server/test_tools_dispatch_halt.py",
         }
     ),
     "migration": frozenset(

@@ -1,0 +1,2 @@
+{"type":"assistant","message":{"stop_reason":"stop_sequence","type":"message","content":[{"type":"text","text":"Prompt is too long"}]},"session_id":"6708fcd2-c5ae-49a8-afe0-cf87dbbe2c68","error":"invalid_request"}
+{"stop_reason":"stop_sequence","session_id":"6708fcd2-c5ae-49a8-afe0-cf87dbbe2c68","terminal_reason":"prompt_too_long","is_error":true,"subtype":"success","result":"Prompt is too long","type":"result","duration_ms":331}

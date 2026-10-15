@@ -33,6 +33,7 @@ from autoskillit.hooks.formatters.pretty_output_hook import (
     _format_response,
     _strip_yaml_ingredients_block,
 )
+from autoskillit.pipeline import KitchenActivationId
 from autoskillit.recipe import load_and_validate
 from autoskillit.recipe.api import _api_cache
 from autoskillit.recipe.api._api_cache import LoadCache
@@ -453,6 +454,30 @@ def test_fmt_open_kitchen_combined_response():
     assert "run_cmd" in formatted
 
 
+@pytest.mark.parametrize("tool_name", ["load_recipe", "open_kitchen"])
+def test_dispatch_success_reasons_are_omitted_from_formatted_recipe_text(
+    tool_name: str,
+) -> None:
+    payload = {
+        "content": "name: my-recipe\nsteps:\n  done:\n    action: stop\n",
+        "valid": True,
+        "suggestions": [],
+        "kitchen": "open",
+        "version": "1.0.0",
+        "_dispatch_success_reasons": ["dispatch_reason_complete"],
+    }
+
+    formatted = _format_response(
+        f"mcp__autoskillit__{tool_name}",
+        json.dumps(payload),
+        pipeline=False,
+    )
+
+    assert formatted is not None
+    assert "_dispatch_success_reasons" not in formatted
+    assert "dispatch_reason_complete" not in formatted
+
+
 def test_fmt_open_kitchen_combined_includes_ingredients_table():
     """Combined open_kitchen response includes pre-formatted ingredients table."""
     payload = {
@@ -522,7 +547,7 @@ def test_attested_recipe_delivery_region_is_preserved_byte_for_byte(
     payload["recipe_flow"] = flow_generation.identity()
     generation = persist_recipe_artifact(
         tmp_path,
-        kitchen_id="formatter-contract",
+        activation_id=KitchenActivationId("formatter-contract"),
         producer_tool=tool_name,
         recipe_name="remediation",
         payload=payload,
@@ -1189,7 +1214,7 @@ def _measure_persisted_envelope(
     payload["recipe_flow"] = flow_generation.identity()
     generation = persist_recipe_artifact(
         tmp_path,
-        kitchen_id="pretty-output",
+        activation_id=KitchenActivationId("pretty-output"),
         producer_tool="open_kitchen",
         recipe_name=recipe_name,
         payload=payload,

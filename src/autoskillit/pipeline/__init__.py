@@ -60,6 +60,7 @@ from autoskillit.pipeline.github_api_log import DefaultGitHubApiLog
 from autoskillit.pipeline.kitchen_transition import (
     KITCHEN_EFFECT_RECIPE_SERVING,
     KITCHEN_EFFECT_RESPONSE_ENFORCEMENT,
+    KitchenActivationId,
     KitchenEffectPhase,
     KitchenEffectRecord,
     KitchenIntentConflict,
@@ -81,6 +82,7 @@ from autoskillit.pipeline.kitchen_transition import (
     new_kitchen_open_state,
     prepare_kitchen_response,
     release_kitchen_request,
+    require_kitchen_activation_id,
     start_kitchen_effect,
     transition_abort,
     transition_ambiguous,
@@ -174,6 +176,7 @@ __all__ = [
     # kitchen transition
     "KITCHEN_EFFECT_RECIPE_SERVING",
     "KITCHEN_EFFECT_RESPONSE_ENFORCEMENT",
+    "KitchenActivationId",
     "KitchenEffectPhase",
     "KitchenEffectRecord",
     "KitchenIntentConflict",
@@ -197,6 +200,7 @@ __all__ = [
     "mark_kitchen_effect_ambiguous",
     "mark_kitchen_effect_degraded",
     "new_kitchen_open_state",
+    "require_kitchen_activation_id",
     "prepare_kitchen_response",
     "release_kitchen_request",
     "start_kitchen_effect",

@@ -272,6 +272,27 @@ class TestOutputDisciplineDelivery:
         assert CODEX_SCOPE_DISCIPLINE_DIGEST not in self._extract_prompt(spec)
 
 
+class TestAutoCompactionLaunchEnvironment:
+    def test_food_truck_forces_auto_compaction_disabled_after_env_overrides(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("DISABLE_AUTO_COMPACT", "0")
+        spec = ClaudeCodeBackend().build_food_truck_cmd(
+            **FOOD_TRUCK_BASE,
+            env_extras={"DISABLE_AUTO_COMPACT": "0"},
+        )
+
+        assert spec.env["DISABLE_AUTO_COMPACT"] == "1"
+
+    def test_skill_worker_does_not_add_auto_compaction_override(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("DISABLE_AUTO_COMPACT", raising=False)
+        spec = ClaudeCodeBackend().build_skill_session_cmd("/plan", **SKILL_BASE)
+
+        assert "DISABLE_AUTO_COMPACT" not in spec.env
+
+
 class TestBuildSkillSessionCmdConfigAdapter:
     def test_config_adapter_matches_impl(self) -> None:
         backend = ClaudeCodeBackend()

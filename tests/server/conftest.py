@@ -17,6 +17,7 @@ import structlog.contextvars
 import structlog.testing
 
 from tests.conftest import bind_test_kitchen_identity
+from tests.server._recipe_fixture_parameters import RESEARCH_READY_DEFAULT
 
 if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
@@ -143,12 +144,13 @@ def _set_mock_kitchen_transition(ctx: MagicMock, *, kitchen_id: str = "") -> Non
     """Give a mock context the typed transition state guaranteed by make_context()."""
     from threading import RLock
 
-    from autoskillit.pipeline import closed_kitchen_open_state
+    from autoskillit.pipeline import ToolContext, closed_kitchen_open_state
 
     ctx.kitchen_transition_lock = RLock()
     ctx.kitchen_open_state = closed_kitchen_open_state()
     bind_test_kitchen_identity(ctx, kitchen_id)
     type(ctx).kitchen_id = property(lambda self: self.kitchen_open_state.kitchen_id)
+    type(ctx).kitchen_activation_id = ToolContext.kitchen_activation_id
 
 
 def _make_mock_ctx(config=None) -> MagicMock:
@@ -394,23 +396,6 @@ def forbid_artifact_reads(monkeypatch: pytest.MonkeyPatch):
     return lambda: monkeypatch.setattr(recipe_section_handler, "load_recipe_artifact", _forbidden)
 
 
-_READY_RECIPE_NAME = "research"
-_READY_RECIPE_ATTESTED_STEP = "scope"
-_READY_RECIPE_OVERRIDES = {
-    "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/4411",
-    "source_dir": ".",
-    "task": "test task",
-    "task_description": "test task",
-}
-# Default-preserving: every existing tool_ctx_ready_recipe consumer requests
-# it without parametrization and must keep getting exactly this triple.
-_READY_RECIPE_DEFAULT_PARAM = (
-    _READY_RECIPE_NAME,
-    _READY_RECIPE_ATTESTED_STEP,
-    _READY_RECIPE_OVERRIDES,
-)
-
-
 @dataclass(frozen=True)
 class ReadyRecipeContext:
     """A real attested ToolContext plus the delivered credential and step body.
@@ -426,7 +411,7 @@ class ReadyRecipeContext:
     tool_ctx: ToolContext
     receipt: dict[str, Any]
     step_body: dict[str, Any]
-    step_name: str = _READY_RECIPE_ATTESTED_STEP
+    step_name: str = RESEARCH_READY_DEFAULT[1]
 
     @property
     def credential(self) -> dict[str, Any]:
@@ -496,10 +481,8 @@ async def tool_ctx_ready_recipe(
 
     Indirectly parametrizable over ``(recipe_name, attested_step, ingredient_overrides)``
     via ``@pytest.mark.parametrize("tool_ctx_ready_recipe", [(...)], indirect=True)``.
-    Requesting the fixture without parametrization (every pre-existing consumer)
-    defaults to today's values — ``_READY_RECIPE_DEFAULT_PARAM`` — so
-    ``test_attestation_delivery_reachability.py`` and ``test_recipe_segment_delivery.py``
-    are source-compatible.
+    Without parametrization, the fixture uses ``RESEARCH_READY_DEFAULT`` from
+    the shared recipe inputs module.
     """
     from autoskillit.server.tools.tools_recipe import complete_recipe_initialization
     from tests.server._helpers import (
@@ -509,7 +492,7 @@ async def tool_ctx_ready_recipe(
     )
 
     recipe_name, attested_step, ingredient_overrides = getattr(
-        request, "param", _READY_RECIPE_DEFAULT_PARAM
+        request, "param", RESEARCH_READY_DEFAULT
     )
 
     monkeypatch.chdir(tmp_path)

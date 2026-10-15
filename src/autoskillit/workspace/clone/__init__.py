@@ -47,6 +47,7 @@ from ._registry import (
 from ._remote import (
     CloneSourceResolution,
     _ensure_origin_isolated,
+    _matching_push_remote,
     _probe_clone_source_url,
 )
 from ._worktree import (
@@ -416,6 +417,30 @@ def _classify_push_failure(stderr_text: str, *, force: bool) -> str | None:
     return None
 
 
+def _resolve_push_url(source_dir: str, remote_url: str, *, clone_path: str, branch: str) -> str:
+    """Resolve the push URL without changing the source checkout."""
+    if remote_url:
+        return remote_url
+    if not source_dir:
+        logger.error("push_to_remote_no_url_or_source", clone_path=clone_path, branch=branch)
+        raise RuntimeError("push_to_remote: neither remote_url nor source_dir was provided")
+    result = subprocess.run(
+        ["git", "remote", "get-url", "origin"],
+        cwd=source_dir,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        logger.error(
+            "push_to_remote_get_url_failed",
+            source_dir=source_dir,
+            branch=branch,
+            stderr=result.stderr.strip(),
+        )
+        raise RuntimeError(result.stderr.strip())
+    return result.stdout.strip()
+
+
 def push_to_remote(
     clone_path: str,
     source_dir: str = "",
@@ -430,6 +455,10 @@ def push_to_remote(
     When remote_url is provided (non-empty), it is used directly and source_dir
     is not accessed for URL lookup. This is the preferred calling convention when
     remote_url has been captured from clone_repo at pipeline start.
+
+    A configured remote is used only when all its push URLs match the resolved
+    destination, preserving branch tracking without changing remote configuration.
+    Otherwise, the resolved URL is passed to git push directly.
 
     When remote_url is empty, falls back to reading the upstream URL from
     source_dir via 'git remote get-url origin' (read-only — no writes to source_dir).
@@ -466,51 +495,34 @@ def push_to_remote(
             ),
         }
 
-    resolved_url = remote_url
-    if not resolved_url:
-        if not source_dir:
-            logger.error("push_to_remote_no_url_or_source", clone_path=clone_path, branch=branch)
+    try:
+        resolved_url = _resolve_push_url(
+            source_dir, remote_url, clone_path=clone_path, branch=branch
+        )
+        # Classify the resolved URL to catch non-bare local remotes early
+        url_type = classify_remote_url(resolved_url)
+        if url_type == "nonbare_local":
+            logger.error(
+                "push_to_remote_nonbare_local",
+                clone_path=clone_path,
+                remote_url=resolved_url,
+                branch=branch,
+            )
             return {
                 "success": False,
-                "stderr": "push_to_remote: neither remote_url nor source_dir was provided",
+                "error_type": "local_non_bare_remote",
+                "stderr": (
+                    "push_to_remote: target is a non-bare local repository with the branch "
+                    "checked out. Use a bare repository or a network remote."
+                ),
             }
-        url_result = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
-            cwd=source_dir,
-            capture_output=True,
-            text=True,
-        )
-        if url_result.returncode != 0:
-            logger.error(
-                "push_to_remote_get_url_failed",
-                source_dir=source_dir,
-                branch=branch,
-                stderr=url_result.stderr.strip(),
-            )
-            return {"success": False, "stderr": url_result.stderr.strip()}
-        resolved_url = url_result.stdout.strip()
+        destination = _matching_push_remote(Path(clone_path), resolved_url)
+    except (RuntimeError, OSError, subprocess.SubprocessError) as exc:
+        return {"success": False, "stderr": str(exc)}
 
-    # Classify the resolved URL to catch non-bare local remotes early
-    url_type = classify_remote_url(resolved_url)
-    if url_type == "nonbare_local":
-        logger.error(
-            "push_to_remote_nonbare_local",
-            clone_path=clone_path,
-            remote_url=resolved_url,
-            branch=branch,
-        )
-        return {
-            "success": False,
-            "error_type": "local_non_bare_remote",
-            "stderr": (
-                "push_to_remote: target is a non-bare local repository with the branch "
-                "checked out. Use a bare repository or a network remote."
-            ),
-        }
-
-    push_cmd = ["git", "push", "-u", "upstream", branch]
+    push_cmd = ["git", "push", "-u", "--", destination, branch]
     if force:
-        push_cmd.append("--force-with-lease")
+        push_cmd.insert(3, "--force-with-lease")
     push_result = subprocess.run(
         push_cmd,
         cwd=clone_path,

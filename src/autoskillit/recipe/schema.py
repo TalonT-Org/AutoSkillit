@@ -1,8 +1,9 @@
-"""Pure domain model for pipeline recipes — dataclasses and enums only."""
+"""Recipe domain models and extraction of declared sentinel JSON examples."""
 
 from __future__ import annotations
 
 import dataclasses
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -23,6 +24,57 @@ from autoskillit.core import (
 AUTOSKILLIT_VERSION_KEY: Final = "autoskillit_version"
 RECIPE_VERSION_KEY: Final = "recipe_version"
 CAMPAIGN_REF_RE: Final = re.compile(r"\$\{\{\s*campaign\.(\w+)\s*\}\}")
+
+
+# Trigger regex: matches multiple sentinel-indicating phrases
+_SENTINEL_TRIGGER_RE = re.compile(
+    r"example\s+sentinel:|sentinel\s+JSON:|sentinel:\s*(?=\{)",
+    re.DOTALL | re.IGNORECASE,
+)
+
+
+def _find_json_object_end(text: str, start: int) -> int | None:
+    """Find the matching closing brace, respecting JSON strings and escapes."""
+    depth = 0
+    in_string = False
+    escaped = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+        elif ch == '"':
+            in_string = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+    return None
+
+
+def extract_sentinel_json_blocks(text: str) -> list[str]:
+    """Extract complete JSON object strings following sentinel trigger phrases.
+
+    Handles nested braces and arrays, ignoring braces inside JSON strings.
+    Matches phrases such as "Example sentinel:", "sentinel JSON:", and "sentinel: {…}".
+    Returns raw JSON strings that can be passed to json.loads().
+    """
+    blocks: list[str] = []
+    for match in _SENTINEL_TRIGGER_RE.finditer(text):
+        start = match.end()
+        while start < len(text) and text[start] in " \t\n\r":
+            start += 1
+        if start >= len(text) or text[start] != "{":
+            continue
+        if (end := _find_json_object_end(text, start)) is not None:
+            blocks.append(text[start:end])
+    return blocks
 
 
 class RecipeKind(StrEnum):
@@ -291,6 +343,24 @@ class Recipe:
     # When True, this sub-recipe is excluded from fleet dispatch listings and MCP
     # list_recipes. It is only loaded via campaign dispatch by name.
     delivery_segments: tuple[RecipeDeliverySegment, ...] = field(default_factory=tuple)
+
+    def declared_success_reasons(self) -> frozenset[str] | None:
+        """Collect valid success reasons declared by this graph's stop examples."""
+        reasons: set[str] = set()
+        for step in self.steps.values():
+            if step.action != "stop" or not step.message:
+                continue
+            for block in extract_sentinel_json_blocks(step.message):
+                try:
+                    payload = json.loads(block)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(payload, dict) or payload.get("success") is not True:
+                    continue
+                reason = payload.get("reason")
+                if isinstance(reason, str) and reason.strip():
+                    reasons.add(reason.strip())
+        return frozenset(reasons) if reasons else None
 
     def __post_init__(self) -> None:
         self.name = self.name.strip()

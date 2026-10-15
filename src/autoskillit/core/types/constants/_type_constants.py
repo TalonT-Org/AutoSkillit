@@ -398,8 +398,8 @@ SESSION_ADD_DIR_SUBDIR: str = "add-dir"
 RECIPE_EXECUTION_ATTESTATION_MISSING_MESSAGE: str = (
     "an active recipe requires recipe_execution_id and invocation_template_digest; "
     "take both from the recipe_execution block of the complete_recipe_initialization "
-    "receipt (bounded delivery) or of the open_kitchen response (inline delivery), "
-    "using invocation_template_digests[step_name] for this step; structured calls must "
+    "receipt, which carries every named step's credential, using "
+    "invocation_template_digests[step_name] for this step; structured calls must "
     "initialize skill_inputs from skill_input_shapes[step_name] ordered keys, replace "
     "available values in place, copy only advertised absence_values by key presence "
     'so "", 0, and False remain verbatim, and never delete or invent a key'

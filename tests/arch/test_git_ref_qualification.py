@@ -163,9 +163,9 @@ _EXPECTED_GIT_REF_SITES: tuple[tuple[str, str, int, str, str], ...] = (
     ("server/git.py", "perform_merge", 565, "merge-base", "BARE"),
     ("server/git.py", "perform_merge", 617, "merge", "BARE"),
     ("core/install/install_detect.py", "_git", 64, "<unresolved>", "UNRESOLVABLE"),
-    ("server/tools/tools_ci_watch.py", "_auto_trigger_ci", 455, "push", "BARE"),
-    ("server/tools/tools_git.py", "classify_fix", 201, "fetch", "BARE"),
-    ("server/tools/tools_git.py", "classify_fix", 220, "diff", "BARE"),
+    ("server/tools/tools_ci_watch.py", "_auto_trigger_ci", 408, "push", "BARE"),
+    ("server/tools/tools_git.py", "classify_fix", 177, "fetch", "BARE"),
+    ("server/tools/tools_git.py", "classify_fix", 196, "diff", "BARE"),
     (
         "server/tools/_pre_commit_transaction.py",
         "_run_pre_commit_transaction",
@@ -178,7 +178,7 @@ _EXPECTED_GIT_REF_SITES: tuple[tuple[str, str, int, str, str], ...] = (
     (
         "server/tools/tools_workspace.py",
         "_run_commit_transaction",
-        68,
+        63,
         "<unresolved>",
         "UNRESOLVABLE",
     ),
@@ -209,18 +209,18 @@ _EXPECTED_GIT_REF_SITES: tuple[tuple[str, str, int, str, str], ...] = (
     (
         "workspace/clone/__init__.py",
         "_decontaminate_generated_files",
-        169,
+        170,
         "<unresolved>",
         "UNRESOLVABLE",
     ),
     (
         "workspace/clone/__init__.py",
         "_decontaminate_generated_files",
-        177,
+        178,
         "<unresolved>",
         "UNRESOLVABLE",
     ),
-    ("workspace/clone/__init__.py", "push_to_remote", 511, "push", "BARE"),
+    ("workspace/clone/__init__.py", "push_to_remote", 523, "push", "BARE"),
 )
 _DEFERRED_REF_SITES: dict[tuple[str, str, int, str, str], TrackedDeferral] = {}
 
@@ -287,13 +287,25 @@ def _before_path_separator(arguments: tuple[ast.expr, ...]) -> tuple[ast.expr, .
     return arguments
 
 
+def _remote_refspec_indices(arguments: tuple[ast.expr, ...]) -> tuple[int, ...]:
+    """Skip the remote operand while honoring the end of options."""
+    positions: list[int] = []
+    options_ended = False
+    for index, argument in enumerate(arguments):
+        value = _constant_string(argument)
+        if value == "--":
+            options_ended = True
+        elif options_ended or not (value or "").startswith("-"):
+            positions.append(index)
+    return tuple(positions[1:])
+
+
 def _revision_indices(subcommand: str, arguments: tuple[ast.expr, ...]) -> tuple[int, ...] | None:
     before_separator = _before_path_separator(arguments)
     if subcommand in _ALL_NON_FLAG_REVISIONS or subcommand == "diff":
         return _non_flag_indices(before_separator)
     if subcommand in _REMOTE_REFSPEC_SUBCOMMANDS:
-        positions = _non_flag_indices(before_separator)
-        return positions[1:]
+        return _remote_refspec_indices(arguments)
     if subcommand in {"checkout", "switch"}:
         if any(
             _constant_string(argument) in {"-B", "-C", "-b", "-c"} for argument in before_separator
@@ -715,6 +727,15 @@ def test_push_remote_name_is_not_a_revision() -> None:
         "synthetic.py",
     )
     assert [site.classification for site in sites] == ["BARE"]
+
+
+@pytest.mark.parametrize("subcommand", ["fetch", "ls-remote", "push"])
+def test_remote_ref_after_option_terminator_is_still_checked(subcommand: str) -> None:
+    sites = _scan_tree(
+        ast.parse(f'subprocess.run(["git", "{subcommand}", "--", remote, branch])'),
+        "synthetic.py",
+    )
+    assert [(site.subcommand, site.classification) for site in sites] == [(subcommand, "BARE")]
 
 
 def test_checkout_dash_b_names_a_new_branch() -> None:

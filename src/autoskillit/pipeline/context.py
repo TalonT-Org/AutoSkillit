@@ -83,6 +83,7 @@ from autoskillit.core import (
 )
 from autoskillit.pipeline.background import DefaultBackgroundSupervisor
 from autoskillit.pipeline.kitchen_transition import (
+    KitchenActivationId,
     KitchenOpenState,
     closed_kitchen_open_state,
 )
@@ -198,8 +199,10 @@ class ToolContext:
                           context accounting and recovery service.
     workspace_outcome_ledger: WorkspaceOutcomeLedger — durable shared authority for
                           terminal workspace outcomes across parent and child sessions.
-    kitchen_id:           Read-only identity derived from kitchen_open_state; set only through
-                          establish_kitchen_identity and empty while the state is CLOSED.
+    kitchen_id:           Read-only campaign-lineage identity derived from kitchen_open_state;
+                          set only through establish_kitchen_identity and empty while CLOSED.
+    kitchen_activation_id: Read-only per-activation identity derived from kitchen_open_state;
+                          raises while the state is CLOSED.
     kitchen_open_state:   Immutable process-local open-operation lifecycle and effect journal
                           retained for the ToolContext lifetime. Fleet dispatch provenance
                           instead uses request/task-scoped ContextVars; the different owners
@@ -413,6 +416,14 @@ class ToolContext:
     def kitchen_id(self) -> str:
         """Return the identity derived from the current lifecycle state."""
         return self.kitchen_open_state.kitchen_id
+
+    @property
+    def kitchen_activation_id(self) -> KitchenActivationId:
+        """Return the live activation identity; raise when none is live."""
+        activation_id = self.kitchen_open_state.activation_id
+        if activation_id is None:
+            raise RuntimeError("no kitchen activation is live")
+        return activation_id
 
     @property
     def host_client_attestation(self) -> HostClientAttestation | None:

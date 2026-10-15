@@ -76,6 +76,7 @@ STATUS_STOPPED = "stopped"
 KNOWN_UNSUPPORTED_CHANNELS = frozenset(
     {
         ("codex", "rewrite_mcp_output", "PostToolUse"),
+        ("codex", "block", "PreCompact"),
         ("claude", "halt", "PreCompact"),
     }
 )

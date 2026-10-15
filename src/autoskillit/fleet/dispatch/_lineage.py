@@ -35,11 +35,17 @@ from autoskillit.fleet._native_shell_capture import (
     prepare_food_truck_lineage,
     resolve_dispatch_timeout,
 )
-from autoskillit.fleet._outcome import build_success_short_circuit as _build_success_short_circuit
+from autoskillit.fleet._outcome import (
+    build_success_short_circuit as _build_success_short_circuit,
+)
+from autoskillit.fleet._outcome import (
+    success_reason_contract_error,
+)
 from autoskillit.fleet.campaign_state.state import (
     DispatchIdentity,
     DispatchRecord,
     DispatchStateHandle,
+    DispatchStatus,
     read_all_campaign_captures,
     read_state,
 )
@@ -47,7 +53,11 @@ from autoskillit.fleet.campaign_state.state_effects import (
     DispatchEffectName,
     DispatchProvenanceTracker,
 )
-from autoskillit.fleet.campaign_state.state_outcomes import DispatchResult
+from autoskillit.fleet.campaign_state.state_outcomes import (
+    DispatchCompleted,
+    DispatchRejected,
+    DispatchResult,
+)
 from autoskillit.fleet.campaign_state.state_recovery import ResumePreflight, prepare_resume
 from autoskillit.fleet.dispatch._errors import complete_failure_with_state
 from autoskillit.workspace import default_skill_resolver, prepare_skill_projection
@@ -69,6 +79,42 @@ def resume_managed_join_parent_id(state_path: Path, dispatch_name: str) -> str |
         if record.name == dispatch_name and record.managed_lineage_ref is not None:
             return record.managed_lineage_ref.launch_id
     return None
+
+
+def _refuse_context_exhaustion_resume(
+    *,
+    state_path: Path,
+    dispatch_name: str,
+    resume_session_id: str | None,
+    prior_dispatch_id: str | None,
+    provenance: DispatchProvenanceTracker,
+) -> DispatchResult | None:
+    """Reject an explicit resume of a persisted context-exhausted dispatch."""
+    if not resume_session_id or not prior_dispatch_id:
+        return None
+    prior_state = read_state(state_path)
+    if prior_state is None:
+        return None
+    failed_dispatch = next(
+        (
+            record
+            for record in prior_state.dispatches
+            if record.name == dispatch_name
+            and record.reason == FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED
+        ),
+        None,
+    )
+    if failed_dispatch is None:
+        return None
+    return DispatchResult(
+        outcome=DispatchRejected(
+            error_code=FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED,
+            dispatch_id=failed_dispatch.dispatch_id or prior_dispatch_id,
+            message="This dispatch cannot resume after context exhaustion.",
+            effect_provenance=provenance.snapshot(),
+        ),
+        per_dispatch_state_path=None,
+    )
 
 
 @dataclass
@@ -107,6 +153,18 @@ class PriorSuccessLineageResult:
     prior_success_dispatch_result: DispatchResult
 
 
+@dataclass(frozen=True, slots=True)
+class _PreparedLineageInputs:
+    identity_preparation: Any
+    identity: DispatchIdentity
+    dispatch_id: str
+    state_path: Path
+    effective_ingredients: dict[str, str]
+    dispatches_dir: Path
+    campaign_id: str
+    recipe_snapshot: dict
+
+
 @dataclass
 class ReadyLineageResult:
     """Phase B outcome carrying everything Phase C needs to spawn the executor."""
@@ -116,6 +174,101 @@ class ReadyLineageResult:
 
 
 LineagePreparationResult = PriorSuccessLineageResult | ReadyLineageResult
+
+
+def _reuse_prior_success(
+    *,
+    candidate: DispatchRecord,
+    success_reasons: frozenset[str] | None,
+    provenance: DispatchProvenanceTracker,
+    handle: DispatchStateHandle | None = None,
+    dispatch_name: str = "",
+    prior_dispatch_id: str | None = None,
+) -> PriorSuccessLineageResult | DispatchResult:
+    """Validate prior success and preserve the authority used to reuse it."""
+    reason_error = success_reason_contract_error(candidate.reason, success_reasons)
+    if reason_error is not None:
+        return DispatchResult(
+            outcome=DispatchRejected(
+                error_code=FleetErrorCode.FLEET_L3_RESULT_CONTRACT_VIOLATION,
+                dispatch_id=candidate.dispatch_id,
+                message=f"Stored successful dispatch cannot be reused: {reason_error}",
+                effect_provenance=provenance.snapshot(),
+            ),
+            per_dispatch_state_path=None,
+        )
+
+    identities: dict[str, object] = {
+        "dispatch_id": candidate.dispatch_id,
+        "dispatched_session_id": candidate.dispatched_session_id,
+    }
+    if handle is not None:
+        logger.info(
+            "resume_skipped_prior_success",
+            dispatch_name=dispatch_name,
+            prior_dispatch_id=prior_dispatch_id,
+        )
+        provenance.confirm(
+            DispatchEffectName.DISPATCH_ALLOCATION,
+            receipt="opened authoritative prior dispatch state",
+            identities={"dispatch_id": candidate.dispatch_id, "state_path": handle.state_path},
+        )
+        provenance.start(
+            DispatchEffectName.PRIOR_DISPATCH_BINDING,
+            retry_relevant=False,
+            identities=identities,
+        )
+        provenance.confirm(
+            DispatchEffectName.PRIOR_DISPATCH_BINDING,
+            receipt="authoritative prior dispatch state reported success",
+            retry_relevant=False,
+            identities=identities,
+        )
+        provenance.start(DispatchEffectName.COMMIT, identities=identities)
+        provenance.confirm(
+            DispatchEffectName.COMMIT,
+            receipt="reused committed prior dispatch",
+            identities=identities,
+        )
+        prior_success_result = _build_success_short_circuit(
+            candidate,
+            handle,
+            provenance.snapshot(),
+        )
+    else:
+        provenance.start(
+            DispatchEffectName.PRIOR_DISPATCH_BINDING,
+            retry_relevant=False,
+            identities=identities,
+        )
+        provenance.confirm(
+            DispatchEffectName.PRIOR_DISPATCH_BINDING,
+            receipt="campaign state reported prior success",
+            retry_relevant=False,
+            identities=identities,
+        )
+        provenance.start(DispatchEffectName.COMMIT, identities=identities)
+        provenance.confirm(
+            DispatchEffectName.COMMIT,
+            receipt="reused committed campaign dispatch",
+            identities=identities,
+        )
+        prior_success_result = DispatchResult(
+            outcome=DispatchCompleted(
+                dispatch_status=DispatchStatus.SUCCESS,
+                dispatch_id=candidate.dispatch_id,
+                dispatched_session_id=candidate.dispatched_session_id,
+                reason=candidate.reason,
+                token_usage=dict(candidate.token_usage),
+                effect_provenance=provenance.snapshot(),
+            ),
+            per_dispatch_state_path=None,
+        )
+
+    return PriorSuccessLineageResult(
+        outcome="prior_success_short_circuit",
+        prior_success_dispatch_result=prior_success_result,
+    )
 
 
 def create_fresh_handle(
@@ -162,6 +315,7 @@ def prepare_launch(
     effective_backend: CodingAgentBackend | None,
     tool_ctx: ToolContext,
     adaptation_context: SemanticAdaptationContext | None = None,
+    success_reasons: frozenset[str] | None = None,
 ) -> tuple[str, Any, Any, Path]:
     """Build the (prompt, plugin_authority, capability_preparation, authoritative_cwd) tuple.
 
@@ -184,6 +338,7 @@ def prepare_launch(
         l3_timeout_sec=int(l3_timeout_sec) if l3_timeout_sec is not None else 0,
         capture=capture,
         caller_instructions=caller_instructions,
+        success_reasons=success_reasons,
     )
     plugin_authority = capability_preparation = None
     if effective_backend is not None:
@@ -280,52 +435,32 @@ def _validate_and_materialize_ingredients(
         )
 
 
-async def run_lineage_preparation(
+def _prepare_identity_and_ingredients(
     *,
     tool_ctx: ToolContext,
-    recipe: str,
-    recipe_obj: Any,  # RecipeInfo — mirrors the local from `_run_dispatch`
-    task: str,
+    recipe_obj: Any,
+    full_recipe: Recipe,
     effective_ingredients: dict[str, str],
     effective_name: str,
-    full_recipe: Recipe,
-    effective_backend: CodingAgentBackend | None,
     caller_backend_name: str,
-    dispatch_name: str | None,
-    prompt_builder: Callable[..., str],
-    capture: dict[str, CaptureEntrySpec] | None,
-    resume_session_id: str | None,
-    resume_checkpoint: SessionCheckpoint | None,
-    resume_message: str | None,
-    caller_instructions: str | None,
-    prior_dispatch_id: str | None,
     caller_session_id: str,
+    resume_session_id: str | None,
+    prior_dispatch_id: str | None,
     provenance: DispatchProvenanceTracker,
-    native_shell_capture_mode: NativeShellCaptureMode | None,
-    timeout_sec: int | None,
-    managed_join_parent_id: str | None = None,
-    adaptation_context: SemanticAdaptationContext | None = None,
-) -> LineagePreparationResult | DispatchResult:
-    """Mint the per-dispatch state handle, prepare the managed lineage, build the launch tuple.
+    success_reasons: frozenset[str] | None,
+    prior_success_candidate: DispatchRecord | None,
+) -> _PreparedLineageInputs | PriorSuccessLineageResult | DispatchResult:
+    """Resolve identity, prior-success authority, and validated launch ingredients."""
+    if prior_success_candidate is not None:
+        return _reuse_prior_success(
+            candidate=prior_success_candidate,
+            success_reasons=success_reasons,
+            provenance=provenance,
+        )
 
-    All closure-scoped variables from the legacy ``_create_fresh_handle`` and
-    ``_prepare_launch`` closures are now explicit keyword arguments to the
-    free functions ``create_fresh_handle`` and ``prepare_launch`` defined in
-    this module.
-
-    ``managed_lineage_ref`` is threaded via the local variable: every call to
-    ``complete_failure_with_state`` from this Phase passes
-    ``managed_lineage_ref=None`` because the assignment at the end of the
-    function has not fired yet — the original closure's free-variable lookup
-    always read the latest value, but the only caller that would have
-    observed a non-None ``managed_lineage_ref`` was the catch-block that
-    fires BEFORE the post-try assignment.
-    """
-    effective_name = dispatch_name or effective_name
     dispatches_dir = tool_ctx.temp_dir / "dispatches"
     dispatches_dir.mkdir(parents=True, exist_ok=True)
     campaign_id = tool_ctx.kitchen_id
-
     recipe_snapshot = {
         "recipe_name": recipe_obj.name,
         "recipe_path": str(recipe_obj.path),
@@ -372,57 +507,24 @@ async def run_lineage_preparation(
         prior_dispatch_id=prior_dispatch_id,
     )
     handle = identity_preparation.handle
+    context_resume_refusal = _refuse_context_exhaustion_resume(
+        state_path=handle.state_path,
+        dispatch_name=effective_name,
+        resume_session_id=resume_session_id,
+        prior_dispatch_id=prior_dispatch_id,
+        provenance=provenance,
+    )
+    if context_resume_refusal is not None:
+        return context_resume_refusal
+
     if identity_preparation.prior_success_record is not None:
-        logger.info(
-            "resume_skipped_prior_success",
+        return _reuse_prior_success(
+            candidate=identity_preparation.prior_success_record,
+            success_reasons=success_reasons,
+            provenance=provenance,
+            handle=handle,
             dispatch_name=effective_name,
             prior_dispatch_id=prior_dispatch_id,
-        )
-        provenance.confirm(
-            DispatchEffectName.DISPATCH_ALLOCATION,
-            receipt="opened authoritative prior dispatch state",
-            identities={
-                "dispatch_id": identity_preparation.prior_success_record.dispatch_id,
-                "state_path": handle.state_path,
-            },
-        )
-        provenance.confirm(
-            DispatchEffectName.PRIOR_DISPATCH_BINDING,
-            receipt="authoritative prior dispatch state reported success",
-            retry_relevant=False,
-            identities={
-                "dispatch_id": identity_preparation.prior_success_record.dispatch_id,
-                "dispatched_session_id": (
-                    identity_preparation.prior_success_record.dispatched_session_id
-                ),
-            },
-        )
-        provenance.start(
-            DispatchEffectName.COMMIT,
-            identities={
-                "dispatch_id": identity_preparation.prior_success_record.dispatch_id,
-                "dispatched_session_id": (
-                    identity_preparation.prior_success_record.dispatched_session_id
-                ),
-            },
-        )
-        provenance.confirm(
-            DispatchEffectName.COMMIT,
-            receipt="reused committed prior dispatch",
-            identities={
-                "dispatch_id": identity_preparation.prior_success_record.dispatch_id,
-                "dispatched_session_id": (
-                    identity_preparation.prior_success_record.dispatched_session_id
-                ),
-            },
-        )
-        return PriorSuccessLineageResult(
-            outcome="prior_success_short_circuit",
-            prior_success_dispatch_result=_build_success_short_circuit(
-                identity_preparation.prior_success_record,
-                handle,
-                provenance.snapshot(),
-            ),
         )
 
     identity = handle.identity
@@ -431,22 +533,16 @@ async def run_lineage_preparation(
     provenance.confirm(
         DispatchEffectName.DISPATCH_ALLOCATION,
         receipt="per-dispatch state identity persisted",
-        identities={
-            "dispatch_id": dispatch_id,
-            "state_path": state_path,
-        },
+        identities={"dispatch_id": dispatch_id, "state_path": state_path},
     )
     if resume_session_id and prior_dispatch_id:
         provenance.confirm(
             DispatchEffectName.PRIOR_DISPATCH_BINDING,
             receipt="prior dispatch state opened",
             retry_relevant=False,
-            identities={
-                "prior_dispatch_id": prior_dispatch_id,
-                "dispatch_id": dispatch_id,
-            },
+            identities={"prior_dispatch_id": prior_dispatch_id, "dispatch_id": dispatch_id},
         )
-    ingredient_materialization = _validate_and_materialize_ingredients(
+    materialized = _validate_and_materialize_ingredients(
         effective_ingredients=effective_ingredients,
         full_recipe=full_recipe,
         dispatches_dir=dispatches_dir,
@@ -457,9 +553,89 @@ async def run_lineage_preparation(
         effective_name=effective_name,
         tool_ctx=tool_ctx,
     )
-    if isinstance(ingredient_materialization, DispatchResult):
-        return ingredient_materialization
-    effective_ingredients = ingredient_materialization
+    if isinstance(materialized, DispatchResult):
+        return materialized
+    return _PreparedLineageInputs(
+        identity_preparation=identity_preparation,
+        identity=identity,
+        dispatch_id=dispatch_id,
+        state_path=state_path,
+        effective_ingredients=materialized,
+        dispatches_dir=dispatches_dir,
+        campaign_id=campaign_id,
+        recipe_snapshot=recipe_snapshot,
+    )
+
+
+async def run_lineage_preparation(
+    *,
+    tool_ctx: ToolContext,
+    recipe: str,
+    recipe_obj: Any,  # RecipeInfo — mirrors the local from `_run_dispatch`
+    task: str,
+    effective_ingredients: dict[str, str],
+    effective_name: str,
+    full_recipe: Recipe,
+    effective_backend: CodingAgentBackend | None,
+    caller_backend_name: str,
+    dispatch_name: str | None,
+    prompt_builder: Callable[..., str],
+    capture: dict[str, CaptureEntrySpec] | None,
+    resume_session_id: str | None,
+    resume_checkpoint: SessionCheckpoint | None,
+    resume_message: str | None,
+    caller_instructions: str | None,
+    prior_dispatch_id: str | None,
+    caller_session_id: str,
+    provenance: DispatchProvenanceTracker,
+    native_shell_capture_mode: NativeShellCaptureMode | None,
+    timeout_sec: int | None,
+    managed_join_parent_id: str | None = None,
+    adaptation_context: SemanticAdaptationContext | None = None,
+    success_reasons: frozenset[str] | None = None,
+    prior_success_candidate: DispatchRecord | None = None,
+) -> LineagePreparationResult | DispatchResult:
+    """Mint the per-dispatch state handle, prepare the managed lineage, build the launch tuple.
+
+    All closure-scoped variables from the legacy ``_create_fresh_handle`` and
+    ``_prepare_launch`` closures are now explicit keyword arguments to the
+    free functions ``create_fresh_handle`` and ``prepare_launch`` defined in
+    this module.
+
+    ``managed_lineage_ref`` is threaded via the local variable: every call to
+    ``complete_failure_with_state`` from this Phase passes
+    ``managed_lineage_ref=None`` because the assignment at the end of the
+    function has not fired yet — the original closure's free-variable lookup
+    always read the latest value, but the only caller that would have
+    observed a non-None ``managed_lineage_ref`` was the catch-block that
+    fires BEFORE the post-try assignment.
+    """
+    effective_name = dispatch_name or effective_name
+    prepared = _prepare_identity_and_ingredients(
+        tool_ctx=tool_ctx,
+        recipe_obj=recipe_obj,
+        full_recipe=full_recipe,
+        effective_ingredients=effective_ingredients,
+        effective_name=effective_name,
+        caller_backend_name=caller_backend_name,
+        caller_session_id=caller_session_id,
+        resume_session_id=resume_session_id,
+        prior_dispatch_id=prior_dispatch_id,
+        provenance=provenance,
+        success_reasons=success_reasons,
+        prior_success_candidate=prior_success_candidate,
+    )
+    if not isinstance(prepared, _PreparedLineageInputs):
+        return prepared
+
+    identity_preparation = prepared.identity_preparation
+    identity = prepared.identity
+    dispatch_id = prepared.dispatch_id
+    state_path = prepared.state_path
+    effective_ingredients = prepared.effective_ingredients
+    dispatches_dir = prepared.dispatches_dir
+    campaign_id = prepared.campaign_id
+    recipe_snapshot = prepared.recipe_snapshot
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None
 
     resolved_timeout = resolve_dispatch_timeout(
@@ -499,6 +675,7 @@ async def run_lineage_preparation(
                 effective_backend=effective_backend,
                 tool_ctx=tool_ctx,
                 adaptation_context=adaptation_context,
+                success_reasons=success_reasons,
             ),
             prepare_launch=lambda for_dispatch_id: prepare_launch(
                 for_dispatch_id=for_dispatch_id,
@@ -513,6 +690,7 @@ async def run_lineage_preparation(
                 effective_backend=effective_backend,
                 tool_ctx=tool_ctx,
                 adaptation_context=adaptation_context,
+                success_reasons=success_reasons,
             ),
             create_fresh_handle=lambda: create_fresh_handle(
                 dispatches_dir=dispatches_dir,

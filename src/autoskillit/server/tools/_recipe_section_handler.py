@@ -355,10 +355,11 @@ async def get_recipe_section(
             if part < 0:
                 return _recipe_section_failure("invalid_recipe_section_part")
 
+            activation_id = tool_ctx.kitchen_activation_id
             try:
                 persisted = load_recipe_artifact(
                     artifact_dir,
-                    kitchen_id=tool_ctx.kitchen_id,
+                    activation_id=activation_id,
                     identity=identity,
                 )
             except RecipeArtifactSchemaError as exc:
@@ -372,7 +373,7 @@ async def get_recipe_section(
                 if producer_tool not in recipe_recreation_producers():
                     return _recipe_section_failure("recipe_artifact_unavailable")
                 generation_record = get_recipe_generation_store().lookup_artifact(
-                    tool_ctx.kitchen_id,
+                    activation_id,
                     identity,
                 )
                 if generation_record is None:
@@ -383,7 +384,7 @@ async def get_recipe_section(
                     )
                     recreated_generation = persist_recipe_artifact(
                         artifact_dir,
-                        kitchen_id=tool_ctx.kitchen_id,
+                        activation_id=activation_id,
                         producer_tool=producer_tool,
                         recipe_name=requested_recipe_name,
                         payload=recreated_payload,
@@ -407,7 +408,7 @@ async def get_recipe_section(
                 try:
                     persisted = load_recipe_artifact(
                         artifact_dir,
-                        kitchen_id=tool_ctx.kitchen_id,
+                        activation_id=activation_id,
                         identity=identity,
                     )
                 except RecipeArtifactSchemaError as exc:
@@ -448,7 +449,7 @@ async def get_recipe_section(
 
             try:
                 page_plan = get_or_build_recipe_section_page_plan(
-                    kitchen_id=tool_ctx.kitchen_id,
+                    activation_id=activation_id,
                     generation=identity,
                     selected=selected,
                     recipe_section_bound_bytes=request_state.recipe_section_bound_bytes,

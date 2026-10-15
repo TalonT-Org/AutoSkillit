@@ -328,3 +328,39 @@ def test_food_truck_prompt_passes_overrides_to_open_kitchen():
         "Food truck prompt does not pass overrides to open_kitchen. "
         "Steps guarded by skip_when_false may be irreversibly pruned using defaults."
     )
+
+
+def test_food_truck_prompt_declares_success_reasons_and_matches_identity_failures():
+    from autoskillit.core.types.launch._type_dispatch_identity import _build_sentinel_contract
+    from autoskillit.fleet._prompts import _build_food_truck_prompt
+
+    prompt = _build_food_truck_prompt(
+        recipe="implementation",
+        task="test-task",
+        ingredients={},
+        mcp_prefix="mcp__autoskillit__",
+        dispatch_id="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        campaign_id="test-campaign-id",
+        l3_timeout_sec=600,
+        success_reasons=["z_recipe_complete", "a_recipe_complete"],
+    )
+    identity_contract = _build_sentinel_contract(
+        "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        "aaaaaaaa",
+    )
+
+    assert 'Declared success reasons: ["a_recipe_complete", "z_recipe_complete"]' in prompt
+    assert "Do not substitute a generic reason such as 'completed'." in prompt
+    assert 'reason: "completed"' not in prompt
+
+    for failure_reason in (
+        "fleet_quota_exhausted",
+        "timeout",
+        "open_kitchen_failed",
+        "missing_on_failure",
+        "degraded_tool_response",
+    ):
+        assert f'"{failure_reason}"' in prompt
+        assert f'"{failure_reason}"' in identity_contract
+    assert '"quota_exhausted"' not in prompt
+    assert '"quota_exhausted"' not in identity_contract

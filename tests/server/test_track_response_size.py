@@ -349,6 +349,7 @@ class TestTrackResponseSize:
 
         from autoskillit.core import RecipeDeliveryMode
         from autoskillit.pipeline import (
+            KitchenActivationId,
             KitchenEffectPhase,
             new_kitchen_open_state,
             start_kitchen_effect,
@@ -374,6 +375,7 @@ class TestTrackResponseSize:
         ctx.kitchen_open_state = start_kitchen_effect(
             new_kitchen_open_state(
                 kitchen_id="kitchen",
+                activation_id=KitchenActivationId("kitchen"),
                 context_id="context",
                 operation_id="operation",
             ),

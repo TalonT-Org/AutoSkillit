@@ -7,19 +7,18 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
+from tests.server._recipe_fixture_parameters import (
+    IMPLEMENTATION_OVERRIDES,
+)
 
-_IMPLEMENTATION_OVERRIDES = {
-    "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/5256",
-    "task": "test task",
-}
+pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
 
 @pytest.mark.parametrize(
     ("tool_ctx_ready_recipe", "skill"),
     [
-        (("implementation", "plan", _IMPLEMENTATION_OVERRIDES), "make-plan"),
-        (("implementation", "prepare_pr", _IMPLEMENTATION_OVERRIDES), "prepare-pr"),
+        (("implementation", "plan", IMPLEMENTATION_OVERRIDES), "make-plan"),
+        (("implementation", "prepare_pr", IMPLEMENTATION_OVERRIDES), "prepare-pr"),
     ],
     indirect=["tool_ctx_ready_recipe"],
 )

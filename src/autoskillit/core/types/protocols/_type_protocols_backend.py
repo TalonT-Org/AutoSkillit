@@ -191,6 +191,10 @@ class SessionLocator(Protocol):
 
     def session_log_path(self, cwd: str, session_id: str) -> Path | None: ...
 
+    def session_context_was_compacted(self, cwd: str, session_id: str) -> bool:
+        """Return whether a transcript records history replacement by a summary."""
+        ...
+
     def read_child_task(self, child_id: str) -> ChildTaskTranscript | None:
         """Return the view of one delegated child's own transcript, or None when unresolvable."""
         ...

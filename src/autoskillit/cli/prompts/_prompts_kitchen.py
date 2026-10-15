@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from autoskillit.cli.prompts._prompts import (
     _MCP_RETRY_INSTRUCTION,
+    CONTEXT_EXHAUSTION_RECOVERY_CLAUSE,
     _backend_supplement,
     _read_full_sous_chef,
 )
@@ -205,6 +206,8 @@ issue context when the task involves a GitHub issue.
   (e.g., 'use model opus for implement', 'skip review if diff is under 20 lines'),
   pass it as caller_instructions. This free-text is injected into the L2 system prompt
   as authoritative guidance from the dispatcher.
+
+{CONTEXT_EXHAUSTION_RECOVERY_CLAUSE}
 
 ## DISPATCH RESUME PROTOCOL
 

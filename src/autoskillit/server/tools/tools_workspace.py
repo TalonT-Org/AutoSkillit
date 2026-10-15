@@ -32,11 +32,6 @@ from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.git import detect_self_reverts, validate_commit_paths
 from autoskillit.server.lifecycle._guards import _require_enabled
 from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
-from autoskillit.server.recipe._recipe_segment_delivery import (
-    PreparedRecipeSegmentDelivery,
-    attach_recipe_segment,
-    prepare_recipe_segment_delivery,
-)
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._commit_outcome import _finish_commit_response
 from autoskillit.server.tools._pre_commit_failure import (
@@ -221,13 +216,12 @@ async def test_check(
 
     Args:
         worktree_path: Path to the git worktree to run tests in.
-        step_name: Optional YAML step key for wall-clock timing accumulation.
+        step_name: Exact recipe step key; selects recipe-segment delivery and timing.
             Has no effect on test filtering — filter behavior is controlled by
             config.test_check.filter_mode.
 
     Never raises.
     """
-    prepared_segment: PreparedRecipeSegmentDelivery | None = None
     try:
         resolved = os.path.realpath(worktree_path)
         with structlog.contextvars.bound_contextvars(tool="test_check", cwd=resolved):
@@ -243,14 +237,8 @@ async def test_check(
             from autoskillit.server import _get_ctx  # circular-break
 
             tool_ctx = _get_ctx()
-            prepared_segment = prepare_recipe_segment_delivery(tool_ctx, step_name)
 
-            def _finish(response: dict[str, object], *, success: bool) -> str:
-                wire_response = attach_recipe_segment(
-                    response,
-                    prepared_segment,
-                    success=success,
-                )
+            def _finish(response: dict[str, object]) -> str:
                 try:
                     tool_ctx.workspace_outcome_ledger.record(
                         WorkspaceOutcomeRecord(
@@ -266,23 +254,16 @@ async def test_check(
                     )
                 except (OSError, ValueError, RuntimeError) as exc:
                     logger.error("test_check outcome recording failed", exc_info=True)
-                    wire_response = attach_recipe_segment(
-                        {
-                            "passed": False,
-                            "error": (
-                                f"workspace outcome recording failed: {type(exc).__name__}: {exc}"
-                            ),
-                        },
-                        prepared_segment,
-                        success=False,
-                    )
-                return json.dumps(wire_response)
+                    response = {
+                        "passed": False,
+                        "error": (
+                            f"workspace outcome recording failed: {type(exc).__name__}: {exc}"
+                        ),
+                    }
+                return json.dumps(response)
 
             if tool_ctx.tester is None:
-                return _finish(
-                    {"passed": False, "error": "Test runner not configured"},
-                    success=False,
-                )
+                return _finish({"passed": False, "error": "Test runner not configured"})
 
             if not os.path.isdir(resolved):
                 logger.warning("test_check path does not exist", path=resolved)
@@ -291,8 +272,7 @@ async def test_check(
                         "passed": False,
                         "error": f"Worktree path does not exist: {resolved}",
                         "infrastructure_missing": True,
-                    },
-                    success=False,
+                    }
                 )
             infra_issue = tool_ctx.tester.check_infrastructure(Path(resolved))
             if infra_issue is not None:
@@ -302,8 +282,7 @@ async def test_check(
                         "passed": False,
                         "error": f"Test infrastructure not found: {infra_issue}",
                         "infrastructure_missing": True,
-                    },
-                    success=False,
+                    }
                 )
 
             _start = time.monotonic()
@@ -333,27 +312,18 @@ async def test_check(
                     timed_out=timed_out,
                     effective_passed=effective_passed,
                 )
-                return _finish(response, success=effective_passed)
+                return _finish(response)
             except WorktreeGateContention as exc:
-                return _finish({"passed": False, "error": str(exc)}, success=False)
+                return _finish({"passed": False, "error": str(exc)})
             except Exception as exc:
                 logger.error("test_check unhandled exception", exc_info=True)
-                return _finish(
-                    {"passed": False, "error": f"{type(exc).__name__}: {exc}"},
-                    success=False,
-                )
+                return _finish({"passed": False, "error": f"{type(exc).__name__}: {exc}"})
             finally:
                 if step_name:
                     tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
     except Exception as exc:
         logger.error("test_check unhandled exception", exc_info=True)
-        return json.dumps(
-            attach_recipe_segment(
-                {"passed": False, "error": f"{type(exc).__name__}: {exc}"},
-                prepared_segment,
-                success=False,
-            )
-        )
+        return json.dumps({"passed": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
 @mcp.tool(
@@ -386,7 +356,6 @@ async def commit_files(
 
     Never raises.
     """
-    prepared_segment: PreparedRecipeSegmentDelivery | None = None
     try:
         resolved = os.path.realpath(cwd)
         with structlog.contextvars.bound_contextvars(tool="commit_files", cwd=resolved):
@@ -395,7 +364,6 @@ async def commit_files(
             from autoskillit.server import _get_ctx  # circular-break
 
             tool_ctx = _get_ctx()
-            prepared_segment = prepare_recipe_segment_delivery(tool_ctx, step_name)
 
             def _finish(
                 response: dict[str, object],
@@ -407,7 +375,6 @@ async def commit_files(
                     failure_class=failure_class,
                     tool_ctx=tool_ctx,
                     workspace=resolved,
-                    prepared_segment=prepared_segment,
                 )
 
             if not cwd or not os.path.isdir(resolved):
@@ -462,15 +429,11 @@ async def commit_files(
     except Exception as exc:
         logger.error("commit_files unhandled exception", exc_info=True)
         return json.dumps(
-            attach_recipe_segment(
-                {
-                    "success": False,
-                    "error": f"{type(exc).__name__}: {exc}",
-                    "failure_class": CommitFailureClass.UNHANDLED.value,
-                },
-                prepared_segment,
-                success=False,
-            )
+            {
+                "success": False,
+                "error": f"{type(exc).__name__}: {exc}",
+                "failure_class": CommitFailureClass.UNHANDLED.value,
+            }
         )
 
 

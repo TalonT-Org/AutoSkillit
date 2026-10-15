@@ -37,7 +37,6 @@ from autoskillit.server.lifecycle._session_scope import (
     SCOPE_ORCHESTRATOR_EXACT,
     session_scoped,
 )
-from autoskillit.server.recipe._recipe_segment_delivery import attach_recipe_segment
 from autoskillit.server.response._run_skill_completion import _request_session_identity
 from autoskillit.server.tools import (
     tools_pipeline_tracker,
@@ -657,7 +656,11 @@ async def complete_run_skill_result(
     receipt_id: str,
     ctx: Context = CurrentContext(),
 ) -> str:
-    """Acknowledge one exactly delivered ``run_skill`` result. Never raises."""
+    """Acknowledge one exactly delivered ``run_skill`` result. Never raises.
+
+    Successful acknowledgments include ``step_name`` from the completion receipt,
+    which identifies the step used to attach its success or recovery recipe segment.
+    """
     if (gate := _require_enabled()) is not None:
         return gate
     try:
@@ -676,23 +679,20 @@ async def complete_run_skill_result(
                 request_session_id=request_session_id,
             ),
         )
-        prepared_segment = tools_pipeline_tracker.prepare_recipe_segment_delivery(
-            tool_ctx, receipt.step_name
-        )
-
         tracker_result = authority.apply_acknowledged_tracker_outcome(
             receipt.receipt_id,
             kitchen_id=tool_ctx.kitchen_id,
             request_session_id=request_session_id,
             effect=lambda: _apply_receipt_tracker_outcome(tool_ctx, authority, receipt),
         )
-        response = attach_recipe_segment(
+        return json.dumps(
             {
                 "success": True,
                 "receipt_id": receipt.receipt_id,
                 "run_skill_success": receipt.success,
                 "classification": receipt.classification,
                 "session_id": receipt.child_session_id,
+                "step_name": receipt.step_name,
                 "tracker": tracker_result,
                 "tracker_repairable": bool(
                     receipt.success
@@ -700,11 +700,6 @@ async def complete_run_skill_result(
                     and not tracker_result.get("success")
                 ),
             },
-            prepared_segment,
-            success=receipt.success,
-        )
-        return json.dumps(
-            response,
             ensure_ascii=False,
             separators=(",", ":"),
         )

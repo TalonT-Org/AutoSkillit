@@ -48,6 +48,7 @@ _ENVELOPE_EXCLUDED_FIELDS = {
     "api_failure": "flattened into api_error_*, api_terminal_reason, and rate_limit_* keys",
     "api_retry": "flattened into api_retry_* keys",
     "audit": "flattened into audit_* keys",
+    "compaction_attempted": "live-only fleet evidence, excluded from the public envelope",
     "contamination": "flattened into pre_contamination_* keys",
     "evidence": "flattened into write and progress-evidence keys",
     "infra": "flattened into infra_* keys",

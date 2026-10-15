@@ -46,6 +46,7 @@ from autoskillit.execution import (
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 from autoskillit.pipeline import (
     InitializingRecipe,
+    KitchenActivationId,
     KitchenEffectPhase,
     KitchenRetryDisposition,
     ReadyRecipe,
@@ -62,6 +63,7 @@ from autoskillit.server.recipe._recipe_artifact import (
     _generation_dir,
     _generation_from_payload,
     _safe_component,
+    retire_recipe_artifacts,
 )
 from autoskillit.server.recipe._recipe_delivery import (
     RECIPE_BODY_END,
@@ -78,7 +80,6 @@ from autoskillit.server.recipe._recipe_delivery import (
     prepare_recipe_delivery_generation,
     recipe_pull_producers,
     recipe_recreation_producers,
-    retire_recipe_artifacts,
 )
 from autoskillit.server.recipe._recipe_section_pagination import (
     PagePlanCache,
@@ -253,6 +254,7 @@ def test_compile_identity_and_artifact_share_one_source_projection(tool_ctx) -> 
     payload = _payload()
     payload["custom_generation_input"] = {"value": 3}
     payload["initialization_id"] = "caller-owned-stale-id"
+    payload["_dispatch_success_reasons"] = ["recipe_complete"]
 
     prepared = prepare_recipe_delivery_generation(
         payload,
@@ -267,6 +269,18 @@ def test_compile_identity_and_artifact_share_one_source_projection(tool_ctx) -> 
     assert prepared.canonical_artifact_payload["custom_generation_input"] == {"value": 3}
     assert "initialization_id" not in source_payload
     assert "initialization_id" not in prepared.canonical_artifact_payload
+    assert "_dispatch_success_reasons" not in source_payload
+    assert "_dispatch_success_reasons" not in prepared.canonical_artifact_payload
+
+    _, finalized = _persist_finalized_generation(tool_ctx, payload)
+    assert finalized.normalized_compile_key == prepared.normalized_compile_key
+
+    artifact_root = recipe_artifact._artifact_root(tool_ctx.temp_dir)
+    payload_files = list(artifact_root.rglob("payload.json"))
+    assert len(payload_files) == 1
+    persisted = json.loads(payload_files[0].read_text(encoding="utf-8"))
+    assert persisted == prepared.canonical_artifact_payload
+    assert "_dispatch_success_reasons" not in persisted
 
 
 def _persist_finalized_generation(
@@ -286,11 +300,42 @@ def _persist_finalized_generation(
     return finalized.artifact_generation, finalized
 
 
+def test_finalize_persistence_failure_logs_cause(tool_ctx_kitchen_open, monkeypatch) -> None:
+    from structlog.testing import capture_logs
+
+    from autoskillit.server.recipe._recipe_delivery import _finalize
+
+    monkeypatch.setattr(
+        _finalize,
+        "persist_recipe_artifact",
+        MagicMock(side_effect=RecipeArtifactError("boom")),
+    )
+    with capture_logs() as logs:
+        finalized = _finalize_recipe_delivery(
+            _payload(),
+            surface="open_kitchen",
+            recipe_name="remediation",
+            tool_ctx=tool_ctx_kitchen_open,
+            finalized_projection=_test_projection(),
+        )
+
+    assert json.loads(finalized.rendered) == {
+        "success": False,
+        "error": "recipe_artifact_unavailable",
+    }
+    warnings = [log for log in logs if log["event"] == "recipe_artifact_persistence_failed"]
+    assert len(warnings) == 1
+    assert warnings[0]["log_level"] == "warning"
+    assert warnings[0]["error_type"] == "RecipeArtifactError"
+    assert warnings[0]["exc_info"] is True
+
+
 def test_finalized_response_rejects_stale_kitchen_transition_owner(tool_ctx) -> None:
     bind_test_kitchen_identity(tool_ctx, kitchen_id="transition-owner")
     tool_ctx.kitchen_open_state = start_kitchen_effect(
         new_kitchen_open_state(
             kitchen_id=tool_ctx.kitchen_id,
+            activation_id=tool_ctx.kitchen_activation_id,
             context_id="context-1",
             operation_id="operation-1",
         ),
@@ -308,6 +353,7 @@ def test_finalized_response_rejects_stale_kitchen_transition_owner(tool_ctx) -> 
     tool_ctx.kitchen_open_state = start_kitchen_effect(
         new_kitchen_open_state(
             kitchen_id=tool_ctx.kitchen_id,
+            activation_id=tool_ctx.kitchen_activation_id,
             context_id="context-1",
             operation_id="operation-2",
         ),
@@ -327,6 +373,7 @@ def test_finalized_response_confirms_owned_kitchen_serving_effect(tool_ctx) -> N
     tool_ctx.kitchen_open_state = start_kitchen_effect(
         new_kitchen_open_state(
             kitchen_id=tool_ctx.kitchen_id,
+            activation_id=tool_ctx.kitchen_activation_id,
             context_id="context-1",
             operation_id="operation-1",
         ),
@@ -361,6 +408,7 @@ def test_finalized_response_marks_changed_kitchen_serving_effect_ambiguous(
     tool_ctx.kitchen_open_state = start_kitchen_effect(
         new_kitchen_open_state(
             kitchen_id=tool_ctx.kitchen_id,
+            activation_id=tool_ctx.kitchen_activation_id,
             context_id="context-1",
             operation_id="operation-1",
         ),
@@ -397,12 +445,12 @@ def _persist(
     payload: dict[str, object] | None = None,
     *,
     producer: str = "open_kitchen",
-    kitchen_id: str = "kitchen-test",
+    activation_id: KitchenActivationId = KitchenActivationId("kitchen-test"),
 ) -> RecipeArtifactGeneration:
     persisted_payload, flow_generation = _with_flow(dict(payload or _payload()))
     return persist_recipe_artifact(
         tmp_path,
-        kitchen_id=kitchen_id,
+        activation_id=activation_id,
         producer_tool=producer,
         recipe_name="remediation",
         payload=persisted_payload,
@@ -414,7 +462,7 @@ def _write_malformed_generation(
     tmp_path: Path,
     payload: dict[str, object],
     *,
-    kitchen_id: str = "kitchen-test",
+    activation_id: KitchenActivationId = KitchenActivationId("kitchen-test"),
     producer: str = "open_kitchen",
 ) -> RecipeArtifactGeneration:
     """Write a digest-consistent artifact while bypassing producer validation."""
@@ -429,7 +477,7 @@ def _write_malformed_generation(
     )
     directory = _generation_dir(
         tmp_path,
-        kitchen_id=kitchen_id,
+        activation_id=activation_id,
         producer_tool=producer,
         recipe_name="remediation",
         descriptor_version=generation.descriptor_version,
@@ -504,6 +552,31 @@ def test_persistence_rejects_malformed_pullable_sections(
         _persist(tmp_path, payload)
 
 
+def test_recipe_artifact_namespace_rejects_lineage_string_before_schema_checks(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(TypeError, match="a KitchenActivationId is required"):
+        persist_recipe_artifact(
+            tmp_path,
+            activation_id="kitchen-test",
+            producer_tool="open_kitchen",
+            recipe_name="remediation",
+            payload={},
+        )
+    with pytest.raises(TypeError, match="a KitchenActivationId is required"):
+        retire_recipe_artifacts(tmp_path, activation_id="kitchen-test")
+    assert not (tmp_path / "recipe-delivery").exists()
+
+
+def test_recipe_artifact_load_rejects_lineage_string_before_reading(tmp_path: Path) -> None:
+    identity = _persist(tmp_path, _payload())
+    shutil.rmtree(tmp_path / "recipe-delivery")
+
+    with pytest.raises(TypeError, match="a KitchenActivationId is required"):
+        load_recipe_artifact(tmp_path, activation_id="kitchen-test", identity=identity)
+    assert not (tmp_path / "recipe-delivery").exists()
+
+
 def test_persistence_rejects_missing_required_content(tmp_path: Path) -> None:
     payload = _payload()
     payload.pop("content")
@@ -547,31 +620,34 @@ def test_load_rejects_digest_consistent_malformed_artifact(tmp_path: Path) -> No
     with pytest.raises(RecipeArtifactSchemaError):
         load_recipe_artifact(
             tmp_path,
-            kitchen_id="kitchen-test",
+            activation_id=KitchenActivationId("kitchen-test"),
             identity=generation,
         )
 
 
-def test_artifact_namespace_encodes_colliding_kitchen_ids_injectively(tmp_path: Path) -> None:
+def test_artifact_namespace_encodes_colliding_activation_ids_injectively(tmp_path: Path) -> None:
     first = persist_recipe_artifact(
         tmp_path,
-        kitchen_id="a/b",
+        activation_id=KitchenActivationId("a/b"),
         producer_tool="open_kitchen",
         recipe_name="remediation",
         payload=_payload(),
     )
     second = persist_recipe_artifact(
         tmp_path,
-        kitchen_id="a?b",
+        activation_id=KitchenActivationId("a?b"),
         producer_tool="open_kitchen",
         recipe_name="remediation",
         payload=_payload(),
     )
 
-    assert retire_recipe_artifacts(tmp_path, kitchen_id="a/b") is True
+    assert retire_recipe_artifacts(tmp_path, activation_id=KitchenActivationId("a/b")) is True
     with pytest.raises(RecipeArtifactError):
-        load_recipe_artifact(tmp_path, kitchen_id="a/b", identity=first)
-    assert load_recipe_artifact(tmp_path, kitchen_id="a?b", identity=second) == _payload()
+        load_recipe_artifact(tmp_path, activation_id=KitchenActivationId("a/b"), identity=first)
+    assert (
+        load_recipe_artifact(tmp_path, activation_id=KitchenActivationId("a?b"), identity=second)
+        == _payload()
+    )
 
 
 def test_artifact_persistence_rejects_blob_above_read_ceiling(tmp_path: Path) -> None:
@@ -600,8 +676,8 @@ def test_shared_producer_surfaces_require_identical_pull_policies(
         recipe_recreation_producers()
 
 
-def _remove_persisted_namespace(temp_dir: Path, *, kitchen_id: str) -> None:
-    shutil.rmtree(temp_dir / "recipe-delivery" / kitchen_id)
+def _remove_persisted_namespace(temp_dir: Path, *, activation_id: KitchenActivationId) -> None:
+    shutil.rmtree(temp_dir / "recipe-delivery" / _safe_component(activation_id.value))
 
 
 def _build_envelope(
@@ -657,10 +733,15 @@ def test_same_payload_is_idempotent_and_changed_payload_is_immutable(tmp_path: P
 
     assert same == first
     assert changed.payload_sha256 != first.payload_sha256
-    assert load_recipe_artifact(tmp_path, kitchen_id="kitchen-test", identity=first) == _payload()
-    assert load_recipe_artifact(tmp_path, kitchen_id="kitchen-test", identity=changed) == _payload(
-        "name: remediation\nsteps: {}\n"
+    assert (
+        load_recipe_artifact(
+            tmp_path, activation_id=KitchenActivationId("kitchen-test"), identity=first
+        )
+        == _payload()
     )
+    assert load_recipe_artifact(
+        tmp_path, activation_id=KitchenActivationId("kitchen-test"), identity=changed
+    ) == _payload("name: remediation\nsteps: {}\n")
 
 
 @pytest.mark.parametrize(
@@ -684,8 +765,15 @@ def test_generation_path_includes_version_domain(
     assert second.payload_sha256 == first.payload_sha256
     assert second.pull_identity() != first.pull_identity()
     with pytest.raises(RecipeArtifactError, match="invalid recipe artifact identity bounds"):
-        load_recipe_artifact(tmp_path, kitchen_id="kitchen-test", identity=first)
-    assert load_recipe_artifact(tmp_path, kitchen_id="kitchen-test", identity=second) == _payload()
+        load_recipe_artifact(
+            tmp_path, activation_id=KitchenActivationId("kitchen-test"), identity=first
+        )
+    assert (
+        load_recipe_artifact(
+            tmp_path, activation_id=KitchenActivationId("kitchen-test"), identity=second
+        )
+        == _payload()
+    )
 
 
 def test_concurrent_writers_publish_one_exact_generation(tmp_path: Path) -> None:
@@ -693,7 +781,11 @@ def test_concurrent_writers_publish_one_exact_generation(tmp_path: Path) -> None
         generations = list(pool.map(lambda _: _persist(tmp_path), range(24)))
     assert generations == [generations[0]] * len(generations)
     assert (
-        load_recipe_artifact(tmp_path, kitchen_id="kitchen-test", identity=generations[0])
+        load_recipe_artifact(
+            tmp_path,
+            activation_id=KitchenActivationId("kitchen-test"),
+            identity=generations[0],
+        )
         == _payload()
     )
 
@@ -743,7 +835,7 @@ def test_generation_identity_domains_are_independently_verified(
     with pytest.raises(RecipeArtifactError):
         load_recipe_artifact(
             tmp_path,
-            kitchen_id="kitchen-test",
+            activation_id=KitchenActivationId("kitchen-test"),
             identity=replace(generation, **{field: value}),
         )
 
@@ -754,7 +846,11 @@ def test_generation_descriptor_read_has_server_owned_ceiling(tmp_path: Path) -> 
     descriptor_path.write_bytes(b"x" * 20_000)
 
     with pytest.raises(RecipeArtifactError, match="descriptor exceeds read limit"):
-        load_recipe_artifact(tmp_path, kitchen_id="kitchen-test", identity=generation)
+        load_recipe_artifact(
+            tmp_path,
+            activation_id=KitchenActivationId("kitchen-test"),
+            identity=generation,
+        )
 
 
 def test_non_utf8_payload_is_normalized_to_recipe_artifact_error(tmp_path: Path) -> None:
@@ -780,7 +876,7 @@ def test_non_utf8_payload_is_normalized_to_recipe_artifact_error(tmp_path: Path)
     )
     directory = _generation_dir(
         tmp_path,
-        kitchen_id="kitchen-test",
+        activation_id=KitchenActivationId("kitchen-test"),
         producer_tool=generation.producer_tool,
         recipe_name=generation.recipe_name,
         descriptor_version=generation.descriptor_version,
@@ -795,7 +891,11 @@ def test_non_utf8_payload_is_normalized_to_recipe_artifact_error(tmp_path: Path)
     )
 
     with pytest.raises(RecipeArtifactError, match="not valid JSON"):
-        load_recipe_artifact(tmp_path, kitchen_id="kitchen-test", identity=generation)
+        load_recipe_artifact(
+            tmp_path,
+            activation_id=KitchenActivationId("kitchen-test"),
+            identity=generation,
+        )
 
 
 def test_generation_descriptor_has_no_caller_selected_path(tmp_path: Path) -> None:
@@ -825,41 +925,47 @@ def test_kitchen_retirement_removes_only_that_namespace(tmp_path: Path) -> None:
     first = _persist(tmp_path)
     second = persist_recipe_artifact(
         tmp_path,
-        kitchen_id="other-kitchen",
+        activation_id=KitchenActivationId("other-kitchen"),
         producer_tool="open_kitchen",
         recipe_name="remediation",
         payload=_payload(),
     )
-    assert retire_recipe_artifacts(tmp_path, kitchen_id="kitchen-test") is True
+    assert (
+        retire_recipe_artifacts(tmp_path, activation_id=KitchenActivationId("kitchen-test"))
+        is True
+    )
     with pytest.raises(RecipeArtifactError):
-        load_recipe_artifact(tmp_path, kitchen_id="kitchen-test", identity=first)
+        load_recipe_artifact(
+            tmp_path, activation_id=KitchenActivationId("kitchen-test"), identity=first
+        )
     with pytest.raises(RecipeArtifactError, match="namespace is retired"):
         _persist(tmp_path)
-    assert (
-        load_recipe_artifact(tmp_path, kitchen_id="other-kitchen", identity=second) == _payload()
+    assert load_recipe_artifact(
+        tmp_path, activation_id=KitchenActivationId("other-kitchen"), identity=second
     )
 
 
 def test_kitchen_retirement_notifies_callbacks_after_one_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    notified: list[str] = []
+    activation_id = KitchenActivationId("kitchen-test")
+    notified: list[KitchenActivationId] = []
 
-    def failing_callback(_kitchen_id: str) -> None:
+    def failing_callback(_activation_id: KitchenActivationId) -> None:
         raise RuntimeError("cleanup failed")
 
-    def succeeding_callback(kitchen_id: str) -> None:
-        notified.append(kitchen_id)
+    def succeeding_callback(retired_activation_id: KitchenActivationId) -> None:
+        notified.append(retired_activation_id)
 
     monkeypatch.setattr(
         recipe_section_lifecycle,
-        "_KITCHEN_RETIREMENT_CALLBACKS",
+        "_ACTIVATION_RETIREMENT_CALLBACKS",
         (failing_callback, succeeding_callback),
     )
 
-    recipe_section_lifecycle.notify_kitchen_retired("kitchen-test")
+    recipe_section_lifecycle.notify_activation_retired(activation_id)
 
-    assert notified == ["kitchen-test"]
+    assert notified == [activation_id]
 
 
 @pytest.mark.parametrize("kwargs", [{"max_entries": -1}, {"max_bytes": -1}])
@@ -882,19 +988,30 @@ def test_kitchen_retirement_evicts_only_matching_page_plans(
         "recipe_section_bound_bytes": 10_000,
     }
     retired = get_or_build_recipe_section_page_plan(
-        kitchen_id="kitchen-test",
+        activation_id=KitchenActivationId("kitchen-test"),
         **common,
     )
     retained = get_or_build_recipe_section_page_plan(
-        kitchen_id="other-kitchen",
+        activation_id=KitchenActivationId("other-kitchen"),
         **common,
     )
 
-    assert retire_recipe_artifacts(tmp_path, kitchen_id="kitchen-test") is True
-
-    assert get_or_build_recipe_section_page_plan(kitchen_id="other-kitchen", **common) is retained
     assert (
-        get_or_build_recipe_section_page_plan(kitchen_id="kitchen-test", **common) is not retired
+        retire_recipe_artifacts(tmp_path, activation_id=KitchenActivationId("kitchen-test"))
+        is True
+    )
+
+    assert (
+        get_or_build_recipe_section_page_plan(
+            activation_id=KitchenActivationId("other-kitchen"), **common
+        )
+        is retained
+    )
+    assert (
+        get_or_build_recipe_section_page_plan(
+            activation_id=KitchenActivationId("kitchen-test"), **common
+        )
+        is not retired
     )
 
 
@@ -904,7 +1021,10 @@ def test_cold_kitchen_retirement_does_not_create_page_plan_cache(
 ) -> None:
     monkeypatch.setattr(pagination, "_PAGE_PLAN_CACHE", None)
 
-    assert retire_recipe_artifacts(tmp_path, kitchen_id="cold-kitchen") is True
+    assert (
+        retire_recipe_artifacts(tmp_path, activation_id=KitchenActivationId("cold-kitchen"))
+        is True
+    )
     assert pagination._PAGE_PLAN_CACHE is None
 
 
@@ -925,17 +1045,18 @@ def test_kitchen_retirement_evicts_after_generation_lock_exits(
             finally:
                 lock_active = False
 
-    evicted: list[str] = []
+    activation_id = KitchenActivationId("lock-kitchen")
+    evicted: list[KitchenActivationId] = []
 
-    def _evict(kitchen_id: str) -> None:
+    def _evict(retired_activation_id: KitchenActivationId) -> None:
         assert lock_active is False
-        evicted.append(kitchen_id)
+        evicted.append(retired_activation_id)
 
     monkeypatch.setattr(recipe_artifact, "_generation_lock", _tracked_lock)
-    monkeypatch.setattr(pagination, "evict_kitchen", _evict)
+    monkeypatch.setattr(pagination, "evict_activation", _evict)
 
-    assert retire_recipe_artifacts(tmp_path, kitchen_id="lock-kitchen") is True
-    assert evicted == ["lock-kitchen"]
+    assert retire_recipe_artifacts(tmp_path, activation_id=activation_id) is True
+    assert evicted == [activation_id]
 
 
 def test_generation_lock_translates_timeout(
@@ -957,10 +1078,11 @@ def test_kitchen_retirement_eviction_is_success_only_and_nonthrowing(
     tmp_path: Path,
 ) -> None:
     evict = MagicMock(side_effect=RuntimeError("cache unavailable"))
-    monkeypatch.setattr(pagination, "evict_kitchen", evict)
+    monkeypatch.setattr(pagination, "evict_activation", evict)
 
-    assert retire_recipe_artifacts(tmp_path, kitchen_id="successful-kitchen") is True
-    evict.assert_called_once_with("successful-kitchen")
+    successful_activation = KitchenActivationId("successful-kitchen")
+    assert retire_recipe_artifacts(tmp_path, activation_id=successful_activation) is True
+    evict.assert_called_once_with(successful_activation)
 
     evict.reset_mock()
     monkeypatch.setattr(
@@ -968,16 +1090,24 @@ def test_kitchen_retirement_eviction_is_success_only_and_nonthrowing(
         "atomic_write",
         MagicMock(side_effect=OSError("retirement failed")),
     )
-    assert retire_recipe_artifacts(tmp_path, kitchen_id="failed-kitchen") is False
+    assert (
+        retire_recipe_artifacts(tmp_path, activation_id=KitchenActivationId("failed-kitchen"))
+        is False
+    )
     evict.assert_not_called()
 
 
-@pytest.mark.parametrize("kitchen_id", [".", ".."])
-def test_kitchen_retirement_rejects_dot_path_components(tmp_path: Path, kitchen_id: str) -> None:
+@pytest.mark.parametrize(
+    "activation_id",
+    [KitchenActivationId("."), KitchenActivationId("..")],
+)
+def test_kitchen_retirement_rejects_dot_path_components(
+    tmp_path: Path, activation_id: KitchenActivationId
+) -> None:
     sentinel = tmp_path / "unrelated-temp-data"
     sentinel.write_text("preserve me", encoding="utf-8")
 
-    assert retire_recipe_artifacts(tmp_path, kitchen_id=kitchen_id) is False
+    assert retire_recipe_artifacts(tmp_path, activation_id=activation_id) is False
     assert sentinel.read_text(encoding="utf-8") == "preserve me"
 
 
@@ -1692,7 +1822,7 @@ async def test_pull_tool_reads_exact_generation_and_reports_byte_offsets(
     expected_content = "héllo\n" * 12_000
     generation = persist_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,
-        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        activation_id=tool_ctx_kitchen_open.kitchen_activation_id,
         producer_tool="open_kitchen",
         recipe_name="remediation",
         payload=_payload(expected_content),
@@ -1749,7 +1879,7 @@ async def test_pull_tool_rejects_missing_or_wrong_continuation(
     tool_ctx_kitchen_open.config.output_budget = OutputBudgetConfig(page_max_bytes=None)
     generation = persist_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,
-        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        activation_id=tool_ctx_kitchen_open.kitchen_activation_id,
         producer_tool="open_kitchen",
         recipe_name="remediation",
         payload=_payload("x" * 50_000),
@@ -1809,7 +1939,7 @@ async def test_pull_tool_maps_planner_failures_to_exact_bounded_codes(
     )
     generation = persist_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,
-        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        activation_id=tool_ctx_kitchen_open.kitchen_activation_id,
         producer_tool="open_kitchen",
         recipe_name="remediation",
         payload=_payload(),
@@ -1866,7 +1996,7 @@ async def test_pull_tool_distinguishes_missing_none_and_present_empty_sections(
         payload[section] = []
     generation = persist_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,
-        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        activation_id=tool_ctx_kitchen_open.kitchen_activation_id,
         producer_tool="open_kitchen",
         recipe_name="remediation",
         payload=payload,
@@ -1905,7 +2035,7 @@ async def test_initial_schema_failure_is_bounded_and_never_recreates(
     generation = _write_malformed_generation(
         tool_ctx_kitchen_open.temp_dir,
         payload,
-        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        activation_id=tool_ctx_kitchen_open.kitchen_activation_id,
     )
     recreate = MagicMock(side_effect=AssertionError("schema failure must not recreate"))
     warning = MagicMock()
@@ -1938,7 +2068,7 @@ async def test_recreation_persistence_schema_failure_precedes_artifact_error(
     generation, _finalized = _persist_finalized_generation(tool_ctx_kitchen_open)
     _remove_persisted_namespace(
         tool_ctx_kitchen_open.temp_dir,
-        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        activation_id=tool_ctx_kitchen_open.kitchen_activation_id,
     )
     monkeypatch.setattr(
         recipe_section_handler,
@@ -2051,7 +2181,10 @@ async def test_negative_part_is_rejected_before_artifact_load(
 
     tool_ctx_kitchen_open.backend = CodexBackend()
     bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="kitchen-test")
-    generation = _persist(tool_ctx_kitchen_open.temp_dir)
+    generation = _persist(
+        tool_ctx_kitchen_open.temp_dir,
+        activation_id=tool_ctx_kitchen_open.kitchen_activation_id,
+    )
     artifact_load = MagicMock(side_effect=AssertionError("negative part reached artifact load"))
     monkeypatch.setattr(recipe_section_handler, "load_recipe_artifact", artifact_load)
     kwargs = generation.pull_identity()
@@ -2069,7 +2202,10 @@ async def test_oversized_part_is_rejected_after_page_planning(
 ) -> None:
     tool_ctx_kitchen_open.backend = CodexBackend()
     bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="kitchen-test")
-    generation = _persist(tool_ctx_kitchen_open.temp_dir)
+    generation = _persist(
+        tool_ctx_kitchen_open.temp_dir,
+        activation_id=tool_ctx_kitchen_open.kitchen_activation_id,
+    )
     kwargs = generation.pull_identity()
     kwargs.pop("pull_tool")
 
@@ -2095,7 +2231,10 @@ async def test_request_specific_floor_returns_exact_bounded_failure(
             ),
         ),
     )
-    generation = _persist(tool_ctx_kitchen_open.temp_dir)
+    generation = _persist(
+        tool_ctx_kitchen_open.temp_dir,
+        activation_id=tool_ctx_kitchen_open.kitchen_activation_id,
+    )
     kwargs = generation.pull_identity()
     kwargs.pop("pull_tool")
 
@@ -2129,7 +2268,7 @@ async def test_pull_tool_returns_named_step_and_rejects_unknown_section(
     bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="pull-named-step")
     generation = persist_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,
-        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        activation_id=tool_ctx_kitchen_open.kitchen_activation_id,
         producer_tool="open_kitchen",
         recipe_name="remediation",
         payload=_payload(),
@@ -2155,7 +2294,7 @@ async def test_pull_tool_reports_malformed_named_step_yaml(tool_ctx_kitchen_open
     malformed = _payload("steps: [")
     generation = persist_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,
-        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        activation_id=tool_ctx_kitchen_open.kitchen_activation_id,
         producer_tool="open_kitchen",
         recipe_name="remediation",
         payload=malformed,
@@ -2180,7 +2319,7 @@ async def test_oversized_named_step_round_trips_through_continuation(
     payload["post_prune_step_names"] = ["giant_step"]
     generation = persist_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,
-        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        activation_id=tool_ctx_kitchen_open.kitchen_activation_id,
         producer_tool="open_kitchen",
         recipe_name="remediation",
         payload=payload,
@@ -2222,7 +2361,7 @@ async def test_pull_tool_rejects_wrong_generation_identity(tool_ctx_kitchen_open
     bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="pull-wrong")
     generation = persist_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,
-        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        activation_id=tool_ctx_kitchen_open.kitchen_activation_id,
         producer_tool="open_kitchen",
         recipe_name="remediation",
         payload=_payload(),
@@ -2242,7 +2381,7 @@ async def test_pull_tool_rejects_forged_unbounded_identity_sizes(
     bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="pull-unbounded-identity")
     generation = persist_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,
-        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        activation_id=tool_ctx_kitchen_open.kitchen_activation_id,
         producer_tool=producer_tool,
         recipe_name="remediation",
         payload=_payload(),
@@ -2264,7 +2403,7 @@ async def test_pull_tool_recreates_missing_exact_generation(
     bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="pull-recreate")
     generation, finalized = _persist_finalized_generation(tool_ctx_kitchen_open)
     _remove_persisted_namespace(
-        tool_ctx_kitchen_open.temp_dir, kitchen_id=tool_ctx_kitchen_open.kitchen_id
+        tool_ctx_kitchen_open.temp_dir, activation_id=tool_ctx_kitchen_open.kitchen_activation_id
     )
     recompile = MagicMock(side_effect=AssertionError("recreation must not recompile"))
     monkeypatch.setattr(
@@ -2281,7 +2420,7 @@ async def test_pull_tool_recreates_missing_exact_generation(
     assert response["content"] == _payload()["content"]
     recreated = load_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,
-        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        activation_id=tool_ctx_kitchen_open.kitchen_activation_id,
         identity=generation,
     )
     assert recreated["content"] == _payload()["content"]
@@ -2305,7 +2444,7 @@ async def test_recreation_reuses_original_snapshot_without_snapshot_factory(
         payload,
     )
     _remove_persisted_namespace(
-        tool_ctx_kitchen_open.temp_dir, kitchen_id=tool_ctx_kitchen_open.kitchen_id
+        tool_ctx_kitchen_open.temp_dir, activation_id=tool_ctx_kitchen_open.kitchen_activation_id
     )
     snapshot_factory = MagicMock(
         side_effect=AssertionError("recreation must reuse the original snapshot")
@@ -2323,7 +2462,7 @@ async def test_recreation_reuses_original_snapshot_without_snapshot_factory(
     assert response["success"] is True
     recreated = load_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,
-        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        activation_id=tool_ctx_kitchen_open.kitchen_activation_id,
         identity=generation,
     )
     assert recreated["recipe_execution"]["execution_id"] == (
@@ -2338,13 +2477,13 @@ async def test_pull_tool_reports_invalid_missing_generation_recreation(
     bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="pull-recreate-invalid")
     generation = persist_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,
-        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        activation_id=tool_ctx_kitchen_open.kitchen_activation_id,
         producer_tool="open_kitchen",
         recipe_name="remediation",
         payload=_payload(),
     )
     _remove_persisted_namespace(
-        tool_ctx_kitchen_open.temp_dir, kitchen_id=tool_ctx_kitchen_open.kitchen_id
+        tool_ctx_kitchen_open.temp_dir, activation_id=tool_ctx_kitchen_open.kitchen_activation_id
     )
 
     kwargs = generation.pull_identity()
@@ -2360,7 +2499,7 @@ async def test_pull_tool_rejects_changed_recreated_generation(
     bind_test_kitchen_identity(tool_ctx_kitchen_open, kitchen_id="pull-recreate-changed")
     generation, _finalized = _persist_finalized_generation(tool_ctx_kitchen_open)
     _remove_persisted_namespace(
-        tool_ctx_kitchen_open.temp_dir, kitchen_id=tool_ctx_kitchen_open.kitchen_id
+        tool_ctx_kitchen_open.temp_dir, activation_id=tool_ctx_kitchen_open.kitchen_activation_id
     )
 
     kwargs = generation.pull_identity()

@@ -28,6 +28,12 @@ Two defenses exist:
 The re-delivery path remains necessary when model-visible recipe content is lost for any
 reason. It re-acquires recipe knowledge without reading raw files.
 
+Current dispatched-root backends use synchronous native controls to block automatic
+compaction before transcript history is replaced: Claude Code's exit-2 hook and Codex's
+trusted `PreCompact` veto. A detected legacy or unexpected `compact_boundary` transcript
+is a terminal failure and is never resumed. The transcript check runs after dispatch or
+before resume; it detects prior history replacement and does not stop a running session.
+
 ## Decision
 
 > **`load_recipe` / `open_kitchen` (the MCP tools exposed by `server/tools/tools_recipe.py`)
@@ -54,7 +60,8 @@ snapshot, while the public `open_kitchen` response contains only the segment ove
 initial bodies. Each mapped checkpoint tool verifies READY against that exact durable
 generation before its effect and then returns `recipe_segment` with either authenticated
 future bodies or an ordered manual `recipe_pull` closure. No raw YAML, LRU lookup, runtime
-skip carrier, or separately persisted projection participates in recovery.
+skip carrier, or separately persisted projection participates in recovery. Carriers are
+attached by the shared response wrapper from each tool's registry outcome declaration.
 
 Acknowledged `run_skill` receipts are replayable only for the same kitchen, request
 session, and receipt identity. Their tracker effect remains one-shot and cached, so a
@@ -121,8 +128,10 @@ Four invariants are non-negotiable:
   for envelope responses, `get_recipe_section`).
 - Terminal-page delivery enforces the four invariants above while preserving the
   separate completion call as a compatibility fallback for non-receipt responses.
-- Segmented recipes recover from the latest `recipe_segment`; the startup credential is
-  intentionally scoped to delivered bodies rather than the full future recipe.
+- Segmented recipes recover from the latest `recipe_segment`; the startup carrier's
+  credential is scoped to the first segment's bodies by the carrier byte cap, while the
+  completion receipt (invariant 4) always carries the complete credential and is
+  re-requestable while the recipe is READY.
 - The delivery-reachability suite verifies `load_recipe` / `open_kitchen` /
   `get_recipe_section` re-delivery restores pipeline execution capability, including
   complete-envelope and bounded-envelope per-step pulls.

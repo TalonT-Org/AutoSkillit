@@ -60,6 +60,8 @@ class RecipeContext:
     task: str
     recipe_obj: Any = None  # RecipeInfo — populated by Phase A, consumed by Phase B
     dispatch_name: str | None = None
+    # From the validated active recipe graph, never the separately loaded raw recipe.
+    success_reasons: frozenset[str] | None = None
 
 
 async def run_pre_launch_gating(
@@ -180,6 +182,7 @@ async def run_pre_launch_gating(
         )
 
     effective_name = dispatch_name or recipe
+    declared_success_reasons = validation_result.get("_dispatch_success_reasons")
 
     return RecipeContext(
         effective_name=effective_name,
@@ -191,6 +194,9 @@ async def run_pre_launch_gating(
         task=task,
         recipe_obj=recipe_obj,
         dispatch_name=dispatch_name,
+        success_reasons=(
+            frozenset(declared_success_reasons) if declared_success_reasons is not None else None
+        ),
     )
 
 

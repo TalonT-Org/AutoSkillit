@@ -53,7 +53,6 @@ def _dispatch_food_truck_json_producer() -> dict:
 
     provenance = DispatchEffectProvenance(operation_id="formatter-coverage")
     base = DispatchCompleted(
-        success=True,
         dispatch_status=DispatchStatus.SUCCESS,
         dispatch_id="d1",
         dispatched_session_id="s1",
@@ -68,7 +67,6 @@ def _dispatch_food_truck_json_producer() -> dict:
         health_report={"status": "healthy", "findings": []},
     )
     completed_failure = DispatchCompleted(
-        success=False,
         dispatch_status=DispatchStatus.FAILURE,
         dispatch_id="d3",
         dispatched_session_id="s3",

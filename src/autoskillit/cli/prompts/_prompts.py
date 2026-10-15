@@ -30,6 +30,20 @@ from autoskillit.workspace import (
 _PRE_DISPATCH_SCOPE = "pre_dispatch"
 _POST_RECEIPT_SCOPE = "post_receipt"
 
+CONTEXT_EXHAUSTION_RECOVERY_CLAUSE = """## CONTEXT EXHAUSTION FAILURE
+
+A dispatch failure with reason `fleet_l3_context_exhausted` is terminal for its
+failed identity. Do not resume or retry it, pass its `dispatched_session_id` as
+`resume_session_id`, reuse its `dispatch_name`, or reset it to clear the failure,
+regardless of `effect_provenance.retry_disposition` or campaign
+`continue_on_failure`.
+
+For a campaign, apply `continue_on_failure` only to whether you halt the campaign
+or proceed to other dispatches; never retry the failed identity. For an ad-hoc
+dispatch, report the terminal failure to the human caller and do not retry. A
+separately authorized fresh dispatch has a new identity and must not reuse the
+failed session or dispatch ID."""
+
 
 @dataclass(frozen=True, slots=True)
 class _McpStartupRecoveryClause:
@@ -164,12 +178,19 @@ _MCP_STARTUP_RECOVERY_SPEC = _McpStartupRecoverySpec(
                 "recipe_delivery.payload_metadata when the body is attested); the same "
                 "forwarding rule applies. If any response contains recipe_segment, "
                 "consume it as mandatory authority: verify and install ordered bodies "
-                "for startup/success carriers, use the carrier-scoped invocation "
-                "digests, and reconstruct every recovery pull_closure entry through "
+                "for startup/success carriers and reconstruct every recovery "
+                "pull_closure entry through "
                 "the unchanged recipe_pull. The overview is only a table of contents. "
                 "If subtype=recipe_segment_post_effect_delivery_failure, the operation "
-                "already ran; do not repeat it. Do not assume startup contains "
-                "full-horizon invocation_template_digests. For structured child inputs, "
+                "already ran; do not repeat it. "
+                "The complete_recipe_initialization(initialization_id) receipt carries every "
+                "named step's recipe_execution credential. Use the delivered completion receipt "
+                "when one is already present, including a terminal-page embedded receipt; "
+                "otherwise call complete_recipe_initialization(initialization_id) before the "
+                "first run_skill. The receipt can be re-requested at any time while the recipe "
+                "is READY, and a digest rejection names that exact call. Absence of a top-level "
+                "recipe_execution block alone does not identify segmented delivery. "
+                "For structured child inputs, "
                 "select "
                 "recipe_execution.skill_input_shapes[step_name], initialize skill_inputs "
                 "with exactly its ordered keys, and replace available values in place. "

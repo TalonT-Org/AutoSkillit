@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any
 import autoskillit.fleet._api as _facade
 from autoskillit.core import (
     CaptureEntrySpec,
+    FleetErrorCode,
     ManagedHeadlessSessionTerminalState,
     SessionCheckpoint,
     SkillResult,
@@ -34,8 +35,10 @@ from autoskillit.core import (
 from autoskillit.fleet._native_shell_capture import set_lineage_terminal_state
 from autoskillit.fleet._outcome import (
     _checkpoint_to_dict,
+    _sanitize_managed_capture_diagnostics,
     build_dispatch_result,
     classify_dispatch_outcome,
+    is_context_exhausted,
 )
 from autoskillit.fleet.campaign_state.state import (
     DispatchRecord,
@@ -72,9 +75,8 @@ class ClassificationResult:
     labels_cleaned: bool
     project_log_dir: str
     extended_chain: list[str]
-    dispatched_session_id: str | None  # for finalize to override skill_result.session_id
+    dispatched_session_id: str
     skill_result: SkillResult  # for finalize_state_write
-    result_success: bool
     dispatch_checkpoint: SessionCheckpoint | None  # for finalize resume_checkpoint serialization
 
 
@@ -88,11 +90,13 @@ class _OutcomeMaterialization:
     tracker_authority_error: str | None
     parsed_result: Any
     extended_chain: list[str]
+    context_compacted: bool
 
 
 def _materialize_outcome(
     *,
     skill_result: SkillResult,
+    dispatched_session_id: str,
     spawn_ctx: SpawnContext,
     tool_ctx: ToolContext,
     tracker_lease: Any,
@@ -128,6 +132,17 @@ def _materialize_outcome(
         if incoming_resume_checkpoint is not None
         else loaded_tracker_checkpoint
     )
+    context_compacted = is_context_exhausted(
+        skill_result.retry_reason or "",
+        skill_result.infra.exit_category or "",
+        skill_result.compaction_attempted,
+    )
+    locator = effective_backend.session_locator() if effective_backend is not None else None
+    if locator is not None and dispatched_session_id:
+        context_compacted = (
+            locator.session_context_was_compacted(str(tool_ctx.project_dir), dispatched_session_id)
+            or context_compacted
+        )
 
     extended_chain = prior_session_chain[:]
     parsed_result: Any = None
@@ -135,7 +150,6 @@ def _materialize_outcome(
         if prior_dispatched_session_id and prior_dispatched_session_id not in extended_chain:
             extended_chain.append(prior_dispatched_session_id)
 
-        locator = effective_backend.session_locator() if effective_backend is not None else None
         additional_jsonl_paths = [
             path
             for session_id in extended_chain
@@ -149,16 +163,16 @@ def _materialize_outcome(
             is not None
         ]
         jsonl_path = (
-            locator.session_log_path(str(tool_ctx.project_dir), skill_result.session_id or "")
+            locator.session_log_path(str(tool_ctx.project_dir), dispatched_session_id)
             if locator is not None
             else None
         )
-        if resume_line_offset and skill_result.session_id and resume_session_id:
-            if skill_result.session_id != resume_session_id:
+        if resume_line_offset and dispatched_session_id and resume_session_id:
+            if dispatched_session_id != resume_session_id:
                 logger.warning(
                     "resume_line_offset_invalidated",
                     resume_session_id=resume_session_id,
-                    actual_session_id=skill_result.session_id,
+                    actual_session_id=dispatched_session_id,
                 )
                 resume_line_offset = 0
         parsed_result = _facade.parse_l3_result_block(
@@ -175,6 +189,7 @@ def _materialize_outcome(
             parsed_result is not None
             and parsed_result.outcome == "no_sentinel"
             and sidecar_entries
+            and not context_compacted
         ):
             from autoskillit.fleet._sidecar_synthesis import (
                 synthesize_from_sidecar,
@@ -193,6 +208,7 @@ def _materialize_outcome(
         tracker_authority_error=tracker_authority_error,
         parsed_result=parsed_result,
         extended_chain=extended_chain,
+        context_compacted=context_compacted,
     )
 
 
@@ -236,6 +252,32 @@ async def _cleanup_non_success_non_resumable_labels(
     return labels_cleaned
 
 
+def _log_success_reason_contract_violation(
+    *,
+    reason: str,
+    parsed_result: Any,
+    dispatch_id: str,
+    success_reasons: frozenset[str] | None,
+) -> None:
+    """Log sanitized evidence when a successful result violates its reason contract."""
+    if reason != FleetErrorCode.FLEET_L3_RESULT_CONTRACT_VIOLATION:
+        return
+    payload = parsed_result.payload if parsed_result is not None else None
+    claimed_reason = payload.get("reason") if payload is not None else None
+    if isinstance(claimed_reason, str):
+        claimed_reason = _sanitize_managed_capture_diagnostics(claimed_reason)
+    elif claimed_reason is not None:
+        claimed_reason = f"<{type(claimed_reason).__name__}>"
+    logger.warning(
+        "dispatch_success_reason_contract_violation",
+        dispatch_id=dispatch_id,
+        claimed_reason=claimed_reason,
+        declared_success_reasons=sorted(
+            _sanitize_managed_capture_diagnostics(item) for item in (success_reasons or ())
+        ),
+    )
+
+
 async def run_outcome_classification(
     *,
     skill_result: SkillResult,
@@ -256,14 +298,21 @@ async def run_outcome_classification(
     dispatch_sidecar_path: str,
     resume_line_offset: int = 0,
     prior_dispatch_ids: list[str] | None = None,
+    success_reasons: frozenset[str] | None = None,
 ) -> ClassificationResult:
     """Phase E — classifies the dispatch outcome.
 
     Returns a ``ClassificationResult`` carrying every field the orchestrator's
     finalize shard needs.
     """
+    dispatched_session_id = (
+        spawn_ctx.dispatched_session_id[0]
+        if spawn_ctx.dispatched_session_id
+        else skill_result.session_id or ""
+    )
     materialization = _materialize_outcome(
         skill_result=skill_result,
+        dispatched_session_id=dispatched_session_id,
         spawn_ctx=spawn_ctx,
         tool_ctx=tool_ctx,
         tracker_lease=tracker_lease,
@@ -284,6 +333,7 @@ async def run_outcome_classification(
     tracker_authority_error = materialization.tracker_authority_error
     parsed_result = materialization.parsed_result
     extended_chain = materialization.extended_chain
+    context_compacted = materialization.context_compacted
     _issue_urls_raw = spawn_ctx.issue_urls_raw
 
     final_status, reason = classify_dispatch_outcome(
@@ -292,17 +342,18 @@ async def run_outcome_classification(
         sidecar_exists=sidecar_file.exists(),
         checkpoint=dispatch_checkpoint,
         subtype=skill_result.subtype,
+        success_reasons=success_reasons,
+        context_compacted=context_compacted,
     )
-    result_success = bool(
-        parsed_result is not None
-        and parsed_result.outcome == "completed_clean"
-        and parsed_result.payload
-        and parsed_result.payload.get("success", False)
+    _log_success_reason_contract_violation(
+        reason=reason,
+        parsed_result=parsed_result,
+        dispatch_id=dispatch_id,
+        success_reasons=success_reasons,
     )
-    if tracker_authority_error is not None:
+    if tracker_authority_error is not None and reason != FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED:
         final_status = DispatchStatus.FAILURE
         reason = tracker_authority_error
-        result_success = False
 
     if final_status != DispatchStatus.RESUMABLE:
         terminal_state = (
@@ -354,15 +405,11 @@ async def run_outcome_classification(
     # The orchestrator threads the dispatched backend's log directory through.
     project_log_dir = str(dispatched_log_dir) if dispatched_log_dir is not None else ""
 
-    if (
-        resume_session_id
-        and skill_result.session_id
-        and resume_session_id != skill_result.session_id
-    ):
+    if resume_session_id and dispatched_session_id and resume_session_id != dispatched_session_id:
         logger.warning(
             "session_id_continuity_mismatch",
             resume_session_id=resume_session_id,
-            returned_session_id=skill_result.session_id,
+            returned_session_id=dispatched_session_id,
         )
 
     # SUCCESS → COMMIT provenance.
@@ -371,7 +418,7 @@ async def run_outcome_classification(
             DispatchEffectName.COMMIT,
             identities={
                 "dispatch_id": dispatch_id,
-                "dispatched_session_id": skill_result.session_id or "",
+                "dispatched_session_id": dispatched_session_id,
             },
         )
         provenance.confirm(
@@ -379,7 +426,7 @@ async def run_outcome_classification(
             receipt="dispatch outcome classifier confirmed success",
             identities={
                 "dispatch_id": dispatch_id,
-                "dispatched_session_id": skill_result.session_id or "",
+                "dispatched_session_id": dispatched_session_id,
             },
         )
 
@@ -393,13 +440,8 @@ async def run_outcome_classification(
         labels_cleaned=_labels_cleaned,
         project_log_dir=project_log_dir,
         extended_chain=extended_chain,
-        dispatched_session_id=(
-            spawn_ctx.dispatched_session_id[0]
-            if spawn_ctx.dispatched_session_id
-            else skill_result.session_id
-        ),
+        dispatched_session_id=dispatched_session_id,
         skill_result=skill_result,
-        result_success=result_success,
         dispatch_checkpoint=dispatch_checkpoint,
     )
 
@@ -435,6 +477,7 @@ async def finalize_state_write(
     project_log_dir = classification.project_log_dir
     _issue_urls_raw = spawn_ctx.issue_urls_raw
     dispatch_checkpoint = classification.dispatch_checkpoint
+    diagnostic_message = classification.tracker_authority_error or ""
 
     # Build the DispatchRecord.
     record = DispatchRecord(
@@ -444,7 +487,7 @@ async def finalize_state_write(
         campaign_id=campaign_id,
         caller_session_id=caller_session_id,
         caller_backend_name=caller_backend_name,
-        dispatched_session_id=classification.dispatched_session_id or "",
+        dispatched_session_id=classification.dispatched_session_id,
         session_chain=extended_chain,
         dispatched_session_log_dir=project_log_dir,
         dispatched_pid=spawn_ctx.dispatched_pid[0] if spawn_ctx.dispatched_pid else 0,
@@ -456,6 +499,7 @@ async def finalize_state_write(
         if spawn_ctx.dispatched_create_time
         else 0.0,
         reason=reason or "",
+        diagnostic_message=diagnostic_message,
         retry_reason=skill_result.retry_reason or "",
         infra_exit_category=skill_result.infra.exit_category or "",
         token_usage=normalize_dispatch_token_usage(
@@ -512,11 +556,12 @@ async def finalize_state_write(
     # Build and return the DispatchResult envelope.
     return build_dispatch_result(
         parsed_result=parsed_result,
-        result_success=classification.result_success,
         final_status=final_status,
         reason=reason or "",
+        diagnostic_message=diagnostic_message,
         dispatch_id=dispatch_id,
         skill_result=skill_result,
+        dispatched_session_id=classification.dispatched_session_id,
         backend_name=effective_backend_name,
         dispatch_checkpoint=dispatch_checkpoint,
         started_at=started_at,

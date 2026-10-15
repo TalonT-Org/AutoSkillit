@@ -6,6 +6,9 @@ quota_guard:
 branching:
   default_base_branch: main
 
+model:
+  default: sonnet[1m]
+
 features:
   fleet: true
   fleet_headless_run: true

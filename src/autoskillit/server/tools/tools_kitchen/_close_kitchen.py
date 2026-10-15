@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fastmcp import Context
@@ -15,7 +14,6 @@ from autoskillit.core import (
     fast_dumps,
     get_logger,
 )
-from autoskillit.pipeline import closed_kitchen_open_state
 from autoskillit.server import mcp
 from autoskillit.server._notify import track_response_size
 from autoskillit.server._tracker_authority import (
@@ -23,11 +21,8 @@ from autoskillit.server._tracker_authority import (
     _release_kitchen_tracker_authority,
     try_retire_tracker,
 )
+from autoskillit.server.lifecycle._kitchen_identity import retire_kitchen_identity
 from autoskillit.server.lifecycle._session_scope import SCOPE_ORCHESTRATOR_EXACT, session_scoped
-from autoskillit.server.recipe._recipe_delivery import retire_recipe_artifacts
-from autoskillit.server.recipe._recipe_generation import (
-    retire_kitchen as retire_recipe_generation,
-)
 
 # Late-binding for monkeypatch reach: tests patch
 # "autoskillit.server.tools.tools_kitchen.<name>" (the package facade), so
@@ -93,16 +88,8 @@ def _close_kitchen_handler() -> None:
     abandoned_targets = _drain_context_tracker_leases(ctx)
     for target in abandoned_targets:
         try_retire_tracker(target)
-    if isinstance(ctx.kitchen_id, str) and ctx.kitchen_id:
-        if isinstance(ctx.temp_dir, Path) and not retire_recipe_artifacts(
-            ctx.temp_dir,
-            kitchen_id=ctx.kitchen_id,
-        ):
-            logger.warning("close_kitchen_recipe_artifact_retirement_failed")
-        try:
-            retire_recipe_generation(ctx.kitchen_id)
-        except Exception:
-            logger.warning("close_kitchen_recipe_generation_retirement_failed", exc_info=True)
+    kitchen_id = ctx.kitchen_id
+    retire_kitchen_identity(ctx)
     ctx.active_recipe_packs = None
     ctx.active_recipe_features = None
     ctx.active_recipe_steps = None
@@ -118,7 +105,7 @@ def _close_kitchen_handler() -> None:
     ctx.gate_infrastructure_ready = False
     logger.info("close_kitchen", gate_state="closed")
     if (log := ctx.github_api_log) is not None:
-        orphan_usage = log.drain(ctx.kitchen_id)
+        orphan_usage = log.drain(kitchen_id)
         if orphan_usage is not None:
             try:
                 log_dir = _tk_pkg.resolve_log_dir(ctx.config.linux_tracing.log_dir)
@@ -150,9 +137,6 @@ def _close_kitchen_handler() -> None:
             review_gate_path.unlink(missing_ok=True)
     except OSError:
         logger.warning("review_gate_state_remove_failed", path=str(review_gate_path))
-    with ctx.kitchen_transition_lock:
-        context_id = ctx.kitchen_open_state.context_id
-        ctx.kitchen_open_state = closed_kitchen_open_state(context_id=context_id)
 
 
 @mcp.tool(

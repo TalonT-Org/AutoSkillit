@@ -177,8 +177,7 @@ async def test_run_skill_logs_warning_when_output_dir_resolved_from_recipe(
 async def test_run_skill_skips_auto_fill_when_output_dir_has_template(
     tool_ctx_kitchen_open, monkeypatch, tmp_path
 ) -> None:
-    """When recipe step output_dir has ${{ }}, auto-fill MUST skip AND fallback
-    to resolve_skill_temp_dir — producing the correct skill-scoped prefix."""
+    """Unresolved output_dir templates use the default artifact watch directory."""
     from autoskillit.recipe.schema import RecipeStep
     from tests.fakes import InMemoryHeadlessExecutor
 
@@ -202,9 +201,10 @@ async def test_run_skill_skips_auto_fill_when_output_dir_has_template(
         cwd=str(tmp_path),
         step_name="verify",
     )
-    expected = str(tmp_path / ".autoskillit" / "temp" / "dry-walkthrough") + "/"
-    assert executor.calls[0].allowed_write_prefix == expected
-    assert executor.calls[0].allowed_write_prefixes == (expected,)
+    call = executor.calls[0]
+    assert tmp_path / ".autoskillit" / "temp" / "dry-walkthrough" in call.write_watch_dirs
+    assert call.allowed_write_prefix == ""
+    assert call.allowed_write_prefixes == ()
 
 
 @pytest.mark.anyio

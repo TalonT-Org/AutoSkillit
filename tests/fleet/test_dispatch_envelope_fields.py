@@ -20,6 +20,51 @@ from tests.fleet._helpers import (
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 
+class TestDispatchCompletedSuccessDerivation:
+    @pytest.mark.parametrize(
+        ("dispatch_status", "expected_success"),
+        [
+            ("success", True),
+            ("failure", False),
+            ("resumable", False),
+        ],
+    )
+    def test_success_property_and_envelope_follow_dispatch_status(
+        self, dispatch_status, expected_success
+    ):
+        from autoskillit.fleet import DispatchCompleted, DispatchStatus
+
+        status = DispatchStatus(dispatch_status)
+        completed = DispatchCompleted(
+            dispatch_status=status,
+            dispatch_id="dispatch-derived-success",
+            dispatched_session_id="session-derived-success",
+            reason="implementation_complete",
+            effect_provenance=DispatchEffectProvenance(operation_id="dispatch-derived-success"),
+        )
+
+        assert completed.success is expected_success
+        assert json.loads(completed.to_envelope())["success"] is expected_success
+
+    def test_success_cannot_be_supplied_to_constructor(self):
+        from typing import Any
+
+        from autoskillit.fleet import DispatchCompleted, DispatchStatus
+
+        constructor: Any = DispatchCompleted
+        with pytest.raises(TypeError, match="unexpected keyword argument 'success'"):
+            constructor(
+                success=True,
+                dispatch_status=DispatchStatus.FAILURE,
+                dispatch_id="dispatch-invalid-success",
+                dispatched_session_id="session-invalid-success",
+                reason="failure",
+                effect_provenance=DispatchEffectProvenance(
+                    operation_id="dispatch-invalid-success"
+                ),
+            )
+
+
 class TestElapsedSecondsEnvelopeField:
     @pytest.mark.anyio
     async def test_dispatch_completed_envelope_contains_elapsed_seconds(self):
@@ -31,7 +76,6 @@ class TestElapsedSecondsEnvelopeField:
         from autoskillit.fleet import DispatchCompleted, DispatchStatus
 
         completed = DispatchCompleted(
-            success=True,
             dispatch_status=DispatchStatus.SUCCESS,
             dispatch_id="test-dispatch-id",
             dispatched_session_id="test-session-id",
@@ -222,7 +266,6 @@ class TestKindDiscriminatorEnvelopeField:
         from autoskillit.fleet import DispatchCompleted, DispatchRejected, DispatchStatus
 
         completed = DispatchCompleted(
-            success=True,
             dispatch_status=DispatchStatus.SUCCESS,
             dispatch_id="d-c",
             dispatched_session_id="s-c",
@@ -284,7 +327,6 @@ class TestHealthReportEnvelopeField:
         from autoskillit.fleet import DispatchCompleted, DispatchStatus
 
         completed = DispatchCompleted(
-            success=True,
             dispatch_status=DispatchStatus.SUCCESS,
             dispatch_id="test-id",
             dispatched_session_id="sess-id",
@@ -300,7 +342,6 @@ class TestHealthReportEnvelopeField:
         from autoskillit.fleet import DispatchCompleted, DispatchStatus
 
         completed = DispatchCompleted(
-            success=True,
             dispatch_status=DispatchStatus.SUCCESS,
             dispatch_id="test-id",
             dispatched_session_id="sess-id",
@@ -345,7 +386,6 @@ class TestHealthReportDispatchEnrichment:
         from autoskillit.fleet import DispatchCompleted, DispatchStatus
 
         original = DispatchCompleted(
-            success=True,
             dispatch_status=DispatchStatus.SUCCESS,
             dispatch_id="test-id",
             dispatched_session_id="sess-id",

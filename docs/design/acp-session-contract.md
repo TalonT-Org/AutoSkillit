@@ -194,7 +194,7 @@ and has no ACP analogue. Both backends raise `CapabilityNotSupportedError`
 
 ## Section 2: Recovery Ladder
 
-The recovery ladder maps each of the 20 `RetryReason` enum values
+The recovery ladder maps the `RetryReason` enum values
 (`src/autoskillit/core/types/foundation/_type_enums.py`, lines 44–64) to one of three ACP
 session rungs — `session/resume`, `session/load`, `session/new` — or to a
 terminal/wait-and-retry classification.
@@ -230,8 +230,23 @@ specific infra-classification signals (e.g. API errors → `RESUME`, rate limits
 | `OUTCOME_INVARIANT` | `session/new` | `on_failure` | Skill-emitted outcome fields violated their declared relationship. |
 | `OUTCOME_REPORT_MALFORMED` | `session/new` | `on_failure` | Skill's terminal outcome report could not be parsed. Do not add a label. |
 | `ASYNC_OBLIGATION` | `session/new` | `on_failure` | Backend-owned work or a wakeup remained unresolved, the bounded completion drain expired, or lifecycle evidence was unavailable. Start fresh; never poll or resume the prior session. |
-| `CONTEXT_EXHAUSTED` | (terminal) | N/A | Correlated Codex automatic-compaction veto. Start an explicit new session, or compact manually and deliberately resume. |
+| `CONTEXT_EXHAUSTED` | (terminal) | N/A | Correlated Codex automatic-compaction veto. Do not resume or retry that failed session identity. |
 | `NONE` | (no retry) | N/A | Success — no recovery needed. |
+
+The fleet dispatch layer also emits `fleet_l3_context_exhausted` when retained native
+compaction evidence or a maximum-window failure makes that dispatch non-resumable. It is
+terminal for the failed dispatch identity even when the result block or sidecar suggests
+progress. The campaign may continue to other dispatches according to `continue_on_failure`,
+but this identity is never resumed or retried. A separately authorized fresh dispatch is
+a new identity and must not reuse the failed session ID.
+
+The automatic-compaction veto is root prevention; detecting an already-compacted legacy
+root while resolving a resume is a refusal fallback and cannot stop compaction already in
+progress. Codex maximum-window handling is covered with schema-backed fixtures based on
+the [Codex v2 app-server schema](https://github.com/openai/codex/blob/main/codex-rs/app-server-protocol/schema/json/v2/ThreadStartResponse.json),
+not a captured live maximum-window incident.
+If a live reproduction is separately available, record the actual CLI version; do not
+infer a version floor from these fixtures.
 
 ### 2.2 ACP rung semantics
 
@@ -535,7 +550,7 @@ human-facing ratios remain inside one source pair.
 | §2 Retry routing | `_compute_retry`, `_build_skill_result` overrides | `src/autoskillit/execution/session/_retry_fsm.py`, `src/autoskillit/execution/headless/_headless_result.py` |
 | §2 Contract nudge | `_attempt_contract_nudge`, `_merge_token_usage` | `src/autoskillit/execution/headless/_headless_recovery.py` |
 | §4.9 Token evidence | `TokenMeasure`, source-pair classifier, OTLP sink | `src/autoskillit/_measure_aggregation.py`, `src/autoskillit/execution/session/turn_usage.py`, `src/autoskillit/execution/evidence/otlp_sink.py` |
-| §3 Capabilities | `BackendCapabilities` (47 fields) | `src/autoskillit/core/types/execution/_type_backend.py` |
+| §3 Capabilities | `BackendCapabilities` | `src/autoskillit/core/types/execution/_type_backend.py` |
 | §3 Forward-declared | `_FORWARD_DECLARED` | `tests/arch/test_capability_consumption.py` |
 | §4 Codex flags | `CodexFlags` | `src/autoskillit/execution/backends/codex.py` lines 98–107 |
 | §4 Codex divergence mappings | Binding, output-mode, idle-stop, and warning sites | `src/autoskillit/execution/backends/codex.py` |

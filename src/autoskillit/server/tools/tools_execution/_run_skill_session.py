@@ -33,7 +33,11 @@ from autoskillit.core import (
     resolve_skill_temp_dir as _resolve_skill_temp_dir,
 )
 from autoskillit.execution import ReplayingSubprocessRunner
-from autoskillit.hooks._write_scope import output_dir_widens_scope, widened_output_dir_message
+from autoskillit.hooks._write_scope import (
+    WriteScopeKind,
+    output_dir_widens_scope,
+    widened_output_dir_message,
+)
 from autoskillit.pipeline import canonical_step_name as _canonical_step_name
 from autoskillit.pipeline import gate_error_result
 from autoskillit.server._explorer_projection import _build_requested_execution_identity
@@ -479,6 +483,15 @@ def _materialize_fresh_session(state: _RunSkillDispatchState) -> str | None:
 def _prepare_owned_write_scope(state: _RunSkillDispatchState) -> str | None:
     state.allowed_write_prefix = ""
     state.allowed_write_prefixes = ()
+    # An implicit artifact watch directory does not narrow an unrestricted skill.
+    if (
+        not state.is_read_only
+        and not state.output_dir
+        and state.invocation is not None
+        and state.invocation.root.write_scope is not None
+        and state.invocation.root.write_scope.kind is WriteScopeKind.UNRESTRICTED
+    ):
+        return None
     if state.write_watch_dirs:
         state.allowed_write_prefix, state.allowed_write_prefixes = _compute_write_prefixes(
             state.write_watch_dirs, state.cwd, state.skill_command

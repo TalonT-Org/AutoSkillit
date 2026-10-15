@@ -255,11 +255,15 @@ inclusive. Historical numeric zero values load as `unknown` because their
 observation status cannot be recovered.
 
 `context_fraction` is the normalized cache-read proxy
-`cache_read_tokens / context_window_tokens` for that row's observed model. It
+`cache_read_tokens / context_window_tokens` for the session's requested model. It
 does not include uncached or newly cached input and is not total context
 occupancy. `context_window_tokens` is positive capacity metadata, not an
 accounting observation; a missing capacity or unobserved cache read leaves the
-fraction `null`. Claude snapshots deduplicate by
+fraction `null`. For Claude, the CLI-reported window comes from
+`modelUsage[<the session's requested model>].contextWindow`, identified by the
+init record or the sole `modelUsage` key. The turn row's `model` remains the
+served name. This does not measure the provider's maximum accepted input or
+repair upstream reporting errors. Claude snapshots deduplicate by
 `(backend, provider_used, message.id)`, preserving first-seen order and the
 first timestamp. Identical message IDs from different source pairs remain
 separate rows. Codex rows

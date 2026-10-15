@@ -40,7 +40,6 @@ _TEST_PROVENANCE = DispatchEffectProvenance(operation_id="fleet-admission-test")
 def _make_success_result() -> DispatchResult:
     return DispatchResult(
         outcome=DispatchCompleted(
-            success=True,
             dispatch_status=DispatchStatus.SUCCESS,
             dispatch_id="test-dispatch",
             dispatched_session_id="test-session",

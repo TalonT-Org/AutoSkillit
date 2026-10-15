@@ -6,12 +6,18 @@ import json
 
 import pytest
 
-import autoskillit.server.tools.tools_git as tools_git
 from autoskillit.server.tools.tools_git import check_pr_mergeable, create_unique_branch
 from tests.conftest import _make_result
-from tests.server._recipe_segment_test_helpers import install_prepared_recipe_segment
+from tests.server._recipe_fixture_parameters import (
+    IMPLEMENTATION_READY_PARAMETERS,
+)
+from tests.server._recipe_segment_test_helpers import (
+    assert_delivery_outcome,
+    assert_real_checkpoint_response_budget,
+    install_prepared_recipe_segment,
+)
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 
 class TestCreateUniqueBranch:
@@ -128,9 +134,16 @@ class TestCreateUniqueBranch:
 
 class TestCheckPrMergeable:
     @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "tool_ctx_ready_recipe",
+        IMPLEMENTATION_READY_PARAMETERS,
+        indirect=True,
+    )
     async def test_mergeable_pr(
         self,
         tool_ctx_kitchen_open,
+        tool_ctx_ready_recipe,
+        tmp_path,
         monkeypatch: pytest.MonkeyPatch,
     ):
         tool_ctx_kitchen_open.runner.push(
@@ -138,12 +151,15 @@ class TestCheckPrMergeable:
                 0, json.dumps({"mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN"}), ""
             )
         )
-        install_prepared_recipe_segment(monkeypatch, tools_git, step_name="mergeable")
+        install_prepared_recipe_segment(monkeypatch, step_name="mergeable")
         result = json.loads(await check_pr_mergeable(42, ".", step_name="mergeable"))
         assert result["mergeable"] is True
         assert result["merge_state_status"] == "CLEAN"
         assert result["mergeable_status"] == "MERGEABLE"
         assert result["recipe_segment"]["kind"] == "success"
+        await assert_real_checkpoint_response_budget(
+            tool_ctx_ready_recipe, "check_pr_mergeable", result, tmp_path
+        )
 
     @pytest.mark.anyio
     async def test_conflicting_pr_is_not_mergeable(
@@ -156,12 +172,13 @@ class TestCheckPrMergeable:
                 0, json.dumps({"mergeable": "CONFLICTING", "mergeStateStatus": "DIRTY"}), ""
             )
         )
-        install_prepared_recipe_segment(monkeypatch, tools_git, step_name="mergeable")
+        install_prepared_recipe_segment(monkeypatch, step_name="mergeable")
         result = json.loads(await check_pr_mergeable(42, ".", step_name="mergeable"))
         assert result["mergeable"] is False
         assert result["merge_state_status"] == "DIRTY"
         assert result["mergeable_status"] == "CONFLICTING"
         assert result["recipe_segment"]["kind"] == "success"
+        assert_delivery_outcome("check_pr_mergeable", result, expected=True)
 
     @pytest.mark.anyio
     async def test_unknown_mergeable_status_returned_raw(self, tool_ctx_kitchen_open):
@@ -181,10 +198,11 @@ class TestCheckPrMergeable:
         monkeypatch: pytest.MonkeyPatch,
     ):
         tool_ctx_kitchen_open.runner.push(_make_result(1, "", "pr not found"))
-        install_prepared_recipe_segment(monkeypatch, tools_git, step_name="mergeable")
+        install_prepared_recipe_segment(monkeypatch, step_name="mergeable")
         result = json.loads(await check_pr_mergeable(99, ".", step_name="mergeable"))
         assert result["success"] is False
         assert result["recipe_segment"]["kind"] == "recovery"
+        assert_delivery_outcome("check_pr_mergeable", result, expected=False)
 
     @pytest.mark.anyio
     async def test_gate_closed_returns_gate_error(self, tool_ctx):

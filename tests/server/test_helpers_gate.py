@@ -54,7 +54,6 @@ def _valid_recipe_section_pages(format_family: str) -> list[dict[str, object]]:
         flow_record_count=2,
     )
     plan = build_recipe_section_page_plan(
-        kitchen_id="consumer-sequence",
         generation=generation,
         selected=select_recipe_section(payload, section),
         recipe_section_bound_bytes=2_000,

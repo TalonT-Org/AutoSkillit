@@ -99,8 +99,20 @@ Synonym for the kitchen-tagged MCP tools. Two words, no hyphen.
 
 ### kitchen_id
 
-The unique identifier assigned to a kitchen instance (typically a session
-UUID). Recorded in pipeline telemetry.
+The campaign lineage identifier: the supplied resume campaign ID, otherwise
+`AUTOSKILLIT_CAMPAIGN_ID`, otherwise a UUID minted when the kitchen opens.
+It stays stable across close and reopen within a campaign and is shared by
+the campaign's food trucks. Captures, child environment, hooks, tracker,
+session logs, plan-set binding, and response envelopes use this identifier.
+Per-activation recipe state uses [kitchen_activation_id](#kitchen_activation_id).
+
+### kitchen_activation_id
+
+The identity minted fresh on each `CLOSED -> INFRASTRUCTURE_READY` transition,
+never reused, and carried unchanged when an already-open kitchen receives new
+arguments. It keys recipe artifacts and their tombstones, the recipe generation
+store, and the page-plan cache. [kitchen_id](#kitchen_id) retains the campaign
+lineage across these activations.
 
 ### L0
 

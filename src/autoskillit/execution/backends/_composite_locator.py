@@ -25,12 +25,13 @@ class CompositeSessionLocator:
             for backend_name, cls in BACKEND_REGISTRY.items()
         )
 
-    def locate_session(self, session_id: str) -> Path | None:
+    def _first_resolved_session(self, session_id: str) -> tuple[SessionLocator, Path] | None:
         if not session_id or session_id.startswith(("no_session_", "crashed_")):
             return None
         for backend_name, locator_factory in self._locator_sources():
             try:
-                result = locator_factory().locate_session(session_id)
+                locator = locator_factory()
+                result = locator.locate_session(session_id)
             except Exception:
                 if backend_name is None:
                     logger.debug("session_locate_failed", exc_info=True)
@@ -38,27 +39,21 @@ class CompositeSessionLocator:
                     logger.debug("session_locate_failed", backend=backend_name, exc_info=True)
                 continue
             if result is not None:
-                return result
+                return locator, result
         return None
 
+    def locate_session(self, session_id: str) -> Path | None:
+        resolved = self._first_resolved_session(session_id)
+        return resolved[1] if resolved is not None else None
+
     def session_context_was_compacted(self, cwd: str, session_id: str) -> bool:
-        if not session_id or session_id.startswith(("no_session_", "crashed_")):
+        resolved = self._first_resolved_session(session_id)
+        if resolved is None:
             return False
-        for backend_name, locator_factory in self._locator_sources():
-            try:
-                locator = locator_factory()
-                path = locator.locate_session(session_id)
-            except Exception:
-                if backend_name is None:
-                    logger.debug("session_locate_failed", exc_info=True)
-                else:
-                    logger.debug("session_locate_failed", backend=backend_name, exc_info=True)
-                continue
-            if path is not None:
-                # Once the exact session is found, propagate transcript read errors;
-                # another backend cannot provide authoritative evidence for that session.
-                return locator.session_context_was_compacted(cwd, session_id)
-        return False
+        locator, _ = resolved
+        # Once the exact session is found, propagate transcript read errors;
+        # another backend cannot provide authoritative evidence for that session.
+        return locator.session_context_was_compacted(cwd, session_id)
 
     def project_log_dir(self, cwd: str) -> Path:
         return self.project_log_dir_for(cwd, "claude-code")

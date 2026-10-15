@@ -527,7 +527,7 @@
           "source_doc": "${{ context.experiment_plan }}"
         },
         "cwd": "${{ context.worktree_path }}",
-        "step_name": "decompose",
+        "step_name": "decompose_phases",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/make-groups"
       },
       "capture": {
@@ -1084,7 +1084,7 @@
           "adjust": true
         },
         "cwd": "${{ context.worktree_path }}",
-        "step_name": "adjust",
+        "step_name": "adjust_experiment",
         "output_dir": "."
       },
       "capture": {
@@ -1244,7 +1244,7 @@
           "group_manifest": "${{ context.group_manifest }}"
         },
         "cwd": "${{ context.worktree_path }}",
-        "step_name": "generate_report",
+        "step_name": "generate_report_inconclusive",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/generate-report"
       },
       "capture": {
@@ -1276,7 +1276,7 @@
           "worktree_path": "${{ context.worktree_path }}"
         },
         "cwd": "${{ inputs.source_dir }}",
-        "step_name": "fix",
+        "step_name": "fix_tests",
         "output_dir": "."
       },
       "capture": {

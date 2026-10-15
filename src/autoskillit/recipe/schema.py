@@ -33,38 +33,47 @@ _SENTINEL_TRIGGER_RE = re.compile(
 )
 
 
+def _find_json_object_end(text: str, start: int) -> int | None:
+    """Find the matching closing brace, respecting JSON strings and escapes."""
+    depth = 0
+    in_string = False
+    escaped = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+        elif ch == '"':
+            in_string = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+    return None
+
+
 def extract_sentinel_json_blocks(text: str) -> list[str]:
-    """Extract complete JSON object strings from a text using bracket-aware parsing.
+    """Extract complete JSON object strings following sentinel trigger phrases.
 
-    Handles nested braces and arrays, unlike a simple regex that stops at the first `}`.
-    Matches any sentinel-indicating trigger phrase (e.g., "Example sentinel:",
-    "sentinel JSON:", "sentinel: {…}") and then uses bracket counting to find the matching
-    closing brace for the JSON object that follows.
-
-    Returns a list of raw JSON strings (still serialized) that can be passed to json.loads().
+    Handles nested braces and arrays, ignoring braces inside JSON strings.
+    Matches phrases such as "Example sentinel:", "sentinel JSON:", and "sentinel: {…}".
+    Returns raw JSON strings that can be passed to json.loads().
     """
     blocks: list[str] = []
     for match in _SENTINEL_TRIGGER_RE.finditer(text):
-        # Position right after the trigger phrase
         start = match.end()
-        # Find first non-whitespace character
         while start < len(text) and text[start] in " \t\n\r":
             start += 1
         if start >= len(text) or text[start] != "{":
             continue
-        # Bracket-counting scan to find matching closing brace
-        depth = 0
-        i = start
-        while i < len(text):
-            ch = text[i]
-            if ch == "{":
-                depth += 1
-            elif ch == "}":
-                depth -= 1
-                if depth == 0:
-                    blocks.append(text[start : i + 1])
-                    break
-            i += 1
+        if (end := _find_json_object_end(text, start)) is not None:
+            blocks.append(text[start:end])
     return blocks
 
 

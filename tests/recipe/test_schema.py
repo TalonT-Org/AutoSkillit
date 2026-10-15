@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import dataclasses
+import json
 import pathlib
 
 import pytest
@@ -300,6 +301,23 @@ def test_recipe_declared_success_reasons(step_specs, expected) -> None:
     )
 
     assert recipe.declared_success_reasons() == expected
+
+
+@pytest.mark.parametrize(
+    "reason",
+    ["closing } brace", "opening { brace", 'escaped " quote } and \\ backslash', "trailing \\"],
+)
+def test_declared_success_reasons_preserve_braces_and_escapes_in_strings(reason: str) -> None:
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    sentinel = json.dumps({"success": True, "reason": reason, "nested": {"values": [1, 2]}})
+    recipe = Recipe(
+        name="quoted-braces",
+        description="JSON string extraction",
+        steps={"done": RecipeStep(action="stop", message=f"Example sentinel: {sentinel}")},
+    )
+
+    assert recipe.declared_success_reasons() == frozenset({reason})
 
 
 def test_step_retry_dataclass_removed() -> None:

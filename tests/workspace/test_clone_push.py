@@ -318,7 +318,7 @@ class TestPushToRemoteProtectedBranch:
 
 
 class TestPushToRemoteMocked:
-    @pytest.fixture(autouse=True)
+    @pytest.fixture
     def upstream_remote(self):
         with patch(
             "autoskillit.workspace.clone._matching_push_remote",
@@ -384,7 +384,7 @@ class TestPushToRemoteMocked:
         assert result == {"success": False, "stderr": str(error)}
         run.assert_not_called()
 
-    def test_ds7_push_to_remote_fails_when_no_origin(self) -> None:
+    def test_ds7_push_to_remote_fails_when_no_origin(self, upstream_remote) -> None:
         """T_DS7: push_to_remote returns error when git remote get-url fails, no push attempted."""
         mock_fail = MagicMock()
         mock_fail.returncode = 128
@@ -399,8 +399,9 @@ class TestPushToRemoteMocked:
         assert result["success"] is False
         assert "origin" in result["stderr"]
         assert mock_run.call_count == 1  # no push attempted
+        upstream_remote.assert_not_called()
 
-    def test_push_to_remote_with_force_injects_force_with_lease(self) -> None:
+    def test_push_to_remote_with_force_injects_force_with_lease(self, upstream_remote) -> None:
         """T1: push_to_remote with force=True appends --force-with-lease to push command."""
         mock_url = MagicMock()
         mock_url.returncode = 0
@@ -426,7 +427,11 @@ class TestPushToRemoteMocked:
         assert "main" in cmd
         assert second_call[1]["cwd"] == "/clone"
 
-    def test_push_to_remote_default_force_false_does_not_inject_lease(self) -> None:
+        upstream_remote.assert_called_once_with(Path("/clone"), "git@github.com:org/repo.git")
+
+    def test_push_to_remote_default_force_false_does_not_inject_lease(
+        self, upstream_remote
+    ) -> None:
         """T2: push_to_remote with force=False (default) does not inject --force-with-lease."""
         mock_url = MagicMock()
         mock_url.returncode = 0
@@ -448,6 +453,7 @@ class TestPushToRemoteMocked:
         second_call = mock_run.call_args_list[1]
         cmd = second_call[0][0]
         assert cmd == ["git", "push", "-u", "--", "git@github.com:org/repo.git", "main"]
+        upstream_remote.assert_called_once_with(Path("/clone"), "git@github.com:org/repo.git")
 
     def test_default_clone_manager_push_to_remote_accepts_force_param(self) -> None:
         """T5: DefaultCloneManager.push_to_remote has force keyword param with default False."""
@@ -458,7 +464,7 @@ class TestPushToRemoteMocked:
         param = sig.parameters["force"]
         assert param.default is False, "force param must default to False"
 
-    def test_force_with_lease_stale_returns_error_type(self) -> None:
+    def test_force_with_lease_stale_returns_error_type(self, upstream_remote) -> None:
         """push_to_remote returns error_type=force_with_lease_stale when git reports stale info."""
         mock_url = MagicMock()
         mock_url.returncode = 0
@@ -476,8 +482,9 @@ class TestPushToRemoteMocked:
 
         assert result["success"] is False
         assert result.get("error_type") == "force_with_lease_stale"
+        upstream_remote.assert_called_once_with(Path("/clone"), "git@github.com:org/repo.git")
 
-    def test_force_with_lease_no_upstream_returns_error_type(self) -> None:
+    def test_force_with_lease_no_upstream_returns_error_type(self, upstream_remote) -> None:
         """push_to_remote returns error_type=force_with_lease_no_upstream for missing upstream."""
         mock_url = MagicMock()
         mock_url.returncode = 0
@@ -495,8 +502,9 @@ class TestPushToRemoteMocked:
 
         assert result["success"] is False
         assert result.get("error_type") == "force_with_lease_no_upstream"
+        upstream_remote.assert_called_once_with(Path("/clone"), "git@github.com:org/repo.git")
 
-    def test_force_push_generic_failure_has_no_error_type(self) -> None:
+    def test_force_push_generic_failure_has_no_error_type(self, upstream_remote) -> None:
         """push_to_remote returns no error_type for generic force-push failures."""
         mock_url = MagicMock()
         mock_url.returncode = 0
@@ -515,7 +523,9 @@ class TestPushToRemoteMocked:
         assert result["success"] is False
         assert "error_type" not in result
 
-    def test_non_force_failure_has_no_error_type(self) -> None:
+        upstream_remote.assert_called_once_with(Path("/clone"), "git@github.com:org/repo.git")
+
+    def test_non_force_failure_has_no_error_type(self, upstream_remote) -> None:
         """push_to_remote returns no error_type for non-force push failures."""
         mock_url = MagicMock()
         mock_url.returncode = 0
@@ -536,7 +546,9 @@ class TestPushToRemoteMocked:
         assert result["success"] is False
         assert "error_type" not in result
 
-    def test_gh006_returns_queued_branch_error_type(self) -> None:
+        upstream_remote.assert_called_once_with(Path("/clone"), "git@github.com:org/repo.git")
+
+    def test_gh006_returns_queued_branch_error_type(self, upstream_remote) -> None:
         """GH006 stderr produces error_type=queued_branch."""
         mock_url = MagicMock()
         mock_url.returncode = 0
@@ -558,7 +570,9 @@ class TestPushToRemoteMocked:
         assert result["success"] is False
         assert result.get("error_type") == "queued_branch"
 
-    def test_merge_queue_stderr_returns_queued_branch_error_type(self) -> None:
+        upstream_remote.assert_called_once_with(Path("/clone"), "git@github.com:org/repo.git")
+
+    def test_merge_queue_stderr_returns_queued_branch_error_type(self, upstream_remote) -> None:
         """'protected by merge queue' stderr variant also produces queued_branch."""
         mock_url = MagicMock()
         mock_url.returncode = 0
@@ -577,7 +591,9 @@ class TestPushToRemoteMocked:
         assert result["success"] is False
         assert result.get("error_type") == "queued_branch"
 
-    def test_gh006_non_force_also_returns_queued_branch(self) -> None:
+        upstream_remote.assert_called_once_with(Path("/clone"), "git@github.com:org/repo.git")
+
+    def test_gh006_non_force_also_returns_queued_branch(self, upstream_remote) -> None:
         """GH006 fires for non-force pushes too (queue protects all push modes)."""
         mock_url = MagicMock()
         mock_url.returncode = 0
@@ -597,6 +613,7 @@ class TestPushToRemoteMocked:
 
         assert result["success"] is False
         assert result.get("error_type") == "queued_branch"
+        upstream_remote.assert_called_once_with(Path("/clone"), "git@github.com:org/repo.git")
 
 
 class TestPushToRemoteNonBare:

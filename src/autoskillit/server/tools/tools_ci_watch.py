@@ -34,6 +34,10 @@ def _coerce_none_string(value: str | None, *, tool: str) -> str | None:
     return value
 
 
+def _wait_for_ci_error(error: str) -> str:
+    return json.dumps({"run_id": None, "conclusion": "error", "failed_jobs": [], "error": error})
+
+
 async def _infer_ci_head_sha(head_sha: str | None, *, branch: str, cwd: str) -> str | None:
     """Infer the current HEAD SHA and warn if cwd is on another branch."""
     if head_sha is not None or not cwd:
@@ -130,13 +134,8 @@ async def wait_for_ci(
         _timing_ctx = None
         event = _coerce_none_string(event, tool="wait_for_ci")
         if event is not None and event not in KNOWN_CI_EVENTS:
-            return json.dumps(
-                {
-                    "run_id": None,
-                    "conclusion": "error",
-                    "failed_jobs": [],
-                    "error": f"Invalid event {event!r}. Valid events: {sorted(KNOWN_CI_EVENTS)}",
-                }
+            return _wait_for_ci_error(
+                f"Invalid event {event!r}. Valid events: {sorted(KNOWN_CI_EVENTS)}"
             )
         with structlog.contextvars.bound_contextvars(tool="wait_for_ci"):
             logger.info("wait_for_ci", branch=branch, repo=repo or "(infer)")
@@ -150,14 +149,7 @@ async def wait_for_ci(
             if tool_ctx.ci_watcher is None:
                 if step_name:
                     tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
-                return json.dumps(
-                    {
-                        "run_id": None,
-                        "conclusion": "error",
-                        "failed_jobs": [],
-                        "error": "CI watcher not configured",
-                    }
-                )
+                return _wait_for_ci_error("CI watcher not configured")
 
             head_sha = await _infer_ci_head_sha(head_sha, branch=branch, cwd=cwd)
 
@@ -221,14 +213,7 @@ async def wait_for_ci(
                 return json.dumps(result)
             except Exception as exc:
                 logger.error("wait_for_ci failed", exc_info=True)
-                return json.dumps(
-                    {
-                        "run_id": None,
-                        "conclusion": "error",
-                        "failed_jobs": [],
-                        "error": f"{type(exc).__name__}: {exc}",
-                    }
-                )
+                return _wait_for_ci_error(f"{type(exc).__name__}: {exc}")
             finally:
                 if step_name:
                     tool_ctx.timing_log.record(step_name, time.monotonic() - _start)
@@ -236,14 +221,7 @@ async def wait_for_ci(
         logger.error("wait_for_ci unhandled exception", exc_info=True)
         if step_name and _timing_ctx is not None:
             _timing_ctx.timing_log.record(step_name, time.monotonic() - _start)
-        return json.dumps(
-            {
-                "run_id": None,
-                "conclusion": "error",
-                "failed_jobs": [],
-                "error": f"{type(exc).__name__}: {exc}",
-            }
-        )
+        return _wait_for_ci_error(f"{type(exc).__name__}: {exc}")
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": True})

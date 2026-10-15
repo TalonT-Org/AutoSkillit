@@ -207,8 +207,6 @@ async def run_cmd(
                         "autoskillit.run_cmd",
                         extra={"exit_code": returncode},
                     )
-                if result.get("success") is True:
-                    return json.dumps(result)
                 return json.dumps(result)
             finally:
                 if step_name:

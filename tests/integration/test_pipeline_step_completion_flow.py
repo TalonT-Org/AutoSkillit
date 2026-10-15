@@ -17,7 +17,6 @@ from autoskillit.core.types import RetryReason
 from autoskillit.core.types.results._type_results import SkillResult
 from autoskillit.server import _notify
 from autoskillit.server.recipe import _recipe_segment_delivery as delivery_module
-from autoskillit.server.recipe._recipe_segment_delivery import PreparedRecipeSegmentDelivery
 from autoskillit.server.response._run_skill_completion import RunSkillCompletionMiddleware
 from autoskillit.server.tools import tools_pipeline_tracker
 from autoskillit.server.tools.tools_execution import run_skill
@@ -116,8 +115,8 @@ async def _deliver_run_skill_result(tmp_path, tool_ctx, result: SkillResult) -> 
     return json.loads(delivered.content[0].text)["receipt_id"]
 
 
-def _prepared_delivery() -> PreparedRecipeSegmentDelivery:
-    return PreparedRecipeSegmentDelivery(
+def _prepared_delivery() -> delivery_module.PreparedRecipeSegmentDelivery:
+    return delivery_module.PreparedRecipeSegmentDelivery(
         step_name="rectify",
         success_carrier=_SUCCESS_CARRIER,
         success_pull_carrier=_SUCCESS_CARRIER,

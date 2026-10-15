@@ -379,6 +379,13 @@ async def test_recovery_only_success_carrier_follows_success_crossings(
     claim_issue = prepare_recipe_segment_delivery(tool_ctx, "claim_and_resolve")
     assert claim_issue is not None
     assert claim_issue.success_carrier is None
+    assert claim_issue.success_pull_carrier is None
+    recovery = claim_issue.recovery_carrier
+    assert recovery["kind"] == "recovery"
+    assert recovery["source_step"] == "claim_and_resolve"
+    assert "register_clone_failure" in recovery["target_steps"]
+    assert "register_clone_failure" in recovery["pull_closure"]
+    assert {"section": "register_clone_failure", "part": 0} in recovery["pull_requests"]
 
 
 @pytest.mark.parametrize(

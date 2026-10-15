@@ -213,6 +213,7 @@ async def test_following_the_recovery_yields_an_admitted_digest(
             credential["execution_id"],
             credential["invocation_template_digests"][step_name],
         )
+        assert admitted["success"] is True, admitted
         serialized = json.dumps(admitted)
         for code in (
             "recipe_execution_attestation_missing",

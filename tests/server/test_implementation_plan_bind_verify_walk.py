@@ -171,9 +171,6 @@ async def test_plan_bind_verify_walk_uses_only_delivered_responses(
     assert carrier["kind"] == "success"
     assert _carrier_delivers_step(carrier, "verify")
 
-    if review_approach:
-        return
-
     verify_record = next(body for body in carrier["bodies"] if body["step"] == "verify")
     verify_body = load_yaml(verify_record["body"])["verify"]
     assert (

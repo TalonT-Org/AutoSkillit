@@ -55,6 +55,8 @@ class CompositeSessionLocator:
                     logger.debug("session_locate_failed", backend=backend_name, exc_info=True)
                 continue
             if path is not None:
+                # Once the exact session is found, propagate transcript read errors;
+                # another backend cannot provide authoritative evidence for that session.
                 return locator.session_context_was_compacted(cwd, session_id)
         return False
 

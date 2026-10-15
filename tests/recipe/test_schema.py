@@ -320,6 +320,23 @@ def test_declared_success_reasons_preserve_braces_and_escapes_in_strings(reason:
     assert recipe.declared_success_reasons() == frozenset({reason})
 
 
+@pytest.mark.parametrize("trigger", ["Sentinel:", "SENTINEL JSON:", "EXAMPLE SENTINEL:"])
+def test_declared_success_reasons_accept_case_variations_in_trigger(trigger: str) -> None:
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    recipe = Recipe(
+        name="capitalized-sentinel",
+        description="case-insensitive sentinel triggers",
+        steps={
+            "done": RecipeStep(
+                action="stop", message=f'{trigger} {{"success": true, "reason": "done"}}'
+            )
+        },
+    )
+
+    assert recipe.declared_success_reasons() == frozenset({"done"})
+
+
 def test_step_retry_dataclass_removed() -> None:
     """StepRetry dataclass must not exist in recipe.schema."""
     import autoskillit.recipe.schema as schema

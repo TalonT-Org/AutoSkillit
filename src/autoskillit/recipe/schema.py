@@ -28,8 +28,8 @@ CAMPAIGN_REF_RE: Final = re.compile(r"\$\{\{\s*campaign\.(\w+)\s*\}\}")
 
 # Trigger regex: matches multiple sentinel-indicating phrases
 _SENTINEL_TRIGGER_RE = re.compile(
-    r"[Ee]xample\s+sentinel:|sentinel\s+JSON:|sentinel:\s*(?=\{)",
-    re.DOTALL,
+    r"example\s+sentinel:|sentinel\s+JSON:|sentinel:\s*(?=\{)",
+    re.DOTALL | re.IGNORECASE,
 )
 
 

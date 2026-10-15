@@ -144,21 +144,27 @@ def _resolve_resume_log(
     if not resume_session_id:
         return None
 
+    def _refuse_compacted_session(
+        selected_session_id: str, *, original_session_id: str | None = None
+    ) -> ExecutionResult | None:
+        if not locator.session_context_was_compacted(project_dir, selected_session_id):
+            return None
+        log_fields = {"selected_session_id": selected_session_id}
+        if original_session_id is not None:
+            log_fields["original_session_id"] = original_session_id
+        logger.warning("resume_session_context_compacted", **log_fields)
+        return fail_closed(
+            FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED,
+            f"Session {selected_session_id} has a compacted context; automatic resume is refused.",
+            selected_session_id,
+        )
+
     primary_jsonl = (
         locator.session_log_path(project_dir, resume_session_id) if locator is not None else None
     )
     if primary_jsonl is not None and primary_jsonl.exists():
-        if locator.session_context_was_compacted(project_dir, resume_session_id):
-            logger.warning(
-                "resume_session_context_compacted",
-                selected_session_id=resume_session_id,
-            )
-            return fail_closed(
-                FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED,
-                f"Session {resume_session_id} has a compacted context; "
-                "automatic resume is refused.",
-                resume_session_id,
-            )
+        if (refusal := _refuse_compacted_session(resume_session_id)) is not None:
+            return refusal
         return resume_session_id
 
     logger.warning(
@@ -174,18 +180,12 @@ def _resolve_resume_log(
             else None
         )
         if fallback_jsonl is not None and fallback_jsonl.exists():
-            if locator.session_context_was_compacted(project_dir, fallback_session_id):
-                logger.warning(
-                    "resume_session_context_compacted",
-                    selected_session_id=fallback_session_id,
-                    original_session_id=resume_session_id,
+            if (
+                refusal := _refuse_compacted_session(
+                    fallback_session_id, original_session_id=resume_session_id
                 )
-                return fail_closed(
-                    FleetErrorCode.FLEET_L3_CONTEXT_EXHAUSTED,
-                    f"Session {fallback_session_id} has a compacted context; "
-                    "automatic resume is refused.",
-                    fallback_session_id,
-                )
+            ) is not None:
+                return refusal
             logger.info(
                 "resume_session_fallback",
                 original_session_id=resume_session_id,

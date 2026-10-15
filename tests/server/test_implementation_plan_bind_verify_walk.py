@@ -121,12 +121,12 @@ async def test_plan_bind_verify_walk_uses_only_delivered_responses(
     from autoskillit.core.io import load_yaml
     from tests.fakes import InMemoryHeadlessExecutor
     from tests.server._helpers import _skill_ok
+    from tests.server._plan_set_test_helpers import write_plan_set_parts
     from tests.server._recipe_segment_test_helpers import assert_delivery_outcome
-    from tests.server.test_tools_plan_set import _parts
 
     ready = tool_ctx_ready_recipe
     credential = ready.receipt["recipe_execution"]
-    _, part_a, part_b = _parts(git_checkout, ready.tool_ctx, monkeypatch)
+    _, part_a, part_b = write_plan_set_parts(git_checkout, ready.tool_ctx, monkeypatch)
     plan_text = f"verdict = plan\nplan_path = {part_a}\nplan_parts = {part_a},{part_b}"
     executor = InMemoryHeadlessExecutor(default_result=_skill_ok(plan_text))
     monkeypatch.setattr(ready.tool_ctx, "executor", executor)

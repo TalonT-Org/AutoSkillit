@@ -171,23 +171,27 @@ async def test_plan_bind_verify_walk_uses_only_delivered_responses(
             == credential["invocation_template_digests"]["verify"]
         )
     else:
+        from autoskillit.server.recipe._recipe_artifact import load_recipe_artifact
+        from autoskillit.server.tools import _recipe_section_handler as section_handler
         from autoskillit.server.tools.tools_recipe import get_recipe_section
 
         pull = {key: value for key, value in carrier["recipe_pull"].items() if key != "pull_tool"}
         chunks = []
         page_args = {"part": 0}
-        while True:
-            page = json.loads(await get_recipe_section(section="verify", **pull, **page_args))
-            assert page["success"] is True, page
-            assert page["payload_sha256"] == pull["payload_sha256"]
-            chunks.append(page["content"])
-            if not page["has_more"]:
-                break
-            page_args = {
-                "part": page["next_part"],
-                "page_plan_sha256": page["page_plan_sha256"],
-                "continuation": page["continuation"],
-            }
+        with monkeypatch.context() as pull_reads:
+            pull_reads.setattr(section_handler, "load_recipe_artifact", load_recipe_artifact)
+            while True:
+                page = json.loads(await get_recipe_section(section="verify", **pull, **page_args))
+                assert page["success"] is True, page
+                assert page["payload_sha256"] == pull["payload_sha256"]
+                chunks.append(page["content"])
+                if not page["has_more"]:
+                    break
+                page_args = {
+                    "part": page["next_part"],
+                    "page_plan_sha256": page["page_plan_sha256"],
+                    "continuation": page["continuation"],
+                }
         verify_yaml = "".join(chunks)
     verify_body = load_yaml(verify_yaml)["verify"]
     verify_context = {

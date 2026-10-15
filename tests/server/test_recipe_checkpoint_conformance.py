@@ -87,7 +87,7 @@ def _install_preparer(
     prepared = delivery_module.PreparedRecipeSegmentDelivery(
         step_name=_STEP_NAME,
         success_carrier=success_carrier,
-        success_pull_carrier=(_PULL_SUCCESS_CARRIER if success_carrier is not None else None),
+        success_pull_only_carrier=(_PULL_SUCCESS_CARRIER if success_carrier is not None else None),
         recovery_carrier=_RECOVERY_CARRIER,
     )
     calls: list[str] = []

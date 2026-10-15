@@ -119,7 +119,7 @@ def _prepared_delivery() -> delivery_module.PreparedRecipeSegmentDelivery:
     return delivery_module.PreparedRecipeSegmentDelivery(
         step_name="rectify",
         success_carrier=_SUCCESS_CARRIER,
-        success_pull_carrier=_SUCCESS_CARRIER,
+        success_pull_only_carrier=_SUCCESS_CARRIER,
         recovery_carrier=_RECOVERY_CARRIER,
     )
 

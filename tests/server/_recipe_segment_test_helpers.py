@@ -34,7 +34,7 @@ def install_prepared_recipe_segment(
     *,
     step_name: str,
     success_carrier: object = _DEFAULT_CARRIER,
-    success_pull_carrier: object = _DEFAULT_CARRIER,
+    success_pull_only_carrier: object = _DEFAULT_CARRIER,
 ) -> PreparedRecipeSegmentDelivery:
     success = (
         {
@@ -48,10 +48,10 @@ def install_prepared_recipe_segment(
     prepared = PreparedRecipeSegmentDelivery(
         step_name=step_name,
         success_carrier=success,
-        success_pull_carrier=(
+        success_pull_only_carrier=(
             success
-            if success_pull_carrier is _DEFAULT_CARRIER
-            else cast(dict[str, Any] | None, success_pull_carrier)
+            if success_pull_only_carrier is _DEFAULT_CARRIER
+            else cast(dict[str, Any] | None, success_pull_only_carrier)
         ),
         recovery_carrier={
             "kind": "recovery",
@@ -130,7 +130,7 @@ async def assert_real_checkpoint_response_budget(
     assert_delivery_outcome(tool_name, result, expected=True)
     prepared = _real_success_delivery(ready, tool_name)
     assert prepared.success_carrier is not None
-    assert prepared.success_pull_carrier is not None
+    assert prepared.success_pull_only_carrier is not None
     if not prepared.success_carrier.get("bodies") and not prepared.success_carrier.get(
         "pull_closures"
     ):
@@ -146,7 +146,7 @@ async def assert_real_checkpoint_response_budget(
     assert inline_size < RECIPE_SEGMENT_MAX_BYTES
     expanded["checkpoint_auxiliary"] = "x" * (RECIPE_SEGMENT_MAX_BYTES - inline_size)
     attached = delivery_module.attach_recipe_segment(expanded, prepared, success=True)
-    assert attached["recipe_segment"] == prepared.success_pull_carrier
+    assert attached["recipe_segment"] == prepared.success_pull_only_carrier
     shaped = enforce_response_budget(
         attached,
         tool_name=tool_name,
@@ -156,10 +156,13 @@ async def assert_real_checkpoint_response_budget(
     payload = json.loads(shaped) if isinstance(shaped, str) else shaped
     assert payload.get("subtype") != "recipe_segment_post_effect_delivery_failure"
     assert_delivery_outcome(tool_name, payload, expected=True)
-    assert payload["recipe_segment"] == prepared.success_pull_carrier
-    assert prepared.success_pull_carrier["source_step"] == prepared.step_name
-    assert prepared.success_pull_carrier["recipe_pull"] == prepared.success_carrier["recipe_pull"]
-    assert prepared.success_pull_carrier["pull_closures"]
+    assert payload["recipe_segment"] == prepared.success_pull_only_carrier
+    assert prepared.success_pull_only_carrier["source_step"] == prepared.step_name
+    assert (
+        prepared.success_pull_only_carrier["recipe_pull"]
+        == prepared.success_carrier["recipe_pull"]
+    )
+    assert prepared.success_pull_only_carrier["pull_closures"]
     for key, value in base.items():
         assert payload[key] == value, key
     metadata = payload.get(RESPONSE_SPILL_METADATA_KEY)

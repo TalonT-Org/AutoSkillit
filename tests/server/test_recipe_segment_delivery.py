@@ -228,12 +228,12 @@ async def test_checkpoint_delivery_sizes_failure_with_actual_tool_name(
 
     assert prepared is not None
     assert prepared.success_carrier is not None
-    assert prepared.success_pull_carrier is not None
+    assert prepared.success_pull_only_carrier is not None
     assert prepared.recovery_carrier is not None
     assert seen_tool_names == [expected_tool_name] * 4
     assert validated_carriers == [
         prepared.success_carrier,
-        prepared.success_pull_carrier,
+        prepared.success_pull_only_carrier,
         prepared.success_carrier,
         prepared.recovery_carrier,
     ]
@@ -379,7 +379,7 @@ async def test_recovery_only_success_carrier_follows_success_crossings(
     claim_issue = prepare_recipe_segment_delivery(tool_ctx, "claim_and_resolve")
     assert claim_issue is not None
     assert claim_issue.success_carrier is None
-    assert claim_issue.success_pull_carrier is None
+    assert claim_issue.success_pull_only_carrier is None
     recovery = claim_issue.recovery_carrier
     assert recovery["kind"] == "recovery"
     assert recovery["source_step"] == "claim_and_resolve"
@@ -400,7 +400,7 @@ async def test_success_carrier_degrades_to_pull_only_when_response_would_not_fit
     prepared = prepare_recipe_segment_delivery(tool_ctx, "bind_plan_set")
     assert prepared is not None
     assert prepared.success_carrier is not None
-    assert prepared.success_pull_carrier is not None
+    assert prepared.success_pull_only_carrier is not None
 
     base = {
         "success": True,
@@ -425,7 +425,7 @@ async def test_success_carrier_degrades_to_pull_only_when_response_would_not_fit
     )
 
     attached = attach_recipe_segment(base, prepared, success=True)
-    assert attached["recipe_segment"] == prepared.success_pull_carrier
+    assert attached["recipe_segment"] == prepared.success_pull_only_carrier
     shaped = enforce_response_budget(
         attached,
         tool_name="bind_plan_set",
@@ -435,7 +435,7 @@ async def test_success_carrier_degrades_to_pull_only_when_response_would_not_fit
     payload = json.loads(shaped) if isinstance(shaped, str) else shaped
 
     assert payload["success"] is True
-    assert payload["recipe_segment"] == prepared.success_pull_carrier
+    assert payload["recipe_segment"] == prepared.success_pull_only_carrier
     assert all(payload[key] == value for key, value in base.items())
 
 
@@ -452,7 +452,7 @@ async def test_pull_only_success_survives_oversized_bind_response_spill(
     assert isinstance(state, ReadyRecipe)
     prepared = prepare_recipe_segment_delivery(tool_ctx, "bind_plan_set")
     assert prepared is not None
-    assert prepared.success_pull_carrier is not None
+    assert prepared.success_pull_only_carrier is not None
     base = {
         "success": True,
         "plan_set_state": "sealed",
@@ -462,7 +462,7 @@ async def test_pull_only_success_survives_oversized_bind_response_spill(
     }
 
     attached = attach_recipe_segment(base, prepared, success=True)
-    assert attached["recipe_segment"] == prepared.success_pull_carrier
+    assert attached["recipe_segment"] == prepared.success_pull_only_carrier
     shaped = enforce_response_budget(
         attached,
         tool_name="bind_plan_set",
@@ -475,7 +475,7 @@ async def test_pull_only_success_survives_oversized_bind_response_spill(
     assert "do_not_repeat" not in payload
     assert payload["success"] is True
     assert payload["plan_set_authority_path"] == base["plan_set_authority_path"]
-    assert payload["recipe_segment"] == prepared.success_pull_carrier
+    assert payload["recipe_segment"] == prepared.success_pull_only_carrier
     assert payload["recipe_segment"]["source_step"] == "bind_plan_set"
     assert payload["recipe_segment"]["recipe_pull"] == state.artifact_generation.pull_identity()
     pull_requests = [

@@ -68,11 +68,16 @@ class RecipeSegmentDeliveryError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class PreparedRecipeSegmentDelivery:
-    """Pre-effect carriers for one mapped checkpoint source."""
+    """Pre-effect carriers for one mapped checkpoint source.
+
+    The primary success carrier includes bodies when automatic delivery is enabled;
+    the pull-only variant omits bodies to fit larger tool responses. Recovery-only
+    tools can share a recovery carrier between both success slots.
+    """
 
     step_name: str
     success_carrier: dict[str, Any] | None
-    success_pull_carrier: dict[str, Any] | None
+    success_pull_only_carrier: dict[str, Any] | None
     recovery_carrier: dict[str, Any]
 
 
@@ -537,7 +542,7 @@ def _prepare_checkpoint_carriers(
         success=False,
     )
     success_carrier: dict[str, Any] | None
-    success_pull_carrier: dict[str, Any] | None
+    success_pull_only_carrier: dict[str, Any] | None
     if definition is not None and definition.automatic_recipe_delivery:
         success_carrier = _checkpoint_carrier(
             persisted,
@@ -546,7 +551,7 @@ def _prepare_checkpoint_carriers(
             tool_name=tool_name,
             success=True,
         )
-        success_pull_carrier = _checkpoint_carrier(
+        success_pull_only_carrier = _checkpoint_carrier(
             persisted,
             ready=ready,
             step_name=step_name,
@@ -560,12 +565,12 @@ def _prepare_checkpoint_carriers(
             step_name,
             recovery_carrier,
         )
-        success_pull_carrier = success_carrier
+        success_pull_only_carrier = success_carrier
     if success_carrier is not None:
         build_post_effect_segment_failure(success_carrier, tool_name=tool_name)
     if recovery_carrier is not success_carrier:
         build_post_effect_segment_failure(recovery_carrier, tool_name=tool_name)
-    return success_carrier, success_pull_carrier, recovery_carrier
+    return success_carrier, success_pull_only_carrier, recovery_carrier
 
 
 def prepare_recipe_segment_delivery(
@@ -614,7 +619,7 @@ def prepare_recipe_segment_delivery(
     validate_segment_delivery_projection(state.finalized_projection)
     tool_name = _delivery_tool_name(state.finalized_projection, step_name) or "unknown"
     definition = get_tool_def(tool_name)
-    success_carrier, success_pull_carrier, recovery_carrier = _prepare_checkpoint_carriers(
+    success_carrier, success_pull_only_carrier, recovery_carrier = _prepare_checkpoint_carriers(
         persisted,
         ready=state,
         step_name=step_name,
@@ -624,7 +629,7 @@ def prepare_recipe_segment_delivery(
     return PreparedRecipeSegmentDelivery(
         step_name=step_name,
         success_carrier=success_carrier,
-        success_pull_carrier=success_pull_carrier,
+        success_pull_only_carrier=success_pull_only_carrier,
         recovery_carrier=recovery_carrier,
     )
 
@@ -646,7 +651,7 @@ def attach_recipe_segment(
         and len(_serialized_bytes({**result, "recipe_segment": carrier}))
         >= RECIPE_SEGMENT_MAX_BYTES
     ):
-        carrier = prepared.success_pull_carrier
+        carrier = prepared.success_pull_only_carrier
         if carrier is None:
             return result
     return {

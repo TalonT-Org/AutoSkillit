@@ -1755,6 +1755,15 @@ class TestPullRequestAssertions:
 
 
 class TestSessionWindowGate:
+    def test_malformed_session_index_names_the_file_and_row(self, tmp_path: Path) -> None:
+        path = tmp_path / "sessions.jsonl"
+        path.write_text("\n{broken\n", encoding="utf-8")
+
+        with pytest.raises(ValueError) as error:
+            harness.session_index_dir_names(tmp_path)
+
+        assert str(error.value).startswith(f"{path}:2: invalid session index JSON:")
+
     def test_malformed_turn_usage_names_the_session_file_and_row(self, tmp_path: Path) -> None:
         log_dir = tmp_path / "logs"
         _seed_sessions(log_dir, {"broken-session": []})

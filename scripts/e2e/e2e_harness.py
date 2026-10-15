@@ -330,8 +330,17 @@ def session_index_dir_names(log_dir: Path) -> frozenset[str]:
     index = log_dir / "sessions.jsonl"
     if not index.exists():
         return frozenset()
-    rows = (json.loads(line) for line in index.read_text().splitlines() if line.strip())
-    return frozenset(row["dir_name"] for row in rows if isinstance(row.get("dir_name"), str))
+    names = set()
+    for line_number, line in enumerate(index.read_text().splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"{index}:{line_number}: invalid session index JSON: {exc}") from exc
+        if isinstance(row.get("dir_name"), str):
+            names.add(row["dir_name"])
+    return frozenset(names)
 
 
 def _check_session_turn_windows(log_dir: Path, dir_name: str) -> list[str]:

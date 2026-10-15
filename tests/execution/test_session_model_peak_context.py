@@ -40,6 +40,24 @@ def _assistant(
     return json.dumps(record)
 
 
+def _init(model: str | None) -> str:
+    record: dict[str, object] = {
+        "type": "system",
+        "subtype": "init",
+        "session_id": "s",
+    }
+    if model is not None:
+        record["model"] = model
+    return json.dumps(record)
+
+
+def _subagent(model: str, cache_read: object, message_id: str) -> str:
+    record = json.loads(_assistant(cache_read=cache_read, message_id=message_id, model=model))
+    record["subagent_type"] = "Explore"
+    record["parent_tool_use_id"] = "call_1"
+    return json.dumps(record)
+
+
 def _result(cache_read: int = 0) -> str:
     return json.dumps(
         {
@@ -177,11 +195,140 @@ def test_duplicate_message_snapshots_count_once_in_rows_and_aggregate():
     assert [row["message_id"] for row in rows] == [f"msg-{index}" for index in range(1, 6)]
 
 
-def test_rows_use_exact_model_windows_and_inclusive_input():
+@pytest.mark.parametrize(
+    ("init_models", "parent_models", "model_usage", "include_subagent", "window"),
+    [
+        pytest.param(
+            ("claude-sonnet-5",),
+            ("MiniMax-M3",),
+            {"claude-sonnet-5": {"contextWindow": 200_000}},
+            False,
+            200_000,
+            id="gateway-unsuffixed",
+        ),
+        pytest.param(
+            ("claude-sonnet-5[1m]",),
+            ("MiniMax-M3",),
+            {"claude-sonnet-5[1m]": {"contextWindow": 1_000_000}},
+            False,
+            1_000_000,
+            id="gateway-suffixed",
+        ),
+        pytest.param(
+            ("claude-opus-4-6[1m]",),
+            ("MiniMax-M3",),
+            {
+                "claude-opus-4-6[1m]": {"contextWindow": 1_000_000},
+                "MiniMax-M3": {"contextWindow": 200_000},
+            },
+            True,
+            1_000_000,
+            id="subagent-served-name-collision",
+        ),
+        pytest.param(
+            ("claude-sonnet-5",),
+            ("claude-sonnet-5",),
+            {"claude-sonnet-5": {"contextWindow": 1_000_000}},
+            False,
+            1_000_000,
+            id="first-party-bare-name",
+        ),
+        pytest.param(
+            ("haiku",),
+            ("claude-haiku-4-5-20251001",),
+            {"claude-haiku-4-5-20251001": {"contextWindow": 200_000}},
+            False,
+            200_000,
+            id="alias-launch",
+        ),
+        pytest.param(
+            ("claude-sonnet-5[1m]",) * 3,
+            ("MiniMax-M3",),
+            {"claude-sonnet-5[1m]": {"contextWindow": 1_000_000}},
+            False,
+            1_000_000,
+            id="repeated-init-same-model",
+        ),
+    ],
+)
+def test_parent_turn_window_is_the_requested_models_window(
+    init_models: tuple[str, ...],
+    parent_models: tuple[str, ...],
+    model_usage: dict[str, dict[str, object]],
+    include_subagent: bool,
+    window: int,
+):
+    lines = [_init(model) for model in init_models]
+    lines.extend(
+        _assistant(cache_read=100, message_id=f"parent-{index}", model=model)
+        for index, model in enumerate(parent_models, start=1)
+    )
+    if include_subagent:
+        lines.append(_subagent("MiniMax-M3", 100, "subagent-1"))
+    lines.append(_model_usage_result(model_usage))
+
+    _usage, rows = extract_token_usage(_build_ndjson(lines))
+
+    assert [row["context_window_tokens"] for row in rows] == [window] * len(parent_models)
+
+
+@pytest.mark.parametrize(
+    ("init_model", "model_usage", "include_subagent"),
+    [
+        pytest.param(
+            None,
+            {
+                "claude-opus-4-6[1m]": {"contextWindow": 1_000_000},
+                "MiniMax-M3": {"contextWindow": 200_000},
+            },
+            False,
+            id="missing-init",
+        ),
+        pytest.param(
+            "claude-sonnet-5",
+            {
+                "MiniMax-M3": {"contextWindow": 200_000},
+                "claude-haiku-4-5": {"contextWindow": 400_000},
+            },
+            False,
+            id="requested-model-not-in-usage",
+        ),
+        pytest.param(
+            "claude-sonnet-5",
+            {
+                "claude-sonnet-5": {"contextWindow": 0},
+                "MiniMax-M3": {"contextWindow": 200_000},
+            },
+            True,
+            id="invalid-requested-window-with-valid-subagent-window",
+        ),
+    ],
+)
+def test_parent_turn_window_is_unknown_when_the_requested_model_is_ambiguous(
+    init_model: str | None,
+    model_usage: dict[str, dict[str, object]],
+    include_subagent: bool,
+):
+    lines = [] if init_model is None else [_init(init_model)]
+    lines.append(_assistant(cache_read=100, message_id="parent-1", model="MiniMax-M3"))
+    if include_subagent:
+        lines.append(_subagent("MiniMax-M3", 100, "subagent-1"))
+    lines.append(_model_usage_result(model_usage))
+
+    _usage, rows = extract_token_usage(_build_ndjson(lines))
+
+    assert len(rows) == 1
+    assert rows[0]["context_window_tokens"] is None
+    assert rows[0]["context_fraction"] is None
+
+
+def test_rows_use_requested_model_window_and_inclusive_input():
     opus = "claude-opus-4-6-20260901"
     sonnet = "claude-sonnet-4-6-20260901"
+    requested_model = "claude-sonnet-5"
     stdout = _build_ndjson(
         [
+            _init(requested_model),
             _assistant(
                 cache_read=100,
                 message_id="opus-message",
@@ -198,8 +345,7 @@ def test_rows_use_exact_model_windows_and_inclusive_input():
             ),
             _model_usage_result(
                 {
-                    opus: {"contextWindow": 50},
-                    sonnet: {"contextWindow": 200},
+                    requested_model: {"contextWindow": 200},
                 }
             ),
         ]
@@ -212,19 +358,20 @@ def test_rows_use_exact_model_windows_and_inclusive_input():
     assert [row["backend"] for row in rows] == ["claude-code", "claude-code"]
     assert [row["model"] for row in rows] == [opus, sonnet]
     assert [row["input_tokens"] for row in rows] == [115, 125]
-    assert [row["context_window_tokens"] for row in rows] == [50, 200]
-    assert [row["context_fraction"] for row in rows] == [2.0, 0.5]
+    assert [row["context_window_tokens"] for row in rows] == [200, 200]
+    assert [row["context_fraction"] for row in rows] == [0.5, 0.5]
 
 
-@pytest.mark.parametrize("window", [None, 0, -1, True, 200.0, "200"])
+@pytest.mark.parametrize("window", [0, -1, True, 200.0, "200"])
 def test_unknown_or_invalid_context_window_leaves_fraction_unknown(
     window: object,
 ):
-    model = "another-model" if window is None else "claude-sonnet-4-6"
+    model = "claude-sonnet-4-6"
     stdout = _build_ndjson(
         [
+            _init(model),
             _assistant(cache_read=100, message_id="message-1"),
-            _model_usage_result({model: {"contextWindow": 200 if window is None else window}}),
+            _model_usage_result({model: {"contextWindow": window}}),
         ]
     )
 
@@ -234,21 +381,21 @@ def test_unknown_or_invalid_context_window_leaves_fraction_unknown(
     assert rows[0]["context_fraction"] is None
 
 
-def test_conflicting_windows_invalidate_only_the_affected_model():
+def test_conflicting_windows_for_the_requested_model_leave_window_unknown():
     opus = "claude-opus-4-6"
     sonnet = "claude-sonnet-4-6"
+    requested_model = "claude-sonnet-5"
     stdout = _build_ndjson(
         [
+            _init(requested_model),
             _assistant(cache_read=100, message_id="opus-message", model=opus),
             _assistant(cache_read=100, message_id="sonnet-message", model=sonnet),
-            _model_usage_result({opus: {"contextWindow": 200}, sonnet: {"contextWindow": 400}}),
-            _model_usage_result({opus: {"contextWindow": 300}, sonnet: {"contextWindow": 400}}),
+            _model_usage_result({requested_model: {"contextWindow": 200}}),
+            _model_usage_result({requested_model: {"contextWindow": 300}}),
         ]
     )
 
     _usage, rows = extract_token_usage(stdout)
 
-    assert rows[0]["context_window_tokens"] is None
-    assert rows[0]["context_fraction"] is None
-    assert rows[1]["context_window_tokens"] == 400
-    assert rows[1]["context_fraction"] == 0.25
+    assert [row["context_window_tokens"] for row in rows] == [None, None]
+    assert [row["context_fraction"] for row in rows] == [None, None]

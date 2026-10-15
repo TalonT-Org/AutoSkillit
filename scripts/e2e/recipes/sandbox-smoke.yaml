@@ -85,7 +85,8 @@ steps:
         only those two files, then create one new commit containing only
         sandbox/text.py and tests/test_smoke_canary.py with message
         `smoke: add sandbox canary`. Do not run a test command or call tools
-        that dispatch work to another worker.
+        that dispatch work to another worker. Report the commit hash and
+        changed file paths in your final response before the completion marker.
       cwd: "${{ context.worktree_path }}"
       output_dir: "${{ context.worktree_path }}"
       step_name: implement

@@ -269,7 +269,13 @@ class TestPushToRemoteTool:
 
         assert result == {
             "success": False,
-            "error": "RecipeSegmentDeliveryError: READY compile identity differs from artifact",
+            "is_error": True,
+            "error": (
+                "push_to_remote: recipe segment preparation failed: "
+                "RecipeSegmentDeliveryError: READY compile identity differs from artifact"
+            ),
+            "stage": "recipe_segment_delivery",
+            "retriable": True,
         }
         assert_delivery_outcome("push_to_remote", result, expected=False)
         mock_mgr.push_to_remote.assert_not_called()

@@ -18,11 +18,46 @@ from tests._hook_protocol_oracle import (
     STATUS_COMPLETED,
     STATUS_FAILED,
     STATUS_STOPPED,
+    claude_matcher_admits,
     claude_verdict,
     codex_verdict,
 )
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
+
+
+@pytest.mark.parametrize(
+    ("matcher", "value", "admitted"),
+    [
+        (None, "Bash", True),
+        (None, "", True),
+        ("", "Bash", True),
+        ("", "", True),
+        ("*", "Bash", True),
+        ("*", "", True),
+        ("Bash", "Bash", True),
+        ("Bash", "BashOutput", False),
+        ("Edit|Write", "Edit", True),
+        ("Edit|Write", "Write", True),
+        ("Edit|Write", "NotebookEdit", False),
+        ("Edit, Write", "Edit", True),
+        ("Edit, Write", "Write", True),
+        ("Edit, Write", "NotebookEdit", False),
+        ("code-reviewer", "code-reviewer", True),
+        ("code-reviewer", "other-code-reviewer", False),
+        ("^Notebook", "NotebookEdit", True),
+        ("Edit.*", "NotebookEdit", True),
+        ("^Edit$", "NotebookEdit", False),
+        ("^my-plugin:reviewer$", "my-plugin:reviewer", True),
+        ("general-purpose", "", False),
+        (".+", "", False),
+        (".*", "", True),
+    ],
+)
+def test_claude_matcher_follows_the_documented_rule(
+    matcher: str | None, value: str, admitted: bool
+) -> None:
+    assert claude_matcher_admits(matcher, value) is admitted
 
 
 @pytest.mark.parametrize("event", ["PreCompact", "PostCompact"])

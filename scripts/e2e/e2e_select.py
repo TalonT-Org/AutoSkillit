@@ -21,6 +21,7 @@ MIN_CHANGED_FILES = 10
 MIN_CHANGED_LINES = 300
 SAMPLE_PROBABILITY = 0.5
 MAX_TESTS = 2
+MAX_PIPELINE_TESTS = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,10 +69,12 @@ class Selection:
 
 
 def is_eligible(pr: PullRequestFacts) -> bool:
+    return E2E_LABEL in pr.labels or _is_large_change(pr)
+
+
+def _is_large_change(pr: PullRequestFacts) -> bool:
     return (
-        E2E_LABEL in pr.labels
-        or pr.changed_files >= MIN_CHANGED_FILES
-        or pr.additions + pr.deletions >= MIN_CHANGED_LINES
+        pr.changed_files >= MIN_CHANGED_FILES or pr.additions + pr.deletions >= MIN_CHANGED_LINES
     )
 
 
@@ -97,13 +100,32 @@ def _touches(test: e2e_catalog.CatalogTest, changed_paths: Sequence[str]) -> boo
 
 
 def pick_tests(
-    catalog: e2e_catalog.Catalog, changed_paths: Sequence[str], seed: str
+    catalog: e2e_catalog.Catalog,
+    changed_paths: Sequence[str],
+    seed: str,
+    *,
+    large_change: bool = False,
 ) -> tuple[str, ...]:
-    ranked = sorted(catalog.tests, key=lambda test: _rank(seed, test.name))
-    touched = [test.name for test in ranked if _touches(test, changed_paths)]
+    eligible = [
+        test
+        for test in catalog.tests
+        if not test.pipeline or (large_change and _touches(test, changed_paths))
+    ]
+    ranked = sorted(eligible, key=lambda test: _rank(seed, test.name))
+    touched = [test for test in ranked if _touches(test, changed_paths)]
     if touched:
-        return tuple(touched[:MAX_TESTS])
-    return (ranked[0].name,)
+        picked: list[str] = []
+        pipeline_count = 0
+        for test in touched:
+            if test.pipeline:
+                if pipeline_count >= MAX_PIPELINE_TESTS:
+                    continue
+                pipeline_count += 1
+            picked.append(test.name)
+            if len(picked) == MAX_TESTS:
+                break
+        return tuple(picked)
+    return (ranked[0].name,) if ranked else ()
 
 
 def select_for_pull_request(
@@ -122,10 +144,16 @@ def select_for_pull_request(
         )
     seed = f"{pr.number}:{pr.head_sha}"
     if E2E_LABEL in pr.labels:
-        return Selection(pick_tests(catalog, changed_paths, seed), f"{E2E_LABEL} label")
+        return Selection(
+            pick_tests(catalog, changed_paths, seed, large_change=_is_large_change(pr)),
+            f"{E2E_LABEL} label",
+        )
     if not is_sampled(pr, SAMPLE_PROBABILITY):
         return Selection((), "eligible but not sampled for this head commit")
-    return Selection(pick_tests(catalog, changed_paths, seed), "eligible and sampled")
+    return Selection(
+        pick_tests(catalog, changed_paths, seed, large_change=_is_large_change(pr)),
+        "eligible and sampled",
+    )
 
 
 def select_for_dispatch(requested: str, catalog: e2e_catalog.Catalog) -> Selection:

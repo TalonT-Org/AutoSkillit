@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
     ChannelConfirmation,
+    KillReason,
     RolloutMarker,
     SubprocessResult,
     TerminationReason,
@@ -112,6 +113,11 @@ def run_managed_sync(
                 stdout=stdout,
                 stderr=stderr,
                 termination=termination,
+                kill_reason=(
+                    KillReason.INFRA_KILL
+                    if termination is TerminationReason.TIMED_OUT
+                    else KillReason.NATURAL_EXIT
+                ),
                 pid=process.pid,
                 process_group_id=process.pid,
                 channel_confirmation=ChannelConfirmation.UNMONITORED,

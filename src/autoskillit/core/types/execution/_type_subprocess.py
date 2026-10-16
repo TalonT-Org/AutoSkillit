@@ -34,18 +34,18 @@ __all__ = [
 #:   stdout=whatever was flushed to the temp file before exit
 #:   Kill-anomaly possible when returncode==0, UNMONITORED, and stdout is success+empty,
 #:   empty_output, or unparseable → _is_kill_anomaly returns True.
-#:   When CHANNEL_A or CHANNEL_B: no kill anomaly; session completed.
+#:   Channel confirmation excludes this kill anomaly; content success is adjudicated separately.
 #:
 #: COMPLETED (Channel A):
 #:   channel_confirmation=CHANNEL_A (heartbeat confirmed type=result in stdout)
 #:   returncode=nonzero (SIGTERM/SIGKILL from async_kill_process_tree)
 #:   stdout=contains a complete type=result NDJSON record
 #:
-#: COMPLETED (Channel B, drain expired OR no heartbeat configured):
-#:   channel_confirmation=CHANNEL_B (session JSONL is sole authority)
-#:   returncode=nonzero (SIGTERM/SIGKILL)
-#:   stdout=may be empty (CLI not yet flushed type=result before kill)
-#:   _compute_success provenance bypass applies: return True immediately.
+#: Channel B corroboration (independent of termination):
+#:   a session JSONL marker never releases a live process.
+#:   It can corroborate an observed exit or remain recorded after an independent
+#:   timeout or infrastructure-abort cause ends the run.
+#:   It cannot replace native terminal or content evidence.
 #:
 #: STALE:
 #:   channel_confirmation=UNMONITORED (typical: stale monitor fired alone)
@@ -138,8 +138,8 @@ class SubprocessResult:
     """How completion was confirmed by the two-channel detection system.
 
     CHANNEL_A: heartbeat confirmed type=result in stdout; data availability guaranteed.
-    CHANNEL_B: session JSONL marker fired; drain expired or no heartbeat configured.
-               stdout may be empty — callers must trust JSONL signal, not stdout content.
+    CHANNEL_B: session JSONL marker corroboration; never releases a live process.
+               May corroborate an exit or remain recorded after timeout or infrastructure abort.
     UNMONITORED: no channel monitoring active (NATURAL_EXIT, STALE, TIMED_OUT, sync path).
     """
     proc_snapshots: list[dict[str, object]] | None = None

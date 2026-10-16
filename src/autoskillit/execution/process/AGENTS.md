@@ -4,6 +4,9 @@ Subprocess lifecycle management — spawn, monitor, race, kill.
 
 ## Architecture Notes
 
+- A Channel B transcript marker is corroboration and session discovery only; it never releases a live race in any mode. Completion release requires Channel A native terminal evidence or a witnessed exit; timeout, cancellation and infrastructure-abort paths remain bounded.
+- `NO_KILL` requires an observed exit.
+
 **Two-channel completion detection:**
 
 - **Channel A** (stdout heartbeat): polls the subprocess stdout temp file for a `type=result` NDJSON record containing the completion marker. Guarantees stdout data is available.

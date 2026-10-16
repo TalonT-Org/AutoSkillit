@@ -83,6 +83,9 @@ class RaceAccumulator:
     ``process_exited_event`` is set by _watch_process BEFORE setting trigger,
     so downstream code can await it as a race primitive. It is passed (by reference)
     to execute_termination_action to support the DRAIN_THEN_KILL_IF_ALIVE window.
+
+    ``completion_candidate_event`` is set only by Channel A native terminal evidence
+    in ``_watch_heartbeat``.
     """
 
     process_exited: bool = False
@@ -104,7 +107,6 @@ class RaceAccumulator:
     schedule_wakeup_violation: bool = False
     completion_ceiling_expired: bool = False
     channel_a_candidate_at: float | None = None
-    channel_b_candidate_at: float | None = None
     stdout_cursor: EventCursor | None = None
     channel_b_cursor: EventCursor | None = None
     completion_candidate_event: anyio.Event = field(default_factory=anyio.Event)
@@ -148,11 +150,7 @@ class RaceAccumulator:
         if on_session_id_resolved is not None and monitor_result.session_id:
             on_session_id_resolved(monitor_result.session_id)
         channel_b_ready.set()
-        if monitor_result.status is ChannelBStatus.COMPLETION:
-            if self.lifecycle_observation_enabled:
-                self.channel_b_candidate_at = anyio.current_time()
-                self.completion_candidate_event.set()
-        else:
+        if monitor_result.status is not ChannelBStatus.COMPLETION:
             trigger.set()
 
     def to_race_signals(self) -> RaceSignals:

@@ -20,6 +20,7 @@ from autoskillit.core.types import (
 from autoskillit.execution.backends import ClaudeStreamParser
 from autoskillit.execution.process import TetherSpec, run_managed_async, spawn_owned_process
 from autoskillit.execution.process._process_jsonl import EventCursor
+from autoskillit.execution.process._process_monitor import SessionMonitorResult
 from autoskillit.execution.process._process_race import (
     RaceAccumulator,
     RaceSignals,
@@ -306,8 +307,8 @@ class TestRaceAccumulatorFieldCount:
 
     def test_race_accumulator_field_count(self) -> None:
         n = len(dataclasses.fields(RaceAccumulator))
-        assert n == 24, (
-            f"RaceAccumulator has {n} fields (expected 24). Update tests for new fields."
+        assert n == 23, (
+            f"RaceAccumulator has {n} fields (expected 23). Update tests for new fields."
         )
 
 
@@ -367,7 +368,6 @@ def test_lifecycle_accumulator_fields_have_exact_defaults_and_freeze_propagation
     assert acc.schedule_wakeup_violation is False
     assert acc.completion_ceiling_expired is False
     assert acc.channel_a_candidate_at is None
-    assert acc.channel_b_candidate_at is None
     assert acc.stdout_cursor is None
     assert acc.channel_b_cursor is None
     assert not acc.completion_candidate_event.is_set()
@@ -418,7 +418,7 @@ async def test_completion_candidate_without_task_ignores_large_ceiling() -> None
 async def test_completion_ceiling_preserves_pending_ids_for_adjudication() -> None:
     acc = RaceAccumulator(lifecycle_observation_enabled=True)
     acc.pending_task_ids.add("owned")
-    acc.channel_b_candidate_at = anyio.current_time()
+    acc.channel_a_candidate_at = anyio.current_time()
     acc.completion_candidate_event.set()
     trigger = anyio.Event()
 
@@ -460,13 +460,19 @@ async def test_completion_waits_for_terminal_evidence_across_channel_orderings(
     acc = RaceAccumulator(lifecycle_observation_enabled=True)
     acc.stdout_cursor = EventCursor(stdout_path)
     acc.channel_b_cursor = EventCursor(channel_b_path)
+    trigger = anyio.Event()
     if marker_channel == "a":
         acc.channel_a_candidate_at = anyio.current_time()
+        acc.completion_candidate_event.set()
     else:
-        acc.channel_b_candidate_at = anyio.current_time()
-        acc.channel_b_status = ChannelBStatus.COMPLETION
-    acc.completion_candidate_event.set()
-    trigger = anyio.Event()
+        acc.deposit_session_log_result(
+            SessionMonitorResult(
+                ChannelBStatus.COMPLETION, "session", cursor=acc.channel_b_cursor
+            ),
+            anyio.Event(),
+            trigger,
+            None,
+        )
 
     async with anyio.create_task_group() as task_group:
         task_group.start_soon(
@@ -484,13 +490,20 @@ async def test_completion_waits_for_terminal_evidence_across_channel_orderings(
         assert not trigger.is_set()
         with task_path.open("a") as stream:
             stream.write('{"type":"task_notification","task_id":"owned","status":"completed"}\n')
-        with anyio.fail_after(1):
-            await trigger.wait()
+        if marker_channel == "a":
+            with anyio.fail_after(1):
+                await trigger.wait()
+        else:
+            await anyio.sleep(0.03)
+            assert trigger.is_set() is False
+            assert acc.completion_candidate_event.is_set() is False
+            task_group.cancel_scope.cancel()
 
-    signals = acc.to_race_signals()
-    assert signals.pending_task_ids == ()
-    assert signals.terminal_task_ids == ("owned",)
-    assert signals.channel_a_confirmed is (marker_channel == "a")
+    if marker_channel == "a":
+        signals = acc.to_race_signals()
+        assert signals.pending_task_ids == ()
+        assert signals.terminal_task_ids == ("owned",)
+        assert signals.channel_a_confirmed is True
 
 
 @pytest.mark.anyio

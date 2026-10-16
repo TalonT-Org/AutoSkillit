@@ -1989,6 +1989,10 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     # exercises the hook-authored child-outcome snapshot module directly
     # (issue #4623), via autoskillit.hooks's public re-export
     "tests/execution/test_child_outcomes.py": frozenset({"autoskillit.hooks"}),
+    # The managed runner regression invokes the real join Stop dispatcher and ledger.
+    "tests/execution/test_process_stop_hook_join.py": frozenset(
+        {"autoskillit.hooks", "autoskillit.hook_registry"}
+    ),
     "tests/execution/test_quota_io.py": frozenset({"autoskillit.config"}),
     "tests/execution/test_quota_sleep.py": frozenset({"autoskillit.hooks", "autoskillit.config"}),
     "tests/execution/test_quota_http.py": frozenset({"autoskillit.config"}),

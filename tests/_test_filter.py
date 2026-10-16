@@ -1528,6 +1528,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # file-level: exercises the hook-authored child-outcome snapshot module
             # directly (issue #4623) via autoskillit.hooks's public re-export.
             "execution/test_child_outcomes.py",
+            "execution/test_process_stop_hook_join.py",
             # hook_registry imports from autoskillit.hooks at module scope
             # (HOOK_REGISTRY, generate_hooks_json) for the registry init wiring.
             "hook_registry",

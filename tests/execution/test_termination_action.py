@@ -24,8 +24,9 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
         (TerminationReason.COMPLETED, False, False, TerminationAction.DRAIN_THEN_KILL_IF_ALIVE),
         # (NATURAL_EXIT, timeout=False, exited=True) → NO_KILL
         (TerminationReason.NATURAL_EXIT, False, True, TerminationAction.NO_KILL),
-        # (NATURAL_EXIT, timeout=False, exited=False) → NO_KILL
-        (TerminationReason.NATURAL_EXIT, False, False, TerminationAction.NO_KILL),
+        # A live leader needs an honest infrastructure kill regardless of the exit label.
+        (TerminationReason.NATURAL_EXIT, False, False, TerminationAction.IMMEDIATE_KILL),
+        (TerminationReason.SIGNAL_DEATH, False, False, TerminationAction.IMMEDIATE_KILL),
         # (TIMED_OUT, timeout=True, exited=True) → IMMEDIATE_KILL
         (TerminationReason.TIMED_OUT, True, True, TerminationAction.IMMEDIATE_KILL),
         # (TIMED_OUT, timeout=True, exited=False) → IMMEDIATE_KILL
@@ -45,7 +46,8 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
         "completed_exited_no_kill",
         "completed_alive_drain_kill",
         "natural_exit_exited_no_kill",
-        "natural_exit_alive_no_kill",
+        "natural_exit_alive_is_infra_kill",
+        "signal_death_alive_is_infra_kill",
         "timed_out_exited_immediate_kill",
         "timed_out_alive_immediate_kill",
         "idle_stall_alive_immediate_kill",

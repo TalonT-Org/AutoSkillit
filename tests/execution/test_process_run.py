@@ -21,7 +21,7 @@ import psutil
 import pytest
 import structlog.testing
 
-from autoskillit.core.types import TerminationReason
+from autoskillit.core.types import KillReason, TerminationReason
 from autoskillit.execution.process import (
     _normalize_pass_fds,
     read_temp_output,
@@ -189,6 +189,15 @@ class TestStdinInput:
 
 class TestTimeoutKillsHangingProcess:
     """Timeout fires and kills when process hangs."""
+
+    def test_sync_timeout_reports_infra_kill(self, tmp_path):
+        script = tmp_path / "hang.py"
+        script.write_text(HANG_FOREVER_SCRIPT)
+
+        result = run_managed_sync([sys.executable, str(script)], cwd=tmp_path, timeout=0.3)
+
+        assert result.termination is TerminationReason.TIMED_OUT
+        assert result.kill_reason is KillReason.INFRA_KILL
 
     @pytest.mark.anyio
     async def test_timeout_fires_and_kills_hanging_process(self, tmp_path):

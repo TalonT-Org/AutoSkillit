@@ -343,7 +343,7 @@ class TerminationAction(StrEnum):
     Produced by decide_termination_action (pure function) and consumed by
     execute_termination_action (the single authorized kill caller in process.py).
 
-    - NO_KILL: process already exited naturally; no kill needed.
+    - NO_KILL: leader exit observed; no kill needed.
     - DRAIN_THEN_KILL_IF_ALIVE: channel confirmed completion but process is still
       alive; wait up to grace_seconds for natural exit, then kill if still running.
     - IMMEDIATE_KILL: timeout, stall, or stale — kill without draining.
@@ -378,8 +378,8 @@ class ChannelConfirmation(StrEnum):
 
     Invariant (from process.py):
     - CHANNEL_A: heartbeat fired; stdout contains non-empty type=result record.
-    - CHANNEL_B: session JSONL marker fired; drain expired OR no heartbeat configured.
-      stdout may be empty. Downstream must not require stdout content.
+    - CHANNEL_B: session JSONL marker observed; never releases a live process;
+      typically corroborates a process exit.
     - UNMONITORED: no channel monitoring active (NATURAL_EXIT, STALE, TIMED_OUT,
       sync path, or heartbeat disabled with no Channel B win).
     - DIR_MISSING: session log directory did not exist when monitoring started.

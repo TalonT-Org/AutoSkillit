@@ -45,10 +45,11 @@ def decide_termination_action(
 
     Priority:
     1. timeout_fired → IMMEDIATE_KILL (always overrides)
-    2. process_exited → NO_KILL (process already gone, no signal needed)
-    3. termination-reason dispatch:
+    2. process_exited with unresolved obligations or an expired ceiling → IMMEDIATE_KILL
+    3. process_exited → NO_KILL (leader exit observed, no signal needed)
+    4. live termination-reason dispatch:
        - COMPLETED: channel won but process alive → DRAIN_THEN_KILL_IF_ALIVE
-       - NATURAL_EXIT: fallback case → NO_KILL
+       - NATURAL_EXIT / SIGNAL_DEATH: unobserved exit → IMMEDIATE_KILL
        - IDLE_STALL / STALE / TIMED_OUT: infra kill → IMMEDIATE_KILL
 
     The function is deliberately free of anyio and I/O so it can be tested
@@ -64,7 +65,7 @@ def decide_termination_action(
         return TerminationAction.NO_KILL
     match termination:
         case TerminationReason.NATURAL_EXIT | TerminationReason.SIGNAL_DEATH:
-            return TerminationAction.NO_KILL
+            return TerminationAction.IMMEDIATE_KILL
         case TerminationReason.COMPLETED:
             return TerminationAction.DRAIN_THEN_KILL_IF_ALIVE
         case (

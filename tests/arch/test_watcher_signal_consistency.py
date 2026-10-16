@@ -230,31 +230,57 @@ def test_completion_marker_watchers_do_not_trigger_lifecycle_completion_directly
         and call.func.attr == "set"
         for call in ast.walk(deposition)
     )
-    completion_branch = next(
+    assert not any(
+        isinstance(node, ast.Attribute)
+        and (node.attr == "completion_candidate_event" or node.attr.endswith("_candidate_at"))
+        for node in ast.walk(deposition)
+    )
+    trigger_calls = [
+        call
+        for call in ast.walk(deposition)
+        if isinstance(call, ast.Call) and _calls_trigger_set(call)
+    ]
+    assert len(trigger_calls) == 1
+    release_branch = next(
         node
         for node in deposition.body
-        if isinstance(node, ast.If)
-        and isinstance(node.test, ast.Compare)
-        and any(
-            isinstance(comparator, ast.Attribute) and comparator.attr == "COMPLETION"
-            for comparator in node.test.comparators
-        )
+        if isinstance(node, ast.If) and _calls_trigger_set(ast.Module(body=node.body))
     )
-    assert isinstance(completion_branch.test, ast.Compare)
-    assert isinstance(completion_branch.test.left, ast.Attribute)
-    assert isinstance(completion_branch.test.left.value, ast.Name)
-    assert completion_branch.test.left.value.id == "monitor_result"
-    assert completion_branch.test.left.attr == "status"
-    assert not _calls_trigger_set(ast.Module(body=completion_branch.body))
-    assert any(
-        isinstance(call, ast.Call)
-        and isinstance(call.func, ast.Attribute)
-        and isinstance(call.func.value, ast.Attribute)
-        and call.func.value.attr == "completion_candidate_event"
-        and call.func.attr == "set"
-        for call in ast.walk(ast.Module(body=completion_branch.body))
+    comparison = release_branch.test
+    assert isinstance(comparison, ast.Compare)
+    assert len(comparison.ops) == 1 and isinstance(comparison.ops[0], ast.IsNot)
+    assert isinstance(comparison.left, ast.Attribute)
+    assert isinstance(comparison.left.value, ast.Name)
+    assert comparison.left.value.id == "monitor_result"
+    assert comparison.left.attr == "status"
+    assert len(comparison.comparators) == 1
+    assert isinstance(comparison.comparators[0], ast.Attribute)
+    assert comparison.comparators[0].attr == "COMPLETION"
+
+
+def test_completion_candidate_event_has_single_native_terminal_setter() -> None:
+    setters: list[tuple[Path, int]] = []
+    for source in _EXECUTION_ROOT.rglob("*.py"):
+        tree = ast.parse(source.read_text(encoding="utf-8"))
+        for call in ast.walk(tree):
+            if (
+                isinstance(call, ast.Call)
+                and isinstance(call.func, ast.Attribute)
+                and call.func.attr == "set"
+                and isinstance(call.func.value, ast.Attribute)
+                and call.func.value.attr == "completion_candidate_event"
+            ):
+                setters.append((source, call.lineno))
+    assert len(setters) == 1, setters
+    source, lineno = setters[0]
+    assert source == _PROCESS_RACE
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    heartbeat = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_watch_heartbeat"
     )
-    assert _calls_trigger_set(ast.Module(body=completion_branch.orelse))
+    assert heartbeat.lineno < lineno <= heartbeat.end_lineno
 
 
 def test_completion_eligibility_and_final_fold_consume_both_cursors() -> None:

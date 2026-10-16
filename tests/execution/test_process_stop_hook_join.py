@@ -273,8 +273,8 @@ async def test_blocked_stop_continuation_completes_required_work_without_preempt
     assert (tmp_path / "continuation_ran").exists()
     assert result.returncode == 0
     assert result.channel_confirmation is ChannelConfirmation.CHANNEL_A
+    assert result.kill_reason is KillReason.NATURAL_EXIT
     assert "Session terminated" not in result.stdout + result.stderr
-    # F-1: the drain's cancelled exit watcher can still label this KILL_AFTER_COMPLETION.
 
 
 @pytest.mark.anyio

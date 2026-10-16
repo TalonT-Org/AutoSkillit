@@ -92,16 +92,20 @@ async def _drain_before_escalation(
 ) -> tuple[int | None, ProcessCleanupResult] | None:
     with anyio.move_on_after(grace_seconds):
         await process_exited_event.wait()
-    if owner.returncode is not None:
-        proc_log.debug("natural_exit_after_drain", returncode=owner.returncode)
+    returncode = await anyio.to_thread.run_sync(partial(owner.observe_exit, include_stopped=False))
+    if returncode is not None:
+        proc_log.debug("natural_exit_after_drain", returncode=returncode)
         return await anyio.to_thread.run_sync(owner.settle_evidence, abandon_on_cancel=False)
     # Child-liveness deferral: same pattern as _session_log_monitor stale-kill suppression
     if pid is not None and child_deferral_ceiling > 0:
         deferral_start = anyio.current_time()
         _poll_interval = 2.0
         while (anyio.current_time() - deferral_start) < child_deferral_ceiling:
-            if owner.returncode is not None:
-                proc_log.debug("natural_exit_during_deferral", returncode=owner.returncode)
+            returncode = await anyio.to_thread.run_sync(
+                partial(owner.observe_exit, include_stopped=False)
+            )
+            if returncode is not None:
+                proc_log.debug("natural_exit_during_deferral", returncode=returncode)
                 return await anyio.to_thread.run_sync(
                     owner.settle_evidence, abandon_on_cancel=False
                 )

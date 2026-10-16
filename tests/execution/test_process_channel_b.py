@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import sys
 import textwrap
-from functools import partial
-from pathlib import Path
 
 import psutil
 import pytest
@@ -13,10 +11,9 @@ import pytest
 from autoskillit.core.types import ChannelConfirmation, SubprocessResult, TerminationReason
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.process import (
-    _process_race,
-    _session_log_monitor,
     run_managed_async,
 )
+from tests.execution._process_helpers import coordinate_phase2_start
 from tests.execution.conftest import WRITE_RESULT_THEN_HANG_SCRIPT
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -59,18 +56,6 @@ CHANNEL_B_THEN_A_CONFIRM_SCRIPT = textwrap.dedent("""\
     sys.stdout.flush()
     time.sleep(3600)
 """)
-
-
-def _coordinate_phase2_start(
-    monkeypatch: pytest.MonkeyPatch,
-    session_dir: Path,
-) -> None:
-    ready_path = session_dir / "phase2.ready"
-    monkeypatch.setattr(
-        _process_race,
-        "_session_log_monitor",
-        partial(_session_log_monitor, _on_poll=ready_path.touch),
-    )
 
 
 # Script that writes %%ORDER_UP%% to session JSONL but never writes type=result to stdout.
@@ -244,7 +229,7 @@ class TestChannelBDrainWait:
         """
         session_dir = tmp_path / "session"
         session_dir.mkdir()
-        _coordinate_phase2_start(monkeypatch, session_dir)
+        coordinate_phase2_start(monkeypatch, session_dir)
         script = tmp_path / "channel_b_no_stdout.py"
         script.write_text(CHANNEL_B_NO_STDOUT_SCRIPT)
 
@@ -310,7 +295,7 @@ class TestChannelBDrainWait:
         """
         session_dir = tmp_path / "session"
         session_dir.mkdir()
-        _coordinate_phase2_start(monkeypatch, session_dir)
+        coordinate_phase2_start(monkeypatch, session_dir)
         script = tmp_path / "channel_b_no_stdout.py"
         script.write_text(CHANNEL_B_NO_STDOUT_SCRIPT)
 
@@ -390,7 +375,7 @@ class TestChannelBDrainWait:
         """
         session_dir = tmp_path / "session"
         session_dir.mkdir()
-        _coordinate_phase2_start(monkeypatch, session_dir)
+        coordinate_phase2_start(monkeypatch, session_dir)
         script = tmp_path / "channel_b_empty.py"
         script.write_text(CHANNEL_B_THEN_A_EMPTY_RESULT_SCRIPT)
 
@@ -442,7 +427,7 @@ class TestChannelBFullPipelineAdjudication:
 
         session_dir = tmp_path / "session"
         session_dir.mkdir()
-        _coordinate_phase2_start(monkeypatch, session_dir)
+        coordinate_phase2_start(monkeypatch, session_dir)
         script = tmp_path / "channel_b_empty.py"
         script.write_text(CHANNEL_B_THEN_A_EMPTY_RESULT_SCRIPT)
 
@@ -496,7 +481,7 @@ class TestChannelBTimeoutPipelineAdjudication:
 
         session_dir = tmp_path / "session"
         session_dir.mkdir()
-        _coordinate_phase2_start(monkeypatch, session_dir)
+        coordinate_phase2_start(monkeypatch, session_dir)
         script = tmp_path / "channel_b_no_stdout.py"
         script.write_text(CHANNEL_B_NO_STDOUT_SCRIPT)
 

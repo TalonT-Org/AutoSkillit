@@ -258,23 +258,21 @@ async def _watch_completion_eligibility(
     if session_log_enabled and acc.channel_b_cursor is None:
         with anyio.move_on_after(completion_drain_timeout):
             await channel_b_selected.wait()
-    started = min(
-        timestamp
-        for timestamp in (acc.channel_a_candidate_at, acc.channel_b_candidate_at)
-        if timestamp is not None
-    )
+    started = acc.channel_a_candidate_at
+    # Only _watch_heartbeat sets the event, immediately after the timestamp.
+    assert started is not None
     while not trigger.is_set():
         if acc.stdout_cursor is not None:
             fold_event_cursor(acc.stdout_cursor, stream_parser, acc.observe_event)
         if acc.channel_b_cursor is not None:
             fold_event_cursor(acc.channel_b_cursor, stream_parser, acc.observe_event)
         if not acc.has_unresolved_obligations():
-            acc.channel_a_confirmed = acc.channel_a_candidate_at is not None
+            acc.channel_a_confirmed = True
             trigger.set()
             return
         if anyio.current_time() - started >= child_deferral_ceiling:
             acc.completion_ceiling_expired = True
-            acc.channel_a_confirmed = acc.channel_a_candidate_at is not None
+            acc.channel_a_confirmed = True
             trigger.set()
             return
         await anyio.sleep(_poll_interval)

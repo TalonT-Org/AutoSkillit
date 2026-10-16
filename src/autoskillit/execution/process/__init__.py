@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING, cast
 import anyio
 
 from autoskillit.core import (
-    ChannelBStatus,
     ChannelConfirmation,
     RolloutMarker,
     SessionEvent,
@@ -573,11 +572,6 @@ async def run_managed_async(
                     if event.has_marker and acc.channel_a_candidate_at is None:
                         acc.channel_a_candidate_at = anyio.current_time()
 
-                def _observe_final_channel_b(event: SessionEvent) -> None:
-                    acc.observe_event(event)
-                    if event.has_marker and acc.channel_b_candidate_at is None:
-                        acc.channel_b_candidate_at = anyio.current_time()
-
                 final_fold_complete = False
                 if acc.stdout_cursor is not None:
                     final_fold_complete = fold_event_cursor(
@@ -586,21 +580,16 @@ async def run_managed_async(
                 if acc.channel_b_cursor is not None:
                     final_fold_complete = (
                         fold_event_cursor(
-                            acc.channel_b_cursor, lifecycle_parser, _observe_final_channel_b
+                            acc.channel_b_cursor, lifecycle_parser, acc.observe_event
                         )
                         and final_fold_complete
                     )
                 acc.channel_a_confirmed = acc.channel_a_candidate_at is not None
-                if acc.channel_b_candidate_at is not None:
-                    acc.channel_b_status = ChannelBStatus.COMPLETION
                 acc.lifecycle_observation_complete = final_fold_complete
             if (
                 lifecycle_observation_enabled
                 and not acc.has_unresolved_obligations()
-                and (
-                    acc.channel_a_candidate_at is not None
-                    or acc.channel_b_candidate_at is not None
-                )
+                and acc.channel_a_candidate_at is not None
                 and not acc.process_exited
             ):
                 with anyio.move_on_after(0.05):

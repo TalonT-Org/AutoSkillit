@@ -1,8 +1,13 @@
 """Process doubles shared by liveness watcher tests."""
 
+from functools import partial
+from pathlib import Path
 from types import SimpleNamespace
 
 import psutil
+import pytest
+
+from autoskillit.execution.process import _process_race, _session_log_monitor
 
 
 class ConnectedProcess:
@@ -21,3 +26,15 @@ class ConnectedProcess:
         ]
 
     net_connections = connections
+
+
+def coordinate_phase2_start(
+    monkeypatch: pytest.MonkeyPatch,
+    session_dir: Path,
+) -> None:
+    ready_path = session_dir / "phase2.ready"
+    monkeypatch.setattr(
+        _process_race,
+        "_session_log_monitor",
+        partial(_session_log_monitor, _on_poll=ready_path.touch),
+    )

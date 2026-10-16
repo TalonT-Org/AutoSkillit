@@ -35,9 +35,16 @@ from tests._hook_protocol_oracle import (
     STATUS_COMPLETED,
     claude_verdict,
     codex_verdict,
-    run_hook,
 )
-from tests.hooks._session_binding_helpers import copy_projected_hook, write_projection_manifest
+from tests.hooks._session_binding_helpers import (
+    RETIRED_JOIN_ENV,
+    complete_one_assignment_wave,
+    declare_one_assignment,
+    load_join_bearing_skill,
+    load_join_bearing_skill_with_context,
+    run_join_hook,
+    write_cook_registry,
+)
 
 if TYPE_CHECKING:
     from autoskillit.hooks._runtime._hook_output import HookEmission
@@ -48,16 +55,6 @@ pytestmark = [pytest.mark.medium]
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _GUARDS_DIR = _PROJECT_ROOT / "src" / "autoskillit" / "hooks" / "guards"
 _HOOKS_DIR = _PROJECT_ROOT / "src" / "autoskillit" / "hooks"
-_RETIRED_JOIN_ENV = frozenset(
-    {
-        "AUTOSKILLIT_JOIN_FLAG_PATH",
-        "AUTOSKILLIT_JOIN_REQUIRED",
-        "AUTOSKILLIT_HOOK_EVENT",
-        "AUTOSKILLIT_SESSION_ID",
-        "AUTOSKILLIT_JOIN_SESSION_ID",
-        "AUTOSKILLIT_JOIN_PARENT",
-    }
-)
 _SETTLEMENT_EXPECTATIONS: dict[str, tuple[dict[str, object], str]] = {
     "PostToolUse": ({"tool_response": "complete"}, OUTCOME_SUCCESS),
     "PostToolUseFailure": ({"error": "forced failure"}, OUTCOME_FAILURE),
@@ -83,151 +80,6 @@ def _settlement_event_cases() -> tuple[tuple[str, dict[str, object], str], ...]:
 
 
 _SETTLEMENT_EVENT_CASES = _settlement_event_cases()
-
-
-def _run_hook(
-    tmp_path: Path,
-    hook: Path,
-    payload: dict[str, object] | str,
-    *,
-    cwd: Path,
-    env_overrides: dict[str, str] | None = None,
-) -> HookEmission:
-    """Run a real hook program with the shared protocol-test environment."""
-    script = hook.relative_to(_HOOKS_DIR) if hook.is_relative_to(_HOOKS_DIR) else hook
-    return run_hook(
-        script,
-        payload,
-        env={
-            "AUTOSKILLIT_AGENT_BACKEND": "claude-code",
-            "AUTOSKILLIT_LOG_DIR": str(tmp_path / "logs"),
-            "AUTOSKILLIT_SESSION_TYPE": "skill",
-            **(env_overrides or {}),
-        },
-        unset=(
-            *_RETIRED_JOIN_ENV,
-            "AUTOSKILLIT_LAUNCH_ID",
-            MANAGED_JOIN_PARENT_ID_ENV_VAR,
-        ),
-        cwd=cwd,
-    )
-
-
-def _skill_load_payload(
-    worktree: Path,
-    *,
-    session_id: str,
-    activation_source: str,
-) -> dict[str, object]:
-    if activation_source == "slash":
-        return {
-            "hook_event_name": "UserPromptExpansion",
-            "expansion_type": "slash_command",
-            "command_name": "autoskillit:join-bearing",
-            "session_id": session_id,
-            "cwd": str(worktree),
-        }
-    return {
-        "hook_event_name": "PostToolUse",
-        "tool_name": "Skill",
-        "tool_input": {"skill": "join-bearing"},
-        "session_id": session_id,
-        "cwd": str(worktree),
-    }
-
-
-def _load_join_bearing_skill(
-    tmp_path: Path,
-    *,
-    session_id: str = "session-1",
-    activation_source: str = "PostToolUse",
-    cook_launch_id: str = "",
-    resumed: bool = False,
-) -> Path:
-    worktree, _ = _load_join_bearing_skill_with_context(
-        tmp_path,
-        session_id=session_id,
-        activation_source=activation_source,
-        cook_launch_id=cook_launch_id,
-        resumed=resumed,
-    )
-    return worktree
-
-
-def _load_join_bearing_skill_with_context(
-    tmp_path: Path,
-    *,
-    session_id: str = "session-1",
-    activation_source: str = "PostToolUse",
-    cook_launch_id: str = "",
-    resumed: bool = False,
-) -> tuple[Path, str]:
-    """Drive the projected skill-load hook so the binding is production-shaped."""
-    worktree = tmp_path / "worktree"
-    (worktree / ".autoskillit").mkdir(parents=True)
-    projection_root, skill_load_hook = copy_projected_hook(tmp_path)
-    write_projection_manifest(projection_root)
-    registry_before: bytes | None = None
-    if cook_launch_id:
-        _write_cook_registry(
-            worktree,
-            launch_id=cook_launch_id,
-            session_id=session_id if resumed else None,
-        )
-        if resumed:
-            registry_before = (
-                worktree / ".autoskillit" / "temp" / "session_registry.json"
-            ).read_bytes()
-
-    skill_load_event = _skill_load_payload(
-        worktree,
-        session_id=session_id,
-        activation_source=activation_source,
-    )
-    completed = _run_hook(
-        tmp_path,
-        skill_load_hook,
-        skill_load_event,
-        cwd=worktree,
-        env_overrides=({"AUTOSKILLIT_LAUNCH_ID": cook_launch_id} if cook_launch_id else None),
-    )
-    assert completed.exit_code == 0, completed.stderr
-    output = json.loads(completed.stdout)
-    hook_output = output.get("hookSpecificOutput")
-    context = hook_output.get("additionalContext", "") if isinstance(hook_output, dict) else ""
-    assert isinstance(context, str)
-    assert context
-    if activation_source == "PostToolUse":
-        for verdict_fn in (codex_verdict, claude_verdict):
-            verdict = verdict_fn(
-                "PostToolUse",
-                exit_code=completed.exit_code,
-                stdout=completed.stdout,
-                stderr=completed.stderr,
-            )
-            assert verdict.status == STATUS_COMPLETED
-            assert verdict.contexts
-    binding = read_binding(resolve_binding_path(str(worktree), session_id))
-    assert binding is not None and binding.join_required
-    if registry_before is not None:
-        assert (
-            worktree / ".autoskillit" / "temp" / "session_registry.json"
-        ).read_bytes() == registry_before
-    return worktree, context
-
-
-def _declare_one_assignment(worktree: Path, *, session_id: str) -> Path:
-    """Declare one wave at the same state root the hook payload resolves."""
-    flag_dir = resolve_flag_dir(worktree)
-    declare_batch(
-        flag_dir,
-        session_id=session_id,
-        top_level_parent="top_level",
-        skill_name="join-bearing",
-        artifact_digest="artdigest-1",
-        assignments=("worker",),
-    )
-    return flag_dir
 
 
 def _mark_binding_scope_invalid(worktree: Path, *, session_id: str) -> None:
@@ -264,22 +116,6 @@ def _block_reason(emission: HookEmission) -> str:
     return emission.stderr
 
 
-def _write_cook_registry(worktree: Path, *, launch_id: str, session_id: str | None) -> None:
-    registry_path = worktree / ".autoskillit" / "temp" / "session_registry.json"
-    registry_path.parent.mkdir(parents=True, exist_ok=True)
-    registry_path.write_text(
-        json.dumps(
-            {
-                launch_id: {
-                    "session_type": "cook",
-                    "claude_session_id": session_id,
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
-
-
 def _configure_non_cook_shape(
     worktree: Path,
     *,
@@ -302,7 +138,7 @@ def _configure_non_cook_shape(
         registry_path.parent.mkdir(parents=True, exist_ok=True)
         registry_path.write_text("not-json", encoding="utf-8")
     elif case == "ambiguous_registry_identity":
-        _write_cook_registry(worktree, launch_id=launch_id, session_id=session_id)
+        write_cook_registry(worktree, launch_id=launch_id, session_id=session_id)
         registry = json.loads(registry_path.read_text(encoding="utf-8"))
         registry["duplicate-launch"] = {
             "session_type": "cook",
@@ -310,25 +146,25 @@ def _configure_non_cook_shape(
         }
         registry_path.write_text(json.dumps(registry), encoding="utf-8")
     elif case == "launch_session_mismatch":
-        _write_cook_registry(worktree, launch_id=launch_id, session_id="other-session")
+        write_cook_registry(worktree, launch_id=launch_id, session_id="other-session")
     elif case == "headless":
-        _write_cook_registry(worktree, launch_id=launch_id, session_id=session_id)
+        write_cook_registry(worktree, launch_id=launch_id, session_id=session_id)
         env["AUTOSKILLIT_HEADLESS"] = "1"
     elif case in {"non_cook_interactive", "order"}:
-        _write_cook_registry(worktree, launch_id=launch_id, session_id=session_id)
+        write_cook_registry(worktree, launch_id=launch_id, session_id=session_id)
         registry = json.loads(registry_path.read_text(encoding="utf-8"))
         registry[launch_id]["session_type"] = (
             "skill" if case == "non_cook_interactive" else "order"
         )
         registry_path.write_text(json.dumps(registry), encoding="utf-8")
     elif case == "descendant":
-        _write_cook_registry(worktree, launch_id=launch_id, session_id=session_id)
+        write_cook_registry(worktree, launch_id=launch_id, session_id=session_id)
         payload["agent_id"] = "child-agent"
     elif case == "managed_leaf":
         launch_id = session_id
         payload_session_id = "codex-thread"
         payload["session_id"] = payload_session_id
-        _write_cook_registry(worktree, launch_id=launch_id, session_id=None)
+        write_cook_registry(worktree, launch_id=launch_id, session_id=None)
         binding_path = resolve_binding_path(str(worktree), session_id)
         binding = read_binding(binding_path)
         assert binding is not None
@@ -353,9 +189,9 @@ def _configure_non_cook_shape(
 
 def test_claim_guard_denies_an_undeclared_agent_call_in_a_real_session(tmp_path: Path) -> None:
     session_id = "claim-deny"
-    worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
+    worktree = load_join_bearing_skill(tmp_path, session_id=session_id)
 
-    completed = _run_hook(
+    completed = run_join_hook(
         tmp_path,
         _GUARDS_DIR / "join_claim_guard.py",
         _agent_payload(worktree, session_id=session_id, tool_use_id="agent-1"),
@@ -373,10 +209,10 @@ def test_claim_guard_permits_an_agent_call_that_belongs_to_a_declared_wave(
 ) -> None:
     session_id = "claim-permit"
     tool_use_id = "agent-1"
-    worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
-    flag_dir = _declare_one_assignment(worktree, session_id=session_id)
+    worktree = load_join_bearing_skill(tmp_path, session_id=session_id)
+    flag_dir = declare_one_assignment(worktree, session_id=session_id)
 
-    completed = _run_hook(
+    completed = run_join_hook(
         tmp_path,
         _GUARDS_DIR / "join_claim_guard.py",
         _agent_payload(worktree, session_id=session_id, tool_use_id=tool_use_id),
@@ -402,8 +238,8 @@ def test_settle_guard_maps_every_registered_event_type(
 ) -> None:
     session_id = f"settle-{event_name}"
     tool_use_id = "agent-1"
-    worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
-    flag_dir = _declare_one_assignment(worktree, session_id=session_id)
+    worktree = load_join_bearing_skill(tmp_path, session_id=session_id)
+    flag_dir = declare_one_assignment(worktree, session_id=session_id)
     claim_assignment(
         flag_dir,
         session_id=session_id,
@@ -413,7 +249,7 @@ def test_settle_guard_maps_every_registered_event_type(
     payload = _agent_payload(worktree, session_id=session_id, tool_use_id=tool_use_id)
     payload.update({"hook_event_name": event_name, **event_data})
 
-    completed = _run_hook(
+    completed = run_join_hook(
         tmp_path,
         _GUARDS_DIR / "join_settle_guard.py",
         payload,
@@ -443,7 +279,7 @@ def test_authenticated_top_level_cook_full_join_sequence_never_opens_a_wave(
     monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "claude-code")
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
     monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(tmp_path / "logs"))
-    worktree, context = _load_join_bearing_skill_with_context(
+    worktree, context = load_join_bearing_skill_with_context(
         tmp_path,
         session_id=session_id,
         activation_source=activation_source,
@@ -496,7 +332,7 @@ def test_authenticated_top_level_cook_full_join_sequence_never_opens_a_wave(
         ),
     )
     for script_name, payload in guard_events[:2]:
-        completed = _run_hook(
+        completed = run_join_hook(
             tmp_path,
             _GUARDS_DIR / script_name,
             payload,
@@ -518,7 +354,7 @@ def test_authenticated_top_level_cook_full_join_sequence_never_opens_a_wave(
     assert redeclared["wave"] is None
 
     for script_name, payload in guard_events[2:]:
-        completed = _run_hook(
+        completed = run_join_hook(
             tmp_path,
             _GUARDS_DIR / script_name,
             payload,
@@ -561,12 +397,12 @@ def test_cook_redeclaration_is_not_refused_by_a_pre_fix_stranded_wave(
     monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "claude-code")
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
     monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(tmp_path / "logs"))
-    worktree = _load_join_bearing_skill(
+    worktree = load_join_bearing_skill(
         tmp_path,
         session_id=session_id,
         cook_launch_id=launch_id,
     )
-    flag_dir = _declare_one_assignment(worktree, session_id=session_id)
+    flag_dir = declare_one_assignment(worktree, session_id=session_id)
     legacy_batch = active_batch(
         flag_dir,
         session_id=session_id,
@@ -609,7 +445,7 @@ def test_cook_redeclaration_is_not_refused_by_a_pre_fix_stranded_wave(
         ("join_stop_guard.py", {"session_id": session_id, "cwd": str(worktree)}),
     )
     for script_name, payload in events:
-        completed = _run_hook(
+        completed = run_join_hook(
             tmp_path,
             _GUARDS_DIR / script_name,
             payload,
@@ -635,7 +471,7 @@ def test_authenticated_cook_bypass_survives_an_absent_managed_scope(tmp_path: Pa
     launch_id = "cook-launch"
     worktree = tmp_path / "worktree"
     (worktree / ".autoskillit").mkdir(parents=True)
-    _write_cook_registry(worktree, launch_id=launch_id, session_id=session_id)
+    write_cook_registry(worktree, launch_id=launch_id, session_id=session_id)
     env = {"AUTOSKILLIT_LAUNCH_ID": launch_id}
     events = (
         (
@@ -663,7 +499,7 @@ def test_authenticated_cook_bypass_survives_an_absent_managed_scope(tmp_path: Pa
     )
 
     for script_name, payload in events:
-        completed = _run_hook(
+        completed = run_join_hook(
             tmp_path,
             _GUARDS_DIR / script_name,
             payload,
@@ -705,7 +541,7 @@ def test_cook_authentication_rejects_non_top_level_shapes(
     )
 
     session_id = f"non-cook-{case}"
-    worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
+    worktree = load_join_bearing_skill(tmp_path, session_id=session_id)
     payload, binding_session_id, env = _configure_non_cook_shape(
         worktree,
         session_id=session_id,
@@ -728,7 +564,7 @@ def test_cook_authentication_rejects_non_top_level_shapes(
     if case == "descendant":
         return
 
-    claim = _run_hook(
+    claim = run_join_hook(
         tmp_path,
         _GUARDS_DIR / "join_claim_guard.py",
         {
@@ -745,7 +581,7 @@ def test_cook_authentication_rejects_non_top_level_shapes(
     assert isinstance(claim_output, dict)
     assert claim_output["permissionDecision"] == "deny"
 
-    stop = _run_hook(
+    stop = run_join_hook(
         tmp_path,
         _GUARDS_DIR / "join_stop_guard.py",
         payload,
@@ -790,8 +626,8 @@ def test_descendant_is_natively_exempt_but_never_authenticated_as_top_level_cook
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     session_id = "descendant-cook-shape"
-    worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
-    flag_dir = _declare_one_assignment(worktree, session_id=session_id)
+    worktree = load_join_bearing_skill(tmp_path, session_id=session_id)
+    flag_dir = declare_one_assignment(worktree, session_id=session_id)
     payload, binding_session_id, env = _configure_non_cook_shape(
         worktree,
         session_id=session_id,
@@ -829,7 +665,7 @@ def test_descendant_is_natively_exempt_but_never_authenticated_as_top_level_cook
         ),
     )
     for script_name, event in events:
-        completed = _run_hook(
+        completed = run_join_hook(
             tmp_path,
             _GUARDS_DIR / script_name,
             event,
@@ -843,7 +679,7 @@ def test_descendant_is_natively_exempt_but_never_authenticated_as_top_level_cook
     assert batch is not None
     assert batch["wave_outcome"] == "pending"
     assert batch["assignments"][0]["tool_use_id"] is None
-    stop = _run_hook(
+    stop = run_join_hook(
         tmp_path,
         _GUARDS_DIR / "join_stop_guard.py",
         payload,
@@ -856,7 +692,7 @@ def test_descendant_is_natively_exempt_but_never_authenticated_as_top_level_cook
 def test_claim_and_settle_guards_use_the_managed_binding_identity(tmp_path: Path) -> None:
     payload_session_id = "codex-thread-id"
     managed_join_id = "managed-join-id"
-    worktree = _load_join_bearing_skill(tmp_path, session_id=payload_session_id)
+    worktree = load_join_bearing_skill(tmp_path, session_id=payload_session_id)
     payload_binding = read_binding(resolve_binding_path(str(worktree), payload_session_id))
     assert payload_binding is not None
     write_binding(
@@ -887,7 +723,7 @@ def test_claim_and_settle_guards_use_the_managed_binding_identity(tmp_path: Path
         tool_use_id="agent-1",
     )
 
-    claimed = _run_hook(
+    claimed = run_join_hook(
         tmp_path,
         _GUARDS_DIR / "join_claim_guard.py",
         payload,
@@ -897,7 +733,7 @@ def test_claim_and_settle_guards_use_the_managed_binding_identity(tmp_path: Path
     assert claimed.exit_code == 0, claimed.stderr
     assert not claimed.stdout
 
-    settled = _run_hook(
+    settled = run_join_hook(
         tmp_path,
         _GUARDS_DIR / "join_settle_guard.py",
         {
@@ -920,10 +756,10 @@ def test_claim_and_settle_guards_use_the_managed_binding_identity(tmp_path: Path
 
 def test_stop_guard_blocks_on_an_unresolved_wave_using_payload_identity(tmp_path: Path) -> None:
     session_id = "stop-block"
-    worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
-    _declare_one_assignment(worktree, session_id=session_id)
+    worktree = load_join_bearing_skill(tmp_path, session_id=session_id)
+    declare_one_assignment(worktree, session_id=session_id)
 
-    completed = _run_hook(
+    completed = run_join_hook(
         tmp_path,
         _GUARDS_DIR / "join_stop_guard.py",
         {"session_id": session_id, "cwd": str(worktree)},
@@ -935,10 +771,10 @@ def test_stop_guard_blocks_on_an_unresolved_wave_using_payload_identity(tmp_path
 
 def test_stop_guard_blocks_an_invalid_managed_scope(tmp_path: Path) -> None:
     session_id = "stop-invalid-scope"
-    worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
+    worktree = load_join_bearing_skill(tmp_path, session_id=session_id)
     _mark_binding_scope_invalid(worktree, session_id=session_id)
 
-    completed = _run_hook(
+    completed = run_join_hook(
         tmp_path,
         _GUARDS_DIR / "join_stop_guard.py",
         {"session_id": session_id, "cwd": str(worktree)},
@@ -975,7 +811,7 @@ def test_join_block_paths_are_codex_blocking(tmp_path: Path, case: str) -> None:
         }.get(case, event)
     else:
         session_id = f"block-{case}"
-        worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
+        worktree = load_join_bearing_skill(tmp_path, session_id=session_id)
         event = {"hook_event_name": "Stop", "session_id": session_id, "cwd": str(worktree)}
         if case in {
             "stop_invalid_managed_scope",
@@ -984,7 +820,7 @@ def test_join_block_paths_are_codex_blocking(tmp_path: Path, case: str) -> None:
         }:
             _mark_binding_scope_invalid(worktree, session_id=session_id)
         if case in {"stop_unresolved_wave", "followup_unresolved_wave"}:
-            _declare_one_assignment(worktree, session_id=session_id)
+            declare_one_assignment(worktree, session_id=session_id)
 
         if case.startswith("followup_"):
             hook = _GUARDS_DIR / "join_followup_guard.py"
@@ -1029,7 +865,7 @@ def test_join_block_paths_are_codex_blocking(tmp_path: Path, case: str) -> None:
             hook = _GUARDS_DIR / "join_stop_guard.py"
             payload = event
 
-    emission = _run_hook(
+    emission = run_join_hook(
         tmp_path,
         hook,
         payload,
@@ -1072,24 +908,10 @@ def test_join_block_paths_are_codex_blocking(tmp_path: Path, case: str) -> None:
 
 def test_stop_guard_releases_when_the_wave_is_complete(tmp_path: Path) -> None:
     session_id = "stop-release"
-    tool_use_id = "agent-1"
-    worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
-    flag_dir = _declare_one_assignment(worktree, session_id=session_id)
-    claim_assignment(
-        flag_dir,
-        session_id=session_id,
-        top_level_parent="top_level",
-        tool_use_id=tool_use_id,
-    )
-    settle_assignment(
-        flag_dir,
-        session_id=session_id,
-        top_level_parent="top_level",
-        tool_use_id=tool_use_id,
-        outcome=OUTCOME_SUCCESS,
-    )
+    worktree = load_join_bearing_skill(tmp_path, session_id=session_id)
+    complete_one_assignment_wave(worktree, session_id=session_id)
 
-    completed = _run_hook(
+    completed = run_join_hook(
         tmp_path,
         _GUARDS_DIR / "join_stop_guard.py",
         {"session_id": session_id, "cwd": str(worktree)},
@@ -1104,7 +926,7 @@ def test_stop_guard_blocks_on_a_malformed_payload(tmp_path: Path) -> None:
     worktree = tmp_path / "worktree"
     (worktree / ".autoskillit").mkdir(parents=True)
 
-    completed = _run_hook(
+    completed = run_join_hook(
         tmp_path,
         _GUARDS_DIR / "join_stop_guard.py",
         "not valid json",
@@ -1116,10 +938,10 @@ def test_stop_guard_blocks_on_a_malformed_payload(tmp_path: Path) -> None:
 
 def test_followup_guard_blocks_a_followup_while_a_wave_is_unresolved(tmp_path: Path) -> None:
     session_id = "followup-block"
-    worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
-    _declare_one_assignment(worktree, session_id=session_id)
+    worktree = load_join_bearing_skill(tmp_path, session_id=session_id)
+    declare_one_assignment(worktree, session_id=session_id)
 
-    completed = _run_hook(
+    completed = run_join_hook(
         tmp_path,
         _GUARDS_DIR / "join_followup_guard.py",
         {
@@ -1146,8 +968,8 @@ def test_followup_guard_allows_exact_recovery_declaration_after_terminal_failure
     tool_name: str,
 ) -> None:
     session_id = "followup-recovery"
-    worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
-    flag_dir = _declare_one_assignment(worktree, session_id=session_id)
+    worktree = load_join_bearing_skill(tmp_path, session_id=session_id)
+    flag_dir = declare_one_assignment(worktree, session_id=session_id)
     claim_assignment(
         flag_dir,
         session_id=session_id,
@@ -1162,7 +984,7 @@ def test_followup_guard_allows_exact_recovery_declaration_after_terminal_failure
         outcome=OUTCOME_FAILURE,
     )
 
-    completed = _run_hook(
+    completed = run_join_hook(
         tmp_path,
         _GUARDS_DIR / "join_followup_guard.py",
         {
@@ -1204,8 +1026,8 @@ def test_followup_guard_keeps_other_effects_blocked_after_terminal_failure(
     tool_name: str,
 ) -> None:
     session_id = f"followup-terminal-block-{tool_name}"
-    worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
-    flag_dir = _declare_one_assignment(worktree, session_id=session_id)
+    worktree = load_join_bearing_skill(tmp_path, session_id=session_id)
+    flag_dir = declare_one_assignment(worktree, session_id=session_id)
     claim_assignment(
         flag_dir,
         session_id=session_id,
@@ -1220,7 +1042,7 @@ def test_followup_guard_keeps_other_effects_blocked_after_terminal_failure(
         outcome=OUTCOME_FAILURE,
     )
 
-    completed = _run_hook(
+    completed = run_join_hook(
         tmp_path,
         _GUARDS_DIR / "join_followup_guard.py",
         {
@@ -1239,10 +1061,10 @@ def test_followup_guard_blocks_recovery_declaration_while_wave_is_pending(
     tmp_path: Path,
 ) -> None:
     session_id = "followup-pending-recovery"
-    worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
-    _declare_one_assignment(worktree, session_id=session_id)
+    worktree = load_join_bearing_skill(tmp_path, session_id=session_id)
+    declare_one_assignment(worktree, session_id=session_id)
 
-    completed = _run_hook(
+    completed = run_join_hook(
         tmp_path,
         _GUARDS_DIR / "join_followup_guard.py",
         {
@@ -1261,11 +1083,11 @@ def test_followup_guard_blocks_recovery_declaration_when_ledger_is_corrupt(
     tmp_path: Path,
 ) -> None:
     session_id = "followup-corrupt-recovery"
-    worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
-    flag_dir = _declare_one_assignment(worktree, session_id=session_id)
+    worktree = load_join_bearing_skill(tmp_path, session_id=session_id)
+    flag_dir = declare_one_assignment(worktree, session_id=session_id)
     (flag_dir / "join_ledger.json").write_text("not-json", encoding="utf-8")
 
-    completed = _run_hook(
+    completed = run_join_hook(
         tmp_path,
         _GUARDS_DIR / "join_followup_guard.py",
         {
@@ -1282,8 +1104,8 @@ def test_followup_guard_blocks_recovery_declaration_when_ledger_is_corrupt(
 
 def test_stop_guard_stays_blocked_after_terminal_failure(tmp_path: Path) -> None:
     session_id = "stop-terminal-failure"
-    worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
-    flag_dir = _declare_one_assignment(worktree, session_id=session_id)
+    worktree = load_join_bearing_skill(tmp_path, session_id=session_id)
+    flag_dir = declare_one_assignment(worktree, session_id=session_id)
     claim_assignment(
         flag_dir,
         session_id=session_id,
@@ -1298,7 +1120,7 @@ def test_stop_guard_stays_blocked_after_terminal_failure(tmp_path: Path) -> None
         outcome=OUTCOME_FAILURE,
     )
 
-    completed = _run_hook(
+    completed = run_join_hook(
         tmp_path,
         _GUARDS_DIR / "join_stop_guard.py",
         {"session_id": session_id, "cwd": str(worktree)},
@@ -1315,8 +1137,8 @@ def test_stop_guard_is_safe_under_python_optimization(tmp_path: Path) -> None:
     subsequent ``admission.binding_dict`` dereference.
     """
     session_id = "stop-O-flag"
-    worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
-    completed = _run_hook(
+    worktree = load_join_bearing_skill(tmp_path, session_id=session_id)
+    completed = run_join_hook(
         tmp_path,
         _GUARDS_DIR / "join_stop_guard.py",
         {"hook_event_name": "Stop", "session_id": session_id, "cwd": str(worktree)},
@@ -1336,7 +1158,7 @@ def test_stop_guard_is_safe_under_python_optimization(tmp_path: Path) -> None:
 def test_followup_guard_prefers_the_managed_join_identity(tmp_path: Path) -> None:
     payload_session_id = "codex-thread-id"
     managed_join_id = "managed-join-id"
-    worktree = _load_join_bearing_skill(tmp_path, session_id=payload_session_id)
+    worktree = load_join_bearing_skill(tmp_path, session_id=payload_session_id)
     binding = read_binding(resolve_binding_path(str(worktree), payload_session_id))
     assert binding is not None
     write_binding(
@@ -1358,7 +1180,7 @@ def test_followup_guard_prefers_the_managed_join_identity(tmp_path: Path) -> Non
         assignments=("worker",),
     )
 
-    completed = _run_hook(
+    completed = run_join_hook(
         tmp_path,
         _GUARDS_DIR / "join_followup_guard.py",
         {
@@ -1379,9 +1201,9 @@ def test_followup_guard_prefers_the_managed_join_identity(tmp_path: Path) -> Non
 
 def test_background_exec_guard_binds_without_any_join_env_var(tmp_path: Path) -> None:
     session_id = "background-bind"
-    worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
+    worktree = load_join_bearing_skill(tmp_path, session_id=session_id)
 
-    completed = _run_hook(
+    completed = run_join_hook(
         tmp_path,
         _GUARDS_DIR / "background_exec_guard.py",
         {
@@ -1405,7 +1227,7 @@ def test_no_guard_reads_a_retired_join_env_var() -> None:
     for source in _HOOKS_DIR.rglob("*.py"):
         collector = _EnvVarReadCollector()
         collector.visit(ast.parse(source.read_text(encoding="utf-8"), filename=str(source)))
-        retired_reads = collector.reads & _RETIRED_JOIN_ENV
+        retired_reads = collector.reads & RETIRED_JOIN_ENV
         if retired_reads:
             reads[source.relative_to(_PROJECT_ROOT)] = retired_reads
 

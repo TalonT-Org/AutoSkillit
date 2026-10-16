@@ -34,7 +34,7 @@ __all__ = [
 #:   stdout=whatever was flushed to the temp file before exit
 #:   Kill-anomaly possible when returncode==0, UNMONITORED, and stdout is success+empty,
 #:   empty_output, or unparseable → _is_kill_anomaly returns True.
-#:   When CHANNEL_A or CHANNEL_B: no kill anomaly; session completed.
+#:   Channel confirmation excludes this kill anomaly; content success is adjudicated separately.
 #:
 #: COMPLETED (Channel A):
 #:   channel_confirmation=CHANNEL_A (heartbeat confirmed type=result in stdout)

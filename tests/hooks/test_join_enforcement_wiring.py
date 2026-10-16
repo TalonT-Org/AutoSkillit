@@ -40,6 +40,9 @@ from tests.hooks._session_binding_helpers import (
     RETIRED_JOIN_ENV as _RETIRED_JOIN_ENV,
 )
 from tests.hooks._session_binding_helpers import (
+    complete_one_assignment_wave,
+)
+from tests.hooks._session_binding_helpers import (
     declare_one_assignment as _declare_one_assignment,
 )
 from tests.hooks._session_binding_helpers import (
@@ -917,22 +920,8 @@ def test_join_block_paths_are_codex_blocking(tmp_path: Path, case: str) -> None:
 
 def test_stop_guard_releases_when_the_wave_is_complete(tmp_path: Path) -> None:
     session_id = "stop-release"
-    tool_use_id = "agent-1"
     worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
-    flag_dir = _declare_one_assignment(worktree, session_id=session_id)
-    claim_assignment(
-        flag_dir,
-        session_id=session_id,
-        top_level_parent="top_level",
-        tool_use_id=tool_use_id,
-    )
-    settle_assignment(
-        flag_dir,
-        session_id=session_id,
-        top_level_parent="top_level",
-        tool_use_id=tool_use_id,
-        outcome=OUTCOME_SUCCESS,
-    )
+    complete_one_assignment_wave(worktree, session_id=session_id)
 
     completed = _run_hook(
         tmp_path,

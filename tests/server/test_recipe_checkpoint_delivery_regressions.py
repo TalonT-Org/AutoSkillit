@@ -12,7 +12,7 @@ import autoskillit.server.tools._recipe_section_handler as section_handler
 from autoskillit.core import FinalizedRecipeProjection, RecipeFlowEdge, get_tool_def
 from autoskillit.core.io import load_yaml
 from autoskillit.pipeline import ReadyRecipe
-from autoskillit.recipe import _result_arms_by_source
+from autoskillit.recipe import result_arms_by_source
 from autoskillit.server.recipe._recipe_artifact import load_recipe_artifact
 from autoskillit.server.recipe._recipe_segment_delivery import (
     RECIPE_SEGMENT_MAX_BYTES,
@@ -282,7 +282,7 @@ async def test_checkpoint_delivery_closures_and_response_bounds_are_complete(
         for step in segment.ordered_step_names
     }
     finalized_steps = frozenset(projection.ordered_step_names)
-    result_arms_by_source = _result_arms_by_source(projection.ordered_flow_edges)
+    result_arms = result_arms_by_source(projection.ordered_flow_edges)
     automatic_sources = _automatic_checkpoint_sources(projection)
 
     for segment in projection.delivery_segments:
@@ -315,5 +315,5 @@ async def test_checkpoint_delivery_closures_and_response_bounds_are_complete(
                 recipe_name=state.recipe_name,
                 source=source,
                 segment_indices=segment_indices,
-                result_arms_by_source=result_arms_by_source,
+                result_arms_by_source=result_arms,
             )

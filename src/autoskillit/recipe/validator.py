@@ -408,7 +408,7 @@ def _validate_delivery_graph(
             )
 
     checkpoint_sources: list[list[str]] = [[] for _ in normalized]
-    result_arms = _result_arms_by_source(ordered_flow_edges)
+    result_arms = result_arms_by_source(ordered_flow_edges)
     for edge in ordered_flow_edges:
         source_index = segment_index.get(edge.source)
         target_index = segment_index.get(edge.target)
@@ -513,9 +513,10 @@ _RESULT_EQUALITY = re.compile(
 )
 
 
-def _result_arms_by_source(
+def result_arms_by_source(
     ordered_flow_edges: tuple[RecipeFlowEdge, ...],
 ) -> dict[str, tuple[RecipeFlowEdge, ...]]:
+    """Group finalized result-condition edges by source, preserving declaration order."""
     arms: dict[str, list[RecipeFlowEdge]] = {}
     for edge in ordered_flow_edges:
         if edge.edge_type == "result_condition":

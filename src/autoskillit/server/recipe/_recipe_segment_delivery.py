@@ -23,7 +23,7 @@ from autoskillit.core import (
     load_yaml,
 )
 from autoskillit.pipeline import ReadyRecipe
-from autoskillit.recipe import _result_arms_by_source, edge_routes_success
+from autoskillit.recipe import edge_routes_success, result_arms_by_source
 from autoskillit.server.recipe._recipe_artifact import (
     _finalized_projection_payload,
     _normalized_recipe_compile_identity,
@@ -218,7 +218,7 @@ def _target_segment_indices(
     if source_index is None:
         return ()
     selected: list[int] = []
-    result_arms = _result_arms_by_source(projection.ordered_flow_edges)
+    result_arms = result_arms_by_source(projection.ordered_flow_edges)
     for edge in projection.ordered_flow_edges:
         target_index = indices.get(edge.target)
         if (
@@ -313,7 +313,7 @@ def validate_segment_delivery_projection(projection: FinalizedRecipeProjection) 
         return
     indices = _segment_index(projection)
     invocations = projection.binding_projection.invocations
-    result_arms = _result_arms_by_source(projection.ordered_flow_edges)
+    result_arms = result_arms_by_source(projection.ordered_flow_edges)
     for edge in projection.ordered_flow_edges:
         source_index = indices.get(edge.source)
         target_index = indices.get(edge.target)

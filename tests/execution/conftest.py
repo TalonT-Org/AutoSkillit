@@ -37,6 +37,7 @@ from autoskillit.execution.evidence.otlp_sink import _build_env
 from autoskillit.execution.runtime.launch_resolution import DefaultLaunchResolver
 from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.execution.session._exit_classification import _CODEX_API_ERROR_PATTERNS
+from autoskillit.execution.session._write_evidence import WriteEvidenceScope
 from tests._helpers import make_tracing_config
 from tests.fixtures.codex import FLAT_ERROR_MODEL_CAPACITY, TURN_FAILED_MODEL_CAPACITY
 
@@ -660,9 +661,7 @@ def delegated_stream(records: list[str] | tuple[str, ...]) -> str:
     return "\n".join(records)
 
 
-def make_write_evidence_scope(**overrides: Any) -> Any:
-    from autoskillit.execution.session._write_evidence import WriteEvidenceScope
-
+def make_write_evidence_scope(**overrides: Any) -> WriteEvidenceScope:
     values = {
         "write_tool_names": {"Write", "Edit"},
         "fs_writes_detected": False,

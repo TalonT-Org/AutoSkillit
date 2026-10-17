@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
+from types import MappingProxyType
 
 import pytest
 
-from autoskillit.core import RecipeFlowEdge, get_tool_def, load_yaml
+import autoskillit.core.tool_registry as tool_registry
+from autoskillit.core import RecipeFlowEdge, load_yaml
+from autoskillit.core.tool_registry import TOOL_REGISTRY
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import (
     _extract_routing_edges,
@@ -100,24 +104,6 @@ def _assert_delivery_projection_contract(
     )
     assert finalized_steps == frozenset(recipe.steps)
 
-    checkpoint_sources = frozenset(
-        source for segment in segments for source in segment.checkpoint_sources
-    )
-    for edge in edges:
-        step = recipe.steps[edge.source]
-        if step.tool is None or edge.source not in checkpoint_sources:
-            continue
-        tool_name = "complete_run_skill_result" if step.tool == "run_skill" else step.tool
-        definition = get_tool_def(tool_name)
-        assert definition is not None
-        if edge_routes_success(
-            tool_name,
-            edge,
-            automatic=definition.automatic_recipe_delivery,
-            recovery=definition.recovery_recipe_delivery,
-        ):
-            assert edge.target in finalized_steps
-
     assert {
         key: recipe.steps[key].tool for key in _CHECKPOINT_HANDLER_TABLE
     } == _CHECKPOINT_HANDLER_TABLE
@@ -126,28 +112,186 @@ def _assert_delivery_projection_contract(
     } == {key: key for key in _CHECKPOINT_HANDLER_TABLE}
 
 
-@pytest.mark.parametrize(
-    ("condition", "expected"),
-    [
-        (" result.conclusion == 'success' ", True),
-        ('result.conclusion=="success"', True),
-        ("other.result.conclusion == 'success'", False),
-        ("result.conclusion == 'success' == true", False),
-    ],
-)
-def test_edge_routes_success_requires_exact_result_equality(
-    condition: str,
-    expected: bool,
-) -> None:
-    edge = RecipeFlowEdge(
-        source="wait",
-        edge_type="result_condition",
-        target="done",
-        condition=condition,
-        result_field=None,
+def _result_arms(*conditions: str | None) -> tuple[RecipeFlowEdge, ...]:
+    return tuple(
+        RecipeFlowEdge("wait", "result_condition", f"route-{index}", condition, None)
+        for index, condition in enumerate(conditions)
     )
 
-    assert edge_routes_success("wait_for_ci", edge, automatic=True, recovery=True) is expected
+
+@pytest.mark.parametrize(
+    ("tool_name", "conditions", "edge_index", "expected"),
+    [
+        ("wait_for_ci", ("${{ result.conclusion }} == 'success'",), 0, True),
+        ("wait_for_ci", ('result.conclusion == "success"',), 0, True),
+        ("wait_for_ci", ("${{ result.conclusion }} == 'no_runs'",), 0, False),
+        (
+            "wait_for_ci",
+            (
+                "${{ result.conclusion }} == 'success'",
+                "${{ result.conclusion }} == 'no_runs'",
+                None,
+            ),
+            2,
+            False,
+        ),
+        ("wait_for_ci", ("${{ result.conclusion }} == 'no_runs'", None), 1, True),
+        ("wait_for_ci", ("${{ result.conclusion }} == ${{ context.x }}",), 0, True),
+        ("wait_for_merge_queue", ("${{ result.pr_state }} == merged",), 0, True),
+        ("wait_for_merge_queue", ("${{ result.pr_state }} == ejected",), 0, False),
+        ("run_python", ("${{ result.has_changes }} == false", None), 0, True),
+        ("run_python", ("${{ result.has_changes }} == false", None), 1, True),
+        ("run_python", ("${{ result.success }} == 'true'", None), 1, True),
+        ("run_python", ("${{ result.cleaned }} == 'failed'", None), 1, True),
+        (
+            "wait_for_ci",
+            ("${{ result.reason == 'ok' and result.status == 'ready' }}",),
+            0,
+            True,
+        ),
+        ("wait_for_ci", ("${{ result.conclusion }}",), 0, True),
+        ("wait_for_ci", ("${{ result.conclusion }} != 'failure'",), 0, True),
+        ("claim_and_resolve_issue", ("${{ result.claimed }} == true",), 0, False),
+    ],
+    ids=(
+        "ci-wrapped-success ci-bare-success ci-no-runs ci-fallback-after-success "
+        "ci-fallback-no-success ci-dynamic queue-merged queue-ejected python-no-change "
+        "python-no-change-fallback python-success-fallback python-cleaned-fallback "
+        "ci-conjunction ci-truthy ci-inequality recovery-only-claim"
+    ).split(),
+)
+def test_edge_routes_success_from_ordered_recipe_arms(
+    tool_name: str,
+    conditions: tuple[str | None, ...],
+    edge_index: int,
+    expected: bool,
+) -> None:
+    arms = _result_arms(*conditions)
+    edge = arms[edge_index]
+    definition = TOOL_REGISTRY[tool_name]
+
+    assert (
+        edge_routes_success(
+            tool_name,
+            edge,
+            automatic=definition.automatic_recipe_delivery,
+            recovery=definition.recovery_recipe_delivery,
+            result_arms=arms,
+        )
+        is expected
+    )
+
+
+@pytest.mark.parametrize(
+    ("edge_type", "expected"),
+    [
+        pytest.param("success", True, id="automatic-success"),
+        pytest.param("skip", True, id="automatic-skip"),
+        pytest.param("failure", False, id="failure"),
+        pytest.param("exhausted", False, id="exhausted"),
+    ],
+)
+def test_edge_routes_success_handles_non_result_edges(
+    edge_type: str,
+    expected: bool,
+) -> None:
+    definition = TOOL_REGISTRY["wait_for_ci"]
+    edge = RecipeFlowEdge("wait", edge_type, "route", None, None)
+
+    assert (
+        edge_routes_success(
+            "wait_for_ci",
+            edge,
+            automatic=definition.automatic_recipe_delivery,
+            recovery=definition.recovery_recipe_delivery,
+            result_arms=(),
+        )
+        is expected
+    )
+
+
+@pytest.mark.parametrize(
+    "condition",
+    ["${{ result.success == true", "result.success }} == true"],
+    ids=("unclosed-wrapper", "unmatched-wrapper-close"),
+)
+def test_malformed_automatic_result_arms_and_fallback_remain_reachable(
+    condition: str,
+) -> None:
+    arms = _result_arms(condition, None)
+    definition = TOOL_REGISTRY["enqueue_pr"]
+
+    for edge in arms:
+        assert (
+            edge_routes_success(
+                "enqueue_pr",
+                edge,
+                automatic=definition.automatic_recipe_delivery,
+                recovery=definition.recovery_recipe_delivery,
+                result_arms=arms,
+            )
+            is True
+        )
+
+
+@pytest.mark.parametrize(
+    ("outcome_changes", "condition", "expected_conditioned", "expected_fallback"),
+    [
+        pytest.param(
+            {"success_field": "checkpoint_status"},
+            "${{ result.checkpoint_status }} == 'success'",
+            True,
+            False,
+            id="registry-success-field",
+        ),
+        pytest.param(
+            {"success_value": "delivered"},
+            "${{ result.conclusion }} == 'success'",
+            False,
+            True,
+            id="registry-success-value",
+        ),
+        pytest.param(
+            {"recipe_observable": False},
+            "${{ result.conclusion }} == 'success'",
+            True,
+            True,
+            id="registry-unobservable-result",
+        ),
+    ],
+)
+def test_edge_routes_success_uses_replaced_registry_outcome(
+    monkeypatch: pytest.MonkeyPatch,
+    outcome_changes: dict[str, object],
+    condition: str,
+    expected_conditioned: bool,
+    expected_fallback: bool,
+) -> None:
+    original_tool = TOOL_REGISTRY["wait_for_ci"]
+    original_outcome = original_tool.recipe_delivery_outcome
+    assert original_outcome is not None
+    replacement = replace(
+        original_tool,
+        recipe_delivery_outcome=replace(original_outcome, **outcome_changes),
+    )
+    registry = MappingProxyType({**TOOL_REGISTRY, "wait_for_ci": replacement})
+    monkeypatch.setattr(tool_registry, "TOOL_REGISTRY", registry)
+
+    registered = tool_registry.get_tool_def("wait_for_ci")
+    assert registered is replacement
+    arms = _result_arms(condition, None)
+    results = tuple(
+        edge_routes_success(
+            "wait_for_ci",
+            edge,
+            automatic=registered.automatic_recipe_delivery,
+            recovery=registered.recovery_recipe_delivery,
+            result_arms=arms,
+        )
+        for edge in arms
+    )
+
+    assert results == (expected_conditioned, expected_fallback)
 
 
 @pytest.fixture(scope="module")

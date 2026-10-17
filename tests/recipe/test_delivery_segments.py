@@ -337,6 +337,8 @@ def test_bundled_segmented_recipe_opt_in_is_exact() -> None:
     assert opted_in == {"implementation", "remediation"}
 
 
+# These assertions check broad field/value presence, not production's strict equality
+# grammar, so they can independently justify why the registry rejects a result arm.
 def _mentions_success_field(condition: str | None, success_field: str) -> bool:
     return (
         condition is not None

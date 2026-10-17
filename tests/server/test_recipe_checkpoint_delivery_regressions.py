@@ -9,9 +9,10 @@ import pytest
 
 import autoskillit.server.recipe._recipe_segment_delivery as segment_delivery
 import autoskillit.server.tools._recipe_section_handler as section_handler
-from autoskillit.core import FinalizedRecipeProjection, get_tool_def
+from autoskillit.core import FinalizedRecipeProjection, RecipeFlowEdge, get_tool_def
 from autoskillit.core.io import load_yaml
 from autoskillit.pipeline import ReadyRecipe
+from autoskillit.recipe import _result_arms_by_source
 from autoskillit.server.recipe._recipe_artifact import load_recipe_artifact
 from autoskillit.server.recipe._recipe_segment_delivery import (
     RECIPE_SEGMENT_MAX_BYTES,
@@ -121,7 +122,7 @@ def _assert_success_routes_and_response_bounds(
     recipe_name: str,
     source: str,
     segment_indices: dict[str, int],
-    result_arms_by_source: dict[str, list[Any]],
+    result_arms_by_source: dict[str, tuple[RecipeFlowEdge, ...]],
 ) -> None:
     source_index = segment_indices[source]
     for edge in projection.ordered_flow_edges:
@@ -136,7 +137,7 @@ def _assert_success_routes_and_response_bounds(
         if not segment_delivery._edge_routes_success(
             projection,
             edge,
-            result_arms=tuple(result_arms_by_source.get(source, ())),
+            result_arms=result_arms_by_source.get(source, ()),
         ):
             continue
         for carrier in (prepared.success_carrier, prepared.success_pull_only_carrier):
@@ -281,10 +282,7 @@ async def test_checkpoint_delivery_closures_and_response_bounds_are_complete(
         for step in segment.ordered_step_names
     }
     finalized_steps = frozenset(projection.ordered_step_names)
-    result_arms_by_source: dict[str, list[Any]] = {}
-    for edge in projection.ordered_flow_edges:
-        if edge.edge_type == "result_condition":
-            result_arms_by_source.setdefault(edge.source, []).append(edge)
+    result_arms_by_source = _result_arms_by_source(projection.ordered_flow_edges)
     automatic_sources = _automatic_checkpoint_sources(projection)
 
     for segment in projection.delivery_segments:

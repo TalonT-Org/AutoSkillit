@@ -110,6 +110,7 @@ RECIPE_GATEWAY_SYMBOLS: frozenset[str] = frozenset(
         "_recipe_ingredients",
         "_recipe_raw_repair",
         "_registry_utils",
+        "_result_arms_by_source",
         "_rule_helpers",
         "_rules_actions",
         "_rules_audit_impl_plan_scope",

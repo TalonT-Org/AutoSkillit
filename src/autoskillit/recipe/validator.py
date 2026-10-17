@@ -408,6 +408,7 @@ def _validate_delivery_graph(
             )
 
     checkpoint_sources: list[list[str]] = [[] for _ in normalized]
+    result_arms = _result_arms_by_source(ordered_flow_edges)
     for edge in ordered_flow_edges:
         source_index = segment_index.get(edge.source)
         target_index = segment_index.get(edge.target)
@@ -435,6 +436,7 @@ def _validate_delivery_graph(
                 edge,
                 automatic=definition.automatic_recipe_delivery,
                 recovery=definition.recovery_recipe_delivery,
+                result_arms=result_arms.get(edge.source, ()),
             )
             capability = (
                 definition.automatic_recipe_delivery
@@ -504,34 +506,62 @@ def _finalize_delivery_segments(
     )
 
 
+_RESULT_EQUALITY = re.compile(
+    r"^\s*(?P<wrapped>\$\{\{\s*)?result\.(?P<field>[A-Za-z_]\w*)"
+    r"(?(wrapped)\s*\}\})\s*==\s*"
+    r"(?P<quote>['\"]?)(?P<value>[\w.-]+)(?P=quote)\s*$"
+)
+
+
+def _result_arms_by_source(
+    ordered_flow_edges: tuple[RecipeFlowEdge, ...],
+) -> dict[str, tuple[RecipeFlowEdge, ...]]:
+    arms: dict[str, list[RecipeFlowEdge]] = {}
+    for edge in ordered_flow_edges:
+        if edge.edge_type == "result_condition":
+            arms.setdefault(edge.source, []).append(edge)
+    return {source: tuple(edges) for source, edges in arms.items()}
+
+
+def _arm_matches_success(tool_name: str, condition: str | None) -> bool | None:
+    """True/False for equality to the registry success field; None otherwise."""
+    definition = get_tool_def(tool_name)
+    outcome = definition.recipe_delivery_outcome if definition is not None else None
+    if (
+        outcome is None
+        or outcome.success_field is None
+        or not outcome.recipe_observable
+        or condition is None
+    ):
+        return None
+    match = _RESULT_EQUALITY.fullmatch(condition)
+    if match is None or match["field"] != outcome.success_field:
+        return None
+    value = match["value"]
+    if isinstance(outcome.success_value, bool):
+        return value.lower() == str(outcome.success_value).lower()
+    return value == outcome.success_value
+
+
 def edge_routes_success(
     tool_name: str,
     edge: RecipeFlowEdge,
     *,
     automatic: bool,
     recovery: bool,
+    result_arms: tuple[RecipeFlowEdge, ...],
 ) -> bool:
-    """Return whether one finalized tool edge selects the success carrier."""
+    """Return whether a successful tool outcome can take this finalized edge."""
     if not automatic and recovery:
         return False
     if edge.edge_type in {"success", "skip"}:
         return True
     if edge.edge_type != "result_condition":
         return False
-    condition_parts = (edge.condition or "").split("==")
-    if len(condition_parts) != 2:
-        return False
-    field, value = (part.strip() for part in condition_parts)
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
-        value = value[1:-1]
-    success_result = {
-        "wait_for_ci": ("result.conclusion", "success"),
-        "wait_for_merge_queue": ("result.pr_state", "merged"),
-        "claim_and_resolve_issue": ("result.claimed", "true"),
-    }.get(tool_name)
-    if success_result is not None:
-        return (field, value) == success_result
-    return automatic
+    if edge.condition is None:
+        preceding = result_arms[: result_arms.index(edge)]
+        return not any(_arm_matches_success(tool_name, arm.condition) is True for arm in preceding)
+    return _arm_matches_success(tool_name, edge.condition) is not False
 
 
 # Re-export test-access symbols from their new locations.

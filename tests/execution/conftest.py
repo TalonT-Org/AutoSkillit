@@ -522,6 +522,161 @@ def _subagent_assistant_ndjson(
     )
 
 
+def delegated_root_agent_call(
+    tool_use_id: str | None = "call_agent_A",
+    agent_type: str = "general-purpose",
+) -> str:
+    block: dict[str, Any] = {
+        "type": "tool_use",
+        "name": "Agent",
+        "input": {
+            "subagent_type": agent_type,
+            "model": "sonnet",
+            "description": "Update the plan",
+            "prompt": "Read and update the plan.",
+        },
+    }
+    if tool_use_id is not None:
+        block["id"] = tool_use_id
+    return json.dumps(
+        {
+            "type": "assistant",
+            "parent_tool_use_id": None,
+            "message": {"model": "claude-sonnet-4-6", "content": [block]},
+        }
+    )
+
+
+def delegated_task_started(tool_use_id: str = "call_agent_A") -> str:
+    return json.dumps({"type": "system", "subtype": "task_started", "tool_use_id": tool_use_id})
+
+
+def delegated_task_notification(tool_use_id: str = "call_agent_A") -> str:
+    return json.dumps(
+        {"type": "system", "subtype": "task_notification", "tool_use_id": tool_use_id}
+    )
+
+
+def delegated_child_prompt(
+    parent_tool_use_id: str = "call_agent_A",
+    agent_type: str = "general-purpose",
+) -> str:
+    return json.dumps(
+        {
+            "type": "user",
+            "parent_tool_use_id": parent_tool_use_id,
+            "subagent_type": agent_type,
+            "message": {"role": "user", "content": "Read and update the plan."},
+        }
+    )
+
+
+def delegated_child_tool_use(
+    tool_use_id: Any = "call_child_edit",
+    tool_name: str = "Edit",
+    file_path: Any = "/workspace/plan.md",
+    parent_tool_use_id: Any = "call_agent_A",
+    agent_type: Any = "general-purpose",
+) -> str:
+    block: dict[str, Any] = {"type": "tool_use", "name": tool_name, "id": tool_use_id}
+    if file_path is not None:
+        block["input"] = {"file_path": file_path}
+    record: dict[str, Any] = {"type": "assistant", "message": {"content": [block]}}
+    if parent_tool_use_id is not None:
+        record["parent_tool_use_id"] = parent_tool_use_id
+    if agent_type is not None:
+        record["subagent_type"] = agent_type
+    return json.dumps(record)
+
+
+def delegated_child_tool_result(
+    tool_use_id: Any = "call_child_edit",
+    is_error: bool | None = None,
+    parent_tool_use_id: Any = "call_agent_A",
+    agent_type: Any = "general-purpose",
+) -> str:
+    block: dict[str, Any] = {"type": "tool_result", "tool_use_id": tool_use_id}
+    if is_error is not None:
+        block["is_error"] = is_error
+    record: dict[str, Any] = {
+        "type": "user",
+        "message": {"role": "user", "content": [block]},
+    }
+    if parent_tool_use_id is not None:
+        record["parent_tool_use_id"] = parent_tool_use_id
+    if agent_type is not None:
+        record["subagent_type"] = agent_type
+    return json.dumps(record)
+
+
+def delegated_root_agent_result() -> str:
+    return json.dumps(
+        {
+            "type": "user",
+            "message": {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "call_agent_A",
+                        "content": [{"type": "text", "text": "Plan updated."}],
+                    }
+                ],
+            },
+            "tool_use_result": {"agentId": "agentA", "status": "completed"},
+        }
+    )
+
+
+def delegated_root_agent_text_result() -> str:
+    return json.dumps(
+        {
+            "type": "user",
+            "message": {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "call_agent_A",
+                        "content": "Plan updated.\nagentId: agentA",
+                    }
+                ],
+            },
+        }
+    )
+
+
+def delegated_root_text(text: str = "Plan updated.") -> str:
+    return json.dumps(
+        {"type": "assistant", "message": {"content": [{"type": "text", "text": text}]}}
+    )
+
+
+def delegated_result_record() -> str:
+    return _result_ndjson("Plan updated.")
+
+
+def delegated_stream(records: list[str] | tuple[str, ...]) -> str:
+    return "\n".join(records)
+
+
+def make_write_evidence_scope(**overrides: Any) -> Any:
+    from autoskillit.execution.session._write_evidence import WriteEvidenceScope
+
+    values = {
+        "write_tool_names": {"Write", "Edit"},
+        "fs_writes_detected": False,
+        "git_writes_detected": False,
+        "file_changes": (),
+        "write_watch_dirs": (),
+        "cwd": "",
+        "skill_command": "",
+        "delegated_target": None,
+    }
+    values.update(overrides)
+    return WriteEvidenceScope(**values)
+
+
 def _flush(
     tmp_path: Path, *, backend: str = "claude-code", session_locator=None, **overrides
 ) -> None:

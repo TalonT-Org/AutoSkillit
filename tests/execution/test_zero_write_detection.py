@@ -1066,6 +1066,33 @@ class TestHelperDiversityGuard:
 class TestPathAwareImplementationEvidence:
     """Worktree-skill dispatches must distinguish tracked-tree writes from temp writes."""
 
+    def test_worktree_write_without_file_path_is_not_implementation_evidence(
+        self, tmp_path: Path
+    ) -> None:
+        wt = self._worktree_cwd(tmp_path)
+        stdout = _ndjson_with_tool_uses(["Write"])
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:implement-worktree-no-merge /some/path.md",
+            cwd=str(wt),
+            write_watch_dirs=[wt],
+            write_behavior=WriteBehaviorSpec(mode="always"),
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.evidence.write_call_count == 0
+
+    def test_non_worktree_write_without_file_path_is_counted(self, tmp_path: Path) -> None:
+        wt = self._worktree_cwd(tmp_path)
+        stdout = _ndjson_with_tool_uses(["Write"])
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:investigate regression",
+            cwd=str(wt),
+            write_behavior=WriteBehaviorSpec(mode="always"),
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.evidence.write_call_count == 1
+
     def _worktree_cwd(self, tmp_path: Path) -> Path:
         wt = tmp_path / "worktree"
         wt.mkdir()

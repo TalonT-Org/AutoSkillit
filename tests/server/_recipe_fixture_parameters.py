@@ -10,6 +10,11 @@ REVIEW_APPROACH_OVERRIDES = {**IMPLEMENTATION_OVERRIDES, "review_approach": "tru
 IMPLEMENTATION_READY_PARAMETERS = [
     pytest.param(("implementation", "plan", IMPLEMENTATION_OVERRIDES), id="implementation"),
 ]
+
+
+REMEDIATION_READY_PARAMETERS = [
+    pytest.param(("remediation", None, IMPLEMENTATION_OVERRIDES), id="remediation"),
+]
 IMPLEMENTATION_REVIEW_READY_PARAMETERS = [
     pytest.param(("implementation", "plan", IMPLEMENTATION_OVERRIDES), id="default"),
     pytest.param(("implementation", "plan", REVIEW_APPROACH_OVERRIDES), id="review-approach"),

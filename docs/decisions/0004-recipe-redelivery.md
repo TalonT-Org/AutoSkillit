@@ -63,6 +63,16 @@ future bodies or an ordered manual `recipe_pull` closure. No raw YAML, LRU looku
 skip carrier, or separately persisted projection participates in recovery. Carriers are
 attached by the shared response wrapper from each tool's registry outcome declaration.
 
+Success reachability comes from the registry's `RecipeDeliveryOutcomeDef`. An arm that
+cannot be proved failure-only counts as success-reachable. Carrier selection therefore
+conservatively supplies possible continuations; it does not evaluate the actual result
+branch. Delivering or pulling step text does not execute that step. The orchestrator
+still follows the recipe's routing and completed-operation rules.
+
+A manual pull closure includes every segment it reaches, the same unit as inline
+bodies. Outgoing traversal stops at non-root automatic checkpoints, whose carriers
+deliver their later segments; automatic checkpoint roots remain walkable.
+
 Acknowledged `run_skill` receipts are replayable only for the same kitchen, request
 session, and receipt identity. Their tracker effect remains one-shot and cached, so a
 response retry can reproduce the segment without crediting progress twice. A post-effect

@@ -23,7 +23,7 @@ from autoskillit.core import (
     load_yaml,
 )
 from autoskillit.pipeline import ReadyRecipe
-from autoskillit.recipe import edge_routes_success
+from autoskillit.recipe import edge_routes_success, result_arms_by_source
 from autoskillit.server.recipe._recipe_artifact import (
     _finalized_projection_payload,
     _normalized_recipe_compile_identity,
@@ -193,6 +193,8 @@ def _delivery_tool_name(projection: FinalizedRecipeProjection, source_step: str)
 def _edge_routes_success(
     projection: FinalizedRecipeProjection,
     edge: RecipeFlowEdge,
+    *,
+    result_arms: tuple[RecipeFlowEdge, ...],
 ) -> bool:
     tool_name = _delivery_tool_name(projection, edge.source)
     definition = get_tool_def(tool_name) if tool_name is not None else None
@@ -201,6 +203,7 @@ def _edge_routes_success(
         edge,
         automatic=definition is not None and definition.automatic_recipe_delivery,
         recovery=definition is not None and definition.recovery_recipe_delivery,
+        result_arms=result_arms,
     )
 
 
@@ -215,13 +218,19 @@ def _target_segment_indices(
     if source_index is None:
         return ()
     selected: list[int] = []
+    result_arms = result_arms_by_source(projection.ordered_flow_edges)
     for edge in projection.ordered_flow_edges:
         target_index = indices.get(edge.target)
         if (
             edge.source != source_step
             or target_index is None
             or target_index <= source_index
-            or (_edge_routes_success(projection, edge) is not success)
+            or (
+                _edge_routes_success(
+                    projection, edge, result_arms=result_arms.get(edge.source, ())
+                )
+                is not success
+            )
         ):
             continue
         if target_index not in selected:
@@ -239,8 +248,8 @@ def _manual_closure(
     projection: FinalizedRecipeProjection,
     target_steps: tuple[str, ...],
 ) -> tuple[str, ...]:
-    ordered = projection.ordered_step_names
-    known = frozenset(ordered)
+    """Pull reached segments, stopping traversal at non-root automatic checkpoints."""
+    segment_of = _segment_index(projection)
     automatic_sources = frozenset(
         source
         for segment in projection.delivery_segments
@@ -250,20 +259,23 @@ def _manual_closure(
         and definition.automatic_recipe_delivery
     )
     visited: set[str] = set()
+    entered: set[int] = set()
     pending = list(target_steps)
     while pending:
         step_name = pending.pop()
-        if step_name in visited or step_name not in known:
+        if step_name in visited or step_name not in segment_of:
             continue
         visited.add(step_name)
+        segment_index = segment_of[step_name]
+        if segment_index not in entered:
+            entered.add(segment_index)
+            pending.extend(projection.delivery_segments[segment_index].ordered_step_names)
         if step_name in automatic_sources and step_name not in target_steps:
             continue
         pending.extend(
-            edge.target
-            for edge in projection.ordered_flow_edges
-            if edge.source == step_name and edge.target in known
+            edge.target for edge in projection.ordered_flow_edges if edge.source == step_name
         )
-    return tuple(step_name for step_name in ordered if step_name in visited)
+    return tuple(step_name for step_name in projection.ordered_step_names if step_name in visited)
 
 
 def _route_pull_closures(
@@ -301,6 +313,7 @@ def validate_segment_delivery_projection(projection: FinalizedRecipeProjection) 
         return
     indices = _segment_index(projection)
     invocations = projection.binding_projection.invocations
+    result_arms = result_arms_by_source(projection.ordered_flow_edges)
     for edge in projection.ordered_flow_edges:
         source_index = indices.get(edge.source)
         target_index = indices.get(edge.target)
@@ -317,7 +330,7 @@ def validate_segment_delivery_projection(projection: FinalizedRecipeProjection) 
             )
         capability = (
             definition.automatic_recipe_delivery
-            if _edge_routes_success(projection, edge)
+            if _edge_routes_success(projection, edge, result_arms=result_arms.get(edge.source, ()))
             else definition.recovery_recipe_delivery
         )
         if not capability:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from autoskillit.core import (
@@ -9,11 +11,20 @@ from autoskillit.core import (
     FinalizedRecipeStep,
     RecipeBindingProjection,
     RecipeFlowEdge,
+    ToolDef,
 )
+from autoskillit.core.tool_registry import TOOL_REGISTRY
+from autoskillit.recipe import result_arms_by_source
+from autoskillit.recipe._api import load_and_validate
 from autoskillit.recipe._recipe_composition import _prune_skipped_steps
 from autoskillit.recipe.io import _parse_recipe, builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import Recipe, RecipeDeliverySegment, RecipeIngredient, RecipeStep
-from autoskillit.recipe.validator import _finalize_delivery_segments, validate_recipe_structure
+from autoskillit.recipe.validator import (
+    _finalize_delivery_segments,
+    edge_routes_success,
+    validate_recipe_structure,
+)
+from tests.server._recipe_fixture_parameters import IMPLEMENTATION_OVERRIDES
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -324,3 +335,121 @@ def test_bundled_segmented_recipe_opt_in_is_exact() -> None:
     }
 
     assert opted_in == {"implementation", "remediation"}
+
+
+# These assertions check broad field/value presence, not production's strict equality
+# grammar, so they can independently justify why the registry rejects a result arm.
+def _mentions_success_field(condition: str | None, success_field: str) -> bool:
+    return (
+        condition is not None
+        and re.search(rf"\bresult\.{re.escape(success_field)}\b", condition) is not None
+    )
+
+
+def _mentions_success_value(condition: str | None, success_value: bool | str) -> bool:
+    if condition is None:
+        return False
+    flags = re.IGNORECASE if isinstance(success_value, bool) else 0
+    return re.search(rf"\b{re.escape(str(success_value))}\b", condition, flags=flags) is not None
+
+
+def _assert_registry_justifies_rejected_arm(
+    tool_name: str,
+    definition: ToolDef,
+    result_arms: tuple[RecipeFlowEdge, ...],
+    arm_index: int,
+) -> None:
+    edge = result_arms[arm_index]
+    if edge_routes_success(
+        tool_name,
+        edge,
+        automatic=definition.automatic_recipe_delivery,
+        recovery=definition.recovery_recipe_delivery,
+        result_arms=result_arms,
+    ):
+        return
+
+    outcome = definition.recipe_delivery_outcome
+    assert outcome is not None and outcome.recipe_observable
+    assert outcome.success_field is not None
+    if edge.condition is None:
+        assert any(
+            _mentions_success_field(earlier.condition, outcome.success_field)
+            and _mentions_success_value(earlier.condition, outcome.success_value)
+            for earlier in result_arms[:arm_index]
+        )
+    else:
+        assert _mentions_success_field(edge.condition, outcome.success_field)
+        assert not _mentions_success_value(edge.condition, outcome.success_value)
+
+
+@pytest.mark.parametrize(
+    ("recipe_name", "defer_unresolved"),
+    [
+        pytest.param("implementation", False, id="implementation-resolved"),
+        pytest.param("implementation", True, id="implementation-deferred"),
+        pytest.param("remediation", False, id="remediation-resolved"),
+        pytest.param("remediation", True, id="remediation-deferred"),
+    ],
+)
+def test_registry_anchors_automatic_delivery_classification(
+    recipe_name: str,
+    defer_unresolved: bool,
+) -> None:
+    overrides = dict(IMPLEMENTATION_OVERRIDES)
+    if recipe_name == "remediation":
+        overrides["investigate"] = "true"
+    result = load_and_validate(
+        recipe_name,
+        ingredient_overrides=overrides,
+        defer_unresolved=defer_unresolved,
+        include_finalized_projection=True,
+    )
+    assert result["valid"], result["errors"]
+    projection = result["_finalized_projection"]
+    assert projection.delivery_segments
+    segment_index = {
+        step_name: index
+        for index, segment in enumerate(projection.delivery_segments)
+        for step_name in segment.ordered_step_names
+    }
+    check_changes_arms = tuple(
+        edge
+        for edge in projection.ordered_flow_edges
+        if edge.source == "check_changes" and edge.edge_type == "result_condition"
+    )
+    no_change = next(
+        edge
+        for edge in check_changes_arms
+        if edge.target == "close_issue_no_changes" and edge.condition is not None
+    )
+    fallback = next(
+        edge for edge in check_changes_arms if edge.target == "test" and edge.condition is None
+    )
+    assert no_change.condition is not None and "result.has_changes" in no_change.condition
+    assert segment_index["close_issue_no_changes"] == segment_index["check_changes"]
+    assert segment_index["test"] > segment_index["check_changes"]
+    assert fallback.condition is None
+
+    for source, result_arms in result_arms_by_source(projection.ordered_flow_edges).items():
+        source_step = projection.for_step(source)
+        if source_step is None or source_step.tool is None:
+            continue
+        tool_name = (
+            "complete_run_skill_result" if source_step.tool == "run_skill" else source_step.tool
+        )
+        definition = TOOL_REGISTRY[tool_name]
+        if not definition.automatic_recipe_delivery:
+            continue
+        source_index = segment_index[source]
+        for arm_index, edge in enumerate(result_arms):
+            if edge.target not in segment_index:
+                continue
+            if segment_index[edge.target] <= source_index:
+                continue
+            _assert_registry_justifies_rejected_arm(
+                tool_name,
+                definition,
+                result_arms,
+                arm_index,
+            )

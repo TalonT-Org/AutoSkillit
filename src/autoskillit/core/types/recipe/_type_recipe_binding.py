@@ -164,11 +164,16 @@ class ToolParamDef:
 
 @dataclass(frozen=True, slots=True)
 class RecipeDeliveryOutcomeDef:
-    """How the response wrapper reads a delivery tool's outcome from its response."""
+    """How the response wrapper reads a delivery tool's outcome from its response.
+
+    ``recipe_observable`` is False when recipe ``result.*`` does not expose
+    ``success_field`` (the tool nests its result or the field is wrapper-only).
+    """
 
     success_field: str | None = None
     success_value: bool | str = True
     step_name_field: str | None = None
+    recipe_observable: bool = True
 
     def succeeded(self, payload: Mapping[str, object]) -> bool:
         if self.success_field is None:

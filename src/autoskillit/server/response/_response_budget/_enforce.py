@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
+    ASCII_YAML_POLICY,
     CLIENT_CHARS_PER_TOKEN_POLICY,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     TokenLimit,
+    Utf8ByteLimit,
 )
 from autoskillit.server.recipe._recipe_segment_delivery import (
     RECIPE_SEGMENT_MAX_BYTES,
@@ -326,46 +329,42 @@ def _enforce_checkpoint_segmented_response(
         return _segment_failure_like(original, carrier, tool_name=tool_name)
     rendered_size = len(rendered.encode("utf-8"))
     final_limit = RECIPE_SEGMENT_MAX_BYTES - 1
-    over_delivery_bound = (
-        selected_result_token_limit is not None
-        and selected_result_token_limit > 0
-        and _estimated_tokens(rendered_size) > selected_result_token_limit
-    )
-    if not force_spill and not over_delivery_bound and rendered_size <= final_limit:
+    if selected_result_token_limit is not None and selected_result_token_limit > 0:
+        final_limit = min(
+            final_limit, ASCII_YAML_POLICY.to_bytes(TokenLimit(selected_result_token_limit)).value
+        )
+    if not force_spill and rendered_size <= final_limit:
         return rendered if isinstance(original, str) else combined
     if artifact_dir is None:
         return _segment_failure_like(original, carrier, tool_name=tool_name)
 
+    # Reserve the unchanged carrier, its key, and the separating comma before
+    # projecting the base; artifact metadata must fit in the remainder too.
+    carrier_overhead = len(_canonical_json({"recipe_segment": carrier}).encode("utf-8")) - 1
+    base_max_bytes = min(config.response_max_bytes, final_limit - carrier_overhead)
     base_input: Any = _canonical_json(base) if isinstance(original, str) else base
-    shaped_base = enforce_response_budget(
-        base_input,
-        tool_name=tool_name,
-        artifact_dir=artifact_dir,
-        config=config,
-        force_spill=True,
-        selected_result_token_limit=selected_result_token_limit,
-    )
     try:
+        shaped_base = enforce_response_budget(
+            base_input,
+            tool_name=tool_name,
+            artifact_dir=artifact_dir,
+            config=replace(config, response_max_bytes=Utf8ByteLimit(base_max_bytes)),
+            force_spill=True,
+            selected_result_token_limit=selected_result_token_limit,
+        )
         shaped_mapping = json.loads(shaped_base) if isinstance(shaped_base, str) else shaped_base
-    except (TypeError, ValueError, RecursionError):
-        return _segment_failure_like(original, carrier, tool_name=tool_name)
-    if not isinstance(shaped_mapping, dict):
-        return _segment_failure_like(original, carrier, tool_name=tool_name)
-    shaped_error = shaped_mapping.get("error")
-    if isinstance(shaped_error, str) and shaped_error.startswith("response_budget_"):
-        return _segment_failure_like(original, carrier, tool_name=tool_name)
+        if not isinstance(shaped_mapping, dict):
+            return _segment_failure_like(original, carrier, tool_name=tool_name)
+        shaped_error = shaped_mapping.get("error")
+        if isinstance(shaped_error, str) and shaped_error.startswith("response_budget_"):
+            return _segment_failure_like(original, carrier, tool_name=tool_name)
 
-    recombined = {**shaped_mapping, "recipe_segment": carrier}
-    try:
+        recombined = {**shaped_mapping, "recipe_segment": carrier}
         final_rendered = _canonical_json(recombined)
     except (TypeError, ValueError, OverflowError, RecursionError):
         return _segment_failure_like(original, carrier, tool_name=tool_name)
     final_size = len(final_rendered.encode("utf-8"))
-    if final_size > final_limit or (
-        selected_result_token_limit is not None
-        and selected_result_token_limit > 0
-        and _estimated_tokens(final_size) > selected_result_token_limit
-    ):
+    if final_size > final_limit:
         return _segment_failure_like(original, carrier, tool_name=tool_name)
     return final_rendered if isinstance(original, str) else recombined
 

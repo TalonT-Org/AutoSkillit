@@ -197,6 +197,39 @@ def test_checkpoint_budget_spills_only_base_and_preserves_whole_carrier(tmp_path
     assert "recipe_segment" not in persisted_base
 
 
+@pytest.mark.parametrize(
+    ("body_chars", "token_limit", "max_bytes"),
+    [(2700, None, 9999), (600, 1000, 2700)],
+    ids=("carrier-byte-reservation", "carrier-token-reservation"),
+)
+def test_checkpoint_budget_reserves_carrier_before_projecting_base(
+    tmp_path, body_chars, token_limit, max_bytes
+):
+    carrier = _checkpoint_carrier()
+    carrier["bodies"][0]["body"] = "é" * body_chars
+    base = {"success": True, "stdout": "x" * 12_000}
+    config = OutputBudgetConfig()
+
+    shaped = enforce_response_budget(
+        {**base, "recipe_segment": carrier},
+        tool_name="test_check",
+        artifact_dir=tmp_path,
+        config=config,
+        selected_result_token_limit=token_limit,
+    )
+
+    assert isinstance(shaped, dict)
+    assert shaped["success"] is True
+    assert shaped["recipe_segment"] == carrier
+    assert (
+        len(json.dumps(shaped, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+        <= max_bytes
+    )
+    artifact = Path(shaped[RESPONSE_SPILL_METADATA_KEY]["artifact_path"])
+    assert json.loads(artifact.read_text()) == base
+    assert config.response_max_bytes == OutputBudgetConfig().response_max_bytes
+
+
 def test_checkpoint_budget_publication_failure_returns_no_repeat_carrier(tmp_path, monkeypatch):
     from autoskillit.server.response import _response_budget
 

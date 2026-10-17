@@ -77,6 +77,7 @@ _CORE_TYPES_GROUPS: dict[str, frozenset[str]] = {
             "_type_results",
             "_type_results_execution",
             "_type_results_records",
+            "_type_write_evidence",
             "_type_token",
             "_type_figure_spec",
         }
@@ -353,6 +354,7 @@ class TestExecutionSubpackages:
             "_retry_fsm",
             "_exit_classification",
             "_provider_parse",
+            "_write_evidence",
             "turn_usage",
             "_managed_headless_session_lineage",
             "_managed_headless_session_lineage_codec",

@@ -133,6 +133,7 @@ class SkillContract:
         default_factory=dict
     )
     audit_output_mode: AuditOutputMode | None = None
+    delegated_write_input: str | None = None
 
     def __post_init__(self) -> None:
         if self.external_effect not in VALID_EXTERNAL_EFFECTS:

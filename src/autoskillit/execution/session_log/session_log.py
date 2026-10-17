@@ -175,6 +175,7 @@ def flush_session_log(
     fs_writes_detected: bool = False,
     git_writes_detected: bool = False,
     file_changes_count: int = 0,
+    delegated_write_count: int = 0,
     clone_contamination_reverted: bool = False,
     tracked_comm: str | None = None,
     comm_aliases: frozenset[str] = frozenset(),
@@ -456,6 +457,7 @@ def flush_session_log(
             "fs_writes_detected": fs_writes_detected,
             "git_writes_detected": git_writes_detected,
             "file_changes_count": file_changes_count,
+            "delegated_write_count": delegated_write_count,
             "clone_contamination_reverted": clone_contamination_reverted,
             # Tracer target resolution fields (issue #806)
             "tracked_comm": _effective_tracked_comm,

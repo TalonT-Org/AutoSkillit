@@ -199,6 +199,20 @@ def test_flush_session_log_write_call_count_defaults_to_zero(tmp_path):
     assert summary["write_call_count"] == 0
 
 
+def test_flush_session_log_delegated_write_count_is_summary_only(tmp_path):
+    _flush(
+        tmp_path,
+        session_id="delegated-writes",
+        delegated_write_count=3,
+        proc_snapshots=None,
+    )
+    summary = json.loads((tmp_path / "sessions" / "delegated-writes" / "summary.json").read_text())
+    index = json.loads((tmp_path / "sessions.jsonl").read_text().strip().split("\n")[-1])
+
+    assert summary["delegated_write_count"] == 3
+    assert "delegated_write_count" not in index
+
+
 def test_flush_session_log_writes_kitchen_id(tmp_path):
     """kitchen_id parameter is written to sessions.jsonl index entry."""
     _flush(

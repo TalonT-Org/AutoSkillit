@@ -21,6 +21,7 @@ from autoskillit.core import (
     SKILL_PROJECTION_VERSION,
     SKILL_SESSION_CONTRACT_SCHEMA_VERSION,
     ChildExecutionIdentity,
+    DelegatedWriteTarget,
     ExecutionIdentity,
     ExplorationTaskSpec,
     ExplorationVectorApplicabilityId,
@@ -372,6 +373,27 @@ def _execution_identity_from_dict(value: object) -> ExecutionIdentity:
     return ExecutionIdentity(**scalar_values, children=tuple(parsed_children))
 
 
+def _delegated_target_to_dict(target: DelegatedWriteTarget | None) -> dict[str, Any] | None:
+    if target is None:
+        return None
+    return {"path": target.path, "baseline_digest": target.baseline_digest}
+
+
+def _delegated_target_from_dict(data: Mapping[str, Any]) -> DelegatedWriteTarget | None:
+    target = data.get("write_behavior", {}).get("delegated_target")
+    if target is None:
+        return None
+    if not isinstance(target, Mapping):
+        raise ValueError("serialized delegated target must be an object")
+    path = target["path"]
+    baseline_digest = target["baseline_digest"]
+    if not isinstance(path, str) or not path:
+        raise ValueError("serialized delegated target path must be non-empty text")
+    if baseline_digest is not None and not isinstance(baseline_digest, str):
+        raise ValueError("serialized delegated target baseline_digest must be text or null")
+    return DelegatedWriteTarget(path=path, baseline_digest=baseline_digest)
+
+
 def _contract_to_dict(contract: SkillSessionContract) -> dict[str, Any]:
     exploration_vectors: dict[str, list[object]] = {}
     for name, vectors in sorted(contract.exploration_vectors.items()):
@@ -382,6 +404,7 @@ def _contract_to_dict(contract: SkillSessionContract) -> dict[str, Any]:
         ):
             serialized.insert(index, _thaw_json_value(raw))
         exploration_vectors[name] = serialized
+    delegated_target = contract.write_behavior.delegated_target
     return {
         "schema_version": contract.schema_version,
         "root_name": contract.root_name,
@@ -430,6 +453,7 @@ def _contract_to_dict(contract: SkillSessionContract) -> dict[str, Any]:
             "mode": contract.write_behavior.mode,
             "expected_when": list(contract.write_behavior.expected_when),
             "external_effect": contract.write_behavior.external_effect,
+            "delegated_target": _delegated_target_to_dict(delegated_target),
         },
         "read_only": contract.read_only,
         "scope_discipline": contract.scope_discipline,
@@ -650,6 +674,7 @@ def _contract_from_dict(data: Mapping[str, Any]) -> SkillSessionContract:
                     for pattern in data.get("write_behavior", {}).get("expected_when", [])
                 ),
                 external_effect=str(data.get("write_behavior", {}).get("external_effect", "none")),
+                delegated_target=_delegated_target_from_dict(data),
             ),
             read_only=read_only,
             scope_discipline=scope_discipline,

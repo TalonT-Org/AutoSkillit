@@ -19,11 +19,8 @@ import pytest
 
 from autoskillit.core import RetryReason, WriteBehaviorSpec
 from autoskillit.core.types import KillReason
-from autoskillit.core.types.results._type_results import (
-    ApiRetryOutcome,
-    SkillResult,
-    WriteEvidence,
-)
+from autoskillit.core.types.results._type_results import ApiRetryOutcome, SkillResult
+from autoskillit.core.types.results._type_write_evidence import WriteEvidence
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.headless import _build_skill_result
 from autoskillit.execution.headless._headless_adjudication import (

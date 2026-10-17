@@ -152,6 +152,7 @@ class TestModuleCascadeCore:
             "_type_checkpoint",
             "_type_results",
             "_type_results_records",
+            "_type_write_evidence",
             "_type_execution_identity",
             "_type_exploration",
             "_type_results_execution",
@@ -783,6 +784,7 @@ class TestBuildTestScopeCoreCascade:
         [
             "src/autoskillit/core/types/results/_type_results.py",
             "src/autoskillit/core/types/results/_type_results_records.py",
+            "src/autoskillit/core/types/results/_type_write_evidence.py",
         ],
     )
     def test_type_results_narrow_routing(self, tmp_path: Path, source_path: str) -> None:

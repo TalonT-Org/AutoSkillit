@@ -49,7 +49,6 @@ from autoskillit.execution.headless._headless_adjudication import (
 from autoskillit.execution.headless._headless_evidence import (
     _apply_budget_guard,
     _capture_failure,
-    _compute_write_evidence,
     _extract_file_changes,
     _stdout_mentions_write_tools,
 )
@@ -72,6 +71,10 @@ from autoskillit.execution.session._exit_classification import classify_infra_ex
 from autoskillit.execution.session._session_content import _check_expected_patterns
 from autoskillit.execution.session._session_outcome import (
     _compute_outcome,
+)
+from autoskillit.execution.session._write_evidence import (
+    WriteEvidenceScope,
+    _compute_write_evidence,
 )
 from autoskillit.hooks import CODEX_AUTO_COMPACTION_DENIED_REASON
 
@@ -168,11 +171,7 @@ def _build_stall_result(
         provider_used=context.provider_used,
         write_behavior=context.write_behavior,
         skill_contract=context.skill_contract,
-        cwd=context.cwd,
-        fs_writes_detected=context.fs_writes_detected,
-        git_writes_detected=context.git_writes_detected,
-        file_changes=context.file_changes,
-        write_watch_dirs=context.write_watch_dirs,
+        evidence_scope=context.evidence_scope,
         backend_resume_session_id=context.backend_resume_session_id,
         outcome_ledger=context.outcome_ledger,
     )
@@ -225,16 +224,7 @@ def _make_controlled_context_exhaustion_result(
     context: _SkillResultContext,
 ) -> SkillResult:
     """Build the terminal result for the correlated Codex compaction veto."""
-    evidence = _compute_write_evidence(
-        session,
-        context.fs_writes_detected,
-        context.git_writes_detected,
-        context.backend,
-        file_changes=context.file_changes,
-        write_watch_dirs=context.write_watch_dirs,
-        cwd=context.cwd,
-        skill_command=context.skill_command,
-    )
+    evidence = _compute_write_evidence(session, context.evidence_scope)
     _, needs_retry, retry_reason = _apply_infra_retry_policy(
         InfraExitCategory.CONTEXT_EXHAUSTED,
         outcome=SessionOutcome.FAILED,
@@ -300,6 +290,16 @@ def _build_skill_result(
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
     file_changes = _extract_file_changes(result.stdout, backend)
+    evidence_scope = WriteEvidenceScope(
+        write_tool_names=backend.write_tool_names(),
+        fs_writes_detected=fs_writes_detected,
+        git_writes_detected=git_writes_detected,
+        file_changes=tuple(file_changes),
+        write_watch_dirs=tuple(write_watch_dirs),
+        cwd=cwd,
+        skill_command=skill_command,
+        delegated_target=getattr(write_behavior, "delegated_target", None),
+    )
     context = _SkillResultContext(
         backend=backend,
         completion_marker=completion_marker,
@@ -311,11 +311,7 @@ def _build_skill_result(
         provider_used=provider_used,
         write_behavior=write_behavior,
         skill_contract=skill_contract,
-        cwd=cwd,
-        fs_writes_detected=fs_writes_detected,
-        git_writes_detected=git_writes_detected,
-        file_changes=file_changes,
-        write_watch_dirs=write_watch_dirs,
+        evidence_scope=evidence_scope,
         backend_resume_session_id=backend_resume_session_id,
         outcome_ledger=outcome_ledger,
     )
@@ -375,16 +371,7 @@ def _build_skill_result(
                 context=context,
             )
         obligation_session = session
-        obligation_evidence = _compute_write_evidence(
-            obligation_session,
-            fs_writes_detected,
-            git_writes_detected,
-            backend,
-            file_changes=file_changes,
-            write_watch_dirs=write_watch_dirs,
-            cwd=cwd,
-            skill_command=skill_command,
-        )
+        obligation_evidence = _compute_write_evidence(obligation_session, context.evidence_scope)
         diagnostics = [f"pending={','.join(obligation_pending)}"] if obligation_pending else []
         if obligation_wakeup:
             diagnostics.append("schedule_wakeup=true")
@@ -479,16 +466,7 @@ def _build_skill_result(
     else:
         returncode = result.returncode if result.returncode is not None else -1
 
-    evidence = _compute_write_evidence(
-        session,
-        fs_writes_detected,
-        git_writes_detected,
-        backend,
-        file_changes=file_changes,
-        write_watch_dirs=write_watch_dirs,
-        cwd=cwd,
-        skill_command=skill_command,
-    )
+    evidence = _compute_write_evidence(session, context.evidence_scope)
     _has_write_evidence = evidence.has_evidence
 
     try:
@@ -776,7 +754,7 @@ def _build_skill_result(
         evidence,
         write_behavior,
         skill_contract,
-        cwd,
+        evidence_scope.cwd,
         outcome_ledger=outcome_ledger,
         start_ts=result.start_ts,
         end_ts=result.end_ts,

@@ -481,9 +481,11 @@ async def tool_ctx_ready_recipe(
 
     Indirectly parametrizable over ``(recipe_name, attested_step, ingredient_overrides)``
     via ``@pytest.mark.parametrize("tool_ctx_ready_recipe", [(...)], indirect=True)``.
+    A null attested_step selects the first attested run_skill step during setup.
     Without parametrization, the fixture uses ``RESEARCH_READY_DEFAULT`` from
     the shared recipe inputs module.
     """
+    from autoskillit.pipeline import ReadyRecipe
     from autoskillit.server.tools.tools_recipe import complete_recipe_initialization
     from tests.server._helpers import (
         _credit_initialization_sections,
@@ -540,6 +542,19 @@ async def tool_ctx_ready_recipe(
     # required_sections is absent — so no bounded-only assertion belongs here.
 
     await _credit_initialization_sections(envelope)
+    if attested_step is None:
+        state = tool_ctx_kitchen_open.recipe_initialization_state
+        assert isinstance(state, ReadyRecipe)
+        invocations = state.finalized_projection.binding_projection.invocations
+        attested_step = next(
+            (
+                step_name
+                for step_name, invocation in invocations.items()
+                if invocation.tool_name == "run_skill" and invocation.attested
+            ),
+            None,
+        )
+        assert attested_step is not None, f"{recipe_name} has no attested run_skill invocation"
     step_body = await _pull_step_section(envelope, attested_step)
     forbid_artifact_reads()
     receipt = json.loads(await complete_recipe_initialization(envelope["initialization_id"]))

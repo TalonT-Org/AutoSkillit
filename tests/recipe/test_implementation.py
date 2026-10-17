@@ -232,6 +232,16 @@ def test_malformed_automatic_result_arms_and_fallback_remain_reachable(
             )
             is True
         )
+        assert (
+            edge_routes_success(
+                "enqueue_pr",
+                edge,
+                automatic=False,
+                recovery=True,
+                result_arms=arms,
+            )
+            is False
+        )
 
 
 @pytest.mark.parametrize(

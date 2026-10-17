@@ -269,6 +269,31 @@ def test_contract_codec_defaults_absent_delegated_target_under_schema_five(
     assert restored.write_behavior.delegated_target is None
 
 
+@pytest.mark.parametrize(
+    "target",
+    [
+        [],
+        {"baseline_digest": None},
+        {"path": "plan.md"},
+        {"path": "", "baseline_digest": None},
+        {"path": 42, "baseline_digest": None},
+        {"path": "plan.md", "baseline_digest": 42},
+    ],
+    ids=["not-object", "missing-path", "missing-digest", "empty-path", "path-type", "digest-type"],
+)
+def test_contract_codec_rejects_malformed_delegated_target(tmp_path: Path, target: object) -> None:
+    from autoskillit.execution.session._skill_session_contract_codec import (
+        _contract_from_dict,
+        _contract_to_dict,
+    )
+
+    encoded = _contract_to_dict(_contract(tmp_path, "projected\n"))
+    encoded["write_behavior"]["delegated_target"] = target
+
+    with pytest.raises(ValueError, match="Invalid serialized"):
+        _contract_from_dict(encoded)
+
+
 def test_store_persists_lineage_binding_separately_and_rebinds_verified_final_id(
     tmp_path: Path,
 ) -> None:

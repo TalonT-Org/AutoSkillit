@@ -383,7 +383,15 @@ def _delegated_target_from_dict(data: Mapping[str, Any]) -> DelegatedWriteTarget
     target = data.get("write_behavior", {}).get("delegated_target")
     if target is None:
         return None
-    return DelegatedWriteTarget(path=target["path"], baseline_digest=target["baseline_digest"])
+    if not isinstance(target, Mapping):
+        raise ValueError("serialized delegated target must be an object")
+    path = target["path"]
+    baseline_digest = target["baseline_digest"]
+    if not isinstance(path, str) or not path:
+        raise ValueError("serialized delegated target path must be non-empty text")
+    if baseline_digest is not None and not isinstance(baseline_digest, str):
+        raise ValueError("serialized delegated target baseline_digest must be text or null")
+    return DelegatedWriteTarget(path=path, baseline_digest=baseline_digest)
 
 
 def _contract_to_dict(contract: SkillSessionContract) -> dict[str, Any]:

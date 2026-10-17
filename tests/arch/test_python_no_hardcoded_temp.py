@@ -77,7 +77,7 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     # writes by constructing the temp prefix for path-aware filtering. The literal mirrors
     # the canonical default used by resolve_temp_dir — no resolve_temp_dir() available at
     # this stage because path filtering runs on session.tool_uses captured before session ends.
-    "execution/headless/_headless_evidence.py": (
+    "execution/session/_write_evidence.py": (
         "path-aware write-evidence discriminator; mirrors canonical default"
     ),
     # Justification: docstring for resolve_state_root() explains that callers append

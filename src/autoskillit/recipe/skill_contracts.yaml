@@ -311,6 +311,7 @@ skills:
       absence_value: ""
     outputs: []
     write_behavior: always
+    delegated_write_input: plan_path
     input_preflight: [audit_cycle_inventory, plan_set_coverage]
   implement-worktree:
     inputs:

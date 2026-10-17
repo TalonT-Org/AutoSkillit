@@ -43,7 +43,7 @@ from autoskillit.server.recipe._recipe_execution import (
     RecipeExecutionAdmissionError,
     bind_attested_runtime_invocation,
     build_bound_child_prompt,
-    build_standalone_child_prompt,
+    build_standalone_child_invocation,
     get_recipe_execution,
     record_runtime_binding_digest,
     resolve_attested_input_preflight,
@@ -516,11 +516,13 @@ def _admit_dynamic_recipe_invocation(state: _RunSkillDispatchState) -> str | Non
         )
     if not state.resume_session_id:
         try:
-            state.child_skill_command = build_standalone_child_prompt(
-                state.skill_command,
-                state.cwd,
-                state.skill_inputs,
-                audit_output_mode=state._audit_output_mode,
+            state.child_skill_command, state._bound_recipe_inputs = (
+                build_standalone_child_invocation(
+                    state.skill_command,
+                    state.cwd,
+                    state.skill_inputs,
+                    audit_output_mode=state._audit_output_mode,
+                )
             )
         except RecipeExecutionAdmissionError as exc:
             return _recipe_execution_deny(exc.code, str(exc))
@@ -674,11 +676,13 @@ def _admit_standalone_invocation(state: _RunSkillDispatchState) -> str | None:
         )
     if not state.resume_session_id:
         try:
-            state.child_skill_command = build_standalone_child_prompt(
-                state.skill_command,
-                state.cwd,
-                state.skill_inputs,
-                audit_output_mode=state._audit_output_mode,
+            state.child_skill_command, state._bound_recipe_inputs = (
+                build_standalone_child_invocation(
+                    state.skill_command,
+                    state.cwd,
+                    state.skill_inputs,
+                    audit_output_mode=state._audit_output_mode,
+                )
             )
         except RecipeExecutionAdmissionError as exc:
             return _recipe_execution_deny(exc.code, str(exc))

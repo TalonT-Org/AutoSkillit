@@ -1,6 +1,6 @@
-"""Split integrity tests for execution/headless/ _headless_evidence split.
+"""Split integrity tests for headless evidence and session write evidence.
 
-Verifies that symbols moved to _headless_evidence are importable.
+Verifies that symbols moved across those modules remain importable.
 """
 
 import pytest
@@ -12,7 +12,7 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 class TestHeadlessEvidenceModuleExists:
-    """Symbols moved to _headless_evidence are importable from there."""
+    """Evidence symbols remain importable from their owning modules."""
 
     def test__adapt_agent_result_importable(self):
         from autoskillit.execution.headless._headless_evidence import _adapt_agent_result
@@ -20,7 +20,7 @@ class TestHeadlessEvidenceModuleExists:
         assert callable(_adapt_agent_result)
 
     def test__compute_write_evidence_importable(self):
-        from autoskillit.execution.headless._headless_evidence import _compute_write_evidence
+        from autoskillit.execution.session._write_evidence import _compute_write_evidence
 
         assert callable(_compute_write_evidence)
 

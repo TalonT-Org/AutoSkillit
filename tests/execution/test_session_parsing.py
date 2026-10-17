@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 import structlog
 
+from autoskillit.core import DelegatedWriteObservation
 from autoskillit.core.types import (
     ChannelConfirmation,
     InfraExitCategory,
@@ -25,7 +26,20 @@ from autoskillit.execution.session.turn_usage import claude_inclusive_input_toke
 from tests._helpers import UNKNOWN_MEASURE as _UNKNOWN
 from tests._helpers import _flush_structlog_proxy_caches as _flush_logger_proxy_caches
 from tests._helpers import observed_measure as _observed
-from tests.execution.conftest import _assistant_ndjson, _result_ndjson
+from tests.execution.conftest import (
+    _assistant_ndjson,
+    _result_ndjson,
+    delegated_child_prompt,
+    delegated_child_tool_result,
+    delegated_child_tool_use,
+    delegated_result_record,
+    delegated_root_agent_call,
+    delegated_root_agent_result,
+    delegated_root_text,
+    delegated_stream,
+    delegated_task_notification,
+    delegated_task_started,
+)
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -1423,6 +1437,326 @@ class TestSubagentExclusion:
         assert len(result.assistant_messages) == 1
         assert "parent says hello" in result.assistant_messages[0]
         assert "subagent says goodbye" not in " ".join(result.assistant_messages)
+
+
+def _delegated_case_stream(root_call: str, *records: str) -> str:
+    return delegated_stream(
+        [root_call, *records, delegated_root_agent_result(), delegated_result_record()]
+    )
+
+
+class TestDelegatedWriteObservations:
+    def test_archive_shaped_child_edit_preserves_root_view(self) -> None:
+        root_read = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "call_root_read",
+                            "name": "Read",
+                            "input": {"file_path": "/workspace/README.md"},
+                        }
+                    ]
+                },
+            }
+        )
+        stream = delegated_stream(
+            [
+                json.dumps({"type": "system", "subtype": "init", "session_id": "root"}),
+                root_read,
+                delegated_root_agent_call(),
+                delegated_task_started(),
+                delegated_child_prompt(),
+                delegated_child_tool_use(
+                    tool_use_id="call_child_read",
+                    tool_name="Read",
+                    file_path="/workspace/README.md",
+                ),
+                delegated_child_tool_result(tool_use_id="call_child_read"),
+                delegated_child_tool_use(
+                    file_path="/workspace/.autoskillit/temp/make-plan/plan.md"
+                ),
+                delegated_child_tool_result(),
+                delegated_child_tool_use(
+                    tool_use_id="call_child_readback",
+                    tool_name="Read",
+                    file_path="/workspace/.autoskillit/temp/make-plan/plan.md",
+                ),
+                delegated_child_tool_result(tool_use_id="call_child_readback"),
+                delegated_task_notification(),
+                delegated_root_agent_result(),
+                delegated_root_text(),
+                delegated_result_record(),
+            ]
+        )
+        result = parse_session_result(stream)
+        root_only = delegated_stream(
+            [line for line in stream.splitlines() if "subagent_type" not in json.loads(line)]
+        )
+        root_result = parse_session_result(root_only)
+
+        assert result.tool_uses == root_result.tool_uses
+        assert result.denied_tool_use_ids == root_result.denied_tool_use_ids
+        assert result.delegated_writes == (
+            DelegatedWriteObservation(
+                agent_tool_use_id="call_agent_A",
+                agent_type="general-purpose",
+                tool_use_id="call_child_edit",
+                tool_name="Edit",
+                file_path="/workspace/.autoskillit/temp/make-plan/plan.md",
+                succeeded=True,
+            ),
+        )
+
+    @pytest.mark.parametrize(
+        "child_result",
+        [delegated_child_tool_result(is_error=True), None],
+        ids=["denied", "missing-result"],
+    )
+    def test_child_edit_is_unsuccessful_when_result_errors_or_is_missing(
+        self, child_result: str | None
+    ) -> None:
+        records = [delegated_child_tool_use(file_path="/workspace/plan.md")]
+        if child_result is not None:
+            records.append(child_result)
+        result = parse_session_result(
+            _delegated_case_stream(delegated_root_agent_call(), *records)
+        )
+        assert len(result.delegated_writes) == 1
+        assert result.delegated_writes[0].succeeded is False
+
+    @pytest.mark.parametrize(
+        "child_records",
+        [
+            [
+                delegated_child_tool_use(parent_tool_use_id="call_not_issued_by_root"),
+                delegated_child_tool_result(parent_tool_use_id="call_not_issued_by_root"),
+            ],
+            [
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "parent_tool_use_id": "call_agent_A",
+                        "subagent_type": "general-purpose",
+                        "message": {
+                            "content": [
+                                {
+                                    "type": "tool_use",
+                                    "id": "call_nested_agent",
+                                    "name": "Agent",
+                                    "input": {"subagent_type": "Explore"},
+                                }
+                            ]
+                        },
+                    }
+                ),
+                delegated_child_tool_use(
+                    tool_use_id="nested_edit",
+                    parent_tool_use_id="call_nested_agent",
+                    agent_type="Explore",
+                ),
+                delegated_child_tool_result(
+                    tool_use_id="nested_edit",
+                    parent_tool_use_id="call_nested_agent",
+                    agent_type="Explore",
+                ),
+            ],
+            [
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "parent_tool_use_id": "call_agent_A",
+                        "message": {
+                            "content": [
+                                {
+                                    "type": "tool_use",
+                                    "id": "call_untagged_agent",
+                                    "name": "Agent",
+                                    "input": {"subagent_type": "Explore"},
+                                }
+                            ]
+                        },
+                    }
+                ),
+                delegated_child_tool_use(
+                    tool_use_id="nested_edit",
+                    parent_tool_use_id="call_untagged_agent",
+                    agent_type="Explore",
+                ),
+                delegated_child_tool_result(
+                    tool_use_id="nested_edit",
+                    parent_tool_use_id="call_untagged_agent",
+                    agent_type="Explore",
+                ),
+            ],
+            [
+                delegated_child_tool_use(parent_tool_use_id=None),
+                delegated_child_tool_result(parent_tool_use_id=None),
+            ],
+            [
+                delegated_child_tool_use(agent_type=None),
+                delegated_child_tool_result(agent_type=None),
+            ],
+            [
+                delegated_child_tool_use(agent_type="Explore"),
+                delegated_child_tool_result(agent_type="Explore"),
+            ],
+            [
+                json.dumps(
+                    {
+                        "type": "user",
+                        "message": {
+                            "content": [
+                                {
+                                    "type": "tool_result",
+                                    "tool_use_id": "call_agent_A",
+                                    "is_error": True,
+                                }
+                            ]
+                        },
+                    }
+                ),
+                delegated_child_tool_use(),
+                delegated_child_tool_result(),
+            ],
+        ],
+        ids=[
+            "unowned-parent",
+            "nested-agent-call",
+            "untagged-nested-agent-call",
+            "missing-parent",
+            "untagged-write",
+            "tag-mismatch",
+            "denied-root-agent-call",
+        ],
+    )
+    def test_rejects_unowned_or_mismatched_child_records(self, child_records: list[str]) -> None:
+        result = parse_session_result(
+            _delegated_case_stream(delegated_root_agent_call(), *child_records)
+        )
+        assert result.delegated_writes == ()
+
+    def test_synthetic_root_agent_record_does_not_own_child_write(self) -> None:
+        synthetic_root = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "model": "<synthetic>",
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "call_agent_A",
+                            "name": "Agent",
+                            "input": {"subagent_type": "general-purpose"},
+                        }
+                    ],
+                },
+            }
+        )
+        result = parse_session_result(
+            _delegated_case_stream(
+                synthetic_root,
+                delegated_child_tool_use(),
+                delegated_child_tool_result(),
+            )
+        )
+        assert result.delegated_writes == ()
+
+    @pytest.mark.parametrize(
+        "stream",
+        [
+            _delegated_case_stream(
+                delegated_root_agent_call(tool_use_id=None),
+                delegated_child_tool_use(parent_tool_use_id=None),
+                delegated_child_tool_result(parent_tool_use_id=None),
+            ),
+            _delegated_case_stream(
+                delegated_root_agent_call(tool_use_id="123"),
+                delegated_child_tool_use(parent_tool_use_id=123),
+                delegated_child_tool_result(parent_tool_use_id=123),
+            ),
+            _delegated_case_stream(
+                delegated_root_agent_call(agent_type="123"),
+                delegated_child_tool_use(agent_type=123),
+                delegated_child_tool_result(agent_type=123),
+            ),
+        ],
+        ids=["missing-root-id", "integer-parent-id", "integer-child-tag"],
+    )
+    def test_rejects_missing_or_non_string_ownership_identity(self, stream: str) -> None:
+        result = parse_session_result(stream)
+        assert result.delegated_writes == ()
+
+    @pytest.mark.parametrize(
+        ("tool_use_id", "child_result"),
+        [
+            ("123", delegated_child_tool_result(tool_use_id=123)),
+            ("call_child_edit", delegated_child_tool_result(agent_type="Explore")),
+        ],
+        ids=["integer-result-id", "mismatched-result-tag"],
+    )
+    def test_malformed_or_mismatched_result_cannot_mark_write_successful(
+        self, tool_use_id: str, child_result: str
+    ) -> None:
+        result = parse_session_result(
+            _delegated_case_stream(
+                delegated_root_agent_call(),
+                delegated_child_tool_use(tool_use_id=tool_use_id),
+                child_result,
+            )
+        )
+        assert len(result.delegated_writes) == 1
+        assert result.delegated_writes[0].succeeded is False
+
+    def test_child_results_are_scoped_when_sibling_tool_ids_collide(self) -> None:
+        stream = delegated_stream(
+            [
+                delegated_root_agent_call(),
+                delegated_root_agent_call(tool_use_id="call_agent_B", agent_type="Explore"),
+                delegated_child_tool_use(
+                    tool_use_id="shared_child_edit",
+                    parent_tool_use_id="call_agent_A",
+                    agent_type="general-purpose",
+                ),
+                delegated_child_tool_use(
+                    tool_use_id="shared_child_edit",
+                    parent_tool_use_id="call_agent_B",
+                    agent_type="Explore",
+                ),
+                delegated_child_tool_result(
+                    tool_use_id="shared_child_edit",
+                    parent_tool_use_id="call_agent_A",
+                    agent_type="general-purpose",
+                ),
+                delegated_result_record(),
+            ]
+        )
+
+        observations = parse_session_result(stream).delegated_writes
+
+        assert [(item.agent_tool_use_id, item.succeeded) for item in observations] == [
+            ("call_agent_A", True),
+            ("call_agent_B", False),
+        ]
+
+    @pytest.mark.parametrize(
+        "child_results",
+        [
+            [delegated_child_tool_result(is_error=True), delegated_child_tool_result()],
+            [delegated_child_tool_result(), delegated_child_tool_result(is_error=True)],
+        ],
+        ids=["error-then-success", "success-then-error"],
+    )
+    def test_duplicate_child_result_errors_are_latched(self, child_results: list[str]) -> None:
+        result = parse_session_result(
+            _delegated_case_stream(
+                delegated_root_agent_call(), delegated_child_tool_use(), *child_results
+            )
+        )
+        assert len(result.delegated_writes) == 1
+        assert result.delegated_writes[0].succeeded is False
 
 
 @pytest.mark.parametrize(

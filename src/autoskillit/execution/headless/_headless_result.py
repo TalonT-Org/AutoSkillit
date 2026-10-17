@@ -298,7 +298,7 @@ def _build_skill_result(
         write_watch_dirs=tuple(write_watch_dirs),
         cwd=cwd,
         skill_command=skill_command,
-        delegated_target=None,
+        delegated_target=getattr(write_behavior, "delegated_target", None),
     )
     context = _SkillResultContext(
         backend=backend,

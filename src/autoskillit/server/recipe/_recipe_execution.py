@@ -16,6 +16,7 @@ from autoskillit.core import (
     ArtifactRef,
     AuditCycleVerifier,
     AuditVerdict,
+    BindingFailureCode,
     BindingMode,
     BoundScalar,
     InstalledRecipeExecution,
@@ -72,7 +73,7 @@ __all__ = [
     "bind_attested_runtime_invocation",
     "build_bound_child_prompt",
     "build_recipe_execution_snapshot",
-    "build_standalone_child_prompt",
+    "build_standalone_child_invocation",
     "clear_recipe_execution",
     "complete_audit_finalization_effects",
     "get_recipe_execution",
@@ -711,34 +712,22 @@ def build_bound_child_prompt(
     )
 
 
-def build_standalone_child_prompt(
+def build_standalone_child_invocation(
     skill_command: str,
     cwd: str,
     skill_inputs: Mapping[str, str | int | float | bool] | None,
     *,
     audit_output_mode: AuditOutputMode | None = None,
-) -> str:
-    """Validate standalone inputs without requiring attested recipe state.
+) -> tuple[str, tuple[tuple[str, BoundScalar], ...]]:
+    """Bind a standalone command and return its prompt with canonical inputs.
 
-    An unknown skill with no structured inputs may still be resolved from a
-    project/plugin installation later in the normal dispatch path. Structured
-    inputs require a canonical contract because their names and order otherwise
-    cannot be validated safely.
+    Unknown skills without structured inputs retain the existing pass-through
+    behavior. Known skills bind positional and structured inputs through the
+    same canonical contract.
     """
-    if skill_inputs is None:
-        if audit_output_mode is not None:
-            return build_bound_child_prompt(
-                skill_command,
-                (),
-                None,
-                audit_output_mode=audit_output_mode,
-            )
-        return skill_command
-    with_args: dict[str, object] = {
-        "skill_command": skill_command,
-        "cwd": cwd,
-        "skill_inputs": skill_inputs,
-    }
+    with_args: dict[str, object] = {"skill_command": skill_command, "cwd": cwd}
+    if skill_inputs is not None:
+        with_args["skill_inputs"] = skill_inputs
     binding = bind_step_invocation(
         "standalone",
         RecipeStep(
@@ -751,15 +740,21 @@ def build_standalone_child_prompt(
     )
     if binding.failures:
         failure = binding.failures[0]
+        if skill_inputs is None and failure.code is BindingFailureCode.UNKNOWN_SKILL:
+            return skill_command, ()
         raise RecipeExecutionAdmissionError(
             f"standalone_{failure.code.value}",
             failure.message,
         )
-    return build_bound_child_prompt(
-        skill_command,
-        binding.canonical_child_invocation,
-        None,
-        audit_output_mode=audit_output_mode,
+    canonical_inputs = binding.canonical_child_invocation
+    return (
+        build_bound_child_prompt(
+            skill_command,
+            canonical_inputs,
+            None,
+            audit_output_mode=audit_output_mode,
+        ),
+        canonical_inputs,
     )
 
 

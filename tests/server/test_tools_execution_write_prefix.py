@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -242,7 +243,10 @@ async def test_pass_when_scope_covers_cwd(tool_ctx_kitchen_open, monkeypatch, tm
     call = executor.calls[0]
     assert call.capability_contract is not None
     assert not hasattr(call.capability_contract, "resolved_command")
-    assert call.skill_command == f"/implement-worktree-no-merge {plan_path}"
+    invocation_prefix = "\n\nAUTOSKILLIT_BOUND_INVOCATION_V1\n"
+    command, payload = call.skill_command.split(invocation_prefix, 1)
+    assert command == f"/implement-worktree-no-merge {plan_path}"
+    assert json.loads(payload)["skill_inputs"] == [{"name": "plan_path", "value": str(plan_path)}]
     assert call.capability_contract.cwd == str(worktree.resolve())
     assert call.cwd == str(worktree.resolve())
 

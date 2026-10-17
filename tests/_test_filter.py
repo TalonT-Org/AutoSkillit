@@ -1211,6 +1211,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # autoskillit.pipeline at call time. Validated by REQ-GUARD-007.
             "execution/test_backend_dispatch.py",
             "execution/test_boundary_pty_dispatch.py",
+            "execution/test_delegated_write_evidence.py",
             "execution/test_flush_provider_integration.py",
             "execution/test_headless_add_dirs.py",
             "execution/test_headless_backend_mixing.py",
@@ -1336,6 +1337,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "migration",
             # Server file-level entries importing autoskillit.recipe:
             "server/test_run_skill_execution_tuning_fallbacks.py",
+            "server/test_run_skill_delegated_write_binding.py",
             "server/test_bundled_dispatch_write_scope_admission.py",
             "server/test_serve_idempotence.py",
             "server/test_attestation_delivery_reachability.py",

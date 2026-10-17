@@ -6,7 +6,7 @@ import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
-__all__ = ["DelegatedWriteTarget", "WriteEvidence"]
+__all__ = ["DelegatedWriteObservation", "DelegatedWriteTarget", "WriteEvidence"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +45,18 @@ class DelegatedWriteTarget:
 
 
 @dataclass(frozen=True, slots=True)
+class DelegatedWriteObservation:
+    """A parsed child write-tool observation."""
+
+    agent_tool_use_id: str
+    agent_type: str
+    tool_use_id: str
+    tool_name: str
+    file_path: str
+    succeeded: bool
+
+
+@dataclass(frozen=True, slots=True)
 class WriteEvidence:
     """Bundled write evidence signals — either explicitly constructed or absent."""
 
@@ -52,6 +64,7 @@ class WriteEvidence:
     fs_writes_detected: bool
     git_writes_detected: bool
     file_changes_count: int = 0
+    delegated_write_count: int = 0
 
     @classmethod
     def none_observed(cls) -> WriteEvidence:
@@ -69,8 +82,13 @@ class WriteEvidence:
             or self.fs_writes_detected
             or self.git_writes_detected
             or self.file_changes_count >= 1
+            or self.delegated_write_count >= 1
         )
 
     @property
     def has_implementation_evidence(self) -> bool:
-        return self.write_call_count >= 1 or self.file_changes_count >= 1
+        return (
+            self.write_call_count >= 1
+            or self.file_changes_count >= 1
+            or self.delegated_write_count >= 1
+        )

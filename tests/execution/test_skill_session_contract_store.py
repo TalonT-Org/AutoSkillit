@@ -205,6 +205,70 @@ def test_store_round_trip_preserves_machine_contract_and_projected_snapshot(
     assert stored.snapshot_dir.resolve().is_relative_to(root.resolve())
 
 
+@pytest.mark.parametrize("bind_target", [True, False], ids=["bound-target", "no-target"])
+def test_store_round_trip_preserves_delegated_target_baseline(
+    tmp_path: Path, bind_target: bool
+) -> None:
+    from autoskillit.core import DelegatedWriteTarget, WriteBehaviorSpec
+    from autoskillit.execution.session import DefaultSkillSessionContractStore
+
+    plan_path = tmp_path / ".autoskillit" / "temp" / "make-plan" / "plan.md"
+    target: DelegatedWriteTarget | None = None
+    if bind_target:
+        plan_path.parent.mkdir(parents=True)
+        plan_path.write_bytes(b"original plan")
+        target = DelegatedWriteTarget.bind(str(plan_path.resolve()))
+
+    write_behavior = WriteBehaviorSpec(mode="always", delegated_target=target)
+    contract = replace(
+        _contract(tmp_path, "projected\n"),
+        write_behavior=write_behavior,
+    )
+    store = DefaultSkillSessionContractStore(root=tmp_path / "contracts")
+    correlation_key = store.create_provisional(
+        contract=contract,
+        snapshot={".claude/skills/root/SKILL.md": "projected\n"},
+    )
+    store.observe_candidate(correlation_key, "provider-attempt-1")
+    store.finalize(correlation_key, "backend/session:delegated-write")
+
+    if target is not None:
+        plan_path.write_bytes(b"corrected plan")
+
+    restored = store.load("backend/session:delegated-write").contract.write_behavior
+    restored_target = restored.delegated_target
+    assert restored == write_behavior
+    if target is None:
+        assert restored_target is None
+    else:
+        assert restored_target is not None
+        assert restored_target.baseline_digest == target.baseline_digest
+        assert restored_target.changed() is True
+
+
+def test_contract_codec_defaults_absent_delegated_target_under_schema_five(
+    tmp_path: Path,
+) -> None:
+    from autoskillit.core import WriteBehaviorSpec
+    from autoskillit.execution.session._skill_session_contract_codec import (
+        _contract_from_dict,
+        _contract_to_dict,
+    )
+
+    contract = replace(
+        _contract(tmp_path, "projected\n"),
+        write_behavior=WriteBehaviorSpec(mode="always", delegated_target=None),
+    )
+    encoded = _contract_to_dict(contract)
+    assert encoded["schema_version"] == 5
+    encoded["write_behavior"].pop("delegated_target")
+
+    restored = _contract_from_dict(encoded)
+
+    assert restored.schema_version == 5
+    assert restored.write_behavior.delegated_target is None
+
+
 def test_store_persists_lineage_binding_separately_and_rebinds_verified_final_id(
     tmp_path: Path,
 ) -> None:

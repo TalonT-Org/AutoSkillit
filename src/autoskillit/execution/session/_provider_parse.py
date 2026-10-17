@@ -13,11 +13,17 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, assert_never
+from typing import Any, TypeGuard, assert_never
 
 import regex as re
 
-from autoskillit.core import CONTEXT_EXHAUSTION_MARKER, ClaudeContentBlockType, get_logger
+from autoskillit.core import (
+    CONTEXT_EXHAUSTION_MARKER,
+    ClaudeContentBlockType,
+    DelegatedWriteObservation,
+    get_logger,
+    is_parent_assistant_record,
+)
 
 logger = get_logger(__name__)
 
@@ -25,6 +31,7 @@ _ABS_PATH_RE: re.Pattern[str] = re.compile(r'(?:^|[\s="\'])(/(?:[a-zA-Z0-9._/~@+
 _HANDLED_RECORD_TYPES: frozenset[str] = frozenset(
     {"assistant", "rate_limit_event", "result", "system", "user"}
 )
+_AGENT_SPAWN_TOOL_NAMES = frozenset({"Agent", "Task"})
 
 
 def _is_compaction_status_record(obj: Mapping[str, Any]) -> bool:
@@ -67,6 +74,10 @@ class _ProviderParseAccumulator:
     provider_error_code: str = ""
     api_error_message_seen: bool = False
     denied_tool_use_ids: set[str] = field(default_factory=set)
+    agent_invocations: dict[str, str] = field(default_factory=dict)
+    child_write_calls: list[dict[str, str]] = field(default_factory=list)
+    child_tool_errors: dict[tuple[str, str], bool] = field(default_factory=dict)
+    delegated_writes: tuple[DelegatedWriteObservation, ...] = ()
 
 
 def _parse_provider_records(stdout: str) -> _ProviderParseAccumulator:
@@ -104,6 +115,7 @@ def _parse_provider_records(stdout: str) -> _ProviderParseAccumulator:
                 _accumulate_provider_record(fallback, acc)
         except json.JSONDecodeError:
             pass
+    acc.delegated_writes = _build_delegated_writes(acc)
     return acc
 
 
@@ -162,6 +174,9 @@ def _accumulate_provider_record(obj: dict[str, Any], acc: _ProviderParseAccumula
                     else max(acc.rate_limit_resets_at_epoch, raw_resets_at)
                 )
         return
+    _register_root_agent_invocations(obj, acc)
+    _capture_child_write_calls(obj, acc)
+    _capture_child_tool_results(obj, acc)
     if record_type == "result":
         acc.result_obj = obj
         raw_status = _provider_field(obj, "api_error_status")
@@ -191,6 +206,164 @@ def _accumulate_provider_record(obj: dict[str, Any], acc: _ProviderParseAccumula
                     tool_use_id = block.get("tool_use_id", "")
                     if tool_use_id:
                         acc.denied_tool_use_ids.add(tool_use_id)
+
+
+def _nonempty_string(value: Any) -> TypeGuard[str]:
+    return isinstance(value, str) and bool(value)
+
+
+def _record_content_blocks(obj: dict[str, Any]) -> list[Any] | None:
+    message = obj.get("message")
+    if not isinstance(message, dict):
+        return None
+    content = message.get("content")
+    if isinstance(content, list):
+        return content
+    return None
+
+
+def _child_record_identity(obj: dict[str, Any], record_type: str) -> tuple[str, str] | None:
+    """Return validated child type and parent tool id for one record."""
+    if obj.get("type") != record_type:
+        return None
+    subagent_type = obj.get("subagent_type")
+    parent_tool_use_id = obj.get("parent_tool_use_id")
+    if not _nonempty_string(subagent_type):
+        return None
+    if not _nonempty_string(parent_tool_use_id):
+        return None
+    return subagent_type, parent_tool_use_id
+
+
+def _root_agent_invocation(block: Any) -> tuple[str, str] | None:
+    if not isinstance(block, dict) or block.get("type") != "tool_use":
+        return None
+    name = block.get("name")
+    if not _nonempty_string(name) or name not in _AGENT_SPAWN_TOOL_NAMES:
+        return None
+    tool_use_id = block.get("id")
+    if not _nonempty_string(tool_use_id):
+        return None
+    tool_input = block.get("input")
+    if not isinstance(tool_input, Mapping):
+        return None
+    subagent_type = tool_input.get("subagent_type")
+    if _nonempty_string(subagent_type):
+        return tool_use_id, subagent_type
+    return None
+
+
+def _register_root_agent_invocations(obj: dict[str, Any], acc: _ProviderParseAccumulator) -> None:
+    """Retain requested types from real, top-level Agent and Task calls."""
+    if not is_parent_assistant_record(obj):
+        return
+    if obj.get("parent_tool_use_id"):
+        return
+    content = _record_content_blocks(obj)
+    if content is None:
+        return
+    for block in content:
+        invocation = _root_agent_invocation(block)
+        if invocation is None:
+            continue
+        tool_use_id, subagent_type = invocation
+        acc.agent_invocations[tool_use_id] = subagent_type
+
+
+def _child_write_call(
+    block: Any, subagent_type: str, parent_tool_use_id: str
+) -> dict[str, str] | None:
+    if not isinstance(block, dict) or block.get("type") != "tool_use":
+        return None
+    name = block.get("name")
+    if not _nonempty_string(name) or name not in {"Write", "Edit"}:
+        return None
+    tool_use_id = block.get("id")
+    if not _nonempty_string(tool_use_id):
+        return None
+    tool_input = block.get("input")
+    if not isinstance(tool_input, Mapping):
+        return None
+    file_path = tool_input.get("file_path")
+    if _nonempty_string(file_path):
+        return {
+            "id": tool_use_id,
+            "name": name,
+            "file_path": file_path,
+            "parent_tool_use_id": parent_tool_use_id,
+            "subagent_type": subagent_type,
+        }
+    return None
+
+
+def _capture_child_write_calls(obj: dict[str, Any], acc: _ProviderParseAccumulator) -> None:
+    """Capture child writes using the archive's top-level ``subagent_type`` tag.
+
+    Missing or mismatched tags yield no observation; they are never inferred from
+    the root invocation.
+    """
+    identity = _child_record_identity(obj, "assistant")
+    if identity is None:
+        return
+    subagent_type, parent_tool_use_id = identity
+    content = _record_content_blocks(obj)
+    if content is None:
+        return
+    for block in content:
+        call = _child_write_call(block, subagent_type, parent_tool_use_id)
+        if call is not None:
+            acc.child_write_calls.append(call)
+
+
+def _capture_child_tool_results(obj: dict[str, Any], acc: _ProviderParseAccumulator) -> None:
+    """OR-latch child tool errors under the matching parent invocation."""
+    identity = _child_record_identity(obj, "user")
+    if identity is None:
+        return
+    subagent_type, parent_tool_use_id = identity
+    if acc.agent_invocations.get(parent_tool_use_id) != subagent_type:
+        return
+    content = _record_content_blocks(obj)
+    if content is None:
+        return
+    for block in content:
+        if not isinstance(block, dict) or block.get("type") != "tool_result":
+            continue
+        tool_use_id = block.get("tool_use_id")
+        if not _nonempty_string(tool_use_id):
+            continue
+        key = (parent_tool_use_id, tool_use_id)
+        acc.child_tool_errors[key] = (
+            acc.child_tool_errors.get(key, False) or block.get("is_error") is True
+        )
+
+
+def _build_delegated_writes(
+    acc: _ProviderParseAccumulator,
+) -> tuple[DelegatedWriteObservation, ...]:
+    """Build observations owned by an allowed, matching root invocation."""
+    observations: list[DelegatedWriteObservation] = []
+    for call in acc.child_write_calls:
+        parent_tool_use_id = call["parent_tool_use_id"]
+        if not parent_tool_use_id or parent_tool_use_id not in acc.agent_invocations:
+            continue
+        if parent_tool_use_id in acc.denied_tool_use_ids:
+            continue
+        agent_type = acc.agent_invocations[parent_tool_use_id]
+        if call["subagent_type"] != agent_type:
+            continue
+        key = (parent_tool_use_id, call["id"])
+        observations.append(
+            DelegatedWriteObservation(
+                agent_tool_use_id=parent_tool_use_id,
+                agent_type=agent_type,
+                tool_use_id=call["id"],
+                tool_name=call["name"],
+                file_path=call["file_path"],
+                succeeded=(key in acc.child_tool_errors and not acc.child_tool_errors[key]),
+            )
+        )
+    return tuple(observations)
 
 
 def _capture_assistant_record(obj: dict[str, Any], acc: _ProviderParseAccumulator) -> None:

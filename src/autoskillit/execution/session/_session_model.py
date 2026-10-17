@@ -15,6 +15,7 @@ from autoskillit.core import (
     CONTEXT_EXHAUSTION_MARKER,
     ClaudeContentBlockType,
     CliSubtype,
+    DelegatedWriteObservation,
     RetryReason,
     SessionOutcome,
     TokenMeasure,
@@ -97,6 +98,7 @@ class ClaudeSessionResult:
     seen_ndjson_unknown_event_count: int = 0
     seen_ndjson_unknown_item_count: int = 0
     denied_tool_use_ids: frozenset[str] = field(default_factory=frozenset)
+    delegated_writes: tuple[DelegatedWriteObservation, ...] = ()
     compaction_attempted: bool = False
 
     def __post_init__(self) -> None:
@@ -533,4 +535,5 @@ def parse_session_result(stdout: str, *, provider_used: str = "anthropic") -> Cl
         provider_error_code=acc.provider_error_code,
         api_error_message_seen=acc.api_error_message_seen,
         denied_tool_use_ids=frozenset(acc.denied_tool_use_ids),
+        delegated_writes=acc.delegated_writes,
     )

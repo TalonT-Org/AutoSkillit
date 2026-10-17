@@ -109,12 +109,13 @@ def test_audit_response_exposes_reserved_semantic_path(tmp_path: Path) -> None:
 
 
 def test_prompt_contract_mode_is_bound_before_child_dispatch() -> None:
-    standalone = _recipe_execution.build_standalone_child_prompt(
+    standalone, canonical_inputs = _recipe_execution.build_standalone_child_invocation(
         "/autoskillit:audit-impl",
         "/tmp",
         None,
         audit_output_mode=_recipe_execution.AuditOutputMode.STANDALONE,
     )
+    assert canonical_inputs == ()
     standalone_payload = json.loads(standalone.split("AUTOSKILLIT_BOUND_INVOCATION_V1\n", 1)[1])
     assert standalone_payload["audit_output_mode"] == "standalone"
     assert "audit_semantic_submission" not in standalone_payload

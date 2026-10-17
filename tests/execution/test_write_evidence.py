@@ -16,9 +16,21 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import HeadlessExecutor, WriteBehaviorSpec
+from autoskillit.core import DelegatedWriteTarget, HeadlessExecutor, WriteBehaviorSpec
 from tests.conftest import _make_result
-from tests.execution.conftest import _mock_backend
+from tests.execution.conftest import (
+    _mock_backend,
+    _result_ndjson,
+    delegated_child_prompt,
+    delegated_child_tool_result,
+    delegated_child_tool_use,
+    delegated_root_agent_call,
+    delegated_root_agent_result,
+    delegated_root_text,
+    delegated_stream,
+    delegated_task_notification,
+    delegated_task_started,
+)
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -431,6 +443,66 @@ class TestPlannerSkillEndToEnd:
             write_behavior=WriteBehaviorSpec(mode="always"),
         )
         assert sr.evidence.fs_writes_detected is True
+
+
+class TestDelegatedWriteEndToEnd:
+    """The executor passes bound child-write evidence through result adjudication."""
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize("child_edits", [True, False], ids=["child-edits", "no-op-retry"])
+    async def test_child_edit_requires_a_digest_change(
+        self, tmp_path: Path, minimal_ctx, monkeypatch, child_edits: bool
+    ) -> None:
+        from autoskillit.execution.headless import run_headless_core
+
+        plan_dir = tmp_path / ".autoskillit" / "temp" / "make-plan"
+        plan_dir.mkdir(parents=True)
+        plan = plan_dir / "plan.md"
+        plan.write_text(
+            ("Dry-walkthrough verified = TRUE\n" if not child_edits else "") + "Plan draft\n"
+        )
+        target = DelegatedWriteTarget.bind(os.path.realpath(plan))
+        stdout = delegated_stream(
+            [
+                delegated_root_agent_call(),
+                delegated_task_started(),
+                delegated_child_prompt(),
+                delegated_child_tool_use(file_path=str(plan)),
+                delegated_child_tool_result(),
+                delegated_task_notification(),
+                delegated_root_agent_result(),
+                delegated_root_text(),
+                _result_ndjson("Plan updated.\n%%ORDER_UP%%"),
+            ]
+        )
+
+        async def mock_runner(cmd, **kwargs):
+            if cmd and cmd[0] == "git":
+                return _make_result(returncode=1, stdout="")
+            if child_edits:
+                plan.write_text("Dry-walkthrough verified = TRUE\n" + plan.read_text())
+            return _make_result(returncode=0, stdout=stdout)
+
+        monkeypatch.setattr(minimal_ctx, "runner", mock_runner)
+        monkeypatch.setattr(
+            minimal_ctx,
+            "backend",
+            _mock_backend(pty_required=True, channel_b_capable=True),
+        )
+        result = await run_headless_core(
+            f"/autoskillit:dry-walkthrough {plan}",
+            str(tmp_path),
+            minimal_ctx,
+            write_watch_dirs=(plan_dir,),
+            write_behavior=WriteBehaviorSpec(mode="always", delegated_target=target),
+        )
+
+        if child_edits:
+            assert result.success is True
+            assert result.evidence.delegated_write_count == 1
+        else:
+            assert result.subtype == "zero_writes"
+            assert result.evidence.delegated_write_count == 0
 
 
 class TestLateCreatedDirectoryDetection:

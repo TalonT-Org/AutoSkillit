@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,11 +10,15 @@ from typing import Any
 
 from autoskillit.core import (
     WORKTREE_SKILLS,
+    DelegatedWriteObservation,
     DelegatedWriteTarget,
     WriteEvidence,
     extract_skill_name,
+    get_logger,
 )
 from autoskillit.execution.session._session_model import ClaudeSessionResult
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,12 +83,54 @@ def _count_root_write_calls(session: ClaudeSessionResult, scope: WriteEvidenceSc
     return _count_worktree_write_calls(scope, eligible_calls)
 
 
+def _is_admitted_delegated_write(
+    observation: DelegatedWriteObservation,
+    target: DelegatedWriteTarget,
+    scope: WriteEvidenceScope,
+) -> bool:
+    if not observation.succeeded or observation.tool_name not in scope.write_tool_names:
+        return False
+    resolved = os.path.realpath(Path(scope.cwd) / observation.file_path)
+    return resolved == target.path and _is_implementation_path(scope, resolved)
+
+
+def _admitted_delegated_write_count(
+    session: ClaudeSessionResult,
+    scope: WriteEvidenceScope,
+) -> int:
+    observations = session.delegated_writes
+    if not observations:
+        return 0
+
+    target = scope.delegated_target
+    target_bound = target is not None
+    target_changed = target.changed() if target is not None else False
+    if target is not None and target_changed:
+        admitted = sum(
+            1
+            for observation in observations
+            if _is_admitted_delegated_write(observation, target, scope)
+        )
+    else:
+        admitted = 0
+
+    if admitted == 0:
+        logger.warning(
+            "delegated_writes_not_admitted",
+            observed=len(observations),
+            target_bound=target_bound,
+            target_changed=target_changed,
+        )
+    return admitted
+
+
 def _compute_write_evidence(
     session: ClaudeSessionResult,
     scope: WriteEvidenceScope,
 ) -> WriteEvidence:
     # Worktree implementation evidence must be outside temp; other skills count temp writes.
     write_call_count = _count_root_write_calls(session, scope)
+    delegated_write_count = _admitted_delegated_write_count(session, scope)
 
     if write_call_count == 0 and scope.file_changes:
         if _is_worktree_dispatch(scope):
@@ -106,4 +153,5 @@ def _compute_write_evidence(
         fs_writes_detected=scope.fs_writes_detected,
         git_writes_detected=scope.git_writes_detected,
         file_changes_count=file_changes_count,
+        delegated_write_count=delegated_write_count,
     )

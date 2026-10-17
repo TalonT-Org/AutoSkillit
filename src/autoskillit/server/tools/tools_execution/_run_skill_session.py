@@ -20,12 +20,15 @@ from autoskillit.core import (
     LAUNCH_ID_ENV_VAR,
     SKILL_COMMAND_DISPLAY_MAX,
     WORKTREE_SKILLS,
+    ContainmentError,
+    DelegatedWriteTarget,
     SkillContractError,
     SkillExecutionRole,
     SkillResult,
     WriteBehaviorSpec,
     extract_skill_name,
     get_logger,
+    resolve_contained_path,
 )
 from autoskillit.core import current_order_id as _current_order_id
 from autoskillit.core import current_step_name as _current_step_name
@@ -368,6 +371,7 @@ async def _prepare_owned_dispatch_session(
     if (terminal := _extend_closure_write_scope(state)) is not None:
         return terminal
 
+    _bind_delegated_target(state)
     _prepare_owned_session_contract(state)
 
     if (terminal := _prepare_owned_write_scope(state)) is not None:
@@ -525,6 +529,39 @@ def _prepare_owned_write_scope(state: _RunSkillDispatchState) -> str | None:
             )
 
     return None
+
+
+def _bind_delegated_target(state: _RunSkillDispatchState) -> None:
+    """Bind a declared child write to the canonical in-scope invocation input."""
+    input_name = getattr(state._skill_contract, "delegated_write_input", None)
+    if state._stored_contract is not None or state.write_spec is None or not input_name:
+        return
+
+    value = dict(state._bound_recipe_inputs).get(input_name)
+    if value is None:
+        reason = "input_absent"
+    elif not isinstance(value, str):
+        reason = "input_not_string"
+    elif not value:
+        reason = "input_empty"
+    else:
+        try:
+            resolved = resolve_contained_path(Path(state.cwd) / value, state.cwd)
+        except (ContainmentError, OSError, ValueError) as exc:
+            reason = str(exc)
+        else:
+            state.write_spec = replace(
+                state.write_spec,
+                delegated_target=DelegatedWriteTarget.bind(str(resolved)),
+            )
+            return
+
+    logger.warning(
+        "delegated_write_target_unbound",
+        skill=state.skill_command,
+        input=input_name,
+        reason=reason,
+    )
 
 
 def _prepare_owned_session_contract(state: _RunSkillDispatchState) -> None:

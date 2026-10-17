@@ -345,7 +345,7 @@ def _build_delegated_writes(
     observations: list[DelegatedWriteObservation] = []
     for call in acc.child_write_calls:
         parent_tool_use_id = call["parent_tool_use_id"]
-        if not parent_tool_use_id or parent_tool_use_id not in acc.agent_invocations:
+        if parent_tool_use_id not in acc.agent_invocations:
             continue
         if parent_tool_use_id in acc.denied_tool_use_ids:
             continue

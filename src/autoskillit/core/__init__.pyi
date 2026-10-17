@@ -964,6 +964,7 @@ from .types import CoverageStatus as CoverageStatus
 from .types import DatabaseReader as DatabaseReader
 from .types import DeclaredTruthUnresolved as DeclaredTruthUnresolved
 from .types import DeclaredTruthUnsupported as DeclaredTruthUnsupported
+from .types import DelegatedWriteTarget as DelegatedWriteTarget
 from .types import DeliveryOccurrenceId as DeliveryOccurrenceId
 from .types import DiffAnchorAuthority as DiffAnchorAuthority
 from .types import DirectInstall as DirectInstall

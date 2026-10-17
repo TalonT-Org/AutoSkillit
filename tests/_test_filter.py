@@ -553,6 +553,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_checkpoint": frozenset({"core", "execution", "fleet", "server"}),
     "_type_results": _TYPE_RESULTS_CASCADE | {"config", "report"},
     "_type_results_records": _TYPE_RESULTS_CASCADE | {"config", "report"},
+    "_type_write_evidence": _TYPE_RESULTS_CASCADE | {"config", "report"},
     "_type_results_execution": frozenset({"core", "execution", "server", "pipeline"}),
     "_type_execution_identity": frozenset(
         {"core", "execution", "server", "cli", "fleet", "smoke_utils"}

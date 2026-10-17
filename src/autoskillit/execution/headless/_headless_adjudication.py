@@ -37,7 +37,6 @@ from autoskillit.execution.backends._codex_parse import extract_codex_turn_usage
 from autoskillit.execution.headless._headless_evidence import (
     _adapt_agent_result,
     _apply_budget_guard,
-    _compute_write_evidence,
 )
 from autoskillit.execution.headless._headless_outcome import (
     apply_finding_disposition_adjudication,
@@ -58,6 +57,10 @@ from autoskillit.execution.session._session_model import (
     parse_session_result,
 )
 from autoskillit.execution.session._session_outcome import _compute_success
+from autoskillit.execution.session._write_evidence import (
+    WriteEvidenceScope,
+    _compute_write_evidence,
+)
 
 if TYPE_CHECKING:
     from autoskillit.core import (
@@ -86,11 +89,7 @@ class _SkillResultContext:
     provider_used: str
     write_behavior: WriteBehaviorSpec | None
     skill_contract: SkillContract | None
-    cwd: str
-    fs_writes_detected: bool
-    git_writes_detected: bool
-    file_changes: Sequence[str]
-    write_watch_dirs: Sequence[Path]
+    evidence_scope: WriteEvidenceScope
     backend_resume_session_id: str
     outcome_ledger: WorkspaceOutcomeLedger | None
 
@@ -494,11 +493,7 @@ def _attempt_stall_recovery(
     provider_used: str,
     write_behavior: WriteBehaviorSpec | None,
     skill_contract: SkillContract | None,
-    cwd: str,
-    fs_writes_detected: bool,
-    git_writes_detected: bool,
-    file_changes: Sequence[str],
-    write_watch_dirs: Sequence[Path],
+    evidence_scope: WriteEvidenceScope,
     backend_resume_session_id: str = "",
     outcome_ledger: WorkspaceOutcomeLedger | None = None,
 ) -> tuple[SkillResult | None, ClaudeSessionResult, WriteEvidence, ApiRetryOutcome]:
@@ -518,16 +513,7 @@ def _attempt_stall_recovery(
         backend_resume_session_id=backend_resume_session_id,
         provider_used=provider_used,
     )
-    evidence = _compute_write_evidence(
-        session,
-        fs_writes_detected,
-        git_writes_detected,
-        backend,
-        file_changes=file_changes,
-        write_watch_dirs=write_watch_dirs,
-        cwd=cwd,
-        skill_command=skill_command,
-    )
+    evidence = _compute_write_evidence(session, evidence_scope)
     api_retry = _build_api_retry_outcome(session)
     returncode = result.returncode if result.returncode is not None else -1
     can_attempt_recovery = (
@@ -566,7 +552,7 @@ def _attempt_stall_recovery(
         evidence,
         write_behavior,
         skill_contract,
-        cwd,
+        evidence_scope.cwd,
         outcome_ledger=outcome_ledger,
         start_ts=result.start_ts,
         end_ts=result.end_ts,

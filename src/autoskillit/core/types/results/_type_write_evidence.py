@@ -1,0 +1,76 @@
+"""Write evidence and delegated-write target contracts."""
+
+from __future__ import annotations
+
+import hashlib
+from dataclasses import dataclass
+from pathlib import Path
+
+__all__ = ["DelegatedWriteTarget", "WriteEvidence"]
+
+
+@dataclass(frozen=True, slots=True)
+class DelegatedWriteTarget:
+    """A canonical absolute target path and its invocation content baseline."""
+
+    path: str
+    baseline_digest: str | None
+
+    @staticmethod
+    def _content_digest(path: str) -> str | None:
+        """Hash file bytes.
+
+        Metadata changes and identical rewrites do not establish a content change.
+        """
+        candidate = Path(path)
+        try:
+            if not candidate.is_file():
+                return None
+            return hashlib.sha256(candidate.read_bytes()).hexdigest()
+        except OSError:
+            return None
+
+    @classmethod
+    def bind(cls, path: str) -> DelegatedWriteTarget:
+        """Capture the invocation baseline.
+
+        Admission also needs a successful owned tool observation; this is not an
+        exclusive filesystem lock or proof of the writer's identity.
+        """
+        return cls(path=path, baseline_digest=cls._content_digest(path))
+
+    def changed(self) -> bool:
+        current_digest = self._content_digest(self.path)
+        return current_digest is not None and current_digest != self.baseline_digest
+
+
+@dataclass(frozen=True, slots=True)
+class WriteEvidence:
+    """Bundled write evidence signals — either explicitly constructed or absent."""
+
+    write_call_count: int
+    fs_writes_detected: bool
+    git_writes_detected: bool
+    file_changes_count: int = 0
+
+    @classmethod
+    def none_observed(cls) -> WriteEvidence:
+        return cls(
+            write_call_count=0,
+            fs_writes_detected=False,
+            git_writes_detected=False,
+            file_changes_count=0,
+        )
+
+    @property
+    def has_evidence(self) -> bool:
+        return (
+            self.write_call_count >= 1
+            or self.fs_writes_detected
+            or self.git_writes_detected
+            or self.file_changes_count >= 1
+        )
+
+    @property
+    def has_implementation_evidence(self) -> bool:
+        return self.write_call_count >= 1 or self.file_changes_count >= 1

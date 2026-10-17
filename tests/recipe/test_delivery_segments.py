@@ -14,6 +14,7 @@ from autoskillit.core import (
     ToolDef,
 )
 from autoskillit.core.tool_registry import TOOL_REGISTRY
+from autoskillit.recipe import result_arms_by_source
 from autoskillit.recipe._api import load_and_validate
 from autoskillit.recipe._recipe_composition import _prune_skipped_steps
 from autoskillit.recipe.io import _parse_recipe, builtin_recipes_dir, load_recipe
@@ -428,12 +429,7 @@ def test_registry_anchors_automatic_delivery_classification(
     assert segment_index["test"] > segment_index["check_changes"]
     assert fallback.condition is None
 
-    result_arms_by_source: dict[str, list[RecipeFlowEdge]] = {}
-    for edge in projection.ordered_flow_edges:
-        if edge.edge_type == "result_condition":
-            result_arms_by_source.setdefault(edge.source, []).append(edge)
-
-    for source, result_arms_list in result_arms_by_source.items():
+    for source, result_arms in result_arms_by_source(projection.ordered_flow_edges).items():
         source_step = projection.for_step(source)
         if source_step is None or source_step.tool is None:
             continue
@@ -444,7 +440,6 @@ def test_registry_anchors_automatic_delivery_classification(
         if not definition.automatic_recipe_delivery:
             continue
         source_index = segment_index[source]
-        result_arms = tuple(result_arms_list)
         for arm_index, edge in enumerate(result_arms):
             if edge.target not in segment_index:
                 continue

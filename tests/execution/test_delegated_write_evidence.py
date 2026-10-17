@@ -103,6 +103,35 @@ def test_bound_child_edit_is_implementation_progress(
     assert result.has_implementation_progress is True
 
 
+def test_unreadable_target_rejects_child_write_and_logs_cause(
+    tmp_path: Path,
+    plan_and_target: tuple[Path, DelegatedWriteTarget],
+    monkeypatch,
+) -> None:
+    plan, target = plan_and_target
+
+    def unreadable(path: Path) -> bytes:
+        raise PermissionError("target unavailable")
+
+    monkeypatch.setattr(Path, "read_bytes", unreadable)
+    with capture_logs() as events:
+        result = _build_skill_result(
+            _make_result(returncode=0, stdout=_edit_stream(str(plan))),
+            skill_command=f"/autoskillit:dry-walkthrough {plan}",
+            cwd=str(tmp_path),
+            write_behavior=_bound_behavior(target),
+            backend=ClaudeCodeBackend(),
+        )
+
+    assert result.evidence.delegated_write_count == 0
+    assert any(
+        event.get("event") == "delegated_writes_not_admitted"
+        and event.get("error") == "target unavailable"
+        and event.get("exc_info") is True
+        for event in events
+    )
+
+
 def test_text_handback_without_task_lifecycle_records_is_admitted(
     tmp_path: Path,
     plan_and_target: tuple[Path, DelegatedWriteTarget],

@@ -547,12 +547,13 @@ def _bind_delegated_target(state: _RunSkillDispatchState) -> None:
     else:
         try:
             resolved = resolve_contained_path(Path(state.cwd) / value, state.cwd)
+            target = DelegatedWriteTarget.bind(str(resolved))
         except (ContainmentError, OSError, ValueError) as exc:
             reason = str(exc)
         else:
             state.write_spec = replace(
                 state.write_spec,
-                delegated_target=DelegatedWriteTarget.bind(str(resolved)),
+                delegated_target=target,
             )
             return
 

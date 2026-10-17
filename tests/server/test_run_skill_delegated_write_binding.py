@@ -85,6 +85,26 @@ def test_invalid_target_stays_unbound_and_logs_reason(tmp_path: Path, case: str)
     assert any(event.get("event") == "delegated_write_target_unbound" for event in events)
 
 
+def test_unreadable_baseline_stays_unbound_and_logs_reason(tmp_path: Path, monkeypatch) -> None:
+    plan = tmp_path / "plan.md"
+    plan.write_text("plan")
+    state = _binding_state(tmp_path, (("plan_path", "plan.md"),))
+
+    def unreadable(path: Path) -> bytes:
+        raise PermissionError("baseline unavailable")
+
+    monkeypatch.setattr(Path, "read_bytes", unreadable)
+    with structlog.testing.capture_logs() as events:
+        _bind_delegated_target(state)
+
+    assert state.write_spec.delegated_target is None
+    assert any(
+        event.get("event") == "delegated_write_target_unbound"
+        and "baseline unavailable" in event.get("reason", "")
+        for event in events
+    )
+
+
 def test_contract_without_declaration_leaves_write_spec_unchanged(tmp_path: Path) -> None:
     state = _binding_state(tmp_path, (("plan_path", "plan.md"),))
     state._skill_contract = SimpleNamespace(delegated_write_input=None)

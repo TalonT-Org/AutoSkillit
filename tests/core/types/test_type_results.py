@@ -99,6 +99,21 @@ class TestWriteEvidence:
 
 
 class TestDelegatedWriteTarget:
+    @pytest.mark.parametrize("operation", ["stat", "read_bytes"])
+    def test_bind_propagates_unexpected_io_errors(
+        self, tmp_path: Path, monkeypatch, operation: str
+    ) -> None:
+        path = tmp_path / "plan.md"
+        path.write_bytes(b"plan")
+
+        def unreadable(*args, **kwargs):
+            raise PermissionError("target unavailable")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(Path, operation, unreadable)
+            with pytest.raises(PermissionError, match="target unavailable"):
+                DelegatedWriteTarget.bind(str(path))
+
     @pytest.mark.parametrize("is_directory", [False, True], ids=["missing", "directory"])
     def test_bind_records_no_baseline_for_non_files(
         self, tmp_path: Path, is_directory: bool

@@ -104,7 +104,18 @@ def _admitted_delegated_write_count(
 
     target = scope.delegated_target
     target_bound = target is not None
-    target_changed = target.changed() if target is not None else False
+    try:
+        target_changed = target.changed() if target is not None else False
+    except OSError as exc:
+        logger.warning(
+            "delegated_writes_not_admitted",
+            observed=len(observations),
+            target_bound=target_bound,
+            target_changed=False,
+            error=str(exc),
+            exc_info=True,
+        )
+        return 0
     if target is not None and target_changed:
         admitted = sum(
             1

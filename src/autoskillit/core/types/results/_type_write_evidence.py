@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from pathlib import Path
+from stat import S_ISREG
 
 __all__ = ["DelegatedWriteObservation", "DelegatedWriteTarget", "WriteEvidence"]
 
@@ -21,13 +22,14 @@ class DelegatedWriteTarget:
         """Hash file bytes.
 
         Metadata changes and identical rewrites do not establish a content change.
+        Unexpected I/O errors propagate rather than becoming an absent baseline.
         """
         candidate = Path(path)
         try:
-            if not candidate.is_file():
+            if not S_ISREG(candidate.stat().st_mode):
                 return None
             return hashlib.sha256(candidate.read_bytes()).hexdigest()
-        except OSError:
+        except (FileNotFoundError, NotADirectoryError):
             return None
 
     @classmethod

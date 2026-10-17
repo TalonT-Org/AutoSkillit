@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core import (
+    PRState,
     RecipeDeliveryOutcomeDef,
     ToolDef,
     ToolInitializationOperation,
@@ -109,5 +110,54 @@ def test_outcome_reader_semantics(
     assert outcome.succeeded(payload) is expected
 
 
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [({"success": True}, True), ({"success": False}, False)],
+)
+def test_recipe_observability_does_not_change_outcome_reading(
+    payload: dict[str, object],
+    expected: bool,
+) -> None:
+    outcome = RecipeDeliveryOutcomeDef(success_field="success", recipe_observable=False)
+
+    assert outcome.succeeded(payload) is expected
+
+
 def test_every_outcome_key_names_a_registered_tool() -> None:
     assert set(_RECIPE_DELIVERY_OUTCOMES) <= set(TOOL_REGISTRY)
+
+
+def test_wait_for_merge_queue_delivery_outcome_uses_merged_state() -> None:
+    outcome = TOOL_REGISTRY["wait_for_merge_queue"].recipe_delivery_outcome
+    assert outcome is not None
+
+    assert outcome.succeeded({"pr_state": PRState.MERGED.value}) is True
+    assert outcome.succeeded({"success": False, "error": "x"}) is False
+
+
+@pytest.mark.parametrize(
+    "state",
+    [state for state in PRState if state is not PRState.MERGED],
+    ids=lambda state: state.value,
+)
+def test_wait_for_merge_queue_delivery_outcome_rejects_other_pr_states(
+    state: PRState,
+) -> None:
+    outcome = TOOL_REGISTRY["wait_for_merge_queue"].recipe_delivery_outcome
+    assert outcome is not None
+
+    assert outcome.succeeded({"pr_state": state.value}) is False
+
+
+def test_recipe_observable_defaults_true_for_registered_outcomes() -> None:
+    assert RecipeDeliveryOutcomeDef().recipe_observable is True
+    for tool_name in ("run_python", "complete_run_skill_result"):
+        outcome = TOOL_REGISTRY[tool_name].recipe_delivery_outcome
+        assert outcome is not None
+        assert outcome.recipe_observable is False
+    for tool_name, tool_def in TOOL_REGISTRY.items():
+        outcome = tool_def.recipe_delivery_outcome
+        if outcome is None:
+            continue
+        if tool_name not in {"run_python", "complete_run_skill_result"}:
+            assert outcome.recipe_observable is True, tool_name

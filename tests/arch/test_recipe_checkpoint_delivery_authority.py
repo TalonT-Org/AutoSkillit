@@ -49,3 +49,19 @@ def test_only_the_delivery_module_prepares_or_attaches_carriers() -> None:
         "Recipe checkpoint carrier preparation and attachment must stay in "
         "server/recipe/_recipe_segment_delivery.py:\n" + "\n".join(violations)
     )
+
+
+def test_segment_delivery_does_not_read_result_conditions() -> None:
+    tree = ast.parse(
+        _DELIVERY_AUTHORITY_MODULE.read_text(encoding="utf-8"),
+        filename=str(_DELIVERY_AUTHORITY_MODULE),
+    )
+    condition_reads = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Attribute)
+        and node.attr == "condition"
+        and isinstance(node.ctx, ast.Load)
+    ]
+
+    assert not condition_reads, "Condition interpretation belongs in edge_routes_success."

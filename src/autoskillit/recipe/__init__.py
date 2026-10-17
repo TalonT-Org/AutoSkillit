@@ -386,6 +386,7 @@ from autoskillit.recipe.contracts.contracts import (
 )
 from autoskillit.recipe.validator import (
     edge_routes_success,
+    result_arms_by_source,
 )
 
 __all__ = [
@@ -426,6 +427,7 @@ __all__ = [
     "run_semantic_rules",
     "analyze_dataflow",
     "edge_routes_success",
+    "result_arms_by_source",
     "check_contract_staleness",
     "generate_recipe_card",
     "get_skill_contract",

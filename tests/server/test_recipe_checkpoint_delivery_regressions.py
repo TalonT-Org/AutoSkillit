@@ -98,7 +98,7 @@ def _assert_carrier_closures_complete(
             closure_steps = set(closure)
             delivered = body_steps | closure_steps
             assert len(closure_steps) == len(closure)
-            assert not closure_steps.intersection({"done", "escalate"})
+            assert closure_steps <= finalized_steps
             assert closure == tuple(
                 step for step in projection.ordered_step_names if step in closure_steps
             ), f"{recipe_name}:{source} closure is not declaration ordered"

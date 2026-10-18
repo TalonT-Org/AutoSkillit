@@ -257,6 +257,7 @@ def deserialize_skill_contract(payload: str) -> SkillContract | None:
             expected_output_patterns=list(data.get("expected_output_patterns", [])),
             pattern_examples=list(data.get("pattern_examples", [])),
             write_behavior=data.get("write_behavior"),
+            delegated_write_input=data.get("delegated_write_input"),
             write_expected_when=list(data.get("write_expected_when", [])),
             external_effect=str(data.get("external_effect", "none")),
             read_only=read_only,

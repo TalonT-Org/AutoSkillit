@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
-from autoskillit.core.types import WriteEvidence
+from autoskillit.core import DelegatedWriteTarget, WriteEvidence
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
@@ -16,6 +18,7 @@ class TestWriteEvidence:
         assert we.fs_writes_detected is False
         assert we.git_writes_detected is False
         assert we.file_changes_count == 0
+        assert we.delegated_write_count == 0
 
     def test_has_evidence_true_from_write_call_count(self) -> None:
         we = WriteEvidence(write_call_count=3, fs_writes_detected=False, git_writes_detected=False)
@@ -45,6 +48,17 @@ class TestWriteEvidence:
             file_changes_count=1,
         )
         assert we.has_evidence is True
+
+    def test_delegated_write_count_is_implementation_evidence(self) -> None:
+        ev = WriteEvidence(
+            write_call_count=0,
+            fs_writes_detected=False,
+            git_writes_detected=False,
+            delegated_write_count=1,
+        )
+
+        assert ev.has_evidence is True
+        assert ev.has_implementation_evidence is True
 
     def test_none_observed_includes_file_changes_count_zero(self) -> None:
         we = WriteEvidence.none_observed()
@@ -82,6 +96,51 @@ class TestWriteEvidence:
             file_changes_count=1,
         )
         assert ev.has_implementation_evidence is True
+
+
+class TestDelegatedWriteTarget:
+    @pytest.mark.parametrize("operation", ["stat", "read_bytes"])
+    def test_bind_propagates_unexpected_io_errors(
+        self, tmp_path: Path, monkeypatch, operation: str
+    ) -> None:
+        path = tmp_path / "plan.md"
+        path.write_bytes(b"plan")
+
+        def unreadable(*args, **kwargs):
+            raise PermissionError("target unavailable")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(Path, operation, unreadable)
+            with pytest.raises(PermissionError, match="target unavailable"):
+                DelegatedWriteTarget.bind(str(path))
+
+    @pytest.mark.parametrize("is_directory", [False, True], ids=["missing", "directory"])
+    def test_bind_records_no_baseline_for_non_files(
+        self, tmp_path: Path, is_directory: bool
+    ) -> None:
+        path = tmp_path / "target"
+        if is_directory:
+            path.mkdir()
+
+        target = DelegatedWriteTarget.bind(str(path.resolve()))
+
+        assert target.baseline_digest is None
+
+    def test_changed_tracks_content_and_ignores_identical_bytes_or_deletion(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "plan.md"
+        path.write_bytes(b"before")
+        target = DelegatedWriteTarget.bind(str(path.resolve()))
+
+        path.write_bytes(b"before")
+        assert target.changed() is False
+
+        path.write_bytes(b"after")
+        assert target.changed() is True
+
+        path.unlink()
+        assert target.changed() is False
 
 
 class TestValidateRolloutMarker:

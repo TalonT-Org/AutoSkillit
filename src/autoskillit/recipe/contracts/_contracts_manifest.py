@@ -257,6 +257,25 @@ def _as_input_preflight(value: object) -> tuple[str, ...]:
     return tuple(value)
 
 
+def _parse_delegated_write_input(
+    skill_name: str,
+    skill_data: dict[str, Any],
+    inputs: tuple[SkillInput, ...],
+    write_behavior: object,
+) -> str | None:
+    if "delegated_write_input" not in skill_data:
+        return None
+    value = skill_data["delegated_write_input"]
+    error_prefix = f"delegated_write_input for skill '{skill_name}'"
+    if not isinstance(value, str):
+        raise ValueError(f"{error_prefix} must be a string")
+    if not any(item.name == value and item.type == "file_path" for item in inputs):
+        raise ValueError(f"{error_prefix} must name a declared file_path input")
+    if write_behavior not in ("always", "conditional"):
+        raise ValueError(f"{error_prefix} requires write_behavior 'always' or 'conditional'")
+    return value
+
+
 def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContract | None:
     """Look up a skill in the manifest and return a SkillContract."""
     skills = manifest.get("skills", {})
@@ -276,6 +295,9 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
     examples = skill_data.get("pattern_examples", [])
     write_behavior = skill_data.get("write_behavior")
     write_expected_when = skill_data.get("write_expected_when", [])
+    delegated_write_input = _parse_delegated_write_input(
+        skill_name, skill_data, inputs, write_behavior
+    )
     external_effect = skill_data.get("external_effect", "none")
     if not isinstance(external_effect, str):
         raise ValueError(f"external_effect for skill '{skill_name}' must be a string")
@@ -313,6 +335,7 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
         expected_output_patterns=patterns,
         pattern_examples=examples,
         write_behavior=write_behavior,
+        delegated_write_input=delegated_write_input,
         write_expected_when=write_expected_when,
         external_effect=external_effect,
         read_only=read_only,

@@ -144,17 +144,20 @@ _RECIPE_DELIVERY_OUTCOMES: Mapping[str, RecipeDeliveryOutcomeDef] = MappingProxy
     {
         "check_repo_merge_state": RecipeDeliveryOutcomeDef(),
         "enqueue_pr": RecipeDeliveryOutcomeDef(success_field="success"),
-        "wait_for_merge_queue": RecipeDeliveryOutcomeDef(success_field="success"),
+        "wait_for_merge_queue": RecipeDeliveryOutcomeDef(
+            success_field="pr_state", success_value="merged"
+        ),
         "wait_for_ci": RecipeDeliveryOutcomeDef(
             success_field="conclusion",
             success_value="success",
         ),
         "push_to_remote": RecipeDeliveryOutcomeDef(success_field="success"),
         "bootstrap_clone": RecipeDeliveryOutcomeDef(),
-        "run_python": RecipeDeliveryOutcomeDef(success_field="success"),
+        "run_python": RecipeDeliveryOutcomeDef(success_field="success", recipe_observable=False),
         "complete_run_skill_result": RecipeDeliveryOutcomeDef(
             success_field="run_skill_success",
             step_name_field="step_name",
+            recipe_observable=False,
         ),
         "merge_worktree": RecipeDeliveryOutcomeDef(success_field="merge_succeeded"),
         "check_pr_mergeable": RecipeDeliveryOutcomeDef(),

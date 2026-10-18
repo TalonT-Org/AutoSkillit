@@ -274,6 +274,7 @@ RECIPE_GATEWAY_SYMBOLS: frozenset[str] = frozenset(
         "resolve_input_specs",
         "resolve_skill_name",
         "resolve_venue_appendices",
+        "result_arms_by_source",
         "rules",
         "run_semantic_rules",
         "schema",

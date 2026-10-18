@@ -65,6 +65,7 @@ from ._type_results_records import (
     require_aware_timestamp,
 )
 from ._type_token import TurnTokenEntry
+from ._type_write_evidence import DelegatedWriteTarget, WriteEvidence
 
 if TYPE_CHECKING:
     from ..launch._type_launch import ResolvedLaunchContract
@@ -105,7 +106,6 @@ __all__ = [
     "OutcomeInvariantSpec",
     "WorkspaceOutcomeRecord",
     "WriteBehaviorSpec",
-    "WriteEvidence",
     "FailureRecord",
     "ProviderOutcome",
     "PreLaunchReadiness",
@@ -247,11 +247,13 @@ class WriteBehaviorSpec:
     external_effect:
         ``none``, ``serialized-idempotent``, or
         ``serialized-unknown-completion`` for effects outside the workspace.
+    delegated_target: Canonical in-scope target for delegated writes.
     """
 
     mode: str | None = None
     expected_when: tuple[str, ...] = ()
     external_effect: str = "none"
+    delegated_target: DelegatedWriteTarget | None = None
 
     def __post_init__(self) -> None:
         if self.external_effect not in VALID_EXTERNAL_EFFECTS:
@@ -493,38 +495,6 @@ class AuditResultOutcome:
     verdict: AuditVerdict | None = None
     cycle_path: str | None = None
     attempt_id: AuditAttemptId | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class WriteEvidence:
-    """Bundled write evidence signals — either explicitly constructed or absent."""
-
-    write_call_count: int
-    fs_writes_detected: bool
-    git_writes_detected: bool
-    file_changes_count: int = 0
-
-    @classmethod
-    def none_observed(cls) -> WriteEvidence:
-        return cls(
-            write_call_count=0,
-            fs_writes_detected=False,
-            git_writes_detected=False,
-            file_changes_count=0,
-        )
-
-    @property
-    def has_evidence(self) -> bool:
-        return (
-            self.write_call_count >= 1
-            or self.fs_writes_detected
-            or self.git_writes_detected
-            or self.file_changes_count >= 1
-        )
-
-    @property
-    def has_implementation_evidence(self) -> bool:
-        return self.write_call_count >= 1 or self.file_changes_count >= 1
 
 
 @dataclass

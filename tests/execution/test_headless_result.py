@@ -36,18 +36,19 @@ from autoskillit.execution.headless import (
 from autoskillit.execution.headless._headless_adjudication import _parse_stdout
 from autoskillit.execution.headless._headless_evidence import (
     _adapt_agent_result,
-    _compute_write_evidence,
     _stdout_mentions_write_tools,
 )
 from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.execution.session._exit_classification import classify_infra_exit
 from autoskillit.execution.session._session_outcome import _compute_outcome
+from autoskillit.execution.session._write_evidence import _compute_write_evidence
 from autoskillit.execution.session.turn_usage import build_turn_token_entry
 from tests.execution.conftest import (
     CODEX_OBSERVED_PROVIDER_FAILURE_CASES,
     _make_tool_use_line,
     _sr,
     _success_session_json,
+    make_write_evidence_scope,
 )
 from tests.fixtures.codex import (
     HAPPY_PATH_SINGLE_TURN,
@@ -997,14 +998,12 @@ class TestComputeWriteEvidenceCodex:
             session_id="s1",
             tool_uses=[],
         )
-        backend = Mock()
-        backend.write_tool_names.return_value = frozenset()
         evidence = _compute_write_evidence(
             session,
-            False,
-            False,
-            backend=backend,
-            file_changes=["src/foo.py"],
+            make_write_evidence_scope(
+                write_tool_names=frozenset(),
+                file_changes=("src/foo.py",),
+            ),
         )
         assert evidence.has_evidence is True
         assert evidence.file_changes_count == 1
@@ -1018,14 +1017,12 @@ class TestComputeWriteEvidenceCodex:
             session_id="s1",
             tool_uses=[],
         )
-        backend = Mock()
-        backend.write_tool_names.return_value = frozenset()
         evidence = _compute_write_evidence(
             session,
-            False,
-            False,
-            backend=backend,
-            file_changes=["a.py", "b.py", "c.py"],
+            make_write_evidence_scope(
+                write_tool_names=frozenset(),
+                file_changes=("a.py", "b.py", "c.py"),
+            ),
         )
         assert evidence.has_evidence is True
         assert evidence.file_changes_count == 3
@@ -1039,14 +1036,12 @@ class TestComputeWriteEvidenceCodex:
             session_id="s1",
             tool_uses=[],
         )
-        backend = Mock()
-        backend.write_tool_names.return_value = frozenset()
         evidence = _compute_write_evidence(
             session,
-            False,
-            False,
-            backend=backend,
-            file_changes=[],
+            make_write_evidence_scope(
+                write_tool_names=frozenset(),
+                file_changes=(),
+            ),
         )
         assert evidence.has_evidence is False
         assert evidence.file_changes_count == 0
@@ -2083,7 +2078,11 @@ class TestComputeWriteEvidenceWithFileChanges:
             tool_uses=[],
         )
         evidence = _compute_write_evidence(
-            session, False, False, backend=ClaudeCodeBackend(), file_changes=["a.py", "b.py"]
+            session,
+            make_write_evidence_scope(
+                write_tool_names=ClaudeCodeBackend().write_tool_names(),
+                file_changes=("a.py", "b.py"),
+            ),
         )
         assert evidence.file_changes_count == 2
         assert evidence.has_evidence is True
@@ -2098,7 +2097,11 @@ class TestComputeWriteEvidenceWithFileChanges:
             tool_uses=[{"name": "Write", "id": "t1"}],
         )
         evidence = _compute_write_evidence(
-            session, False, False, backend=ClaudeCodeBackend(), file_changes=["a.py"]
+            session,
+            make_write_evidence_scope(
+                write_tool_names=ClaudeCodeBackend().write_tool_names(),
+                file_changes=("a.py",),
+            ),
         )
         assert evidence.file_changes_count == 0
         assert evidence.write_call_count == 1

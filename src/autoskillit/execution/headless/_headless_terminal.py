@@ -402,6 +402,7 @@ def build_terminal_flush_kwargs(
                 "fs_writes_detected": skill_result.evidence.fs_writes_detected,
                 "git_writes_detected": skill_result.evidence.git_writes_detected,
                 "file_changes_count": skill_result.evidence.file_changes_count,
+                "delegated_write_count": skill_result.evidence.delegated_write_count,
                 "clone_contamination_reverted": clone_contamination_reverted,
                 "tracked_comm": result.tracked_comm,
                 "orphaned_tool_result": result.orphaned_tool_result,

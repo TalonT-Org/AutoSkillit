@@ -8,14 +8,32 @@ skill classified as write-expected via WriteBehaviorSpec.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
 
-from autoskillit.core import RetryReason, WriteBehaviorSpec, extract_skill_name
+from autoskillit.core import (
+    DelegatedWriteTarget,
+    RetryReason,
+    WriteBehaviorSpec,
+    extract_skill_name,
+)
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.headless import _build_skill_result
 from tests.conftest import _make_result
+from tests.execution.conftest import (
+    delegated_child_prompt,
+    delegated_child_tool_result,
+    delegated_child_tool_use,
+    delegated_result_record,
+    delegated_root_agent_call,
+    delegated_root_agent_result,
+    delegated_root_text,
+    delegated_stream,
+    delegated_task_notification,
+    delegated_task_started,
+)
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -979,19 +997,106 @@ class TestContractDrivenAlwaysWriteSkills:
 
     @pytest.mark.parametrize("skill_name", _always_write_skills.__func__())  # type: ignore[attr-defined]
     def test_always_write_skill_with_edits_passes(self, skill_name: str) -> None:
-        stdout = _ndjson_with_tool_uses(["Edit", "Write"])
+        from autoskillit.recipe.contracts import get_skill_contract, load_bundled_manifest
+
+        manifest = load_bundled_manifest()
+        contract = get_skill_contract(skill_name, manifest)
+        assert contract is not None
+        assert contract.write_behavior is not None
+        stdout = _ndjson_with_tool_uses(["Edit"])
         sr = _build_skill_result(
             _make_result(returncode=0, stdout=stdout),
             skill_command=f"/autoskillit:{skill_name} arg",
-            write_behavior=WriteBehaviorSpec(mode="always"),
+            write_behavior=WriteBehaviorSpec(
+                mode=contract.write_behavior,
+                expected_when=tuple(contract.write_expected_when),
+                external_effect=contract.external_effect,
+            ),
             backend=ClaudeCodeBackend(),
         )
         assert sr.evidence.has_evidence is True, (
             f"Skill {skill_name!r} (write_behavior=always) must detect write evidence"
         )
+        assert sr.evidence.has_implementation_evidence is True
         assert sr.subtype != "zero_writes", (
             f"Skill {skill_name!r} must not trigger zero_writes gate when writes are present"
         )
+
+
+class TestContractDrivenDelegatedWriteSkills:
+    """Every manifest-declared delegated-write input admits a changed owned edit."""
+
+    @staticmethod
+    def _delegated_write_skills() -> list[str]:
+        from autoskillit.recipe.contracts import load_bundled_manifest
+
+        manifest = load_bundled_manifest()
+        skills = manifest.get("skills", {})
+        if not isinstance(skills, dict):
+            return []
+        names = [
+            name
+            for name, contract in skills.items()
+            if (
+                contract.get("delegated_write_input")
+                if isinstance(contract, dict)
+                else getattr(contract, "delegated_write_input", None)
+            )
+        ]
+        assert names, "load_bundled_manifest() returned no delegated-write contracts"
+        return names
+
+    @pytest.mark.parametrize(
+        "skill_name",
+        _delegated_write_skills.__func__(),  # type: ignore[attr-defined]
+    )
+    def test_manifest_delegated_write_contract_admits_child_edit(
+        self, tmp_path: Path, skill_name: str
+    ) -> None:
+        from autoskillit.recipe.contracts import get_skill_contract, load_bundled_manifest
+
+        plan_dir = tmp_path / ".autoskillit" / "temp" / "make-plan"
+        plan_dir.mkdir(parents=True)
+        plan = plan_dir / "plan.md"
+        plan.write_text("Plan draft\n")
+        target = DelegatedWriteTarget.bind(os.path.realpath(plan))
+        plan.write_text("Dry-walkthrough verified = TRUE\n" + plan.read_text())
+        contract = get_skill_contract(skill_name, load_bundled_manifest())
+        assert contract is not None
+        assert contract.delegated_write_input
+        assert contract.write_behavior is not None
+        stdout = delegated_stream(
+            [
+                delegated_root_agent_call(),
+                delegated_task_started(),
+                delegated_child_prompt(),
+                delegated_child_tool_use(file_path=str(plan)),
+                delegated_child_tool_result(),
+                delegated_task_notification(),
+                delegated_root_agent_result(),
+                delegated_root_text(),
+                delegated_result_record(),
+            ]
+        )
+
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command=f"/autoskillit:{skill_name} {plan}",
+            cwd=str(tmp_path),
+            write_watch_dirs=(plan_dir,),
+            write_behavior=WriteBehaviorSpec(
+                mode=contract.write_behavior,
+                expected_when=tuple(contract.write_expected_when),
+                external_effect=contract.external_effect,
+                delegated_target=target,
+            ),
+            skill_contract=contract,
+            backend=ClaudeCodeBackend(),
+        )
+
+        assert sr.subtype != "zero_writes"
+        assert sr.evidence.write_call_count == 0
+        assert sr.evidence.delegated_write_count == 1
 
 
 class TestStdoutWriteHeuristicStrengthening:
@@ -1105,6 +1210,33 @@ class TestPathAwareImplementationEvidence:
             backend=ClaudeCodeBackend(),
         )
         assert sr.evidence.has_implementation_evidence is False
+
+    def test_worktree_write_without_file_path_is_not_implementation_evidence(
+        self, tmp_path: Path
+    ) -> None:
+        wt = self._worktree_cwd(tmp_path)
+        stdout = _ndjson_with_tool_uses(["Write"])
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:implement-worktree-no-merge /some/path.md",
+            cwd=str(wt),
+            write_watch_dirs=[wt],
+            write_behavior=WriteBehaviorSpec(mode="always"),
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.evidence.write_call_count == 0
+
+    def test_non_worktree_write_without_file_path_is_counted(self, tmp_path: Path) -> None:
+        wt = self._worktree_cwd(tmp_path)
+        stdout = _ndjson_with_tool_uses(["Write"])
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:investigate regression",
+            cwd=str(wt),
+            write_behavior=WriteBehaviorSpec(mode="always"),
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.evidence.write_call_count == 1
 
     def test_mixed_temp_and_tracked_writes_is_implementation_evidence(
         self, tmp_path: Path

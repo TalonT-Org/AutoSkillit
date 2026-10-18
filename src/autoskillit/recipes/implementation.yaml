@@ -179,6 +179,7 @@ delivery_segments:
   - implement
   - retry_worktree
   - check_changes
+  - pr_gate_no_changes
   - close_issue_no_changes
 - name: I3
   steps:
@@ -204,6 +205,7 @@ delivery_segments:
   steps:
   - merge
   - check_has_commits
+  - pr_gate_already_done
   - close_issue_already_done
 - name: I6
   steps:
@@ -331,7 +333,9 @@ delivery_segments:
   steps:
   - release_issue_success
   - patch_token_summary
+  - pr_gate
   - register_clone_unconfirmed
+  - pr_gate_unconfirmed
   - analyze_pipeline_health_unconfirmed
   - done_unconfirmed
   - release_audit_remediation_stuck
@@ -489,6 +493,9 @@ steps:
       plan_parts: ${{ context.plan_parts }}
       cwd: ${{ context.work_dir }}
       issue_url: ${{ inputs.issue_url }}
+      open_pr: ${{ inputs.open_pr }}
+      auto_merge: ${{ inputs.auto_merge }}
+      prior_authority_path: ${{ context.plan_set_authority_path }}
       seal: 'true'
       step_name: bind_plan_set
     capture:
@@ -503,6 +510,8 @@ steps:
       route: check_replan_iteration
     - route: release_issue_failure
     on_failure: release_issue_failure
+    optional_context_refs:
+    - plan_set_authority_path
     note: >-
       __RECIPE_NOTE_PLAN_PARTS_BINDING__
       Aggregate plan-set gate before every walkthrough. Single-shot plans omit
@@ -577,6 +586,8 @@ steps:
     with:
       plan_parts: ${{ context.plan_set_parts }}
       cwd: ${{ context.work_dir }}
+      open_pr: ${{ inputs.open_pr }}
+      auto_merge: ${{ inputs.auto_merge }}
       parent_authority_path: ${{ context.plan_set_authority_path }}
       seal: 'true'
       step_name: renew_plan_set
@@ -667,8 +678,25 @@ steps:
       commit_count: ${{ result.commit_count }}
     on_result:
     - when: ${{ result.has_changes }} == false
-      route: close_issue_no_changes
+      route: pr_gate_no_changes
     - route: test
+    on_failure: release_issue_failure
+  pr_gate_no_changes:
+    tool: run_python
+    with:
+      callable: autoskillit.recipe._cmd_rpc.verify_stage_obligations
+      plan_set_authority_path: ${{ context.plan_set_authority_path }}
+      plan_set_authority_digest: ${{ context.plan_set_authority_digest }}
+      cwd: ${{ context.work_dir }}
+      base_branch: ${{ inputs.base_branch }}
+      pr_number: ${{ context.pr_number }}
+      step_name: pr_gate_no_changes
+    optional_context_refs:
+    - pr_number
+    on_result:
+    - when: ${{ result.success }} == true
+      route: close_issue_no_changes
+    - route: release_issue_failure
     on_failure: release_issue_failure
   close_issue_no_changes:
     tool: release_issue
@@ -1017,7 +1045,24 @@ steps:
     on_result:
     - when: ${{ result.has_commits }}
       route: push
-    - route: close_issue_already_done
+    - route: pr_gate_already_done
+    on_failure: release_issue_failure
+  pr_gate_already_done:
+    tool: run_python
+    with:
+      callable: autoskillit.recipe._cmd_rpc.verify_stage_obligations
+      plan_set_authority_path: ${{ context.plan_set_authority_path }}
+      plan_set_authority_digest: ${{ context.plan_set_authority_digest }}
+      cwd: ${{ context.work_dir }}
+      base_branch: ${{ inputs.base_branch }}
+      pr_number: ${{ context.pr_number }}
+      step_name: pr_gate_already_done
+    optional_context_refs:
+    - pr_number
+    on_result:
+    - when: ${{ result.success }} == true
+      route: close_issue_already_done
+    - route: release_issue_failure
     on_failure: release_issue_failure
   close_issue_already_done:
     tool: run_python
@@ -1229,6 +1274,7 @@ steps:
       skill_command: /autoskillit:audit-impl
       skill_inputs:
         all_plan_paths: ${{ context.all_plan_paths }}
+        plan_set_authority_path: ${{ context.plan_set_authority_path }}
         deviation_manifest_path: ${{ context.deviation_manifest_path }}
         branch_name: ${{ context.base_sha }}
         base_branch: ${{ inputs.base_branch }}
@@ -1427,7 +1473,7 @@ steps:
   extract_pr_number:
     tool: run_cmd
     with:
-      cmd: gh pr view '${{ context.merge_target }}' --json number -q .number
+      cmd: gh pr view '${{ context.pr_url }}' --json number -q .number
       cwd: ${{ context.work_dir }}
       step_name: extract_pr_number
     capture:
@@ -1564,18 +1610,7 @@ steps:
     on_skip: release_issue_success
     optional_context_refs:
     - review_mode
-    note: 'Runs after compose_pr creates the PR. Invokes the review-pr skill as a
-      headless session to leave inline review comments on the PR. The skill finds
-      the open PR by feature branch name (context.merge_target). Captures verdict
-      as review_verdict and routes via on_result: changes_requested/approved_with_comments
-      → enrich_diff_context → resolve_review; all other verdicts (including approved,
-      needs_human) → check_review_posted (effect verification gate) → check_review_loop
-      (mandatory waypoint to increment review_loop_count). On tool-level failure
-      or context exhaustion, routes to release_issue_failure because no authoritative
-      review receipt exists.
-      Skipped when open_pr=false.
-
-      '
+    note: 'Run headless review-pr on the PR in context.merge_target and capture review_verdict. Requested changes or approved comments go to enrich_diff_context and resolve_review; other verdicts verify the posted effect before check_review_loop. Tool failure or context exhaustion releases the issue without an authoritative receipt. Skip when open_pr=false.'
   enrich_diff_context:
     tool: run_python
     with:
@@ -2188,15 +2223,7 @@ steps:
     on_failure: register_clone_unconfirmed
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: "Waits up to 15 minutes for the PR to merge through the queue. merged \u2192\
-      \ release_issue_success to transition issue state then register_clone_success.\
-      \ ejected_ci_failure \u2192 diagnose_ci (CI failure; conflict resolution cannot\
-      \ fix this). dropped_merge_group_ci \u2192 check_dropped_ci_loop (re-enqueue\
-      \ on first drop, escalate to diagnose_ci after the cap is exceeded). not_enrolled\
-      \ \u2192 release_issue_failure (enrollment failed; repo configuration error).\
-      \ ejected \u2192 conflict fix cycle then re-enter. stalled \u2192 lightweight\
-      \ re-enrollment via enqueue_pr. timeout \u2192 register_clone_unconfirmed (release\
-      \ claim without staged label; merge unconfirmed).\n"
+    note: 'Watch the merge queue for up to 15 minutes. Merge succeeds; CI ejection diagnoses CI; missing enrollment fails; ejected PRs repair/re-enter; stalled enrollment is retried; timeout registers an unconfirmed clone.'
   reenroll_stalled_pr:
     tool: enqueue_pr
     with:
@@ -2960,30 +2987,64 @@ steps:
     tool: run_python
     optional: true
     skip_when_false: inputs.open_pr
-    on_skip: register_clone_success
+    on_skip: pr_gate
     with:
       callable: autoskillit.smoke_utils.patch_pr_token_summary
       timeout: 60
       pr_url: ${{ context.pr_url }}
       cwd: ${{ context.work_dir }}
-    on_success: register_clone_success
-    on_failure: register_clone_success
+    on_success: pr_gate
+    on_failure: pr_gate
     note: 'Patches PR body with complete token summary; failures are logged but do
       not alter pipeline routing.
 
       '
+  pr_gate:
+    tool: run_python
+    with:
+      callable: autoskillit.recipe._cmd_rpc.verify_stage_obligations
+      plan_set_authority_path: ${{ context.plan_set_authority_path }}
+      plan_set_authority_digest: ${{ context.plan_set_authority_digest }}
+      cwd: ${{ context.work_dir }}
+      base_branch: ${{ inputs.base_branch }}
+      pr_number: ${{ context.pr_number }}
+      step_name: pr_gate
+    optional_context_refs:
+    - pr_number
+    on_result:
+    - when: ${{ result.success }} == true
+      route: register_clone_success
+    - route: release_issue_failure
+    on_failure: release_issue_failure
   register_clone_unconfirmed:
     tool: register_clone_status
     with:
       clone_path: ${{ context.work_dir }}
       status: unconfirmed
       step_name: register_clone_unconfirmed
-    on_success: analyze_pipeline_health_unconfirmed
-    on_failure: analyze_pipeline_health_unconfirmed
-    note: "Called when a merge-wait step times out before merge is confirmed. Does\
-      \ NOT call release_issue \u2014 the in-progress label stays on the issue so\
-      \ operators can see the PR is still actively queued. The clone is preserved\
-      \ (status: unconfirmed) for human inspection.\n"
+    on_success: pr_gate_unconfirmed
+    on_failure: pr_gate_unconfirmed
+    note: >-
+      Called when a merge-wait step times out before merge is confirmed. Does NOT call
+      release_issue; the in-progress label stays on the issue so operators can see the PR is
+      still actively queued. The clone is preserved (status: unconfirmed) for human inspection.
+  pr_gate_unconfirmed:
+    tool: run_python
+    with:
+      callable: autoskillit.recipe._cmd_rpc.verify_stage_obligations
+      plan_set_authority_path: ${{ context.plan_set_authority_path }}
+      plan_set_authority_digest: ${{ context.plan_set_authority_digest }}
+      cwd: ${{ context.work_dir }}
+      base_branch: ${{ inputs.base_branch }}
+      pr_number: ${{ context.pr_number }}
+      step_name: pr_gate_unconfirmed
+    optional_context_refs:
+    - pr_number
+    on_result:
+    - when: ${{ result.success }} == true
+      route: analyze_pipeline_health_unconfirmed
+    - route: analyze_pipeline_health_error
+    on_failure: analyze_pipeline_health_error
   analyze_pipeline_health_unconfirmed:
     tool: run_skill
     model: ''

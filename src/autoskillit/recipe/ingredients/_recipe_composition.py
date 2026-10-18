@@ -10,11 +10,17 @@ from typing import Any, NamedTuple
 import regex as re
 
 from autoskillit.core import (
+    FALSY_STRINGS as FALSY_STRINGS,
+)
+from autoskillit.core import (
     RECIPE_TERMINAL_TARGETS,
     SKILL_TOOLS,
     RecipeFlowEdge,
     YAMLError,
     load_yaml,
+)
+from autoskillit.core import (
+    is_ingredient_truthy as _is_ingredient_truthy,
 )
 from autoskillit.recipe.analysis._analysis_bfs import bfs_reachable
 from autoskillit.recipe.analysis._analysis_graph import RouteEdge, _extract_routing_edges
@@ -312,13 +318,6 @@ def _validate_route_consistency(raw: str, recipe: Recipe) -> list[str]:
                 f"{raw_signatures!r} != {model_signatures!r}"
             )
     return errors
-
-
-FALSY_STRINGS: frozenset[str] = frozenset({"false", "0", "no", ""})
-
-
-def _is_ingredient_truthy(value: str) -> bool:
-    return bool(value) and value.lower() not in FALSY_STRINGS
 
 
 def _resolve_guard_reference(

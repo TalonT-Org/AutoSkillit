@@ -11,7 +11,7 @@ import pytest
 from autoskillit.execution.backends import BACKEND_REGISTRY
 from autoskillit.execution.backends._codex_hooks import managed_codex_route_digest
 from autoskillit.hook_registry import HOOK_REGISTRY_HASH
-from tests.contracts._ast_helpers import callers_by_function
+from tests._ast_helpers import callers_by_function
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 

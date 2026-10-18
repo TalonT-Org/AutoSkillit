@@ -299,6 +299,7 @@ def _build_skill_result(
         cwd=cwd,
         skill_command=skill_command,
         delegated_target=getattr(write_behavior, "delegated_target", None),
+        delegated_output_scope=getattr(write_behavior, "delegated_output_scope", None),
     )
     context = _SkillResultContext(
         backend=backend,

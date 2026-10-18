@@ -671,6 +671,7 @@ def make_write_evidence_scope(**overrides: Any) -> WriteEvidenceScope:
         "cwd": "",
         "skill_command": "",
         "delegated_target": None,
+        "delegated_output_scope": None,
     }
     values.update(overrides)
     return WriteEvidenceScope(**values)

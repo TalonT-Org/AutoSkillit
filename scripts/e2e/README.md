@@ -275,18 +275,36 @@ For model tests, the container's AutoSkillit data directory (`~/.local/share/aut
 from the runner, so session logs survive a killed container; the harness also reads this
 log tree after fleet runs. Those files belong to uid 1000
 and are often `0600`, so a second container run copies `out/` and `data/logs/` into
-`upload/` world-readable with both secrets replaced by `[REDACTED]`, skips symlinks, and
-fails if any secret survives. Only `upload/` is uploaded, and only when redaction
-succeeded.
+`upload/` world-readable, skipping symlinks. The workflow supplies `MINIMAX_API_KEY` and
+`E2E_SANDBOX_TOKEN`; the redactor replaces their nonempty literal byte values in file
+contents with `[REDACTED]`, re-reads all uploaded file contents, and fails closed if a
+supplied literal survives. Encoded or transformed values, unknown credentials and file
+names are outside this check. Only `upload/` is uploaded, and only when redaction succeeded.
 
-When a test does not pass, the harness preserves plans from each pipeline clone under
-`out/pipeline-artifacts/<clone>/<make-plan|rectify>/` and Claude Code JSONL under
-`out/transcripts/`, retaining relative paths. The transcripts include the orchestrator,
-skill sessions and their subagents; the orchestrator's transcript holds each raw
-`bind_plan_set` response and its `plan_parts` argument. These files go through the same
-redaction and upload steps as the other output artifacts. Collection also runs for an
-expected failure or a harness exception. A container killed before or during collection
-may leave no evidence or only partial evidence.
+Every test copies the stage directories selected by `PIPELINE_EVIDENCE` in
+`e2e_harness.py`, on every outcome: pass, failure, expected failure or harness exception.
+Sources are the `.autoskillit/temp` of the sandbox, each pipeline clone and each surviving
+worktree. They land under `out/pipeline-artifacts/<path under /workspace>/<stage dir>/`.
+Ledgers, kitchen and guard state, counters and the worktrees sidecar are not copied.
+The `pipeline_files` evidence counter records copied stage files.
+
+Claude Code `*.jsonl` and `*.txt` files under the projects tree land in
+`out/transcripts/`, retaining relative paths for orchestrator, skill and subagent sessions.
+The text-file selection includes `tool-results/*.txt`: a transcript's `bind_plan_set`
+response may be a pointer to one of these retained payloads rather than inline bytes.
+All collected files go through the same redaction and upload steps as other artifacts.
+
+`evidence.unretained` lists existing files under any `.autoskillit/temp` mentioned by a
+`sessions.jsonl` row that were not copied. An entry for a commissioning stage means that
+stage's bytes are missing. No `evidence` key means nothing was found to collect.
+Uploaded names escape `~` and upload-forbidden characters as `~XX`, so `sha256:` becomes
+`sha256~3a`; paths quoted inside session logs and transcripts keep their original characters.
+
+A merged run's worktree temp is deleted by `merge_worktree`. The implement step's binding
+digest, id, `sealed` state and coverage status remain in that session's
+`verified_plan_set_preflight` in `logs/sessions.jsonl`. Only the final review iteration's
+files survive `pre_review_cleanup`. A container killed before or during collection may
+leave no evidence or only partial evidence.
 
 Pipeline evidence includes `session-events.jsonl`, `session-concurrency.json`, compact
 `ownership.json`, the seed, effective configuration, fleet stdout/stderr/envelope, captured
@@ -513,13 +531,19 @@ After the plan-set changes have merged, perform this check before CI commissioni
    and the evidence collector. Build and run that revision with the Docker
    invocation above, selecting `--test implementation`. Use the same revision for
    commissioning and record the model.
-2. If the run reaches implementation, the first bind succeeded. If the test does not
-   pass, inspect the orchestrator's `bind_plan_set` results in `out/transcripts/`.
+2. Inspect the orchestrator's `bind_plan_set` results in `out/transcripts/` regardless of
+   outcome, including `tool-results/` when a transcript holds only a pointer. Inspect the
+   sealed records under
+   `out/pipeline-artifacts/autoskillit-runs/<clone>/plan-set-authority/`.
    An observed `success: true` on the first or second bind is the pass condition.
    A `coverage_failed` result explains the rejection in `coverage_gaps`, and
-   `out/pipeline-artifacts/` retains the rejected plan. Missing evidence is inconclusive
-   and does not satisfy this gate: require an observed successful bind. When a run
-   replans, also confirm the second bind's `plan_parts` names only the replacement plan.
+   `out/pipeline-artifacts/` retains the rejected plan. Treat an `evidence.unretained`
+   entry for a commissioning stage as missing evidence. An empty list covers existing
+   session-referenced temp files only; unmentioned producers depend on `PIPELINE_EVIDENCE`,
+   so inspect each required commissioning payload directly before signing off.
+   Missing evidence is inconclusive and does not satisfy this gate: require an observed
+   successful bind. When a run replans, also confirm the second bind's `plan_parts` names
+   only the replacement plan.
 3. Record the model, plan path and bind result in issue #5259's body using
    `gh issue edit --body-file`, never as a comment. Only an observed successful bind
    unblocks `gh workflow run e2e.yml -f tests=implementation`.

@@ -106,15 +106,13 @@ class TestTieredAlwaysRun:
         dir_names = {p.name for p in result2}
         assert "infra" in dir_names
 
-    def test_unconditional_files_constants_have_correct_counts(self) -> None:
-        """_INFRA_UNCONDITIONAL_FILES has 13 entries; hooks has 3 entries.
-
-        Pin the unconditional-files contract: a silent mutation to these
-        frozensets changes the always-run behavior, so any new entry must be
-        reflected here as well.
-        """
-        assert len(_INFRA_UNCONDITIONAL_FILES) == 13
-        assert len(_HOOKS_UNCONDITIONAL_FILES) == 3
+    def test_unconditional_files_name_existing_test_modules(self) -> None:
+        """Every unconditional filename must identify a test module on disk."""
+        tests_root = Path(__file__).parent
+        for filename in _INFRA_UNCONDITIONAL_FILES:
+            assert (tests_root / "infra" / filename).is_file(), filename
+        for filename in _HOOKS_UNCONDITIONAL_FILES:
+            assert (tests_root / "hooks" / filename).is_file(), filename
 
     def test_lint_gate_selection_contract_is_unconditional(self) -> None:
         """The lint-gate selection contract must run on every conservative changeset.

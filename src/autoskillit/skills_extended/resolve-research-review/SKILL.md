@@ -60,6 +60,9 @@ Bounded by `retries: 2` — on exhaustion routes to `research_complete`.
 
 ## Critical Constraints
 
+Never infer publication success from the GitHub HTTP response `comments` array
+or its length.
+
 **NEVER:**
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 

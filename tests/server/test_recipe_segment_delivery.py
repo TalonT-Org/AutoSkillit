@@ -401,28 +401,26 @@ async def test_success_carrier_degrades_to_pull_only_when_response_would_not_fit
     assert prepared is not None
     assert prepared.success_carrier is not None
     assert prepared.success_pull_only_carrier is not None
+    prepared = replace(
+        prepared,
+        success_carrier={
+            **prepared.success_carrier,
+            "test_padding": "x" * RECIPE_SEGMENT_MAX_BYTES,
+        },
+    )
 
     base = {
         "success": True,
         "plan_set_authority_path": "/tmp/plan-set-authority.json",
         "base_marker": "retained",
-        "auxiliary": "",
+        "auxiliary": "retained",
     }
     inline_size = len(
         segment_delivery_module._serialized_bytes(
             {**base, "recipe_segment": prepared.success_carrier}
         )
     )
-    assert inline_size < RECIPE_SEGMENT_MAX_BYTES
-    base["auxiliary"] = "x" * (RECIPE_SEGMENT_MAX_BYTES - inline_size)
-    assert (
-        len(
-            segment_delivery_module._serialized_bytes(
-                {**base, "recipe_segment": prepared.success_carrier}
-            )
-        )
-        >= RECIPE_SEGMENT_MAX_BYTES
-    )
+    assert inline_size >= RECIPE_SEGMENT_MAX_BYTES
 
     attached = attach_recipe_segment(base, prepared, success=True)
     assert attached["recipe_segment"] == prepared.success_pull_only_carrier

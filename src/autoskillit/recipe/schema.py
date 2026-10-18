@@ -310,6 +310,23 @@ class CampaignDispatch:
     skip_when: str | None = None
 
 
+def stop_step_declares_success(step: RecipeStep) -> bool:
+    """Return whether a stop step declares a valid successful sentinel example."""
+    if step.action != "stop" or not step.message:
+        return False
+    for block in extract_sentinel_json_blocks(step.message):
+        try:
+            payload = json.loads(block)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict) or payload.get("success") is not True:
+            continue
+        reason = payload.get("reason")
+        if isinstance(reason, str) and reason.strip():
+            return True
+    return False
+
+
 @dataclass
 class Recipe:
     name: str
@@ -348,8 +365,9 @@ class Recipe:
         """Collect valid success reasons declared by this graph's stop examples."""
         reasons: set[str] = set()
         for step in self.steps.values():
-            if step.action != "stop" or not step.message:
+            if not stop_step_declares_success(step):
                 continue
+            assert step.message is not None
             for block in extract_sentinel_json_blocks(step.message):
                 try:
                     payload = json.loads(block)

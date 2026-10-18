@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.contracts._ast_helpers import call_name, callers_by_function
+from tests._ast_helpers import call_name, callers_by_function
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 

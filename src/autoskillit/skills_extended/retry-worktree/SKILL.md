@@ -66,6 +66,7 @@ open, reference, or validate any other part files.**
 - Re-explore systems that were already explored (skip Step 2 of implement-worktree)
 - Implement in the main working directory (always use the worktree)
 - Force push or perform destructive git operations
+- Never open, merge, or close pull requests or issues — publication belongs to the recipe's later stages.
 - Consider implementation complete if ANY test fails
 - Blame test failures on "pre-existing issues" — ALL tests must pass
 - Re-run tests just to see failures — grep the saved output file instead

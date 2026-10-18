@@ -301,13 +301,21 @@ def _compose_pr_step5_bash() -> str:
         extract_step_sections,
     )
 
-    text = COMPOSE_PR.read_text()
+    text = COMPOSE_PR.read_text(encoding="utf-8")
     sections = extract_step_sections(text)
     step5 = sections.get("Step 5")
     assert step5, "compose-pr/SKILL.md is missing a Step 5 section"
     blocks = extract_bash_blocks(step5)
     assert len(blocks) == 1, f"Expected exactly 1 bash block in Step 5, found {len(blocks)}"
     return blocks[0]
+
+
+def test_compose_pr_step5_uses_scoped_pr_list_for_recovery():
+    import re
+
+    bash = _compose_pr_step5_bash()
+    assert not re.search(r"\bgh\s+pr\s+view\b", bash)
+    assert re.search(r"\bgh\s+pr\s+list\s+--head\s+\S+\s+--base\b", bash)
 
 
 def test_compose_pr_step5_has_bounded_retry_count_of_three():

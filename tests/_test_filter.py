@@ -196,9 +196,13 @@ ALWAYS_RUN_AGGRESSIVE: frozenset[str] = frozenset(
 # skip the test and let a drift pass silently. test_docker_image.py
 # likewise compares the Dockerfile's pins with code constants under src/, which no infra
 # trigger covers.
+# Whole-source-tree scanners read src/ by path, so neither an import edge nor coverage
+# selects them; tests/arch/test_infra_source_scanner_selection.py requires every such
+# infra or hooks scanner to be listed.
 _INFRA_UNCONDITIONAL_FILES: frozenset[str] = frozenset(
     {
         "test_docker_image.py",
+        "test_canonical_json_producer_convention.py",
         "test_manifest_completeness.py",
         "test_manifest_directory_completeness.py",
         "test_guard_coverage.py",
@@ -211,6 +215,8 @@ _INFRA_UNCONDITIONAL_FILES: frozenset[str] = frozenset(
         "test_plugin_source_ratchets.py",
         "test_lint_gate_selection.py",
         "test_typecheck_gate.py",
+        "test_schema_read_convention.py",
+        "test_session_ttl_single_source.py",
     }
 )
 
@@ -221,6 +227,9 @@ _HOOKS_UNCONDITIONAL_FILES: frozenset[str] = frozenset(
         "test_hook_executability.py",
         "test_hook_registration_coverage.py",
         "test_hook_registry.py",
+        "test_hook_scope_authority.py",
+        "test_join_enforcement_wiring.py",
+        "test_write_target_scan_authority.py",
     }
 )
 
@@ -578,6 +587,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     ),
     "_type_recipe_delivery": frozenset({"core", "execution", "pipeline", "server"}),
     "_type_orchestrator_instruction_surfaces": frozenset({"core"}),
+    "_type_stage_obligation": frozenset({"contracts", "core", "recipe", "server"}),
     "_type_recipe_sections": frozenset(
         {"cli", "config", "core", "execution", "pipeline", "recipe", "server", "workspace"}
     ),
@@ -1336,6 +1346,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "hooks/test_recipe_contract_freshness.py",
             "migration",
             # Server file-level entries importing autoskillit.recipe:
+            "server/test_stage_obligation_pipeline.py",
+            "server/test_tools_plan_set.py",
+            "server/test_run_skill_delegated_output_write.py",
             "server/test_run_skill_execution_tuning_fallbacks.py",
             "server/test_run_skill_delegated_write_binding.py",
             "server/test_bundled_dispatch_write_scope_admission.py",

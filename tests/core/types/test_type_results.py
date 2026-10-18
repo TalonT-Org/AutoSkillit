@@ -97,6 +97,24 @@ class TestWriteEvidence:
         )
         assert ev.has_implementation_evidence is True
 
+    def test_delegated_write_paths_alone_are_not_evidence(self) -> None:
+        defaults = WriteEvidence(
+            write_call_count=0,
+            fs_writes_detected=False,
+            git_writes_detected=False,
+        )
+        paths_only = WriteEvidence(
+            write_call_count=0,
+            fs_writes_detected=False,
+            git_writes_detected=False,
+            delegated_write_paths=("/workspace/plan.md",),
+        )
+
+        assert defaults.delegated_write_paths == ()
+        assert paths_only.delegated_write_paths == ("/workspace/plan.md",)
+        assert paths_only.has_implementation_evidence is False
+        assert paths_only.has_evidence is False
+
 
 class TestDelegatedWriteTarget:
     @pytest.mark.parametrize("operation", ["stat", "read_bytes"])
@@ -141,6 +159,34 @@ class TestDelegatedWriteTarget:
 
         path.unlink()
         assert target.changed() is False
+
+
+class TestDelegatedOutputScope:
+    def test_target_for_accepts_only_fresh_paths_inside_root(self, tmp_path: Path) -> None:
+        from autoskillit.core import DelegatedOutputScope
+
+        root = tmp_path / "outputs"
+        root.mkdir()
+        preexisting = root / "old-plan.md"
+        preexisting.write_text("existing")
+        fresh = root / "new-plan.md"
+        outside = tmp_path / "outside.md"
+        scope = DelegatedOutputScope(
+            str(root.resolve()),
+            frozenset({str(preexisting.resolve())}),
+        )
+
+        assert scope.target_for(str(outside.resolve())) is None
+        assert scope.target_for(str(root.resolve())) is None
+        assert scope.target_for(str(preexisting.resolve())) is None
+
+        target = scope.target_for(str(fresh.resolve()))
+        assert target == DelegatedWriteTarget(str(fresh.resolve()), None)
+        assert target is not None
+        assert target.changed() is False
+
+        fresh.write_text("new plan")
+        assert target.changed() is True
 
 
 class TestValidateRolloutMarker:

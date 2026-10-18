@@ -52,4 +52,9 @@ Verdict: {COVERED_count} COVERED, {MISSING_count} MISSING, {ODD_count} ODD, {CON
 
 ## Scope Guard
 
+Obligations explicitly owned by a recipe stage in authenticated preflight were removed before
+slicing. Do not reinstate those publication outcomes as MISSING. Retain every code obligation
+and apply the existing classification and waiver rules to requirements without authenticated
+stage ownership.
+
 Do not modify any files. Do not write remediation suggestions. Report findings only.

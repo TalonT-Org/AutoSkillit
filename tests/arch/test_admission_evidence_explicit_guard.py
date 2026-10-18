@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.contracts._ast_helpers import call_name
+from tests._ast_helpers import call_name
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.medium]
 

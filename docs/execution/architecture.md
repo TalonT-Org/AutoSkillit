@@ -521,6 +521,13 @@ secondary-rate responses persist shared back-pressure. A capacity-one fenced
 lease enforces at least one second between review mutation starts across
 sessions.
 
+When the authenticated reviewer is the pull request's author, requested
+`APPROVE` and `REQUEST_CHANGES` events are published as `COMMENT`. The publisher
+chooses from preflight identities before any mutation, adds a fixed disclosure,
+and records both events in the receipt. This comment provides neither a GitHub
+approval nor a changes-requested review and does not itself satisfy a required
+approval. The skills' verdict and gate are independent of the effective event.
+
 Final success requires a server-authored receipt with the operation identity,
 review/comment IDs, response and reconciliation classes, and an exhaustive
 posted/already-present/omitted disposition for every original finding. Dry-run

@@ -51,6 +51,7 @@ def _write_sub_recipe(sub_dir: Path, name: str = "test-sub") -> None:
             tool: run_cmd
             with:
               cmd: echo hi
+              cwd: /tmp
             on_success: done
             on_failure: escalate
     """)

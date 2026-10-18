@@ -61,9 +61,6 @@ READING_TOKEN_PATTERN: str = r"^(?P<prefix>\w+) = (?P<path>/.+)$"
 
 
 BoundScalar: TypeAlias = str | int | bool
-_TERMINAL_BYPASS_TARGETS = frozenset({"done", "escalate"})
-
-
 RECIPE_TERMINAL_TARGETS: frozenset[str] = frozenset({"done", "escalate"})
 
 
@@ -90,20 +87,16 @@ class ToolInitializationOperation(StrEnum):
 
 
 class ToolParamRole(StrEnum):
-    """The single classification authority for what a tool parameter is for.
-
-    The runtime attestation gate's always-admit set, the actual-kwargs
-    assembly, and the server-side ``RecipeStep`` fallback obligation for
-    execution-tuning parameters are all derived from this field. The
-    per-role runtime-admission *policy* is declared once, alongside this
-    enum, in ``RUNTIME_ADMISSION_BY_ROLE`` — see ``runtime_exempt_param_names``
-    (core/tool_registry.py) and ``bind_runtime_skill_invocation``
-    (recipe/_binding.py) for its consumers.
+    """Parameter purposes governing runtime admission and RecipeStep tuning.
+    MCP membership comes from ToolDef.mcp_kwarg_names; admission policy lives
+    in RUNTIME_ADMISSION_BY_ROLE, consumed by runtime_exempt_param_names.
     """
 
     PROTOCOL = "protocol"
-    """Attestation identity (step_name, recipe_execution_id, invocation_template_digest);
-    always admitted."""
+    """Attestation credentials and step guard values; always admitted."""
+
+    STEP_IDENTITY = "step_identity"
+    """The invoking step's YAML key; declared values must match; always admitted."""
 
     CHILD_INPUT = "child_input"
     """Child-skill inputs; admitted iff with:-compiled."""
@@ -128,6 +121,7 @@ class RuntimeAdmission(StrEnum):
 RUNTIME_ADMISSION_BY_ROLE: Mapping[ToolParamRole, RuntimeAdmission] = MappingProxyType(
     {
         ToolParamRole.PROTOCOL: RuntimeAdmission.ALWAYS,
+        ToolParamRole.STEP_IDENTITY: RuntimeAdmission.ALWAYS,
         ToolParamRole.ORCHESTRATOR_SCOPING: RuntimeAdmission.ALWAYS,
         ToolParamRole.CHILD_INPUT: RuntimeAdmission.WITH_DECLARED_ONLY,
         ToolParamRole.EXECUTION_TUNING: RuntimeAdmission.WITH_DECLARED_ONLY,
@@ -152,7 +146,11 @@ _assert_admission_policy_total(ToolParamRole, RUNTIME_ADMISSION_BY_ROLE)
 
 @dataclass(frozen=True, slots=True)
 class ToolParamDef:
-    """Static definition of one public MCP handler parameter."""
+    """Static definition of one recipe-authorable tool parameter.
+
+    ``handler_parameter=False`` denotes an orchestrator directive never sent
+    to the handler; ``structured_skill_inputs`` uses the separate child-input channel.
+    """
 
     name: str
     wire_type: ToolWireType = ToolWireType.SCALAR
@@ -248,12 +246,24 @@ class ToolDef:
         return tuple(param.name for param in self.params)
 
     @property
+    def step_identity_params(self) -> tuple[ToolParamDef, ...]:
+        """Parameters carrying the invoking recipe step's YAML key."""
+        return tuple(param for param in self.params if param.role is ToolParamRole.STEP_IDENTITY)
+
+    @property
     def param_set(self) -> frozenset[str]:
         return frozenset(self.param_names)
 
     @property
     def handler_param_set(self) -> frozenset[str]:
         return frozenset(param.name for param in self.params if param.handler_parameter)
+
+    @property
+    def mcp_kwarg_names(self) -> frozenset[str]:
+        """Sole membership authority for compiled and runtime ``mcp_kwargs``."""
+        return self.handler_param_set - frozenset(
+            param.name for param in self.params if param.structured_skill_inputs
+        )
 
     def param_def(self, name: str) -> ToolParamDef | None:
         return next((param for param in self.params if param.name == name), None)
@@ -278,6 +288,7 @@ class BoundValueOrigin(StrEnum):
     RECIPE_INPUT = "recipe_input"
     CONTEXT = "context"
     TEMPLATE = "template"
+    DISPATCH_ITEM = "dispatch_item"
     ABSENT = "absent"
 
 
@@ -349,6 +360,10 @@ class BoundValue:
     def is_present(self) -> bool:
         return self.state is BoundValueState.PRESENT
 
+    @property
+    def is_dynamic(self) -> bool:
+        return bool(self.context_dependencies or self.input_dependencies)
+
 
 class BindingFailureCode(StrEnum):
     UNKNOWN_TOOL = "unknown_tool"
@@ -362,6 +377,7 @@ class BindingFailureCode(StrEnum):
     AMBIGUOUS_SKILL_INPUT = "ambiguous_skill_input"
     INVALID_SKILL_INPUT_TYPE = "invalid_skill_input_type"
     INVALID_SKILL_COMMAND = "invalid_skill_command"
+    INVALID_DISPATCH_ITEMS = "invalid_dispatch_items"
 
 
 @dataclass(frozen=True, slots=True)
@@ -578,7 +594,7 @@ def _validate_projection_guards(
         raise ValueError("FinalizedRecipeProjection guards must name finalized steps")
     if any(
         guard.bypass_target not in ordered_step_names
-        and guard.bypass_target not in _TERMINAL_BYPASS_TARGETS
+        and guard.bypass_target not in RECIPE_TERMINAL_TARGETS
         for guard in guards
     ):
         raise ValueError(

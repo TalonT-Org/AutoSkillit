@@ -187,39 +187,32 @@ def _build_actual_mcp_kwargs(
 ) -> dict[str, BoundScalar]:
     """Assemble the actual runtime kwargs the attestation gate checks.
 
-    Iterates ``tool_def``'s handler params only — a param declared
-    ``handler_parameter=False`` (e.g. ``dispatch_items``) or
-    ``structured_skill_inputs=True`` (``skill_inputs``, which has its own
-    dedicated channel) is excluded — and pulls each remaining param's
-    runtime value from ``values``, keyed by param name, which the caller
-    builds from the handler's locals.
+    Uses ``tool_def.mcp_kwarg_names`` and pulls each member's runtime value
+    from ``values``, keyed by param name, which the caller builds from the
+    handler's locals.
 
     A param missing from ``values``, or a ``values`` key absent from the
-    filtered param set, is a loud construction-time bug: adding a
+    MCP kwarg set, is a loud construction-time bug: adding a
     ``ToolParamDef`` without wiring its runtime value (or vice versa) fails
     the first attested call instead of silently drifting. ``None`` values
     are omitted — the vacancy sentinel for optional params such as
     ``stale_threshold``/``idle_output_timeout`` (subsumes the prior
     hand-typed ``if ... is not None`` special case).
     """
-    handler_param_names = frozenset(
-        param.name
-        for param in tool_def.params
-        if param.handler_parameter and not param.structured_skill_inputs
-    )
-    missing = handler_param_names - values.keys()
+    mcp_kwarg_names = tool_def.mcp_kwarg_names
+    missing = mcp_kwarg_names - values.keys()
     if missing:
         raise ValueError(
             f"{tool_def.name}: no runtime value supplied for handler params: {sorted(missing)!r}"
         )
-    unknown = values.keys() - handler_param_names
+    unknown = values.keys() - mcp_kwarg_names
     if unknown:
         raise ValueError(
             f"{tool_def.name}: runtime values supplied for unknown handler params: "
             f"{sorted(unknown)!r}"
         )
     result: dict[str, BoundScalar] = {}
-    for name in handler_param_names:
+    for name in mcp_kwarg_names:
         value = values[name]
         if value is not None:
             result[name] = value

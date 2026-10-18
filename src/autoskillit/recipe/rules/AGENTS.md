@@ -52,6 +52,6 @@ Files with no registration support their folder; files with several registration
 - `rules_skill_content_shell_safety.py` — Registers SKILL.md shell-safety semantic rules.
 - `rules_skill_content_skill_contract.py` — Registers SKILL.md skill-contract semantic rules.
 - `rules_skills.py` — Registers semantic rules for skill_command resolvability.
-- `rules_tools.py` — Registers semantic rules for MCP tool name validity.
+- `rules_tools.py` — Registers semantic rules for MCP tool name and invocation binding validity.
 - `rules_verdict.py` — Registers semantic rules for skill verdict routing completeness and consistency.
 - `rules_worktree.py` — Registers worktree and retry validation rules for recipe pipelines.

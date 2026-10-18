@@ -8,7 +8,6 @@ import os
 import time
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
 
 import structlog
 from fastmcp import Context
@@ -23,8 +22,10 @@ from autoskillit.core import (
     ReviewOperationState,
     ReviewResponseClass,
     atomic_write,
+    decode_github_review_json_object,
     destination_location,
     get_logger,
+    github_review_receipt_filename,
     is_final_github_review_state,
     is_valid_github_review_head_sha,
     is_valid_github_review_logical_iteration,
@@ -90,23 +91,91 @@ def _map_pr_view_reviews(data: dict) -> list:
     ]
 
 
-def _load_unique_json_object(data: bytes) -> dict[str, object]:
-    def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        for key, value in pairs:
-            if key in result:
-                raise ValueError(f"duplicate JSON object key: {key!r}")
-            result[key] = value
-        return result
-
-    value = json.loads(data, object_pairs_hook=_unique_object)
-    if not isinstance(value, dict):
-        raise TypeError("review receipt must be a JSON object")
-    return value
+def _review_verification_result(rejection: str | None) -> str:
+    if rejection is None:
+        return json.dumps({"reviews_posted": "true"})
+    return json.dumps({"reviews_posted": "false", "rejection_reason": rejection})
 
 
-def _review_verification_result(success: bool) -> str:
-    return json.dumps({"reviews_posted": "true" if success else "false"})
+def _load_receipt_payload(receipt: Path, root: Path) -> dict[str, object] | str:
+    try:
+        _, receipt_bytes = read_stable_contained_bytes(
+            receipt,
+            root,
+            max_size_bytes=1_000_000,
+        )
+    except (ContainmentError, OSError):
+        return "receipt_unreadable"
+    try:
+        return decode_github_review_json_object(receipt_bytes)
+    except (TypeError, ValueError):
+        return "receipt_malformed"
+
+
+def _github_receipt_rejection(
+    *,
+    cwd: str,
+    receipt_path: str,
+    repository: str,
+    pr_number: int,
+    head_sha: str,
+    logical_iteration: str,
+    post_state: str,
+) -> str | None:
+    if (
+        not Path(cwd).is_absolute()
+        or not os.path.isdir(cwd)
+        or not is_valid_github_review_repository(repository)
+        or not isinstance(pr_number, int)
+        or isinstance(pr_number, bool)
+        or pr_number <= 0
+        or not is_valid_github_review_head_sha(head_sha)
+        or not is_valid_github_review_logical_iteration(logical_iteration)
+        or not is_final_github_review_state(post_state)
+    ):
+        return "invalid_request"
+    receipt = Path(receipt_path)
+    if not receipt.is_absolute() or receipt.name != github_review_receipt_filename(pr_number):
+        return "invalid_request"
+    payload = _load_receipt_payload(receipt, Path(cwd) / ".autoskillit" / "temp")
+    if isinstance(payload, str):
+        return payload
+    operation_key = payload.get("operation_key")
+    if not is_valid_github_review_operation_key(operation_key):
+        return "receipt_malformed"
+
+    poster = _get_ctx().github_review_poster
+    if poster is None:
+        return "ledger_receipt_missing"
+    authoritative = poster.verify_receipt(operation_key)
+    if authoritative is None:
+        return "ledger_receipt_missing"
+    if (
+        authoritative.repository.casefold() != repository.casefold()
+        or authoritative.pr_number != pr_number
+        or authoritative.head_sha != head_sha
+        or authoritative.logical_iteration != logical_iteration
+        or authoritative.state.value != post_state
+    ):
+        return "identity_mismatch"
+
+    artifact_wire = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    )
+    authoritative_wire = json.dumps(
+        authoritative.to_dict(),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    )
+    if artifact_wire != authoritative_wire:
+        return "receipt_wire_mismatch"
+    return None
 
 
 async def _close_issues_sequentially(
@@ -266,68 +335,25 @@ async def verify_review_receipt(
         if (gate := _require_enabled()) is not None:
             return gate
         if mode == "local":
-            return _review_verification_result(post_state == "LOCAL")
+            return _review_verification_result(
+                None if post_state == "LOCAL" else "invalid_request"
+            )
         if mode != "github":
-            return _review_verification_result(False)
-        if (
-            not Path(cwd).is_absolute()
-            or not os.path.isdir(cwd)
-            or not is_valid_github_review_repository(repository)
-            or not isinstance(pr_number, int)
-            or isinstance(pr_number, bool)
-            or pr_number <= 0
-            or not is_valid_github_review_head_sha(head_sha)
-            or not is_valid_github_review_logical_iteration(logical_iteration)
-            or not is_final_github_review_state(post_state)
-        ):
-            return _review_verification_result(False)
-        receipt = Path(receipt_path)
-        if not receipt.is_absolute() or receipt.name != f"batch_review_response_{pr_number}.json":
-            return _review_verification_result(False)
-        root = Path(cwd) / ".autoskillit" / "temp"
-        _, receipt_bytes = read_stable_contained_bytes(
-            receipt,
-            root,
-            max_size_bytes=1_000_000,
-        )
-        payload = _load_unique_json_object(receipt_bytes)
-        operation_key = payload.get("operation_key")
-        if not is_valid_github_review_operation_key(operation_key):
-            return _review_verification_result(False)
-
-        poster = _get_ctx().github_review_poster
-        if poster is None:
-            return _review_verification_result(False)
-        authoritative = poster.verify_receipt(operation_key)
-        if authoritative is None:
-            return _review_verification_result(False)
-        artifact_wire = json.dumps(
-            payload,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=False,
-            allow_nan=False,
-        )
-        authoritative_wire = json.dumps(
-            authoritative.to_dict(),
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=False,
-            allow_nan=False,
-        )
-        identity_matches = (
-            authoritative.repository.casefold() == repository.casefold()
-            and authoritative.pr_number == pr_number
-            and authoritative.head_sha == head_sha
-            and authoritative.logical_iteration == logical_iteration
-            and authoritative.state.value == post_state
-        )
+            return _review_verification_result("invalid_request")
         return _review_verification_result(
-            identity_matches and artifact_wire == authoritative_wire
+            _github_receipt_rejection(
+                cwd=cwd,
+                receipt_path=receipt_path,
+                repository=repository,
+                pr_number=pr_number,
+                head_sha=head_sha,
+                logical_iteration=logical_iteration,
+                post_state=post_state,
+            )
         )
     except Exception:
         logger.error("verify_review_receipt unhandled exception", exc_info=True)
-        return _review_verification_result(False)
+        return _review_verification_result("unexpected_error")
 
 
 @mcp.tool(tags={"autoskillit", "headless", "github"}, annotations={"readOnlyHint": True})
@@ -369,25 +395,26 @@ async def post_pr_review(
                     state=ReviewOperationState.AMBIGUOUS,
                     response_class=ReviewResponseClass.SERVER_ERROR,
                 )
-            if not os.path.isdir(cwd):
+            if not os.path.isdir(cwd) or type(pr_number) is not int or pr_number <= 0:
                 return _review_post_error(
                     head_sha=head_sha,
-                    error="cwd must be an existing directory",
+                    error="cwd must be an existing directory and pr_number a positive integer",
                     state=ReviewOperationState.TERMINAL,
                     response_class=ReviewResponseClass.CLIENT_ERROR,
                 )
             root = (Path(cwd) / ".autoskillit" / "temp").resolve()
             destination = destination_location(Path(receipt_path))
+            expected_name = github_review_receipt_filename(pr_number)
             if (
                 not Path(cwd).is_absolute()
                 or not destination.is_relative_to(root)
-                or destination.name != f"batch_review_response_{pr_number}.json"
+                or destination.name != expected_name
             ):
                 return _review_post_error(
                     head_sha=head_sha,
                     error=(
                         "receipt_path must be an absolute contained path under "
-                        f"{root} named batch_review_response_{pr_number}.json"
+                        f"{root} named {expected_name}"
                     ),
                     state=ReviewOperationState.TERMINAL,
                     response_class=ReviewResponseClass.CLIENT_ERROR,
@@ -439,7 +466,7 @@ async def post_pr_review(
                         max_size_bytes=1_000_000,
                     )
                     authority = DiffAnchorAuthority.from_wire(
-                        _load_unique_json_object(authority_bytes)
+                        decode_github_review_json_object(authority_bytes)
                     )
                 except (ContainmentError, OSError) as exc:
                     return _review_post_error(

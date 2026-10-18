@@ -211,7 +211,8 @@ async def report_bug(
         cwd: Working directory for the headless session.
         severity: "non_blocking" (fire-and-forget) or "blocking" (await completion).
         model: Model override. Empty string = config default.
-        step_name: Optional label for token tracking.
+        step_name: When called from a recipe, the invoking step's YAML key for token usage.
+            Optional for direct calls.
 
     Never raises.
     """

@@ -726,15 +726,15 @@ class TestCheckBackendVersion:
         monkeypatch.setattr(
             subprocess,
             "run",
-            lambda *a, **kw: self._codex_result("2.1.279 (Claude Code)\n"),
+            lambda *a, **kw: self._codex_result("2.1.295 (Claude Code)\n"),
         )
 
         result = _check_backend_version(backend=ClaudeCodeBackend())
 
         assert result.severity == Severity.WARNING
-        assert "Claude Code 2.1.279" in result.message
+        assert "Claude Code 2.1.295" in result.message
         assert "below minimum" in result.message
-        assert "2.1.280" in result.message
+        assert "2.1.296" in result.message
         assert "Codex CLI" not in result.message
 
     def test_claude_at_minimum_returns_ok(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -751,7 +751,7 @@ class TestCheckBackendVersion:
         )
         result = _check_backend_version(backend=ClaudeCodeBackend())
         assert result.severity == Severity.OK
-        assert "Claude Code 2.1.280" in result.message
+        assert "Claude Code 2.1.296" in result.message
         assert "below minimum" not in result.message
 
 

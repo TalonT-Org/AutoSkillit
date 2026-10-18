@@ -78,7 +78,9 @@ class TestModuleCascadeCore:
 
     def test_artifact_lease_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["artifact_lease"] == frozenset({"core", "workspace"})
-        assert MODULE_CASCADE_CORE["private_file"] == frozenset({"core", "execution", "pipeline"})
+        assert MODULE_CASCADE_CORE["private_file"] == frozenset(
+            {"core", "execution", "pipeline", "smoke_utils"}
+        )
 
     def test_branch_guard_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["branch_guard"] == frozenset(
@@ -214,6 +216,7 @@ class TestModuleCascadeCore:
             "_type_audit_artifact_ref",
             "_type_audit_cycle_authority",
             "_type_audit_cycle_disposition",
+            "_type_stage_obligation",
             "_type_recipe_binding",
             "_type_recipe_execution",
             "_type_closure_report",

@@ -139,6 +139,56 @@ def test_mapped_skill_context_accepts_explicit_vacancy(monkeypatch) -> None:
     assert not _check_mapped_skill_context_definitions(ctx)
 
 
+def test_dispatch_source_requires_definition_even_for_optional_child_input(
+    monkeypatch,
+) -> None:
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe._binding import bind_recipe
+    from autoskillit.recipe.rules.rules_contracts import (
+        _check_mapped_skill_context_definitions,
+    )
+
+    manifest = {
+        "skills": {
+            "demo": {
+                "inputs": [
+                    {
+                        "name": "item",
+                        "type": "string",
+                        "required": False,
+                        "absence_value": "",
+                    }
+                ]
+            }
+        }
+    }
+    recipe = Recipe(
+        name="optional-dispatch",
+        description="test",
+        steps={
+            "consumer": RecipeStep(
+                tool="run_skill",
+                optional_context_refs=["items"],
+                with_args={
+                    "skill_command": "/autoskillit:demo {item}",
+                    "dispatch_items": "${{ context.items }}",
+                },
+            )
+        },
+    )
+    monkeypatch.setattr(_rc, "load_bundled_manifest", lambda: manifest)
+    ctx = make_validation_context(
+        recipe,
+        binding_projection=bind_recipe(recipe, manifest=manifest),
+    )
+
+    findings = _check_mapped_skill_context_definitions(ctx)
+    assert any(
+        finding.rule == "mapped-skill-context-definition" and "items" in finding.message
+        for finding in findings
+    )
+
+
 def test_rule_flags_skills_with_empty_output_patterns() -> None:
     """The missing-output-patterns rule exists and emits no warnings on bundled recipes."""
     recipe_path = pkg_root() / "recipes" / "implementation.yaml"

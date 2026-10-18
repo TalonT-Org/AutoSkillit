@@ -279,8 +279,12 @@ async def run_skill(
             with: block declares model — the step's model: field is normally
             resolved server-side instead. For unattested calls, where the
             recipe-step gate does not apply, it is a caller override.
-        step_name: Optional YAML step key (e.g. "implement"). When set, token usage is
-            accumulated in the server-side token log, grouped by this name.
+        step_name: The recipe's YAML step key. It is required for attested calls; an
+            empty value is denied at attestation admission with
+            `recipe_execution_step_missing`. On a fresh unattested call, omission is
+            resolved only when exactly one active recipe step matches the skill_command
+            prefix; ambiguous matches do not resolve. Dependency authority or locks can
+            require an explicit key. Token and timing usage are grouped by this key.
         order_id: Optional per-issue/order identifier for token telemetry scoping. When set,
             token and timing entries are keyed by this value, enabling per-issue isolation
             in get_token_summary/get_timing_summary and in the token_summary_appender hook.

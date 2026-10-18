@@ -76,6 +76,9 @@ branch already checked out.
 
 ## Critical Constraints
 
+Never infer publication success from the GitHub HTTP response `comments` array
+or its length.
+
 **NEVER:**
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
@@ -343,12 +346,17 @@ After saving the raw review responses, check for the handoff file from review-pr
 
 ```bash
 # Read review-pr artifacts from the iteration-scoped directory
-REVIEW_PR_DIR="${AUTOSKILLIT_TEMP}/review-pr"
+REVIEW_PR_DIR="{{AUTOSKILLIT_TEMP}}/review-pr"
 # If iter_N directory exists under review-pr/, use the latest iteration
 REVIEW_PR_ITER_DIR=$(ls -d "${REVIEW_PR_DIR}"/iter_* 2>/dev/null | sort -V | tail -1)
 REVIEW_PR_OUTPUT="${REVIEW_PR_ITER_DIR:-${REVIEW_PR_DIR}}"
+REVIEW_PR_OUTPUT="$(realpath -- "$REVIEW_PR_OUTPUT")"
 DIFF_CONTEXT_PATH="${REVIEW_PR_OUTPUT}/diff_context_{pr_number}.json"
+printf '%s\n' "$REVIEW_PR_OUTPUT"
 ```
+
+Paste the printed absolute path as a string literal in the Python helper call's
+`output_dir` argument.
 
 If the file exists:
 - Parse it as JSON
@@ -361,12 +369,15 @@ If the file exists:
 - In `mode=local`, read `local_findings_{pr_number}.json` and
   `diff_context_{pr_number}.json` from the same `REVIEW_PR_OUTPUT`, then call
   `review_handoff_pair_error(diff_context, local_findings)`.
-- In `mode=github`, pair `diff_context_{pr_number}.json` with the published
-  `batch_review_response_{pr_number}.json` receipt from the same
-  `REVIEW_PR_OUTPUT`, then call
-  `review_handoff_pair_error(diff_context, batch_review_response)`. Do not require
-  a local-findings artifact in GitHub mode. A helper error for either
-  mode-appropriate pair rejects the handoff and uses the existing fallback path.
+- In `mode=github`, pair `diff_context_{pr_number}.json` with the publisher's
+  `github_review_binding_{pr_number}.json` marker from the same directory by calling
+  `github_review_handoff_error(output_dir=<printed path as a string literal>,
+  pr_number="{pr_number}")` from `autoskillit.smoke_utils`; it also checks the marker
+  against the server-written receipt. Do not require a local-findings artifact in
+  GitHub mode. On a non-null result, set `diff_context_map = {}`, print
+  `Pre-built context rejected: {error}`, skip schema processing and pre-built
+  review-level ingestion, and use the existing fallback path. Continue schema
+  validation and ingestion only when the helper returns `None`.
 - After that mode-appropriate handoff-pair authority check, require
   `schema_version == 2`. Every `context_entries` entry with an integer `line` must
   have a non-empty `anchor_digest`; a null line must omit it. Reject incomplete or
@@ -377,6 +388,9 @@ If the file exists:
   A head mismatch, unavailable/ambiguous target, or invalid regenerated data is
   stale, not permission to mint an anchor digest from this checkout.
 - Log: `"Loaded pre-built context for N findings from review-pr handoff (schema_version: {v})"`
+
+The existing fallback reconstructs code context from review comments and live source
+under Step 3.5's checks; it does not retry or redeliver the publication.
 
 After the same pair-authority and v2 schema validation, load
 `review_level_findings` separately from line-anchored `context_entries`. Preserve

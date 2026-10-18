@@ -112,8 +112,19 @@ async def resume_pending_retry(
     retry_findings = tuple(
         finding for finding in findings if finding.canonical_index in retry_indexes
     )
+    error = None
     if tuple(finding.canonical_index for finding in retry_findings) != (attempt.canonical_indexes):
         error = "persisted review retry references unknown canonical findings"
+    elif (
+        _poster_support.author_effective_event(
+            request.event,
+            authenticated_login=authenticated_login,
+            pr_author_login=pr_author_login,
+        )
+        != attempt.effective_event
+    ):
+        error = "persisted review retry event no longer matches current reviewer identity"
+    if error is not None:
         poster.ledger.complete_attempt(
             operation_key=operation_key,
             attempt_number=attempt.attempt_number,
@@ -142,7 +153,6 @@ async def resume_pending_retry(
         attempt_number=attempt.attempt_number,
         omitted=attempt.omitted_dispositions,
         authenticated_login=authenticated_login,
-        pr_author_login=pr_author_login,
         resume_pending=True,
     )
 

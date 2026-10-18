@@ -34,6 +34,21 @@ def _install_active_step(ctx, step) -> None:
     ctx.active_recipe_steps = {step.name: step for step in projection.ordered_steps}
 
 
+@pytest.mark.parametrize("ambiguous", [False, True], ids=["unique", "ambiguous"])
+def test_step_name_inference_requires_a_unique_command_prefix(ambiguous: bool) -> None:
+    names = ("verify", "verify_again") if ambiguous else ("verify",)
+    active = {
+        name: FinalizedRecipeStep(
+            name=name, tool="run_skill", with_args={"skill_command": "/dry-walkthrough old-plan"}
+        )
+        for name in names
+    }
+
+    result = tools_execution._resolve_step_name_from_recipe("/dry-walkthrough new-plan", active)
+
+    assert result == (("", True) if ambiguous else ("verify", False))
+
+
 @pytest.mark.anyio
 async def test_run_skill_resolves_output_dir_from_recipe_step(
     tool_ctx_kitchen_open, monkeypatch, tmp_path

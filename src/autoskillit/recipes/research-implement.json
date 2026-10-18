@@ -151,7 +151,7 @@
           "source_doc": "${{ inputs.experiment_plan }}"
         },
         "cwd": "${{ inputs.worktree_path }}",
-        "step_name": "decompose",
+        "step_name": "decompose_phases",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/make-groups"
       },
       "capture": {
@@ -394,6 +394,7 @@
       "tool": "run_cmd",
       "with": {
         "cmd": "git worktree remove --force \"${{ context.worktree_path }}\"",
+        "cwd": "${{ inputs.source_dir }}",
         "step_name": "cleanup_phase_worktree"
       },
       "on_success": "plan_phase",
@@ -615,6 +616,7 @@
       "tool": "run_cmd",
       "with": {
         "cmd": "git worktree remove --force \"${{ context.worktree_path }}\"",
+        "cwd": "${{ inputs.source_dir }}",
         "step_name": "pre_remediation_cleanup"
       },
       "on_success": "plan_phase",
@@ -708,7 +710,7 @@
           "adjust": true
         },
         "cwd": "${{ context.worktree_path }}",
-        "step_name": "adjust",
+        "step_name": "adjust_experiment",
         "output_dir": "."
       },
       "capture": {
@@ -870,7 +872,7 @@
           "worktree_path": "${{ context.worktree_path }}"
         },
         "cwd": "${{ inputs.source_dir }}",
-        "step_name": "fix",
+        "step_name": "fix_tests",
         "output_dir": "."
       },
       "capture": {

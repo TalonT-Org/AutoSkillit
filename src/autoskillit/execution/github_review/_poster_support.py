@@ -41,6 +41,41 @@ class RemoteFindingScan:
     error: str | None = None
 
 
+_AUTHOR_EVENT_DISCLOSURES = {
+    "APPROVE": (
+        "Requested review event APPROVE was published as COMMENT because GitHub does not allow "
+        "a pull request's author to approve it; this is not a GitHub approval."
+    ),
+    "REQUEST_CHANGES": (
+        "Requested review event REQUEST_CHANGES was published as COMMENT because GitHub does "
+        "not allow a pull request's author to request changes on it; this review does not "
+        "block merging."
+    ),
+}
+
+
+def author_effective_event(
+    requested_event: str, *, authenticated_login: str, pr_author_login: str
+) -> str:
+    """Choose the event for GitHub's known own-author restriction."""
+    if (
+        requested_event in _AUTHOR_EVENT_DISCLOSURES
+        and authenticated_login.casefold() == pr_author_login.casefold()
+    ):
+        return "COMMENT"
+    return requested_event
+
+
+def _disclose_author_event(body: str, *, requested_event: str, event: str) -> str:
+    if event == requested_event:
+        return body
+    if event != "COMMENT" or requested_event not in _AUTHOR_EVENT_DISCLOSURES:
+        raise ValueError(
+            f"unsupported review event transformation: {requested_event!r} -> {event!r}"
+        )
+    return append_marker(body, _AUTHOR_EVENT_DISCLOSURES[requested_event])
+
+
 def payload(
     *,
     request: GitHubReviewRequest,
@@ -81,6 +116,7 @@ def payload(
             )
     if entries:
         body += "\n\n## Outside Diff Range\n\n" + "\n\n".join(entries)
+    body = _disclose_author_event(body, requested_event=request.event, event=event)
     if len(body) > 60000:
         raise ValueError("review body including omitted findings exceeds 60000 characters")
     return {
@@ -159,20 +195,6 @@ def structured_invalid_comment_index(
     except ValueError:
         return None
     return index if 0 <= index < comment_count else None
-
-
-def is_structured_self_review(response: GatewayResult) -> bool:
-    if response.status_code != 422:
-        return False
-    data = response.data if isinstance(response.data, Mapping) else {}
-    errors = data.get("errors")
-    return isinstance(errors, list) and any(
-        isinstance(item, Mapping)
-        and item.get("field") == "event"
-        and item.get("code") == "invalid"
-        and "own pull request" in str(item.get("message", "")).casefold()
-        for item in errors
-    )
 
 
 def structured_error_message(response: GatewayResult) -> str | None:

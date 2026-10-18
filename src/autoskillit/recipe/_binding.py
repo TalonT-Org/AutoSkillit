@@ -26,6 +26,7 @@ from autoskillit.core import (
 )
 from autoskillit.recipe._binding_input import (
     _AUTOSKILLIT_TEMPLATE_RE,
+    _apply_dispatch_fanout,
     _bound_value,
     _failure,
     _inline_skill_inputs,
@@ -174,7 +175,7 @@ def _compile_tool_parameters(
     hidden_inputs: frozenset[str],
     ingredient_values: Mapping[str, BoundScalar] | None,
 ) -> tuple[list[BoundValue], list[BindingFailure]]:
-    """Compile declared tool parameters in canonical registry order."""
+    """Compile declared tool parameters in registry order; return only handler kwargs."""
     failures: list[BindingFailure] = []
     undeclared_effective_params = frozenset(effective_with) - frozenset(declared_with)
     for name in sorted(undeclared_effective_params):
@@ -285,7 +286,7 @@ def _compile_tool_parameters(
         )
         value = _bound_value(param.name, declared, resolved)
         mcp_kwargs.append(value)
-        unresolved = bool(value.context_dependencies or value.input_dependencies)
+        unresolved = value.is_dynamic
         if not unresolved and not _wire_value_is_valid(resolved, param):
             failures.append(
                 _failure(
@@ -295,7 +296,7 @@ def _compile_tool_parameters(
                     f"tool parameter {param.name!r} expects {param.wire_type.value!r}",
                 )
             )
-    return mcp_kwargs, failures
+    return [value for value in mcp_kwargs if value.name in tool_def.mcp_kwarg_names], failures
 
 
 def _bind_run_skill_inputs(
@@ -513,7 +514,7 @@ def bind_step_invocation(
             tuple(failures),
         )
 
-    return _bind_run_skill_invocation(
+    invocation = _bind_run_skill_invocation(
         step_name,
         step,
         tool_name=tool_name,
@@ -526,6 +527,7 @@ def bind_step_invocation(
         hidden_inputs=hidden_inputs,
         ingredient_values=ingredient_values,
     )
+    return _apply_dispatch_fanout(invocation, declared_with)
 
 
 def bind_recipe(
@@ -563,10 +565,6 @@ def bind_recipe(
         if step.tool is not None
     }
     return RecipeBindingProjection(invocations)
-
-
-def _is_dynamic_binding(value: BoundValue) -> bool:
-    return bool(value.context_dependencies or value.input_dependencies)
 
 
 def _undeclared_runtime_param_message(tool_def: ToolDef, undeclared_names: list[str]) -> str:
@@ -712,17 +710,17 @@ def _bind_runtime_skill_values(
                 "recipe_execution_contract_mismatch",
                 f"compiled skill input {value.name!r} is absent from the runtime contract",
             )
-        if not input_def.accepts(actual):
+        admitted = input_def.admit_runtime_wire(actual, value)
+        if admitted is None:
             raise RuntimeBindingError(
-                "recipe_execution_input_type",
-                f"runtime skill input {value.name!r} expects {input_def.type!r}",
+                "recipe_execution_input_type", input_def.wire_mismatch_message(actual, value)
             )
-        if not _is_dynamic_binding(value) and actual != value.effective_value:
+        if not value.is_dynamic and admitted != value.effective_value:
             raise RuntimeBindingError(
                 "recipe_execution_static_input_mismatch",
                 f"static skill input {value.name!r} differs from the template",
             )
-        bound_inputs.append((value.name, actual))
+        bound_inputs.append((value.name, admitted))
     return tuple(bound_inputs)
 
 
@@ -738,7 +736,7 @@ def _validate_runtime_mcp_values(
                 f"compiled tool parameter {value.name!r} is absent",
             )
         actual = actual_mcp_kwargs[value.name]
-        if not _is_dynamic_binding(value) and actual != value.effective_value:
+        if not value.is_dynamic and actual != value.effective_value:
             raise RuntimeBindingError(
                 "recipe_execution_static_tool_mismatch",
                 f"static tool parameter {value.name!r} differs from the template",

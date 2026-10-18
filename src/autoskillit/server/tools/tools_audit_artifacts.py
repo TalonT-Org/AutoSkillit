@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
+from pydantic import StrictInt
+from typing_extensions import TypedDict
 
 from autoskillit.core import (
     AUDIT_CYCLE_SCHEMA_VERSION,
@@ -41,6 +44,17 @@ from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scope
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
+
+
+# Domain validation stays in ArtifactRef; FastMCP drops unknown wire keys.
+class _ArtifactRefWire(TypedDict):
+    """Audited artifact reference; schema_version and byte_size are JSON integers."""
+
+    locator: str
+    media_type: str
+    schema_version: StrictInt
+    byte_size: StrictInt
+    content_digest: str
 
 
 class _SemanticInputError(ValueError):
@@ -82,10 +96,10 @@ def _assessment(value: object, *, index: int) -> AuditAssessmentRow:
 
 def _build_semantic_result(
     *,
-    audited_plan_refs: list[dict[str, Any]],
+    audited_plan_refs: Sequence[Mapping[str, object]],
     assessments: list[dict[str, Any]],
     verdict: str,
-    remediation_ref: dict[str, Any] | None,
+    remediation_ref: Mapping[str, object] | None,
 ) -> AuditSemanticResult:
     try:
         return AuditSemanticResult(
@@ -204,10 +218,10 @@ def _write_or_verify_standalone_evidence(
 def write_standalone_audit_evidence_sync(
     *,
     temp_root: Path,
-    audited_plan_refs: list[dict[str, Any]],
+    audited_plan_refs: Sequence[Mapping[str, object]],
     assessments: list[dict[str, Any]],
     verdict: str,
-    remediation_ref: dict[str, Any] | None,
+    remediation_ref: Mapping[str, object] | None,
 ) -> dict[str, Any]:
     """Construct and canonically persist standalone evidence. Never raises."""
     try:
@@ -571,10 +585,10 @@ def _write_audit_disposition_bundle_sync(
 @track_response_size("write_audit_semantic_result")
 async def write_audit_semantic_result(
     reservation_handle: str,
-    audited_plan_refs: list[dict[str, Any]],
+    audited_plan_refs: list[_ArtifactRefWire],
     assessments: list[dict[str, Any]],
     verdict: str,
-    remediation_ref: dict[str, Any] | None = None,
+    remediation_ref: _ArtifactRefWire | None = None,
     step_name: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
@@ -649,10 +663,10 @@ async def write_audit_semantic_result(
 @_cancellation_shield()
 @track_response_size("write_standalone_audit_evidence")
 async def write_standalone_audit_evidence(
-    audited_plan_refs: list[dict[str, Any]],
+    audited_plan_refs: list[_ArtifactRefWire],
     assessments: list[dict[str, Any]],
     verdict: str,
-    remediation_ref: dict[str, Any] | None = None,
+    remediation_ref: _ArtifactRefWire | None = None,
     step_name: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:

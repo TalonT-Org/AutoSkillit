@@ -63,7 +63,8 @@ async def clone_repo(
                     via 'git remote set-url origin' after cloning, absorbing the need
                     for a separate git remote set-url step. Empty string (default)
                     uses the source repo's detected origin.
-        step_name: Optional YAML step key for wall-clock timing accumulation.
+        step_name: When called from a recipe, the invoking step's YAML key for timing.
+            Optional for direct calls.
 
     SOURCE ISOLATION: Once this tool returns, source_dir must not be touched for
     any purpose except reading its remote URL in push_to_remote. Never run git
@@ -152,7 +153,8 @@ async def remove_clone(
     Args:
         clone_path: Absolute path to the clone directory to remove.
         keep: Pass "true" to preserve the directory (debugging). Default "false".
-        step_name: Optional YAML step key for wall-clock timing accumulation.
+        step_name: When called from a recipe, the invoking step's YAML key for timing.
+            Optional for direct calls.
         infrastructure_fault_override_reason: Required to proceed when the most
             recently completed step ended in an infrastructure fault. Absent by
             default so refusal is the default path, not an opt-in.
@@ -335,7 +337,8 @@ async def register_clone_status(
                 yet confirmed — in-progress label is retained on the issue).
         registry_path: Absolute path to the shared registry file. Defaults to
                        .autoskillit/temp/clone-cleanup-registry.json in cwd.
-        step_name: Optional YAML step key for wall-clock timing accumulation.
+        step_name: When called from a recipe, the invoking step's YAML key for timing.
+            Optional for direct calls.
 
     Never raises.
     """
@@ -430,7 +433,8 @@ async def batch_cleanup_clones(
                     all success-status entries including legacy orphans.
         owner_filter: Explicit owner string for campaign-scoped cleanup. When non-empty,
                       overrides kitchen_id scoping. Ignored when all_owners="true".
-        step_name: Optional YAML step key for wall-clock timing accumulation.
+        step_name: When called from a recipe, the invoking step's YAML key for timing.
+            Optional for direct calls.
     """
     try:
         if (gate := _require_enabled()) is not None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -263,7 +264,7 @@ class TestOrderDisplayOwnership:
         assert "test-script" in system_prompt
         assert "--- RECIPE ---" not in system_prompt
         assert "--- END RECIPE ---" not in system_prompt
-        assert "steps:" not in system_prompt
+        assert re.search(r"(?m)^\s*steps:\s*$", system_prompt) is None
         assert "on_success:" not in system_prompt
 
     @patch("autoskillit.cli.subprocess.Popen")

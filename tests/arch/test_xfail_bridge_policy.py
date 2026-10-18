@@ -1,8 +1,12 @@
-"""Architectural guard: xfail(strict=True) bridges must cite a tracking issue.
+"""Architectural guard: strict xfail bridges must be specific and cite an issue.
 
 Every ``pytest.mark.xfail(strict=True, reason=...)`` decorator — both on function
 definitions and inside ``pytest.param(..., marks=...)`` — must include a ``#NNNN``
-issue reference in its ``reason`` string so bridge exit conditions are trackable.
+issue reference in its ``reason`` string and a specific ``raises=`` exception type.
+Bare ``Exception``, ``BaseException``, and ``AssertionError`` do not identify the
+expected failure precisely. Class-valued ``raises=`` matching includes subclasses;
+``tests.server.test_attested_admission_replay._assert_admitted`` checks the exact
+rejection code and pinned detail substring.
 Files in ``_XFAIL_POLICY_EXEMPT_FILES`` are excluded when they have an alternative
 self-governance mechanism (e.g. a companion meta-test that forces the count
 monotonically non-increasing).
@@ -99,11 +103,30 @@ def _collect_xfail_strict_true_nodes(tree: ast.Module) -> list[ast.Call]:
                 results.extend(_decorator_xfail_nodes(decorator))
         if isinstance(node, ast.Call):
             results.extend(_param_mark_xfail_nodes(node))
-    return results
+    return list({id(node): node for node in results}.values())
+
+
+def _strict_xfail_raises_issue(node: ast.Call) -> str | None:
+    raises = next((kw.value for kw in node.keywords if kw.arg == "raises"), None)
+    if raises is None:
+        return "requires a specific raises= exception type"
+    for exception in ast.walk(raises):
+        name = None
+        if isinstance(exception, ast.Name):
+            name = exception.id
+        elif (
+            isinstance(exception, ast.Attribute)
+            and isinstance(exception.value, ast.Name)
+            and exception.value.id == "builtins"
+        ):
+            name = exception.attr
+        if name in {"Exception", "BaseException", "AssertionError"}:
+            return f"raises={name} is too broad"
+    return None
 
 
 def test_strict_xfail_reasons_cite_tracking_issue() -> None:
-    """Every xfail(strict=True) reason must contain a #NNNN issue reference."""
+    """Strict xfail bridges must name an expected type and cite a tracking issue."""
     violations: list[str] = []
     for py_file in sorted(_TESTS_ROOT.rglob("test_*.py")):
         rel = py_file.relative_to(_TESTS_ROOT).as_posix()
@@ -114,6 +137,9 @@ def test_strict_xfail_reasons_cite_tracking_issue() -> None:
         except (SyntaxError, UnicodeDecodeError, OSError):
             continue
         for xfail_node in _collect_xfail_strict_true_nodes(tree):
+            raises_issue = _strict_xfail_raises_issue(xfail_node)
+            if raises_issue is not None:
+                violations.append(f"{rel}:{xfail_node.lineno} — {raises_issue}")
             reason = _extract_reason(xfail_node)
             if reason is None:
                 violations.append(
@@ -125,9 +151,42 @@ def test_strict_xfail_reasons_cite_tracking_issue() -> None:
                     f"{rel}:{xfail_node.lineno} — reason={reason!r} does not cite "
                     "a tracking issue; add #NNNN or resolve the defect and remove the xfail"
                 )
-    assert not violations, "xfail(strict=True) without tracking issue reference:\n" + "\n".join(
+    assert not violations, "strict xfail bridge policy violations:\n" + "\n".join(
         f"  {v}" for v in violations
     )
+
+
+@pytest.mark.parametrize(
+    ("raises_clause", "expected_issue"),
+    [
+        pytest.param("", True, id="missing"),
+        pytest.param(", raises=Exception", True, id="exception"),
+        pytest.param(", raises=BaseException", True, id="base-exception"),
+        pytest.param(", raises=AssertionError", True, id="assertion-error"),
+        pytest.param(", raises=(ValueError, Exception)", True, id="broad-tuple"),
+        pytest.param(", raises=builtins.Exception", True, id="qualified-broad-type"),
+        pytest.param(", raises=(ValueError, LookupError)", False, id="specific-tuple"),
+        pytest.param(", raises=builtins.LookupError", False, id="qualified-specific-type"),
+        pytest.param(", raises=LookupError", False, id="specific-type"),
+    ],
+)
+def test_strict_xfail_raises_policy_on_synthetic_source(
+    raises_clause: str, expected_issue: bool
+) -> None:
+    """Synthetic param marks enforce raises precision and are collected once."""
+    tree = ast.parse(
+        "import pytest\n"
+        "@pytest.mark.parametrize('value', [\n"
+        "    pytest.param(1, marks=pytest.mark.xfail(\n"
+        "        strict=True, reason='tracked #1234'"
+        f"{raises_clause})),\n"
+        "])\n"
+        "def test_example(value):\n"
+        "    pass\n"
+    )
+    nodes = _collect_xfail_strict_true_nodes(tree)
+    assert len(nodes) == 1
+    assert (_strict_xfail_raises_issue(nodes[0]) is not None) is expected_issue
 
 
 def _collect_imperative_xfail_nodes(tree: ast.Module) -> list[ast.Call]:

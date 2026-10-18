@@ -141,7 +141,7 @@ steps:
       source_dir: ${{ inputs.source_dir }}
       run_name: ${{ inputs.run_name }}
       base_branch: ${{ inputs.base_branch }}
-      step_name: bootstrap_clone
+      step_name: clone
     capture:
       work_dir: ${{ result.work_dir }}
       remote_url: ${{ result.remote_url }}
@@ -191,7 +191,7 @@ steps:
       issue_number: ${{ context.issue_number }}
       work_dir: ${{ context.work_dir }}
       remote_url: ${{ context.remote_url }}
-      step_name: create_and_publish_branch
+      step_name: create_and_publish
     capture:
       merge_target: ${{ result.merge_target }}
     on_success: group
@@ -303,6 +303,8 @@ steps:
       plan_parts: ${{ context.plan_parts }}
       cwd: ${{ context.work_dir }}
       issue_url: ${{ inputs.issue_url }}
+      open_pr: ${{ inputs.open_pr }}
+      auto_merge: ${{ inputs.auto_merge }}
       parent_authority_path: ${{ context.plan_set_authority_path }}
       seal: 'false'
       step_name: bind_group_parts
@@ -352,6 +354,8 @@ steps:
       plan_parts: ${{ context.plan_set_parts }}
       cwd: ${{ context.work_dir }}
       issue_url: ${{ inputs.issue_url }}
+      open_pr: ${{ inputs.open_pr }}
+      auto_merge: ${{ inputs.auto_merge }}
       parent_authority_path: ${{ context.plan_set_authority_path }}
       seal: 'true'
       step_name: seal_plan_set
@@ -465,6 +469,8 @@ steps:
     with:
       plan_parts: ${{ context.plan_set_parts }}
       cwd: ${{ context.work_dir }}
+      open_pr: ${{ inputs.open_pr }}
+      auto_merge: ${{ inputs.auto_merge }}
       parent_authority_path: ${{ context.plan_set_authority_path }}
       seal: 'true'
       step_name: renew_plan_set
@@ -1062,6 +1068,7 @@ steps:
       skill_command: /autoskillit:audit-impl
       skill_inputs:
         all_plan_paths: ${{ context.all_plan_paths }}
+        plan_set_authority_path: ${{ context.plan_set_authority_path }}
         branch_name: ${{ context.base_sha }}
         base_branch: ${{ inputs.base_branch }}
         prior_audit_cycle_path: ${{ context.audit_cycle_path }}
@@ -1261,20 +1268,23 @@ steps:
   extract_pr_number:
     tool: run_cmd
     with:
-      cmd: gh pr view '${{ context.merge_target }}' --json number -q .number
+      cmd: gh pr view '${{ context.pr_url }}' --json number -q .number
       cwd: ${{ context.work_dir }}
       step_name: extract_pr_number
     capture:
-      pr_number: "${{ result.stdout | trim }}"
+      pr_number:
+        from: ${{ result.stdout | trim }}
+        type: integer
     on_success: capture_review_repository
     on_failure: release_issue_failure
     optional: true
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
     note: >
-      Extracts the integer PR number from the feature branch opened by compose_pr.
-      pr_number is required by the queue finale steps (enqueue_to_queue, wait_for_queue).
-
+      Captures the PR number as canonical ASCII decimal text, declared `type: integer`.
+      Integer skill inputs decode it server-side; MCP and run_python consumers
+      convert it at their own typed boundaries.
+      Required by review_pr, resolve_review, enqueue_to_queue and wait_for_queue.
   capture_review_repository:
     tool: run_cmd
     with:
@@ -1841,7 +1851,7 @@ steps:
         dispatch_id: ${{ inputs.dispatch_id }}
         diagnostics_log_dir: ${{ inputs.diagnostics_log_dir }}
       cwd: ${{ context.work_dir }}
-      step_name: analyze_pipeline_health
+      step_name: analyze_pipeline_health_no_ci
     on_success: escalate_stop_no_ci
     on_failure: escalate_stop_no_ci
     on_context_limit: escalate_stop_no_ci
@@ -2664,12 +2674,29 @@ steps:
       clone_path: ${{ context.work_dir }}
       status: unconfirmed
       step_name: register_clone_unconfirmed
-    on_success: analyze_pipeline_health_unconfirmed
-    on_failure: analyze_pipeline_health_unconfirmed
+    on_success: pr_gate_unconfirmed
+    on_failure: pr_gate_unconfirmed
     note: "Called when a merge-wait step times out before merge is confirmed. Does\
       \ NOT call release_issue \u2014 the in-progress label stays on the issue so\
       \ operators can see the PR is still actively queued. The clone is preserved\
       \ (status: unconfirmed) for human inspection.\n"
+  pr_gate_unconfirmed:
+    tool: run_python
+    with:
+      callable: autoskillit.recipe._cmd_rpc.verify_stage_obligations
+      plan_set_authority_path: ${{ context.plan_set_authority_path }}
+      plan_set_authority_digest: ${{ context.plan_set_authority_digest }}
+      cwd: ${{ context.work_dir }}
+      base_branch: ${{ inputs.base_branch }}
+      pr_number: ${{ context.pr_number }}
+      step_name: pr_gate_unconfirmed
+    optional_context_refs:
+    - pr_number
+    on_result:
+    - when: ${{ result.success }} == true
+      route: analyze_pipeline_health_unconfirmed
+    - route: analyze_pipeline_health_error
+    on_failure: analyze_pipeline_health_error
   analyze_pipeline_health_unconfirmed:
     tool: run_skill
     model: ''
@@ -2684,7 +2711,7 @@ steps:
         dispatch_id: ${{ inputs.dispatch_id }}
         diagnostics_log_dir: ${{ inputs.diagnostics_log_dir }}
       cwd: ${{ context.work_dir }}
-      step_name: analyze_pipeline_health
+      step_name: analyze_pipeline_health_unconfirmed
     on_success: done_unconfirmed
     on_failure: done_unconfirmed
     on_context_limit: done_unconfirmed
@@ -2778,18 +2805,35 @@ steps:
     tool: run_python
     optional: true
     skip_when_false: inputs.open_pr
-    on_skip: register_clone_success
+    on_skip: pr_gate
     with:
       callable: autoskillit.smoke_utils.patch_pr_token_summary
       timeout: 60
       pr_url: ${{ context.pr_url }}
       cwd: ${{ context.work_dir }}
-    on_success: register_clone_success
-    on_failure: register_clone_success
+    on_success: pr_gate
+    on_failure: pr_gate
     note: 'Patches PR body with complete token summary; failures are logged but do
       not alter pipeline routing.
 
       '
+  pr_gate:
+    tool: run_python
+    with:
+      callable: autoskillit.recipe._cmd_rpc.verify_stage_obligations
+      plan_set_authority_path: ${{ context.plan_set_authority_path }}
+      plan_set_authority_digest: ${{ context.plan_set_authority_digest }}
+      cwd: ${{ context.work_dir }}
+      base_branch: ${{ inputs.base_branch }}
+      pr_number: ${{ context.pr_number }}
+      step_name: pr_gate
+    optional_context_refs:
+    - pr_number
+    on_result:
+    - when: ${{ result.success }} == true
+      route: register_clone_success
+    - route: release_issue_failure
+    on_failure: release_issue_failure
   release_audit_remediation_stuck:
     tool: register_clone_status
     with:
@@ -2876,7 +2920,7 @@ steps:
         dispatch_id: ${{ inputs.dispatch_id }}
         diagnostics_log_dir: ${{ inputs.diagnostics_log_dir }}
       cwd: ${{ context.work_dir }}
-      step_name: analyze_pipeline_health
+      step_name: analyze_pipeline_health_error
     on_success: escalate_stop
     on_failure: escalate_stop
     on_context_limit: escalate_stop

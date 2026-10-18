@@ -200,7 +200,12 @@ def _tool(
                 param,
                 wire_type=declared_wire_types.get(param, ToolWireType.SCALAR),
                 required=param in required_set,
-                role=declared_roles.get(param, ToolParamRole.CHILD_INPUT),
+                role=declared_roles.get(
+                    param,
+                    ToolParamRole.STEP_IDENTITY
+                    if param == "step_name"
+                    else ToolParamRole.CHILD_INPUT,
+                ),
             )
             for param in params
         ),
@@ -253,6 +258,26 @@ _REVIEW_AUDIT_TOOL_DEFS = (
     ),
 )
 
+_PLAN_SET_TOOL_DEFS = (
+    _tool(
+        "bind_plan_set",
+        (
+            "plan_parts",
+            "cwd",
+            "issue_url",
+            "parent_authority_path",
+            "seal",
+            "step_name",
+            "open_pr",
+            "auto_merge",
+            "prior_authority_path",
+        ),
+        required=("plan_parts", "cwd"),
+        automatic_recipe_delivery=True,
+        recovery_recipe_delivery=True,
+    ),
+)
+
 
 def _verify_review_receipt() -> ToolDef:
     params = (
@@ -281,22 +306,20 @@ def _verify_review_receipt() -> ToolDef:
             "post_state": ToolWireType.STRING,
             "step_name": ToolWireType.STRING,
         },
-        roles={"step_name": ToolParamRole.PROTOCOL},
         recovery_recipe_delivery=True,
     )
 
 
-# The single classification authority for what each run_skill parameter is
-# for. Every attestation-relevant surface (the runtime gate's always-admit
-# set, the actual-kwargs assembly, the execution-tuning fallback table, and
-# the frozen ledger in tests/contracts/test_run_skill_kwarg_ledger.py) is
-# derived from this mapping — see ToolParamRole for what each role means.
+# Classification authority for run_skill runtime admission and forwarding prose.
+# The gate's always-admit set, execution-tuning fallback table, and frozen ledger
+# derive from this mapping; kwarg membership is ToolDef.mcp_kwarg_names.
+# See ToolParamRole for what each role means.
 _RUN_SKILL_PARAM_ROLES: Mapping[str, ToolParamRole] = MappingProxyType(
     {
         "skill_command": ToolParamRole.CHILD_INPUT,
         "cwd": ToolParamRole.CHILD_INPUT,
         "model": ToolParamRole.EXECUTION_TUNING,
-        "step_name": ToolParamRole.PROTOCOL,
+        "step_name": ToolParamRole.STEP_IDENTITY,
         "recipe_execution_id": ToolParamRole.PROTOCOL,
         "invocation_template_digest": ToolParamRole.PROTOCOL,
         "step_provider": ToolParamRole.EXECUTION_TUNING,

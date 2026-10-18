@@ -146,6 +146,12 @@ _TEST_FILTER_VALIDATORS: frozenset[str] = frozenset(
 # target the scan reaches from it.
 TEST_HELPER_CASCADE: dict[str, frozenset[str]] = {
     "tests/_test_filter.py": _TEST_FILTER_VALIDATORS,
+    "tests/recipe/_binding_helpers.py": frozenset(
+        {
+            "recipe/test_binding_failure_reachability.py",
+            "recipe/test_skill_invocation_binding.py",
+        }
+    ),
     "tests/arch/_helpers.py": _ARCH_HELPER_TEST_TARGETS,
     "tests/arch/_rules.py": _ARCH_HELPER_TEST_TARGETS,
     "tests/fleet/_reaper_test_support.py": frozenset({"fleet"}),
@@ -196,9 +202,13 @@ ALWAYS_RUN_AGGRESSIVE: frozenset[str] = frozenset(
 # skip the test and let a drift pass silently. test_docker_image.py
 # likewise compares the Dockerfile's pins with code constants under src/, which no infra
 # trigger covers.
+# Whole-source-tree scanners read src/ by path, so neither an import edge nor coverage
+# selects them; tests/arch/test_infra_source_scanner_selection.py requires every such
+# infra or hooks scanner to be listed.
 _INFRA_UNCONDITIONAL_FILES: frozenset[str] = frozenset(
     {
         "test_docker_image.py",
+        "test_canonical_json_producer_convention.py",
         "test_manifest_completeness.py",
         "test_manifest_directory_completeness.py",
         "test_guard_coverage.py",
@@ -211,6 +221,8 @@ _INFRA_UNCONDITIONAL_FILES: frozenset[str] = frozenset(
         "test_plugin_source_ratchets.py",
         "test_lint_gate_selection.py",
         "test_typecheck_gate.py",
+        "test_schema_read_convention.py",
+        "test_session_ttl_single_source.py",
     }
 )
 
@@ -221,6 +233,9 @@ _HOOKS_UNCONDITIONAL_FILES: frozenset[str] = frozenset(
         "test_hook_executability.py",
         "test_hook_registration_coverage.py",
         "test_hook_registry.py",
+        "test_hook_scope_authority.py",
+        "test_join_enforcement_wiring.py",
+        "test_write_target_scan_authority.py",
     }
 )
 
@@ -372,7 +387,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "artifact_lease": frozenset({"core", "workspace"}),
     "worktree_gate_lease": frozenset({"core", "execution", "server", "workspace"}),
     "executable_binding": frozenset({"cli", "core", "execution"}),
-    "private_file": frozenset({"core", "execution", "pipeline"}),
+    "private_file": frozenset({"core", "execution", "pipeline", "smoke_utils"}),
     "feature_flags": frozenset(
         {"core", "cli", "config", "execution", "recipe", "server", "workspace"}
     ),
@@ -578,6 +593,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     ),
     "_type_recipe_delivery": frozenset({"core", "execution", "pipeline", "server"}),
     "_type_orchestrator_instruction_surfaces": frozenset({"core"}),
+    "_type_stage_obligation": frozenset({"contracts", "core", "recipe", "server"}),
     "_type_recipe_sections": frozenset(
         {"cli", "config", "core", "execution", "pipeline", "recipe", "server", "workspace"}
     ),
@@ -1336,12 +1352,17 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "hooks/test_recipe_contract_freshness.py",
             "migration",
             # Server file-level entries importing autoskillit.recipe:
+            "server/test_stage_obligation_pipeline.py",
+            "server/test_tools_plan_set.py",
+            "server/test_run_skill_delegated_output_write.py",
             "server/test_run_skill_execution_tuning_fallbacks.py",
             "server/test_run_skill_delegated_write_binding.py",
             "server/test_bundled_dispatch_write_scope_admission.py",
             "server/test_serve_idempotence.py",
             "server/test_attestation_delivery_reachability.py",
             "server/test_recipe_execution_receipt_completeness.py",
+            "server/test_recipe_execution_snapshot_totality.py",
+            "server/test_attested_admission_replay.py",
             "server/test_recipe_checkpoint_delivery_regressions.py",
             "server/test_tools_status_kitchen.py",
             "server/test_open_kitchen_deferred_recall.py",
@@ -1562,7 +1583,6 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_preflight_explicit_backend.py",
             "server/test_managed_join_prelaunch.py",
             "server/test_tools_fleet_dispatch_preflight.py",
-            "server/test_lifespan.py",
             # file-level: live output-budget E2E imports the hook registry directly
             "server/test_output_budget_e2e.py",
             "execution/backends/test_claude_join_recovery_live_gate.py",

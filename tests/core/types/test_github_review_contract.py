@@ -56,6 +56,8 @@ _PUBLIC_NAMES = {
     "ReviewResponseClass",
     "ReviewReconciliationResult",
     "ReviewFindingDispositionKind",
+    "github_review_receipt_filename",
+    "decode_github_review_json_object",
     "is_final_github_review_state",
     "is_valid_github_review_head_sha",
     "is_valid_github_review_logical_iteration",
@@ -151,6 +153,20 @@ def test_contract_module_exports_exact_public_surface() -> None:
     assert set(_type_github_review.__all__) == _PUBLIC_NAMES
     for name in _PUBLIC_NAMES:
         assert getattr(_type_github_review, name) is getattr(sys.modules["autoskillit.core"], name)
+
+
+def test_github_review_receipt_filename_formats_the_server_artifact_name() -> None:
+    from autoskillit.core import github_review_receipt_filename
+
+    assert github_review_receipt_filename(7) == "batch_review_response_7.json"
+
+
+@pytest.mark.parametrize("pr_number", [0, -1, True, "7", 7.0])
+def test_github_review_receipt_filename_rejects_invalid_pr_number(pr_number: object) -> None:
+    from autoskillit.core import github_review_receipt_filename
+
+    with pytest.raises(ValueError, match="pr_number must be a positive integer"):
+        github_review_receipt_filename(pr_number)  # type: ignore[arg-type]
 
 
 def test_contract_module_imports_only_stdlib_and_anchor_sibling() -> None:

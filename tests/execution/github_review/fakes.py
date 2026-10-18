@@ -21,6 +21,11 @@ from autoskillit.execution import (
 from autoskillit.execution.github_review.gateway import (
     CredentialScopeMaterial,
     GatewayResult,
+    _classify_response,
+)
+from tests.fixtures.github_rest import (
+    reviews_create_422_author_approve,
+    reviews_create_422_author_request_changes,
 )
 
 _REMOTE_STATES = {
@@ -122,6 +127,17 @@ class StatefulReviewGateway:
         self.create_calls.append(payload)
         self.call_trace.append("create_review")
         self.create_timestamps.append(self.clock())
+        if self.authenticated_login.casefold() == self.pr_author_login.casefold() and payload[
+            "event"
+        ] in {"APPROVE", "REQUEST_CHANGES"}:
+            body = (
+                reviews_create_422_author_approve()
+                if payload["event"] == "APPROVE"
+                else reviews_create_422_author_request_changes()
+            )
+            return GatewayResult(
+                422, data=body, headers={}, response_class=_classify_response(422, body, {})
+            )
         outcome = self.outcomes.pop(0)
         review_id = self._commit(payload) if outcome.commit else None
         if outcome.fail_reads_after:
@@ -133,7 +149,11 @@ class StatefulReviewGateway:
             status_code=outcome.status_code,
             data=data,
             headers=outcome.headers or {},
-            response_class=_classify(outcome.status_code),
+            response_class=(
+                ReviewResponseClass.TRANSPORT_ERROR
+                if outcome.status_code is None
+                else _classify_response(outcome.status_code, data, outcome.headers or {})
+            ),
             error=outcome.error,
         )
 
@@ -218,20 +238,6 @@ def _success(data: Any) -> GatewayResult:
         headers={},
         response_class=ReviewResponseClass.SUCCESS,
     )
-
-
-def _classify(status_code: int | None) -> ReviewResponseClass:
-    if status_code is None:
-        return ReviewResponseClass.TRANSPORT_ERROR
-    if 200 <= status_code < 300:
-        return ReviewResponseClass.SUCCESS
-    if status_code >= 500:
-        return ReviewResponseClass.SERVER_ERROR
-    if status_code in {403, 429}:
-        return ReviewResponseClass.SECONDARY_RATE_LIMIT
-    if status_code == 422:
-        return ReviewResponseClass.VALIDATION_ERROR
-    return ReviewResponseClass.CLIENT_ERROR
 
 
 def _request(tmp_path: Path, **overrides: object) -> GitHubReviewRequest:

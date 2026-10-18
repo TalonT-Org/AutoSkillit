@@ -13,6 +13,7 @@ import pytest
 
 from autoskillit.core.types import Severity
 from autoskillit.recipe._analysis_bfs import _bfs_capped, _build_success_step_graph
+from autoskillit.recipe._api import load_and_validate
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import analyze_dataflow, run_semantic_rules
 
@@ -622,21 +623,30 @@ class TestImplementationPipelineStructure:
             "(re_push is allowed; push is not)"
         )
 
-    def test_ip_open_pr_false_path_reaches_push_then_cleanup(self, recipe) -> None:
+    def test_ip_open_pr_false_path_reaches_push_then_cleanup(self) -> None:
         """When compose_pr is bypassed (open_pr=false), execution must go:
         audit_impl (GO) → push → [compose_pr bypassed] → cleanup_success → done.
         After the fix, audit_impl's GO route points directly to push, so push is
         always reachable from audit_impl's successors."""
-        from autoskillit.recipe.validator import _build_step_graph
+        result = load_and_validate(
+            "implementation",
+            ingredient_overrides={"open_pr": "false"},
+            include_finalized_projection=True,
+        )
+        assert result["valid"] is True, result.get("errors", result.get("findings", []))
+        projection = result["_finalized_projection"]
+        steps = {step.name for step in projection.ordered_steps}
+        assert "compose_pr" not in steps
+        assert "pr_gate" in steps
 
-        graph = _build_step_graph(recipe)
-        # After the fix: audit_impl.on_result.GO → push (directly).
-        # Verify push is reachable from audit_impl's successors.
+        graph: dict[str, list[str]] = {}
+        for edge in projection.ordered_flow_edges:
+            graph.setdefault(edge.source, []).append(edge.target)
         reachable: set[str] = set()
         queue = list(graph.get("audit_impl", []))
         while queue:
             node = queue.pop(0)
-            if node in reachable or node not in recipe.steps:
+            if node in reachable or node not in steps:
                 continue
             reachable.add(node)
             queue.extend(graph.get(node, []))

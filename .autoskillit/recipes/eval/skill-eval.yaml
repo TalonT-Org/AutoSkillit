@@ -22,7 +22,7 @@ ingredients:
     required: true
   source_dir:
     description: Path to the source project directory (for judge-eval CWD).
-    default: ""
+    required: true
   output_dir:
     description: >-
       Base directory for eval run output. Defaults to
@@ -76,6 +76,7 @@ steps:
     tool: run_skill
     with:
       skill_command: "placeholder — see note for orchestration logic"
+      cwd: "${{ inputs.source_dir }}"
     on_success: compile_scorecard
     on_failure: escalate
     note: >-

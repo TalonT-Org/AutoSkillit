@@ -53,7 +53,7 @@
       "default": "false"
     },
     "investigate": {
-      "description": "Run the investigate step. \"true\" (or \"auto\", the default) always runs; \"false\" always skips. In fleet/batch dispatch, external orchestrators resolve \"auto\" to \"false\" when the issue body contains an investigation-complete marker. In direct orders, \"auto\" behaves like \"true\".",
+      "description": "Run investigation. true/auto runs it; false skips. In fleet, auto skips issues marked investigation-complete; direct orders run it.",
       "default": "auto"
     },
     "open_pr": {
@@ -69,11 +69,11 @@
       "default": "true"
     },
     "review_max_retries": {
-      "description": "Maximum number of review-resolve retry cycles before proceeding to CI",
+      "description": "Review retry cap before CI.",
       "default": "3"
     },
     "local_review_rounds": {
-      "description": "Number of review-resolve cycles to run locally before switching to GitHub-backed review. 0 disables local mode entirely.",
+      "description": "Local review-resolve rounds before GitHub review; zero disables local mode.",
       "type": "integer",
       "default": "2",
       "authority": "config"
@@ -83,7 +83,7 @@
       "default": "3"
     },
     "audit_remediation_max_retries": {
-      "description": "Maximum audit remediation budget (allowed remediation rounds = value − 1). Set to 3 for 2 remediation rounds.",
+      "description": "Audit remediation limit; allowed rounds = value - 1.",
       "default": "3"
     },
     "audit_integrity_max_retries": {
@@ -92,16 +92,16 @@
     },
     "test_fix_max_retries": {
       "default": "3",
-      "description": "Maximum pre-merge test → fix → test budget (allowed fix rounds = value − 1). Set to 3 for 2 fix rounds per remediation cycle.",
+      "description": "Pre-merge test/fix/test limit; allowed fixes = value - 1.",
       "hidden": true
     },
     "merge_test_fix_max_retries": {
       "default": "3",
-      "description": "Maximum iterations of the merge-gate test → fix → test cycle.",
+      "description": "Merge-gate test/fix/test iteration limit.",
       "hidden": true
     },
     "adversarial_review_level": {
-      "description": "Controls adversarial review depth in make-plan. \"auto\" estimates complexity and gates agents accordingly. \"full\" always runs all 3 agents. \"none\" skips adversarial review entirely.",
+      "description": "make-plan review depth: auto estimates complexity, full runs three agents, none skips them.",
       "default": "auto",
       "hidden": true,
       "authority": "config"
@@ -111,7 +111,7 @@
       "required": false
     },
     "upfront_claimed": {
-      "description": "Set to 'true' when process-issues has already claimed this issue upfront. Allows claim_issue defense step to pass through without aborting.",
+      "description": "true when process-issues already claimed the issue; lets claim_issue pass through.",
       "default": "false",
       "hidden": true
     },
@@ -121,7 +121,7 @@
       "hidden": true
     },
     "max_parallel": {
-      "description": "Maximum number of issues to run in parallel within a single execution-map group. Groups exceeding this cap are split into sequential sub-groups. Passed to build-execution-map. Must be a positive integer (expressed as a string).",
+      "description": "Positive integer string limiting parallel issues per group; oversized groups split into sequential subgroups.",
       "default": "6",
       "hidden": true
     },
@@ -195,6 +195,7 @@
         "implement",
         "retry_worktree",
         "check_changes",
+        "pr_gate_no_changes",
         "close_issue_no_changes"
       ]
     },
@@ -279,6 +280,7 @@
         "inter_part_push",
         "next_or_done",
         "check_has_commits",
+        "pr_gate_already_done",
         "close_issue_already_done"
       ]
     },
@@ -445,10 +447,12 @@
       "name": "R29",
       "steps": [
         "register_clone_unconfirmed",
+        "pr_gate_unconfirmed",
         "analyze_pipeline_health_unconfirmed",
         "done_unconfirmed",
         "release_issue_success",
         "patch_token_summary",
+        "pr_gate",
         "release_audit_remediation_stuck",
         "stop_audit_remediation_stuck",
         "await_audit_decision",
@@ -534,7 +538,7 @@
       },
       "on_success": "investigate",
       "on_failure": "release_issue_failure",
-      "note": "Create and publish a unique feature branch; set merge_target and its remote ref for merge_worktree. open_pr=false skips this step and retains base_branch."
+      "note": "Create a unique feature branch; when open_pr=false, keep base_branch."
     },
     "investigate": {
       "tool": "run_skill",
@@ -637,6 +641,9 @@
         "plan_parts": "${{ context.plan_parts }}",
         "cwd": "${{ context.work_dir }}",
         "issue_url": "${{ inputs.issue_url }}",
+        "open_pr": "${{ inputs.open_pr }}",
+        "auto_merge": "${{ inputs.auto_merge }}",
+        "prior_authority_path": "${{ context.plan_set_authority_path }}",
         "seal": "true",
         "step_name": "bind_plan_set"
       },
@@ -660,6 +667,9 @@
         }
       ],
       "on_failure": "release_issue_failure",
+      "optional_context_refs": [
+        "plan_set_authority_path"
+      ],
       "note": "__RECIPE_NOTE_PLAN_PARTS_BINDING__"
     },
     "check_replan_iteration": {
@@ -748,6 +758,8 @@
       "with": {
         "plan_parts": "${{ context.plan_set_parts }}",
         "cwd": "${{ context.work_dir }}",
+        "open_pr": "${{ inputs.open_pr }}",
+        "auto_merge": "${{ inputs.auto_merge }}",
         "parent_authority_path": "${{ context.plan_set_authority_path }}",
         "seal": "true",
         "step_name": "renew_before_retry"
@@ -803,6 +815,8 @@
       "with": {
         "plan_parts": "${{ context.plan_set_parts }}",
         "cwd": "${{ context.work_dir }}",
+        "open_pr": "${{ inputs.open_pr }}",
+        "auto_merge": "${{ inputs.auto_merge }}",
         "parent_authority_path": "${{ context.plan_set_authority_path }}",
         "seal": "true",
         "step_name": "renew_plan_set"
@@ -922,10 +936,35 @@
       "on_result": [
         {
           "when": "${{ result.has_changes }} == false",
-          "route": "close_issue_no_changes"
+          "route": "pr_gate_no_changes"
         },
         {
           "route": "test"
+        }
+      ],
+      "on_failure": "release_issue_failure"
+    },
+    "pr_gate_no_changes": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.recipe._cmd_rpc.verify_stage_obligations",
+        "plan_set_authority_path": "${{ context.plan_set_authority_path }}",
+        "plan_set_authority_digest": "${{ context.plan_set_authority_digest }}",
+        "cwd": "${{ context.work_dir }}",
+        "base_branch": "${{ inputs.base_branch }}",
+        "pr_number": "${{ context.pr_number }}",
+        "step_name": "pr_gate_no_changes"
+      },
+      "optional_context_refs": [
+        "pr_number"
+      ],
+      "on_result": [
+        {
+          "when": "${{ result.success }} == true",
+          "route": "close_issue_no_changes"
+        },
+        {
+          "route": "release_issue_failure"
         }
       ],
       "on_failure": "release_issue_failure"
@@ -1786,6 +1825,7 @@
         "skill_command": "/autoskillit:audit-impl",
         "skill_inputs": {
           "all_plan_paths": "${{ context.plan_parts }}",
+          "plan_set_authority_path": "${{ context.plan_set_authority_path }}",
           "deviation_manifest_path": "${{ context.deviation_manifest_path }}",
           "branch_name": "${{ context.branch_name }}",
           "base_branch": "${{ inputs.base_branch }}",
@@ -2131,7 +2171,32 @@
           "route": "push"
         },
         {
+          "route": "pr_gate_already_done"
+        }
+      ],
+      "on_failure": "release_issue_failure"
+    },
+    "pr_gate_already_done": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.recipe._cmd_rpc.verify_stage_obligations",
+        "plan_set_authority_path": "${{ context.plan_set_authority_path }}",
+        "plan_set_authority_digest": "${{ context.plan_set_authority_digest }}",
+        "cwd": "${{ context.work_dir }}",
+        "base_branch": "${{ inputs.base_branch }}",
+        "pr_number": "${{ context.pr_number }}",
+        "step_name": "pr_gate_already_done"
+      },
+      "optional_context_refs": [
+        "pr_number"
+      ],
+      "on_result": [
+        {
+          "when": "${{ result.success }} == true",
           "route": "close_issue_already_done"
+        },
+        {
+          "route": "release_issue_failure"
         }
       ],
       "on_failure": "release_issue_failure"
@@ -2207,7 +2272,7 @@
       "optional_context_refs": [
         "issue_number"
       ],
-      "note": "Reads plan, runs git diff, classifies changed files, selects 1–3 arch-lens slugs, writes one PR context file per lens, and writes a PR prep file. Does NOT invoke arch-lens skills.\n"
+      "note": "Inspect the diff, select lenses, and write PR context/prep files; do not invoke lens skills."
     },
     "run_arch_lenses": {
       "tool": "run_skill",
@@ -2231,7 +2296,7 @@
       "optional": true,
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Pair selected_lenses with lens_context_paths in order. Run the selected arch-lens skills in parallel, capture each diagram_path, and continue to compose_pr when any lens fails."
+      "note": "Pair selected lens slugs/contexts, run in parallel, capture paths, and continue if one fails."
     },
     "compose_pr": {
       "tool": "run_skill",
@@ -2274,7 +2339,7 @@
         "all_diagram_paths",
         "issue_number"
       ],
-      "note": "Reads the PR prep file, validates arch-lens diagrams (must contain ★ or ●), composes the PR body, and runs gh pr create. Degrades gracefully if gh is unavailable (emits pr_url=).\n"
+      "note": "Validate lens diagrams and create the PR from prep data; missing authentication returns an empty URL."
     },
     "guard_pr_url": {
       "action": "route",
@@ -2292,19 +2357,22 @@
     "extract_pr_number": {
       "tool": "run_cmd",
       "with": {
-        "cmd": "gh pr view '${{ context.merge_target }}' --json number -q .number",
+        "cmd": "gh pr view '${{ context.pr_url }}' --json number -q .number",
         "cwd": "${{ context.work_dir }}",
         "step_name": "extract_pr_number"
       },
       "capture": {
-        "pr_number": "${{ result.stdout | trim }}"
+        "pr_number": {
+          "from": "${{ result.stdout | trim }}",
+          "type": "integer"
+        }
       },
       "on_success": "capture_review_repository",
       "on_failure": "release_issue_failure",
       "optional": true,
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Extracts the integer PR number from the feature branch opened by compose_pr. pr_number is required by the queue finale steps (enable_auto_merge, wait_for_queue).\n"
+      "note": "Captures the PR number as canonical ASCII decimal text, declared `type: integer`. Integer skill inputs decode it server-side; MCP and run_python consumers convert it at their own typed boundaries. Required by review_pr, resolve_review, enqueue_to_queue and wait_for_queue.\n"
     },
     "capture_review_repository": {
       "tool": "run_cmd",
@@ -2383,7 +2451,7 @@
       "optional_context_refs": [
         "review_loop_count"
       ],
-      "note": "Pre-computes annotated diff with [LNNN] markers and hunk ranges JSON for review-pr. Routes to release_issue_failure on annotation failure. Missing authority permits no inline comments.\n"
+      "note": "Add line markers and hunk metadata for review-pr. Routes to release_issue_failure if authority is missing; inline comments require it."
     },
     "review_pr": {
       "tool": "run_skill",
@@ -2453,7 +2521,7 @@
       "optional_context_refs": [
         "review_mode"
       ],
-      "note": "Review the feature PR. Changes requested or approved with comments enter resolve_review; other verdicts verify the posted effect. Failure or context limit releases the issue. Skip without a PR."
+      "note": "Review the feature PR; resolve requested changes and verify posted effects."
     },
     "resolve_review": {
       "tool": "run_skill",
@@ -2722,7 +2790,7 @@
       "on_failure": "ci_watch",
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Derive ci_event against the feature branch, not base_branch. On failure, ci_watch proceeds with a match-any event."
+      "note": "Derive ci_event for the feature branch, not base_branch."
     },
     "route_ci_applicable": {
       "action": "route",
@@ -2737,7 +2805,7 @@
       ],
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Skip CI waiting when neither push nor pull_request workflows match the feature/base branch pair."
+      "note": "Skip CI when no workflow matches."
     },
     "check_pr_state": {
       "tool": "check_pr_mergeable",
@@ -2758,7 +2826,7 @@
       "on_failure": "ci_watch",
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Check mergeability before CI polling. A conflicting PR enters conflict repair because it cannot produce a pull_request merge ref; other states continue to ci_watch."
+      "note": "Check PR mergeability before CI polling; conflicting PRs need repair before a merge ref exists."
     },
     "ci_watch": {
       "tool": "wait_for_ci",
@@ -2796,7 +2864,7 @@
       "optional": true,
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Wait for CI on the feature branch and capture its conclusion and failed jobs. Success checks merge state; missing runs trigger the no-CI path; timeout uses a bounded retry; failure classifies conflicts. Skipped when open_pr=false."
+      "note": "Wait for feature-branch CI; capture conclusion/jobs. Missing runs use no-CI recovery; timeout retries; failures classify conflicts."
     },
     "check_ci_timed_out_loop": {
       "tool": "run_python",
@@ -2937,7 +3005,7 @@
         }
       ],
       "on_failure": "mark_issue_failed_no_ci",
-      "note": "Re-poll CI for 30 seconds before escalation. Success advances, failure repairs conflicts, timeout re-polls, and no_runs escalates."
+      "note": "Re-poll CI for 30 seconds before escalation."
     },
     "mark_issue_failed_no_ci": {
       "tool": "release_issue",
@@ -2976,7 +3044,7 @@
           "diagnostics_log_dir": "${{ inputs.diagnostics_log_dir }}"
         },
         "cwd": "${{ context.work_dir }}",
-        "step_name": "analyze_pipeline_health"
+        "step_name": "analyze_pipeline_health_no_ci"
       },
       "on_success": "escalate_stop_no_ci",
       "on_failure": "escalate_stop_no_ci",
@@ -3009,7 +3077,7 @@
       "on_failure": "immediate_merge",
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "One GraphQL call captures queue, auto-merge, merge-group trigger, and CI event state. Failure falls back to immediate_merge; skip without a PR."
+      "note": "Capture queue, auto-merge, and CI state in one GraphQL call; skip without a PR."
     },
     "route_queue_mode": {
       "block": "pre_queue_gate",
@@ -3047,7 +3115,7 @@
       "on_failure": "verify_queue_enrollment",
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Enroll via the strategy selected by enqueue_pr. On failure, probe whether the PR merged or remained queued."
+      "note": "Enroll using enqueue_pr strategy; probe merge/queue state if it fails."
     },
     "verify_queue_enrollment": {
       "tool": "wait_for_merge_queue",
@@ -3157,7 +3225,7 @@
       "on_failure": "register_clone_unconfirmed",
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Watch the queue for 15 minutes. A merge releases the issue successfully; CI ejection diagnoses CI, healthy ejection retries, and stalled enrollment re-enrolls. Missing enrollment fails. Timeout records an unconfirmed clone state."
+      "note": "Watch the merge queue for 15 minutes; handle merge, ejection, and enrollment outcomes through declared routes; timeout records an unconfirmed clone."
     },
     "reenroll_stalled_pr": {
       "tool": "enqueue_pr",
@@ -3281,7 +3349,7 @@
       "on_failure": "resolve_queue_merge_conflicts",
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Try a clean rebase before conflict-resolution skill; abort on conflict and route to goal-aware resolution."
+      "note": "Try a clean rebase; use goal-aware conflict resolution when it fails."
     },
     "resolve_queue_merge_conflicts": {
       "tool": "run_skill",
@@ -3316,7 +3384,7 @@
       "on_exhausted": "diagnose_ci",
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Resolves rebase conflicts on the feature branch after queue ejection. Only reached when the cheap rebase in queue_ejected_fix encountered conflicts. escalation_required=true → release_issue_failure for human review.\n"
+      "note": "Resolve rebase conflicts after queue ejection; escalate for human review when required."
     },
     "re_push_queue_fix": {
       "tool": "push_to_remote",
@@ -3458,7 +3526,7 @@
       "on_failure": "detect_ci_conflict",
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Check CI after queue-ejection repair: success re-enqueues, no_runs releases after auto-trigger recovery, timeout retries, failure checks conflicts."
+      "note": "Check CI after queue repair; success re-enqueues, missing runs trigger recovery."
     },
     "check_ci_post_queue_loop": {
       "tool": "run_python",
@@ -3486,7 +3554,7 @@
       ],
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Allow one CI timeout retry after queue repair; then release the issue."
+      "note": "Allow one CI timeout retry after queue repair."
     },
     "reenter_merge_queue": {
       "tool": "enqueue_pr",
@@ -3501,7 +3569,7 @@
       "on_failure": "release_issue_failure",
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Re-submits the PR after conflict resolution. Routes back to wait_for_queue. If re-entry fails, release_issue_failure preserves the clone for debugging.\n"
+      "note": "Re-enroll after conflict repair; preserve the clone if re-entry fails."
     },
     "reenter_merge_queue_cheap": {
       "tool": "enqueue_pr",
@@ -3516,7 +3584,7 @@
       "on_failure": "release_issue_failure",
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Re-submits a healthy PR into the merge queue after auto_merge was cleared externally (DROPPED_HEALTHY state). No conflict-resolution CI wait needed. Routes back to wait_for_queue on success.\n"
+      "note": "Re-enroll a healthy PR if auto-merge was cleared externally."
     },
     "direct_merge": {
       "tool": "run_cmd",
@@ -3529,7 +3597,7 @@
       "on_failure": "release_issue_failure",
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Enable native auto-merge outside the queue; failure releases the issue and reports an error."
+      "note": "Enable native auto-merge outside the queue."
     },
     "wait_for_direct_merge": {
       "tool": "run_python",
@@ -3556,7 +3624,7 @@
       "on_failure": "register_clone_unconfirmed",
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Polls GitHub PR state every 10 s for up to 15 minutes. merged → release_issue_success. closed → conflict fix cycle. timeout → register_clone_unconfirmed (releases claim; merge unconfirmed).\n"
+      "note": "Poll PR state every 10 seconds for 15 minutes; preserve an unconfirmed clone on timeout."
     },
     "direct_merge_conflict_fix": {
       "tool": "run_python",
@@ -3580,7 +3648,7 @@
       "on_failure": "resolve_direct_merge_conflicts",
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Attempts a cheap rebase before invoking the full conflict-resolution skill. On clean rebase, proceeds to re_push_direct_fix. On conflict, routes to resolve_direct_merge_conflicts for goal-aware resolution.\n"
+      "note": "Try a clean rebase first; use goal-aware resolution when it conflicts."
     },
     "resolve_direct_merge_conflicts": {
       "tool": "run_skill",
@@ -3615,7 +3683,7 @@
       "on_exhausted": "diagnose_ci",
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Resolves rebase conflicts after direct-merge rejection. Only reached when the cheap rebase in direct_merge_conflict_fix encountered conflicts. escalation_required=true → release_issue_failure for human review.\n"
+      "note": "Resolve rebase conflicts after direct-merge rejection; escalate for human review when required."
     },
     "re_push_direct_fix": {
       "tool": "push_to_remote",
@@ -3642,7 +3710,7 @@
       "on_failure": "release_issue_failure",
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Re-enables auto-merge after conflict resolution and re-push. Routes back to wait_for_direct_merge to poll for completion. On failure, release_issue_failure preserves the clone for debugging.\n"
+      "note": "Restore auto-merge after conflict repair and re-push."
     },
     "immediate_merge": {
       "tool": "run_cmd",
@@ -3655,7 +3723,7 @@
       "on_failure": "release_issue_failure",
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Use synchronous squash merge when auto-merge is unavailable. Failure releases the issue and reports the error."
+      "note": "Use synchronous squash merge when auto-merge is unavailable."
     },
     "wait_for_immediate_merge": {
       "tool": "run_python",
@@ -3682,7 +3750,7 @@
       "on_failure": "register_clone_unconfirmed",
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Confirm synchronous squash merge for up to five minutes. Merged succeeds; closed repairs conflicts; timeout preserves an unconfirmed clone."
+      "note": "Confirm squash merge for up to five minutes; preserve an unconfirmed clone on timeout."
     },
     "immediate_merge_conflict_fix": {
       "tool": "run_python",
@@ -3706,7 +3774,7 @@
       "on_failure": "resolve_immediate_merge_conflicts",
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Attempts a cheap rebase before invoking the full conflict-resolution skill. On clean rebase, proceeds to re_push_immediate_fix. On conflict, routes to resolve_immediate_merge_conflicts for goal-aware resolution.\n"
+      "note": "Try a clean rebase first; use goal-aware resolution when it conflicts."
     },
     "resolve_immediate_merge_conflicts": {
       "tool": "run_skill",
@@ -3741,7 +3809,7 @@
       "on_exhausted": "diagnose_ci",
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Resolves rebase conflicts after immediate-merge rejection. Only reached when the cheap rebase in immediate_merge_conflict_fix encountered conflicts. escalation_required=true → release_issue_failure for human review.\n"
+      "note": "Resolve rebase conflicts after immediate-merge rejection; escalate for human review when required."
     },
     "re_push_immediate_fix": {
       "tool": "push_to_remote",
@@ -3768,7 +3836,7 @@
       "on_failure": "release_issue_failure",
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Re-attempts plain squash merge after conflict resolution and re-push. Routes back to wait_for_immediate_merge to confirm completion. On failure, release_issue_failure preserves the clone for debugging.\n"
+      "note": "Retry squash merge after conflict repair and re-push."
     },
     "diagnose_ci": {
       "tool": "run_skill",
@@ -3800,7 +3868,7 @@
       ],
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Write CI-log diagnosis for resolve_ci. Continue to resolve_ci even if diagnosis fails; diagnosis_path is optional context."
+      "note": "Write CI-log diagnosis; continue to resolve_ci if diagnosis fails."
     },
     "resolve_ci": {
       "tool": "run_skill",
@@ -3988,7 +4056,7 @@
       "optional": true,
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Only CI failures enter this stale-base check; check_pr_mergeable CONFLICTING goes directly to ci_conflict_fix. Exit 0 fixes conflicts; exit 1 (ancestor or fetch error) diagnoses CI."
+      "note": "Use stale-base triage only for CI failures; conflicting PRs use direct conflict repair."
     },
     "ci_conflict_fix": {
       "tool": "run_skill",
@@ -4023,7 +4091,7 @@
       "on_exhausted": "diagnose_ci",
       "skip_when_false": "inputs.open_pr",
       "on_skip": "release_issue_success",
-      "note": "Rebase onto the integration head and re-push clean or resolved conflicts. Escalation, tool failure, context limit, and bounded retry exhaustion diagnose CI before issue failure."
+      "note": "Rebase and re-push; diagnose conflicts or exhausted failures before issue failure."
     },
     "register_clone_unconfirmed": {
       "tool": "register_clone_status",
@@ -4032,9 +4100,34 @@
         "status": "unconfirmed",
         "step_name": "register_clone_unconfirmed"
       },
-      "on_success": "analyze_pipeline_health_unconfirmed",
-      "on_failure": "analyze_pipeline_health_unconfirmed",
+      "on_success": "pr_gate_unconfirmed",
+      "on_failure": "pr_gate_unconfirmed",
       "note": "Preserve the clone and in-progress issue label when a merge wait times out without confirmation."
+    },
+    "pr_gate_unconfirmed": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.recipe._cmd_rpc.verify_stage_obligations",
+        "plan_set_authority_path": "${{ context.plan_set_authority_path }}",
+        "plan_set_authority_digest": "${{ context.plan_set_authority_digest }}",
+        "cwd": "${{ context.work_dir }}",
+        "base_branch": "${{ inputs.base_branch }}",
+        "pr_number": "${{ context.pr_number }}",
+        "step_name": "pr_gate_unconfirmed"
+      },
+      "optional_context_refs": [
+        "pr_number"
+      ],
+      "on_result": [
+        {
+          "when": "${{ result.success }} == true",
+          "route": "analyze_pipeline_health_unconfirmed"
+        },
+        {
+          "route": "analyze_pipeline_health_error"
+        }
+      ],
+      "on_failure": "analyze_pipeline_health_error"
     },
     "analyze_pipeline_health_unconfirmed": {
       "tool": "run_skill",
@@ -4051,7 +4144,7 @@
           "diagnostics_log_dir": "${{ inputs.diagnostics_log_dir }}"
         },
         "cwd": "${{ context.work_dir }}",
-        "step_name": "analyze_pipeline_health"
+        "step_name": "analyze_pipeline_health_unconfirmed"
       },
       "on_success": "done_unconfirmed",
       "on_failure": "done_unconfirmed",
@@ -4080,16 +4173,41 @@
       "tool": "run_python",
       "optional": true,
       "skip_when_false": "inputs.open_pr",
-      "on_skip": "register_clone_success",
+      "on_skip": "pr_gate",
       "with": {
         "callable": "autoskillit.smoke_utils.patch_pr_token_summary",
         "timeout": 60,
         "pr_url": "${{ context.pr_url }}",
         "cwd": "${{ context.work_dir }}"
       },
-      "on_success": "register_clone_success",
-      "on_failure": "register_clone_success",
-      "note": "Patches PR body with complete token summary; failures are logged but do not alter pipeline routing.\n"
+      "on_success": "pr_gate",
+      "on_failure": "pr_gate",
+      "note": "Patch the PR with a token summary; failures are nonfatal."
+    },
+    "pr_gate": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.recipe._cmd_rpc.verify_stage_obligations",
+        "plan_set_authority_path": "${{ context.plan_set_authority_path }}",
+        "plan_set_authority_digest": "${{ context.plan_set_authority_digest }}",
+        "cwd": "${{ context.work_dir }}",
+        "base_branch": "${{ inputs.base_branch }}",
+        "pr_number": "${{ context.pr_number }}",
+        "step_name": "pr_gate"
+      },
+      "optional_context_refs": [
+        "pr_number"
+      ],
+      "on_result": [
+        {
+          "when": "${{ result.success }} == true",
+          "route": "register_clone_success"
+        },
+        {
+          "route": "release_issue_failure"
+        }
+      ],
+      "on_failure": "release_issue_failure"
     },
     "release_audit_remediation_stuck": {
       "tool": "register_clone_status",
@@ -4189,7 +4307,7 @@
           "diagnostics_log_dir": "${{ inputs.diagnostics_log_dir }}"
         },
         "cwd": "${{ context.work_dir }}",
-        "step_name": "analyze_pipeline_health"
+        "step_name": "analyze_pipeline_health_error"
       },
       "on_success": "escalate_stop",
       "on_failure": "escalate_stop",
@@ -4222,7 +4340,7 @@
           "diagnostics_log_dir": "${{ inputs.diagnostics_log_dir }}"
         },
         "cwd": "${{ context.work_dir }}",
-        "step_name": "analyze_pipeline_health"
+        "step_name": "analyze_pipeline_health_no_changes"
       },
       "on_success": "done_no_changes",
       "on_failure": "done_no_changes",
@@ -4255,7 +4373,7 @@
           "diagnostics_log_dir": "${{ inputs.diagnostics_log_dir }}"
         },
         "cwd": "${{ context.work_dir }}",
-        "step_name": "analyze_pipeline_health"
+        "step_name": "analyze_pipeline_health_already_done"
       },
       "on_success": "done_already_done",
       "on_failure": "done_already_done",

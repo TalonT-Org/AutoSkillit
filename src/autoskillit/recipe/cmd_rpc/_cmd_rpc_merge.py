@@ -3,12 +3,88 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import time
 from pathlib import Path
 
-from autoskillit.core import atomic_write, get_logger, run_gh, run_git, truncate_text
+from autoskillit.core import (
+    atomic_write,
+    get_logger,
+    load_pinned_plan_set_authority,
+    run_gh,
+    run_git,
+    truncate_text,
+)
 
 logger = get_logger(__name__)
+
+
+def verify_stage_obligations(
+    plan_set_authority_path: str,
+    plan_set_authority_digest: str,
+    cwd: str,
+    base_branch: str,
+    pr_number: str = "",
+) -> dict[str, str]:
+    """Discharge sealed publication obligations against an observed PR."""
+    verified = load_pinned_plan_set_authority(
+        plan_set_authority_path, expected_digest=plan_set_authority_digest
+    )
+    if not verified.accepted or verified.evidence is None:
+        reason = verified.reason.value if verified.reason else "authority rejected"
+        return {"success": "false", "detail": "; ".join((reason, *verified.detail))}
+    obligations = verified.evidence.stage_obligations
+    if not obligations:
+        return {"success": "true", "detail": "no stage obligations"}
+    if not pr_number:
+        required = ", ".join(f"{o.requirement_id} → {o.obligation.value}" for o in obligations)
+        return {
+            "success": "false",
+            "detail": f"no pull request was published in this run; required: {required}",
+        }
+    pr_state, pr_base = _observe_pull_request(str(pr_number), cwd)
+    violations = []
+    for obligation in obligations:
+        violation = obligation.obligation.violation(
+            pr_state=pr_state, pr_base=pr_base, base_branch=base_branch
+        )
+        if violation:
+            violations.append(
+                f"{obligation.requirement_id} → {obligation.obligation.value}: {violation}"
+            )
+    return {
+        "success": "false" if violations else "true",
+        "detail": "; ".join(violations) if violations else "stage obligations verified",
+    }
+
+
+def _observe_pull_request(pr_number: str, cwd: str) -> tuple[str | None, str | None]:
+    """Read a complete PR observation, retrying transient command and payload failures."""
+    for attempt in range(3):
+        try:
+            result = run_gh(
+                ["pr", "view", str(pr_number), "--json", "state,baseRefName"],
+                cwd=cwd,
+                timeout=30,
+            )
+            if result.returncode == 0:
+                observed = json.loads(result.stdout)
+                if (
+                    isinstance(observed, dict)
+                    and isinstance(observed.get("state"), str)
+                    and isinstance(observed.get("baseRefName"), str)
+                ):
+                    return observed["state"], observed["baseRefName"]
+        except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
+            logger.debug(
+                "stage_obligation_pr_observation_failed",
+                pr_number=pr_number,
+                attempt=attempt + 1,
+                error=str(exc),
+            )
+        if attempt < 2:
+            time.sleep(5)
+    return None, None
 
 
 def _detect_remote(cwd: str) -> str:
@@ -234,29 +310,57 @@ def force_push_and_wait_mergeability(
     raise RuntimeError(msg)
 
 
-def advance_queue_pr(
-    current_pr_number: str,
-    pr_order_file: str,
-) -> dict[str, str]:
-    """Find next PR in queue order file."""
-    if not current_pr_number:
-        return {"error": f"current_pr_number is required, got {current_pr_number!r}"}
+_PR_COMPLEXITIES = frozenset({"simple", "needs_check"})
+
+
+def _load_pr_order(pr_order_file: str) -> list[tuple[str, str]]:
+    if not Path(pr_order_file).is_absolute():
+        raise ValueError(f"pr_order_file must be absolute: {pr_order_file!r}")
     try:
-        with open(pr_order_file) as f:
+        with open(pr_order_file, encoding="utf-8") as f:
             order = json.load(f)
-    except (OSError, json.JSONDecodeError) as exc:
-        raise RuntimeError(str(exc)) from exc
-    current = int(current_pr_number)
-    idx = None
-    for i, entry in enumerate(order):
-        if entry.get("number") == current:
-            idx = i
-            break
-    if idx is None:
-        return {"current_pr_number": "done"}
-    if (idx + 1) < len(order):
-        return {"current_pr_number": str(order[idx + 1]["number"])}
-    return {"current_pr_number": "done"}
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"{pr_order_file}: {exc}") from exc
+    if not isinstance(order, dict) or not isinstance(order.get("prs"), list):
+        raise ValueError(f"{pr_order_file}: expected an object with a prs list")
+    entries: list[tuple[str, str]] = []
+    seen: set[int] = set()
+    for index, entry in enumerate(order["prs"]):
+        location = f"{pr_order_file}: prs[{index}]"
+        if not isinstance(entry, dict):
+            raise ValueError(f"{location}: expected an object")
+        number, complexity = entry.get("number"), entry.get("complexity")
+        if isinstance(number, bool) or not isinstance(number, int) or number <= 0:
+            raise ValueError(f"{location}: number must be a positive integer")
+        if not isinstance(complexity, str) or complexity not in _PR_COMPLEXITIES:
+            raise ValueError(f"{location}: complexity must be simple or needs_check")
+        if number in seen:
+            raise ValueError(f"{location}: duplicate PR number {number}")
+        seen.add(number)
+        entries.append((str(number), complexity))
+    return entries
+
+
+def _cursor_result(entry: tuple[str, str], *, done: bool) -> dict[str, str]:
+    pr_number, complexity = entry
+    return {"pr_number": pr_number, "complexity": complexity, "done": "true" if done else "false"}
+
+
+def first_ordered_pr(pr_order_file: str) -> dict[str, str]:
+    """Select the first eligible PR from the analyze-prs order artifact."""
+    entries = _load_pr_order(pr_order_file)
+    return _cursor_result(entries[0] if entries else ("", ""), done=not entries)
+
+
+def next_ordered_pr(pr_order_file: str, current_pr_number: str) -> dict[str, str]:
+    """Advance by file order, retaining the last PR when the order is exhausted."""
+    entries = _load_pr_order(pr_order_file)
+    for index, entry in enumerate(entries):
+        pr_number, _ = entry
+        if pr_number == current_pr_number:
+            done = index + 1 == len(entries)
+            return _cursor_result(entry if done else entries[index + 1], done=done)
+    raise ValueError(f"{pr_order_file}: current_pr_number {current_pr_number!r} is not in prs")
 
 
 def review_path_rebase(

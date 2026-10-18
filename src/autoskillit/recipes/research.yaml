@@ -698,6 +698,7 @@ steps:
     tool: run_cmd
     with:
       cmd: git worktree remove --force "${{ context.worktree_path }}"
+      cwd: "${{ inputs.source_dir }}"
       step_name: cleanup_phase_worktree
     on_success: plan_phase
     on_failure: plan_phase
@@ -858,6 +859,7 @@ steps:
     tool: run_cmd
     with:
       cmd: git worktree remove --force "${{ context.worktree_path }}"
+      cwd: "${{ inputs.source_dir }}"
       step_name: pre_remediation_cleanup
     on_success: plan_phase
     on_failure: plan_phase
@@ -1229,9 +1231,16 @@ steps:
       cwd: "${{ context.worktree_path }}"
       step_name: extract_pr_number
     capture:
-      pr_number: "${{ result.stdout | trim }}"
+      pr_number:
+        from: ${{ result.stdout | trim }}
+        type: integer
     on_success: capture_review_repository
     on_failure: escalate_stop
+    note: >
+      Captures the PR number as canonical ASCII decimal text, declared `type: integer`.
+      Integer skill inputs decode it server-side; MCP and run_python consumers
+      convert it at their own typed boundaries.
+      Required by annotate_pr_diff, review_research_pr and audit_claims.
 
   capture_review_repository:
     tool: run_cmd

@@ -307,10 +307,10 @@ def build_recipe_execution_snapshot(
         ):
             dynamic_skill_step_names.add(step_name)
             continue
-        if not invocation.attested:
-            continue
-        if invocation.skill_name is None:
-            raise AssertionError("attested invocation is missing its skill identity")
+        if not invocation.attested or invocation.skill_name is None:
+            raise AssertionError(
+                f"uninstallable run_skill step {step_name!r}: {invocation.failures}"
+            )
         skill_identity = compute_skill_contract_identity(invocation.skill_name)
         digest = compute_invocation_template_digest(
             execution_id=active_execution_id,
@@ -599,12 +599,14 @@ def _resolve_plan_set_preflight(
     step_name: str,
     template: InvocationTemplate,
     allowed_root: Path | None,
+    kind: PreflightKind,
 ) -> PlanSetPreflightEvidence | None:
     authority_path = bound_input_map.get("plan_set_authority_path")
     if authority_path in (None, ""):
         return None
-    plan_path = bound_input_map.get("plan_path")
-    if not isinstance(authority_path, str) or not isinstance(plan_path, str):
+    stage_scope = kind is PreflightKind.PLAN_SET_STAGE_OBLIGATIONS
+    plan_path = None if stage_scope else bound_input_map.get("plan_path")
+    if not isinstance(authority_path, str) or (not stage_scope and not isinstance(plan_path, str)):
         raise _build_preflight_input_error(
             "plan-set preflight requires bound string plan_path and authority path",
         )
@@ -621,8 +623,9 @@ def _resolve_plan_set_preflight(
             expected_kitchen_id=tool_ctx.kitchen_id,
             step_name=step_name,
             skill_name=template.invocation.skill_name or "",
-            plan_path=plan_path,
+            plan_path=plan_path if isinstance(plan_path, str) else None,
             plan_set_authority_path=authority_path,
+            allow_part_drift=stage_scope,
         ),
         allowed_root=allowed_root,
     )
@@ -660,7 +663,10 @@ def resolve_attested_input_preflight(
             audit = _resolve_audit_preflight(
                 installed, bound_input_map, execution_id, step_name, template, allowed_root
             )
-        elif preflight_name == PreflightKind.PLAN_SET_COVERAGE.value:
+        elif preflight_name in (
+            PreflightKind.PLAN_SET_COVERAGE.value,
+            PreflightKind.PLAN_SET_STAGE_OBLIGATIONS.value,
+        ):
             plan_set = _resolve_plan_set_preflight(
                 tool_ctx,
                 installed,
@@ -669,6 +675,7 @@ def resolve_attested_input_preflight(
                 step_name,
                 template,
                 allowed_root,
+                PreflightKind(preflight_name),
             )
         else:
             raise RecipeExecutionAdmissionError(

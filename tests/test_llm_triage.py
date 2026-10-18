@@ -713,11 +713,9 @@ async def test_triage_env_excludes_ide_vars(tmp_path: Path, monkeypatch: pytest.
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
-async def test_triage_command_uses_backend_binary_name(
+async def _captured_single_item_triage_cmd(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
-    """The triage command first element must equal ClaudeCodeBackend().binary_name()."""
+) -> list[str]:
     from unittest.mock import AsyncMock
 
     from autoskillit._llm_triage import triage_staleness
@@ -759,11 +757,28 @@ async def test_triage_command_uses_backend_binary_name(
     )
     await triage_staleness([item], project_root=tmp_path, backend=ClaudeCodeBackend())
 
-    cmd = mock_run.call_args.kwargs["cmd"]
+    return mock_run.call_args.kwargs["cmd"]
+
+
+@pytest.mark.anyio
+async def test_triage_command_uses_backend_binary_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cmd = await _captured_single_item_triage_cmd(tmp_path, monkeypatch)
     expected_binary = ClaudeCodeBackend().binary_name()
     assert cmd[0] == expected_binary, (
         f"triage_cmd[0] must equal get_backend().binary_name(), got {cmd[0]!r}"
     )
+
+
+@pytest.mark.anyio
+async def test_triage_command_uses_haiku_class_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from autoskillit.core import CLAUDE_MODEL_ALIASES, ClaudeFlags
+
+    cmd = await _captured_single_item_triage_cmd(tmp_path, monkeypatch)
+    assert cmd[cmd.index(ClaudeFlags.MODEL) + 1] == CLAUDE_MODEL_ALIASES["haiku"]
 
 
 @pytest.mark.anyio
@@ -959,3 +974,63 @@ async def test_triage_batch_claude_code_backend_does_call_subprocess(
     assert len(results) == 1
     assert results[0]["meaningful"] is False
     assert results[0]["summary"] == "no change"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("error_channel", ["stderr", "stdout"])
+async def test_triage_batch_preserves_bounded_failure_diagnostics(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error_channel: str
+) -> None:
+    from unittest.mock import AsyncMock, Mock
+
+    from autoskillit._llm_triage import _triage_batch
+    from autoskillit.core import SubprocessResult, TerminationReason
+
+    error = "Provider rejected pinned model: " + "x" * 1100
+    stdout = (
+        json.dumps(
+            {
+                "type": "result",
+                "subtype": "error_during_execution",
+                "is_error": True,
+                "result": error,
+                "session_id": "triage-failure",
+            }
+        )
+        if error_channel == "stdout"
+        else ""
+    )
+    stderr = error if error_channel == "stderr" else ""
+    monkeypatch.setattr(
+        _patch_autoskillit__llm_triage,
+        "run_managed_async",
+        AsyncMock(
+            return_value=SubprocessResult(
+                returncode=1,
+                stdout=stdout,
+                stderr=stderr,
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=0,
+            )
+        ),
+    )
+    logger = Mock()
+    monkeypatch.setattr(_patch_autoskillit__llm_triage, "logger", logger)
+    item = StaleItem(
+        skill="my-skill", reason="hash_mismatch", stored_value="old", current_value="new"
+    )
+
+    results = await _triage_batch(
+        [item], {"my-skill": "# Skill"}, cwd=tmp_path, backend=ClaudeCodeBackend()
+    )
+
+    assert results == [
+        {"skill": "my-skill", "meaningful": True, "summary": "Batch triage parse failed."}
+    ]
+    logger.warning.assert_called_once_with(
+        "triage_staleness batch parse failed; treating all as meaningful",
+        batch=["my-skill"],
+        returncode=1,
+        stderr=stderr[:1000],
+        session_result=error[:1000] if error_channel == "stdout" else "",
+    )

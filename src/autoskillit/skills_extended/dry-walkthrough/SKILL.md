@@ -287,6 +287,11 @@ Prose such as "deferred to Part" has no effect. If this walkthrough edits the pl
 renews the authority; never edit an allocation table to drop an assigned row. Record the
 authority revision, part ordinal/count, suffix, and number of assigned requirements verified.
 
+Rows allocated `stage` are outcomes the recipe performs after publication; never add an
+implementation step for them. If a mixed step includes a publication action and required code
+work, remove the publication action while preserving the code work and allocation. Remove an
+entire step only when it contains no implementation-owned work, and retain its stage allocation.
+
 **B. Standalone single-part mode.** When there is no plan-set evidence, issue context is
 provided, and the filename has no `_part_` suffix, fetch the issue body:
 ```bash

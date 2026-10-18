@@ -87,8 +87,30 @@ Run:
 gh pr list --base {base_branch} --state open --json number,title,headRefName,author,body,additions,deletions,changedFiles --limit 100
 ```
 
-If zero PRs are returned: write a summary to terminal and exit cleanly with an empty
-`pr_order_{ts}.json` (zero PRs, no integration branch needed).
+If zero PRs are returned, compute `{ts}` with `YYYY-MM-DD_HHMMSS` and the batch
+branch name from Step 5 without creating the branch. Write
+`{{AUTOSKILLIT_TEMP}}/merge-prs/pr_order_{ts}.json` as the documented object with
+`batch_branch`, `base_branch`, `generated_at`, `"pr_count": 0`, `"prs": []`,
+`"ci_blocked_prs": []` and `"review_blocked_prs": []`. The artifact must exist;
+its output path must be absolute and inside the session cwd.
+
+Print a summary, then emit this token block as the last output. No analysis plan
+is written on this early exit, so omit `analysis_file`. Queue detection has not run.
+
+```
+pr_order_file = {absolute_path_to_pr_order_json}
+batch_branch = {batch_branch_name}
+pr_count = 0
+simple_count = 0
+needs_check_count = 0
+ci_blocked_count = 0
+review_blocked_count = 0
+queue_mode = false
+```
+
+When open PRs exist but all are filtered into the blocked arrays, complete the
+normal output flow: preserve those arrays, their counts, the detected queue mode,
+and the analysis file. The eligible `prs` list is still empty.
 
 If `gh` returns an auth error: abort with a clear message.
 

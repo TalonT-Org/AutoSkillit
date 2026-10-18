@@ -446,6 +446,7 @@ GITHUB_API_SKILL_FAMILIES: tuple[SkillFamilyDef, ...] = (
                 "drift-discipline",
                 "graphql-batch-aliases",
                 "mutating-call-delay",
+                "response-body-guard",
             }
         ),
     ),
@@ -461,6 +462,7 @@ GITHUB_API_SKILL_FAMILIES: tuple[SkillFamilyDef, ...] = (
         required_patterns=frozenset(
             {
                 "unpostable-prefilter",
+                "response-body-guard",
             }
         ),
     ),

@@ -139,7 +139,7 @@ def test_pre_launch_probes_bound_executable_with_bound_environment(
         (1, "", "failed"),
         (0, "", "empty"),
         (0, "Claude Code unknown", "unparseable"),
-        (0, "2.1.279 (Claude Code)", "requires Claude Code 2.1.280 or newer"),
+        (0, "2.1.295 (Claude Code)", "requires Claude Code 2.1.296 or newer"),
     ],
 )
 def test_pre_launch_fails_closed_for_unusable_capability_probe(

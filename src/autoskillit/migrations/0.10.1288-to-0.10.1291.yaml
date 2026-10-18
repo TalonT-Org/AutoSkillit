@@ -1,0 +1,28 @@
+from_version: "0.10.1288"
+to_version: "0.10.1291"
+description: Require each recipe step's with.step_name to match its YAML key.
+changes:
+  - id: step-name-equals-step-key
+    description: |
+      Per-variant model.step_overrides and providers.* pins now match
+      analyze_pipeline_health_* variants by their own YAML keys (#4706).
+      Recipe declarations on telemetry-only tools also require the invoking
+      YAML key; free-form cross-step grouping labels are not valid
+      with.step_name values. Distinct analyze_pipeline_health_* keys now use
+      separate token and timing rows, so the former family-level aggregation
+      is lost; no additional label parameter is introduced.
+    instruction: |
+      Every with.step_name on a recipe step (any tool except record_pipeline_step)
+      must equal that step's YAML key; set it to the key or remove it.
+    example_before: |
+      steps:
+        decompose_phases:
+          tool: run_skill
+          with:
+            step_name: decompose
+    example_after: |
+      steps:
+        decompose_phases:
+          tool: run_skill
+          with:
+            step_name: decompose_phases

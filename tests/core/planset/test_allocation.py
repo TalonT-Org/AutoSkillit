@@ -19,6 +19,16 @@ def _plan_with_allocation(body: str, requirement_id: str, implementation_step: s
 """
 
 
+def _part_with_allocations(body: str, rows: str) -> str:
+    return f"""{body}
+
+## Issue Requirement Allocation
+| Requirement ID | Allocation | Implementation Step |
+| --- | --- | --- |
+{rows}
+"""
+
+
 @pytest.mark.parametrize(
     ("body", "requirement_id", "implementation_step", "reason", "detail_parts"),
     (
@@ -255,3 +265,88 @@ Implement R1.
         parse_part_allocation(markdown, part_key="P1")
 
     assert "R1" in str(error.value)
+
+
+def test_stage_allocation_parses_obligation_in_third_cell() -> None:
+    from autoskillit.core import StageObligation
+
+    rows = parse_part_allocation(
+        _part_with_allocations("# Plan", "| P-10 | stage | pr_opened |"), part_key="P1"
+    )
+
+    assert len(rows) == 1
+    assert rows[0].allocation.value == "stage"
+    assert rows[0].implementation_step is None
+    assert rows[0].stage_obligation is StageObligation.PR_OPENED
+
+
+def test_stage_allocation_rejects_unknown_obligation_with_supported_keys() -> None:
+    markdown = _part_with_allocations("# Plan", "| P-10 | stage | Step 4 |")
+
+    with pytest.raises(ValueError) as error:
+        parse_part_allocation(markdown, part_key="P1")
+
+    message = str(error.value)
+    assert "pr_opened" in message
+    assert "pr_left_unmerged" in message
+
+
+def test_requirement_can_have_code_and_stage_allocations() -> None:
+    from autoskillit.core import StageObligation
+
+    rows = parse_part_allocation(
+        _part_with_allocations(
+            "# Plan",
+            "| R3 | owned | Step 2 |\n| R3 | stage | pr_opened |",
+        ),
+        part_key="P1",
+    )
+
+    assert len(rows) == 2
+    assert rows[0].implementation_step == "Step 2"
+    assert rows[1].implementation_step is None
+    assert rows[1].stage_obligation is StageObligation.PR_OPENED
+
+
+def test_duplicate_stage_obligation_pair_is_rejected() -> None:
+    markdown = _part_with_allocations(
+        "# Plan",
+        "| R3 | stage | pr_opened |\n| R3 | stage | pr_opened |",
+    )
+
+    with pytest.raises(ValueError) as error:
+        parse_part_allocation(markdown, part_key="P1")
+
+    message = str(error.value)
+    assert "duplicate" in message.lower()
+    assert "R3" in message
+    assert "pr_opened" in message
+
+
+def test_stage_allocation_cited_by_step_is_rejected() -> None:
+    markdown = _part_with_allocations(
+        "### Step 4: Open PR\nRequirements: P-10\nOpen a pull request.",
+        "| P-10 | stage | pr_opened |",
+    )
+    rows = parse_part_allocation(markdown, part_key="P1")
+
+    defects = verify_allocation_evidence(markdown, rows)
+
+    assert len(defects) == 1
+    requirement_id, reason, detail = defects[0]
+    assert requirement_id == "P-10"
+    assert reason.value == "allocation_stage_cited_by_step"
+    assert "P-10" in detail
+
+
+@pytest.mark.parametrize(("stage_id", "step_citation"), (("P-1", "P-10"), ("P-10", "P-1")))
+def test_stage_allocation_citation_uses_requirement_id_boundaries(
+    stage_id: str, step_citation: str
+) -> None:
+    markdown = _part_with_allocations(
+        f"### Step 4: Open PR\nRequirements: {step_citation}\nOpen a pull request.",
+        f"| {stage_id} | stage | pr_opened |",
+    )
+    rows = parse_part_allocation(markdown, part_key="P1")
+
+    assert verify_allocation_evidence(markdown, rows) == ()

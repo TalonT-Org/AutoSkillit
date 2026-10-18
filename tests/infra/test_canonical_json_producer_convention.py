@@ -1,68 +1,74 @@
-"""Producer ratchet: enforce that every strict-canonical JSON consumer has a
-registered, verified server-side producer.
+"""Ratchet strict canonical JSON consumers to their registered producers.
 
-Scans src/autoskillit/ for decode_versioned_json_bytes(..., require_canonical=True)
-call sites. Each such site must be registered in _CANONICAL_JSON_ARTIFACT_REGISTRY,
-pointing at a producer function that either calls write_canonical_versioned_json or
-exclusively writes already-canonical bytes, and at any child-facing SKILL.md section
-that names the producer's MCP tool by symbol. This closes the
-gap #4406 exhibited: a Python consumer demanding canonical bytes with no mechanical
-guarantee that its LLM-agent producer emits them.
+Consumer identity is the source path plus its dotted enclosing definition scope,
+independent of line numbers. A decode call is strict when require_canonical is true,
+not a literal false, or supplied through **kwargs. Each strict consumer scope must be
+registered in _CANONICAL_JSON_ARTIFACT_REGISTRY, pointing at a producer function that
+either calls write_canonical_versioned_json or exclusively writes already-canonical
+bytes, and at any child-facing SKILL.md section that names the producer's MCP tool by
+symbol. This closes the gap #4406 exhibited: a Python consumer demanding canonical
+bytes with no mechanical guarantee that its LLM-agent producer emits them.
 """
 
 from __future__ import annotations
 
 import ast
+from collections import Counter
+from collections.abc import Mapping
 from pathlib import Path
 from typing import NamedTuple
 
 import pytest
 
+from tests._ast_helpers import MODULE_SCOPE, call_name, count_differences, scope_qualnames
+
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
 
 class CanonicalArtifactDef(NamedTuple):
-    consumer_site: tuple[str, int | tuple[int, ...]]
+    consumer_path: str
+    consumer_function: str
     producer_symbol: str
     producer_path: str
     producer_function: str
     skill_md_refs: tuple[tuple[str, int, int], ...]
 
 
-def _is_literal_true(node: ast.expr) -> bool:
-    return isinstance(node, ast.Constant) and node.value is True
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_SRC_ROOT = _REPO_ROOT / "src" / "autoskillit"
 
 
-def _scan_require_canonical_consumer_sites() -> set[tuple[str, int]]:
-    """AST-scan src/autoskillit/ for decode_versioned_json_bytes(require_canonical=True).
+def _is_strict(call: ast.Call) -> bool:
+    """Return whether a decode call may require canonical bytes."""
+    if any(keyword.arg is None for keyword in call.keywords):
+        return True
+    for keyword in call.keywords:
+        if keyword.arg == "require_canonical":
+            return not (isinstance(keyword.value, ast.Constant) and keyword.value.value is False)
+    return False
 
-    Returns set of (relative_path, line_number) for call sites that pass
-    require_canonical=True as a keyword argument.
+
+def _decode_call_sites(tree: ast.AST, relpath: str) -> Counter[tuple[str, str, bool]]:
+    """Count decode calls by relative path, enclosing scope, and strictness."""
+    scopes = scope_qualnames(tree)
+    sites: Counter[tuple[str, str, bool]] = Counter()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and call_name(node) == "decode_versioned_json_bytes":
+            sites[(relpath, scopes[node], _is_strict(node))] += 1
+    return sites
+
+
+def _scan_decode_call_sites() -> Counter[tuple[str, str, bool]]:
+    """Scan source decode calls; an unparseable file fails here with its filename.
+
+    This check is independent of lint and typecheck and does not rely on their presence
+    or execution order.
     """
-    src_root = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
-    sites: set[tuple[str, int]] = set()
-
-    for py_file in src_root.rglob("*.py"):
-        try:
-            tree = ast.parse(py_file.read_text(), filename=str(py_file))
-        except SyntaxError:
-            continue
-
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
-                continue
-            func = node.func
-            is_decode_call = (
-                isinstance(func, ast.Name) and func.id == "decode_versioned_json_bytes"
-            ) or (isinstance(func, ast.Attribute) and func.attr == "decode_versioned_json_bytes")
-            if not is_decode_call:
-                continue
-            for kw in node.keywords:
-                if kw.arg == "require_canonical" and _is_literal_true(kw.value):
-                    rel = str(py_file.relative_to(src_root.parent.parent))
-                    sites.add((rel, node.lineno))
-                    break
-
+    sites: Counter[tuple[str, str, bool]] = Counter()
+    for path in sorted(_SRC_ROOT.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        relative_path = str(path.relative_to(_REPO_ROOT))
+        sites.update(_decode_call_sites(tree, relative_path))
     return sites
 
 
@@ -75,27 +81,13 @@ def _find_function_by_name(
     return None
 
 
-def _find_call_at_line(tree: ast.Module, lineno: int, func_name: str) -> ast.Call | None:
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or node.lineno != lineno:
-            continue
-        func = node.func
-        matches = (isinstance(func, ast.Name) and func.id == func_name) or (
-            isinstance(func, ast.Attribute) and func.attr == func_name
-        )
-        if matches:
-            return node
-    return None
-
-
 def _scan_child_tool_authority_producer_sites() -> set[tuple[str, int, str]]:
     """Find authority construction or canonicalization in child-facing MCP tools."""
-    repo_root = Path(__file__).resolve().parents[2]
-    tools_root = repo_root / "src" / "autoskillit" / "server" / "tools"
+    tools_root = _SRC_ROOT / "server" / "tools"
     sites: set[tuple[str, int, str]] = set()
     for source_path in tools_root.glob("tools_*.py"):
         tree = ast.parse(source_path.read_text(), filename=str(source_path))
-        relative_path = str(source_path.relative_to(repo_root))
+        relative_path = str(source_path.relative_to(_REPO_ROOT))
         for node in ast.walk(tree):
             if isinstance(node, ast.Call):
                 func = node.func
@@ -121,42 +113,48 @@ _TYPED_PRODUCER_MODULE = "src/autoskillit/server/tools/tools_audit_artifacts.py"
 
 _CANONICAL_JSON_ARTIFACT_REGISTRY: dict[str, CanonicalArtifactDef] = {
     "authority": CanonicalArtifactDef(
-        consumer_site=("src/autoskillit/core/audit/audit_cycle_verifier.py", (504,)),
+        consumer_path="src/autoskillit/core/audit/audit_cycle_verifier.py",
+        consumer_function="AuditCycleVerifier.decode_authority",
         producer_symbol="_write_or_verify",
         producer_path=_MATERIALIZER_PRODUCER_PATH,
         producer_function="_write_or_verify",
         skill_md_refs=(),
     ),
     "disposition_report": CanonicalArtifactDef(
-        consumer_site=("src/autoskillit/core/audit/audit_cycle_verifier.py", (521,)),
+        consumer_path="src/autoskillit/core/audit/audit_cycle_verifier.py",
+        consumer_function="AuditCycleVerifier.load_report",
         producer_symbol="write_audit_disposition_bundle",
         producer_path=_TYPED_PRODUCER_MODULE,
         producer_function="_write_disposition_report",
         skill_md_refs=(("src/autoskillit/skills_extended/make-plan/SKILL.md", 386, 398),),
     ),
     "inventory": CanonicalArtifactDef(
-        consumer_site=("src/autoskillit/core/audit/audit_cycle_verifier.py", (660,)),
+        consumer_path="src/autoskillit/core/audit/audit_cycle_verifier.py",
+        consumer_function="AuditCycleVerifier._decode_inventory_requirement_ids",
         producer_symbol="_write_or_verify",
         producer_path=_MATERIALIZER_PRODUCER_PATH,
         producer_function="_write_or_verify",
         skill_md_refs=(),
     ),
     "plan_association": CanonicalArtifactDef(
-        consumer_site=("src/autoskillit/recipe/cmd_rpc/_cmd_rpc_guards.py", 271),
+        consumer_path="src/autoskillit/recipe/cmd_rpc/_cmd_rpc_guards.py",
+        consumer_function="_load_associated_disposition",
         producer_symbol="write_audit_disposition_bundle",
         producer_path=_TYPED_PRODUCER_MODULE,
         producer_function="_write_plan_association",
         skill_md_refs=(("src/autoskillit/skills_extended/make-plan/SKILL.md", 386, 398),),
     ),
     "audit_semantic_result": CanonicalArtifactDef(
-        consumer_site=("src/autoskillit/core/audit/audit_semantic_codec.py", 423),
+        consumer_path="src/autoskillit/core/audit/audit_semantic_codec.py",
+        consumer_function="load_audit_semantic_result",
         producer_symbol="write_audit_semantic_result",
         producer_path=_TYPED_PRODUCER_MODULE,
         producer_function="_write_semantic_result",
         skill_md_refs=(("src/autoskillit/skills_extended/audit-impl/SKILL.md", 103, 117),),
     ),
     "standalone_audit_evidence": CanonicalArtifactDef(
-        consumer_site=("src/autoskillit/core/audit/audit_semantic_codec.py", 470),
+        consumer_path="src/autoskillit/core/audit/audit_semantic_codec.py",
+        consumer_function="load_standalone_audit_evidence",
         producer_symbol="write_standalone_audit_evidence",
         producer_path=_TYPED_PRODUCER_MODULE,
         producer_function="_write_standalone_evidence",
@@ -165,18 +163,95 @@ _CANONICAL_JSON_ARTIFACT_REGISTRY: dict[str, CanonicalArtifactDef] = {
 }
 
 
-# Documented exception: consumer sites that intentionally decode non-canonical
-# versioned JSON. Paired with the writer that produces them so a future accidental
-# flip to require_canonical=True is caught by test_non_canonical_exceptions_below.
-_NON_CANONICAL_JSON_EXCEPTIONS: dict[str, tuple[tuple[str, int], str]] = {
+# Documented exception: scopes that intentionally decode non-canonical versioned JSON.
+# Their reasons cover every non-canonical read in the scope.
+_NON_CANONICAL_JSON_EXCEPTIONS: dict[str, tuple[tuple[str, str], str]] = {
     "closure_report.json": (
-        ("src/autoskillit/core/audit/closure_verifier.py", 93),
+        (
+            "src/autoskillit/core/audit/closure_verifier.py",
+            "verify_closure_report",
+        ),
         "Closure reports are written by write_versioned_json (see the "
         "_write_report fixture in tests/core/test_closure_verifier.py), not "
         "write_canonical_versioned_json — no content-addressed tamper-evidence "
         "chain requires byte-exact canonical bytes for this artifact.",
     ),
 }
+
+
+def _consumer_registry_problems(
+    registry: Mapping[str, CanonicalArtifactDef],
+    sites: Counter[tuple[str, str, bool]],
+) -> list[str]:
+    """Compare strict call counts to registered path-and-scope consumer counts."""
+    strict = Counter(
+        {
+            (path, qualname): count
+            for (path, qualname, is_strict), count in sites.items()
+            if is_strict
+        }
+    )
+    expected = Counter(
+        (entry.consumer_path, entry.consumer_function) for entry in registry.values()
+    )
+    problems: list[str] = []
+
+    for (path, qualname), expected_count, observed_count in count_differences(expected, strict):
+        if expected_count > observed_count:
+            kinds = sorted(
+                kind
+                for kind, entry in registry.items()
+                if (entry.consumer_path, entry.consumer_function) == (path, qualname)
+            )
+            problems.append(
+                f"{', '.join(kinds)}: {path}::{qualname} is missing count: "
+                f"{expected_count - observed_count}; "
+                "if the consumer moved or was renamed, update consumer_path/consumer_function; "
+                "if it no longer exists, delete the entry"
+            )
+        else:
+            problems.append(
+                f"{path}::{qualname} has unregistered count: {observed_count - expected_count}; "
+                "register a CanonicalArtifactDef in _CANONICAL_JSON_ARTIFACT_REGISTRY "
+                "naming its producer"
+            )
+    return sorted(problems)
+
+
+def _non_canonical_exception_problems(
+    exceptions: Mapping[str, tuple[tuple[str, str], str]],
+    sites: Counter[tuple[str, str, bool]],
+) -> list[str]:
+    """Check scope-wide exceptions for a reason, decode call, and no strict calls.
+
+    An exception requires at least one decode call and rejects any strict call in its
+    scope. It does not associate individual non-strict calls with separate artifact
+    names or enforce their multiplicity; the reason must cover the scope's non-canonical
+    reads.
+    """
+    problems: list[str] = []
+    for artifact_name, ((path, qualname), reason) in exceptions.items():
+        if not reason:
+            problems.append(f"{artifact_name} has an empty exception reason")
+        scoped_calls = [
+            (is_strict, count)
+            for (site_path, site_qualname, is_strict), count in sites.items()
+            if (site_path, site_qualname) == (path, qualname) and count
+        ]
+        if not scoped_calls:
+            problems.append(
+                f"{artifact_name}: no decode_versioned_json_bytes call in "
+                f"{path}::{qualname} — update the anchor if it moved, delete the entry if removed"
+            )
+        elif any(is_strict for is_strict, _count in scoped_calls):
+            problems.append(
+                f"{artifact_name}: {path}::{qualname} now counts as strict "
+                "(require_canonical=True, a nonliteral argument, or **kwargs) — this pairing "
+                "is documented as non-canonical in _NON_CANONICAL_JSON_EXCEPTIONS; "
+                "register its producer in _CANONICAL_JSON_ARTIFACT_REGISTRY if strictness is "
+                "intended, otherwise restore an explicitly non-canonical call"
+            )
+    return sorted(problems)
 
 
 class TestCanonicalJsonProducerConvention:
@@ -188,48 +263,11 @@ class TestCanonicalJsonProducerConvention:
         assert _scan_child_tool_authority_producer_sites() == set()
 
     def test_require_canonical_consumers_have_registered_producers(self):
-        """Every require_canonical=True consumer site must have a registry entry.
-
-        consumer_site may be ``(file, line: int)`` or ``(file, lines: tuple[int, ...])``.
-        The tuple form lets a single entry span the line numbers of multiple
-        development branches whose refactors shift the call site but do not
-        change its meaning — the test then asserts the scanner finds at least
-        one acceptable line per registered file and vice versa.
-        """
-        current = _scan_require_canonical_consumer_sites()
-
-        registered_per_file: dict[str, set[int]] = {}
-        for entry in _CANONICAL_JSON_ARTIFACT_REGISTRY.values():
-            file, lines = entry.consumer_site
-            if isinstance(lines, int):
-                registered_per_file.setdefault(file, set()).add(lines)
-            else:
-                registered_per_file.setdefault(file, set()).update(lines)
-
-        current_per_file: dict[str, set[int]] = {}
-        for file, line in current:
-            current_per_file.setdefault(file, set()).add(line)
-
-        added_files = sorted(set(current_per_file) - set(registered_per_file))
-        stale = [
-            file
-            for file, acceptable in registered_per_file.items()
-            if not (acceptable & current_per_file.get(file, set()))
-        ]
-
-        msg_parts = []
-        if added_files:
-            msg_parts.append(
-                "New require_canonical=True consumer files found (register a "
-                "CanonicalArtifactDef in _CANONICAL_JSON_ARTIFACT_REGISTRY):\n"
-                + "\n".join(f"  + {f}" for f in added_files)
-            )
-        if stale:
-            msg_parts.append(
-                "Registered consumer sites no longer found (remove from "
-                "_CANONICAL_JSON_ARTIFACT_REGISTRY):\n" + "\n".join(f"  - {f}" for f in stale)
-            )
-        assert not added_files and not stale, "\n\n".join(msg_parts)
+        """Every strict consumer scope matches one registry entry in both directions."""
+        problems = _consumer_registry_problems(
+            _CANONICAL_JSON_ARTIFACT_REGISTRY, _scan_decode_call_sites()
+        )
+        assert not problems, "\n\n".join(problems)
 
     def test_registered_producers_are_sanctioned_canonical_writers(self):
         """Every registered producer writes canonical objects or prepared canonical bytes."""
@@ -273,42 +311,240 @@ class TestCanonicalJsonProducerConvention:
                     f"{entry.producer_symbol!r}"
                 )
 
-    def test_new_require_canonical_consumer_without_registered_producer_fails(self, monkeypatch):
+    def test_new_require_canonical_consumer_without_registered_producer_fails(self):
         """Meta-test: a fake extra consumer site should cause the ratchet to fail."""
-        original_scan = _scan_require_canonical_consumer_sites
-
-        def patched_scan():
-            sites = original_scan()
-            sites.add(("src/autoskillit/fake_canonical_module.py", 999))
-            return sites
-
-        monkeypatch.setattr(
-            "tests.infra.test_canonical_json_producer_convention."
-            "_scan_require_canonical_consumer_sites",
-            patched_scan,
-        )
-        with pytest.raises(AssertionError, match="fake_canonical_module"):
-            self.test_require_canonical_consumers_have_registered_producers()
+        sites = _scan_decode_call_sites()
+        sites[("src/autoskillit/fake_canonical_module.py", "load", True)] += 1
+        problems = _consumer_registry_problems(_CANONICAL_JSON_ARTIFACT_REGISTRY, sites)
+        assert any("fake_canonical_module" in problem for problem in problems)
 
     def test_non_canonical_exceptions_still_resolve_to_non_canonical_reads(self):
-        """Documented non-canonical exceptions must not pass require_canonical=True."""
-        repo_root = Path(__file__).resolve().parents[2]
-        for artifact_name, (site, reason) in _NON_CANONICAL_JSON_EXCEPTIONS.items():
-            assert reason, f"{artifact_name} has an empty exception reason"
-            relative_path, lineno = site
-            source_path = repo_root / relative_path
+        """Each exception scope has non-strict decode calls and a reason."""
+        sites = Counter()
+        exception_paths = sorted(
+            {path for (path, _qualname), _reason in _NON_CANONICAL_JSON_EXCEPTIONS.values()}
+        )
+        for relative_path in exception_paths:
+            source_path = _REPO_ROOT / relative_path
             tree = ast.parse(source_path.read_text(), filename=str(source_path))
-            call = _find_call_at_line(tree, lineno, "decode_versioned_json_bytes")
-            assert call is not None, (
-                f"{artifact_name}: no decode_versioned_json_bytes call found at "
-                f"{relative_path}:{lineno}"
-            )
-            for kw in call.keywords:
-                if kw.arg == "require_canonical":
-                    assert not _is_literal_true(kw.value), (
-                        f"{artifact_name}: {relative_path}:{lineno} now passes "
-                        "require_canonical=True — this pairing is documented as "
-                        "non-canonical in _NON_CANONICAL_JSON_EXCEPTIONS; either "
-                        "register it in _CANONICAL_JSON_ARTIFACT_REGISTRY instead or "
-                        "revert the flag"
-                    )
+            sites.update(_decode_call_sites(tree, relative_path))
+        problems = _non_canonical_exception_problems(_NON_CANONICAL_JSON_EXCEPTIONS, sites)
+        assert not problems, "\n\n".join(problems)
+
+
+def _def(path: str, function: str) -> CanonicalArtifactDef:
+    """Build a synthetic consumer entry; producer fields are ignored by this diff."""
+    return CanonicalArtifactDef(
+        consumer_path=path,
+        consumer_function=function,
+        producer_symbol="write_placeholder",
+        producer_path="pkg/producer.py",
+        producer_function="write_placeholder",
+        skill_md_refs=(),
+    )
+
+
+class TestCanonicalConsumerGuardBehavior:
+    def test_consumer_identity_is_line_free_and_scope_qualified(self):
+        source = """
+def load():
+    decode_versioned_json_bytes(payload, require_canonical=True)
+
+class Verifier:
+    def load(self):
+        decode_versioned_json_bytes(payload, require_canonical=True)
+
+    async def aload(self):
+        decode_versioned_json_bytes(payload, require_canonical=True)
+
+    decode_versioned_json_bytes(payload, require_canonical=True)
+
+def outer():
+    def inner():
+        decode_versioned_json_bytes(payload, require_canonical=True)
+
+decode_versioned_json_bytes(payload, require_canonical=True)
+
+def HeaderOwner(value=header_probe()):
+    pass
+
+class ClassHeaderOwner(header_probe()):
+    pass
+"""
+        tree = ast.parse(source)
+        expected = Counter(
+            {
+                ("pkg/mod.py", "load", True): 1,
+                ("pkg/mod.py", "Verifier.load", True): 1,
+                ("pkg/mod.py", "Verifier.aload", True): 1,
+                ("pkg/mod.py", "Verifier", True): 1,
+                ("pkg/mod.py", "outer.inner", True): 1,
+                ("pkg/mod.py", MODULE_SCOPE, True): 1,
+            }
+        )
+        assert _decode_call_sites(tree, "pkg/mod.py") == expected
+
+        owners = scope_qualnames(tree)
+        header_calls = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "header_probe"
+        ]
+        assert {owners[node] for node in header_calls} == {"HeaderOwner", "ClassHeaderOwner"}
+
+        shifted_tree = ast.parse("\n" * 40 + "# shifted line numbers\n" + source)
+        assert _decode_call_sites(shifted_tree, "pkg/mod.py") == expected
+
+    @pytest.mark.parametrize(
+        "load_b_def",
+        [
+            "",
+            "    def load_b(self):\n"
+            "        decode_versioned_json_bytes(payload, require_canonical=False)",
+            "    def load_b(self):\n        decode_versioned_json_bytes(payload)",
+        ],
+        ids=["removed", "non-canonical", "keyword-omitted"],
+    )
+    def test_registered_consumer_missing_or_noncanonical_is_rejected_beside_valid_sibling(
+        self, load_b_def: str
+    ):
+        source = f"""
+class Verifier:
+    def load_a(self):
+        decode_versioned_json_bytes(payload, require_canonical=True)
+{load_b_def}
+"""
+        registry = {
+            "alpha": _def("pkg/mod.py", "Verifier.load_a"),
+            "beta": _def("pkg/mod.py", "Verifier.load_b"),
+        }
+        problems = _consumer_registry_problems(
+            registry, _decode_call_sites(ast.parse(source), "pkg/mod.py")
+        )
+
+        assert len(problems) == 1
+        problem = problems[0]
+        assert "beta" in problem
+        assert "pkg/mod.py::Verifier.load_b" in problem
+        assert "alpha" not in problem
+        assert "update consumer_path/consumer_function" in problem
+        assert "delete the entry" in problem
+
+    def test_extra_strict_calls_are_rejected(self):
+        registry = {"alpha": _def("pkg/mod.py", "Verifier.load_a")}
+        extra_scope = ast.parse(
+            """
+class Verifier:
+    def load_a(self):
+        decode_versioned_json_bytes(payload, require_canonical=True)
+
+def load_c():
+    decode_versioned_json_bytes(payload, require_canonical=True)
+"""
+        )
+        problems = _consumer_registry_problems(
+            registry, _decode_call_sites(extra_scope, "pkg/mod.py")
+        )
+        assert len(problems) == 1
+        assert "pkg/mod.py::load_c" in problems[0]
+        assert "register a CanonicalArtifactDef" in problems[0]
+
+        duplicate_scope = ast.parse(
+            """
+class Verifier:
+    def load_a(self):
+        decode_versioned_json_bytes(first, require_canonical=True)
+        decode_versioned_json_bytes(second, require_canonical=True)
+"""
+        )
+        problems = _consumer_registry_problems(
+            registry, _decode_call_sites(duplicate_scope, "pkg/mod.py")
+        )
+        assert len(problems) == 1
+        assert "pkg/mod.py::Verifier.load_a" in problems[0]
+        assert "unregistered count: 1" in problems[0]
+
+    def test_ambiguous_require_canonical_counts_as_strict(self):
+        tree = ast.parse(
+            """
+def load_x(flag):
+    decode_versioned_json_bytes(payload, require_canonical=flag)
+
+def load_y(opts):
+    decode_versioned_json_bytes(payload, **opts)
+
+def load_z(opts):
+    decode_versioned_json_bytes(payload, require_canonical=False, **opts)
+"""
+        )
+        sites = _decode_call_sites(tree, "pkg/mod.py")
+        assert sites == Counter(
+            {
+                ("pkg/mod.py", "load_x", True): 1,
+                ("pkg/mod.py", "load_y", True): 1,
+                ("pkg/mod.py", "load_z", True): 1,
+            }
+        )
+        problems = _consumer_registry_problems({}, sites)
+        assert len(problems) == 3
+        assert all("unregistered count: 1" in problem for problem in problems)
+        assert all(
+            f"pkg/mod.py::{function}" in "\n".join(problems)
+            for function in ("load_x", "load_y", "load_z")
+        )
+
+    def test_non_canonical_exception_detects_flip_and_disappearance(self):
+        exceptions = {"report.json": (("pkg/mod.py", "verify"), "reason text")}
+        non_strict = _decode_call_sites(
+            ast.parse(
+                """
+def verify():
+    decode_versioned_json_bytes(payload, require_canonical=False)
+"""
+            ),
+            "pkg/mod.py",
+        )
+        assert _non_canonical_exception_problems(exceptions, non_strict) == []
+
+        strict = _decode_call_sites(
+            ast.parse(
+                """
+def verify():
+    decode_versioned_json_bytes(payload, require_canonical=True)
+"""
+            ),
+            "pkg/mod.py",
+        )
+        problems = _non_canonical_exception_problems(exceptions, strict)
+        assert len(problems) == 1
+        assert "report.json" in problems[0]
+        assert "counts as strict" in problems[0]
+
+        missing = _decode_call_sites(ast.parse("def verify():\n    pass\n"), "pkg/mod.py")
+        problems = _non_canonical_exception_problems(exceptions, missing)
+        assert len(problems) == 1
+        assert "report.json" in problems[0]
+        assert "no decode_versioned_json_bytes call" in problems[0]
+
+        empty_reason = {"report.json": (("pkg/mod.py", "verify"), "")}
+        problems = _non_canonical_exception_problems(empty_reason, non_strict)
+        assert len(problems) == 1
+        assert "report.json" in problems[0]
+        assert "empty exception reason" in problems[0]
+
+    def test_source_parse_failure_is_not_silently_skipped(self, tmp_path, monkeypatch):
+        source_root = tmp_path / "src" / "autoskillit"
+        source_root.mkdir(parents=True)
+        invalid_file = source_root / "broken.py"
+        invalid_file.write_text("def broken(:\n", encoding="utf-8")
+        monkeypatch.setattr(
+            "tests.infra.test_canonical_json_producer_convention._REPO_ROOT", tmp_path
+        )
+        monkeypatch.setattr(
+            "tests.infra.test_canonical_json_producer_convention._SRC_ROOT", source_root
+        )
+
+        with pytest.raises(SyntaxError, match="broken.py"):
+            _scan_decode_call_sites()

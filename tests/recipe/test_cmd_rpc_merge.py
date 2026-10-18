@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+import autoskillit.recipe._cmd_rpc as _cmd_rpc
 import autoskillit.recipe.cmd_rpc._cmd_rpc_merge as _patch_cmd_rpc__cmd_rpc_merge
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
@@ -219,3 +222,164 @@ def test_proactive_rebase_next_pr_publishes_conflict_report(tmp_path):
     assert result["status"] == "conflicts"
     assert result["conflict_report_path"] == str(report_path)
     assert "src/y.py" in report_path.read_text()
+
+
+def _ordered_pr(number: object, complexity: object = "simple") -> dict[str, object]:
+    return {
+        "number": number,
+        "complexity": complexity,
+    }
+
+
+def _order_document(prs: list[dict[str, object]]) -> dict[str, object]:
+    return {"prs": prs}
+
+
+def _write_order_file(tmp_path: Path, document: object) -> Path:
+    path = tmp_path / "pr-order.json"
+    path.write_text(json.dumps(document), encoding="utf-8")
+    return path
+
+
+@pytest.fixture
+def pr_order_file(tmp_path):
+    return _write_order_file(
+        tmp_path,
+        _order_document(
+            [
+                _ordered_pr(42),
+                _ordered_pr(4, "needs_check"),
+                _ordered_pr(123),
+            ]
+        ),
+    )
+
+
+def test_first_ordered_pr_returns_first_number_and_complexity(pr_order_file):
+    assert _cmd_rpc.first_ordered_pr(pr_order_file=str(pr_order_file)) == {
+        "pr_number": "42",
+        "complexity": "simple",
+        "done": "false",
+    }
+
+
+def test_first_ordered_pr_returns_done_for_empty_order(tmp_path):
+    path = _write_order_file(tmp_path, _order_document([]))
+
+    assert _cmd_rpc.first_ordered_pr(pr_order_file=str(path)) == {
+        "pr_number": "",
+        "complexity": "",
+        "done": "true",
+    }
+
+
+@pytest.mark.parametrize(
+    ("current", "number", "complexity"), [("42", "4", "needs_check"), ("4", "123", "simple")]
+)
+def test_next_ordered_pr_advances_by_file_position(pr_order_file, current, number, complexity):
+    assert _cmd_rpc.next_ordered_pr(
+        pr_order_file=str(pr_order_file), current_pr_number=current
+    ) == {
+        "pr_number": number,
+        "complexity": complexity,
+        "done": "false",
+    }
+
+
+def test_next_ordered_pr_repeats_last_entry_as_done_without_mutating_file(
+    pr_order_file,
+):
+    before = pr_order_file.read_bytes()
+
+    expected = {"pr_number": "123", "complexity": "simple", "done": "true"}
+    first = _cmd_rpc.next_ordered_pr(pr_order_file=str(pr_order_file), current_pr_number="123")
+    second = _cmd_rpc.next_ordered_pr(pr_order_file=str(pr_order_file), current_pr_number="123")
+
+    assert first == expected
+    assert second == expected
+    assert pr_order_file.read_bytes() == before
+
+
+def test_first_ordered_pr_rejects_relative_path_before_file_access():
+    with pytest.raises(ValueError):
+        _cmd_rpc.first_ordered_pr(pr_order_file="relative-pr-order.json")
+
+
+@pytest.mark.parametrize("current_pr_number", ["", "999", "done", "#4"])
+def test_next_ordered_pr_rejects_invalid_current_number(pr_order_file, current_pr_number):
+    with pytest.raises(ValueError):
+        _cmd_rpc.next_ordered_pr(
+            pr_order_file=str(pr_order_file), current_pr_number=current_pr_number
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        pytest.param("complexity", [], id="complexity-list"),
+        pytest.param("complexity", "unknown", id="complexity-unknown"),
+        pytest.param("number", True, id="number-bool"),
+        pytest.param("number", 0, id="number-zero"),
+        pytest.param("number", -1, id="number-negative"),
+        pytest.param("number", "42", id="number-string"),
+    ],
+)
+def test_first_ordered_pr_reports_invalid_pr_field_location(tmp_path, field, value):
+    pr = _ordered_pr(42)
+    pr[field] = value
+    path = _write_order_file(tmp_path, _order_document([pr]))
+
+    with pytest.raises(ValueError) as exc_info:
+        _cmd_rpc.first_ordered_pr(pr_order_file=str(path))
+
+    message = str(exc_info.value)
+    assert str(path) in message
+    assert "prs[0]" in message
+
+
+def test_first_ordered_pr_reports_duplicate_number_location(tmp_path):
+    path = _write_order_file(tmp_path, _order_document([_ordered_pr(42), _ordered_pr(42)]))
+
+    with pytest.raises(ValueError) as exc_info:
+        _cmd_rpc.first_ordered_pr(pr_order_file=str(path))
+
+    assert str(path) in str(exc_info.value)
+    assert "prs[1]" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "malformation", ["top-level-list", "missing-prs", "nonlist-prs", "nondict-entry"]
+)
+def test_first_ordered_pr_reports_invalid_order_document(tmp_path, malformation):
+    document = _order_document([_ordered_pr(42)])
+    if malformation == "top-level-list":
+        document = []
+    elif malformation == "missing-prs":
+        document.pop("prs")
+    elif malformation == "nonlist-prs":
+        document["prs"] = {}
+    else:
+        document["prs"] = [None]
+    path = _write_order_file(tmp_path, document)
+
+    with pytest.raises(ValueError) as exc_info:
+        _cmd_rpc.first_ordered_pr(pr_order_file=str(path))
+
+    message = str(exc_info.value)
+    assert str(path) in message
+    if malformation == "nondict-entry":
+        assert "prs[0]" in message
+
+
+@pytest.mark.parametrize("file_contents", [None, "{", b"\xff"])
+def test_first_ordered_pr_wraps_file_read_errors_as_runtime_error(tmp_path, file_contents):
+    path = tmp_path / "pr-order.json"
+    if isinstance(file_contents, bytes):
+        path.write_bytes(file_contents)
+    elif file_contents is not None:
+        path.write_text(file_contents, encoding="utf-8")
+
+    with pytest.raises(RuntimeError) as exc_info:
+        _cmd_rpc.first_ordered_pr(pr_order_file=str(path))
+
+    assert str(path) in str(exc_info.value)

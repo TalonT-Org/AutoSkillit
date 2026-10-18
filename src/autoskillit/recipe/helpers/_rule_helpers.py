@@ -12,6 +12,7 @@ import regex as re
 
 from autoskillit.core import get_logger
 from autoskillit.recipe.analysis._analysis import ValidationContext
+from autoskillit.recipe.registry import declaration_scoped_rule_names
 from autoskillit.recipe.schema import (
     extract_sentinel_json_blocks,
 )
@@ -234,6 +235,17 @@ def _identify_optional_output_fields(contract: SkillContract) -> set[str]:
         if m and m.group(1) in output_names:
             optional.add(m.group(1))
     return optional
+
+
+def retain_declaration_findings(
+    post_prune_findings: list[RuleFinding],
+    pre_prune_findings: list[RuleFinding],
+) -> list[RuleFinding]:
+    """Keep declaration diagnostics from the original recipe, including pruned steps."""
+    declaration_rules = declaration_scoped_rule_names()
+    return [f for f in post_prune_findings if f.rule not in declaration_rules] + [
+        f for f in pre_prune_findings if f.rule in declaration_rules
+    ]
 
 
 def filter_pruning_false_positives(

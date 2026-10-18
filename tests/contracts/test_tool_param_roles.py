@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from dataclasses import fields as dataclass_fields
 from dataclasses import replace
+from inspect import signature
 
 import pytest
 
@@ -22,14 +23,18 @@ from autoskillit.core import (
     EXECUTION_TUNING_STEP_FIELDS,
     RUN_SKILL_ATTESTATION_PARAMS,
     RUNTIME_ADMISSION_BY_ROLE,
+    TOOL_REGISTRY,
     RuntimeAdmission,
     ToolParamRole,
+    ToolWireType,
     compute_tool_contract_identity,
     get_tool_def,
     runtime_exempt_param_names,
 )
+from autoskillit.recipe._binding import bind_step_invocation
+from autoskillit.recipe._contracts_manifest import load_bundled_manifest
 from autoskillit.recipe.schema import RecipeStep
-from autoskillit.server.tools.tools_execution import _build_actual_mcp_kwargs
+from autoskillit.server.tools.tools_execution import _build_actual_mcp_kwargs, run_skill
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
@@ -113,20 +118,13 @@ def test_execution_tuning_fallback_tables_cover_role_exactly() -> None:
 
 
 def test_build_actual_mcp_kwargs_fails_fast_on_drift() -> None:
-    """The kwargs-assembly helper must raise on a missing handler param and on an
-    unknown values key, and must NOT demand values for dispatch_items
-    (handler_parameter=False) or skill_inputs (structured_skill_inputs=True) —
-    pinning the filter that keeps assembly aligned with the real handler surface."""
+    """The kwargs-assembly helper must follow the ToolDef wire-kwarg view."""
     tool_def = _run_skill_tool_def()
-    handler_param_names = frozenset(
-        param.name
-        for param in tool_def.params
-        if param.handler_parameter and not param.structured_skill_inputs
-    )
-    assert "dispatch_items" not in handler_param_names
-    assert "skill_inputs" not in handler_param_names
+    mcp_kwarg_names = tool_def.mcp_kwarg_names
+    assert "dispatch_items" not in mcp_kwarg_names
+    assert "skill_inputs" not in mcp_kwarg_names
 
-    complete_values: dict[str, object] = dict.fromkeys(handler_param_names, "")
+    complete_values: dict[str, object] = dict.fromkeys(mcp_kwarg_names, "")
 
     incomplete = dict(complete_values)
     del incomplete["order_id"]
@@ -134,12 +132,47 @@ def test_build_actual_mcp_kwargs_fails_fast_on_drift() -> None:
         _build_actual_mcp_kwargs(tool_def, incomplete)
 
     excess = dict(complete_values)
-    excess["not_a_real_param"] = ""
-    with pytest.raises(ValueError, match="not_a_real_param"):
+    excess["dispatch_items"] = ""
+    with pytest.raises(ValueError, match="dispatch_items"):
         _build_actual_mcp_kwargs(tool_def, excess)
 
     result = _build_actual_mcp_kwargs(tool_def, complete_values)
-    assert set(result) == handler_param_names
+    assert set(result) == mcp_kwarg_names
+
+
+def test_compiled_mcp_kwargs_are_exactly_the_kwarg_view() -> None:
+    tool_def = get_tool_def("run_skill")
+    assert tool_def is not None
+    with_args = {
+        param.name: (
+            "/autoskillit:dry-walkthrough"
+            if param.name == "skill_command"
+            else "/repo"
+            if param.name == "cwd"
+            else "verify"
+            if param.name == "step_name"
+            else 2400
+            if param.wire_type is ToolWireType.INTEGER
+            else {"plan_path": "/tmp/plan.md"}
+            if param.wire_type is ToolWireType.OBJECT
+            else "value"
+        )
+        for param in tool_def.params
+    }
+    with_args["dispatch_items"] = "${{ context.plan_paths }}"
+    with_args["skill_inputs"] = {"plan_path": "{plan_path}"}
+    step = RecipeStep(name="verify", tool="run_skill", with_args=with_args)
+
+    invocation = bind_step_invocation(
+        "verify",
+        step,
+        manifest=load_bundled_manifest(),
+    )
+
+    assert invocation.is_valid, invocation.failures
+    expected_names = set(signature(run_skill).parameters) - {"ctx", "skill_inputs"}
+    assert tool_def.mcp_kwarg_names == expected_names
+    assert {value.name for value in invocation.mcp_kwargs} == expected_names
 
 
 def test_run_skill_attestation_params_is_subset_of_protocol_role() -> None:
@@ -175,3 +208,59 @@ def test_contract_identity_excludes_role() -> None:
     assert compute_tool_contract_identity(reroled_tool_def) == compute_tool_contract_identity(
         tool_def
     ), "role changed compute_tool_contract_identity's output — it must be excluded by construction"
+
+
+def test_step_name_role_and_tool_membership_are_reviewed() -> None:
+    """Every invoking-step reference is a step identity; the tracker target is an input."""
+    expected_step_identity_tools = {
+        "batch_cleanup_clones",
+        "bind_plan_set",
+        "bootstrap_clone",
+        "check_pr_mergeable",
+        "check_repo_merge_state",
+        "claim_and_resolve_issue",
+        "classify_fix",
+        "clone_repo",
+        "commit_files",
+        "create_and_publish_branch",
+        "create_unique_branch",
+        "enqueue_pr",
+        "merge_worktree",
+        "push_to_remote",
+        "release_issue",
+        "register_clone_status",
+        "remove_clone",
+        "report_bug",
+        "reset_test_dir",
+        "run_cmd",
+        "run_python",
+        "run_skill",
+        "test_check",
+        "verify_review_receipt",
+        "wait_for_ci",
+        "wait_for_merge_queue",
+        "write_audit_disposition_bundle",
+        "write_audit_semantic_result",
+        "write_standalone_audit_evidence",
+    }
+    step_name_roles = {
+        tool.name: param.role
+        for tool in TOOL_REGISTRY.values()
+        if (param := tool.param_def("step_name")) is not None
+    }
+
+    assert set(step_name_roles) == expected_step_identity_tools | {"record_pipeline_step"}
+    assert {
+        name for name, role in step_name_roles.items() if role is ToolParamRole.STEP_IDENTITY
+    } == expected_step_identity_tools
+    assert step_name_roles["record_pipeline_step"] is ToolParamRole.CHILD_INPUT
+
+
+def test_run_skill_exempt_set_unchanged() -> None:
+    assert runtime_exempt_param_names(_run_skill_tool_def()) == {
+        "step_name",
+        "recipe_execution_id",
+        "invocation_template_digest",
+        "step_guard_value",
+        "order_id",
+    }

@@ -226,6 +226,41 @@ def test_evict_stale_hooks_removes_legacy_formats(tmp_path):
     assert len(quota_commands) == 1
 
 
+def test_evict_removes_orphaned_registry_hash_key(tmp_path: Path) -> None:
+    from autoskillit.cli._hooks import _evict_stale_autoskillit_hooks
+
+    settings = tmp_path / "settings.json"
+    user_group = {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo hi"}]}
+    seed = {
+        "permissions": {"allow": ["Bash(git status)"]},
+        "env": {"PROJECT_MODE": "test"},
+        "_autoskillit_registry_hash": "legacy",
+        "hooks": {
+            "PreToolUse": [
+                {
+                    "matcher": "Read",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "python3 /old/hooks/_dispatch.py guards/tool_guard",
+                        }
+                    ],
+                },
+                user_group,
+            ]
+        },
+    }
+    settings.write_text(json.dumps(seed))
+
+    _evict_stale_autoskillit_hooks(settings)
+
+    data = json.loads(settings.read_text())
+    assert "_autoskillit_registry_hash" not in data
+    assert data["permissions"] == seed["permissions"]
+    assert data["env"] == seed["env"]
+    assert data["hooks"]["PreToolUse"] == [user_group]
+
+
 # T-REG-1
 def test_install_production_order_includes_quota_check(tmp_path, monkeypatch):
     """install() must register quota_guard.py in hooks.json (plugin authority path)."""

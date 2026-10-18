@@ -11,6 +11,7 @@ from autoskillit.core import (
     CaptureValueType,
     CaptureValueTypeError,
     get_logger,
+    is_canonical_integer_text,
     is_capture_value_type,
     resolve_payload_field,
 )
@@ -58,6 +59,15 @@ def _validate_capture_value(key: str, value: str, declared_type: str) -> None:
 
     Raises CaptureValueTypeError if validation fails.
     """
+    if declared_type == "integer":
+        if not is_canonical_integer_text(value):
+            raise CaptureValueTypeError(
+                key=key,
+                value=value,
+                declared_type=declared_type,
+                reason="integer value must be canonical ASCII decimal text",
+            )
+        return
     if declared_type == "optional_string":
         return
     if declared_type not in ("path", "string", "url"):

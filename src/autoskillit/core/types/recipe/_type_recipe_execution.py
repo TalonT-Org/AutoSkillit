@@ -295,6 +295,7 @@ def build_recipe_execution_credential(
 class PreflightKind(StrEnum):
     AUDIT_CYCLE_INVENTORY = "audit_cycle_inventory"
     PLAN_SET_COVERAGE = "plan_set_coverage"
+    PLAN_SET_STAGE_OBLIGATIONS = "plan_set_stage_obligations"
 
 
 @dataclass(frozen=True, slots=True)
@@ -328,9 +329,10 @@ class PlanSetPreflightRequest:
     expected_kitchen_id: str
     step_name: str
     skill_name: str
-    plan_path: str
+    plan_path: str | None
     plan_set_authority_path: str
     require_sealed: bool = True
+    allow_part_drift: bool = False
 
 
 @dataclass(frozen=True, slots=True)

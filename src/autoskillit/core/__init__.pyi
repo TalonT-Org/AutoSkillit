@@ -136,6 +136,7 @@ from .io import _render_gfm_table as _render_gfm_table
 from .io import _render_terminal_table as _render_terminal_table
 from .io import atomic_write as atomic_write
 from .io import check_metadata_stable as check_metadata_stable
+from .io import cites_requirement as cites_requirement
 from .io import claude_code_log_path as claude_code_log_path
 from .io import claude_code_project_dir as claude_code_project_dir
 from .io import collect_version_snapshot as collect_version_snapshot
@@ -220,7 +221,9 @@ from .planset import InventoryExtraction as InventoryExtraction
 from .planset import assigned_requirements as assigned_requirements
 from .planset import evaluate_coverage as evaluate_coverage
 from .planset import extract_requirement_inventory as extract_requirement_inventory
+from .planset import load_pinned_plan_set_authority as load_pinned_plan_set_authority
 from .planset import parse_part_allocation as parse_part_allocation
+from .planset import stage_obligations as stage_obligations
 from .planset import verify_allocation_evidence as verify_allocation_evidence
 from .planset import verify_plan_set_authority as verify_plan_set_authority
 from .plugins._active_kitchens import ActiveKitchensReadResult as ActiveKitchensReadResult
@@ -511,6 +514,7 @@ from .types import BROKER_AUTHORITY_STATUSES as BROKER_AUTHORITY_STATUSES
 from .types import CALLER_SOVEREIGN_INGREDIENTS as CALLER_SOVEREIGN_INGREDIENTS
 from .types import CAMPAIGN_ID_ENV_VAR as CAMPAIGN_ID_ENV_VAR
 from .types import CANONICAL_ACCOUNTING_FIELDS as CANONICAL_ACCOUNTING_FIELDS
+from .types import CANONICAL_INTEGER_DIGITS as CANONICAL_INTEGER_DIGITS
 from .types import CANONICAL_LAUNCH_DIGEST_FIELDS as CANONICAL_LAUNCH_DIGEST_FIELDS
 from .types import CAPTURE_VALID_VALUE_TYPES as CAPTURE_VALID_VALUE_TYPES
 from .types import CATEGORY_TAGS as CATEGORY_TAGS
@@ -587,6 +591,7 @@ from .types import EXPLORATION_FALLBACK_CODES as EXPLORATION_FALLBACK_CODES
 from .types import EXPLORATION_TOOLS as EXPLORATION_TOOLS
 from .types import EXPLORER_SPAWN_REFUSAL_RESPONSE as EXPLORER_SPAWN_REFUSAL_RESPONSE
 from .types import EXTERNAL_EFFECT_CHOICES as EXTERNAL_EFFECT_CHOICES
+from .types import FALSY_STRINGS as FALSY_STRINGS
 from .types import FEATURE_REGISTRY as FEATURE_REGISTRY
 from .types import FLEET_DISPATCH_MODE as FLEET_DISPATCH_MODE
 from .types import FLEET_DISPATCH_TOOLS as FLEET_DISPATCH_TOOLS
@@ -964,6 +969,7 @@ from .types import CoverageStatus as CoverageStatus
 from .types import DatabaseReader as DatabaseReader
 from .types import DeclaredTruthUnresolved as DeclaredTruthUnresolved
 from .types import DeclaredTruthUnsupported as DeclaredTruthUnsupported
+from .types import DelegatedOutputScope as DelegatedOutputScope
 from .types import DelegatedWriteObservation as DelegatedWriteObservation
 from .types import DelegatedWriteTarget as DelegatedWriteTarget
 from .types import DeliveryOccurrenceId as DeliveryOccurrenceId
@@ -1349,6 +1355,8 @@ from .types import SourcePair as SourcePair
 from .types import SpilledOutput as SpilledOutput
 from .types import SpillSpec as SpillSpec
 from .types import StageHistoryEvent as StageHistoryEvent
+from .types import StageObligation as StageObligation
+from .types import StageObligationDef as StageObligationDef
 from .types import StaleGeneratorError as StaleGeneratorError
 from .types import StandaloneAuditEvidence as StandaloneAuditEvidence
 from .types import StartGenerationEvent as StartGenerationEvent
@@ -1422,6 +1430,7 @@ from .types import (
 from .types import compute_remaining as compute_remaining
 from .types import compute_runtime_binding_digest as compute_runtime_binding_digest
 from .types import context_admission_envelope_header as context_admission_envelope_header
+from .types import decode_github_review_json_object as decode_github_review_json_object
 from .types import (
     decode_stored_context_admission_envelope as decode_stored_context_admission_envelope,
 )
@@ -1435,14 +1444,17 @@ from .types import extract_path_arg as extract_path_arg
 from .types import extract_positional_args as extract_positional_args
 from .types import extract_skill_name as extract_skill_name
 from .types import fleet_error as fleet_error
+from .types import github_review_receipt_filename as github_review_receipt_filename
 from .types import group_by_pair as group_by_pair
 from .types import hookdef_session_scope as hookdef_session_scope
+from .types import is_canonical_integer_text as is_canonical_integer_text
 from .types import is_canonical_plugin_artifact_digest as is_canonical_plugin_artifact_digest
 from .types import (
     is_canonical_plugin_artifact_incarnation_id as is_canonical_plugin_artifact_incarnation_id,
 )
 from .types import is_capture_value_type as is_capture_value_type
 from .types import is_final_github_review_state as is_final_github_review_state
+from .types import is_ingredient_truthy as is_ingredient_truthy
 from .types import is_path_like_token as is_path_like_token
 from .types import is_recipe_path_validation_report as is_recipe_path_validation_report
 from .types import is_valid_child_task_id as is_valid_child_task_id

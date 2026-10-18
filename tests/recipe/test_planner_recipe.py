@@ -5,8 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core.types import Severity
+from autoskillit.core.io import load_yaml
+from autoskillit.core.types import BoundValueOrigin, Severity
 from autoskillit.recipe._api import load_and_validate
+from autoskillit.recipe._binding_input import _dispatch_producer
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import run_semantic_rules
 from tests.recipe.conftest import assert_no_rule_errors
@@ -392,6 +394,46 @@ def test_refine_tier_steps_all_use_dispatch_items(planner_recipe, step_name):
         f"{step_name} must use dispatch_items for per-phase parallel dispatch. "
         "All refine_* steps at the assignment/WP tier must shard by phase."
     )
+
+
+def test_every_dispatch_step_binds_exactly_one_dispatch_item():
+    loaded = load_and_validate(
+        "planner",
+        project_dir=_PROJECT_ROOT,
+        include_finalized_projection=True,
+    )
+    assert loaded["valid"], loaded.get("errors")
+    assert "_finalized_projection" in loaded
+
+    raw_steps = load_yaml(loaded["content"])["steps"]
+    dispatch_steps = {
+        name: raw_step
+        for name, raw_step in raw_steps.items()
+        if "dispatch_items" in raw_step.get("with", {})
+    }
+    assert dispatch_steps
+
+    invocations = loaded["_finalized_projection"].binding_projection.invocations
+    for name, raw_step in dispatch_steps.items():
+        invocation = invocations[name]
+        dispatch_inputs = [
+            value
+            for value in invocation.skill_inputs
+            if value.is_present and value.origin is BoundValueOrigin.DISPATCH_ITEM
+        ]
+        assert len(dispatch_inputs) == 1, name
+
+        dispatch_items = raw_step["with"]["dispatch_items"]
+        producer = _dispatch_producer(dispatch_items)
+        assert producer is not None, name
+        namespace, producer_name = producer
+        assert dispatch_inputs[0].context_dependencies == (
+            (producer_name,) if namespace == "context" else ()
+        ), name
+        assert dispatch_inputs[0].input_dependencies == (
+            (producer_name,) if namespace == "inputs" else ()
+        ), name
+        assert invocation.attested, name
 
 
 def test_planner_recipe_valid_on_codex_backend():

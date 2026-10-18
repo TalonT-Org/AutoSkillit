@@ -535,6 +535,7 @@ skills:
     inputs: []
     outputs: []
   audit-impl:
+    input_preflight: [plan_set_stage_obligations]
     audit_authority_publication:
       output_field: audit_semantic_result_path
       prior_input_field: prior_audit_cycle_path
@@ -569,6 +570,10 @@ skills:
       required: false
     - name: all_conflict_report_paths
       type: file_path_list
+      required: false
+      absence_value: ""
+    - name: plan_set_authority_path
+      type: file_path
       required: false
       absence_value: ""
     - name: branch_name
@@ -713,6 +718,7 @@ skills:
     - "https://github.com/owner/repo/pull/42\n%%ORDER_UP%%"
 
   prepare-pr:
+    delegated_write_output: prep_path
     inputs:
     - name: plan_paths
       type: file_path_list
@@ -3577,6 +3583,28 @@ callable_contracts:
     outputs:
     - name: state
       type: str
+  autoskillit.recipe._cmd_rpc.verify_stage_obligations:
+    inputs:
+    - name: plan_set_authority_path
+      type: str
+      required: true
+    - name: plan_set_authority_digest
+      type: str
+      required: true
+    - name: cwd
+      type: str
+      required: true
+    - name: base_branch
+      type: str
+      required: true
+    - name: pr_number
+      type: str
+      required: false
+    outputs:
+    - name: success
+      type: str
+    - name: detail
+      type: str
   autoskillit.recipe._cmd_rpc.wait_for_immediate_merge:
     inputs:
     - name: pr_number
@@ -3655,20 +3683,36 @@ callable_contracts:
     outputs:
     - name: ok
       type: str
-  autoskillit.recipe._cmd_rpc.advance_queue_pr:
+  autoskillit.recipe._cmd_rpc.first_ordered_pr:
     inputs:
-    - name: current_pr_number
-      type: str
-      required: true
-      nullable: false
     - name: pr_order_file
       type: str
       required: true
     outputs:
+    - name: pr_number
+      type: str
+    - name: complexity
+      type: str
+    - name: done
+      type: str
+      allowed_values: ['true', 'false']
+  autoskillit.recipe._cmd_rpc.next_ordered_pr:
+    inputs:
+    - name: pr_order_file
+      type: str
+      required: true
     - name: current_pr_number
       type: str
-    - name: error
+      required: true
+      nullable: false
+    outputs:
+    - name: pr_number
       type: str
+    - name: complexity
+      type: str
+    - name: done
+      type: str
+      allowed_values: ['true', 'false']
   autoskillit.recipe._cmd_rpc.proactive_rebase_next_pr:
     inputs:
     - name: work_dir

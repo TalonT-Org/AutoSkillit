@@ -1,6 +1,6 @@
 name: merge-prs
 description: Merge open PRs into an integration branch
-summary: 'clone > setup_remote > analyze_prs > create_batch_branch > [loop per PR: merge_pr or (plan > verify > create_conflict_worktree > implement
+summary: 'clone > setup_remote > analyze_prs > get_first_pr_number > route_by_queue_mode > create_batch_branch > [loop per PR: merge_pr > advance_merge_pr or (plan > verify > create_conflict_worktree > implement
   > test > push_worktree_branch > create_conflict_pr > wait_for_conflict_ci > merge_conflict_pr)] > push_batch_branch > collect_artifacts
   > check_impl_plans > (audit_impl?) > open_integration_pr > wait_for_review_pr_mergeability > check_mergeability > (resolve_integration_conflicts
   > force_push_after_rebase)? > review_pr_integration > (resolve_review_integration > re_push_review_integration)? > ci_watch_pr
@@ -76,8 +76,8 @@ kitchen_rules:
   develop). context.batch_branch is the per-run batch branch (e.g. pr-batch/pr-merge-{ts}) created from base_branch for this
   pipeline run. All PR merges and worktree merges target context.batch_branch. The final review PR opens from context.batch_branch
   into inputs.base_branch.'
-- 'PR QUEUE: The agent reads context.pr_order_file once at analyze_prs and maintains an ordered queue. context.current_pr_number
-  tracks the current PR. advance_queue_pr captures the next PR number at the recipe level after each successful merge.'
+- 'PR QUEUE: Only get_first_pr_number, advance_queue_pr and advance_merge_pr write context.current_pr_number and
+  context.current_pr_complexity. Never set or advance these values yourself. The cursor reads the immutable analyze_prs order file.'
 - 'COMPLEX PR PATH: When merge_pr returns needs_plan=true, context.task is set to the conflict_report_path. Pass context.task
   to make-plan. The plan+implement cycle creates a worktree from the integration branch; the worktree branch is then pushed
   to origin and merged into the integration batch branch via GitHub PR (push_worktree_branch → create_conflict_pr → wait_for_conflict_ci
@@ -95,8 +95,8 @@ kitchen_rules:
 - 'QUEUE MODE: When context.queue_mode == true, PRs merge directly into base_branch via the merge queue. The batch branch
   (context.batch_branch) is the same as base_branch. Never invoke create_batch_branch, publish_batch_branch, merge_pr, or
   push_batch_branch in queue mode.'
-- 'QUEUE LOOP: In queue mode, context.current_pr_number tracks the current PR being waited on. Initialized by get_first_pr_number
-  from pr_order_file[0]. advance_queue_pr looks up the current number in pr_order_file and captures the next entry''s number.'
+- 'QUEUE LOOP: get_first_pr_number initializes the PR number and complexity before selecting either mode. In queue mode,
+  advance_queue_pr selects the successor by file position and returns done after the last PR without changing the artifact.'
 - 'CONFLICT REPORT PATHS: context.all_conflict_report_paths accumulates conflict_report_path values from resolve_ejected_conflicts
   and resolve_integration_conflicts via capture_list. Pass it as the 5th argument to open_integration_pr and 4th argument
   to audit_impl. It is empty string when no conflict resolution occurred — downstream skills treat empty string as absent.'
@@ -222,41 +222,40 @@ steps:
       pr_order_file: ${{ result.pr_order_file }}
       batch_branch: ${{ result.batch_branch }}
       queue_mode: ${{ result.queue_mode }}
-    on_success: route_by_queue_mode
+    on_success: get_first_pr_number
     on_failure: register_clone_failure
     on_rate_limit: register_clone_failure
     optional_context_refs:
     - merge_queue_data_path
     note: 'Captures pr_order_file (path to JSON with ordered PRs + complexity tags), batch_branch (e.g. integration/pr-merge-20250228-143052),
       and queue_mode ("true" when a GitHub merge queue with MERGEABLE entries is active on base_branch; "false" otherwise).
-      If the skill reports pr_count=0 (no open PRs), skip directly to cleanup_success — no integration branch is needed. merge_queue_data_path
-      is pre-computed by fetch_merge_queue_data step.
+      get_first_pr_number selects the initial cursor in either mode. An empty eligible prs list routes to register_clone_success
+      without creating a batch branch. merge_queue_data_path is pre-computed by fetch_merge_queue_data.
 
       '
   route_by_queue_mode:
     action: route
     on_result:
     - when: ${{ context.queue_mode }} == true
-      route: get_first_pr_number
+      route: get_current_pr_branch
     - route: create_batch_branch
-    note: 'Routes to queue mode (get_first_pr_number) when analyze-prs detected a merge queue on the target branch. Falls
-      back to the classic batch-branch path otherwise. context.queue_mode is captured from analyze_prs result.
-
-      '
+    note: 'The cursor is already initialized. Select queue mode at get_current_pr_branch when analyze-prs detected a merge
+      queue; otherwise select the classic batch-branch path.'
   get_first_pr_number:
-    tool: run_cmd
+    tool: run_python
     with:
-      cmd: jq -r '.[0].number' '${{ context.pr_order_file }}'
-      cwd: ${{ context.work_dir }}
-      step_name: get_first_pr_number
+      callable: autoskillit.recipe._cmd_rpc.first_ordered_pr
+      pr_order_file: ${{ context.pr_order_file }}
     capture:
-      current_pr_number: ${{ result.stdout | trim }}
-    on_success: get_current_pr_branch
+      current_pr_number: ${{ result.pr_number }}
+      current_pr_complexity: ${{ result.complexity }}
+    on_result:
+    - when: ${{ result.done }} == true
+      route: register_clone_success
+    - route: route_by_queue_mode
     on_failure: register_clone_failure
-    note: 'Queue mode only. Extracts the first PR''s number from pr_order_file to initialize context.current_pr_number before
-      the sequential enqueue loop.
-
-      '
+    note: 'Selects the first eligible PR number and complexity for both modes. An empty prs list means there is nothing
+      eligible to merge and ends successfully without a batch branch.'
   get_current_pr_branch:
     tool: run_cmd
     with:
@@ -334,7 +333,7 @@ steps:
     on_success: wait_queue_pr
     on_failure: verify_queue_enrollment
     note: 'Queue mode only. Submits a single PR to the merge queue via the unified enqueue_pr tool. Called once per PR in
-      the sequential enqueue loop: get_first_pr_number → get_current_pr_branch → wait_ci_pre_enqueue → enqueue_current_pr
+      the sequential enqueue loop: get_first_pr_number → route_by_queue_mode → get_current_pr_branch → wait_ci_pre_enqueue → enqueue_current_pr
       → wait_queue_pr → (merged) → advance_queue_pr → get_current_pr_branch → wait_ci_pre_enqueue → enqueue_current_pr → ...
 
       '
@@ -669,21 +668,19 @@ steps:
   advance_queue_pr:
     tool: run_python
     with:
-      callable: autoskillit.recipe._cmd_rpc.advance_queue_pr
+      callable: autoskillit.recipe._cmd_rpc.next_ordered_pr
       current_pr_number: ${{ context.current_pr_number }}
       pr_order_file: ${{ context.pr_order_file }}
     capture:
-      current_pr_number: ${{ result.current_pr_number }}
+      current_pr_number: ${{ result.pr_number }}
+      current_pr_complexity: ${{ result.complexity }}
     on_result:
-    - when: ${{ result.current_pr_number }} == done
+    - when: ${{ result.done }} == true
       route: collect_and_check_impl_plans
     - route: get_next_pr_branch
     on_failure: register_clone_failure
-    note: 'Advances to the next PR by looking up the current PR number in pr_order_file and returning the next entry. Outputs
-      the next PR number (or "done"). The capture block sets current_pr_number at the recipe level — no agent-managed variable
-      updates. Routes to get_next_pr_branch for proactive rebase, or collect_and_check_impl_plans when done.
-
-      '
+    note: 'Advances by file position and captures the next PR number and complexity. At the end, retains the last PR and
+      returns done. Continues through proactive rebase or collects implementation plans when done.'
   get_next_pr_branch:
     tool: run_cmd
     with:
@@ -880,8 +877,8 @@ steps:
     with:
       skill_command: /autoskillit:merge-pr
       skill_inputs:
-        complexity: '{complexity}'
-        pr_number: '{pr_number}'
+        complexity: ${{ context.current_pr_complexity }}
+        pr_number: ${{ context.current_pr_number }}
       cwd: ${{ context.work_dir }}
       step_name: merge_pr
       output_dir: '{{AUTOSKILLIT_TEMP}}/merge-prs/iter_${{ context.pr_merge_loop_count }}'
@@ -892,7 +889,6 @@ steps:
       escalation_required: ${{ result.escalation_required }}
       escalation_reason: ${{ result.escalation_reason }}
       task: ${{ result.conflict_report_path }}
-      current_pr_number: ${{ result.pr_number }}
       merged: ${{ result.merged }}
     on_result:
     - when: ${{ result.escalation_required }} == true
@@ -907,13 +903,10 @@ steps:
     on_exhausted: register_clone_failure
     on_context_limit: register_clone_failure
     on_rate_limit: register_clone_failure
-    note: "The agent reads context.pr_order_file at context.current_pr_number to get the current PR's number and complexity.\
-      \ Both values are passed via structured skill_inputs (skill_inputs.pr_number\
-      \ and skill_inputs.complexity) \u2014 do NOT append them to skill_command, which\
-      \ stays the fixed literal /autoskillit:merge-pr. escalation_required=true\
-      \ → ambiguous conflict, human intervention needed → escalate_stop. needs_plan=true → conflict_report_path set as context.task\
-      \ → plan. merged=false (timeout/conflict) → register_clone_failure. merged=true + fallthrough → PR merged directly →\
-      \ next_part_or_next_pr.\n"
+    note: 'Both inputs come from the recipe-level cursor. Send context.current_pr_number and context.current_pr_complexity
+      exactly as strings in structured skill_inputs. skill_command stays the fixed literal /autoskillit:merge-pr.
+      escalation_required=true routes to escalate_stop. needs_plan=true sets conflict_report_path as context.task and routes
+      to plan. merged=false routes to register_clone_failure. A successful direct merge routes to next_part_or_next_pr.'
   plan:
     tool: run_skill
     model: ''
@@ -1264,13 +1257,27 @@ steps:
       field: next
       routes:
         more_parts: select_next_plan_part
-        more_prs: check_pr_merge_loop
-        all_done: push_batch_branch
-    note: 'Routing step — no tool call. The agent evaluates what comes next: 1. If more plan_parts remain for the current
-      PR → verify (next part). 2. If all parts done, advance current_pr_number. If more PRs remain → check_pr_merge_loop.
-      3. If all PRs processed → push_batch_branch.
-
-      '
+        next_pr: advance_merge_pr
+    note: 'The agent decides only whether plan parts remain for the current PR. More parts route to select_next_plan_part;
+      otherwise advance_merge_pr determines whether another PR remains.'
+  advance_merge_pr:
+    tool: run_python
+    with:
+      callable: autoskillit.recipe._cmd_rpc.next_ordered_pr
+      current_pr_number: ${{ context.current_pr_number }}
+      pr_order_file: ${{ context.pr_order_file }}
+    capture:
+      current_pr_number: ${{ result.pr_number }}
+      current_pr_complexity: ${{ result.complexity }}
+    on_result:
+    - when: ${{ context.queue_mode }} == true and ${{ result.done }} == true
+      route: collect_and_check_impl_plans
+    - when: ${{ result.done }} == true
+      route: push_batch_branch
+    - route: check_pr_merge_loop
+    on_failure: register_clone_failure
+    note: 'Classic and post-remediation advance, keyed on current_pr_number once per finished PR. Queue-mode audit remediation
+      re-enters at the last PR and exits to collect_and_check_impl_plans through the first done arm.'
   select_next_plan_part:
     tool: run_cmd
     with:
@@ -1300,7 +1307,7 @@ steps:
     on_failure: register_clone_failure
     optional_context_refs:
     - pr_merge_loop_count
-    note: 'Guards the merge_pr → next_part_or_next_pr outer loop. The loop is data-bounded by the finite pr_order_file list;
+    note: 'Guards the merge_pr → next_part_or_next_pr → advance_merge_pr outer loop. The cursor advances through the finite prs list;
       this provides a structural bound for the cycle validator. 50 iterations allows large batch runs. Unlike retry loops
       (capped at 3–15 attempts), this cap is an outer iteration over data items (PRs to merge), not a retry count — hence
       the higher bound is safe: it tracks distinct work units, not repeated attempts on the same operation.
@@ -1616,14 +1623,19 @@ steps:
       max_polls: '12'
       poll_interval: '15'
     capture:
-      review_pr_number: ${{ result.pr_number }}
+      review_pr_number:
+        from: ${{ result.pr_number }}
+        type: integer
     on_success: capture_review_repository
     on_failure: register_clone_failure
-    note: 'Extracts the review PR number from context.pr_url and polls GitHub until the mergeable field is no longer UNKNOWN
-      (GitHub computes this asynchronously after PR creation). Polls up to 12 times with 15-second intervals (3 minutes maximum).
-      Captures review_pr_number for use by check_mergeability and check_mergeability_post_rebase.
-
-      '
+    note: >
+      Extracts the review PR number from context.pr_url and polls GitHub until the
+      mergeable field is no longer UNKNOWN. Polls up to 12 times with 15-second
+      intervals (3 minutes maximum).
+      Captures the PR number as canonical ASCII decimal text, declared `type: integer`.
+      Integer skill inputs decode it server-side; MCP and run_python consumers
+      convert it at their own typed boundaries.
+      Required by check_mergeability, review_pr_integration and resolve_review_integration.
   capture_review_repository:
     tool: run_cmd
     with:
@@ -2007,7 +2019,7 @@ steps:
         dispatch_id: ${{ inputs.dispatch_id }}
         diagnostics_log_dir: ${{ inputs.diagnostics_log_dir }}
       cwd: ${{ context.work_dir }}
-      step_name: analyze_pipeline_health
+      step_name: analyze_pipeline_health_error
     on_success: escalate_stop
     on_failure: escalate_stop
     on_context_limit: escalate_stop

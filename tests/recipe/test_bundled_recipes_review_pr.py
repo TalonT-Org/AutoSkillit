@@ -59,6 +59,13 @@ class TestReviewPrRecipeIntegration:
             f"{recipe_name}: guard_pr_url must route to extract_pr_number when pr_url is truthy"
         )
 
+    def test_extract_pr_number_derives_from_verified_pr_url(self, recipe: object) -> None:
+        step = recipe.steps["extract_pr_number"]  # type: ignore[attr-defined]
+        cmd = step.with_args["cmd"]
+        assert "context.pr_url" in cmd
+        assert "merge_target" not in cmd
+        assert step.capture["pr_number"].from_ == "${{ result.stdout | trim }}"
+
     def test_review_pr_step_exists_and_is_run_skill(self, recipe: object) -> None:
         """T_RP2: review_pr step exists and uses run_skill tool."""
         step = recipe.steps["review_pr"]  # type: ignore[attr-defined]
@@ -206,6 +213,18 @@ def test_implementation_groups_has_ci_watch() -> None:
     assert "ci_watch" in recipe.steps
     assert "resolve_ci" in recipe.steps
     assert "re_push" in recipe.steps
+
+
+@pytest.mark.parametrize(
+    "recipe_name",
+    ["implementation", "implementation-groups", "remediation", "research", "research-review"],
+)
+def test_extract_pr_number_declares_integer(recipe_name: str) -> None:
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+
+    capture = recipe.steps["extract_pr_number"].capture["pr_number"]
+    assert capture.value_type == "integer"
+    assert capture.from_ == "${{ result.stdout | trim }}"
 
 
 def test_merge_prs_review_pr_integration_includes_diff_metrics_path() -> None:

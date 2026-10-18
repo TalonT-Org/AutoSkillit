@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from typing import cast
+
 import regex as re
 from packaging.version import Version
 
@@ -11,19 +14,89 @@ from autoskillit.core import (
     CONFIG_AUTHORITY_KEYS,
     SKILL_TOOLS,
     BindingFailureCode,
+    BoundValue,
     BoundValueOrigin,
+    BoundValueState,
     Severity,
     get_logger,
 )
 from autoskillit.recipe._analysis import ValidationContext, bfs_reachable
 from autoskillit.recipe.contracts import (
+    RESULT_CAPTURE_RE,
+    SkillInput,
     get_skill_contract,
     load_bundled_manifest,
 )
+from autoskillit.recipe.contracts._contracts_types import (
+    WHOLE_VALUE_PLACEHOLDER_RE as _WHOLE_VALUE_PLACEHOLDER_RE,
+)
 from autoskillit.recipe.io import iter_steps_with_context
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
+from autoskillit.recipe.schema import Recipe
 
 logger = get_logger(__name__)
+
+
+def _unresolved_template_reason(bound: BoundValue, *, per_item: bool) -> str | None:
+    value = cast(str, bound.declared_value)
+    scan = value
+    for name in bound.template_dependencies:
+        scan = scan.replace("{{" + name + "}}", "")
+    if "${{" in scan and (
+        RESULT_CAPTURE_RE.search(scan)
+        or (not bound.context_dependencies and not bound.input_dependencies)
+    ):
+        return (
+            "the binder treats this unresolved expression as static, so admission accepts only "
+            "the compiled effective value"
+        )
+    if not per_item and _WHOLE_VALUE_PLACEHOLDER_RE.fullmatch(value.strip()):
+        return "this is a whole-value placeholder the binder treats as a static literal"
+    return None
+
+
+@semantic_rule(
+    name="unresolved-skill-input-template",
+    description=(
+        "Reject whole-value skill input placeholders and unresolved ${{ ... }} expressions "
+        "that compile to static values runtime admission cannot accept (recipe validation only)."
+    ),
+    severity=Severity.ERROR,
+    declaration_scoped=True,
+)
+def _check_unresolved_skill_input_template(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool not in SKILL_TOOLS:
+            continue
+        invocation = ctx.binding_projection.for_step(step_name)
+        if invocation is None or invocation.skill_name is None:
+            continue
+        for bound in invocation.skill_inputs:
+            if bound.state is not BoundValueState.PRESENT or not isinstance(
+                bound.declared_value, str
+            ):
+                continue
+            reason = _unresolved_template_reason(
+                bound, per_item=bound.origin is BoundValueOrigin.DISPATCH_ITEM
+            )
+            if reason is not None:
+                findings.append(
+                    make_finding(
+                        rule_name="unresolved-skill-input-template",
+                        step_name=step_name,
+                        message=(
+                            f"Skill input '{bound.name}' declares {bound.declared_value!r}: "
+                            f"{reason}. "
+                            "Bind ${{ context.<var> }} from a recipe-level producer step, "
+                            "or ${{ inputs.<name> }}. For a per-item fan-out, declare "
+                            "dispatch_items: ${{ context.<list> }} or "
+                            "${{ inputs.<list> }} and use exactly one "
+                            "{placeholder}."
+                        ),
+                    )
+                )
+    return findings
 
 
 @semantic_rule(
@@ -55,6 +128,7 @@ def _check_outdated_version(ctx: ValidationContext) -> list[RuleFinding]:
     name="missing-ingredient",
     description="Skill steps must provide all required ingredients via context or recipe inputs.",
     severity=Severity.ERROR,
+    declaration_scoped=True,
 )
 def _check_unsatisfied_skill_input(ctx: ValidationContext) -> list[RuleFinding]:
     wf = ctx.recipe
@@ -98,6 +172,7 @@ def _check_unsatisfied_skill_input(ctx: ValidationContext) -> list[RuleFinding]:
     name="invalid-skill-invocation-binding",
     description="Structured child-skill inputs must bind unambiguously to the selected contract.",
     severity=Severity.ERROR,
+    declaration_scoped=True,
 )
 def _check_invalid_skill_invocation_binding(
     ctx: ValidationContext,
@@ -110,6 +185,7 @@ def _check_invalid_skill_invocation_binding(
         BindingFailureCode.AMBIGUOUS_SKILL_INPUT,
         BindingFailureCode.INVALID_SKILL_INPUT_TYPE,
         BindingFailureCode.INVALID_SKILL_COMMAND,
+        BindingFailureCode.INVALID_DISPATCH_ITEMS,
     }
     for step_name, step in ctx.recipe.steps.items():
         if step.tool not in SKILL_TOOLS:
@@ -125,6 +201,84 @@ def _check_invalid_skill_invocation_binding(
                     rule_name="invalid-skill-invocation-binding",
                     step_name=step_name,
                     message=failure.message,
+                )
+            )
+    return findings
+
+
+def _typed_dynamic_inputs(
+    ctx: ValidationContext, step_name: str
+) -> Iterator[tuple[BoundValue, SkillInput]]:
+    if ctx.recipe.steps[step_name].tool not in SKILL_TOOLS:
+        return
+    invocation = ctx.binding_projection.for_step(step_name)
+    if invocation is None or invocation.skill_name is None:
+        return
+    contract = get_skill_contract(invocation.skill_name, load_bundled_manifest())
+    if contract is None:
+        return
+    for input_def in contract.inputs:
+        bound = invocation.skill_input(input_def.name)
+        if (
+            bound is not None
+            and bound.is_present
+            and bound.is_dynamic
+            and input_def.type in {"integer", "boolean", "bool"}
+        ):
+            yield bound, input_def
+
+
+def _has_declared_integer_source(recipe: Recipe, bound: BoundValue, input_def: SkillInput) -> bool:
+    if input_def.type != "integer":
+        return False
+    if bound.origin is BoundValueOrigin.RECIPE_INPUT:
+        ingredient = recipe.ingredients.get(bound.input_dependencies[0])
+        return ingredient is not None and ingredient.type == "integer"
+    if bound.origin is BoundValueOrigin.CONTEXT:
+        variable = bound.context_dependencies[0]
+        producers = [
+            step
+            for step in recipe.steps.values()
+            if variable in step.capture or variable in step.capture_list
+        ]
+        return bool(producers) and all(
+            variable in step.capture and step.capture[variable].value_type == "integer"
+            for step in producers
+        )
+    return False
+
+
+@semantic_rule(
+    name="typed-skill-input-undeclared-source",
+    description="Dynamic integer skill inputs need declared sources; booleans need literals.",
+    severity=Severity.WARNING,
+)
+def _check_typed_skill_input_sources(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name in sorted(ctx.recipe.steps):
+        for bound, input_def in _typed_dynamic_inputs(ctx, step_name):
+            if _has_declared_integer_source(ctx.recipe, bound, input_def):
+                continue
+            if input_def.type == "integer":
+                reason = "has no supported declared integer source"
+                remedy = (
+                    "Bind an exact ${{ context.X }} whose producers declare "
+                    "scalar capture type: integer (capture_list does not qualify), "
+                    "or an exact ${{ inputs.X }} with ingredient type: integer; "
+                    "interpolated templates do not qualify."
+                )
+            else:
+                reason = "uses an unsupported dynamic boolean source"
+                remedy = "Bind a boolean literal; no boolean producer declaration is supported."
+            findings.append(
+                make_finding(
+                    rule_name="typed-skill-input-undeclared-source",
+                    step_name=step_name,
+                    message=(
+                        f"Step {step_name!r} input {bound.name!r} from "
+                        f"{bound.declared_value!r} {reason}."
+                    ),
+                    remedy=remedy,
                 )
             )
     return findings

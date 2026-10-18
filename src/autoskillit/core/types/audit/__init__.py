@@ -18,6 +18,8 @@ from ._type_closure_report import *  # noqa: F403
 from ._type_closure_report import __all__ as _closure_report_all
 from ._type_plan_set_authority import *  # noqa: F403
 from ._type_plan_set_authority import __all__ as _plan_set_authority_all
+from ._type_stage_obligation import *  # noqa: F403
+from ._type_stage_obligation import __all__ as _stage_obligation_all
 
 if not TYPE_CHECKING:
     __all__ = (
@@ -27,5 +29,6 @@ if not TYPE_CHECKING:
         + _audit_cycle_authority_all
         + _audit_cycle_disposition_all
         + _closure_report_all
+        + _stage_obligation_all
         + _plan_set_authority_all
     )

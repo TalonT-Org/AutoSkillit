@@ -6,6 +6,12 @@ import json
 
 import pytest
 
+from tests._run_skill_caller_oracle import (
+    ORCHESTRATOR_SAMPLES,
+    build_run_skill_payload,
+    run_skill_actual_mcp_kwargs,
+)
+
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
 # Sources are given as (recipe, step name) — a test selects by step name,
@@ -48,6 +54,27 @@ def _write_tracker_for(ready) -> None:
         {},
         kitchen_id=ready.tool_ctx.kitchen_id,
     )
+
+
+async def test_attested_call_without_step_name_is_denied(tool_ctx_ready_recipe, tmp_path) -> None:
+    from autoskillit.server.tools.tools_execution import run_skill
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    ready = tool_ctx_ready_recipe
+    executor = InMemoryHeadlessExecutor()
+    ready.tool_ctx.executor = executor
+    result = json.loads(
+        await run_skill(
+            ready.with_args["skill_command"],
+            str(tmp_path),
+            recipe_execution_id=ready.credential["execution_id"],
+            invocation_template_digest=ready.template_digest,
+        )
+    )
+
+    assert result["stage"] == "preflight:recipe_execution"
+    assert "recipe_execution_step_missing" in json.dumps(result)
+    assert not executor.calls
 
 
 @pytest.mark.parametrize("param_name", sorted(_DENIAL_TEST_VALUES))
@@ -185,18 +212,6 @@ async def test_step_provider_delivered_from_recipe_step_without_caller_forwardin
     assert resolved_step_providers == ["anthropic"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Blocked by #4775: dispatch_items is filtered out of the runtime "
-        "actual-kwargs assembly (handler_parameter=False) but not out of the "
-        "compile-time mcp_kwargs binding, and _binding.py:1028 demands every "
-        "compiled kwarg be present — so no fan-out step can pass attestation. "
-        "Every bundled recipe step with a literal non-templated model: is a "
-        "dispatch_items fan-out step, so this is the only reachable vehicle. "
-        "Independent of #4707; goes green automatically once #4775 lands."
-    ),
-)
 @pytest.mark.parametrize(
     "tool_ctx_ready_recipe",
     [("planner", "elaborate_phases", _PLANNER_OVERRIDES)],
@@ -216,43 +231,52 @@ async def test_model_delivered_from_recipe_step_without_caller_forwarding(
     engages) would reproduce the exact coverage gap this plan exists to
     close — a green test that is no evidence at all about attestation.
 
-    So it is bridged rather than weakened. See the xfail reason for why it
-    cannot pass today; the assertions below are the real contract and are
-    what will be checked once #4775 is fixed.
+    The assertions below check that the model declared by the recipe reaches
+    the headless executor through the attested admission path.
     """
+    from autoskillit.server.recipe._recipe_execution import (
+        bind_attested_runtime_invocation,
+        get_recipe_execution,
+    )
     from autoskillit.server.tools.tools_execution import run_skill
     from tests.fakes import InMemoryHeadlessExecutor
 
     ready = tool_ctx_ready_recipe
     executor = InMemoryHeadlessExecutor()
     ready.tool_ctx.executor = executor
-    with_args = ready.with_args
     work_dir = tmp_path / "work"
     work_dir.mkdir()
     _write_tracker_for(ready)
 
-    # elaborate_phases declares no skill_inputs: sub-key — its child inputs come
-    # from parsing skill_command's placeholders. Omitting the parameter lets the
-    # runtime binder derive them (_binding.py:965-990) rather than guessing keys.
-    declared_inputs = with_args.get("skill_inputs")
-    optional_inputs = (
-        {"skill_inputs": {name: "probe value" for name in declared_inputs}}
-        if declared_inputs
-        else {}
+    samples = {
+        **ORCHESTRATOR_SAMPLES,
+        "context": {
+            **ORCHESTRATOR_SAMPLES["context"],
+            "planner_dir": ".autoskillit/temp/planner/run-test",
+        },
+    }
+    payload = build_run_skill_payload(
+        ready.step_name,
+        ready.step_body,
+        ready.credential,
+        cwd=str(work_dir),
+        samples=samples,
     )
+    installed = get_recipe_execution(ready.tool_ctx)
+    assert installed is not None
+    bound_inputs, _ = bind_attested_runtime_invocation(
+        installed,
+        execution_id=payload["recipe_execution_id"],
+        step_name=payload["step_name"],
+        template_digest=payload["invocation_template_digest"],
+        skill_command=payload["skill_command"],
+        skill_inputs=payload.get("skill_inputs"),
+        actual_mcp_kwargs=run_skill_actual_mcp_kwargs(payload),
+    )
+    assert ORCHESTRATOR_SAMPLES["item"]["phase_id"] in dict(bound_inputs).values()
 
-    result = json.loads(
-        await run_skill(
-            with_args["skill_command"],
-            str(work_dir),
-            step_name=ready.step_name,
-            output_dir=with_args["output_dir"],
-            recipe_execution_id=ready.credential["execution_id"],
-            invocation_template_digest=ready.template_digest,
-            **optional_inputs,
-        )
-    )
+    result = json.loads(await run_skill(**payload))
 
     assert result.get("stage") != "preflight:recipe_execution", result
-    assert len(executor.calls) == 1
+    assert len(executor.calls) == 1, result
     assert executor.calls[0].model == "opus[1m]"

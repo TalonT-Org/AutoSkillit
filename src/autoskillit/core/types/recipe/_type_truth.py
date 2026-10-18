@@ -1,10 +1,12 @@
-"""Closed truth-value dialect for values supplied to declared recipe guards."""
+"""Truth dialects used by recipe guards and ingredient pruning."""
 
 from __future__ import annotations
 
 __all__ = [
     "DeclaredTruthUnresolved",
     "DeclaredTruthUnsupported",
+    "FALSY_STRINGS",
+    "is_ingredient_truthy",
     "normalize_declared_truth",
 ]
 
@@ -19,6 +21,12 @@ class DeclaredTruthUnsupported(ValueError):
 
 _TRUTHY_VALUES = frozenset({"true", "1", "yes", "on"})
 _FALSY_VALUES = frozenset({"false", "0", "no", "off", ""})
+FALSY_STRINGS = frozenset({"false", "0", "no", ""})
+
+
+def is_ingredient_truthy(value: str) -> bool:
+    """Resolve recipe ingredient values used by skip_when_false."""
+    return bool(value) and value.lower() not in FALSY_STRINGS
 
 
 def normalize_declared_truth(value: object) -> bool:

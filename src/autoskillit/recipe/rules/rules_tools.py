@@ -27,6 +27,14 @@ from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 logger = get_logger(__name__)
 
 _ALL_TOOLS: frozenset[str] = frozenset(TOOL_REGISTRY)
+INVALID_TOOL_INVOCATION_BINDING_RULE = "invalid-tool-invocation-binding"
+_TOOL_INVOCATION_BINDING_FAILURE_CODES = frozenset(
+    {
+        BindingFailureCode.MISSING_TOOL_PARAMETER,
+        BindingFailureCode.INVALID_TOOL_PARAMETER_TYPE,
+    }
+)
+STEP_IDENTITY_MISMATCH_RULE = "step-identity-mismatch"
 
 # Registry of context variables that are captured upstream and MUST be forwarded
 # to any tool step that accepts them. Each entry maps a tool name to the set of
@@ -122,6 +130,7 @@ def _check_constant_step_no_with_args(ctx: ValidationContext) -> list[RuleFindin
     name="unknown-tool",
     description="step.tool must be a registered MCP tool name",
     severity=Severity.ERROR,
+    declaration_scoped=True,
 )
 def _check_unknown_tool(ctx: ValidationContext) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
@@ -177,6 +186,7 @@ def _check_subset_disabled_tool(ctx: ValidationContext) -> list[RuleFinding]:
     name="dead-with-param",
     description="with: key does not match any known parameter of the step's tool",
     severity=Severity.ERROR,
+    declaration_scoped=True,
 )
 def _check_dead_with_params(ctx: ValidationContext) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
@@ -200,6 +210,76 @@ def _check_dead_with_params(ctx: ValidationContext) -> list[RuleFinding]:
                     f"Known parameters: {known_params}",
                 )
             )
+    return findings
+
+
+@semantic_rule(
+    name=INVALID_TOOL_INVOCATION_BINDING_RULE,
+    description=(
+        "Recipe tool steps must supply every required tool parameter with a value "
+        "of the registered wire type."
+    ),
+    severity=Severity.ERROR,
+    declaration_scoped=True,
+)
+def _check_invalid_tool_invocation_binding(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool is None:
+            continue
+        invocation = ctx.binding_projection.for_step(step_name)
+        if invocation is None:
+            continue
+        for failure in invocation.failures:
+            if failure.code not in _TOOL_INVOCATION_BINDING_FAILURE_CODES:
+                continue
+            message = f"step '{step_name}': tool '{step.tool}' {failure.message}"
+            if failure.code is BindingFailureCode.MISSING_TOOL_PARAMETER and failure.name == "cwd":
+                message += (
+                    " — add cwd under with:, bound to the recipe's repository"
+                    " or context worktree path"
+                )
+            findings.append(
+                make_finding(
+                    rule_name=INVALID_TOOL_INVOCATION_BINDING_RULE,
+                    step_name=step_name,
+                    message=message,
+                )
+            )
+    return findings
+
+
+@semantic_rule(
+    name=STEP_IDENTITY_MISMATCH_RULE,
+    description="A step's with: identity parameter must equal its YAML step key",
+    severity=Severity.ERROR,
+    declaration_scoped=True,
+)
+def _check_step_identity(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for key, step in ctx.recipe.steps.items():
+        tool_def = get_tool_def(step.tool) if step.tool else None
+        if tool_def is None:
+            continue
+        for param in tool_def.step_identity_params:
+            mismatches = [
+                f"{name}[{param.name!r}]={args[param.name]!r}"
+                for name, args in (
+                    ("with_args", step.with_args),
+                    ("declared_with_args", step.declared_with_args or {}),
+                )
+                if args.get(param.name, key) != key
+            ]
+            if mismatches:
+                findings.append(
+                    make_finding(
+                        rule_name=STEP_IDENTITY_MISMATCH_RULE,
+                        step_name=key,
+                        message=f"step '{key}': {'; '.join(mismatches)} must equal "
+                        f"the YAML step key '{key}'",
+                        remedy="set with.step_name to the step's YAML key, or remove it",
+                    )
+                )
     return findings
 
 

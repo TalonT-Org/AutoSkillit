@@ -60,6 +60,7 @@ steps:
     tool: run_cmd
     with:
       cmd: "echo 'pr_url = ${{ context.pr_url }}' && echo 'verdict = ${{ context.verdict }}' && echo 'category_summary = ${{ context.category_summary }}'"
+      cwd: "${{ inputs.source_dir }}"
       step_name: "emit_result"
     on_success: done
     on_failure: done

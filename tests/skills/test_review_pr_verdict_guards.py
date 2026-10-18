@@ -290,3 +290,15 @@ def test_contract_yamls_include_approved_with_comments() -> None:
             f"{contract_path.name}: pattern_examples for review-pr must include "
             "'approved_with_comments'"
         )
+
+
+def test_review_gate_is_keyed_on_verdict_not_github_review_state() -> None:
+    text = _skill_text()
+    start = text.index("emit the review gate tag")
+    gate = text[start : text.index("Exit 0", start)]
+    assert "`verdict = approved`" in gate
+    assert "%%REVIEW_GATE::CLEAR%%" in gate
+    assert all(
+        term not in gate
+        for term in ("effective_event", "requested_event", "APPROVED", "COMMENTED", "receipt")
+    )

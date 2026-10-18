@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -19,6 +21,11 @@ from autoskillit.execution import GitHubReviewLedger, compute_review_operation_k
 from autoskillit.execution.github_review import _poster_support
 from autoskillit.execution.github_review.canonical import admit_findings, canonical_findings
 from autoskillit.execution.github_review.gateway import GatewayResult
+from tests.fixtures.github_rest import (
+    reviews_create_422_author_approve,
+    reviews_create_422_author_request_changes,
+    reviews_create_422_line_unresolved,
+)
 
 from .fakes import (
     CreateOutcome,
@@ -83,7 +90,6 @@ async def test_pre_gateway_guard_returns_are_classified_outcomes(
         attempt_number=2,
         omitted=(),
         authenticated_login="bot",
-        pr_author_login="author",
         resume_pending=outcome is not ReviewAttemptOutcome.SLOT_BLOCKED,
     )
     assert result.state is ReviewOperationState.AMBIGUOUS
@@ -149,66 +155,6 @@ def test_structured_invalid_comment_index_rejects_malformed_suffix(field: str) -
     )
 
 
-def _self_review_error() -> dict[str, object]:
-    return {
-        "message": "Validation Failed",
-        "errors": [
-            {
-                "resource": "PullRequestReview",
-                "field": "event",
-                "code": "invalid",
-                "message": "Can not request changes on your own pull request",
-            }
-        ],
-    }
-
-
-@pytest.mark.anyio
-async def test_combined_self_review_and_anchor_422_does_not_retry_unreduced(
-    tmp_path: Path,
-) -> None:
-    combined = _validation_error(0)
-    combined["errors"] += _self_review_error()["errors"]
-    clock = ManualClock()
-    gateway = StatefulReviewGateway(
-        clock=clock,
-        authenticated_login="author",
-        pr_author_login="author",
-        outcomes=[CreateOutcome(422, data=combined), CreateOutcome(200, commit=True)],
-    )
-    result = await _poster(tmp_path / "ledger.sqlite3", gateway, clock).post(
-        _request(
-            tmp_path,
-            event="REQUEST_CHANGES",
-            comments=(
-                GitHubReviewComment(path="src/a.py", line=10, body="Reject"),
-                GitHubReviewComment(path="src/b.py", line=20, body="Keep"),
-            ),
-        )
-    )
-    assert result.state is ReviewOperationState.SUCCEEDED
-    assert [len(call["comments"]) for call in gateway.create_calls] == [2, 1]
-    assert gateway.create_calls[1]["event"] == "COMMENT"
-    assert "Reject" in gateway.create_calls[1]["body"]
-    assert gateway.call_trace[:2] == ["create_review", "list_reviews"]
-
-
-@pytest.mark.anyio
-async def test_self_review_retry_reconciles_before_mutating(tmp_path: Path) -> None:
-    clock = ManualClock()
-    gateway = StatefulReviewGateway(
-        clock=clock,
-        authenticated_login="author",
-        pr_author_login="author",
-        outcomes=[CreateOutcome(422, data=_self_review_error()), CreateOutcome(200, commit=True)],
-    )
-    result = await _poster(tmp_path / "ledger.sqlite3", gateway, clock).post(
-        _request(tmp_path, event="REQUEST_CHANGES")
-    )
-    assert result.state is ReviewOperationState.SUCCEEDED
-    assert gateway.call_trace == ["create_review", "list_reviews", "create_review", "list_reviews"]
-
-
 @pytest.mark.anyio
 @pytest.mark.parametrize("second,fail_reads", [(False, True), (True, True), (True, False)])
 async def test_generic_and_second_422_reconcile_before_terminal(
@@ -217,7 +163,7 @@ async def test_generic_and_second_422_reconcile_before_terminal(
     fail_reads: bool,
 ) -> None:
     clock = ManualClock()
-    outcomes = [CreateOutcome(422, data=_self_review_error())] if second else []
+    outcomes = [CreateOutcome(422, data=_validation_error(0))] if second else []
     outcomes.append(
         CreateOutcome(
             422,
@@ -225,12 +171,8 @@ async def test_generic_and_second_422_reconcile_before_terminal(
             fail_reads_after=fail_reads,
         )
     )
-    gateway = StatefulReviewGateway(
-        clock=clock, authenticated_login="author", pr_author_login="author", outcomes=outcomes
-    )
-    result = await _poster(tmp_path / "ledger.sqlite3", gateway, clock).post(
-        _request(tmp_path, event="REQUEST_CHANGES")
-    )
+    gateway = StatefulReviewGateway(clock=clock, outcomes=outcomes)
+    result = await _poster(tmp_path / "ledger.sqlite3", gateway, clock).post(_request(tmp_path))
     assert result.state is (
         ReviewOperationState.AMBIGUOUS if fail_reads else ReviewOperationState.TERMINAL
     )
@@ -243,14 +185,12 @@ async def test_second_422_after_corrected_retry_terminates_without_third_attempt
     tmp_path: Path,
 ) -> None:
     database_path = tmp_path / "ledger.sqlite3"
-    request = _request(tmp_path, event="REQUEST_CHANGES")
+    request = _request(tmp_path)
     clock = ManualClock()
     gateway = StatefulReviewGateway(
         clock=clock,
-        authenticated_login="author",
-        pr_author_login="author",
         outcomes=[
-            CreateOutcome(422, data=_self_review_error()),
+            CreateOutcome(422, data=_validation_error(0)),
             CreateOutcome(422, data=_validation_error(0)),
         ],
     )
@@ -261,6 +201,7 @@ async def test_second_422_after_corrected_retry_terminates_without_third_attempt
     assert len(gateway.create_calls) == 2
     assert gateway.call_trace == [
         "create_review",
+        "list_reviews",
         "list_reviews",
         "create_review",
         "list_reviews",
@@ -537,6 +478,57 @@ async def test_crash_before_reduced_retry_claim_resumes_persisted_intent(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "reviewer,resumed_reviewer",
+    [("reviewer", "pull-author"), ("pull-author", "reviewer")],
+)
+async def test_resumed_retry_rejects_changed_author_event(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    reviewer: str,
+    resumed_reviewer: str,
+) -> None:
+    request = _request(
+        tmp_path,
+        event="APPROVE",
+        comments=(
+            GitHubReviewComment(path="src/a.py", line=10, body="Reject A"),
+            GitHubReviewComment(path="src/b.py", line=20, body="Keep B"),
+        ),
+    )
+    database_path = tmp_path / "ledger.sqlite3"
+    clock = ManualClock()
+    gateway = StatefulReviewGateway(
+        clock=clock,
+        authenticated_login=reviewer,
+        pr_author_login="pull-author",
+        outcomes=[CreateOutcome(422, data=_validation_error(0))],
+    )
+    poster = _poster(database_path, gateway, clock)
+
+    def crash_after_retry_is_persisted(*, operation_key: str, attempt_number: int) -> bool:
+        raise RuntimeError("crash after retry scheduling")
+
+    monkeypatch.setattr(poster.ledger, "claim_retry_attempt", crash_after_retry_is_persisted)
+    interrupted = await poster.post(request)
+    assert interrupted.state is ReviewOperationState.AMBIGUOUS
+    operation_key = compute_review_operation_key(request)
+    assert GitHubReviewLedger(database_path).load_attempts(operation_key)[-1].state == (
+        ReviewOperationState.RETRY_PENDING.value
+    )
+
+    monkeypatch.setattr(gateway, "authenticated_login", resumed_reviewer)
+    recovered = await _poster(database_path, gateway, clock).post(request)
+
+    assert recovered.state is ReviewOperationState.TERMINAL
+    assert "current reviewer identity" in recovered.error
+    assert len(gateway.create_calls) == 1
+    attempts = GitHubReviewLedger(database_path).load_attempts(operation_key)
+    assert len(attempts) == 2
+    assert attempts[-1].state == ReviewOperationState.TERMINAL.value
+
+
+@pytest.mark.anyio
 async def test_release_failure_after_reduced_retry_preserves_retry_intent(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -727,55 +719,6 @@ async def test_unstructured_or_second_422_is_terminal_without_further_fallback(
 
 
 @pytest.mark.anyio
-async def test_self_review_422_transforms_request_changes_to_comment_once(
-    tmp_path: Path,
-) -> None:
-    request = _request(tmp_path, event="REQUEST_CHANGES")
-    clock = ManualClock()
-    gateway = StatefulReviewGateway(
-        clock=clock,
-        authenticated_login="pull-author",
-        pr_author_login="pull-author",
-        outcomes=[
-            CreateOutcome(422, data=_self_review_error()),
-            CreateOutcome(200, commit=True),
-        ],
-    )
-
-    result = await _poster(tmp_path / "ledger.sqlite3", gateway, clock).post(request)
-
-    assert [payload["event"] for payload in gateway.create_calls] == [
-        "REQUEST_CHANGES",
-        "COMMENT",
-    ]
-    assert gateway.create_timestamps[1] - gateway.create_timestamps[0] >= 1.0
-    assert result.state is ReviewOperationState.SUCCEEDED
-    assert result.receipt is not None
-    assert result.receipt.requested_event == "REQUEST_CHANGES"
-    assert result.receipt.effective_event == "COMMENT"
-
-
-@pytest.mark.anyio
-async def test_self_review_text_without_identity_proof_does_not_transform(
-    tmp_path: Path,
-) -> None:
-    clock = ManualClock()
-    gateway = StatefulReviewGateway(
-        clock=clock,
-        authenticated_login="review-bot",
-        pr_author_login="pull-author",
-        outcomes=[CreateOutcome(422, data=_self_review_error())],
-    )
-
-    result = await _poster(tmp_path / "ledger.sqlite3", gateway, clock).post(
-        _request(tmp_path, event="REQUEST_CHANGES")
-    )
-
-    assert result.state is ReviewOperationState.TERMINAL
-    assert len(gateway.create_calls) == 1
-
-
-@pytest.mark.anyio
 async def test_secondary_rate_limit_persists_backpressure_without_retry_or_receipt(
     tmp_path: Path,
 ) -> None:
@@ -799,3 +742,243 @@ async def test_secondary_rate_limit_persists_backpressure_without_retry_or_recei
     assert result.receipt is None
     assert GitHubReviewLedger(database_path).load_receipt(result.operation_key) is None
     assert len(gateway.create_calls) == 1
+
+
+_AUTHOR_DISCLOSURES = {
+    "APPROVE": (
+        "Requested review event APPROVE was published as COMMENT because GitHub does not allow "
+        "a pull request's author to approve it; this is not a GitHub approval."
+    ),
+    "REQUEST_CHANGES": (
+        "Requested review event REQUEST_CHANGES was published as COMMENT because GitHub does "
+        "not allow a pull request's author to request changes on it; this review does not "
+        "block merging."
+    ),
+}
+
+
+@pytest.mark.parametrize(
+    "event,reviewer,author,expected",
+    [
+        ("APPROVE", "pull-author", "pull-author", "COMMENT"),
+        ("REQUEST_CHANGES", "pull-author", "pull-author", "COMMENT"),
+        ("COMMENT", "pull-author", "pull-author", "COMMENT"),
+        ("APPROVE", "reviewer", "pull-author", "APPROVE"),
+        ("REQUEST_CHANGES", "reviewer", "pull-author", "REQUEST_CHANGES"),
+        ("APPROVE", "Pull-Author", "pull-author", "COMMENT"),
+    ],
+)
+def test_author_effective_event_decision_table(
+    event: str, reviewer: str, author: str, expected: str
+) -> None:
+    assert (
+        _poster_support.author_effective_event(
+            event, authenticated_login=reviewer, pr_author_login=author
+        )
+        == expected
+    )
+
+
+@pytest.mark.parametrize(
+    "requested,event,body,raises",
+    [
+        ("APPROVE", "COMMENT", "Automated review", False),
+        ("APPROVE", "COMMENT", "", False),
+        ("REQUEST_CHANGES", "COMMENT", "Automated review", False),
+        ("COMMENT", "COMMENT", "Automated review", False),
+        ("COMMENT", "APPROVE", "Automated review", True),
+        ("APPROVE", "REQUEST_CHANGES", "Automated review", True),
+    ],
+)
+def test_payload_discloses_only_author_comment_transformation(
+    tmp_path: Path, requested: str, event: str, body: str, raises: bool
+) -> None:
+    request = _request(tmp_path, event=requested, body=body)
+    arguments = dict(request=request, operation_key="key", findings=(), omitted=(), event=event)
+    if raises:
+        with pytest.raises(
+            ValueError, match="unsupported review event transformation"
+        ) as exc_info:
+            _poster_support.payload(**arguments)
+        assert f"{requested!r} -> {event!r}" in str(exc_info.value)
+        return
+    pieces = [body] if body else []
+    if event != requested:
+        pieces.append(_AUTHOR_DISCLOSURES[requested])
+    pieces.append("<!-- autoskillit-review-operation:key -->")
+    assert _poster_support.payload(**arguments)["body"] == "\n\n".join(pieces)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("event", ["APPROVE", "REQUEST_CHANGES", "COMMENT"])
+async def test_author_review_publishes_one_comment(tmp_path: Path, event: str) -> None:
+    request = _request(
+        tmp_path,
+        event=event,
+        comments=(
+            GitHubReviewComment(path="src/a.py", line=10, body="First finding"),
+            GitHubReviewComment(path="src/b.py", line=20, body="Second finding"),
+        ),
+    )
+    clock = ManualClock()
+    gateway = StatefulReviewGateway(
+        clock=clock, authenticated_login="pull-author", pr_author_login="pull-author"
+    )
+    db = tmp_path / "ledger.sqlite3"
+    result = await _poster(db, gateway, clock).post(request)
+
+    assert result.state is ReviewOperationState.SUCCEEDED
+    assert result.executed_mutation_count == 1
+    assert [call["event"] for call in gateway.create_calls] == ["COMMENT"]
+    assert len(gateway.create_calls[0]["comments"]) == len(request.comments)
+    pieces = [request.body]
+    if event != "COMMENT":
+        pieces.append(_AUTHOR_DISCLOSURES[event])
+    pieces.append(f"<!-- autoskillit-review-operation:{result.operation_key} -->")
+    body = "\n\n".join(pieces)
+    assert gateway.create_calls[0]["body"] == body
+    assert result.receipt is not None
+    assert result.receipt.requested_event == event
+    assert result.receipt.effective_event == "COMMENT"
+    assert result.receipt.effective_body_digest == hashlib.sha256(body.encode()).hexdigest()
+    assert [review["state"] for review in gateway.reviews] == ["COMMENTED"]
+    assert [
+        attempt.effective_event
+        for attempt in GitHubReviewLedger(db).load_attempts(result.operation_key)
+    ] == ["COMMENT"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "event,state", [("APPROVE", "APPROVED"), ("REQUEST_CHANGES", "CHANGES_REQUESTED")]
+)
+async def test_third_party_review_keeps_requested_event(
+    tmp_path: Path, event: str, state: str
+) -> None:
+    clock = ManualClock()
+    gateway = StatefulReviewGateway(clock=clock)
+    request = _request(tmp_path, event=event)
+    result = await _poster(tmp_path / "ledger.sqlite3", gateway, clock).post(request)
+
+    assert result.state is ReviewOperationState.SUCCEEDED
+    assert [call["event"] for call in gateway.create_calls] == [event]
+    assert [review["state"] for review in gateway.reviews] == [state]
+    assert gateway.create_calls[0]["body"] == (
+        f"{request.body}\n\n<!-- autoskillit-review-operation:{result.operation_key} -->"
+    )
+    assert result.receipt is not None
+    assert result.receipt.requested_event == result.receipt.effective_event == event
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "capture,event,error",
+    [
+        (
+            reviews_create_422_author_approve,
+            "APPROVE",
+            "Unprocessable Entity: Review Can not approve your own pull request",
+        ),
+        (
+            reviews_create_422_author_request_changes,
+            "REQUEST_CHANGES",
+            "Unprocessable Entity: Review Can not request changes on your own pull request",
+        ),
+        (
+            reviews_create_422_line_unresolved,
+            "COMMENT",
+            "Unprocessable Entity: Line could not be resolved",
+        ),
+    ],
+)
+async def test_captured_review_422_is_terminal_with_github_detail(
+    tmp_path: Path, capture: Callable[[], dict[str, object]], event: str, error: str
+) -> None:
+    clock = ManualClock()
+    gateway = StatefulReviewGateway(clock=clock, outcomes=[CreateOutcome(422, data=capture())])
+    db = tmp_path / "ledger.sqlite3"
+    result = await _poster(db, gateway, clock).post(_request(tmp_path, event=event))
+
+    assert result.state is ReviewOperationState.TERMINAL
+    assert result.executed_mutation_count == 1
+    assert [call["event"] for call in gateway.create_calls] == [event]
+    assert gateway.call_trace == ["create_review", "list_reviews"]
+    assert result.error == error
+    ledger = GitHubReviewLedger(db)
+    assert ledger.load_attempts(result.operation_key)[0].error == error
+    assert result.receipt is None
+    assert ledger.load_receipt(result.operation_key) is None
+
+
+@pytest.mark.anyio
+async def test_persisted_terminal_author_approve_is_not_cleared(tmp_path: Path) -> None:
+    clock = ManualClock()
+    db = tmp_path / "ledger.sqlite3"
+    request = _request(tmp_path, event="APPROVE")
+    gateway = StatefulReviewGateway(
+        clock=clock, outcomes=[CreateOutcome(422, data=reviews_create_422_author_approve())]
+    )
+    first = await _poster(db, gateway, clock).post(request)
+    gateway2 = StatefulReviewGateway(
+        clock=clock, authenticated_login="pull-author", pr_author_login="pull-author"
+    )
+    result = await _poster(db, gateway2, clock).post(request)
+
+    assert first.state is ReviewOperationState.TERMINAL
+    assert result.state is ReviewOperationState.AMBIGUOUS
+    assert gateway2.create_calls == []
+    assert len(GitHubReviewLedger(db).load_attempts(first.operation_key)) == 1
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "event,own_author,length", [("APPROVE", True, 59990), ("COMMENT", False, 60001)]
+)
+async def test_effective_body_overflow_rejected_before_ledger_state(
+    tmp_path: Path, event: str, own_author: bool, length: int
+) -> None:
+    clock = ManualClock()
+    gateway = StatefulReviewGateway(
+        clock=clock,
+        authenticated_login="pull-author" if own_author else "reviewer",
+        pr_author_login="pull-author",
+    )
+    db = tmp_path / "ledger.sqlite3"
+    request = _request(tmp_path, event=event, body="x" * length)
+    result = await _poster(db, gateway, clock).post(request)
+
+    assert result.state is ReviewOperationState.TERMINAL
+    assert "60000" in result.error
+    assert gateway.create_calls == []
+    assert GitHubReviewLedger(db).load_operation(compute_review_operation_key(request)) is None
+
+
+@pytest.mark.anyio
+async def test_author_event_anchor_retry_keeps_disclosed_comment(tmp_path: Path) -> None:
+    clock = ManualClock()
+    gateway = StatefulReviewGateway(
+        clock=clock,
+        authenticated_login="pull-author",
+        pr_author_login="pull-author",
+        outcomes=[CreateOutcome(422, data=_validation_error(0)), CreateOutcome(200, commit=True)],
+    )
+    request = _request(
+        tmp_path,
+        event="REQUEST_CHANGES",
+        comments=(
+            GitHubReviewComment(path="src/a.py", line=10, body="Reject"),
+            GitHubReviewComment(path="src/b.py", line=20, body="Keep"),
+        ),
+    )
+    result = await _poster(tmp_path / "ledger.sqlite3", gateway, clock).post(request)
+
+    assert result.state is ReviewOperationState.SUCCEEDED
+    assert [call["event"] for call in gateway.create_calls] == ["COMMENT", "COMMENT"]
+    assert [len(call["comments"]) for call in gateway.create_calls] == [2, 1]
+    assert all(
+        _AUTHOR_DISCLOSURES["REQUEST_CHANGES"] in call["body"] for call in gateway.create_calls
+    )
+    assert result.receipt is not None
+    assert result.receipt.requested_event == "REQUEST_CHANGES"
+    assert result.receipt.effective_event == "COMMENT"
+    assert gateway.create_timestamps[1] - gateway.create_timestamps[0] >= 1.0

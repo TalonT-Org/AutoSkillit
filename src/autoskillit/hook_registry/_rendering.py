@@ -12,7 +12,6 @@ import shlex
 from collections.abc import Sequence
 from pathlib import Path
 
-from ._hashing import compute_registry_hash
 from ._hooks_defs import (
     _LOGICAL_HOOK_COMPONENT,
     HookDef,
@@ -23,7 +22,6 @@ from ._registry_data import (
     LIFECYCLE_CONTRACTS,
     PLUGIN_ROOT_TOKEN,
     PROTECTION_WAIVERS,
-    RETIRED_SCRIPT_BASENAMES,
 )
 
 
@@ -102,7 +100,22 @@ def render_hooks_json_text(
     digests them; keeping the serialization in one place prevents the three
     from drifting apart.
     """
-    return json.dumps(generate_hooks_json(registry, lifecycle_contracts), indent=2) + "\n"
+    return serialize_hooks_json(generate_hooks_json(registry, lifecycle_contracts))
+
+
+def serialize_hooks_json(payload: dict) -> str:
+    """Serialize a hook document without AutoSkillit's retired private key.
+
+    Repair uses the installed incarnation's payload rather than the running
+    registry, preserving its hooks and consumer-owned document metadata.
+    """
+    return (
+        json.dumps(
+            {key: value for key, value in payload.items() if key != "_autoskillit_registry_hash"},
+            indent=2,
+        )
+        + "\n"
+    )
 
 
 def render_hook_scope_table(
@@ -174,10 +187,4 @@ def generate_hooks_json(
     by_event: dict[str, list] = {}
     for (event_type, _), entry in groups.items():
         by_event.setdefault(event_type, []).append(entry)
-    registry_hash = compute_registry_hash(
-        registry,
-        RETIRED_SCRIPT_BASENAMES,
-        lifecycle_contracts,
-        PROTECTION_WAIVERS,
-    )
-    return {"hooks": by_event, "_autoskillit_registry_hash": registry_hash}
+    return {"hooks": by_event}

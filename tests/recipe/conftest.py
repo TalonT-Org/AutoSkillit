@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -11,6 +12,7 @@ import yaml
 from autoskillit.core.types import Severity
 from autoskillit.recipe.io import _parse_step, builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import RuleFinding
+from autoskillit.recipe.rules.rules_tools import STEP_IDENTITY_MISMATCH_RULE
 from autoskillit.recipe.schema import Recipe, RecipeStep
 
 BUNDLED_RECIPE_NAMES: list[str] = [
@@ -20,6 +22,14 @@ BUNDLED_RECIPE_NAMES: list[str] = [
     "merge-prs",
     "full-audit",
 ]
+
+
+def identity_suggestions(result: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        suggestion
+        for suggestion in result.get("suggestions", [])
+        if suggestion.get("rule") == STEP_IDENTITY_MISMATCH_RULE
+    ]
 
 
 def assert_no_rule_errors(

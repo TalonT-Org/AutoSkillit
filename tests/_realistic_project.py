@@ -24,8 +24,8 @@ AGENT_TEAMS_ENV_VAR = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 # `CLAUDE_CODE_CAPABILITIES.min_version` in src/autoskillit/core/types/execution/_type_backend.py.
 # Bumping the product floor requires bumping this constant and any inline shim
 # scripts that still embed the literal directly.
-PINNED_CLAUDE_SHIM_VERSION_OUTPUT = "2.1.280 (Claude Code)"
-PINNED_CLAUDE_SHIM_VERSION = "2.1.280"
+PINNED_CLAUDE_SHIM_VERSION_OUTPUT = "2.1.296 (Claude Code)"
+PINNED_CLAUDE_SHIM_VERSION = "2.1.296"
 
 _CONFIG_YAML = """agent_backend:
   backend: claude-code

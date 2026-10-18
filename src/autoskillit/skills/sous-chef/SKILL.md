@@ -530,11 +530,19 @@ When dispatching from an execution map:
 ## STEP NAME IMMUTABILITY — MANDATORY
 
 The `step_name` passed to `run_skill` (and all other recipe-step tools that accept
-`step_name`) must be the **exact value from the recipe YAML `with:` block**.
+`step_name`) must be the step's **YAML key** — its name under `steps:` — on every
+call, even when the step's `with:` block declares no `step_name`. A declared
+invoking-step `with.step_name` is validated to equal that key.
+
+Exception: `record_pipeline_step.step_name` names the target tracked step; pass
+that target's YAML key rather than the invoking tool-step key.
 
 **NEVER** append clone numbers, instance indices, retry counts, or any other
-disambiguation strings. The telemetry layer aggregates all invocations of the same
-logical step automatically — suffixing produces garbage rows in token and timing tables.
+disambiguation strings.
+The telemetry layer aggregates invocations of the same logical step automatically;
+suffixes fragment its token and timing rows.
+Distinct YAML step keys remain separate telemetry rows, even when they
+invoke the same skill.
 
 Correct:
 ```yaml
@@ -555,10 +563,10 @@ parallel run of the same step reports under the same canonical step name.
 
 ## PARAMETER FORWARDING — step_name, output_dir
 
-When a recipe step's `with:` block contains `step_name`, you MUST pass it as the
-`step_name` parameter of `run_skill`. This enables ingredient lock enforcement,
-pipeline dependency checks, and all per-step parameter auto-fills. Omitting it
-degrades enforcement and may cause the call to be denied when locks are active.
+The STEP NAME IMMUTABILITY rule above enables ingredient lock enforcement,
+pipeline dependency checks, and all per-step
+parameter auto-fills. Omitting it degrades enforcement and may cause the call to be
+denied when locks are active.
 
 When a recipe step's `with:` block contains `output_dir`, you MUST pass it as the
 `output_dir` parameter of `run_skill`. This controls the write guard — omitting it

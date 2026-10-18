@@ -351,7 +351,8 @@ async def commit_files(
         paths: List of file paths (relative to cwd) to stage and commit.
         message: Commit message.
         cwd: Absolute path to the git worktree.
-        step_name: Optional YAML step key for wall-clock timing accumulation.
+        step_name: When called from a recipe, the invoking step's YAML key for timing.
+            Optional for direct calls.
         self_revert_base_sha: Optional ancestor commit from which to scan for inverse hunks.
 
     Never raises.
@@ -456,7 +457,8 @@ async def reset_test_dir(
         test_dir: Path to the test directory to clear. Must contain the reset guard marker.
         force: Override the marker check. When True, all contents are deleted
                including the marker file itself.
-        step_name: Optional YAML step key for wall-clock timing accumulation.
+        step_name: When called from a recipe, the invoking step's YAML key for timing.
+            Optional for direct calls.
 
     Never raises.
     """

@@ -11,6 +11,7 @@ from collections.abc import Collection, Mapping
 from types import MappingProxyType
 
 from ._tool_registry_builders import (
+    _PLAN_SET_TOOL_DEFS,
     _REVIEW_AUDIT_TOOL_DEFS,
     _run_skill,
     _tool,
@@ -74,10 +75,7 @@ _TOOL_DEFS = (
         "delegate_evidence_reader",
         ("role", "role_data"),
         required=("role", "role_data"),
-        wire_types={
-            "role": ToolWireType.STRING,
-            "role_data": ToolWireType.OBJECT,
-        },
+        wire_types={"role": ToolWireType.STRING, "role_data": ToolWireType.OBJECT},
     ),
     _tool(
         "read_authorized_artifact",
@@ -88,10 +86,7 @@ _TOOL_DEFS = (
         "get_authorized_artifact_page",
         ("continuation", "page_size"),
         required=("continuation",),
-        wire_types={
-            "continuation": ToolWireType.STRING,
-            "page_size": ToolWireType.INTEGER,
-        },
+        wire_types={"continuation": ToolWireType.STRING, "page_size": ToolWireType.INTEGER},
     ),
     _tool("unlock_agent_pack", ("pack_name",), required=("pack_name",)),
     _tool(
@@ -379,7 +374,7 @@ _TOOL_DEFS = (
         "commit_files",
         ("paths", "message", "cwd", "step_name", "self_revert_base_sha"),
         required=("paths", "message", "cwd"),
-        wire_types={"self_revert_base_sha": ToolWireType.STRING},
+        wire_types={"paths": ToolWireType.ARRAY, "self_revert_base_sha": ToolWireType.STRING},
     ),
     _tool(
         "write_audit_semantic_result",
@@ -458,6 +453,7 @@ _TOOL_DEFS = (
         "prepare_issue",
         ("title", "body", "repo", "labels", "dry_run", "split"),
         required=("title", "body"),
+        wire_types={"labels": ToolWireType.ARRAY},
     ),
     _tool("claim_issue", ("issue_url", "label", "allow_reentry"), required=("issue_url",)),
     _tool(
@@ -491,7 +487,11 @@ _TOOL_DEFS = (
         ("project_dir", "_autoskillit_exploration_request_token"),
         roles={"_autoskillit_exploration_request_token": ToolParamRole.ORCHESTRATOR_SCOPING},
     ),
-    _tool("lock_ingredients", ("locked", "pipeline_id", "unlock")),
+    _tool(
+        "lock_ingredients",
+        ("locked", "pipeline_id", "unlock"),
+        wire_types={"locked": ToolWireType.OBJECT, "unlock": ToolWireType.ARRAY},
+    ),
     _tool(
         "declare_join_batch",
         ("skill_name", "assignments", "session_id", "top_level_parent"),
@@ -511,7 +511,13 @@ _TOOL_DEFS = (
         wire_types={"offset": ToolWireType.INTEGER, "page_size": ToolWireType.INTEGER},
     ),
     _tool("reload_session"),
-    _tool("record_pipeline_step", ("pipeline_id", "op", "dependencies", "step_name")),
+    # step_name identifies the tracked target step being marked.
+    _tool(
+        "record_pipeline_step",
+        ("pipeline_id", "op", "dependencies", "step_name"),
+        roles={"step_name": ToolParamRole.CHILD_INPUT},
+        wire_types={"dependencies": ToolWireType.OBJECT},
+    ),
     _tool("get_pr_reviews", ("pr_number", "cwd", "repo"), required=("pr_number", "cwd")),
     _verify_review_receipt(),
     _tool(
@@ -631,7 +637,7 @@ _TOOL_DEFS = (
         "read_db",
         ("db_path", "query", "params", "timeout"),
         required=("db_path", "query"),
-        wire_types={"params": ToolWireType.ARRAY},
+        wire_types={"params": ToolWireType.STRING},
     ),
     _tool(
         "test_check",
@@ -640,13 +646,7 @@ _TOOL_DEFS = (
         automatic_recipe_delivery=True,
         recovery_recipe_delivery=True,
     ),
-    _tool(
-        "bind_plan_set",
-        ("plan_parts", "cwd", "issue_url", "parent_authority_path", "seal", "step_name"),
-        required=("plan_parts", "cwd"),
-        automatic_recipe_delivery=True,
-        recovery_recipe_delivery=True,
-    ),
+    *_PLAN_SET_TOOL_DEFS,
     _tool("reset_test_dir", ("test_dir", "force", "step_name"), required=("test_dir",)),
     _tool("reset_workspace", ("test_dir",), required=("test_dir",)),
 )

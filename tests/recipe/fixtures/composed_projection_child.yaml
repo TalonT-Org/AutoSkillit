@@ -11,5 +11,6 @@ steps:
     tool: run_python
     with:
       step_name: child_step
+      callable: autoskillit.smoke_utils.check_loop_iteration
     on_success: done
     on_failure: escalate

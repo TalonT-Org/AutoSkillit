@@ -26,15 +26,21 @@ def test_implementation_recipe_has_change_check_after_implement() -> None:
     )
 
 
-def test_implementation_recipe_check_changes_routes_false_to_close() -> None:
-    """check_changes step must route has_changes=false to close_issue_no_changes."""
+def test_implementation_recipe_check_changes_routes_false_through_obligation_gate() -> None:
+    """A no-change close must pass stage-obligation verification first."""
     data = _load("implementation")
     assert "check_changes" in data["steps"], "check_changes step must exist"
     step = data["steps"]["check_changes"]
     on_result = step.get("on_result", [])
     false_routes = [r.get("route") for r in on_result if "false" in r.get("when", "")]
-    assert "close_issue_no_changes" in false_routes, (
-        f"check_changes must route has_changes=false to close_issue_no_changes, got: {on_result}"
+    assert "pr_gate_no_changes" in false_routes, (
+        f"check_changes must route has_changes=false through pr_gate_no_changes, got: {on_result}"
+    )
+    gate = data["steps"]["pr_gate_no_changes"]
+    assert any(
+        route.get("when") == "${{ result.success }} == true"
+        and route.get("route") == "close_issue_no_changes"
+        for route in gate.get("on_result", [])
     )
 
 

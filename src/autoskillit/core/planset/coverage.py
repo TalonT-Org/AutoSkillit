@@ -15,9 +15,11 @@ from ..types.audit._type_plan_set_authority import (
     PlanSetAuthority,
     RequirementDef,
     RequirementKind,
+    implementation_rows,
 )
+from ..types.audit._type_stage_obligation import StageObligation, StageObligationDef
 
-__all__ = ["assigned_requirements", "evaluate_coverage"]
+__all__ = ["assigned_requirements", "evaluate_coverage", "stage_obligations"]
 
 
 def evaluate_coverage(
@@ -26,10 +28,24 @@ def evaluate_coverage(
     rows_by_part: Mapping[str, tuple[AllocationRowDef, ...]],
 ) -> CoverageResultDef:
     rows = tuple(row for part_rows in rows_by_part.values() for row in part_rows)
+    implementation = implementation_rows(rows)
+    stage_duplicates: set[str] = set()
+    seen_stage: set[tuple[str, StageObligation]] = set()
+    for row in rows:
+        if row.allocation is not AllocationKind.STAGE:
+            continue
+        assert row.stage_obligation is not None
+        stage_key = (row.requirement_id, row.stage_obligation)
+        if stage_key in seen_stage:
+            stage_duplicates.add(row.requirement_id)
+        seen_stage.add(stage_key)
     if mode in {InventoryMode.UNENUMERATED, InventoryMode.NO_ISSUE}:
-        empty = tuple(key for key, part_rows in rows_by_part.items() if not part_rows)
+        empty = tuple(
+            key for key, part_rows in rows_by_part.items() if not implementation_rows(part_rows)
+        )
         return CoverageResultDef(
-            CoverageStatus.PASS if not empty else CoverageStatus.FAIL,
+            CoverageStatus.PASS if not empty and not stage_duplicates else CoverageStatus.FAIL,
+            duplicate=tuple(sorted(stage_duplicates)),
             parts_without_obligations=empty,
         )
 
@@ -51,9 +67,9 @@ def evaluate_coverage(
         }
     )
     allocations: dict[str, list[AllocationRowDef]] = {}
-    for row in rows:
+    for row, _ in implementation:
         allocations.setdefault(row.requirement_id, []).append(row)
-    duplicate: set[str] = set()
+    duplicate = set(stage_duplicates)
     for requirement_id, entries in allocations.items():
         if len(entries) < 2:
             continue
@@ -61,10 +77,11 @@ def evaluate_coverage(
             duplicate.add(requirement_id)
         elif len({entry.part_key for entry in entries}) != len(entries):
             duplicate.add(requirement_id)
+    assigned_ids = {row.requirement_id for row in rows}
     unassigned = sorted(
         item.requirement_id
         for item in requirements
-        if item.kind is not RequirementKind.CONTAINER and item.requirement_id not in allocations
+        if item.kind is not RequirementKind.CONTAINER and item.requirement_id not in assigned_ids
     )
     uncovered = sorted(
         item.requirement_id
@@ -96,7 +113,7 @@ def assigned_requirements(
 ) -> tuple[AssignedRequirementDef, ...]:
     requirements = {item.requirement_id: item for item in authority.requirements}
     result: list[AssignedRequirementDef] = []
-    for row in authority.allocations:
+    for row, implementation_step in implementation_rows(authority.allocations):
         requirement = requirements.get(row.requirement_id)
         if row.part_key != part_key or requirement is None:
             continue
@@ -108,7 +125,27 @@ def assigned_requirements(
                 text=requirement.text,
                 source_line=requirement.source_line,
                 allocation=row.allocation,
-                implementation_step=row.implementation_step,
+                implementation_step=implementation_step,
             )
         )
+    return tuple(result)
+
+
+def stage_obligations(authority: PlanSetAuthority) -> tuple[StageObligationDef, ...]:
+    part_ordinals = {part.part_key: part.ordinal for part in authority.parts}
+    ordered_rows = sorted(
+        (row for row in authority.allocations if row.part_key in part_ordinals),
+        key=lambda row: part_ordinals[row.part_key],
+    )
+    seen: set[tuple[str, StageObligation]] = set()
+    result: list[StageObligationDef] = []
+    for row in ordered_rows:
+        if row.allocation is not AllocationKind.STAGE:
+            continue
+        assert row.stage_obligation is not None
+        key = (row.requirement_id, row.stage_obligation)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(StageObligationDef(row.requirement_id, row.stage_obligation))
     return tuple(result)

@@ -21,6 +21,7 @@ from autoskillit.core import (
     SKILL_COMMAND_DISPLAY_MAX,
     WORKTREE_SKILLS,
     ContainmentError,
+    DelegatedOutputScope,
     DelegatedWriteTarget,
     SkillContractError,
     SkillExecutionRole,
@@ -29,6 +30,7 @@ from autoskillit.core import (
     extract_skill_name,
     get_logger,
     resolve_contained_path,
+    strict_walk,
 )
 from autoskillit.core import current_order_id as _current_order_id
 from autoskillit.core import current_step_name as _current_step_name
@@ -532,9 +534,13 @@ def _prepare_owned_write_scope(state: _RunSkillDispatchState) -> str | None:
 
 
 def _bind_delegated_target(state: _RunSkillDispatchState) -> None:
-    """Bind a declared child write to the canonical in-scope invocation input."""
+    """Bind declared child-write targets for this invocation."""
+    if state.write_spec is None:
+        return
+    if getattr(state._skill_contract, "delegated_write_output", None):
+        _bind_delegated_output_scope(state)
     input_name = getattr(state._skill_contract, "delegated_write_input", None)
-    if state._stored_contract is not None or state.write_spec is None or not input_name:
+    if state._stored_contract is not None or not input_name:
         return
 
     value = dict(state._bound_recipe_inputs).get(input_name)
@@ -561,6 +567,43 @@ def _bind_delegated_target(state: _RunSkillDispatchState) -> None:
         "delegated_write_target_unbound",
         skill=state.skill_command,
         input=input_name,
+        reason=reason,
+    )
+
+
+def _bind_delegated_output_scope(state: _RunSkillDispatchState) -> None:
+    assert state.write_spec is not None
+    if state.output_dir:
+        reason = "explicit_output_dir"
+    elif state._default_temp is None:
+        reason = "no_output_root"
+    else:
+        try:
+            root = os.path.realpath(state._default_temp)
+            if not Path(root).is_relative_to(os.path.realpath(state.cwd)):
+                reason = "output_root_outside_cwd"
+            else:
+                try:
+                    os.lstat(root)
+                except FileNotFoundError:
+                    preexisting: frozenset[str] = frozenset()
+                else:
+                    preexisting = frozenset(
+                        os.path.join(root, entry.relative_path)
+                        for entry in strict_walk(Path(root))
+                        if entry.kind == "f"
+                    )
+                state.write_spec = replace(
+                    state.write_spec,
+                    delegated_output_scope=DelegatedOutputScope(root, preexisting),
+                )
+                return
+        except (OSError, ValueError, NotImplementedError) as exc:
+            reason = str(exc)
+    logger.warning(
+        "delegated_write_target_unbound",
+        skill=state.skill_command,
+        output=getattr(state._skill_contract, "delegated_write_output", None),
         reason=reason,
     )
 

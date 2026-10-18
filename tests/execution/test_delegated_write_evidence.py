@@ -56,14 +56,20 @@ def plan_and_target(tmp_path: Path) -> tuple[Path, DelegatedWriteTarget]:
     return plan, DelegatedWriteTarget.bind(os.path.realpath(plan))
 
 
-def _edit_stream(file_path: str, result_record: str | None = None) -> str:
+def _edit_stream(
+    file_path: str,
+    result_record: str | None = None,
+    *,
+    tool_name: str = "Edit",
+    child_result_is_error: bool | None = None,
+) -> str:
     return delegated_stream(
         [
             delegated_root_agent_call(),
             delegated_task_started(),
             delegated_child_prompt(),
-            delegated_child_tool_use(file_path=file_path),
-            delegated_child_tool_result(),
+            delegated_child_tool_use(file_path=file_path, tool_name=tool_name),
+            delegated_child_tool_result(is_error=child_result_is_error),
             delegated_task_notification(),
             delegated_root_agent_result(),
             delegated_root_text(),
@@ -74,6 +80,265 @@ def _edit_stream(file_path: str, result_record: str | None = None) -> str:
 
 def _bound_behavior(target: DelegatedWriteTarget | None) -> WriteBehaviorSpec:
     return WriteBehaviorSpec(mode="always", delegated_target=target)
+
+
+@pytest.mark.parametrize(
+    "scenario",
+    ["owned", "unbound", "failed", "nul", "worktree_temp"],
+    ids=["owned-success", "unbound", "failed-child", "nul-path", "worktree-temp-only"],
+)
+def test_collects_only_bound_successful_implementation_paths(
+    tmp_path: Path, scenario: str
+) -> None:
+    from autoskillit.core import DelegatedOutputScope
+    from autoskillit.execution.session._write_evidence import _compute_write_evidence
+    from tests.execution.conftest import make_write_evidence_scope
+
+    root = tmp_path.resolve()
+    child_path = root / "plan.md"
+    skill_command = "/autoskillit:prepare-pr"
+    write_watch_dirs: tuple[Path, ...] = ()
+    if scenario == "worktree_temp":
+        child_path = root / ".autoskillit" / "temp" / "plan.md"
+        skill_command = "/autoskillit:implement-worktree plan"
+        write_watch_dirs = (root / "src",)
+    child_path_text = str(child_path)
+    if scenario == "nul":
+        child_path_text += "\x00invalid"
+
+    output_scope = None if scenario == "unbound" else DelegatedOutputScope(str(root), frozenset())
+    evidence_scope = make_write_evidence_scope(
+        cwd=str(root),
+        skill_command=skill_command,
+        write_watch_dirs=write_watch_dirs,
+        delegated_output_scope=output_scope,
+    )
+    session = parse_session_result(
+        _edit_stream(
+            child_path_text,
+            tool_name="Write",
+            child_result_is_error=scenario == "failed",
+        )
+    )
+
+    evidence = _compute_write_evidence(session, evidence_scope)
+
+    expected = (os.path.realpath(child_path),) if scenario == "owned" else ()
+    assert evidence.delegated_write_paths == expected
+
+
+def test_canonical_path_rejects_nul(
+    tmp_path: Path,
+    plan_and_target: tuple[Path, DelegatedWriteTarget],
+) -> None:
+    from autoskillit.execution.session._write_evidence import _compute_write_evidence
+    from tests.execution.conftest import make_write_evidence_scope
+
+    plan, target = plan_and_target
+    plan.write_text(_PREPENDED_MARKER + plan.read_text())
+    child_paths = (str(plan), f"{plan}\x00invalid")
+    records = [delegated_root_agent_call(), delegated_task_started(), delegated_child_prompt()]
+    for index, child_path in enumerate(child_paths):
+        tool_use_id = f"call_child_edit_{index}"
+        records.extend(
+            (
+                delegated_child_tool_use(
+                    tool_use_id=tool_use_id,
+                    tool_name="Write",
+                    file_path=child_path,
+                ),
+                delegated_child_tool_result(tool_use_id=tool_use_id, is_error=False),
+            )
+        )
+    records.extend(
+        (delegated_task_notification(), delegated_root_agent_result(), delegated_root_text())
+    )
+    records.append(delegated_result_record())
+    session = parse_session_result(delegated_stream(records))
+    evidence_scope = make_write_evidence_scope(
+        cwd=str(tmp_path),
+        delegated_target=target,
+    )
+
+    evidence = _compute_write_evidence(session, evidence_scope)
+
+    assert evidence.delegated_write_count == 1
+
+
+@pytest.mark.parametrize("missing", ["output_name", "scope", "paths", "value"])
+def test_output_admission_returns_same_evidence_when_unarmed(
+    tmp_path: Path,
+    missing: str,
+) -> None:
+    from autoskillit.core import DelegatedOutputScope, WriteEvidence
+    from autoskillit.execution.session._write_evidence import _admit_declared_output_write
+
+    root = tmp_path.resolve()
+    output_path = root / "plan.md"
+    output_path.write_text("new output")
+    output_scope = DelegatedOutputScope(str(root), frozenset())
+    observed_paths = () if missing == "paths" else (str(output_path),)
+    evidence = WriteEvidence(
+        write_call_count=0,
+        fs_writes_detected=False,
+        git_writes_detected=False,
+        delegated_write_paths=observed_paths,
+    )
+    contract = (
+        SimpleNamespace()
+        if missing == "output_name"
+        else SimpleNamespace(delegated_write_output="prep_path")
+    )
+    behavior = (
+        SimpleNamespace()
+        if missing == "scope"
+        else SimpleNamespace(delegated_output_scope=output_scope)
+    )
+    fields = {} if missing == "value" else {"prep_path": "plan.md"}
+
+    admitted = _admit_declared_output_write(evidence, fields, contract, behavior, str(root))
+
+    assert admitted is evidence
+
+
+@pytest.mark.parametrize("absolute", [False, True], ids=["relative-path", "absolute-path"])
+def test_output_admission_counts_matching_fresh_observations(
+    tmp_path: Path,
+    absolute: bool,
+) -> None:
+    from autoskillit.core import DelegatedOutputScope, WriteEvidence
+    from autoskillit.execution.session._write_evidence import _admit_declared_output_write
+
+    root = tmp_path.resolve()
+    output_path = root / "plan.md"
+    output_path.write_text("new output")
+    canonical_path = str(output_path.resolve())
+    evidence = WriteEvidence(
+        write_call_count=2,
+        fs_writes_detected=True,
+        git_writes_detected=False,
+        file_changes_count=1,
+        delegated_write_count=3,
+        delegated_write_paths=(canonical_path, canonical_path, str(root / "other.md")),
+    )
+    contract = SimpleNamespace(delegated_write_output="prep_path")
+    behavior = SimpleNamespace(delegated_output_scope=DelegatedOutputScope(str(root), frozenset()))
+    emitted_path = str(output_path) if absolute else "plan.md"
+
+    admitted = _admit_declared_output_write(
+        evidence,
+        {"prep_path": emitted_path},
+        contract,
+        behavior,
+        str(root),
+    )
+
+    assert admitted is not evidence
+    assert admitted.write_call_count == evidence.write_call_count
+    assert admitted.file_changes_count == evidence.file_changes_count
+    assert admitted.delegated_write_count == evidence.delegated_write_count + 2
+    assert admitted.delegated_write_paths == evidence.delegated_write_paths
+
+
+@pytest.mark.parametrize("case", ["preexisting", "stale", "mismatched"])
+def test_output_admission_rejections_preserve_evidence_identity(
+    tmp_path: Path,
+    case: str,
+) -> None:
+    from autoskillit.core import DelegatedOutputScope, WriteEvidence
+    from autoskillit.execution.session._write_evidence import _admit_declared_output_write
+
+    root = tmp_path.resolve()
+    output_path = root / "plan.md"
+    canonical_path = str(output_path)
+    if case != "stale":
+        output_path.write_text("output")
+    preexisting = frozenset({canonical_path}) if case == "preexisting" else frozenset()
+    observed_path = str(root / "other.md") if case == "mismatched" else canonical_path
+    evidence = WriteEvidence(
+        write_call_count=1,
+        fs_writes_detected=False,
+        git_writes_detected=False,
+        delegated_write_paths=(observed_path,),
+    )
+    behavior = SimpleNamespace(delegated_output_scope=DelegatedOutputScope(str(root), preexisting))
+
+    admitted = _admit_declared_output_write(
+        evidence,
+        {"prep_path": "plan.md"},
+        SimpleNamespace(delegated_write_output="prep_path"),
+        behavior,
+        str(root),
+    )
+
+    assert admitted is evidence
+
+
+def test_output_admission_preserves_identity_when_freshness_check_raises(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from autoskillit.core import DelegatedOutputScope, WriteEvidence
+    from autoskillit.execution.session._write_evidence import _admit_declared_output_write
+
+    root = tmp_path.resolve()
+    output_path = root / "plan.md"
+    output_path.write_text("output")
+    evidence = WriteEvidence(
+        write_call_count=1,
+        fs_writes_detected=False,
+        git_writes_detected=False,
+        delegated_write_paths=(str(output_path),),
+    )
+    behavior = SimpleNamespace(delegated_output_scope=DelegatedOutputScope(str(root), frozenset()))
+
+    def unavailable(_target: DelegatedWriteTarget) -> bool:
+        raise OSError("target unavailable")
+
+    monkeypatch.setattr(DelegatedWriteTarget, "changed", unavailable)
+    admitted = _admit_declared_output_write(
+        evidence,
+        {"prep_path": "plan.md"},
+        SimpleNamespace(delegated_write_output="prep_path"),
+        behavior,
+        str(root),
+    )
+
+    assert admitted is evidence
+
+
+def test_unarmed_conditional_output_does_not_log_admission_warning(tmp_path: Path) -> None:
+    from autoskillit.core import DelegatedOutputScope
+
+    root = tmp_path.resolve()
+    behavior = WriteBehaviorSpec(
+        mode="conditional",
+        expected_when=(r"prep_path\s*=",),
+        delegated_output_scope=DelegatedOutputScope(str(root), frozenset()),
+    )
+    contract = SimpleNamespace(
+        delegated_write_output="prep_path",
+        outputs=(),
+        outcome_invariants=(),
+    )
+
+    with capture_logs() as events:
+        result = _build_skill_result(
+            _make_result(
+                returncode=0,
+                stdout=_edit_stream(str(root / "plan.md"), tool_name="Write"),
+            ),
+            skill_command="/autoskillit:prepare-pr",
+            cwd=str(root),
+            write_behavior=behavior,
+            backend=ClaudeCodeBackend(),
+            skill_contract=contract,
+        )
+
+    assert result.success is True
+    assert result.evidence.delegated_write_paths == (os.path.realpath(root / "plan.md"),)
+    assert result.evidence.has_implementation_evidence is False
+    assert not any(event.get("event") == "delegated_output_write_not_admitted" for event in events)
 
 
 @pytest.mark.parametrize("fs_writes_detected", [False, True])

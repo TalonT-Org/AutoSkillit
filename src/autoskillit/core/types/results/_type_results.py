@@ -65,7 +65,7 @@ from ._type_results_records import (
     require_aware_timestamp,
 )
 from ._type_token import TurnTokenEntry
-from ._type_write_evidence import DelegatedWriteTarget, WriteEvidence
+from ._type_write_evidence import DelegatedOutputScope, DelegatedWriteTarget, WriteEvidence
 
 if TYPE_CHECKING:
     from ..launch._type_launch import ResolvedLaunchContract
@@ -248,12 +248,14 @@ class WriteBehaviorSpec:
         ``none``, ``serialized-idempotent``, or
         ``serialized-unknown-completion`` for effects outside the workspace.
     delegated_target: Canonical in-scope target for delegated writes.
+    delegated_output_scope: Attempt-local scope for fresh declared-output writes.
     """
 
     mode: str | None = None
     expected_when: tuple[str, ...] = ()
     external_effect: str = "none"
     delegated_target: DelegatedWriteTarget | None = None
+    delegated_output_scope: DelegatedOutputScope | None = None
 
     def __post_init__(self) -> None:
         if self.external_effect not in VALID_EXTERNAL_EFFECTS:

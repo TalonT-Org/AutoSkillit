@@ -296,15 +296,24 @@ def test_output_admission_preserves_identity_when_freshness_check_raises(
         raise OSError("target unavailable")
 
     monkeypatch.setattr(DelegatedWriteTarget, "changed", unavailable)
-    admitted = _admit_declared_output_write(
-        evidence,
-        {"prep_path": "plan.md"},
-        SimpleNamespace(delegated_write_output="prep_path"),
-        behavior,
-        str(root),
-    )
+    with capture_logs() as events:
+        admitted = _admit_declared_output_write(
+            evidence,
+            {"prep_path": "plan.md"},
+            SimpleNamespace(delegated_write_output="prep_path"),
+            behavior,
+            str(root),
+        )
 
     assert admitted is evidence
+    assert events == [
+        {
+            "event": "delegated_output_freshness_check_failed",
+            "output": "prep_path",
+            "error_type": "OSError",
+            "log_level": "debug",
+        }
+    ]
 
 
 def test_unarmed_conditional_output_does_not_log_admission_warning(tmp_path: Path) -> None:

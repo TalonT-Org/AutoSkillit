@@ -178,8 +178,12 @@ def _admit_declared_output_write(
     try:
         if target is not None and target.changed():
             admitted = evidence.delegated_write_paths.count(target.path)
-    except OSError:
-        pass
+    except OSError as exc:
+        logger.debug(
+            "delegated_output_freshness_check_failed",
+            output=name,
+            error_type=type(exc).__name__,
+        )
     if admitted == 0:
         if not evidence.has_implementation_evidence:
             logger.warning(

@@ -184,19 +184,11 @@ def test_output_admission_returns_same_evidence_when_unarmed(
         git_writes_detected=False,
         delegated_write_paths=observed_paths,
     )
-    contract = (
-        SimpleNamespace()
-        if missing == "output_name"
-        else SimpleNamespace(delegated_write_output="prep_path")
-    )
-    behavior = (
-        SimpleNamespace()
-        if missing == "scope"
-        else SimpleNamespace(delegated_output_scope=output_scope)
-    )
+    output_name = None if missing == "output_name" else "prep_path"
+    scope = None if missing == "scope" else output_scope
     fields = {} if missing == "value" else {"prep_path": "plan.md"}
 
-    admitted = _admit_declared_output_write(evidence, fields, contract, behavior, str(root))
+    admitted = _admit_declared_output_write(evidence, fields, output_name, scope, str(root))
 
     assert admitted is evidence
 
@@ -221,15 +213,14 @@ def test_output_admission_counts_matching_fresh_observations(
         delegated_write_count=3,
         delegated_write_paths=(canonical_path, canonical_path, str(root / "other.md")),
     )
-    contract = SimpleNamespace(delegated_write_output="prep_path")
-    behavior = SimpleNamespace(delegated_output_scope=DelegatedOutputScope(str(root), frozenset()))
+    output_scope = DelegatedOutputScope(str(root), frozenset())
     emitted_path = str(output_path) if absolute else "plan.md"
 
     admitted = _admit_declared_output_write(
         evidence,
         {"prep_path": emitted_path},
-        contract,
-        behavior,
+        "prep_path",
+        output_scope,
         str(root),
     )
 
@@ -261,13 +252,13 @@ def test_output_admission_rejections_preserve_evidence_identity(
         git_writes_detected=False,
         delegated_write_paths=(observed_path,),
     )
-    behavior = SimpleNamespace(delegated_output_scope=DelegatedOutputScope(str(root), preexisting))
+    output_scope = DelegatedOutputScope(str(root), preexisting)
 
     admitted = _admit_declared_output_write(
         evidence,
         {"prep_path": "plan.md"},
-        SimpleNamespace(delegated_write_output="prep_path"),
-        behavior,
+        "prep_path",
+        output_scope,
         str(root),
     )
 
@@ -290,7 +281,7 @@ def test_output_admission_preserves_identity_when_freshness_check_raises(
         git_writes_detected=False,
         delegated_write_paths=(str(output_path),),
     )
-    behavior = SimpleNamespace(delegated_output_scope=DelegatedOutputScope(str(root), frozenset()))
+    output_scope = DelegatedOutputScope(str(root), frozenset())
 
     def unavailable(_target: DelegatedWriteTarget) -> bool:
         raise OSError("target unavailable")
@@ -300,8 +291,8 @@ def test_output_admission_preserves_identity_when_freshness_check_raises(
         admitted = _admit_declared_output_write(
             evidence,
             {"prep_path": "plan.md"},
-            SimpleNamespace(delegated_write_output="prep_path"),
-            behavior,
+            "prep_path",
+            output_scope,
             str(root),
         )
 

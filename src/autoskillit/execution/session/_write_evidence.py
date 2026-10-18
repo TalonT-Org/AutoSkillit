@@ -163,17 +163,15 @@ def _owned_write_paths(session: ClaudeSessionResult, scope: WriteEvidenceScope) 
 def _admit_declared_output_write(
     evidence: WriteEvidence,
     fields: dict[str, str | int],
-    skill_contract: object,
-    write_behavior: object,
+    output_name: str | None,
+    output_scope: DelegatedOutputScope | None,
     cwd: str,
 ) -> WriteEvidence:
-    name = getattr(skill_contract, "delegated_write_output", None)
-    scope = getattr(write_behavior, "delegated_output_scope", None)
-    if not name or scope is None or not evidence.delegated_write_paths:
+    if not output_name or output_scope is None or not evidence.delegated_write_paths:
         return evidence
-    value = fields.get(name)
+    value = fields.get(output_name)
     path = _canonical_path(cwd, value) if isinstance(value, str) and value else None
-    target = scope.target_for(path) if path else None
+    target = output_scope.target_for(path) if path else None
     admitted = 0
     try:
         if target is not None and target.changed():
@@ -181,14 +179,14 @@ def _admit_declared_output_write(
     except OSError as exc:
         logger.debug(
             "delegated_output_freshness_check_failed",
-            output=name,
+            output=output_name,
             error_type=type(exc).__name__,
         )
     if admitted == 0:
         if not evidence.has_implementation_evidence:
             logger.warning(
                 "delegated_output_write_not_admitted",
-                output=name,
+                output=output_name,
                 observed=len(evidence.delegated_write_paths),
                 declared=path is not None,
                 in_scope=target is not None,

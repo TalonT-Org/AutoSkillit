@@ -319,7 +319,11 @@ def _apply_post_session_adjudication(
             )
     if write_expected:
         admitted = _admit_declared_output_write(
-            evidence, fields, skill_contract, write_behavior, cwd
+            evidence,
+            fields,
+            skill_contract.delegated_write_output if skill_contract else None,
+            write_behavior.delegated_output_scope if write_behavior else None,
+            cwd,
         )
         if admitted is not evidence:
             evidence = admitted

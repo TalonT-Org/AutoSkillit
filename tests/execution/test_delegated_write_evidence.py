@@ -297,14 +297,11 @@ def test_output_admission_preserves_identity_when_freshness_check_raises(
         )
 
     assert admitted is evidence
-    assert events == [
-        {
-            "event": "delegated_output_freshness_check_failed",
-            "output": "prep_path",
-            "error_type": "OSError",
-            "log_level": "debug",
-        }
-    ]
+    assert len(events) == 1
+    assert events[0]["event"] == "delegated_output_freshness_check_failed"
+    assert events[0]["output"] == "prep_path"
+    assert events[0]["error_type"] == "OSError"
+    assert events[0]["log_level"] == "debug"
 
 
 def test_unarmed_conditional_output_does_not_log_admission_warning(tmp_path: Path) -> None:

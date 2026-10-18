@@ -77,11 +77,11 @@ def _dispatch_state(
 
 def _bound_state(cwd: Path, contract: Any, spec: Any) -> SimpleNamespace:
     from autoskillit.server.tools.tools_execution._run_skill_session import (
-        _bind_delegated_target,
+        _bind_delegated_writes,
     )
 
     state = _dispatch_state(cwd, contract, spec)
-    _bind_delegated_target(state)
+    _bind_delegated_writes(state)
     return state
 
 
@@ -276,7 +276,7 @@ async def test_fresh_child_written_prep_is_credited_end_to_end(
 )
 def test_unproven_prep_write_stays_zero_writes(tmp_path: Path, case: str) -> None:
     from autoskillit.server.tools.tools_execution._run_skill_session import (
-        _bind_delegated_target,
+        _bind_delegated_writes,
     )
 
     contract, spec = _contract_and_spec(tmp_path)
@@ -289,7 +289,7 @@ def test_unproven_prep_write_stays_zero_writes(tmp_path: Path, case: str) -> Non
 
     if case == "preexisting-output":
         _write_file(prep)
-    _bind_delegated_target(state)
+    _bind_delegated_writes(state)
 
     if case in {"denied-parent", "unowned-child", "preexisting-output", "disappeared-output"}:
         _write_file(prep)
@@ -353,10 +353,10 @@ def test_binder_records_preexisting_names(tmp_path: Path) -> None:
     (state._default_temp / "old.md").write_text("old", encoding="utf-8")
 
     from autoskillit.server.tools.tools_execution._run_skill_session import (
-        _bind_delegated_target,
+        _bind_delegated_writes,
     )
 
-    _bind_delegated_target(state)
+    _bind_delegated_writes(state)
     scope = _output_scope(state.write_spec)
 
     assert scope is not None
@@ -369,10 +369,10 @@ def test_binder_missing_root_is_known_empty(tmp_path: Path) -> None:
     state = _dispatch_state(tmp_path, contract, spec)
 
     from autoskillit.server.tools.tools_execution._run_skill_session import (
-        _bind_delegated_target,
+        _bind_delegated_writes,
     )
 
-    _bind_delegated_target(state)
+    _bind_delegated_writes(state)
     scope = _output_scope(state.write_spec)
 
     assert scope is not None
@@ -388,11 +388,11 @@ def test_binder_rejects_non_directory_ancestor(tmp_path: Path) -> None:
     temp_parent.write_text("not a directory", encoding="utf-8")
 
     from autoskillit.server.tools.tools_execution._run_skill_session import (
-        _bind_delegated_target,
+        _bind_delegated_writes,
     )
 
     with capture_logs() as events:
-        _bind_delegated_target(state)
+        _bind_delegated_writes(state)
 
     _assert_no_output_scope(state.write_spec)
     assert any(event.get("event") == "delegated_write_target_unbound" for event in events)
@@ -403,11 +403,11 @@ def test_binder_skips_explicit_output_dir(tmp_path: Path) -> None:
     state = _dispatch_state(tmp_path, contract, spec, output_dir=".")
 
     from autoskillit.server.tools.tools_execution._run_skill_session import (
-        _bind_delegated_target,
+        _bind_delegated_writes,
     )
 
     with capture_logs() as events:
-        _bind_delegated_target(state)
+        _bind_delegated_writes(state)
 
     _assert_no_output_scope(state.write_spec)
     assert any(
@@ -428,11 +428,11 @@ def test_binder_rejects_root_outside_cwd(tmp_path: Path) -> None:
     (cwd / ".autoskillit" / "temp").symlink_to(outside, target_is_directory=True)
 
     from autoskillit.server.tools.tools_execution._run_skill_session import (
-        _bind_delegated_target,
+        _bind_delegated_writes,
     )
 
     with capture_logs() as events:
-        _bind_delegated_target(state)
+        _bind_delegated_writes(state)
 
     _assert_no_output_scope(state.write_spec)
     assert any(event.get("event") == "delegated_write_target_unbound" for event in events)
@@ -441,7 +441,7 @@ def test_binder_rejects_root_outside_cwd(tmp_path: Path) -> None:
 def test_binder_rebinds_output_scope_on_resume(tmp_path: Path) -> None:
     from autoskillit.core import DelegatedWriteTarget
     from autoskillit.server.tools.tools_execution._run_skill_session import (
-        _bind_delegated_target,
+        _bind_delegated_writes,
     )
 
     contract, spec = _contract_and_spec(tmp_path)
@@ -452,7 +452,7 @@ def test_binder_rebinds_output_scope_on_resume(tmp_path: Path) -> None:
     state.write_spec = replace(state.write_spec, delegated_target=original_target)
     state._stored_contract = object()
 
-    _bind_delegated_target(state)
+    _bind_delegated_writes(state)
 
     assert _output_scope(state.write_spec) is not None
     assert state.write_spec.delegated_target is original_target
@@ -463,7 +463,7 @@ def test_binder_ignores_contracts_without_output_route(tmp_path: Path) -> None:
     from autoskillit.recipe.contracts import get_skill_contract, load_bundled_manifest
     from autoskillit.server._factory import make_context
     from autoskillit.server.tools.tools_execution._run_skill_session import (
-        _bind_delegated_target,
+        _bind_delegated_writes,
     )
     from tests.server._factory_test_helpers import _runner
 
@@ -475,7 +475,7 @@ def test_binder_ignores_contracts_without_output_route(tmp_path: Path) -> None:
     assert spec is not None
     state = _dispatch_state(tmp_path, contract, spec, skill_name="dry-walkthrough")
 
-    _bind_delegated_target(state)
+    _bind_delegated_writes(state)
 
     _assert_no_output_scope(state.write_spec)
     assert state.write_spec.delegated_target is not None
@@ -485,7 +485,7 @@ def test_incomplete_baseline_stays_unbound_and_logs(tmp_path: Path, monkeypatch)
     from autoskillit.core import TreeVanishedError
     from autoskillit.server.tools.tools_execution import _run_skill_session
     from autoskillit.server.tools.tools_execution._run_skill_session import (
-        _bind_delegated_target,
+        _bind_delegated_writes,
     )
 
     contract, spec = _contract_and_spec(tmp_path)
@@ -497,7 +497,7 @@ def test_incomplete_baseline_stays_unbound_and_logs(tmp_path: Path, monkeypatch)
 
     monkeypatch.setattr(_run_skill_session, "strict_walk", incomplete_walk, raising=False)
     with capture_logs() as events:
-        _bind_delegated_target(state)
+        _bind_delegated_writes(state)
 
     _assert_no_output_scope(state.write_spec)
     assert any(event.get("event") == "delegated_write_target_unbound" for event in events)

@@ -373,7 +373,7 @@ async def _prepare_owned_dispatch_session(
     if (terminal := _extend_closure_write_scope(state)) is not None:
         return terminal
 
-    _bind_delegated_target(state)
+    _bind_delegated_writes(state)
     _prepare_owned_session_contract(state)
 
     if (terminal := _prepare_owned_write_scope(state)) is not None:
@@ -533,7 +533,7 @@ def _prepare_owned_write_scope(state: _RunSkillDispatchState) -> str | None:
     return None
 
 
-def _bind_delegated_target(state: _RunSkillDispatchState) -> None:
+def _bind_delegated_writes(state: _RunSkillDispatchState) -> None:
     """Bind declared child-write targets for this invocation."""
     if state.write_spec is None:
         return

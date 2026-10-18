@@ -92,19 +92,16 @@ def _canonical_path(cwd: str, file_path: str) -> str | None:
         return None
 
 
-def _is_admitted_delegated_write(
+def _qualifying_delegated_write_path(
     observation: DelegatedWriteObservation,
-    target: DelegatedWriteTarget,
     scope: WriteEvidenceScope,
-) -> bool:
+) -> str | None:
     if not observation.succeeded or observation.tool_name not in scope.write_tool_names:
-        return False
+        return None
     resolved = _canonical_path(scope.cwd, observation.file_path)
-    return (
-        resolved is not None
-        and resolved == target.path
-        and _is_implementation_path(scope, resolved)
-    )
+    if resolved is None or not _is_implementation_path(scope, resolved):
+        return None
+    return resolved
 
 
 def _admitted_delegated_write_count(
@@ -133,7 +130,7 @@ def _admitted_delegated_write_count(
         admitted = sum(
             1
             for observation in observations
-            if _is_admitted_delegated_write(observation, target, scope)
+            if _qualifying_delegated_write_path(observation, scope) == target.path
         )
     else:
         admitted = 0
@@ -154,9 +151,7 @@ def _owned_write_paths(session: ClaudeSessionResult, scope: WriteEvidenceScope) 
     return tuple(
         path
         for observation in session.delegated_writes
-        if observation.succeeded and observation.tool_name in scope.write_tool_names
-        if (path := _canonical_path(scope.cwd, observation.file_path)) is not None
-        and _is_implementation_path(scope, path)
+        if (path := _qualifying_delegated_write_path(observation, scope)) is not None
     )
 
 

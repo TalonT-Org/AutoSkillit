@@ -7,7 +7,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from stat import S_ISREG
 
-__all__ = ["DelegatedWriteObservation", "DelegatedWriteTarget", "WriteEvidence"]
+__all__ = [
+    "DelegatedOutputScope",
+    "DelegatedWriteObservation",
+    "DelegatedWriteTarget",
+    "WriteEvidence",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +52,24 @@ class DelegatedWriteTarget:
 
 
 @dataclass(frozen=True, slots=True)
+class DelegatedOutputScope:
+    """Canonical output root and regular files observed during a completed scan.
+
+    The baseline is not an atomic snapshot or an attestation of artifact bytes.
+    """
+
+    root: str
+    preexisting: frozenset[str]
+
+    def target_for(self, path: str) -> DelegatedWriteTarget | None:
+        if path == self.root or not Path(path).is_relative_to(self.root):
+            return None
+        if path in self.preexisting:
+            return None
+        return DelegatedWriteTarget(path=path, baseline_digest=None)
+
+
+@dataclass(frozen=True, slots=True)
 class DelegatedWriteObservation:
     """A parsed child write-tool observation."""
 
@@ -60,13 +83,17 @@ class DelegatedWriteObservation:
 
 @dataclass(frozen=True, slots=True)
 class WriteEvidence:
-    """Bundled write evidence signals — either explicitly constructed or absent."""
+    """Bundled write evidence signals — either explicitly constructed or absent.
+
+    Owned child paths await declared-output admission and are never evidence alone.
+    """
 
     write_call_count: int
     fs_writes_detected: bool
     git_writes_detected: bool
     file_changes_count: int = 0
     delegated_write_count: int = 0
+    delegated_write_paths: tuple[str, ...] = ()
 
     @classmethod
     def none_observed(cls) -> WriteEvidence:

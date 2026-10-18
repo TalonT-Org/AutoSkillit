@@ -59,6 +59,7 @@ from autoskillit.execution.session._session_model import (
 from autoskillit.execution.session._session_outcome import _compute_success
 from autoskillit.execution.session._write_evidence import (
     WriteEvidenceScope,
+    _admit_declared_output_write,
     _compute_write_evidence,
 )
 
@@ -307,8 +308,8 @@ def _apply_post_session_adjudication(
     if not sr.success:
         return sr
 
-    if not evidence.has_implementation_evidence and write_behavior is not None:
-        write_expected = False
+    write_expected = False
+    if write_behavior is not None:
         if write_behavior.mode == "always":
             write_expected = True
         elif write_behavior.mode == "conditional" and write_behavior.expected_when:
@@ -316,23 +317,34 @@ def _apply_post_session_adjudication(
                 sr.result,
                 write_behavior.expected_when,
             )
-        if write_expected:
-            detail = "expected implementation writes were not observed"
-            return dataclasses.replace(
-                sr,
-                success=False,
+    if write_expected:
+        admitted = _admit_declared_output_write(
+            evidence,
+            fields,
+            skill_contract.delegated_write_output if skill_contract else None,
+            write_behavior.delegated_output_scope if write_behavior else None,
+            cwd,
+        )
+        if admitted is not evidence:
+            evidence = admitted
+            sr = dataclasses.replace(sr, evidence=admitted)
+    if write_expected and not evidence.has_implementation_evidence:
+        detail = "expected implementation writes were not observed"
+        return dataclasses.replace(
+            sr,
+            success=False,
+            subtype="zero_writes",
+            needs_retry=True,
+            retry_reason=RetryReason.ZERO_WRITES,
+            result=detail,
+            adjudication_verdict=AdjudicationVerdict(
+                reason_kind=RetryReason.ZERO_WRITES,
                 subtype="zero_writes",
-                needs_retry=True,
-                retry_reason=RetryReason.ZERO_WRITES,
-                result=detail,
-                adjudication_verdict=AdjudicationVerdict(
-                    reason_kind=RetryReason.ZERO_WRITES,
-                    subtype="zero_writes",
-                    detail=detail,
-                    outcome_fields=sr.outcome_fields,
-                    defects=(),
-                ),
-            )
+                detail=detail,
+                outcome_fields=sr.outcome_fields,
+                defects=(),
+            ),
+        )
 
     if skill_contract is None:
         return sr

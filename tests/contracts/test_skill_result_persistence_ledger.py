@@ -57,6 +57,7 @@ SKILL_RESULT_PERSISTENCE: tuple[tuple[str, str, str], ...] = (
     ("contamination.retry_reason", "contamination_retry_reason", "live-only:derived-elsewhere"),
     ("contamination.subtype", "contamination_subtype", "live-only:derived-elsewhere"),
     ("evidence.delegated_write_count", "delegated_write_count", "summary-only"),
+    ("evidence.delegated_write_paths", "delegated_write_paths", "live-only:ephemeral-path"),
     ("evidence.file_changes_count", "file_changes_count", "persisted"),
     ("evidence.fs_writes_detected", "fs_writes_detected", "persisted"),
     ("evidence.git_writes_detected", "git_writes_detected", "persisted"),

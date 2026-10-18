@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Literal, assert_never, cast
 
@@ -257,20 +257,22 @@ def _as_input_preflight(value: object) -> tuple[str, ...]:
     return tuple(value)
 
 
-def _parse_delegated_write_input(
+def _parse_delegated_write_name(
     skill_name: str,
     skill_data: dict[str, Any],
-    inputs: tuple[SkillInput, ...],
+    key: Literal["delegated_write_input", "delegated_write_output"],
+    declared: Sequence[SkillInput | SkillOutput],
     write_behavior: object,
 ) -> str | None:
-    if "delegated_write_input" not in skill_data:
+    if key not in skill_data:
         return None
-    value = skill_data["delegated_write_input"]
-    error_prefix = f"delegated_write_input for skill '{skill_name}'"
+    value = skill_data[key]
+    error_prefix = f"{key} for skill '{skill_name}'"
     if not isinstance(value, str):
         raise ValueError(f"{error_prefix} must be a string")
-    if not any(item.name == value and item.type == "file_path" for item in inputs):
-        raise ValueError(f"{error_prefix} must name a declared file_path input")
+    if not any(item.name == value and item.type == "file_path" for item in declared):
+        kind = "input" if key == "delegated_write_input" else "output"
+        raise ValueError(f"{error_prefix} must name a declared file_path {kind}")
     if write_behavior not in ("always", "conditional"):
         raise ValueError(f"{error_prefix} requires write_behavior 'always' or 'conditional'")
     return value
@@ -295,8 +297,11 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
     examples = skill_data.get("pattern_examples", [])
     write_behavior = skill_data.get("write_behavior")
     write_expected_when = skill_data.get("write_expected_when", [])
-    delegated_write_input = _parse_delegated_write_input(
-        skill_name, skill_data, inputs, write_behavior
+    delegated_write_input = _parse_delegated_write_name(
+        skill_name, skill_data, "delegated_write_input", inputs, write_behavior
+    )
+    delegated_write_output = _parse_delegated_write_name(
+        skill_name, skill_data, "delegated_write_output", outputs, write_behavior
     )
     external_effect = skill_data.get("external_effect", "none")
     if not isinstance(external_effect, str):
@@ -336,6 +341,7 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
         pattern_examples=examples,
         write_behavior=write_behavior,
         delegated_write_input=delegated_write_input,
+        delegated_write_output=delegated_write_output,
         write_expected_when=write_expected_when,
         external_effect=external_effect,
         read_only=read_only,

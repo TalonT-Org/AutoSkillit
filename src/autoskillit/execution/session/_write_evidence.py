@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import os
 from collections.abc import Collection
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
 from autoskillit.core import (
     WORKTREE_SKILLS,
+    DelegatedOutputScope,
     DelegatedWriteObservation,
     DelegatedWriteTarget,
     WriteEvidence,
@@ -31,6 +32,7 @@ class WriteEvidenceScope:
     cwd: str
     skill_command: str
     delegated_target: DelegatedWriteTarget | None
+    delegated_output_scope: DelegatedOutputScope | None
 
 
 def _is_worktree_dispatch(scope: WriteEvidenceScope) -> bool:
@@ -83,15 +85,23 @@ def _count_root_write_calls(session: ClaudeSessionResult, scope: WriteEvidenceSc
     return _count_worktree_write_calls(scope, eligible_calls)
 
 
-def _is_admitted_delegated_write(
+def _canonical_path(cwd: str, file_path: str) -> str | None:
+    try:
+        return os.path.realpath(Path(cwd) / file_path)
+    except (OSError, ValueError):
+        return None
+
+
+def _qualifying_delegated_write_path(
     observation: DelegatedWriteObservation,
-    target: DelegatedWriteTarget,
     scope: WriteEvidenceScope,
-) -> bool:
+) -> str | None:
     if not observation.succeeded or observation.tool_name not in scope.write_tool_names:
-        return False
-    resolved = os.path.realpath(Path(scope.cwd) / observation.file_path)
-    return resolved == target.path and _is_implementation_path(scope, resolved)
+        return None
+    resolved = _canonical_path(scope.cwd, observation.file_path)
+    if resolved is None or not _is_implementation_path(scope, resolved):
+        return None
+    return resolved
 
 
 def _admitted_delegated_write_count(
@@ -120,12 +130,12 @@ def _admitted_delegated_write_count(
         admitted = sum(
             1
             for observation in observations
-            if _is_admitted_delegated_write(observation, target, scope)
+            if _qualifying_delegated_write_path(observation, scope) == target.path
         )
     else:
         admitted = 0
 
-    if admitted == 0:
+    if admitted == 0 and scope.delegated_output_scope is None:
         logger.warning(
             "delegated_writes_not_admitted",
             observed=len(observations),
@@ -133,6 +143,51 @@ def _admitted_delegated_write_count(
             target_changed=target_changed,
         )
     return admitted
+
+
+def _owned_write_paths(session: ClaudeSessionResult, scope: WriteEvidenceScope) -> tuple[str, ...]:
+    if scope.delegated_output_scope is None:
+        return ()
+    return tuple(
+        path
+        for observation in session.delegated_writes
+        if (path := _qualifying_delegated_write_path(observation, scope)) is not None
+    )
+
+
+def _admit_declared_output_write(
+    evidence: WriteEvidence,
+    fields: dict[str, str | int],
+    output_name: str | None,
+    output_scope: DelegatedOutputScope | None,
+    cwd: str,
+) -> WriteEvidence:
+    if not output_name or output_scope is None or not evidence.delegated_write_paths:
+        return evidence
+    value = fields.get(output_name)
+    path = _canonical_path(cwd, value) if isinstance(value, str) and value else None
+    target = output_scope.target_for(path) if path else None
+    admitted = 0
+    try:
+        if target is not None and target.changed():
+            admitted = evidence.delegated_write_paths.count(target.path)
+    except OSError as exc:
+        logger.debug(
+            "delegated_output_freshness_check_failed",
+            output=output_name,
+            error_type=type(exc).__name__,
+        )
+    if admitted == 0:
+        if not evidence.has_implementation_evidence:
+            logger.warning(
+                "delegated_output_write_not_admitted",
+                output=output_name,
+                observed=len(evidence.delegated_write_paths),
+                declared=path is not None,
+                in_scope=target is not None,
+            )
+        return evidence
+    return replace(evidence, delegated_write_count=evidence.delegated_write_count + admitted)
 
 
 def _compute_write_evidence(
@@ -165,4 +220,5 @@ def _compute_write_evidence(
         git_writes_detected=scope.git_writes_detected,
         file_changes_count=file_changes_count,
         delegated_write_count=delegated_write_count,
+        delegated_write_paths=_owned_write_paths(session, scope),
     )

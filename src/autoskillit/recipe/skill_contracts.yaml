@@ -713,6 +713,7 @@ skills:
     - "https://github.com/owner/repo/pull/42\n%%ORDER_UP%%"
 
   prepare-pr:
+    delegated_write_output: prep_path
     inputs:
     - name: plan_paths
       type: file_path_list

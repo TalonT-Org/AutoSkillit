@@ -17,7 +17,7 @@ from autoskillit.server.tools._execution_helpers import (
     serialize_skill_contract,
 )
 from autoskillit.server.tools.tools_execution._run_skill_session import (
-    _bind_delegated_target,
+    _bind_delegated_writes,
 )
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -49,7 +49,7 @@ def test_binder_captures_in_scope_plan_digest(tmp_path: Path, path_form: str) ->
     }[path_form]
 
     state = _binding_state(root, (("plan_path", input_path),))
-    _bind_delegated_target(state)
+    _bind_delegated_writes(state)
 
     target = state.write_spec.delegated_target
     assert target.path == str(plan.resolve())
@@ -79,7 +79,7 @@ def test_invalid_target_stays_unbound_and_logs_reason(tmp_path: Path, case: str)
     state = _binding_state(root, inputs[case])
 
     with structlog.testing.capture_logs() as events:
-        _bind_delegated_target(state)
+        _bind_delegated_writes(state)
 
     assert state.write_spec.delegated_target is None
     assert any(event.get("event") == "delegated_write_target_unbound" for event in events)
@@ -95,7 +95,7 @@ def test_unreadable_baseline_stays_unbound_and_logs_reason(tmp_path: Path, monke
 
     monkeypatch.setattr(Path, "read_bytes", unreadable)
     with structlog.testing.capture_logs() as events:
-        _bind_delegated_target(state)
+        _bind_delegated_writes(state)
 
     assert state.write_spec.delegated_target is None
     assert any(
@@ -110,7 +110,7 @@ def test_contract_without_declaration_leaves_write_spec_unchanged(tmp_path: Path
     state._skill_contract = SimpleNamespace(delegated_write_input=None)
     original_spec = state.write_spec
 
-    _bind_delegated_target(state)
+    _bind_delegated_writes(state)
 
     assert state.write_spec is original_spec
 
@@ -152,7 +152,7 @@ def test_resume_keeps_original_target_baseline_without_rebinding(tmp_path: Path)
         WriteBehaviorSpec(mode="always", delegated_target=original_target),
     )
 
-    _bind_delegated_target(state)
+    _bind_delegated_writes(state)
 
     restored_target = state.write_spec.delegated_target
     assert restored_target.baseline_digest == original_target.baseline_digest
@@ -165,7 +165,7 @@ def test_resume_without_target_stays_unbound_without_warning(tmp_path: Path) -> 
     state = _restored_state(tmp_path, contract, WriteBehaviorSpec(mode="always"))
 
     with structlog.testing.capture_logs() as events:
-        _bind_delegated_target(state)
+        _bind_delegated_writes(state)
 
     assert state.write_spec.delegated_target is None
     assert not any(event.get("event") == "delegated_write_target_unbound" for event in events)

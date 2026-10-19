@@ -14,6 +14,7 @@ class StageObligation(StrEnum):
     PR_LEFT_UNMERGED = "pr_left_unmerged"
 
     def unavailable_reason(self, *, open_pr: bool, auto_merge: bool) -> str | None:
+        """Explain why recipe ingredients prevent this outcome, or return None."""
         match self:
             case StageObligation.PR_OPENED:
                 if not open_pr:
@@ -31,6 +32,7 @@ class StageObligation(StrEnum):
     def violation(
         self, *, pr_state: str | None, pr_base: str | None, base_branch: str
     ) -> str | None:
+        """Explain how the observed PR misses this outcome, or return None."""
         if pr_state is None:
             return "no pull request could be observed"
         if pr_base != base_branch:

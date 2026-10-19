@@ -15,9 +15,9 @@ from autoskillit.core import (
     PlanSetBindRequest,
     PlanSetRejectReason,
     get_logger,
+    is_ingredient_truthy,
     resolve_temp_dir,
 )
-from autoskillit.recipe.ingredients import _is_ingredient_truthy
 from autoskillit.server import mcp
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
@@ -92,7 +92,7 @@ async def bind_plan_set(
             parent_authority_path=parent_authority_path,
             seal=_as_bool(seal),
             step_name=step_name,
-            open_pr=_is_ingredient_truthy(open_pr),
+            open_pr=is_ingredient_truthy(open_pr),
             auto_merge=auto_merge == "true",
             prior_authority_path=prior_authority_path,
             execution_generation=execution_generation,

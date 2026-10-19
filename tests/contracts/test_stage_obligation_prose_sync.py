@@ -29,7 +29,9 @@ def test_plan_part_form_lists_every_stage_obligation_key() -> None:
 def test_planner_skills_document_stage_allocation_and_echo_exemption() -> None:
     skills_root = pkg_root() / "skills_extended"
     for skill_name in ("make-plan", "rectify"):
-        content = (skills_root / skill_name / "SKILL.md").read_text(encoding="utf-8")
+        content = " ".join(
+            (skills_root / skill_name / "SKILL.md").read_text(encoding="utf-8").split()
+        )
         assert "opening the pull request, or leaving it unmerged" in content
         assert "allocated as `stage` with its obligation key" in content
         assert "never to an implementation step; bind refuses one this run cannot perform" in (

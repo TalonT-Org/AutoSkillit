@@ -89,17 +89,34 @@ def test_implementation_family_recipes_route_terminals_through_diagnostics() -> 
             # The step must route on_success to an analyze_pipeline_health* step
             next_step = cs.on_success
             assert next_step is not None, f"{name}: {step_name} has no on_success"
-            assert next_step.startswith(diag_step_prefixes), (
-                f"{name}: {step_name}.on_success={next_step!r} must start with "
-                f"{diag_step_prefixes!r}"
-            )
+            if step_name == "register_clone_unconfirmed":
+                assert next_step == "verify_stage_obligations_unconfirmed"
+                gate = steps[next_step]
+                assert gate.on_result is not None
+                diag_name = next(
+                    condition.route
+                    for condition in gate.on_result.conditions
+                    if condition.when and "result.success" in condition.when
+                )
+                failure_target = next(
+                    condition.route
+                    for condition in gate.on_result.conditions
+                    if condition.when is None
+                )
+                assert failure_target == "analyze_pipeline_health_error"
+            else:
+                assert next_step.startswith(diag_step_prefixes), (
+                    f"{name}: {step_name}.on_success={next_step!r} must start with "
+                    f"{diag_step_prefixes!r}"
+                )
+                diag_name = next_step
             # The analyze_pipeline_health* step must gate on inputs.pipeline_health
-            diag = steps.get(next_step)
+            diag = steps.get(diag_name)
             assert diag is not None, (
-                f"{name}: step {step_name} routes to {next_step!r} but no such step exists"
+                f"{name}: step {step_name} routes to {diag_name!r} but no such step exists"
             )
             assert diag.skip_when_false in required_post_run_refs, (
-                f"{name}: {next_step}.skip_when_false={diag.skip_when_false!r} "
+                f"{name}: {diag_name}.skip_when_false={diag.skip_when_false!r} "
                 f"must reference one of {required_post_run_refs!r}"
             )
 

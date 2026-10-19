@@ -63,10 +63,7 @@ ingredients:
     description: Review solution approaches against the plan (runs after rectify/make-plan)
     default: 'false'
   investigate:
-    description: Run the investigate step. "true" (or "auto", the default) always
-      runs; "false" always skips. In fleet/batch dispatch, external orchestrators
-      resolve "auto" to "false" when the issue body contains an investigation-complete
-      marker. In direct orders, "auto" behaves like "true".
+    description: 'Run investigation. true/auto runs it; false skips. In fleet, auto skips issues marked investigation-complete; direct orders run it.'
     default: auto
   open_pr:
     description: PR instead of direct merge
@@ -79,12 +76,10 @@ ingredients:
       \ merge queue when available, direct merge otherwise"
     default: 'true'
   review_max_retries:
-    description: Maximum number of review-resolve retry cycles before proceeding to
-      CI
+    description: 'Review retry cap before CI.'
     default: '3'
   local_review_rounds:
-    description: Number of review-resolve cycles to run locally before switching to
-      GitHub-backed review. 0 disables local mode entirely.
+    description: 'Local review-resolve rounds before GitHub review; zero disables local mode.'
     type: integer
     default: '2'
     authority: config
@@ -92,26 +87,21 @@ ingredients:
     description: Maximum number of merge-fix retry cycles before failing
     default: '3'
   audit_remediation_max_retries:
-    description: "Maximum audit remediation budget (allowed remediation rounds = value\
-      \ \u2212 1). Set to 3 for 2 remediation rounds."
+    description: 'Audit remediation limit; allowed rounds = value - 1.'
     default: '3'
   audit_integrity_max_retries:
     description: Maximum retries after an audit semantic or infrastructure failure
     default: '2'
   test_fix_max_retries:
     default: '3'
-    description: "Maximum pre-merge test \u2192 fix \u2192 test budget (allowed fix\
-      \ rounds = value \u2212 1). Set to 3 for 2 fix rounds per remediation cycle."
+    description: 'Pre-merge test/fix/test limit; allowed fixes = value - 1.'
     hidden: true
   merge_test_fix_max_retries:
     default: '3'
-    description: "Maximum iterations of the merge-gate test \u2192 fix \u2192 test\
-      \ cycle."
+    description: 'Merge-gate test/fix/test iteration limit.'
     hidden: true
   adversarial_review_level:
-    description: Controls adversarial review depth in make-plan. "auto" estimates
-      complexity and gates agents accordingly. "full" always runs all 3 agents. "none"
-      skips adversarial review entirely.
+    description: 'make-plan review depth: auto estimates complexity, full runs three agents, none skips them.'
     default: auto
     hidden: true
     authority: config
@@ -119,8 +109,7 @@ ingredients:
     description: GitHub issue to close on merge
     required: false
   upfront_claimed:
-    description: Set to 'true' when process-issues has already claimed this issue
-      upfront. Allows claim_issue defense step to pass through without aborting.
+    description: 'true when process-issues already claimed the issue; lets claim_issue pass through.'
     default: 'false'
     hidden: true
   run_mode:
@@ -131,9 +120,7 @@ ingredients:
     default: sequential
     hidden: true
   max_parallel:
-    description: Maximum number of issues to run in parallel within a single execution-map
-      group. Groups exceeding this cap are split into sequential sub-groups. Passed
-      to build-execution-map. Must be a positive integer (expressed as a string).
+    description: 'Positive integer string passed to build-execution-map; oversized groups split into sequential subgroups.'
     default: '6'
     hidden: true
   pipeline_health:
@@ -443,7 +430,7 @@ steps:
       merge_target: ${{ result.merge_target }}
     on_success: investigate
     on_failure: release_issue_failure
-    note: 'Create and publish a unique feature branch; set merge_target and its remote ref for merge_worktree. open_pr=false skips this step and retains base_branch.'
+    note: 'Create a unique feature branch; when open_pr=false, keep base_branch.'
   investigate:
     tool: run_skill
     optional: true
@@ -1727,9 +1714,7 @@ steps:
     on_skip: release_issue_success
     optional_context_refs:
     - issue_number
-    note: "Reads plan, runs git diff, classifies changed files, selects 1\u20133 arch-lens\
-      \ slugs, writes one PR context file per lens, and writes a PR prep file. Does\
-      \ NOT invoke arch-lens skills.\n"
+    note: 'Inspect the diff, select lenses, and write PR context/prep files; do not invoke lens skills.'
   run_arch_lenses:
     tool: run_skill
     model: ''
@@ -1749,7 +1734,7 @@ steps:
     optional: true
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: 'Pair selected_lenses with lens_context_paths in order. Run the selected arch-lens skills in parallel, capture each diagram_path, and continue to compose_pr when any lens fails.'
+    note: 'Pair selected lens slugs/contexts, run in parallel, capture paths, and continue if one fails.'
   compose_pr:
     tool: run_skill
     model: ''
@@ -1781,9 +1766,7 @@ steps:
     optional_context_refs:
     - all_diagram_paths
     - issue_number
-    note: "Reads the PR prep file, validates arch-lens diagrams (must contain \u2605\
-      \ or \u25CF), composes the PR body, and runs gh pr create. Degrades gracefully\
-      \ if gh is unavailable (emits pr_url=).\n"
+    note: 'Validate lens diagrams and create the PR from prep data; missing authentication returns an empty URL.'
   guard_pr_url:
     action: route
     on_result:
@@ -1805,10 +1788,7 @@ steps:
     optional: true
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: 'Extracts the integer PR number from the feature branch opened by compose_pr.
-      pr_number is required by the queue finale steps (enable_auto_merge, wait_for_queue).
-
-      '
+    note: 'Extract the PR number; queue steps require it.'
   capture_review_repository:
     tool: run_cmd
     with:
@@ -1877,11 +1857,7 @@ steps:
     on_skip: release_issue_success
     optional_context_refs:
     - review_loop_count
-    note: 'Pre-computes annotated diff with [LNNN] markers and hunk ranges JSON for
-      review-pr. Routes to release_issue_failure on annotation failure.
-      Missing authority permits no inline comments.
-
-      '
+    note: 'Add line markers and hunk metadata for review-pr; missing authority forbids inline comments.'
   review_pr:
     tool: run_skill
     model: ''
@@ -1932,7 +1908,7 @@ steps:
     on_skip: release_issue_success
     optional_context_refs:
     - review_mode
-    note: 'Review the feature PR. Changes requested or approved with comments enter resolve_review; other verdicts verify the posted effect. Failure or context limit releases the issue. Skip without a PR.'
+    note: 'Review the feature PR; resolve requested changes and verify posted effects.'
   resolve_review:
     tool: run_skill
     model: ''
@@ -2123,7 +2099,7 @@ steps:
     on_failure: ci_watch
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: 'Derive ci_event against the feature branch, not base_branch. On failure, ci_watch proceeds with a match-any event.'
+    note: 'Derive ci_event for the feature branch, not base_branch.'
   route_ci_applicable:
     action: route
     on_result:
@@ -2132,7 +2108,7 @@ steps:
     - route: check_pr_state
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: 'Skip CI waiting when neither push nor pull_request workflows match the feature/base branch pair.'
+    note: 'Skip CI when no workflow matches.'
   check_pr_state:
     tool: check_pr_mergeable
     with:
@@ -2146,7 +2122,7 @@ steps:
     on_failure: ci_watch
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: 'Check mergeability before CI polling. A conflicting PR enters conflict repair because it cannot produce a pull_request merge ref; other states continue to ci_watch.'
+    note: 'Check PR mergeability before CI polling; conflicting PRs need repair before a merge ref exists.'
   ci_watch:
     tool: wait_for_ci
     with:
@@ -2172,7 +2148,7 @@ steps:
     optional: true
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: 'Wait for CI on the feature branch and capture its conclusion and failed jobs. Success checks merge state; missing runs trigger the no-CI path; timeout uses a bounded retry; failure classifies conflicts. Skipped when open_pr=false.'
+    note: 'Wait for feature-branch CI; capture conclusion/jobs. Missing runs use no-CI recovery; timeout retries; failures classify conflicts.'
   check_ci_timed_out_loop:
     tool: run_python
     with:
@@ -2278,7 +2254,7 @@ steps:
       route: ci_watch
     - route: mark_issue_failed_no_ci
     on_failure: mark_issue_failed_no_ci
-    note: 'Re-poll CI for 30 seconds before escalation. Success advances, failure repairs conflicts, timeout re-polls, and no_runs escalates.'
+    note: 'Re-poll CI for 30 seconds before escalation.'
   mark_issue_failed_no_ci:
     tool: release_issue
     optional: true
@@ -2346,7 +2322,7 @@ steps:
     on_failure: immediate_merge
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: 'One GraphQL call captures queue, auto-merge, merge-group trigger, and CI event state. Failure falls back to immediate_merge; skip without a PR.'
+    note: 'Capture queue, auto-merge, and CI state in one GraphQL call; skip without a PR.'
   route_queue_mode:
     block: pre_queue_gate
     action: route
@@ -2373,7 +2349,7 @@ steps:
     on_failure: verify_queue_enrollment
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: 'Enroll via the strategy selected by enqueue_pr. On failure, probe whether the PR merged or remained queued.'
+    note: 'Enroll using enqueue_pr strategy; probe merge/queue state if it fails.'
   verify_queue_enrollment:
     tool: wait_for_merge_queue
     with:
@@ -2440,7 +2416,7 @@ steps:
     on_failure: register_clone_unconfirmed
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: 'Watch the queue for 15 minutes. A merge releases the issue successfully; CI ejection diagnoses CI, healthy ejection retries, and stalled enrollment re-enrolls. Missing enrollment fails. Timeout records an unconfirmed clone state.'
+    note: 'Watch the merge queue for 15 minutes; handle merge, ejection, and enrollment outcomes through declared routes; timeout records an unconfirmed clone.'
   reenroll_stalled_pr:
     tool: enqueue_pr
     with:
@@ -2532,7 +2508,7 @@ steps:
     on_failure: resolve_queue_merge_conflicts
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: 'Try a clean rebase before conflict-resolution skill; abort on conflict and route to goal-aware resolution.'
+    note: 'Try a clean rebase; use goal-aware conflict resolution when it fails.'
   resolve_queue_merge_conflicts:
     tool: run_skill
     model: ''
@@ -2558,9 +2534,7 @@ steps:
     on_exhausted: diagnose_ci
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: "Resolves rebase conflicts on the feature branch after queue ejection. Only\
-      \ reached when the cheap rebase in queue_ejected_fix encountered conflicts.\
-      \ escalation_required=true \u2192 release_issue_failure for human review.\n"
+    note: 'Resolve rebase conflicts after queue ejection; escalate for human review when required.'
   re_push_queue_fix:
     tool: push_to_remote
     with:
@@ -2652,7 +2626,7 @@ steps:
     on_failure: detect_ci_conflict
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: 'Check CI after queue-ejection repair: success re-enqueues, no_runs releases after auto-trigger recovery, timeout retries, failure checks conflicts.'
+    note: 'Check CI after queue repair; success re-enqueues, missing runs trigger recovery.'
   check_ci_post_queue_loop:
     tool: run_python
     with:
@@ -2671,7 +2645,7 @@ steps:
     - ci_post_queue_loop_count
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: 'Allow one CI timeout retry after queue repair; then release the issue.'
+    note: 'Allow one CI timeout retry after queue repair.'
   reenter_merge_queue:
     tool: enqueue_pr
     with:
@@ -2684,10 +2658,7 @@ steps:
     on_failure: release_issue_failure
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: 'Re-submits the PR after conflict resolution. Routes back to wait_for_queue.
-      If re-entry fails, release_issue_failure preserves the clone for debugging.
-
-      '
+    note: 'Re-enroll after conflict repair; preserve the clone if re-entry fails.'
   reenter_merge_queue_cheap:
     tool: enqueue_pr
     with:
@@ -2700,11 +2671,7 @@ steps:
     on_failure: release_issue_failure
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: 'Re-submits a healthy PR into the merge queue after auto_merge was cleared
-      externally (DROPPED_HEALTHY state). No conflict-resolution CI wait needed. Routes
-      back to wait_for_queue on success.
-
-      '
+    note: 'Re-enroll a healthy PR if auto-merge was cleared externally.'
   direct_merge:
     tool: run_cmd
     with:
@@ -2715,7 +2682,7 @@ steps:
     on_failure: release_issue_failure
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: 'Enable native auto-merge outside the queue; failure releases the issue and reports an error.'
+    note: 'Enable native auto-merge outside the queue.'
   wait_for_direct_merge:
     tool: run_python
     with:
@@ -2733,9 +2700,7 @@ steps:
     on_failure: register_clone_unconfirmed
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: "Polls GitHub PR state every 10 s for up to 15 minutes. merged \u2192 release_issue_success.\
-      \ closed \u2192 conflict fix cycle. timeout \u2192 register_clone_unconfirmed\
-      \ (releases claim; merge unconfirmed).\n"
+    note: 'Poll PR state every 10 seconds for 15 minutes; preserve an unconfirmed clone on timeout.'
   direct_merge_conflict_fix:
     tool: run_python
     with:
@@ -2751,11 +2716,7 @@ steps:
     on_failure: resolve_direct_merge_conflicts
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: 'Attempts a cheap rebase before invoking the full conflict-resolution skill.
-      On clean rebase, proceeds to re_push_direct_fix. On conflict, routes to resolve_direct_merge_conflicts
-      for goal-aware resolution.
-
-      '
+    note: 'Try a clean rebase first; use goal-aware resolution when it conflicts.'
   resolve_direct_merge_conflicts:
     tool: run_skill
     model: ''
@@ -2781,9 +2742,7 @@ steps:
     on_exhausted: diagnose_ci
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: "Resolves rebase conflicts after direct-merge rejection. Only reached when\
-      \ the cheap rebase in direct_merge_conflict_fix encountered conflicts. escalation_required=true\
-      \ \u2192 release_issue_failure for human review.\n"
+    note: 'Resolve rebase conflicts after direct-merge rejection; escalate for human review when required.'
   re_push_direct_fix:
     tool: push_to_remote
     with:
@@ -2806,11 +2765,7 @@ steps:
     on_failure: release_issue_failure
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: 'Re-enables auto-merge after conflict resolution and re-push. Routes back
-      to wait_for_direct_merge to poll for completion. On failure, release_issue_failure
-      preserves the clone for debugging.
-
-      '
+    note: 'Restore auto-merge after conflict repair and re-push.'
   immediate_merge:
     tool: run_cmd
     with:
@@ -2821,7 +2776,7 @@ steps:
     on_failure: release_issue_failure
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: 'Use synchronous squash merge when auto-merge is unavailable. Failure releases the issue and reports the error.'
+    note: 'Use synchronous squash merge when auto-merge is unavailable.'
   wait_for_immediate_merge:
     tool: run_python
     with:
@@ -2839,7 +2794,7 @@ steps:
     on_failure: register_clone_unconfirmed
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: 'Confirm synchronous squash merge for up to five minutes. Merged succeeds; closed repairs conflicts; timeout preserves an unconfirmed clone.'
+    note: 'Confirm squash merge for up to five minutes; preserve an unconfirmed clone on timeout.'
   immediate_merge_conflict_fix:
     tool: run_python
     with:
@@ -2855,11 +2810,7 @@ steps:
     on_failure: resolve_immediate_merge_conflicts
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: 'Attempts a cheap rebase before invoking the full conflict-resolution skill.
-      On clean rebase, proceeds to re_push_immediate_fix. On conflict, routes to resolve_immediate_merge_conflicts
-      for goal-aware resolution.
-
-      '
+    note: 'Try a clean rebase first; use goal-aware resolution when it conflicts.'
   resolve_immediate_merge_conflicts:
     tool: run_skill
     model: ''
@@ -2885,9 +2836,7 @@ steps:
     on_exhausted: diagnose_ci
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: "Resolves rebase conflicts after immediate-merge rejection. Only reached\
-      \ when the cheap rebase in immediate_merge_conflict_fix encountered conflicts.\
-      \ escalation_required=true \u2192 release_issue_failure for human review.\n"
+    note: 'Resolve rebase conflicts after immediate-merge rejection; escalate for human review when required.'
   re_push_immediate_fix:
     tool: push_to_remote
     with:
@@ -2910,11 +2859,7 @@ steps:
     on_failure: release_issue_failure
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: 'Re-attempts plain squash merge after conflict resolution and re-push. Routes
-      back to wait_for_immediate_merge to confirm completion. On failure, release_issue_failure
-      preserves the clone for debugging.
-
-      '
+    note: 'Retry squash merge after conflict repair and re-push.'
   diagnose_ci:
     tool: run_skill
     model: ''
@@ -2942,7 +2887,7 @@ steps:
     - ci_flake_count
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: 'Write CI-log diagnosis for resolve_ci. Continue to resolve_ci even if diagnosis fails; diagnosis_path is optional context.'
+    note: 'Write CI-log diagnosis; continue to resolve_ci if diagnosis fails.'
   resolve_ci:
     tool: run_skill
     model: ''
@@ -3086,7 +3031,7 @@ steps:
     optional: true
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: 'Only CI failures enter this stale-base check; check_pr_mergeable CONFLICTING goes directly to ci_conflict_fix. Exit 0 fixes conflicts; exit 1 (ancestor or fetch error) diagnoses CI.'
+    note: 'Use stale-base triage only for CI failures; conflicting PRs use direct conflict repair.'
   ci_conflict_fix:
     tool: run_skill
     model: ''
@@ -3112,7 +3057,7 @@ steps:
     on_exhausted: diagnose_ci
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: 'Rebase onto the integration head and re-push clean or resolved conflicts. Escalation, tool failure, context limit, and bounded retry exhaustion diagnose CI before issue failure.'
+    note: 'Rebase and re-push; diagnose conflicts or exhausted failures before issue failure.'
   register_clone_unconfirmed:
     tool: register_clone_status
     with:
@@ -3196,10 +3141,7 @@ steps:
       cwd: ${{ context.work_dir }}
     on_success: verify_stage_obligations
     on_failure: verify_stage_obligations
-    note: 'Patches PR body with complete token summary; failures are logged but do
-      not alter pipeline routing.
-
-      '
+    note: 'Patch the PR with a token summary; failures are nonfatal.'
   verify_stage_obligations:
     tool: run_python
     with:

@@ -75,13 +75,14 @@ def test_gate_rejects_comma_list_all_missing(tmp_path):
 
 
 def test_resolve_input_specs_audit_impl_path_sequence():
-    """audit-impl path-spec sequence must be list, list, scalar in declared order."""
+    """audit-impl path specs preserve the manifest's declared argument order."""
     from autoskillit.recipe._contracts_manifest import resolve_input_specs
 
     specs = resolve_input_specs("/autoskillit:audit-impl /plan1.md,/plan2.md main feature/x")
     names_types_positions = [(s.name, s.type, s.position) for s in specs]
     assert ("all_plan_paths", "file_path_list", 0) in names_types_positions
-    assert ("closure_authority_path", "file_path", 2) in names_types_positions
+    assert ("plan_set_authority_path", "file_path", 2) in names_types_positions
+    assert ("closure_authority_path", "file_path", 3) in names_types_positions
 
 
 def test_gate_accepts_quoted_newline_separated_plan_list(tmp_path):

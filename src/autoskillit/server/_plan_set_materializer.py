@@ -104,7 +104,7 @@ def _coverage_gaps(
     locators = {part.part_key: part.locator for part in parts}
     gaps.extend(
         f"{key} [part_without_obligations]: {locators[key]} allocates no requirement; "
-        "every part needs at least one allocation row"
+        "every part needs at least one implementation allocation row"
         for key in coverage.parts_without_obligations
     )
     return "\n".join(gaps)

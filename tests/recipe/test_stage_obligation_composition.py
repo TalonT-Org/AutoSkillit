@@ -120,14 +120,16 @@ def _reaches_in_order(graph: dict[str, list[str]], names: tuple[str, ...]) -> bo
     return False
 
 
-def _assert_gates_dominate_success(result, projection, recipe_name: str) -> None:
+def _assert_gates_dominate_success(
+    result, projection, recipe_name: str, expected_gates: set[str] | None = None
+) -> None:
     steps = {step.name: step for step in projection.ordered_steps}
     gates = {
         name
         for name, step in steps.items()
         if step.tool == "run_python" and step.with_args.get("callable") == GATE_CALLABLE
     }
-    assert set(GATE_SITES[recipe_name]) <= gates
+    assert (expected_gates or set(GATE_SITES[recipe_name])) <= gates
     assert all(steps[name].skip_when_false is None for name in gates)
     sealed_binds = [
         step.name
@@ -147,7 +149,10 @@ def _assert_gates_dominate_success(result, projection, recipe_name: str) -> None
 
 @pytest.mark.parametrize("recipe_name", PIPELINE_RECIPES)
 def test_open_pr_true_auto_merge_false_flow_crosses_the_gate_in_order(recipe_name: str) -> None:
-    result, projection = _load_projection(recipe_name, {"open_pr": "true", "auto_merge": "false"})
+    overrides = {"open_pr": "true", "auto_merge": "false"}
+    if recipe_name == "implementation-groups":
+        overrides["audit_impl"] = "true"
+    result, projection = _load_projection(recipe_name, overrides)
     _assert_gates_dominate_success(result, projection, recipe_name)
     bind_name = SEALED_BIND[recipe_name]
     graph = _graph(projection)
@@ -169,8 +174,9 @@ def test_open_pr_false_keeps_gates_and_has_no_success_bypass(recipe_name: str) -
     result, projection = _load_projection(recipe_name, {"open_pr": "false"})
     steps = {step.name: step for step in projection.ordered_steps}
     assert "compose_pr" not in steps
-    assert set(GATE_SITES[recipe_name]) <= set(steps)
-    _assert_gates_dominate_success(result, projection, recipe_name)
+    reachable_gates = set(GATE_SITES[recipe_name]) - {"verify_stage_obligations_unconfirmed"}
+    assert reachable_gates <= set(steps)
+    _assert_gates_dominate_success(result, projection, recipe_name, reachable_gates)
     primary_bind = steps[SEALED_BIND[recipe_name]]
     assert primary_bind.with_args["open_pr"] == "${{ inputs.open_pr }}"
 

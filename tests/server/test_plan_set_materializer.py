@@ -161,7 +161,10 @@ def _coverage_failure_case(
     elif case == "part_without_obligations":
         part_texts = (_plan_part(""),)
         issue_url = ""
-        expected_gaps = ("part_without_obligations",)
+        expected_gaps = (
+            "part_without_obligations",
+            "implementation allocation",
+        )
     else:
         fixture = _FIXTURES / "missing_r2"
         part_texts = tuple(

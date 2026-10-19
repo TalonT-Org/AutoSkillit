@@ -1610,18 +1610,7 @@ steps:
     on_skip: release_issue_success
     optional_context_refs:
     - review_mode
-    note: 'Runs after compose_pr creates the PR. Invokes the review-pr skill as a
-      headless session to leave inline review comments on the PR. The skill finds
-      the open PR by feature branch name (context.merge_target). Captures verdict
-      as review_verdict and routes via on_result: changes_requested/approved_with_comments
-      → enrich_diff_context → resolve_review; all other verdicts (including approved,
-      needs_human) → check_review_posted (effect verification gate) → check_review_loop
-      (mandatory waypoint to increment review_loop_count). On tool-level failure
-      or context exhaustion, routes to release_issue_failure because no authoritative
-      review receipt exists.
-      Skipped when open_pr=false.
-
-      '
+    note: 'Run headless review-pr on the PR in context.merge_target and capture review_verdict. Requested changes or approved comments go to enrich_diff_context and resolve_review; other verdicts verify the posted effect before check_review_loop. Tool failure or context exhaustion releases the issue without an authoritative receipt. Skip when open_pr=false.'
   enrich_diff_context:
     tool: run_python
     with:
@@ -2234,15 +2223,7 @@ steps:
     on_failure: register_clone_unconfirmed
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
-    note: "Waits up to 15 minutes for the PR to merge through the queue. merged \u2192\
-      \ release_issue_success to transition issue state then register_clone_success.\
-      \ ejected_ci_failure \u2192 diagnose_ci (CI failure; conflict resolution cannot\
-      \ fix this). dropped_merge_group_ci \u2192 check_dropped_ci_loop (re-enqueue\
-      \ on first drop, escalate to diagnose_ci after the cap is exceeded). not_enrolled\
-      \ \u2192 release_issue_failure (enrollment failed; repo configuration error).\
-      \ ejected \u2192 conflict fix cycle then re-enter. stalled \u2192 lightweight\
-      \ re-enrollment via enqueue_pr. timeout \u2192 register_clone_unconfirmed (release\
-      \ claim without staged label; merge unconfirmed).\n"
+    note: 'Watch the merge queue for up to 15 minutes. Merge succeeds; CI ejection diagnoses CI; missing enrollment fails; ejected PRs repair/re-enter; stalled enrollment is retried; timeout registers an unconfirmed clone.'
   reenroll_stalled_pr:
     tool: enqueue_pr
     with:

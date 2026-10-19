@@ -17,6 +17,7 @@ from autoskillit.core import (
     AuditCycleVerifier,
     PluginLoadMode,
     RecipeExecutionId,
+    compute_bytes_hash,
 )
 from autoskillit.core.io import resolve_temp_dir
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
@@ -219,6 +220,7 @@ async def test_projected_plugin_child_publishes_through_parent_audit_authority(
                     "cwd": cwd,
                     "handle": submission["reservation_handle"],
                     "semantic_path": written["audit_semantic_result_path"],
+                    "semantic_digest": written["semantic_digest"],
                 }
             )
 
@@ -264,6 +266,7 @@ async def test_projected_plugin_child_publishes_through_parent_audit_authority(
     semantic_path = Path(str(dispatches[0]["semantic_path"]))
     assert semantic_path.is_relative_to(clone.resolve())
     assert semantic_path == reservation.semantic_result_path
+    assert dispatches[0]["semantic_digest"] == compute_bytes_hash(semantic_path.read_bytes())
     assert not (clone_audit_root / "audit-admission" / "ledger.sqlite3").exists()
 
     assert published["success"] is True

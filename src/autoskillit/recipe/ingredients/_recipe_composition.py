@@ -10,7 +10,7 @@ from typing import Any, NamedTuple
 import regex as re
 
 from autoskillit.core import (
-    FALSY_STRINGS as _FALSY_STRINGS,
+    FALSY_STRINGS as FALSY_STRINGS,
 )
 from autoskillit.core import (
     RECIPE_TERMINAL_TARGETS,
@@ -34,8 +34,6 @@ from autoskillit.recipe.schema import (
     StepResultCondition,
     StepResultRoute,
 )
-
-FALSY_STRINGS = _FALSY_STRINGS
 
 
 class _DeferredGuardState(NamedTuple):

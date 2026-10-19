@@ -75,8 +75,13 @@ def _observe_pull_request(pr_number: str, cwd: str) -> tuple[str | None, str | N
                     and isinstance(observed.get("baseRefName"), str)
                 ):
                     return observed["state"], observed["baseRefName"]
-        except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError):
-            pass
+        except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
+            logger.debug(
+                "stage_obligation_pr_observation_failed",
+                pr_number=pr_number,
+                attempt=attempt + 1,
+                error=str(exc),
+            )
         if attempt < 2:
             time.sleep(5)
     return None, None

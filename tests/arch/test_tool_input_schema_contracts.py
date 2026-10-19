@@ -40,7 +40,7 @@ async def _registered_tools():
 def _is_opaque(schema: dict[str, Any]) -> bool:
     if schema.get("type") == "object":
         return not schema.get("properties") and schema.get("additionalProperties", True) is True
-    return not any(key in schema for key in ("type", "anyOf", "enum", "const"))
+    return not any(key in schema for key in ("type", "anyOf", "oneOf", "allOf", "enum", "const"))
 
 
 def _opaque_pointers(name: str, schema: dict[str, Any], path: str = "") -> set[tuple[str, str]]:
@@ -50,11 +50,19 @@ def _opaque_pointers(name: str, schema: dict[str, Any], path: str = "") -> set[t
         pointers.update(_opaque_pointers(name, child, child_path))
     if isinstance(items := schema.get("items"), dict):
         pointers.update(_opaque_pointers(name, items, f"{path}[]"))
-    for branch in schema.get("anyOf", []):
-        pointers.update(_opaque_pointers(name, branch, path))
+    for keyword in ("anyOf", "oneOf", "allOf"):
+        for branch in schema.get(keyword, []):
+            pointers.update(_opaque_pointers(name, branch, path))
     if isinstance(values := schema.get("additionalProperties"), dict):
         pointers.update(_opaque_pointers(name, values, f"{path}{{}}"))
     return pointers
+
+
+@pytest.mark.parametrize("keyword", ("anyOf", "oneOf", "allOf"))
+def test_opaque_pointers_traverse_composite_schemas(keyword):
+    schema = {keyword: [{"type": "object", "properties": {"payload": {"type": "object"}}}]}
+
+    assert _opaque_pointers("example", schema) == {("example", "payload")}
 
 
 @pytest.mark.anyio

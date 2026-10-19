@@ -13,7 +13,6 @@ from pydantic import ValidationError
 
 import autoskillit.server as server
 from autoskillit.core import ArtifactRef, compute_bytes_hash
-from autoskillit.server import mcp
 from autoskillit.server.tools import tools_audit_artifacts
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small, pytest.mark.anyio]
@@ -45,7 +44,9 @@ def _arguments(tmp_path: Path, tool_name: str) -> dict[str, Any]:
 
 
 async def _call_at_boundary(name: str, arguments: dict[str, object]) -> dict[str, Any]:
-    result = await mcp.call_tool(name, json.loads(json.dumps(arguments)), run_middleware=False)
+    result = await server.mcp.call_tool(
+        name, json.loads(json.dumps(arguments)), run_middleware=False
+    )
     return json.loads(result.content[0].text)
 
 
@@ -56,7 +57,7 @@ async def _call_at_boundary(name: str, arguments: dict[str, object]) -> dict[str
 async def test_artifact_ref_positions_advertise_reference_contract(
     kitchen_enabled, tool_name, position
 ):
-    tools = {tool.name: tool for tool in await mcp.list_tools()}
+    tools = {tool.name: tool for tool in await server.mcp.list_tools()}
     schema = tools[tool_name].parameters
     parameter = schema["properties"][position]
     if position == "audited_plan_refs":

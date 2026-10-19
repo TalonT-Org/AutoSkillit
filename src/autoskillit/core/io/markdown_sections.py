@@ -20,6 +20,7 @@ STEP_HEADING_RE = re.compile(
 
 
 def cites_requirement(text: str, requirement_id: str) -> bool:
+    """Match an exact requirement ID bounded by non-identifier characters."""
     return (
         re.search(
             rf"(?<![A-Za-z0-9_-]){re.escape(requirement_id)}(?![A-Za-z0-9_-])",

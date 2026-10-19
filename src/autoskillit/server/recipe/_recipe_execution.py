@@ -23,6 +23,7 @@ from autoskillit.core import (
     InventoryAdmissionDecision,
     InvocationTemplate,
     PlanSetPreflightEvidence,
+    PlanSetPreflightRequest,
     PreflightEvidence,
     PreflightKind,
     RecipeBindingProjection,
@@ -54,7 +55,6 @@ from autoskillit.recipe import (
     compute_skill_contract_identity,
 )
 from autoskillit.server._misc import clear_run_skill_state
-from autoskillit.server.recipe._plan_set_preflight import resolve_plan_set_preflight
 
 if TYPE_CHECKING:
     from autoskillit.core import (
@@ -617,16 +617,17 @@ def _resolve_plan_set_preflight(
             "recipe_execution_preflight_unavailable",
             "plan-set preflight resolver is unavailable",
         )
-    verification = resolve_plan_set_preflight(
-        installed.plan_set_preflight_resolver,
-        execution_generation=execution_id,
-        kitchen_id=tool_ctx.kitchen_id,
-        step_name=step_name,
-        skill_name=template.invocation.skill_name or "",
-        plan_path=plan_path if isinstance(plan_path, str) else None,
-        authority_path=authority_path,
+    verification = installed.plan_set_preflight_resolver.resolve(
+        PlanSetPreflightRequest(
+            execution_generation=execution_id,
+            expected_kitchen_id=tool_ctx.kitchen_id,
+            step_name=step_name,
+            skill_name=template.invocation.skill_name or "",
+            plan_path=plan_path if isinstance(plan_path, str) else None,
+            plan_set_authority_path=authority_path,
+            allow_part_drift=stage_scope,
+        ),
         allowed_root=allowed_root,
-        allow_part_drift=stage_scope,
     )
     if not verification.accepted:
         reason = verification.reason.value if verification.reason else "rejected"

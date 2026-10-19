@@ -7,37 +7,10 @@ from pathlib import Path
 from autoskillit.core import (
     PlanSetBindingMode,
     PlanSetPreflightRequest,
-    PlanSetPreflightResolver,
     PlanSetVerification,
     RecipeExecutionId,
     verify_plan_set_authority,
 )
-
-
-def resolve_plan_set_preflight(
-    resolver: PlanSetPreflightResolver,
-    *,
-    execution_generation: str,
-    kitchen_id: str,
-    step_name: str,
-    skill_name: str,
-    plan_path: str | None,
-    authority_path: str,
-    allowed_root: Path,
-    allow_part_drift: bool,
-) -> PlanSetVerification:
-    return resolver.resolve(
-        PlanSetPreflightRequest(
-            execution_generation=execution_generation,
-            expected_kitchen_id=kitchen_id,
-            step_name=step_name,
-            skill_name=skill_name,
-            plan_path=plan_path,
-            plan_set_authority_path=authority_path,
-            allow_part_drift=allow_part_drift,
-        ),
-        allowed_root=allowed_root,
-    )
 
 
 class DefaultPlanSetPreflightResolver:

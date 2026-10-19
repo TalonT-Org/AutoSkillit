@@ -303,6 +303,8 @@ steps:
       plan_parts: ${{ context.plan_parts }}
       cwd: ${{ context.work_dir }}
       issue_url: ${{ inputs.issue_url }}
+      open_pr: ${{ inputs.open_pr }}
+      auto_merge: ${{ inputs.auto_merge }}
       parent_authority_path: ${{ context.plan_set_authority_path }}
       seal: 'false'
       step_name: bind_group_parts
@@ -352,6 +354,8 @@ steps:
       plan_parts: ${{ context.plan_set_parts }}
       cwd: ${{ context.work_dir }}
       issue_url: ${{ inputs.issue_url }}
+      open_pr: ${{ inputs.open_pr }}
+      auto_merge: ${{ inputs.auto_merge }}
       parent_authority_path: ${{ context.plan_set_authority_path }}
       seal: 'true'
       step_name: seal_plan_set
@@ -465,6 +469,8 @@ steps:
     with:
       plan_parts: ${{ context.plan_set_parts }}
       cwd: ${{ context.work_dir }}
+      open_pr: ${{ inputs.open_pr }}
+      auto_merge: ${{ inputs.auto_merge }}
       parent_authority_path: ${{ context.plan_set_authority_path }}
       seal: 'true'
       step_name: renew_plan_set
@@ -1062,6 +1068,7 @@ steps:
       skill_command: /autoskillit:audit-impl
       skill_inputs:
         all_plan_paths: ${{ context.all_plan_paths }}
+        plan_set_authority_path: ${{ context.plan_set_authority_path }}
         branch_name: ${{ context.base_sha }}
         base_branch: ${{ inputs.base_branch }}
         prior_audit_cycle_path: ${{ context.audit_cycle_path }}
@@ -2664,12 +2671,29 @@ steps:
       clone_path: ${{ context.work_dir }}
       status: unconfirmed
       step_name: register_clone_unconfirmed
-    on_success: analyze_pipeline_health_unconfirmed
-    on_failure: analyze_pipeline_health_unconfirmed
+    on_success: pr_gate_unconfirmed
+    on_failure: pr_gate_unconfirmed
     note: "Called when a merge-wait step times out before merge is confirmed. Does\
       \ NOT call release_issue \u2014 the in-progress label stays on the issue so\
       \ operators can see the PR is still actively queued. The clone is preserved\
       \ (status: unconfirmed) for human inspection.\n"
+  pr_gate_unconfirmed:
+    tool: run_python
+    with:
+      callable: autoskillit.recipe._cmd_rpc.verify_stage_obligations
+      plan_set_authority_path: ${{ context.plan_set_authority_path }}
+      plan_set_authority_digest: ${{ context.plan_set_authority_digest }}
+      cwd: ${{ context.work_dir }}
+      base_branch: ${{ inputs.base_branch }}
+      pr_number: ${{ context.pr_number }}
+      step_name: pr_gate_unconfirmed
+    optional_context_refs:
+    - pr_number
+    on_result:
+    - when: ${{ result.success }} == true
+      route: analyze_pipeline_health_unconfirmed
+    - route: analyze_pipeline_health_error
+    on_failure: analyze_pipeline_health_error
   analyze_pipeline_health_unconfirmed:
     tool: run_skill
     model: ''
@@ -2778,18 +2802,35 @@ steps:
     tool: run_python
     optional: true
     skip_when_false: inputs.open_pr
-    on_skip: register_clone_success
+    on_skip: pr_gate
     with:
       callable: autoskillit.smoke_utils.patch_pr_token_summary
       timeout: 60
       pr_url: ${{ context.pr_url }}
       cwd: ${{ context.work_dir }}
-    on_success: register_clone_success
-    on_failure: register_clone_success
+    on_success: pr_gate
+    on_failure: pr_gate
     note: 'Patches PR body with complete token summary; failures are logged but do
       not alter pipeline routing.
 
       '
+  pr_gate:
+    tool: run_python
+    with:
+      callable: autoskillit.recipe._cmd_rpc.verify_stage_obligations
+      plan_set_authority_path: ${{ context.plan_set_authority_path }}
+      plan_set_authority_digest: ${{ context.plan_set_authority_digest }}
+      cwd: ${{ context.work_dir }}
+      base_branch: ${{ inputs.base_branch }}
+      pr_number: ${{ context.pr_number }}
+      step_name: pr_gate
+    optional_context_refs:
+    - pr_number
+    on_result:
+    - when: ${{ result.success }} == true
+      route: register_clone_success
+    - route: release_issue_failure
+    on_failure: release_issue_failure
   release_audit_remediation_stuck:
     tool: register_clone_status
     with:

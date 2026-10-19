@@ -23,9 +23,9 @@ from ..types.audit._type_plan_set_authority import (
     PlanSetState,
     PlanSetVerification,
 )
-from .coverage import assigned_requirements
+from .coverage import assigned_requirements, stage_obligations
 
-__all__ = ["verify_plan_set_authority"]
+__all__ = ["load_pinned_plan_set_authority", "verify_plan_set_authority"]
 
 
 def _rejection(
@@ -67,6 +67,46 @@ def _read_reject_reason(exc: Exception, *, part: bool = False) -> PlanSetRejectR
         (reason for phrase, reason in _MESSAGE_REASONS if phrase in message),
         PlanSetRejectReason.CONTAINMENT,
     )
+
+
+def _read_canonical_authority(
+    authority_path: str | Path,
+    allowed_root: str | Path,
+) -> tuple[Path, PlanSetAuthority] | PlanSetVerification:
+    try:
+        resolved_authority, raw = read_stable_contained_bytes(
+            authority_path,
+            allowed_root,
+            max_size_bytes=PLAN_SET_MAX_AUTHORITY_BYTES,
+        )
+    except (ContainmentError, OSError) as exc:
+        return _rejection(_read_reject_reason(exc), [str(exc)])
+    try:
+        payload = parse_canonical_json_bytes(raw)
+    except ValueError as exc:
+        return _rejection(PlanSetRejectReason.AUTHORITY_NOT_CANONICAL, [str(exc)])
+    if not isinstance(payload, dict):
+        return _rejection(PlanSetRejectReason.AUTHORITY_INVALID, ["authority is not an object"])
+    if payload.get("schema_version") != PLAN_SET_SCHEMA_VERSION:
+        return _rejection(
+            PlanSetRejectReason.SCHEMA_VERSION, ["unsupported authority schema version"]
+        )
+    raw_without_digest = dict(payload)
+    supplied_digest = raw_without_digest.pop("authority_digest", None)
+    details: list[str] = []
+    if supplied_digest != compute_canonical_hash(
+        raw_without_digest, domain=PLAN_SET_AUTHORITY_DOMAIN
+    ):
+        details.append("authority_digest does not match canonical authority bytes")
+    try:
+        authority = PlanSetAuthority.from_dict(payload)
+    except ValueError as exc:
+        if details:
+            return _rejection(PlanSetRejectReason.AUTHORITY_DIGEST, details + [str(exc)])
+        return _rejection(PlanSetRejectReason.AUTHORITY_INVALID, [str(exc)])
+    if details:
+        return _rejection(PlanSetRejectReason.AUTHORITY_DIGEST, details)
+    return resolved_authority, authority
 
 
 def _collect_identity_failures(
@@ -184,39 +224,10 @@ def verify_plan_set_authority(
     allow_part_drift: bool = False,
 ) -> PlanSetVerification:
     """Verify canonical authority bytes and every artifact they bind, without trust-on-read."""
-    details: list[str] = []
-    try:
-        resolved_authority, raw = read_stable_contained_bytes(
-            authority_path,
-            allowed_root,
-            max_size_bytes=PLAN_SET_MAX_AUTHORITY_BYTES,
-        )
-    except (ContainmentError, OSError) as exc:
-        return _rejection(_read_reject_reason(exc), [str(exc)])
-    try:
-        payload = parse_canonical_json_bytes(raw)
-    except ValueError as exc:
-        return _rejection(PlanSetRejectReason.AUTHORITY_NOT_CANONICAL, [str(exc)])
-    if not isinstance(payload, dict):
-        return _rejection(PlanSetRejectReason.AUTHORITY_INVALID, ["authority is not an object"])
-    if payload.get("schema_version") != PLAN_SET_SCHEMA_VERSION:
-        return _rejection(
-            PlanSetRejectReason.SCHEMA_VERSION, ["unsupported authority schema version"]
-        )
-    raw_without_digest = dict(payload)
-    supplied_digest = raw_without_digest.pop("authority_digest", None)
-    if supplied_digest != compute_canonical_hash(
-        raw_without_digest, domain=PLAN_SET_AUTHORITY_DOMAIN
-    ):
-        details.append("authority_digest does not match canonical authority bytes")
-    try:
-        authority = PlanSetAuthority.from_dict(payload)
-    except ValueError as exc:
-        if details:
-            return _rejection(PlanSetRejectReason.AUTHORITY_DIGEST, details + [str(exc)])
-        return _rejection(PlanSetRejectReason.AUTHORITY_INVALID, [str(exc)])
-    if details:
-        return _rejection(PlanSetRejectReason.AUTHORITY_DIGEST, details)
+    loaded = _read_canonical_authority(authority_path, allowed_root)
+    if isinstance(loaded, PlanSetVerification):
+        return loaded
+    resolved_authority, authority = loaded
     failures = _collect_identity_failures(
         authority,
         expected_execution_generation,
@@ -244,5 +255,43 @@ def verify_plan_set_authority(
         plan_set_state=authority.state,
         coverage_status=authority.coverage.status.value,
         assigned_requirements=assigned_requirements(authority, part_key) if part_key else (),
+        stage_obligations=(stage_obligations(authority) if current_plan_path is None else ()),
+    )
+    return PlanSetVerification(True, None, (), authority, evidence)
+
+
+def load_pinned_plan_set_authority(
+    path: str | Path,
+    *,
+    expected_digest: str,
+) -> PlanSetVerification:
+    """Load the sealed authority fields pinned by a plan-set digest."""
+    loaded = _read_canonical_authority(path, Path(path).parent)
+    if isinstance(loaded, PlanSetVerification):
+        return loaded
+    resolved_authority, authority = loaded
+    if authority.authority_digest != expected_digest:
+        return _rejection(
+            PlanSetRejectReason.AUTHORITY_DIGEST,
+            ["authority_digest does not match the expected plan-set digest"],
+        )
+    if authority.state is not PlanSetState.SEALED:
+        return _rejection(PlanSetRejectReason.AUTHORITY_NOT_SEALED, ["authority is not sealed"])
+    if authority.binding_mode is not PlanSetBindingMode.RECIPE:
+        return _rejection(PlanSetRejectReason.BINDING_MODE, ["authority is not recipe-bound"])
+    evidence = PlanSetPreflightEvidence(
+        status="admitted",
+        plan_set_authority_path=str(resolved_authority),
+        plan_set_authority_digest=authority.authority_digest,
+        plan_set_authority_id=authority.plan_set_authority_id,
+        revision=authority.revision,
+        part_key=None,
+        part_ordinal=None,
+        part_count=len(authority.parts),
+        part_suffix=None,
+        plan_set_state=authority.state,
+        coverage_status=authority.coverage.status.value,
+        assigned_requirements=(),
+        stage_obligations=stage_obligations(authority),
     )
     return PlanSetVerification(True, None, (), authority, evidence)

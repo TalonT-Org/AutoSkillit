@@ -3,12 +3,88 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import time
 from pathlib import Path
 
-from autoskillit.core import atomic_write, get_logger, run_gh, run_git, truncate_text
+from autoskillit.core import (
+    atomic_write,
+    get_logger,
+    load_pinned_plan_set_authority,
+    run_gh,
+    run_git,
+    truncate_text,
+)
 
 logger = get_logger(__name__)
+
+
+def verify_stage_obligations(
+    plan_set_authority_path: str,
+    plan_set_authority_digest: str,
+    cwd: str,
+    base_branch: str,
+    pr_number: str = "",
+) -> dict[str, str]:
+    """Discharge sealed publication obligations against an observed PR."""
+    verified = load_pinned_plan_set_authority(
+        plan_set_authority_path, expected_digest=plan_set_authority_digest
+    )
+    if not verified.accepted or verified.evidence is None:
+        reason = verified.reason.value if verified.reason else "authority rejected"
+        return {"success": "false", "detail": "; ".join((reason, *verified.detail))}
+    obligations = verified.evidence.stage_obligations
+    if not obligations:
+        return {"success": "true", "detail": "no stage obligations"}
+    if not pr_number:
+        required = ", ".join(f"{o.requirement_id} → {o.obligation.value}" for o in obligations)
+        return {
+            "success": "false",
+            "detail": f"no pull request was published in this run; required: {required}",
+        }
+    pr_state, pr_base = _observe_pull_request(str(pr_number), cwd)
+    violations = []
+    for obligation in obligations:
+        violation = obligation.obligation.violation(
+            pr_state=pr_state, pr_base=pr_base, base_branch=base_branch
+        )
+        if violation:
+            violations.append(
+                f"{obligation.requirement_id} → {obligation.obligation.value}: {violation}"
+            )
+    return {
+        "success": "false" if violations else "true",
+        "detail": "; ".join(violations) if violations else "stage obligations verified",
+    }
+
+
+def _observe_pull_request(pr_number: str, cwd: str) -> tuple[str | None, str | None]:
+    """Read a complete PR observation, retrying transient command and payload failures."""
+    for attempt in range(3):
+        try:
+            result = run_gh(
+                ["pr", "view", str(pr_number), "--json", "state,baseRefName"],
+                cwd=cwd,
+                timeout=30,
+            )
+            if result.returncode == 0:
+                observed = json.loads(result.stdout)
+                if (
+                    isinstance(observed, dict)
+                    and isinstance(observed.get("state"), str)
+                    and isinstance(observed.get("baseRefName"), str)
+                ):
+                    return observed["state"], observed["baseRefName"]
+        except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
+            logger.debug(
+                "stage_obligation_pr_observation_failed",
+                pr_number=pr_number,
+                attempt=attempt + 1,
+                error=str(exc),
+            )
+        if attempt < 2:
+            time.sleep(5)
+    return None, None
 
 
 def _detect_remote(cwd: str) -> str:

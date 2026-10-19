@@ -578,6 +578,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     ),
     "_type_recipe_delivery": frozenset({"core", "execution", "pipeline", "server"}),
     "_type_orchestrator_instruction_surfaces": frozenset({"core"}),
+    "_type_stage_obligation": frozenset({"contracts", "core", "recipe", "server"}),
     "_type_recipe_sections": frozenset(
         {"cli", "config", "core", "execution", "pipeline", "recipe", "server", "workspace"}
     ),
@@ -1336,6 +1337,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "hooks/test_recipe_contract_freshness.py",
             "migration",
             # Server file-level entries importing autoskillit.recipe:
+            "server/test_stage_obligation_pipeline.py",
+            "server/test_tools_plan_set.py",
             "server/test_run_skill_delegated_output_write.py",
             "server/test_run_skill_execution_tuning_fallbacks.py",
             "server/test_run_skill_delegated_write_binding.py",

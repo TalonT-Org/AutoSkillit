@@ -45,6 +45,7 @@ _CORE_TYPES_GROUPS: dict[str, frozenset[str]] = {
             "_type_audit_cycle_disposition",
             "_type_closure_report",
             "_type_plan_set_authority",
+            "_type_stage_obligation",
         }
     ),
     "recipe": frozenset(

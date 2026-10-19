@@ -12,6 +12,7 @@ from autoskillit.core import (
     PLAN_SET_AUTHORITY_ID_DOMAIN,
     PLAN_SET_MAX_ISSUE_BYTES,
     PLAN_SET_MAX_PART_BYTES,
+    AllocationKind,
     AllocationRowDef,
     CoverageResultDef,
     CoverageStatus,
@@ -35,6 +36,7 @@ from autoskillit.core import (
     parse_part_allocation,
     parse_plan_paths,
     read_stable_contained_bytes,
+    stage_obligations,
     verify_allocation_evidence,
     verify_plan_set_authority,
     write_canonical_versioned_json,
@@ -47,9 +49,21 @@ _ISSUE_NUMBER = re.compile(r"(?:#|/issues/)(\d+)(?:$|[/?#])")
 
 
 def _failure(
-    reason: PlanSetRejectReason, error: str, coverage_gaps: str = ""
+    reason: PlanSetRejectReason,
+    error: str,
+    coverage_gaps: str = "",
+    *,
+    plan_set_authority_path: str = "",
+    plan_set_authority_digest: str = "",
 ) -> PlanSetBindResult:
-    return PlanSetBindResult(False, reason, error, coverage_gaps=coverage_gaps)
+    return PlanSetBindResult(
+        False,
+        reason,
+        error,
+        plan_set_authority_path=plan_set_authority_path,
+        plan_set_authority_digest=plan_set_authority_digest,
+        coverage_gaps=coverage_gaps,
+    )
 
 
 def _write_or_verify(path: Path, data: bytes, allowed_root: Path) -> None:
@@ -90,7 +104,7 @@ def _coverage_gaps(
     locators = {part.part_key: part.locator for part in parts}
     gaps.extend(
         f"{key} [part_without_obligations]: {locators[key]} allocates no requirement; "
-        "every part needs at least one allocation row"
+        "every part needs at least one implementation allocation row"
         for key in coverage.parts_without_obligations
     )
     return "\n".join(gaps)
@@ -157,25 +171,123 @@ class DefaultPlanSetMaterializer:
         self._github_client = github_client
 
     async def bind(self, request: PlanSetBindRequest) -> PlanSetBindResult:
+        predecessor: PlanSetAuthority | None = None
+        predecessor_path = ""
+        predecessor_digest = ""
         try:
-            return await self._bind(request)
+            root = request.allowed_root.resolve()
+            parent: PlanSetAuthority | None = None
+            parent_path = ""
+            if request.prior_authority_path:
+                verified_prior = verify_plan_set_authority(
+                    request.prior_authority_path,
+                    allowed_root=root,
+                    expected_execution_generation=request.execution_generation,
+                    expected_kitchen_id=request.kitchen_id,
+                    expected_binding_mode=request.binding_mode,
+                    current_plan_path=None,
+                    require_sealed=True,
+                    allow_part_drift=True,
+                )
+                if not verified_prior.accepted or verified_prior.authority is None:
+                    return _failure(
+                        verified_prior.reason or PlanSetRejectReason.AUTHORITY_INVALID,
+                        "; ".join(verified_prior.detail),
+                    )
+                predecessor = verified_prior.authority
+                predecessor_digest = predecessor.authority_digest
+                predecessor_path = request.prior_authority_path
+                predecessor_path = str(Path(predecessor_path).resolve())
+            if request.parent_authority_path:
+                verified_parent = verify_plan_set_authority(
+                    request.parent_authority_path,
+                    allowed_root=root,
+                    expected_execution_generation=request.execution_generation,
+                    expected_kitchen_id=request.kitchen_id,
+                    expected_binding_mode=request.binding_mode,
+                    current_plan_path=None,
+                    require_sealed=False,
+                    allow_part_drift=True,
+                )
+                if not verified_parent.accepted or verified_parent.authority is None:
+                    return _failure(
+                        verified_parent.reason or PlanSetRejectReason.AUTHORITY_INVALID,
+                        "; ".join(verified_parent.detail),
+                        plan_set_authority_path=predecessor_path,
+                        plan_set_authority_digest=predecessor_digest,
+                    )
+                parent = verified_parent.authority
+                if predecessor is None:
+                    predecessor = parent
+                    predecessor_digest = parent.authority_digest
+                    predecessor_path = request.parent_authority_path
+                parent_path = str(Path(request.parent_authority_path).resolve())
+                if predecessor is parent:
+                    predecessor_path = parent_path
+            return await self._bind(
+                request,
+                root,
+                parent,
+                parent_path,
+                predecessor,
+                predecessor_path,
+                predecessor_digest,
+            )
         except Exception as exc:
             logger.error("plan-set binding failed", exc_info=True)
-            return _failure(PlanSetRejectReason.INTERNAL, f"{type(exc).__name__}: {exc}")
+            return _failure(
+                PlanSetRejectReason.INTERNAL,
+                f"{type(exc).__name__}: {exc}",
+                plan_set_authority_path=predecessor_path,
+                plan_set_authority_digest=predecessor_digest,
+            )
 
-    async def _bind(self, request: PlanSetBindRequest) -> PlanSetBindResult:
-        admitted = self._admit_parts(request)
+    async def _bind(
+        self,
+        request: PlanSetBindRequest,
+        root: Path,
+        parent: PlanSetAuthority | None,
+        parent_path: str,
+        predecessor: PlanSetAuthority | None,
+        predecessor_path: str,
+        predecessor_digest: str,
+    ) -> PlanSetBindResult:
+        admitted = self._admit_parts(
+            request,
+            root,
+            parent,
+            parent_path,
+            predecessor,
+            predecessor_path,
+            predecessor_digest,
+        )
         if isinstance(admitted, PlanSetBindResult):
             return admitted
-        root, parent, loaded, append = admitted
+        loaded, append = admitted
 
-        snapshot = await self._snapshot_issue(request, root, parent, loaded)
+        snapshot = await self._snapshot_issue(
+            request,
+            root,
+            parent,
+            loaded,
+            predecessor_path,
+            predecessor_digest,
+        )
         if isinstance(snapshot, PlanSetBindResult):
             return snapshot
         issue, authority_id = snapshot
 
         authority = self._assemble_authority(
-            request, root, parent, loaded, append, issue, authority_id
+            request,
+            root,
+            parent,
+            predecessor,
+            predecessor_path,
+            predecessor_digest,
+            loaded,
+            append,
+            issue,
+            authority_id,
         )
         if isinstance(authority, PlanSetBindResult):
             return authority
@@ -195,49 +307,58 @@ class DefaultPlanSetMaterializer:
             )
             if existing != canonical_json_bytes(authority.to_dict()):
                 return _failure(
-                    PlanSetRejectReason.INTERNAL, "authority path contains different bytes"
+                    PlanSetRejectReason.INTERNAL,
+                    "authority path contains different bytes",
+                    plan_set_authority_path=predecessor_path,
+                    plan_set_authority_digest=predecessor_digest,
                 )
         return _result(authority, artifact_path)
 
     def _admit_parts(
-        self, request: PlanSetBindRequest
-    ) -> tuple[Path, PlanSetAuthority | None, list[tuple[Path, bytes]], bool] | PlanSetBindResult:
+        self,
+        request: PlanSetBindRequest,
+        root: Path,
+        parent: PlanSetAuthority | None,
+        parent_path: str,
+        predecessor: PlanSetAuthority | None,
+        predecessor_path: str,
+        predecessor_digest: str,
+    ) -> tuple[list[tuple[Path, bytes]], bool] | PlanSetBindResult:
         raw_paths = parse_plan_paths(request.plan_parts_raw)
         if not raw_paths:
-            return _failure(PlanSetRejectReason.NO_PARTS, "plan_parts is empty")
-        root = request.allowed_root.resolve()
-        parent: PlanSetAuthority | None = None
-        if request.parent_authority_path:
-            verified = verify_plan_set_authority(
-                request.parent_authority_path,
-                allowed_root=root,
-                expected_execution_generation=request.execution_generation,
-                expected_kitchen_id=request.kitchen_id,
-                expected_binding_mode=request.binding_mode,
-                current_plan_path=None,
-                require_sealed=False,
-                allow_part_drift=True,
+            return _failure(
+                PlanSetRejectReason.NO_PARTS,
+                "plan_parts is empty",
+                plan_set_authority_path=predecessor_path,
+                plan_set_authority_digest=predecessor_digest,
             )
-            if not verified.accepted or verified.authority is None:
-                return _failure(
-                    verified.reason or PlanSetRejectReason.AUTHORITY_INVALID,
-                    "; ".join(verified.detail),
-                )
-            parent = verified.authority
 
-        loaded = self._read_parts(raw_paths, root)
+        loaded = self._read_parts(raw_paths, root, predecessor_path, predecessor_digest)
         if isinstance(loaded, PlanSetBindResult):
             return loaded
         append = False
         if parent is not None:
-            update = self._admit_parent_update(request, root, parent, loaded)
+            update = self._admit_parent_update(
+                request,
+                root,
+                parent,
+                parent_path,
+                predecessor,
+                loaded,
+                predecessor_path,
+                predecessor_digest,
+            )
             if isinstance(update, PlanSetBindResult):
                 return update
             append = update
-        return root, parent, loaded, append
+        return loaded, append
 
     def _read_parts(
-        self, raw_paths: tuple[str, ...], root: Path
+        self,
+        raw_paths: tuple[str, ...],
+        root: Path,
+        predecessor_path: str,
+        predecessor_digest: str,
     ) -> list[tuple[Path, bytes]] | PlanSetBindResult:
         loaded: list[tuple[Path, bytes]] = []
         try:
@@ -249,11 +370,19 @@ class DefaultPlanSetMaterializer:
                 )
         except Exception as exc:
             logger.warning("plan-set part read failed", exc_info=True)
-            return _failure(PlanSetRejectReason.CONTAINMENT, str(exc))
+            return _failure(
+                PlanSetRejectReason.CONTAINMENT,
+                str(exc),
+                plan_set_authority_path=predecessor_path,
+                plan_set_authority_digest=predecessor_digest,
+            )
         locators = tuple(str(path) for path, _ in loaded)
         if len(set(locators)) != len(locators):
             return _failure(
-                PlanSetRejectReason.PART_LIST_CHANGED, "plan parts contain duplicate locators"
+                PlanSetRejectReason.PART_LIST_CHANGED,
+                "plan parts contain duplicate locators",
+                plan_set_authority_path=predecessor_path,
+                plan_set_authority_digest=predecessor_digest,
             )
         return loaded
 
@@ -262,7 +391,11 @@ class DefaultPlanSetMaterializer:
         request: PlanSetBindRequest,
         root: Path,
         parent: PlanSetAuthority,
+        parent_path: str,
+        predecessor: PlanSetAuthority | None,
         loaded: list[tuple[Path, bytes]],
+        predecessor_path: str,
+        predecessor_digest: str,
     ) -> bool | PlanSetBindResult:
         locators = tuple(str(path) for path, _ in loaded)
         parent_locators = tuple(part.locator for part in parent.parts)
@@ -271,11 +404,14 @@ class DefaultPlanSetMaterializer:
         append = not any(members) and parent.state is PlanSetState.OPEN
         if not (renew or append):
             return _failure(
-                PlanSetRejectReason.PART_LIST_CHANGED, "parent part list cannot be changed"
+                PlanSetRejectReason.PART_LIST_CHANGED,
+                "parent part list cannot be changed",
+                plan_set_authority_path=predecessor_path,
+                plan_set_authority_digest=predecessor_digest,
             )
         if append:
             unchanged_parent = verify_plan_set_authority(
-                request.parent_authority_path,
+                parent_path,
                 allowed_root=root,
                 expected_execution_generation=request.execution_generation,
                 expected_kitchen_id=request.kitchen_id,
@@ -287,14 +423,84 @@ class DefaultPlanSetMaterializer:
                 return _failure(
                     unchanged_parent.reason or PlanSetRejectReason.AUTHORITY_INVALID,
                     "; ".join(unchanged_parent.detail),
+                    plan_set_authority_path=predecessor_path,
+                    plan_set_authority_digest=predecessor_digest,
                 )
         if renew and request.seal and parent.state is PlanSetState.SEALED:
             if all(
                 part.byte_size == len(data) and part.content_digest == compute_bytes_hash(data)
                 for part, (_, data) in zip(parent.parts, loaded, strict=True)
             ):
-                return _result(parent, Path(request.parent_authority_path).resolve())
+                stage_failure = self._stage_obligation_failure(
+                    request,
+                    parent.allocations,
+                    predecessor,
+                    predecessor_path,
+                    predecessor_digest,
+                )
+                if stage_failure is not None:
+                    return stage_failure
+                return _result(parent, Path(parent_path))
         return append
+
+    def _stage_obligation_failure(
+        self,
+        request: PlanSetBindRequest,
+        allocations: Sequence[AllocationRowDef],
+        predecessor: PlanSetAuthority | None,
+        predecessor_path: str,
+        predecessor_digest: str,
+    ) -> PlanSetBindResult | None:
+        if not request.seal:
+            return None
+        unavailable: list[str] = []
+        for row in allocations:
+            if row.allocation is not AllocationKind.STAGE or row.stage_obligation is None:
+                continue
+            reason = row.stage_obligation.unavailable_reason(
+                open_pr=request.open_pr,
+                auto_merge=request.auto_merge,
+            )
+            if reason is not None:
+                unavailable.append(
+                    f"{row.requirement_id} → {row.stage_obligation.value}: {reason}"
+                )
+        if unavailable:
+            return _failure(
+                PlanSetRejectReason.STAGE_OBLIGATION_UNAVAILABLE,
+                "unavailable stage obligations:\n" + "\n".join(unavailable),
+                plan_set_authority_path=predecessor_path,
+                plan_set_authority_digest=predecessor_digest,
+            )
+
+        if predecessor is None:
+            return None
+        current_obligations = {
+            row.stage_obligation
+            for row in allocations
+            if row.allocation is AllocationKind.STAGE and row.stage_obligation is not None
+        }
+        missing_obligations = sorted(
+            {
+                item.obligation
+                for item in stage_obligations(predecessor)
+                if item.obligation not in current_obligations
+            },
+            key=lambda obligation: obligation.value,
+        )
+        if not missing_obligations:
+            return None
+        coverage_gaps = "\n".join(
+            f"{obligation.value} was sealed earlier in this run; keep a stage row for it"
+            for obligation in missing_obligations
+        )
+        return _failure(
+            PlanSetRejectReason.COVERAGE_FAILED,
+            "previously sealed stage obligations are missing",
+            coverage_gaps,
+            plan_set_authority_path=predecessor_path,
+            plan_set_authority_digest=predecessor_digest,
+        )
 
     async def _snapshot_issue(
         self,
@@ -302,13 +508,18 @@ class DefaultPlanSetMaterializer:
         root: Path,
         parent: PlanSetAuthority | None,
         loaded: list[tuple[Path, bytes]],
+        predecessor_path: str,
+        predecessor_digest: str,
     ) -> tuple[IssueSnapshotRef | None, str] | PlanSetBindResult:
         if parent is not None:
             issue = parent.issue
             if request.seal and issue is not None and request.issue_url:
                 if self._github_client is None:
                     return _failure(
-                        PlanSetRejectReason.ISSUE_FETCH_FAILED, "GitHub client is unavailable"
+                        PlanSetRejectReason.ISSUE_FETCH_FAILED,
+                        "GitHub client is unavailable",
+                        plan_set_authority_path=predecessor_path,
+                        plan_set_authority_digest=predecessor_digest,
                     )
                 fetched = await self._github_client.fetch_issue(
                     request.issue_url, include_comments=False
@@ -317,13 +528,18 @@ class DefaultPlanSetMaterializer:
                     return _failure(
                         PlanSetRejectReason.ISSUE_FETCH_FAILED,
                         str(fetched.get("error", "issue fetch failed")),
+                        plan_set_authority_path=predecessor_path,
+                        plan_set_authority_digest=predecessor_digest,
                     )
                 if (
                     compute_bytes_hash(str(fetched.get("body", "")).encode("utf-8"))
                     != issue.content_digest
                 ):
                     return _failure(
-                        PlanSetRejectReason.ISSUE_DRIFT, "issue body changed since snapshot"
+                        PlanSetRejectReason.ISSUE_DRIFT,
+                        "issue body changed since snapshot",
+                        plan_set_authority_path=predecessor_path,
+                        plan_set_authority_digest=predecessor_digest,
                     )
             return issue, parent.plan_set_authority_id
 
@@ -332,7 +548,10 @@ class DefaultPlanSetMaterializer:
         if request.issue_url:
             if self._github_client is None:
                 return _failure(
-                    PlanSetRejectReason.ISSUE_FETCH_FAILED, "GitHub client is unavailable"
+                    PlanSetRejectReason.ISSUE_FETCH_FAILED,
+                    "GitHub client is unavailable",
+                    plan_set_authority_path=predecessor_path,
+                    plan_set_authority_digest=predecessor_digest,
                 )
             fetched = await self._github_client.fetch_issue(
                 request.issue_url, include_comments=False
@@ -341,6 +560,8 @@ class DefaultPlanSetMaterializer:
                 return _failure(
                     PlanSetRejectReason.ISSUE_FETCH_FAILED,
                     str(fetched.get("error", "issue fetch failed")),
+                    plan_set_authority_path=predecessor_path,
+                    plan_set_authority_digest=predecessor_digest,
                 )
             issue_body = str(fetched.get("body", ""))
             issue_number = fetched.get("issue_number")
@@ -379,6 +600,9 @@ class DefaultPlanSetMaterializer:
         request: PlanSetBindRequest,
         root: Path,
         parent: PlanSetAuthority | None,
+        predecessor: PlanSetAuthority | None,
+        predecessor_path: str,
+        predecessor_digest: str,
         loaded: list[tuple[Path, bytes]],
         append: bool,
         issue: IssueSnapshotRef | None,
@@ -403,7 +627,11 @@ class DefaultPlanSetMaterializer:
         allocations.extend(rows)
         if errors:
             return _failure(
-                PlanSetRejectReason.COVERAGE_FAILED, "; ".join(errors), "\n\n".join(blocks)
+                PlanSetRejectReason.COVERAGE_FAILED,
+                "; ".join(errors),
+                "\n\n".join(blocks),
+                plan_set_authority_path=predecessor_path,
+                plan_set_authority_digest=predecessor_digest,
             )
 
         requirements: tuple[RequirementDef, ...]
@@ -424,7 +652,10 @@ class DefaultPlanSetMaterializer:
             unparsed = extraction.unparsed_marker_lines
         if unparsed:
             return _failure(
-                PlanSetRejectReason.UNPARSED_MARKERS, f"unparsed marker lines: {unparsed}"
+                PlanSetRejectReason.UNPARSED_MARKERS,
+                f"unparsed marker lines: {unparsed}",
+                plan_set_authority_path=predecessor_path,
+                plan_set_authority_digest=predecessor_digest,
             )
         rows_by_part = {
             part.part_key: tuple(row for row in allocations if row.part_key == part.part_key)
@@ -440,10 +671,8 @@ class DefaultPlanSetMaterializer:
                 success=False,
                 reason=PlanSetRejectReason.COVERAGE_FAILED,
                 error="plan-set coverage has gaps",
-                plan_set_authority_path=(
-                    str(Path(request.parent_authority_path).resolve()) if parent else ""
-                ),
-                plan_set_authority_digest=parent.authority_digest if parent else "",
+                plan_set_authority_path=predecessor_path,
+                plan_set_authority_digest=predecessor_digest,
                 plan_set_authority_id=authority_id,
                 coverage=coverage,
                 plan_set_parts="\n".join(part.locator for part in parent.parts) if parent else "",
@@ -457,6 +686,16 @@ class DefaultPlanSetMaterializer:
                 parts_without_obligations=coverage.parts_without_obligations,
                 coverage_gaps=_coverage_gaps(coverage, requirements, parts),
             )
+
+        stage_failure = self._stage_obligation_failure(
+            request,
+            allocations,
+            predecessor,
+            predecessor_path,
+            predecessor_digest,
+        )
+        if stage_failure is not None:
+            return stage_failure
         authority = PlanSetAuthority.create(
             binding_mode=request.binding_mode,
             execution_generation=request.execution_generation,

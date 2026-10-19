@@ -9,7 +9,13 @@ from pathlib import Path
 import pytest
 
 import autoskillit.server._plan_set_materializer as materializer_module
-from autoskillit.core import PlanSetRejectReason
+from autoskillit.core import (
+    PlanSetBindRequest,
+    PlanSetBindResult,
+    PlanSetRejectReason,
+    resolve_temp_dir,
+)
+from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.server._plan_set_materializer import DefaultPlanSetMaterializer
 from autoskillit.server.tools.tools_plan_set import bind_plan_set
 from tests.server._plan_set_test_helpers import (
@@ -25,6 +31,17 @@ from tests.server._recipe_fixture_parameters import (
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
 _MISSING_R2_FIXTURE = PLAN_SET_FIXTURE.parent / "missing_r2"
+_PUBLICATION_FIXTURE = PLAN_SET_FIXTURE.parent / "publication_pr"
+
+
+class _RecordingMaterializer:
+    def __init__(self, delegate: DefaultPlanSetMaterializer) -> None:
+        self.delegate = delegate
+        self.request: PlanSetBindRequest | None = None
+
+    async def bind(self, request: PlanSetBindRequest) -> PlanSetBindResult:
+        self.request = request
+        return await self.delegate.bind(request)
 
 
 async def test_headless_bind_writes_snapshot_and_tracks_response(
@@ -61,6 +78,93 @@ async def test_headless_bind_writes_snapshot_and_tracks_response(
     )
     assert renewed["success"] is True
     assert renewed["plan_set_authority_digest"] != result["plan_set_authority_digest"]
+
+
+@pytest.mark.parametrize(
+    ("open_pr", "auto_merge", "expected_open_pr", "expected_auto_merge", "success"),
+    [
+        ("", "false", False, False, False),
+        ("false", "false", False, False, False),
+        ("0", "false", False, False, False),
+        ("no", "false", False, False, False),
+        ("off", "false", True, False, True),
+        ("true", "true", True, True, False),
+        ("true", "TRUE", True, False, True),
+        ("true", "yes", True, False, True),
+    ],
+)
+async def test_bind_plan_set_passes_publication_flags_to_materializer(
+    tmp_path: Path,
+    tool_ctx,
+    monkeypatch: pytest.MonkeyPatch,
+    open_pr: str,
+    auto_merge: str,
+    expected_open_pr: bool,
+    expected_auto_merge: bool,
+    success: bool,
+) -> None:
+    root = resolve_temp_dir(tmp_path, tool_ctx.config.workspace.temp_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    part = root / "part_a.md"
+    part.write_text((_PUBLICATION_FIXTURE / "part_a.md").read_text(), encoding="utf-8")
+    recorder = _RecordingMaterializer(
+        DefaultPlanSetMaterializer(PlanSetGitHub(fixture_dir=_PUBLICATION_FIXTURE))
+    )
+    monkeypatch.setattr(tool_ctx, "plan_set_materializer", recorder)
+
+    result = json.loads(
+        await bind_plan_set(
+            plan_parts=str(part),
+            cwd=str(tmp_path),
+            issue_url="owner/repo#1",
+            open_pr=open_pr,
+            auto_merge=auto_merge,
+            prior_authority_path="",
+        )
+    )
+
+    assert recorder.request is not None
+    assert recorder.request.open_pr is expected_open_pr
+    assert recorder.request.auto_merge is expected_auto_merge
+    assert recorder.request.prior_authority_path == ""
+    assert result["success"] is success
+    if success:
+        assert result["reason"] == ""
+    else:
+        assert result["reason"] == PlanSetRejectReason.STAGE_OBLIGATION_UNAVAILABLE.value
+
+
+def test_stage_obligation_unavailability_falls_through_to_failure_in_every_bind_recipe_step() -> (
+    None
+):
+    recipe_steps = {
+        "implementation": {"bind_plan_set", "renew_plan_set"},
+        "remediation": {"bind_plan_set", "renew_before_retry", "renew_plan_set"},
+        "implementation-groups": {"bind_group_parts", "seal_plan_set", "renew_plan_set"},
+    }
+
+    for recipe_name, expected_steps in recipe_steps.items():
+        recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+        bind_steps = {
+            name: step for name, step in recipe.steps.items() if step.tool == "bind_plan_set"
+        }
+        assert set(bind_steps) == expected_steps
+        for step_name, step in bind_steps.items():
+            assert step.on_result is not None, (recipe_name, step_name)
+            conditions = step.on_result.conditions
+            replan_routes = [
+                condition
+                for condition in conditions
+                if condition.route == "check_replan_iteration"
+            ]
+            assert all(
+                condition.when is not None and "coverage_failed" in condition.when
+                for condition in replan_routes
+            ), (recipe_name, step_name)
+            assert any(
+                condition.when is None and condition.route == "release_issue_failure"
+                for condition in conditions
+            ), (recipe_name, step_name)
 
 
 async def test_open_bind_and_mixed_parent_list(

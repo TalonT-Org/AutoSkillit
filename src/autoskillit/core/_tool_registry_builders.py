@@ -253,6 +253,26 @@ _REVIEW_AUDIT_TOOL_DEFS = (
     ),
 )
 
+_PLAN_SET_TOOL_DEFS = (
+    _tool(
+        "bind_plan_set",
+        (
+            "plan_parts",
+            "cwd",
+            "issue_url",
+            "parent_authority_path",
+            "seal",
+            "step_name",
+            "open_pr",
+            "auto_merge",
+            "prior_authority_path",
+        ),
+        required=("plan_parts", "cwd"),
+        automatic_recipe_delivery=True,
+        recovery_recipe_delivery=True,
+    ),
+)
+
 
 def _verify_review_receipt() -> ToolDef:
     params = (

@@ -59,6 +59,7 @@ from autoskillit.core.io.io import (
 )
 from autoskillit.core.io.markdown_sections import (
     STEP_HEADING_RE,
+    cites_requirement,
     extract_section,
     parse_pipe_table,
     split_table_row,
@@ -123,6 +124,7 @@ __all__ = [
     "_render_terminal_table",
     "atomic_write",
     "check_metadata_stable",
+    "cites_requirement",
     "claude_code_log_path",
     "claude_code_project_dir",
     "collect_version_snapshot",

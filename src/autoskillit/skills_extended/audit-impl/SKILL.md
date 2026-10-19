@@ -260,6 +260,9 @@ as plan/remediation context already admitted by the parent. Never scan for a lat
 (not 1). Each extracts requirements independently. Take the union of all extracted
 requirements (deduplicate by semantic equivalence).
 
+The authenticated `verified_plan_set_preflight.stage_obligations` list names outcomes the
+recipe performs and verifies after this audit.
+
 Each child delegation returns:
 
 - Plan title and stated scope
@@ -381,7 +384,7 @@ verdict logic (Step 4).
 
 ### Step 3 — Audit via Parallel Subagents (SINGLE MESSAGE)
 
-Set `audit_slices` to the requirement slices produced from the exact-cycle inventory.
+Construct `audit_slices` only after applying the authenticated stage scope below.
 Retain slice-auditor child IDs keyed by slice through the join.
 
 **Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
@@ -393,6 +396,16 @@ The working directory (`cwd`) may be on a different branch than the implementati
 audited. Do NOT use Read, Grep, or Glob — subagents are tool-restricted to Bash only via
 their agent definition, blocking filesystem reads at the platform level. When full file
 content is needed beyond the diff, subagents use `git show {implementation_ref}:{path}`.
+
+After union extraction and before slicing, use only authenticated
+`verified_plan_set_preflight.stage_obligations` to exclude recipe-owned publication outcomes
+from code audit scope. Exclude stage-only requirements; for a mixed requirement, remove only
+its stage-owned clause and retain the code obligation for assessment. Allocation prose alone
+does not authorize an exclusion. Never assess these authenticated stage-owned outcomes as
+`MISSING` or `UNSATISFIABLE_BY_CODE` because the pull request or its state does not exist yet.
+If the same ID has implementation steps, assess that code. When no authenticated stage
+evidence is supplied, apply the existing full audit scope and waiver rules. Report excluded
+items under **Stage-owned obligations (verified after publication)**.
 
 Slice the inventory verified or written for this exact cycle into up to 3 slices. For a
 remediation descendant, use only the inventory `ArtifactRef` from the verified prior

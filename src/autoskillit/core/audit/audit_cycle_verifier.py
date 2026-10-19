@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from ..io.io import decode_versioned_json_bytes
+from ..io.markdown_sections import cites_requirement
 from ..io.path_containment import ContainmentError, read_stable_contained_bytes
 from ..logging import get_logger
 from ..types.audit._type_audit_artifact_ref import ArtifactRef
@@ -82,15 +82,7 @@ def _verify_legacy_rows(
         citation_is_missing = (
             blocking
             and carried
-            and (
-                block is None
-                or re.search(
-                    rf"(?<![A-Za-z0-9_-]){re.escape(assessment.requirement_id)}"
-                    r"(?![A-Za-z0-9_-])",
-                    block,
-                )
-                is None
-            )
+            and (block is None or not cites_requirement(block, assessment.requirement_id))
         )
         row_is_invalid = (blocking and (not carried or citation_is_missing)) or (
             not blocking and disposition.satisfied_round != authority.audit_round

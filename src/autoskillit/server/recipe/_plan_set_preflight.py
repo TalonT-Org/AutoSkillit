@@ -34,4 +34,5 @@ class DefaultPlanSetPreflightResolver:
             expected_binding_mode=PlanSetBindingMode.RECIPE,
             current_plan_path=request.plan_path,
             require_sealed=request.require_sealed,
+            allow_part_drift=request.allow_part_drift,
         )

@@ -5,9 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, Self, assert_never
 
 from ...audit.closure_hashing import canonical_json_bytes, compute_canonical_hash
+from ._type_stage_obligation import StageObligation, StageObligationDef
 
 __all__ = [
     "ALLOCATION_KIND",
@@ -65,6 +66,7 @@ class RequirementKind(StrEnum):
 class AllocationKind(StrEnum):
     OWNED = "owned"
     SHARED = "shared"
+    STAGE = "stage"
 
 
 # Compatibility with the noun used in the persisted allocation vocabulary.
@@ -102,6 +104,8 @@ class PlanSetRejectReason(StrEnum):
     UNPARSED_MARKERS = "unparsed_markers"
     ALLOCATION_STEP_MISSING = "allocation_step_missing"
     ALLOCATION_STEP_UNREFERENCED = "allocation_step_unreferenced"
+    ALLOCATION_STAGE_CITED_BY_STEP = "allocation_stage_cited_by_step"
+    STAGE_OBLIGATION_UNAVAILABLE = "stage_obligation_unavailable"
     CONTAINMENT = "containment"
     INTERNAL = "internal"
 
@@ -212,21 +216,41 @@ class AllocationRowDef:
     requirement_id: str
     part_key: str
     allocation: AllocationKind
-    implementation_step: str
+    implementation_step: str | None = None
+    stage_obligation: StageObligation | None = None
 
     def __post_init__(self) -> None:
-        for name in ("requirement_id", "part_key", "implementation_step"):
+        for name in ("requirement_id", "part_key"):
             _nonempty(f"AllocationRowDef.{name}", getattr(self, name))
         if not isinstance(self.allocation, AllocationKind):
             raise ValueError("AllocationRowDef.allocation must be an AllocationKind")
+        if self.stage_obligation is not None and not isinstance(
+            self.stage_obligation, StageObligation
+        ):
+            raise ValueError("AllocationRowDef.stage_obligation must be a StageObligation")
+        match self.allocation:
+            case AllocationKind.STAGE:
+                if self.implementation_step is not None:
+                    raise ValueError("stage allocation cannot have an implementation step")
+                if self.stage_obligation is None:
+                    raise ValueError("stage allocation requires a stage obligation")
+            case AllocationKind.OWNED | AllocationKind.SHARED:
+                _nonempty("AllocationRowDef.implementation_step", self.implementation_step)
+                if self.stage_obligation is not None:
+                    raise ValueError("implementation allocation cannot have a stage obligation")
+            case unreachable:
+                assert_never(unreachable)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "requirement_id": self.requirement_id,
             "part_key": self.part_key,
             "allocation": self.allocation.value,
             "implementation_step": self.implementation_step,
         }
+        if self.stage_obligation is not None:
+            payload["stage_obligation"] = self.stage_obligation.value
+        return payload
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Self:
@@ -234,8 +258,24 @@ class AllocationRowDef:
             requirement_id=data["requirement_id"],
             part_key=data["part_key"],
             allocation=AllocationKind(data["allocation"]),
-            implementation_step=data["implementation_step"],
+            implementation_step=data.get("implementation_step"),
+            stage_obligation=(
+                StageObligation(data["stage_obligation"])
+                if data.get("stage_obligation") is not None
+                else None
+            ),
         )
+
+
+def implementation_rows(
+    rows: tuple[AllocationRowDef, ...],
+) -> tuple[tuple[AllocationRowDef, str], ...]:
+    result: list[tuple[AllocationRowDef, str]] = []
+    for row in rows:
+        step = row.implementation_step
+        if step is not None:
+            result.append((row, step))
+    return tuple(result)
 
 
 @dataclass(frozen=True, slots=True)
@@ -356,9 +396,10 @@ class PlanSetPreflightEvidence:
     plan_set_state: PlanSetState
     coverage_status: str
     assigned_requirements: tuple[AssignedRequirementDef, ...]
+    stage_obligations: tuple[StageObligationDef, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "status": self.status,
             "plan_set_authority_path": self.plan_set_authority_path,
             "plan_set_authority_digest": self.plan_set_authority_digest,
@@ -372,6 +413,9 @@ class PlanSetPreflightEvidence:
             "coverage_status": self.coverage_status,
             "assigned_requirements": [item.to_dict() for item in self.assigned_requirements],
         }
+        if self.stage_obligations:
+            payload["stage_obligations"] = [item.to_dict() for item in self.stage_obligations]
+        return payload
 
 
 @dataclass(frozen=True, slots=True)
@@ -450,7 +494,9 @@ class PlanSetAuthority:
         if len({Path(part.locator).resolve() for part in self.parts}) != len(self.parts):
             raise ValueError("PlanSetAuthority.parts contain duplicate locators")
         if self.inventory_mode in {InventoryMode.UNENUMERATED, InventoryMode.NO_ISSUE}:
-            empty_parts = part_keys - {row.part_key for row in self.allocations}
+            empty_parts = part_keys - {
+                row.part_key for row, _ in implementation_rows(self.allocations)
+            }
             if set(self.coverage.parts_without_obligations) != empty_parts:
                 raise ValueError(
                     "coverage.parts_without_obligations must match actual empty parts"
@@ -606,6 +652,9 @@ class PlanSetBindRequest:
     kitchen_id: str
     dispatch_id: str
     binding_mode: PlanSetBindingMode
+    open_pr: bool = False
+    auto_merge: bool = False
+    prior_authority_path: str = ""
 
 
 @dataclass(frozen=True, slots=True)

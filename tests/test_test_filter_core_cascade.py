@@ -214,6 +214,7 @@ class TestModuleCascadeCore:
             "_type_audit_artifact_ref",
             "_type_audit_cycle_authority",
             "_type_audit_cycle_disposition",
+            "_type_stage_obligation",
             "_type_recipe_binding",
             "_type_recipe_execution",
             "_type_closure_report",

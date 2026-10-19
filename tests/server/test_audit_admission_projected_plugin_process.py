@@ -248,6 +248,7 @@ async def test_projected_plugin_child_publishes_through_parent_audit_authority(
             "branch_name": branch_name,
             "base_branch": "develop",
             "prior_audit_cycle_path": "",
+            "plan_set_authority_path": "",
         },
         "closure_plan_paths": str(plan_path),
         "closure_base_sha": branch_name,

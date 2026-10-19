@@ -25,6 +25,7 @@ _DIALECT_RATIONALES = {
     ),
     "failure-sentinel": "Only explicit false signals a recipe stop failure.",
     "declared-step-guard": "Captured guard values are a closed execution contract.",
+    "plan-set-auto-merge": "Only the literal true value enables plan-set auto-merge.",
 }
 
 
@@ -37,6 +38,7 @@ def test_truth_dialect_census_is_complete_and_explained() -> None:
         "quota-hook-disabled",
         "failure-sentinel",
         "declared-step-guard",
+        "plan-set-auto-merge",
     }
     assert all(_DIALECT_RATIONALES.values())
 

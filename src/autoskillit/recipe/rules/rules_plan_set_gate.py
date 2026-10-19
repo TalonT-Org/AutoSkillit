@@ -11,6 +11,7 @@ from autoskillit.recipe._skill_helpers import MULTIPART_SKILL_NAMES
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 from autoskillit.recipe.schema import RecipeStep, stop_step_declares_success
 
+STAGE_OBLIGATION_GATE_DOMINANCE_RULE = "stage-obligation-gate-dominance"
 _STAGE_OBLIGATION_CALLABLE = "autoskillit.recipe._cmd_rpc.verify_stage_obligations"
 
 
@@ -193,7 +194,7 @@ def _gate_non_success_targets(step: RecipeStep) -> set[str]:
 
 
 @semantic_rule(
-    name="stage-obligation-gate-dominance",
+    name=STAGE_OBLIGATION_GATE_DOMINANCE_RULE,
     description="Sealed publication requirements cannot reach success without verification.",
     severity=Severity.ERROR,
 )
@@ -229,7 +230,7 @@ def _check_stage_obligation_gate_dominance(ctx: ValidationContext) -> list[RuleF
         for stop_name in success_reachable_without_gate(bind_name):
             findings.append(
                 make_finding(
-                    rule_name="stage-obligation-gate-dominance",
+                    rule_name=STAGE_OBLIGATION_GATE_DOMINANCE_RULE,
                     step_name=bind_name,
                     message=(
                         f"Sealed bind '{bind_name}' can reach success stop '{stop_name}' "
@@ -243,7 +244,7 @@ def _check_stage_obligation_gate_dominance(ctx: ValidationContext) -> list[RuleF
         if gate.skip_when_false:
             findings.append(
                 make_finding(
-                    rule_name="stage-obligation-gate-dominance",
+                    rule_name=STAGE_OBLIGATION_GATE_DOMINANCE_RULE,
                     step_name=gate_name,
                     message=(
                         f"Stage-obligation gate '{gate_name}' cannot declare skip_when_false."
@@ -254,7 +255,7 @@ def _check_stage_obligation_gate_dominance(ctx: ValidationContext) -> list[RuleF
             for stop_name in success_reachable_without_gate(target):
                 findings.append(
                     make_finding(
-                        rule_name="stage-obligation-gate-dominance",
+                        rule_name=STAGE_OBLIGATION_GATE_DOMINANCE_RULE,
                         step_name=gate_name,
                         message=(
                             f"Gate '{gate_name}' has a non-success route that reaches "

@@ -50,6 +50,7 @@ from autoskillit.recipe.ingredients._recipe_composition import (
 )
 from autoskillit.recipe.ingredients._recipe_raw_repair import _resolve_skip_guards_in_content
 from autoskillit.recipe.registry import RuleFinding as _RuleFinding
+from autoskillit.recipe.rules.rules_plan_set_gate import STAGE_OBLIGATION_GATE_DOMINANCE_RULE
 from autoskillit.recipe.schema import Recipe, RecipeStep
 
 __all__ = ["_record_pipeline_error", "_run_validation_pipeline"]
@@ -86,7 +87,7 @@ def _reconcile_semantic_findings(
     gate_skip_findings = [
         finding
         for finding in pre_prune_findings
-        if finding.rule == "stage-obligation-gate-dominance"
+        if finding.rule == STAGE_OBLIGATION_GATE_DOMINANCE_RULE
         and "cannot declare skip_when_false" in finding.message
     ]
     retained_keys = {

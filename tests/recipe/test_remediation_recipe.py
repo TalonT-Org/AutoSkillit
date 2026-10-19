@@ -22,7 +22,7 @@ RECIPE_PATH = (
     Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipes" / "remediation.yaml"
 )
 _PRE_DELIVERY_STRUCTURE_SHA256 = (
-    "sha256:64e553d7e7669f32968ac401161139869fce71c023dbb129ba977d0dd2e3d831"
+    "sha256:dd6b03be68a4e6025005f97818d8ef21813461b2002828a0ed4033075016a159"
 )
 
 
@@ -476,17 +476,22 @@ def test_register_clone_already_done_routes_to_diagnostic(recipe) -> None:
 
 
 def test_register_clone_unconfirmed_routes_to_done_unconfirmed(recipe) -> None:
-    """register_clone_unconfirmed must route toward done_unconfirmed."""
+    """Unconfirmed clone registration must verify the PR before diagnostics."""
     step = recipe.steps["register_clone_unconfirmed"]
-    # May route via optional analyze_pipeline_health_unconfirmed step first
-    assert step.on_success in ("done_unconfirmed", "analyze_pipeline_health_unconfirmed"), (
-        "register_clone_unconfirmed.on_success must route toward done_unconfirmed, "
-        f"got {step.on_success!r}"
+    assert step.on_success == "verify_stage_obligations_unconfirmed"
+    assert step.on_failure == "verify_stage_obligations_unconfirmed"
+    gate = recipe.steps["verify_stage_obligations_unconfirmed"]
+    assert gate.on_result is not None
+    assert any(
+        condition.route == "analyze_pipeline_health_unconfirmed"
+        and condition.when
+        and "result.success" in condition.when
+        and "== true" in condition.when
+        for condition in gate.on_result.conditions
     )
-    assert step.on_failure in ("done_unconfirmed", "analyze_pipeline_health_unconfirmed"), (
-        "register_clone_unconfirmed.on_failure must route toward done_unconfirmed, "
-        f"got {step.on_failure!r}"
-    )
+    assert next(
+        condition.route for condition in gate.on_result.conditions if not condition.when
+    ) == ("analyze_pipeline_health_error")
 
 
 # T7: investigate step has optional: true and skip_when_false

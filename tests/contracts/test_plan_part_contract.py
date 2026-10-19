@@ -34,9 +34,26 @@ def _allocation_blocks(content: str, skill_path: Path) -> list[str]:
     return blocks
 
 
-def test_bundled_plan_part_templates_pass_the_allocation_verifier() -> None:
+def _verify_allocation_blocks(content: str, document_path: Path) -> int:
     from autoskillit.core import parse_part_allocation, verify_allocation_evidence
+
+    blocks = _allocation_blocks(content, document_path)
+    for block_index, block in enumerate(blocks, start=1):
+        try:
+            rows = parse_part_allocation(block, part_key="P1")
+        except ValueError as exc:
+            pytest.fail(f"{document_path} allocation block {block_index} is not parseable: {exc}")
+        assert rows, f"{document_path} allocation block {block_index} has no rows"
+        defects = verify_allocation_evidence(block, rows)
+        assert not defects, (
+            f"{document_path} allocation block {block_index} has evidence defects: {defects}"
+        )
+    return len(blocks)
+
+
+def test_bundled_plan_part_templates_pass_the_allocation_verifier() -> None:
     from autoskillit.workspace.skills import bundled_skills_dir, bundled_skills_extended_dir
+    from autoskillit.workspace.skills._resources import load_skill_resource
 
     expected_skills: set[str] = set()
     verified_skills: set[str] = set()
@@ -51,21 +68,17 @@ def test_bundled_plan_part_templates_pass_the_allocation_verifier() -> None:
                 f"{skill_path} escapes the allocation separator"
             )
 
-            blocks = _allocation_blocks(content, skill_path)
-            for block_index, block in enumerate(blocks, start=1):
-                try:
-                    rows = parse_part_allocation(block, part_key="P1")
-                except ValueError as exc:
-                    pytest.fail(
-                        f"{skill_path} allocation block {block_index} is not parseable: {exc}"
-                    )
-                assert rows, f"{skill_path} allocation block {block_index} has no rows"
-                defects = verify_allocation_evidence(block, rows)
-                assert not defects, (
-                    f"{skill_path} allocation block {block_index} has evidence defects: {defects}"
-                )
-                verified_block_count += 1
+            verified_blocks = _verify_allocation_blocks(content, skill_path)
+            verified_block_count += verified_blocks
+            if verified_blocks:
                 verified_skills.add(skill_path.parent.name)
+
+    resource = load_skill_resource("plan-part-form")
+    resource_path = Path(f"skill_resources/{resource.id}.md")
+    resource_blocks = _verify_allocation_blocks(resource.body, resource_path)
+    assert resource_blocks == 1, (
+        f"{resource_path} must contain one fenced complete stage allocation example"
+    )
 
     assert verified_block_count > 0, "no bundled plan-part allocation template was checked"
     assert expected_skills, "no bundled plan-part authoring skill was found"

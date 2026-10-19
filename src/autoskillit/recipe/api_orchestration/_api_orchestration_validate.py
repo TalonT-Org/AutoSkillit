@@ -83,6 +83,23 @@ def _reconcile_semantic_findings(
                     message=finding.message,
                 )
 
+    gate_skip_findings = [
+        finding
+        for finding in pre_prune_findings
+        if finding.rule == "stage-obligation-gate-dominance"
+        and "cannot declare skip_when_false" in finding.message
+    ]
+    retained_keys = {
+        (finding.rule, finding.step_name, finding.message) for finding in semantic_findings
+    }
+    semantic_findings.extend(
+        finding
+        for finding in gate_skip_findings
+        if (finding.rule, finding.step_name, finding.message) not in retained_keys
+    )
+    if gate_skip_findings:
+        semantic_suggestions = _orch.findings_to_dicts(semantic_findings)
+
     if recipe_name in (suppressed or ()):
         from autoskillit.recipe.validator import filter_version_rule
 

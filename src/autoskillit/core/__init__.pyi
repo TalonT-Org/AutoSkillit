@@ -136,6 +136,7 @@ from .io import _render_gfm_table as _render_gfm_table
 from .io import _render_terminal_table as _render_terminal_table
 from .io import atomic_write as atomic_write
 from .io import check_metadata_stable as check_metadata_stable
+from .io import cites_requirement as cites_requirement
 from .io import claude_code_log_path as claude_code_log_path
 from .io import claude_code_project_dir as claude_code_project_dir
 from .io import collect_version_snapshot as collect_version_snapshot
@@ -220,7 +221,9 @@ from .planset import InventoryExtraction as InventoryExtraction
 from .planset import assigned_requirements as assigned_requirements
 from .planset import evaluate_coverage as evaluate_coverage
 from .planset import extract_requirement_inventory as extract_requirement_inventory
+from .planset import load_pinned_plan_set_authority as load_pinned_plan_set_authority
 from .planset import parse_part_allocation as parse_part_allocation
+from .planset import stage_obligations as stage_obligations
 from .planset import verify_allocation_evidence as verify_allocation_evidence
 from .planset import verify_plan_set_authority as verify_plan_set_authority
 from .plugins._active_kitchens import ActiveKitchensReadResult as ActiveKitchensReadResult
@@ -1350,6 +1353,8 @@ from .types import SourcePair as SourcePair
 from .types import SpilledOutput as SpilledOutput
 from .types import SpillSpec as SpillSpec
 from .types import StageHistoryEvent as StageHistoryEvent
+from .types import StageObligation as StageObligation
+from .types import StageObligationDef as StageObligationDef
 from .types import StaleGeneratorError as StaleGeneratorError
 from .types import StandaloneAuditEvidence as StandaloneAuditEvidence
 from .types import StartGenerationEvent as StartGenerationEvent

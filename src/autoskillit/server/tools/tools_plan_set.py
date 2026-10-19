@@ -17,6 +17,7 @@ from autoskillit.core import (
     get_logger,
     resolve_temp_dir,
 )
+from autoskillit.recipe.ingredients import _is_ingredient_truthy
 from autoskillit.server import mcp
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
@@ -46,6 +47,9 @@ async def bind_plan_set(
     parent_authority_path: str = "",
     seal: str = "true",
     step_name: str = "",
+    open_pr: str = "",
+    auto_merge: str = "",
+    prior_authority_path: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
     """Bind plan parts to one verified authority artifact.
@@ -88,6 +92,9 @@ async def bind_plan_set(
             parent_authority_path=parent_authority_path,
             seal=_as_bool(seal),
             step_name=step_name,
+            open_pr=_is_ingredient_truthy(open_pr),
+            auto_merge=auto_merge == "true",
+            prior_authority_path=prior_authority_path,
             execution_generation=execution_generation,
             kitchen_id=tool_ctx.kitchen_id,
             dispatch_id=os.environ.get(DISPATCH_ID_ENV_VAR, ""),

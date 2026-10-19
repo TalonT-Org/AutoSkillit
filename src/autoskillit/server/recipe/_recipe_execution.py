@@ -23,7 +23,6 @@ from autoskillit.core import (
     InventoryAdmissionDecision,
     InvocationTemplate,
     PlanSetPreflightEvidence,
-    PlanSetPreflightRequest,
     PreflightEvidence,
     PreflightKind,
     RecipeBindingProjection,
@@ -55,6 +54,7 @@ from autoskillit.recipe import (
     compute_skill_contract_identity,
 )
 from autoskillit.server._misc import clear_run_skill_state
+from autoskillit.server.recipe._plan_set_preflight import resolve_plan_set_preflight
 
 if TYPE_CHECKING:
     from autoskillit.core import (
@@ -599,12 +599,14 @@ def _resolve_plan_set_preflight(
     step_name: str,
     template: InvocationTemplate,
     allowed_root: Path | None,
+    kind: PreflightKind,
 ) -> PlanSetPreflightEvidence | None:
     authority_path = bound_input_map.get("plan_set_authority_path")
     if authority_path in (None, ""):
         return None
-    plan_path = bound_input_map.get("plan_path")
-    if not isinstance(authority_path, str) or not isinstance(plan_path, str):
+    stage_scope = kind is PreflightKind.PLAN_SET_STAGE_OBLIGATIONS
+    plan_path = None if stage_scope else bound_input_map.get("plan_path")
+    if not isinstance(authority_path, str) or (not stage_scope and not isinstance(plan_path, str)):
         raise _build_preflight_input_error(
             "plan-set preflight requires bound string plan_path and authority path",
         )
@@ -615,16 +617,16 @@ def _resolve_plan_set_preflight(
             "recipe_execution_preflight_unavailable",
             "plan-set preflight resolver is unavailable",
         )
-    verification = installed.plan_set_preflight_resolver.resolve(
-        PlanSetPreflightRequest(
-            execution_generation=execution_id,
-            expected_kitchen_id=tool_ctx.kitchen_id,
-            step_name=step_name,
-            skill_name=template.invocation.skill_name or "",
-            plan_path=plan_path,
-            plan_set_authority_path=authority_path,
-        ),
+    verification = resolve_plan_set_preflight(
+        installed.plan_set_preflight_resolver,
+        execution_generation=execution_id,
+        kitchen_id=tool_ctx.kitchen_id,
+        step_name=step_name,
+        skill_name=template.invocation.skill_name or "",
+        plan_path=plan_path if isinstance(plan_path, str) else None,
+        authority_path=authority_path,
         allowed_root=allowed_root,
+        allow_part_drift=stage_scope,
     )
     if not verification.accepted:
         reason = verification.reason.value if verification.reason else "rejected"
@@ -660,7 +662,10 @@ def resolve_attested_input_preflight(
             audit = _resolve_audit_preflight(
                 installed, bound_input_map, execution_id, step_name, template, allowed_root
             )
-        elif preflight_name == PreflightKind.PLAN_SET_COVERAGE.value:
+        elif preflight_name in (
+            PreflightKind.PLAN_SET_COVERAGE.value,
+            PreflightKind.PLAN_SET_STAGE_OBLIGATIONS.value,
+        ):
             plan_set = _resolve_plan_set_preflight(
                 tool_ctx,
                 installed,
@@ -669,6 +674,7 @@ def resolve_attested_input_preflight(
                 step_name,
                 template,
                 allowed_root,
+                PreflightKind(preflight_name),
             )
         else:
             raise RecipeExecutionAdmissionError(

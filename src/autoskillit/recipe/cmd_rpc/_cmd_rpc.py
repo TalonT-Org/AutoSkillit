@@ -30,6 +30,7 @@ from autoskillit.recipe.cmd_rpc._cmd_rpc_merge import (  # noqa: F401
     proactive_rebase_next_pr,
     queue_ejected_fix,
     review_path_rebase,
+    verify_stage_obligations,
     wait_for_direct_merge,
     wait_for_immediate_merge,
     wait_for_review_pr_mergeability,

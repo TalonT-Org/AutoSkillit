@@ -63,6 +63,7 @@ Implement a provided plan in an isolated git worktree branched from the current 
 - Force push or perform destructive git operations
 - Consider implementation complete if ANY test fails
 - Blame test failures on "pre-existing issues" — ALL tests must pass
+- Never open, merge, or close pull requests or issues — publication belongs to the recipe's later stages.
 - Re-run tests just to see failures — grep the saved output file instead
 - Detach child delegations instead of joining them (joining every child is required)
 - Start independent child delegations sequentially

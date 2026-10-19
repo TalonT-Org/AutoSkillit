@@ -62,6 +62,7 @@ The worktree is left intact for the orchestrator to test and merge separately.
 - Implement in the main working directory (always use the worktree)
 - Force push or perform destructive git operations
 - Merge the worktree branch into any branch
+- Never open, merge, or close pull requests or issues — publication belongs to the recipe's later stages.
 - Delete or remove the worktree
 - Run the full test suite (the orchestrator handles testing) — NEVER invoke pytest, python -m pytest, or any test runner directly
 - Rebase onto the base branch

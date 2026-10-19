@@ -323,14 +323,15 @@ handles correctly.
 - Be willing to recommend significant refactoring if that's the right answer
 - Start all independent child delegations before awaiting any result to maximize concurrency
 - The plan set must cover every remediation item and every requirement item enumerated in the source issue; if an item cannot be delivered, stop and surface it — do not descope it in the plan. Each part declares exactly its owned or shared items in `## Issue Requirement Allocation`; never list sibling parts or paths.
+- An outcome a later recipe stage performs — opening the pull request, or leaving it unmerged — is allocated as `stage` with its obligation key, never to an implementation step; bind refuses one this run cannot perform.
 - Every new component, class, or function is wired into the call chain — nothing is created but left unconnected
 
-**Requirement Echo Rule:** Every behavioral requirement stated in `## Summary` or `## Design Decisions` prose MUST be echoed as an explicit `## Implementation Steps` directive. After drafting the plan:
+**Requirement Echo Rule:** Every code-owned behavioral requirement stated in `## Summary` or `## Design Decisions` prose MUST be echoed as an explicit `## Implementation Steps` directive. Stage-owned outcomes are exempt from echoing into steps. They appear in the plan only as their allocation rows, not in the code Summary, Verification, or Requirements Map. Preserve the original bound source snapshot and, in ENUMERATED mode, the source inventory's IDs and text. In UNENUMERATED and NO_ISSUE modes, keep planner-declared IDs on their stage rows without fabricating an enumerated source inventory. This code-step echo exemption must not delete the source obligation. After drafting the plan:
 
-1. Enumerate every behavioral constraint in the prose sections above.
-2. For each constraint, verify it maps to at least one explicit step directive.
-3. If a constraint has no corresponding step, add one. Never leave behavioral requirements as prose-only.
-4. Include a `## Requirements Map` section at the end of the plan listing each constraint with its corresponding step reference.
+1. Enumerate every code-owned behavioral constraint in the prose sections above.
+2. For each code-owned constraint, verify it maps to at least one explicit step directive.
+3. If a code-owned constraint has no corresponding step, add one. Never leave code requirements as prose-only.
+4. Include a `## Requirements Map` section at the end of the plan listing each code-owned constraint with its corresponding step reference.
 
 ## Context Limit Behavior
 

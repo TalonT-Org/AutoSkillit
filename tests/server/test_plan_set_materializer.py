@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -10,24 +11,20 @@ import pytest
 from autoskillit.core import (
     PlanSetBindingMode,
     PlanSetBindRequest,
+    PlanSetBindResult,
     PlanSetRejectReason,
     verify_plan_set_authority,
 )
+from autoskillit.server import _plan_set_materializer as materializer_module
 from autoskillit.server._plan_set_materializer import DefaultPlanSetMaterializer
 from autoskillit.server.recipe._recipe_execution import build_bound_child_prompt
+from tests.server._plan_set_test_helpers import PlanSetGitHub
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 _FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "plan_set"
-
-
-class _GitHub:
-    async def fetch_issue(self, *_args: object, **_kwargs: object) -> dict[str, object]:
-        return {
-            "success": True,
-            "issue_number": 1,
-            "body": (_FIXTURES / "split_r1_r2" / "issue.md").read_text(),
-        }
+_PUBLICATION_FIXTURE = _FIXTURES / "publication_pr"
+_GitHub = PlanSetGitHub
 
 
 def _plan_part(
@@ -45,6 +42,42 @@ def _plan_part(
 | --- | --- | --- |
 {allocation_rows}
 """
+
+
+def _write_publication_part(tmp_path: Path) -> Path:
+    part = tmp_path / "part_a.md"
+    part.write_text((_PUBLICATION_FIXTURE / "part_a.md").read_text(), encoding="utf-8")
+    return part
+
+
+def _publication_request(
+    tmp_path: Path,
+    part: Path,
+    *,
+    issue_url: str = "owner/repo#1",
+    parent_authority_path: str = "",
+    prior_authority_path: str = "",
+    seal: bool = True,
+    open_pr: bool = False,
+    auto_merge: bool = False,
+    binding_mode: PlanSetBindingMode = PlanSetBindingMode.RECIPE,
+    execution_generation: str = "generation",
+) -> PlanSetBindRequest:
+    return PlanSetBindRequest(
+        plan_parts_raw=str(part),
+        allowed_root=tmp_path,
+        issue_url=issue_url,
+        parent_authority_path=parent_authority_path,
+        seal=seal,
+        step_name="bind",
+        execution_generation=execution_generation,
+        kitchen_id="kitchen",
+        dispatch_id="",
+        binding_mode=binding_mode,
+        open_pr=open_pr,
+        auto_merge=auto_merge,
+        prior_authority_path=prior_authority_path,
+    )
 
 
 @pytest.mark.asyncio
@@ -106,7 +139,7 @@ def _coverage_failure_case(
         part_texts = (_plan_part("| R1 | partial | Step 1.1 |"),)
         issue_url = "owner/repo#1"
         expected_gaps = ("R1", "partial")
-        expected_forms = ("use owned or shared",)
+        expected_forms = ("use owned, shared or stage",)
     elif case == "two_parts":
         part_texts = (
             _plan_part(
@@ -121,7 +154,10 @@ def _coverage_failure_case(
             "R2",
             "partial",
         )
-        expected_forms = ("table rows must be pipe-delimited", "use owned or shared")
+        expected_forms = (
+            "table rows must be pipe-delimited",
+            "use owned, shared or stage",
+        )
     elif case == "part_without_obligations":
         part_texts = (_plan_part(""),)
         issue_url = ""
@@ -253,6 +289,297 @@ async def test_failed_seal_preserves_open_parent_for_gap_replan(tmp_path: Path) 
     assert failed.plan_set_authority_path == parent.plan_set_authority_path
     assert failed.plan_set_authority_digest == parent.plan_set_authority_digest
     assert set((tmp_path / "plan-set-authority").rglob("*.json")) == before
+
+
+@pytest.mark.parametrize(
+    ("open_pr", "auto_merge", "unavailable"),
+    [
+        (True, False, ()),
+        (False, False, ("R3 → pr_opened", "R4 → pr_left_unmerged")),
+        (True, True, ("R4 → pr_left_unmerged",)),
+    ],
+)
+@pytest.mark.asyncio
+async def test_sealed_publication_obligations_require_available_stages(
+    tmp_path: Path,
+    open_pr: bool,
+    auto_merge: bool,
+    unavailable: tuple[str, ...],
+) -> None:
+    part = _write_publication_part(tmp_path)
+    result = await DefaultPlanSetMaterializer(_GitHub(fixture_dir=_PUBLICATION_FIXTURE)).bind(
+        _publication_request(
+            tmp_path,
+            part,
+            open_pr=open_pr,
+            auto_merge=auto_merge,
+        )
+    )
+
+    if unavailable:
+        assert result.success is False
+        assert result.reason is PlanSetRejectReason.STAGE_OBLIGATION_UNAVAILABLE
+        assert result.plan_set_authority_path == ""
+        for line in unavailable:
+            assert line in result.error
+        if auto_merge:
+            assert "R3 → pr_opened" not in result.error
+        assert not list((tmp_path / "plan-set-authority").rglob("*.json"))
+    else:
+        assert result.success is True
+        assert result.plan_set_state == "sealed"
+        assert Path(result.plan_set_authority_path).is_file()
+
+
+@pytest.mark.parametrize(
+    "binding_mode",
+    (PlanSetBindingMode.RECIPE, PlanSetBindingMode.STANDALONE),
+)
+@pytest.mark.asyncio
+async def test_publication_obligations_without_recipe_arguments_are_unavailable(
+    tmp_path: Path, binding_mode: PlanSetBindingMode
+) -> None:
+    part = _write_publication_part(tmp_path)
+
+    result = await DefaultPlanSetMaterializer(_GitHub(fixture_dir=_PUBLICATION_FIXTURE)).bind(
+        _publication_request(tmp_path, part, binding_mode=binding_mode)
+    )
+
+    assert result.success is False
+    assert result.reason is PlanSetRejectReason.STAGE_OBLIGATION_UNAVAILABLE
+    assert "R3 → pr_opened" in result.error
+    assert "R4 → pr_left_unmerged" in result.error
+
+
+@pytest.mark.asyncio
+async def test_open_bind_does_not_check_publication_availability(tmp_path: Path) -> None:
+    part = _write_publication_part(tmp_path)
+
+    result = await DefaultPlanSetMaterializer(_GitHub(fixture_dir=_PUBLICATION_FIXTURE)).bind(
+        _publication_request(tmp_path, part, seal=False)
+    )
+
+    assert result.success is True
+    assert result.plan_set_state == "open"
+
+
+@pytest.mark.asyncio
+async def test_identical_sealed_parent_rebind_checks_current_publication_flags(
+    tmp_path: Path,
+) -> None:
+    part = _write_publication_part(tmp_path)
+    materializer = DefaultPlanSetMaterializer(_GitHub(fixture_dir=_PUBLICATION_FIXTURE))
+    initial = await materializer.bind(_publication_request(tmp_path, part, open_pr=True))
+    assert initial.success is True
+
+    rebound = await materializer.bind(
+        _publication_request(
+            tmp_path,
+            part,
+            issue_url="",
+            parent_authority_path=initial.plan_set_authority_path,
+            open_pr=True,
+            auto_merge=True,
+        )
+    )
+
+    assert rebound.success is False
+    assert rebound.reason is PlanSetRejectReason.STAGE_OBLIGATION_UNAVAILABLE
+    assert "R4 → pr_left_unmerged" in rebound.error
+    assert "R3 → pr_opened" not in rebound.error
+    assert rebound.plan_set_authority_path == initial.plan_set_authority_path
+    assert rebound.plan_set_authority_digest == initial.plan_set_authority_digest
+
+
+@pytest.mark.parametrize("predecessor", ("parent", "prior"))
+@pytest.mark.asyncio
+async def test_rebind_cannot_drop_a_sealed_stage_obligation(
+    tmp_path: Path, predecessor: str
+) -> None:
+    part = _write_publication_part(tmp_path)
+    materializer = DefaultPlanSetMaterializer(_GitHub(fixture_dir=_PUBLICATION_FIXTURE))
+    initial = await materializer.bind(_publication_request(tmp_path, part, open_pr=True))
+    assert initial.success is True
+
+    part.write_text(
+        part.read_text(encoding="utf-8")
+        .replace(
+            "### Step 1.2: Validate R2\nAdd regression tests for R2.",
+            "### Step 1.2: Validate R2 and implement R4\n"
+            "Add regression tests for R2 and implement R4.",
+        )
+        .replace(
+            "| R4 | stage | pr_left_unmerged |",
+            "| R4 | owned | Step 1.2 |",
+        ),
+        encoding="utf-8",
+    )
+    if predecessor == "parent":
+        request = _publication_request(
+            tmp_path,
+            part,
+            issue_url="",
+            parent_authority_path=initial.plan_set_authority_path,
+            open_pr=True,
+        )
+    else:
+        request = _publication_request(
+            tmp_path,
+            part,
+            prior_authority_path=initial.plan_set_authority_path,
+            open_pr=True,
+        )
+
+    renewed = await materializer.bind(request)
+
+    assert renewed.success is False
+    assert renewed.reason is PlanSetRejectReason.COVERAGE_FAILED
+    assert "pr_left_unmerged was sealed earlier in this run" in renewed.coverage_gaps
+    assert renewed.plan_set_authority_path == initial.plan_set_authority_path
+    assert renewed.plan_set_authority_digest == initial.plan_set_authority_digest
+
+
+@pytest.mark.asyncio
+async def test_prior_authority_from_another_generation_is_rejected(tmp_path: Path) -> None:
+    part = _write_publication_part(tmp_path)
+    materializer = DefaultPlanSetMaterializer(_GitHub(fixture_dir=_PUBLICATION_FIXTURE))
+    foreign = await materializer.bind(
+        _publication_request(
+            tmp_path,
+            part,
+            execution_generation="other-generation",
+            open_pr=True,
+        )
+    )
+    assert foreign.success is True
+
+    rejected = await materializer.bind(
+        _publication_request(
+            tmp_path,
+            part,
+            prior_authority_path=foreign.plan_set_authority_path,
+            open_pr=True,
+        )
+    )
+
+    assert rejected.success is False
+    assert rejected.reason is PlanSetRejectReason.EXECUTION_GENERATION
+    assert rejected.plan_set_authority_path == ""
+
+
+def _edit_rebind_part(part: Path, case: str) -> None:
+    edits = {
+        "coverage": (("| R2 | owned | Step 1.2 |\n", ""),),
+        "continuity": (
+            (
+                "### Step 1.2: Validate R2\nAdd regression tests for R2.",
+                "### Step 1.2: Validate R2 and implement R4\n"
+                "Add regression tests for R2 and implement R4.",
+            ),
+            ("| R4 | stage | pr_left_unmerged |", "| R4 | owned | Step 1.2 |"),
+        ),
+        "artifact_write": (("# Publication-aware plan", "# Updated publication-aware plan"),),
+    }
+    content = part.read_text(encoding="utf-8")
+    for old, new in edits.get(case, ()):
+        content = content.replace(old, new)
+    part.write_text(content, encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("case", "expected_reason"),
+    (
+        ("no_parts", PlanSetRejectReason.NO_PARTS),
+        ("issue_fetch", PlanSetRejectReason.ISSUE_FETCH_FAILED),
+        ("part_read", None),
+        ("coverage", PlanSetRejectReason.COVERAGE_FAILED),
+        ("availability", PlanSetRejectReason.STAGE_OBLIGATION_UNAVAILABLE),
+        ("continuity", PlanSetRejectReason.COVERAGE_FAILED),
+        ("artifact_write", PlanSetRejectReason.INTERNAL),
+        ("caught_exception", PlanSetRejectReason.INTERNAL),
+    ),
+)
+@pytest.mark.asyncio
+async def test_failed_rebind_preserves_the_verified_predecessor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    case: str,
+    expected_reason: PlanSetRejectReason | None,
+) -> None:
+    part = _write_publication_part(tmp_path)
+    fixture_client = _GitHub(fixture_dir=_PUBLICATION_FIXTURE)
+    materializer = DefaultPlanSetMaterializer(fixture_client)
+    predecessor = await materializer.bind(_publication_request(tmp_path, part, open_pr=True))
+    assert predecessor.success is True
+    _edit_rebind_part(part, case)
+
+    issue_url = "owner/repo#1"
+    plan_parts_raw = str(part)
+    open_pr = True
+    if case == "no_parts":
+        plan_parts_raw = " \n"
+        issue_url = ""
+    elif case == "issue_fetch":
+        materializer = DefaultPlanSetMaterializer(
+            _GitHub(success=False, fixture_dir=_PUBLICATION_FIXTURE)
+        )
+    elif case == "part_read":
+        plan_parts_raw = str(tmp_path / "missing.md")
+        issue_url = ""
+    elif case == "availability":
+        open_pr = False
+    elif case == "caught_exception":
+
+        async def fail_bind(*_args: object, **_kwargs: object) -> PlanSetBindResult:
+            raise RuntimeError("injected bind failure")
+
+        monkeypatch.setattr(materializer, "_bind", fail_bind)
+    if case == "artifact_write":
+
+        def fail_write(*_args: object, **_kwargs: object) -> None:
+            raise OSError("injected artifact write failure")
+
+        monkeypatch.setattr(materializer_module, "write_canonical_versioned_json", fail_write)
+
+    request = _publication_request(
+        tmp_path,
+        part,
+        issue_url=issue_url,
+        prior_authority_path=predecessor.plan_set_authority_path,
+        open_pr=open_pr,
+    )
+    request = replace(request, plan_parts_raw=plan_parts_raw)
+
+    failed = await materializer.bind(request)
+
+    assert failed.success is False
+    assert failed.plan_set_authority_path == predecessor.plan_set_authority_path
+    assert failed.plan_set_authority_digest == predecessor.plan_set_authority_digest
+    if expected_reason is not None:
+        assert failed.reason is expected_reason
+
+
+@pytest.mark.asyncio
+async def test_failed_first_bind_has_no_authority_reference(tmp_path: Path) -> None:
+    result = await DefaultPlanSetMaterializer(_GitHub()).bind(
+        PlanSetBindRequest(
+            plan_parts_raw="",
+            allowed_root=tmp_path,
+            issue_url="",
+            parent_authority_path="",
+            seal=True,
+            step_name="bind",
+            execution_generation="generation",
+            kitchen_id="kitchen",
+            dispatch_id="",
+            binding_mode=PlanSetBindingMode.RECIPE,
+        )
+    )
+
+    assert result.success is False
+    assert result.reason is PlanSetRejectReason.NO_PARTS
+    assert result.plan_set_authority_path == ""
+    assert result.plan_set_authority_digest == ""
 
 
 @pytest.mark.asyncio

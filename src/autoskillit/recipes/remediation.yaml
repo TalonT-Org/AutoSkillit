@@ -189,6 +189,7 @@ delivery_segments:
   - implement
   - retry_worktree
   - check_changes
+  - verify_stage_obligations_no_changes
   - close_issue_no_changes
 - name: R4
   steps:
@@ -249,6 +250,7 @@ delivery_segments:
   - inter_part_push
   - next_or_done
   - check_has_commits
+  - verify_stage_obligations_already_done
   - close_issue_already_done
 - name: R12
   steps:
@@ -361,10 +363,12 @@ delivery_segments:
 - name: R29
   steps:
   - register_clone_unconfirmed
+  - verify_stage_obligations_unconfirmed
   - analyze_pipeline_health_unconfirmed
   - done_unconfirmed
   - release_issue_success
   - patch_token_summary
+  - verify_stage_obligations
   - release_audit_remediation_stuck
   - stop_audit_remediation_stuck
   - await_audit_decision
@@ -525,6 +529,9 @@ steps:
       plan_parts: ${{ context.plan_parts }}
       cwd: ${{ context.work_dir }}
       issue_url: ${{ inputs.issue_url }}
+      open_pr: ${{ inputs.open_pr }}
+      auto_merge: ${{ inputs.auto_merge }}
+      prior_authority_path: ${{ context.plan_set_authority_path }}
       seal: 'true'
       step_name: bind_plan_set
     capture:
@@ -539,6 +546,8 @@ steps:
       route: check_replan_iteration
     - route: release_issue_failure
     on_failure: release_issue_failure
+    optional_context_refs:
+    - plan_set_authority_path
     note: >-
       __RECIPE_NOTE_PLAN_PARTS_BINDING__
   check_replan_iteration:
@@ -610,6 +619,8 @@ steps:
     with:
       plan_parts: ${{ context.plan_set_parts }}
       cwd: ${{ context.work_dir }}
+      open_pr: ${{ inputs.open_pr }}
+      auto_merge: ${{ inputs.auto_merge }}
       parent_authority_path: ${{ context.plan_set_authority_path }}
       seal: 'true'
       step_name: renew_before_retry
@@ -654,6 +665,8 @@ steps:
     with:
       plan_parts: ${{ context.plan_set_parts }}
       cwd: ${{ context.work_dir }}
+      open_pr: ${{ inputs.open_pr }}
+      auto_merge: ${{ inputs.auto_merge }}
       parent_authority_path: ${{ context.plan_set_authority_path }}
       seal: 'true'
       step_name: renew_plan_set
@@ -750,8 +763,25 @@ steps:
       commit_count: ${{ result.commit_count }}
     on_result:
     - when: ${{ result.has_changes }} == false
-      route: close_issue_no_changes
+      route: verify_stage_obligations_no_changes
     - route: test
+    on_failure: release_issue_failure
+  verify_stage_obligations_no_changes:
+    tool: run_python
+    with:
+      callable: autoskillit.recipe._cmd_rpc.verify_stage_obligations
+      plan_set_authority_path: ${{ context.plan_set_authority_path }}
+      plan_set_authority_digest: ${{ context.plan_set_authority_digest }}
+      cwd: ${{ context.work_dir }}
+      base_branch: ${{ inputs.base_branch }}
+      pr_number: ${{ context.pr_number }}
+      step_name: verify_stage_obligations_no_changes
+    optional_context_refs:
+    - pr_number
+    on_result:
+    - when: ${{ result.success }} == true
+      route: close_issue_no_changes
+    - route: release_issue_failure
     on_failure: release_issue_failure
   close_issue_no_changes:
     tool: release_issue
@@ -1378,6 +1408,7 @@ steps:
       skill_command: /autoskillit:audit-impl
       skill_inputs:
         all_plan_paths: ${{ context.plan_parts }}
+        plan_set_authority_path: ${{ context.plan_set_authority_path }}
         deviation_manifest_path: ${{ context.deviation_manifest_path }}
         branch_name: ${{ context.branch_name }}
         base_branch: ${{ inputs.base_branch }}
@@ -1617,7 +1648,24 @@ steps:
     on_result:
     - when: ${{ result.has_commits }}
       route: push
-    - route: close_issue_already_done
+    - route: verify_stage_obligations_already_done
+    on_failure: release_issue_failure
+  verify_stage_obligations_already_done:
+    tool: run_python
+    with:
+      callable: autoskillit.recipe._cmd_rpc.verify_stage_obligations
+      plan_set_authority_path: ${{ context.plan_set_authority_path }}
+      plan_set_authority_digest: ${{ context.plan_set_authority_digest }}
+      cwd: ${{ context.work_dir }}
+      base_branch: ${{ inputs.base_branch }}
+      pr_number: ${{ context.pr_number }}
+      step_name: verify_stage_obligations_already_done
+    optional_context_refs:
+    - pr_number
+    on_result:
+    - when: ${{ result.success }} == true
+      route: close_issue_already_done
+    - route: release_issue_failure
     on_failure: release_issue_failure
   close_issue_already_done:
     tool: run_python
@@ -3071,9 +3119,26 @@ steps:
       clone_path: ${{ context.work_dir }}
       status: unconfirmed
       step_name: register_clone_unconfirmed
-    on_success: analyze_pipeline_health_unconfirmed
-    on_failure: analyze_pipeline_health_unconfirmed
+    on_success: verify_stage_obligations_unconfirmed
+    on_failure: verify_stage_obligations_unconfirmed
     note: 'Preserve the clone and in-progress issue label when a merge wait times out without confirmation.'
+  verify_stage_obligations_unconfirmed:
+    tool: run_python
+    with:
+      callable: autoskillit.recipe._cmd_rpc.verify_stage_obligations
+      plan_set_authority_path: ${{ context.plan_set_authority_path }}
+      plan_set_authority_digest: ${{ context.plan_set_authority_digest }}
+      cwd: ${{ context.work_dir }}
+      base_branch: ${{ inputs.base_branch }}
+      pr_number: ${{ context.pr_number }}
+      step_name: verify_stage_obligations_unconfirmed
+    optional_context_refs:
+    - pr_number
+    on_result:
+    - when: ${{ result.success }} == true
+      route: analyze_pipeline_health_unconfirmed
+    - route: analyze_pipeline_health_error
+    on_failure: analyze_pipeline_health_error
   analyze_pipeline_health_unconfirmed:
     tool: run_skill
     model: ''
@@ -3123,18 +3188,35 @@ steps:
     tool: run_python
     optional: true
     skip_when_false: inputs.open_pr
-    on_skip: register_clone_success
+    on_skip: verify_stage_obligations
     with:
       callable: autoskillit.smoke_utils.patch_pr_token_summary
       timeout: 60
       pr_url: ${{ context.pr_url }}
       cwd: ${{ context.work_dir }}
-    on_success: register_clone_success
-    on_failure: register_clone_success
+    on_success: verify_stage_obligations
+    on_failure: verify_stage_obligations
     note: 'Patches PR body with complete token summary; failures are logged but do
       not alter pipeline routing.
 
       '
+  verify_stage_obligations:
+    tool: run_python
+    with:
+      callable: autoskillit.recipe._cmd_rpc.verify_stage_obligations
+      plan_set_authority_path: ${{ context.plan_set_authority_path }}
+      plan_set_authority_digest: ${{ context.plan_set_authority_digest }}
+      cwd: ${{ context.work_dir }}
+      base_branch: ${{ inputs.base_branch }}
+      pr_number: ${{ context.pr_number }}
+      step_name: verify_stage_obligations
+    optional_context_refs:
+    - pr_number
+    on_result:
+    - when: ${{ result.success }} == true
+      route: register_clone_success
+    - route: release_issue_failure
+    on_failure: release_issue_failure
   release_audit_remediation_stuck:
     tool: register_clone_status
     with:

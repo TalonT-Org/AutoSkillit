@@ -5,12 +5,28 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
-__all__ = ["STEP_HEADING_RE", "extract_section", "parse_pipe_table", "split_table_row"]
+__all__ = [
+    "STEP_HEADING_RE",
+    "cites_requirement",
+    "extract_section",
+    "parse_pipe_table",
+    "split_table_row",
+]
 
 STEP_HEADING_RE = re.compile(
     r"^###\s+(Step\s+[1-9][0-9]*(?:\.[1-9][0-9]*)*)(?::[^\n]*)?$",
     re.MULTILINE,
 )
+
+
+def cites_requirement(text: str, requirement_id: str) -> bool:
+    return (
+        re.search(
+            rf"(?<![A-Za-z0-9_-]){re.escape(requirement_id)}(?![A-Za-z0-9_-])",
+            text,
+        )
+        is not None
+    )
 
 
 def extract_section(markdown: str, heading: str) -> str:

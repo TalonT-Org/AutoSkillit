@@ -112,6 +112,7 @@ Do not change any code.
   This token is MANDATORY — the pipeline cannot capture the output without it.
 - The solution must solve more than just the immediate issue
 - The plan set must cover every remediation item and every requirement item enumerated in the source issue; if an item cannot be delivered, stop and surface it — do not descope it in the plan. Each part declares exactly its owned or shared items in `## Issue Requirement Allocation`; never list sibling parts or paths.
+- An outcome a later recipe stage performs — opening the pull request, or leaving it unmerged — is allocated as `stage` with its obligation key, never to an implementation step; bind refuses one this run cannot perform.
 - Every new component, class, or function is wired into the call chain — nothing is created but left unconnected
 
 ## Context Limit Behavior
@@ -280,6 +281,13 @@ each part; the template below applies those rules.
 
 Sub-steps are further level-3 headings (`### Step 2.1: …`); an allocation row cites
 the sub-step key.
+
+Stage-owned outcomes are exempt from echoing into steps. They appear in the plan only as
+their allocation rows, not in the code Summary, Verification, or a Requirements Map. Preserve
+the original bound source snapshot and, in ENUMERATED mode, the source inventory's IDs and
+text. In UNENUMERATED and NO_ISSUE modes, keep planner-declared IDs on their stage rows
+without fabricating an enumerated source inventory. This code-step echo exemption must not
+delete the source obligation.
 
 **Plan structure:**
 ```markdown

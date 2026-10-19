@@ -25,7 +25,7 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 RECIPE_PATH = builtin_recipes_dir() / "implementation.yaml"
 _PRE_DELIVERY_STRUCTURE_SHA256 = (
-    "sha256:e40250e17a66baf20bb7146c73b4a92a2f7c6ece6c8244a156588e711a35d5c0"
+    "sha256:d6c9fff1a84fc6c6ed0863465fc2eed0afe462c5b917b23f328d789dfdf3ab66"
 )
 
 _CHECKPOINT_HANDLER_TABLE = {
@@ -556,9 +556,9 @@ def test_register_clone_already_done_routes_to_diagnostic(recipe) -> None:
 def test_register_clone_unconfirmed_routes_to_done_unconfirmed(recipe) -> None:
     """Unconfirmed clone registration must verify the PR before diagnostics."""
     step = recipe.steps["register_clone_unconfirmed"]
-    assert step.on_success == "verify_stage_obligations_unconfirmed"
-    assert step.on_failure == "verify_stage_obligations_unconfirmed"
-    gate = recipe.steps["verify_stage_obligations_unconfirmed"]
+    assert step.on_success == "pr_gate_unconfirmed"
+    assert step.on_failure == "pr_gate_unconfirmed"
+    gate = recipe.steps["pr_gate_unconfirmed"]
     assert gate.on_result is not None
     assert any(
         condition.route == "analyze_pipeline_health_unconfirmed"

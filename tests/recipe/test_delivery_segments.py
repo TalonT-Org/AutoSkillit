@@ -421,16 +421,16 @@ def test_registry_anchors_automatic_delivery_classification(
     no_change = next(
         edge
         for edge in check_changes_arms
-        if edge.target == "verify_stage_obligations_no_changes" and edge.condition is not None
+        if edge.target == "pr_gate_no_changes" and edge.condition is not None
     )
     fallback = next(
         edge for edge in check_changes_arms if edge.target == "test" and edge.condition is None
     )
     assert no_change.condition is not None and "result.has_changes" in no_change.condition
-    assert segment_index["verify_stage_obligations_no_changes"] == segment_index["check_changes"]
+    assert segment_index["pr_gate_no_changes"] == segment_index["check_changes"]
     assert segment_index["close_issue_no_changes"] == segment_index["check_changes"]
     segment_steps = projection.delivery_segments[segment_index["check_changes"]].ordered_step_names
-    assert segment_steps.index("verify_stage_obligations_no_changes") < segment_steps.index(
+    assert segment_steps.index("pr_gate_no_changes") < segment_steps.index(
         "close_issue_no_changes"
     )
     assert segment_index["test"] > segment_index["check_changes"]

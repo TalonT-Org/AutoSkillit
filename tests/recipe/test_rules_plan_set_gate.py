@@ -84,16 +84,16 @@ def test_rule_does_not_reject_out_of_scope_recipes(recipe_name: str) -> None:
 @pytest.mark.parametrize(
     ("recipe_name", "gate_name", "bypass_target"),
     [
-        ("implementation", "verify_stage_obligations", "register_clone_success"),
+        ("implementation", "pr_gate", "register_clone_success"),
         (
             "remediation",
-            "verify_stage_obligations_unconfirmed",
+            "pr_gate_unconfirmed",
             "analyze_pipeline_health_unconfirmed",
         ),
-        ("implementation", "verify_stage_obligations_no_changes", "close_issue_no_changes"),
+        ("implementation", "pr_gate_no_changes", "close_issue_no_changes"),
         (
             "implementation",
-            "verify_stage_obligations_already_done",
+            "pr_gate_already_done",
             "close_issue_already_done",
         ),
     ],
@@ -111,7 +111,7 @@ def test_rule_rejects_a_gate_deleted_from_a_success_path(
 
 def test_rule_rejects_gate_failure_routed_to_success() -> None:
     recipe = _load_recipe("implementation")
-    gate = _gate(recipe, "verify_stage_obligations")
+    gate = _gate(recipe, "pr_gate")
     assert gate.on_result is not None
     failure_arm = next(
         condition for condition in gate.on_result.conditions if condition.when is None
@@ -125,7 +125,7 @@ def test_rule_rejects_gate_failure_routed_to_success() -> None:
 
 def test_rule_rejects_skippable_gate() -> None:
     recipe = _load_recipe("implementation")
-    _gate(recipe, "verify_stage_obligations").skip_when_false = "inputs.open_pr"
+    _gate(recipe, "pr_gate").skip_when_false = "inputs.open_pr"
 
     findings = _rule_findings(recipe)
     assert findings

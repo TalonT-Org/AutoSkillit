@@ -22,7 +22,7 @@ RECIPE_PATH = (
     Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipes" / "remediation.yaml"
 )
 _PRE_DELIVERY_STRUCTURE_SHA256 = (
-    "sha256:e0c53c5b6f2bdf624a20ab04d8ea93f922f87fedb48ee49239ad30d19e513910"
+    "sha256:6b19d1acebd5f44f85f478cc3ca13045f29e156d85d7bead283860671cc0da86"
 )
 
 
@@ -478,9 +478,9 @@ def test_register_clone_already_done_routes_to_diagnostic(recipe) -> None:
 def test_register_clone_unconfirmed_routes_to_done_unconfirmed(recipe) -> None:
     """Unconfirmed clone registration must verify the PR before diagnostics."""
     step = recipe.steps["register_clone_unconfirmed"]
-    assert step.on_success == "verify_stage_obligations_unconfirmed"
-    assert step.on_failure == "verify_stage_obligations_unconfirmed"
-    gate = recipe.steps["verify_stage_obligations_unconfirmed"]
+    assert step.on_success == "pr_gate_unconfirmed"
+    assert step.on_failure == "pr_gate_unconfirmed"
+    gate = recipe.steps["pr_gate_unconfirmed"]
     assert gate.on_result is not None
     assert any(
         condition.route == "analyze_pipeline_health_unconfirmed"

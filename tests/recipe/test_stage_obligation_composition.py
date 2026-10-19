@@ -24,20 +24,20 @@ BIND_SITES = {
 }
 GATE_SITES = {
     "implementation": (
-        "verify_stage_obligations",
-        "verify_stage_obligations_unconfirmed",
-        "verify_stage_obligations_no_changes",
-        "verify_stage_obligations_already_done",
+        "pr_gate",
+        "pr_gate_unconfirmed",
+        "pr_gate_no_changes",
+        "pr_gate_already_done",
     ),
     "remediation": (
-        "verify_stage_obligations",
-        "verify_stage_obligations_unconfirmed",
-        "verify_stage_obligations_no_changes",
-        "verify_stage_obligations_already_done",
+        "pr_gate",
+        "pr_gate_unconfirmed",
+        "pr_gate_no_changes",
+        "pr_gate_already_done",
     ),
     "implementation-groups": (
-        "verify_stage_obligations",
-        "verify_stage_obligations_unconfirmed",
+        "pr_gate",
+        "pr_gate_unconfirmed",
     ),
 }
 SEALED_BIND = {
@@ -162,7 +162,7 @@ def test_open_pr_true_auto_merge_false_flow_crosses_the_gate_in_order(recipe_nam
         "compose_pr",
         "route_queue_mode",
         "patch_token_summary",
-        "verify_stage_obligations",
+        "pr_gate",
         "register_clone_success",
         "done",
     )
@@ -174,7 +174,7 @@ def test_open_pr_false_keeps_gates_and_has_no_success_bypass(recipe_name: str) -
     result, projection = _load_projection(recipe_name, {"open_pr": "false"})
     steps = {step.name: step for step in projection.ordered_steps}
     assert "compose_pr" not in steps
-    reachable_gates = set(GATE_SITES[recipe_name]) - {"verify_stage_obligations_unconfirmed"}
+    reachable_gates = set(GATE_SITES[recipe_name]) - {"pr_gate_unconfirmed"}
     assert reachable_gates <= set(steps)
     _assert_gates_dominate_success(result, projection, recipe_name, reachable_gates)
     primary_bind = steps[SEALED_BIND[recipe_name]]
@@ -214,10 +214,10 @@ def test_audit_impl_receives_the_bound_authority(recipe_name: str) -> None:
 
 def test_skip_guard_on_gate_still_fails_after_pruning_clears_true_guard(tmp_path: Path) -> None:
     source = (builtin_recipes_dir() / "implementation.yaml").read_text(encoding="utf-8")
-    original = "  verify_stage_obligations:\n    tool: run_python\n"
+    original = "  pr_gate:\n    tool: run_python\n"
     mutated = source.replace(
         original,
-        "  verify_stage_obligations:\n    skip_when_false: inputs.open_pr\n    tool: run_python\n",
+        "  pr_gate:\n    skip_when_false: inputs.open_pr\n    tool: run_python\n",
         1,
     )
     assert mutated != source

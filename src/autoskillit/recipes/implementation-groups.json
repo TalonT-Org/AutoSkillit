@@ -3190,11 +3190,11 @@
         "status": "unconfirmed",
         "step_name": "register_clone_unconfirmed"
       },
-      "on_success": "verify_stage_obligations_unconfirmed",
-      "on_failure": "verify_stage_obligations_unconfirmed",
+      "on_success": "pr_gate_unconfirmed",
+      "on_failure": "pr_gate_unconfirmed",
       "note": "Called when a merge-wait step times out before merge is confirmed. Does NOT call release_issue — the in-progress label stays on the issue so operators can see the PR is still actively queued. The clone is preserved (status: unconfirmed) for human inspection.\n"
     },
-    "verify_stage_obligations_unconfirmed": {
+    "pr_gate_unconfirmed": {
       "tool": "run_python",
       "with": {
         "callable": "autoskillit.recipe._cmd_rpc.verify_stage_obligations",
@@ -3203,7 +3203,7 @@
         "cwd": "${{ context.work_dir }}",
         "base_branch": "${{ inputs.base_branch }}",
         "pr_number": "${{ context.pr_number }}",
-        "step_name": "verify_stage_obligations_unconfirmed"
+        "step_name": "pr_gate_unconfirmed"
       },
       "optional_context_refs": [
         "pr_number"
@@ -3312,18 +3312,18 @@
       "tool": "run_python",
       "optional": true,
       "skip_when_false": "inputs.open_pr",
-      "on_skip": "verify_stage_obligations",
+      "on_skip": "pr_gate",
       "with": {
         "callable": "autoskillit.smoke_utils.patch_pr_token_summary",
         "timeout": 60,
         "pr_url": "${{ context.pr_url }}",
         "cwd": "${{ context.work_dir }}"
       },
-      "on_success": "verify_stage_obligations",
-      "on_failure": "verify_stage_obligations",
+      "on_success": "pr_gate",
+      "on_failure": "pr_gate",
       "note": "Patches PR body with complete token summary; failures are logged but do not alter pipeline routing.\n"
     },
-    "verify_stage_obligations": {
+    "pr_gate": {
       "tool": "run_python",
       "with": {
         "callable": "autoskillit.recipe._cmd_rpc.verify_stage_obligations",
@@ -3332,7 +3332,7 @@
         "cwd": "${{ context.work_dir }}",
         "base_branch": "${{ inputs.base_branch }}",
         "pr_number": "${{ context.pr_number }}",
-        "step_name": "verify_stage_obligations"
+        "step_name": "pr_gate"
       },
       "optional_context_refs": [
         "pr_number"

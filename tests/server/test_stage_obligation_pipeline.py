@@ -185,6 +185,6 @@ async def test_zero_change_gate_refuses_to_close_publication_obligation(
     assert "no pull request was published" in result["detail"]
     assert calls == []
     recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
-    routes = recipe.steps["verify_stage_obligations_no_changes"].on_result
+    routes = recipe.steps["pr_gate_no_changes"].on_result
     assert routes is not None
     assert next(c.route for c in routes.conditions if c.when is None) == "release_issue_failure"

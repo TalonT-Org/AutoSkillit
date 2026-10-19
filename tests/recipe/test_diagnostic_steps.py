@@ -90,7 +90,7 @@ def test_implementation_family_recipes_route_terminals_through_diagnostics() -> 
             next_step = cs.on_success
             assert next_step is not None, f"{name}: {step_name} has no on_success"
             if step_name == "register_clone_unconfirmed":
-                assert next_step == "verify_stage_obligations_unconfirmed"
+                assert next_step == "pr_gate_unconfirmed"
                 gate = steps[next_step]
                 assert gate.on_result is not None
                 diag_name = next(

@@ -637,7 +637,7 @@ class TestImplementationPipelineStructure:
         projection = result["_finalized_projection"]
         steps = {step.name for step in projection.ordered_steps}
         assert "compose_pr" not in steps
-        assert "verify_stage_obligations" in steps
+        assert "pr_gate" in steps
 
         graph: dict[str, list[str]] = {}
         for edge in projection.ordered_flow_edges:

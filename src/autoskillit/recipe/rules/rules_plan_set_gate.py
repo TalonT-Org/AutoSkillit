@@ -199,9 +199,6 @@ def _gate_non_success_targets(step: RecipeStep) -> set[str]:
     severity=Severity.ERROR,
 )
 def _check_stage_obligation_gate_dominance(ctx: ValidationContext) -> list[RuleFinding]:
-    """Stopping at gates leaves no success stop reachable from sealed binds
-    or gate failures.
-    """
     if not any(
         step.tool == "bind_plan_set" and "open_pr" in step.with_args
         for step in ctx.recipe.steps.values()

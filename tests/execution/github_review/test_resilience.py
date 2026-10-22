@@ -206,11 +206,6 @@ async def test_second_422_after_corrected_retry_terminates_without_third_attempt
         "create_review",
         "list_reviews",
     ]
-    assert (
-        gateway.call_trace.index("create_review")
-        < gateway.call_trace.index("list_reviews")
-        < gateway.call_trace.index("create_review", 1)
-    )
     attempts = GitHubReviewLedger(database_path).load_attempts(
         compute_review_operation_key(request)
     )

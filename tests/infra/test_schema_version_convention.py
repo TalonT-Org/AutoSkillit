@@ -276,10 +276,7 @@ class TestSchemaVersionConvention:
             path, _scope = key.rsplit("::", 1)
             basename = Path(path).name
             if basename in co_owned_paths:
-                assert isinstance(path, str) and path, (
-                    f"Co-owned allowlist entry has invalid path: {path!r}"
-                )
-                assert isinstance(_scope, str) and _scope
+                assert _scope, f"Co-owned allowlist entry has empty scope: {key!r}"
 
     def test_allowlist_includes_list_payloads_as_documented(self):
         """List-payload sites are included since the AST scanner can't distinguish return types."""

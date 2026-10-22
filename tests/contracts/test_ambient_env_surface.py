@@ -38,9 +38,9 @@ from tests.arch._helpers import SRC_ROOT
 pytestmark = [pytest.mark.small]
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def cleared_ambient_env_scan_caches() -> Iterator[None]:
-    """Clear ambient-environment and scope caches around each requesting test."""
+    """Clear ambient-environment and scope caches around each test."""
     ambient_env_surface._cached_production_env_read_surface.cache_clear()
     _cached_ambient_env_marker_names.cache_clear()
     _scope_owners.cache_clear()

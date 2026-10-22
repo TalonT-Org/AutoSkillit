@@ -1,4 +1,4 @@
-"""Shared AST helpers for call-site extraction tests."""
+"""Shared AST helpers for call-site extraction tests across test packages."""
 
 from __future__ import annotations
 

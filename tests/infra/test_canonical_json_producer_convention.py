@@ -20,7 +20,7 @@ from typing import NamedTuple
 
 import pytest
 
-from tests.contracts._ast_helpers import MODULE_SCOPE, call_name, scope_qualnames
+from tests._ast_helpers import MODULE_SCOPE, call_name, scope_qualnames
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 

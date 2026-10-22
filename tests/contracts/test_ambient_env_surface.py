@@ -32,8 +32,8 @@ from tests._ambient_env_surface import (
     production_env_read_surface,
     production_env_write_surface,
 )
+from tests._ast_helpers import MODULE_SCOPE, scope_qualnames
 from tests.arch._helpers import SRC_ROOT
-from tests.contracts._ast_helpers import MODULE_SCOPE, scope_qualnames
 
 pytestmark = [pytest.mark.small]
 

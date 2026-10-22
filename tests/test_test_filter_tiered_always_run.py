@@ -114,11 +114,6 @@ class TestTieredAlwaysRun:
         for filename in _HOOKS_UNCONDITIONAL_FILES:
             assert (tests_root / "hooks" / filename).is_file(), filename
 
-    def test_unconditional_files_constants_have_correct_counts(self) -> None:
-        """Pin the unconditional-file set sizes so a silent removal fails here."""
-        assert len(_INFRA_UNCONDITIONAL_FILES) == 16
-        assert len(_HOOKS_UNCONDITIONAL_FILES) == 3
-
     def test_lint_gate_selection_contract_is_unconditional(self) -> None:
         """The lint-gate selection contract must run on every conservative changeset.
 

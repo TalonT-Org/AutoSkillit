@@ -472,14 +472,6 @@ def test_every_forwarding_site_is_declared() -> None:
     assert not problems, f"FORWARDING_SITES registry mismatch: {problems}"
 
 
-def test_no_orphan_forwarding_sites() -> None:
-    surface = production_env_read_surface(SRC_ROOT)
-    live = Counter(_site_key(site, SRC_ROOT) for site in surface.forwarding_sites)
-    expected = {key: 1 for key in FORWARDING_SITES}
-    problems = _site_registry_problems(live, expected)
-    assert not problems, f"FORWARDING_SITES registry mismatch: {problems}"
-
-
 def test_every_unresolved_read_is_declared() -> None:
     surface = production_env_read_surface(SRC_ROOT)
     live = Counter(_site_key(site, SRC_ROOT) for site in surface.unresolved)
@@ -487,14 +479,6 @@ def test_every_unresolved_read_is_declared() -> None:
     problems = _site_registry_problems(live, expected)
     assert set(DYNAMIC_READ_EXEMPTION_COUNTS) <= set(DYNAMIC_READ_EXEMPTIONS)
     assert all(count >= 2 for count in DYNAMIC_READ_EXEMPTION_COUNTS.values())
-    assert not problems, f"DYNAMIC_READ_EXEMPTIONS registry mismatch: {problems}"
-
-
-def test_no_orphan_dynamic_read_exemptions() -> None:
-    surface = production_env_read_surface(SRC_ROOT)
-    live = Counter(_site_key(site, SRC_ROOT) for site in surface.unresolved)
-    expected = {key: DYNAMIC_READ_EXEMPTION_COUNTS.get(key, 1) for key in DYNAMIC_READ_EXEMPTIONS}
-    problems = _site_registry_problems(live, expected)
     assert not problems, f"DYNAMIC_READ_EXEMPTIONS registry mismatch: {problems}"
 
 

@@ -49,13 +49,13 @@ import sys
 from pathlib import Path
 
 args = sys.argv[1:]
-with Path(os.environ["FAKE_GH_CALL_LOG"]).open("a") as log:
+with Path(os.environ["FAKE_GH_CALL_LOG"]).open("a", encoding="utf-8") as log:
     log.write(json.dumps(args) + "\n")
 
 if args[:2] == ["pr", "create"]:
     counter = Path(os.environ["FAKE_GH_ATTEMPT_FILE"])
-    attempt = int(counter.read_text()) + 1
-    counter.write_text(str(attempt))
+    attempt = int(counter.read_text(encoding="utf-8")) + 1
+    counter.write_text(str(attempt), encoding="utf-8")
     for field, stream in (("STDOUT", sys.stdout), ("STDERR", sys.stderr)):
         value = os.environ.get(f"FAKE_GH_CREATE_{attempt}_{field}", "")
         if value:
@@ -70,7 +70,7 @@ def option(*names, default=None):
     return default
 
 
-prs = json.loads(Path(os.environ["FAKE_GH_PRS"]).read_text())
+prs = json.loads(Path(os.environ["FAKE_GH_PRS"]).read_text(encoding="utf-8"))
 if args[:2] == ["pr", "list"]:
     head, base = option("--head"), option("--base")
     state = option("--state", default="open")
@@ -219,8 +219,8 @@ def _run_step5(
     )
     return (
         proc,
-        int(counter.read_text()),
-        [json.loads(line) for line in call_log.read_text().splitlines()],
+        int(counter.read_text(encoding="utf-8")),
+        [json.loads(line) for line in call_log.read_text(encoding="utf-8").splitlines()],
     )
 
 

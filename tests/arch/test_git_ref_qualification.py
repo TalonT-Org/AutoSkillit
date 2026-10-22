@@ -15,6 +15,7 @@ from typing import Final
 
 import pytest
 
+from tests._ast_helpers import MODULE_SCOPE, scope_qualnames
 from tests.arch._deferred_debt import (
     TrackedDeferral,
     assert_deferrals_have_regression_tests,
@@ -320,9 +321,9 @@ def _is_string_join_call(node: ast.Call) -> bool:
 
 
 class _GitRefCollector(ast.NodeVisitor):
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str, tree: ast.AST) -> None:
         self._path = path
-        self._functions: list[str] = []
+        self._scope_names = scope_qualnames(tree)
         self._assignments: list[dict[str, ast.expr | None]] = [{}]
         self.sites: list[_GitRefSite] = []
 
@@ -330,29 +331,14 @@ class _GitRefCollector(ast.NodeVisitor):
     def _scope(self) -> dict[str, ast.expr | None]:
         return self._assignments[-1]
 
-    @property
-    def _function(self) -> str:
-        return ".".join(self._functions) or "<module>"
-
     def _visit_scope(self, node: ast.AST) -> None:
         self._assignments.append({})
         self.generic_visit(node)
         self._assignments.pop()
 
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        self._functions.append(node.name)
-        self._visit_scope(node)
-        self._functions.pop()
-
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-        self._functions.append(node.name)
-        self._visit_scope(node)
-        self._functions.pop()
-
-    def visit_ClassDef(self, node: ast.ClassDef) -> None:
-        self._functions.append(node.name)
-        self._visit_scope(node)
-        self._functions.pop()
+    visit_FunctionDef = _visit_scope
+    visit_AsyncFunctionDef = _visit_scope
+    visit_ClassDef = _visit_scope
 
     def visit_DictComp(self, node: ast.DictComp) -> None:
         self._visit_scope(node)
@@ -495,7 +481,7 @@ class _GitRefCollector(ast.NodeVisitor):
                 self.sites.append(
                     _GitRefSite(
                         path=self._path,
-                        function=self._function,
+                        function=self._scope_names[call],
                         lineno=getattr(argument, "lineno", call.lineno),
                         subcommand=subcommand,
                         classification=classification,
@@ -527,7 +513,7 @@ class _GitRefCollector(ast.NodeVisitor):
         self.sites.append(
             _GitRefSite(
                 path=self._path,
-                function=self._function,
+                function=self._scope_names[call],
                 lineno=call.lineno,
                 subcommand=subcommand,
                 classification="UNRESOLVABLE",
@@ -536,7 +522,7 @@ class _GitRefCollector(ast.NodeVisitor):
 
 
 def _scan_tree(tree: ast.AST, path: str) -> tuple[_GitRefSite, ...]:
-    collector = _GitRefCollector(path)
+    collector = _GitRefCollector(path, tree)
     collector.visit(tree)
     return tuple(collector.sites)
 
@@ -770,7 +756,7 @@ def test_same_named_methods_in_different_classes_have_distinct_keys() -> None:
 
 
 def test_missing_expected_site_is_caught() -> None:
-    observed = (("synthetic.py", "<module>", "diff", "BARE"),)
+    observed = (("synthetic.py", MODULE_SCOPE, "diff", "BARE"),)
     with pytest.raises(AssertionError):
         _assert_inventory_matches(observed, ())
     with pytest.raises(AssertionError):

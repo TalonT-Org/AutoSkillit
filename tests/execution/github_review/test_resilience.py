@@ -483,6 +483,56 @@ async def test_crash_before_reduced_retry_claim_resumes_persisted_intent(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "reviewer,resumed_reviewer",
+    [("reviewer", "pull-author"), ("pull-author", "reviewer")],
+)
+async def test_resumed_retry_rejects_changed_author_event(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    reviewer: str,
+    resumed_reviewer: str,
+) -> None:
+    request = _request(
+        tmp_path,
+        event="APPROVE",
+        comments=(
+            GitHubReviewComment(path="src/a.py", line=10, body="Reject A"),
+            GitHubReviewComment(path="src/b.py", line=20, body="Keep B"),
+        ),
+    )
+    database_path = tmp_path / "ledger.sqlite3"
+    clock = ManualClock()
+    gateway = StatefulReviewGateway(
+        clock=clock,
+        authenticated_login=reviewer,
+        pr_author_login="pull-author",
+        outcomes=[CreateOutcome(422, data=_validation_error(0))],
+    )
+    poster = _poster(database_path, gateway, clock)
+
+    def crash_after_retry_is_persisted(*, operation_key: str, attempt_number: int) -> bool:
+        raise RuntimeError("crash after retry scheduling")
+
+    monkeypatch.setattr(poster.ledger, "claim_retry_attempt", crash_after_retry_is_persisted)
+    interrupted = await poster.post(request)
+    assert interrupted.state is ReviewOperationState.AMBIGUOUS
+    assert GitHubReviewLedger(database_path).load_attempts(interrupted.operation_key)[
+        -1
+    ].state == (ReviewOperationState.RETRY_PENDING.value)
+
+    monkeypatch.setattr(gateway, "authenticated_login", resumed_reviewer)
+    recovered = await _poster(database_path, gateway, clock).post(request)
+
+    assert recovered.state is ReviewOperationState.TERMINAL
+    assert "current reviewer identity" in recovered.error
+    assert len(gateway.create_calls) == 1
+    attempts = GitHubReviewLedger(database_path).load_attempts(interrupted.operation_key)
+    assert len(attempts) == 2
+    assert attempts[-1].state == ReviewOperationState.TERMINAL.value
+
+
+@pytest.mark.anyio
 async def test_release_failure_after_reduced_retry_preserves_retry_intent(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

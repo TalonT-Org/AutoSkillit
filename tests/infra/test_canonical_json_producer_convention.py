@@ -83,12 +83,11 @@ def _find_function_by_name(
 
 def _scan_child_tool_authority_producer_sites() -> set[tuple[str, int, str]]:
     """Find authority construction or canonicalization in child-facing MCP tools."""
-    repo_root = Path(__file__).resolve().parents[2]
-    tools_root = repo_root / "src" / "autoskillit" / "server" / "tools"
+    tools_root = _SRC_ROOT / "server" / "tools"
     sites: set[tuple[str, int, str]] = set()
     for source_path in tools_root.glob("tools_*.py"):
         tree = ast.parse(source_path.read_text(), filename=str(source_path))
-        relative_path = str(source_path.relative_to(repo_root))
+        relative_path = str(source_path.relative_to(_REPO_ROOT))
         for node in ast.walk(tree):
             if isinstance(node, ast.Call):
                 func = node.func
@@ -321,13 +320,12 @@ class TestCanonicalJsonProducerConvention:
 
     def test_non_canonical_exceptions_still_resolve_to_non_canonical_reads(self):
         """Each exception scope has non-strict decode calls and a reason."""
-        repo_root = Path(__file__).resolve().parents[2]
         sites = Counter()
         exception_paths = sorted(
             {path for (path, _qualname), _reason in _NON_CANONICAL_JSON_EXCEPTIONS.values()}
         )
         for relative_path in exception_paths:
-            source_path = repo_root / relative_path
+            source_path = _REPO_ROOT / relative_path
             tree = ast.parse(source_path.read_text(), filename=str(source_path))
             sites.update(_decode_call_sites(tree, relative_path))
         problems = _non_canonical_exception_problems(_NON_CANONICAL_JSON_EXCEPTIONS, sites)

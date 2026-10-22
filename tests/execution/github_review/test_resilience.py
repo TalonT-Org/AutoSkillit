@@ -512,9 +512,10 @@ async def test_resumed_retry_rejects_changed_author_event(
     monkeypatch.setattr(poster.ledger, "claim_retry_attempt", crash_after_retry_is_persisted)
     interrupted = await poster.post(request)
     assert interrupted.state is ReviewOperationState.AMBIGUOUS
-    assert GitHubReviewLedger(database_path).load_attempts(interrupted.operation_key)[
-        -1
-    ].state == (ReviewOperationState.RETRY_PENDING.value)
+    operation_key = compute_review_operation_key(request)
+    assert GitHubReviewLedger(database_path).load_attempts(operation_key)[-1].state == (
+        ReviewOperationState.RETRY_PENDING.value
+    )
 
     monkeypatch.setattr(gateway, "authenticated_login", resumed_reviewer)
     recovered = await _poster(database_path, gateway, clock).post(request)
@@ -522,7 +523,7 @@ async def test_resumed_retry_rejects_changed_author_event(
     assert recovered.state is ReviewOperationState.TERMINAL
     assert "current reviewer identity" in recovered.error
     assert len(gateway.create_calls) == 1
-    attempts = GitHubReviewLedger(database_path).load_attempts(interrupted.operation_key)
+    attempts = GitHubReviewLedger(database_path).load_attempts(operation_key)
     assert len(attempts) == 2
     assert attempts[-1].state == ReviewOperationState.TERMINAL.value
 

@@ -1,8 +1,8 @@
-"""Selection contract: an infra or hooks test that scans the whole source package reads
+"""Selection contract: an infra or hooks test that scans the source package or hooks reads
 code by path, so no import edge selects it; it must be named in the matching
-unconditional set. Detects `.rglob` on a `Path(__file__)`-rooted chain, directly or via
-up to four name bindings. Conservative syntax matching may over-select fixture roots or
-names rebound in another scope.
+unconditional set. Detects `.rglob` on an imported HOOKS_DIR or a `Path(__file__)`-rooted
+chain, directly or via up to four name bindings. Conservative syntax matching may
+over-select fixture roots or names rebound in another scope.
 """
 
 from __future__ import annotations
@@ -61,7 +61,9 @@ def _receiver_forms(receiver: ast.expr, bindings: dict[str, list[ast.expr]]) -> 
     return forms
 
 
-def _is_package_root(expression: ast.expr) -> bool:
+def _is_package_root(expression: ast.expr, hook_root_names: set[str]) -> bool:
+    if isinstance(expression, ast.Name) and expression.id in hook_root_names:
+        return True
     suffix: list[str] = []
     base = expression
     while isinstance(base, ast.BinOp) and isinstance(base.op, ast.Div):
@@ -71,18 +73,32 @@ def _is_package_root(expression: ast.expr) -> bool:
         base = base.left
     return any(
         isinstance(node, ast.Name) and node.id == "__file__" for node in ast.walk(base)
-    ) and tuple(reversed(suffix)) in {("src",), ("src", "autoskillit")}
+    ) and tuple(reversed(suffix)) in {
+        ("src",),
+        ("src", "autoskillit"),
+        ("src", "autoskillit", "hooks"),
+    }
 
 
 def _root_scan_lines(tree: ast.AST) -> list[int]:
     bindings = _bindings(tree)
+    hook_root_names = {
+        alias.asname or alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module == "autoskillit.hook_registry"
+        for alias in node.names
+        if alias.name == "HOOKS_DIR"
+    }
     lines: list[int] = []
     for call in ast.walk(tree):
         if (
             isinstance(call, ast.Call)
             and isinstance(call.func, ast.Attribute)
             and call.func.attr == "rglob"
-            and any(_is_package_root(form) for form in _receiver_forms(call.func.value, bindings))
+            and any(
+                _is_package_root(form, hook_root_names)
+                for form in _receiver_forms(call.func.value, bindings)
+            )
         ):
             lines.append(call.lineno)
     return sorted(lines)
@@ -136,6 +152,23 @@ def _root_scan_lines(tree: ast.AST) -> list[int]:
             from pathlib import Path
             SRC = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
             (SRC / "hooks").rglob("*.py")
+            """,
+            1,
+            id="hooks-source-root",
+        ),
+        pytest.param(
+            """
+            from autoskillit.hook_registry import HOOKS_DIR as hooks_root
+            hooks_root.rglob("*.py")
+            """,
+            1,
+            id="imported-hooks-root",
+        ),
+        pytest.param(
+            """
+            from pathlib import Path
+            SRC = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
+            (SRC / "server").rglob("*.py")
             """,
             0,
             id="non-root-subdirectory",
@@ -208,4 +241,5 @@ def test_infra_and_hooks_source_scanners_are_unconditional() -> None:
         "test_plugin_source_ratchets.py",
     }
     assert required_infra_scanners <= scanner_names["infra"]
+    assert "test_hook_registration_coverage.py" in scanner_names["hooks"]
     assert not violations, "\n".join(violations)

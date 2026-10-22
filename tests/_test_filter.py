@@ -227,6 +227,8 @@ _HOOKS_UNCONDITIONAL_FILES: frozenset[str] = frozenset(
         "test_hook_executability.py",
         "test_hook_registration_coverage.py",
         "test_hook_registry.py",
+        "test_hook_scope_authority.py",
+        "test_join_enforcement_wiring.py",
     }
 )
 

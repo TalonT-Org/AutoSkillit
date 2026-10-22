@@ -188,7 +188,7 @@ class DefaultGitHubReviewPoster:
             authenticated_login=authenticated_login,
             pr_author_login=pr_author_login,
         )
-        _poster_retry.attempt_material(
+        prepared_material = _poster_retry.attempt_material(
             request=request,
             operation_key=operation_key,
             findings=findings,
@@ -246,6 +246,7 @@ class DefaultGitHubReviewPoster:
             attempt_number=1,
             omitted=omitted,
             authenticated_login=authenticated_login,
+            prepared_material=prepared_material,
         )
         return replace(result, planned_comment_count=len(findings))
 
@@ -267,13 +268,17 @@ class DefaultGitHubReviewPoster:
         omitted: tuple[GitHubReviewFindingDisposition, ...],
         authenticated_login: str,
         resume_pending: bool = False,
+        prepared_material: tuple[dict[str, Any], bytes, str] | None = None,
     ) -> GitHubReviewPostResult:
-        payload, payload_json, attempt_digest = _poster_retry.attempt_material(
-            request=request,
-            operation_key=operation_key,
-            findings=findings,
-            omitted=omitted,
-            effective_event=effective_event,
+        payload, payload_json, attempt_digest = (
+            prepared_material
+            or _poster_retry.attempt_material(
+                request=request,
+                operation_key=operation_key,
+                findings=findings,
+                omitted=omitted,
+                effective_event=effective_event,
+            )
         )
         attempt = self.ledger.begin_attempt(
             operation_key=operation_key,

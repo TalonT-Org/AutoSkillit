@@ -1820,7 +1820,7 @@
     "extract_pr_number": {
       "tool": "run_cmd",
       "with": {
-        "cmd": "gh pr view '${{ context.merge_target }}' --json number -q .number",
+        "cmd": "gh pr view '${{ context.pr_url }}' --json number -q .number",
         "cwd": "${{ context.work_dir }}",
         "step_name": "extract_pr_number"
       },

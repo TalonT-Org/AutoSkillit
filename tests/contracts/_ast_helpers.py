@@ -7,6 +7,8 @@ from collections import Counter
 from collections.abc import Iterable
 from pathlib import Path
 
+MODULE_SCOPE = "<module>"
+
 
 def call_name(node: ast.Call) -> str | None:
     """Return the dotted tail name for one ``ast.Call`` node (Name or Attribute)."""
@@ -15,6 +17,27 @@ def call_name(node: ast.Call) -> str | None:
     if isinstance(node.func, ast.Attribute):
         return node.func.attr
     return None
+
+
+def scope_qualnames(tree: ast.AST) -> dict[ast.AST, str]:
+    """Map nodes to their enclosing named-definition AST chain.
+
+    Scopes are ``ClassDef``/``FunctionDef``/``AsyncFunctionDef`` nodes joined with ``."``
+    (``Outer.method``); a def or class node maps to its own qualname, and nodes outside
+    every def and class map to ``MODULE_SCOPE``. Definition headers inherit that
+    definition's key, including decorators, defaults, annotations and class bases.
+    This describes AST ancestry, not Python execution scopes. Keys omit runtime
+    ``__qualname__``'s ``<locals>`` component: a nested function is ``outer.inner``.
+    """
+    owners: dict[ast.AST, str] = {}
+    stack: list[tuple[ast.AST, str]] = [(tree, MODULE_SCOPE)]
+    while stack:
+        node, scope = stack.pop()
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            scope = node.name if scope == MODULE_SCOPE else f"{scope}.{node.name}"
+        owners[node] = scope
+        stack.extend((child, scope) for child in ast.iter_child_nodes(node))
+    return owners
 
 
 def callers_by_function(
@@ -59,4 +82,10 @@ def count_callers(src_root: Path, symbol: str) -> int:
     return sum(callers_by_function(src_root, symbol=symbol).values())
 
 
-__all__: Iterable[str] = ("call_name", "callers_by_function", "count_callers")
+__all__: Iterable[str] = (
+    "MODULE_SCOPE",
+    "call_name",
+    "callers_by_function",
+    "count_callers",
+    "scope_qualnames",
+)

@@ -14,8 +14,9 @@ subsumes the legacy ``_clear_private_env`` fixture's two source sets (V4).
 from __future__ import annotations
 
 import ast
-from collections.abc import Iterator
-from functools import lru_cache
+from collections import Counter
+from collections.abc import Iterator, Mapping
+from functools import cache, lru_cache
 from pathlib import Path
 
 import pytest
@@ -25,26 +26,81 @@ from autoskillit.execution.runtime.commands import _HEADLESS_EXCLUSIVE_VARS
 from tests import _ambient_env_surface as ambient_env_surface
 from tests._ambient_env_surface import (
     AMBIENT_ENV_DISPOSITIONS,
+    DYNAMIC_READ_EXEMPTION_COUNTS,
     DYNAMIC_READ_EXEMPTIONS,
     FORWARDING_SITES,
     production_env_read_surface,
     production_env_write_surface,
 )
+from tests._ast_helpers import MODULE_SCOPE, count_differences, scope_qualnames
 from tests.arch._helpers import SRC_ROOT
 
 pytestmark = [pytest.mark.small]
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def cleared_ambient_env_scan_caches() -> Iterator[None]:
-    """Clear both ambient-environment scan caches around each requesting test."""
+    """Clear ambient-environment and scope caches around each test."""
     ambient_env_surface._cached_production_env_read_surface.cache_clear()
     _cached_ambient_env_marker_names.cache_clear()
+    _scope_owners.cache_clear()
     try:
         yield
     finally:
         ambient_env_surface._cached_production_env_read_surface.cache_clear()
         _cached_ambient_env_marker_names.cache_clear()
+        _scope_owners.cache_clear()
+
+
+@cache
+def _scope_owners(root: Path, file: str) -> dict[ast.AST, str]:
+    path = root / file
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=file)
+    return scope_qualnames(tree)
+
+
+def _site_scope(file: str, line: int, src_root: Path) -> str:
+    candidates: list[tuple[int, str]] = []
+    for node, scope in _scope_owners(src_root, file).items():
+        if not isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        start = min([node.lineno, *(decorator.lineno for decorator in node.decorator_list)])
+        end = node.end_lineno if node.end_lineno is not None else node.lineno
+        if start <= line <= end:
+            candidates.append((scope.count("."), scope))
+    if not candidates:
+        return MODULE_SCOPE
+    return max(candidates, key=lambda candidate: candidate[0])[1]
+
+
+def _site_key(
+    record: ambient_env_surface.UnresolvedRead | ambient_env_surface.ForwardingSite,
+    src_root: Path,
+) -> str:
+    return f"{record.file}::{_site_scope(record.file, record.line, src_root)}"
+
+
+def _site_registry_problems(live: Counter[str], expected: Mapping[str, int]) -> list[str]:
+    problems = [
+        f"{key}: count must be at least 1 (got {count})"
+        for key, count in expected.items()
+        if count < 1
+    ]
+    for key, expected_count, live_count in count_differences(expected, live):
+        if key in expected and expected_count < 1:
+            continue
+        if live_count > expected_count:
+            problems.append(
+                f"{key}: undeclared count {live_count} exceeds expected {expected_count}; "
+                "add the key or raise its count with justification"
+            )
+        elif live_count < expected_count:
+            problems.append(
+                f"{key}: stale count {live_count} is below expected {expected_count}; "
+                "if moved or renamed, update the key; "
+                "if removed, delete the entry or lower its count"
+            )
+    return sorted(problems)
 
 
 def test_production_read_surface_caches_only_canonical_root(
@@ -119,6 +175,78 @@ def test_scanner_reports_unresolved_dynamic_reads(tmp_path: Path) -> None:
     assert matches, surface.unresolved
     assert matches[0].line == 5
     assert matches[0].expression == "some_runtime_name"
+
+
+def test_registry_key_survives_line_shift(
+    tmp_path: Path,
+    cleared_ambient_env_scan_caches: None,
+) -> None:
+    source = "import os\n\n\ndef read(name: str) -> str | None:\n    return os.environ.get(name)\n"
+    original_root = tmp_path / "original"
+    shifted_root = tmp_path / "shifted"
+    original_root.mkdir()
+    shifted_root.mkdir()
+    (original_root / "synthetic_shift.py").write_text(source, encoding="utf-8")
+    (shifted_root / "synthetic_shift.py").write_text("\n" * 30 + source, encoding="utf-8")
+
+    original = production_env_read_surface(original_root).unresolved[0]
+    shifted = production_env_read_surface(shifted_root).unresolved[0]
+
+    assert _site_key(original, original_root) == "synthetic_shift.py::read"
+    assert shifted.line == original.line + 30
+    assert _site_key(shifted, shifted_root) == _site_key(original, original_root)
+
+
+def test_site_scope_is_class_qualified(
+    tmp_path: Path,
+    cleared_ambient_env_scan_caches: None,
+) -> None:
+    source = (
+        "import os\nimport subprocess\n\n"
+        "def decorate(value: object) -> object:\n    return value\n\n"
+        "class Runner:\n"
+        "    @decorate(os.getenv(env_name))\n"
+        "    def spawn(self) -> None:\n"
+        '        subprocess.run(["true"], env=os.environ)\n'
+    )
+    (tmp_path / "synthetic_fw.py").write_text(source, encoding="utf-8")
+    surface = production_env_read_surface(tmp_path)
+    forwarding = [site for site in surface.forwarding_sites if site.file == "synthetic_fw.py"]
+    unresolved = [site for site in surface.unresolved if site.file == "synthetic_fw.py"]
+
+    assert forwarding
+    assert unresolved
+    assert _site_key(forwarding[0], tmp_path) == "synthetic_fw.py::Runner.spawn"
+    assert _site_key(unresolved[0], tmp_path) == "synthetic_fw.py::Runner.spawn"
+
+
+@pytest.mark.parametrize(
+    ("live_items", "expected", "expected_key", "expected_message"),
+    [
+        ({"a": 2}, {"a": 1}, "a", "undeclared"),
+        ({"a": 1, "b": 1}, {"a": 1}, "b", "undeclared"),
+        ({"a": 1}, {"a": 1, "b": 1}, "b", "stale"),
+        ({"a": 1}, {"a": 2}, "a", "stale"),
+        ({}, {"a": 0}, "a", "count must be at least 1"),
+        ({}, {"a": -1}, "a", "count must be at least 1"),
+        ({"a": 1}, {"a": 1}, "", ""),
+    ],
+    ids=["extra-count", "extra-key", "missing-key", "missing-count", "zero", "negative", "equal"],
+)
+def test_site_registry_diff_is_per_key_and_counted(
+    live_items: dict[str, int],
+    expected: Mapping[str, int],
+    expected_key: str,
+    expected_message: str,
+) -> None:
+    problems = _site_registry_problems(Counter(live_items), expected)
+
+    if not expected_message:
+        assert problems == []
+        return
+    assert len(problems) == 1
+    assert expected_key in problems[0]
+    assert expected_message in problems[0]
 
 
 _KEYWORD_ONLY_READ_CASES: tuple[tuple[str, str, str], ...] = (
@@ -338,36 +466,27 @@ def test_scanner_reports_wholesale_forwarding_sites(
 
 def test_every_forwarding_site_is_declared() -> None:
     surface = production_env_read_surface(SRC_ROOT)
-    undeclared = {f"{s.file}:{s.line}" for s in surface.forwarding_sites} - set(FORWARDING_SITES)
-    assert not undeclared, (
-        f"Forwarding sites missing a FORWARDING_SITES entry: {sorted(undeclared)}"
-    )
-
-
-def test_no_orphan_forwarding_sites() -> None:
-    surface = production_env_read_surface(SRC_ROOT)
-    live = {f"{s.file}:{s.line}" for s in surface.forwarding_sites}
-    orphans = set(FORWARDING_SITES) - live
-    assert not orphans, (
-        f"Stale FORWARDING_SITES entries no longer in the surface: {sorted(orphans)}"
-    )
+    live = Counter(_site_key(site, SRC_ROOT) for site in surface.forwarding_sites)
+    expected = {key: 1 for key in FORWARDING_SITES}
+    problems = _site_registry_problems(live, expected)
+    assert not problems, f"FORWARDING_SITES registry mismatch: {problems}"
 
 
 def test_every_unresolved_read_is_declared() -> None:
     surface = production_env_read_surface(SRC_ROOT)
-    undeclared = {f"{u.file}:{u.line}" for u in surface.unresolved} - set(DYNAMIC_READ_EXEMPTIONS)
-    assert not undeclared, (
-        f"Unresolved dynamic reads missing a DYNAMIC_READ_EXEMPTIONS entry: {sorted(undeclared)}"
-    )
+    live = Counter(_site_key(site, SRC_ROOT) for site in surface.unresolved)
+    expected = {key: DYNAMIC_READ_EXEMPTION_COUNTS.get(key, 1) for key in DYNAMIC_READ_EXEMPTIONS}
+    problems = _site_registry_problems(live, expected)
+    assert not problems, f"DYNAMIC_READ_EXEMPTIONS registry mismatch: {problems}"
 
 
-def test_no_orphan_dynamic_read_exemptions() -> None:
-    surface = production_env_read_surface(SRC_ROOT)
-    live = {f"{u.file}:{u.line}" for u in surface.unresolved}
-    orphans = set(DYNAMIC_READ_EXEMPTIONS) - live
-    assert not orphans, (
-        f"Stale DYNAMIC_READ_EXEMPTIONS entries no longer in the surface: {sorted(orphans)}"
+def test_dynamic_read_exemption_counts_are_wellformed() -> None:
+    orphaned = set(DYNAMIC_READ_EXEMPTION_COUNTS) - set(DYNAMIC_READ_EXEMPTIONS)
+    assert not orphaned, (
+        f"Count overrides lack DYNAMIC_READ_EXEMPTIONS entries: {sorted(orphaned)}"
     )
+    invalid = {key: count for key, count in DYNAMIC_READ_EXEMPTION_COUNTS.items() if count < 2}
+    assert not invalid, f"Count overrides must be at least 2: {invalid}"
 
 
 def test_production_env_surface_scan_parses_all_source_files() -> None:

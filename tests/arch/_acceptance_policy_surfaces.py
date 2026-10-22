@@ -50,6 +50,18 @@ class PolicyRelaxationApproval:
 
 POLICY_SURFACES: tuple[PolicySurface, ...] = (
     PolicySurface(
+        "tests/infra/test_schema_version_convention.py",
+        "_LEGACY_JSON_WRITE_COUNTS",
+        "int_map",
+        default=0,
+    ),
+    PolicySurface(
+        "tests/_ambient_env_surface.py",
+        "DYNAMIC_READ_EXEMPTION_COUNTS",
+        "int_map",
+        default=1,
+    ),
+    PolicySurface(
         "tests/arch/_subpackage_isolation_line_limits.py",
         "_LINE_LIMIT_EXEMPTIONS",
         "exemption_map",

@@ -410,14 +410,14 @@ async def test_schedule_wakeup_defers_release_from_native_terminal(tmp_path, sto
         emit_stdout({"type": "assistant", "message": {"content": [
             {"type": "tool_use", "id": "wake", "name": "ScheduleWakeup", "input": {}}
         ]}})
-        touch("a_at")
+        (root / "a_at").write_text(str(time.monotonic()))
         emit_stdout({"type": "result", "result": "done\\n" + marker, "session_id": sid})
         time.sleep(30)
         """,
         child_deferral_ceiling=2.0,
         natural_exit_grace_seconds=0.2,
     )
-    ended = time.time()
+    ended = time.monotonic()
 
     assert result.schedule_wakeup_violation is True
     assert result.completion_ceiling_expired is True

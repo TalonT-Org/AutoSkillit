@@ -27,7 +27,11 @@ def test_error_detail_is_bounded() -> None:
     detail = _github_http.github_error_detail(
         {"message": "Validation Failed", "errors": ["x" * 1000] * 50}
     )
-    assert detail is not None and len(detail) <= 500
+    prefix = "Validation Failed: "
+    assert detail == prefix + "x" * (500 - len(prefix))
+
+
+def test_error_detail_returns_message_without_errors() -> None:
     assert _github_http.github_error_detail({"message": "Unprocessable Entity"}) == (
         "Unprocessable Entity"
     )

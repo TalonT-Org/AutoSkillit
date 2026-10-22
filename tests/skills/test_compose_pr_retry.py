@@ -235,6 +235,14 @@ def _assert_success(proc, number):
     assert proc.stdout.splitlines() == [f"pr_url = https://github.com/owner/repo/pull/{number}"]
 
 
+def _create_attempts(attempts: list[tuple[str, str]]) -> dict[str, str]:
+    return {
+        f"FAKE_GH_CREATE_{n}_{field}": value
+        for n, (exit_code, stderr) in enumerate(attempts, 1)
+        for field, value in (("EXIT", exit_code), ("STDERR", stderr))
+    }
+
+
 class TestStep5Retry:
     def test_direct_create_success(self, tmp_path):
         proc, attempts, calls = _run_step5(
@@ -296,14 +304,7 @@ class TestStep5Retry:
         proc, attempts, _ = _run_step5(
             tmp_path,
             _make_fake_gh(tmp_path),
-            {
-                f"FAKE_GH_CREATE_{n}_{field}": value
-                for n in range(1, 4)
-                for field, value in (
-                    ("EXIT", "1"),
-                    ("STDERR", f"HTTP 503 attempt {n} unavailable"),
-                )
-            },
+            _create_attempts([("1", f"HTTP 503 attempt {n} unavailable") for n in range(1, 4)]),
         )
         _assert_failure(proc)
         assert attempts == 3
@@ -379,14 +380,15 @@ class TestStep5Retry:
         proc, attempts, _ = _run_step5(
             tmp_path,
             _make_fake_gh(tmp_path),
-            {
-                f"FAKE_GH_CREATE_{n}_{field}": value
-                for n in range(1, 4)
-                for field, value in (
-                    ("EXIT", "0" if case == "zero_exit_without_url" else "1"),
-                    ("STDERR", "" if case == "zero_exit_without_url" else "HTTP 502 Bad Gateway"),
-                )
-            },
+            _create_attempts(
+                [
+                    (
+                        "0" if case == "zero_exit_without_url" else "1",
+                        "" if case == "zero_exit_without_url" else "HTTP 502 Bad Gateway",
+                    )
+                ]
+                * 3
+            ),
             store=store,
             work_dir=repo,
         )

@@ -784,22 +784,22 @@ def test_author_effective_event_decision_table(
 
 
 @pytest.mark.parametrize(
-    "requested,event,body",
+    "requested,event,body,raises",
     [
-        ("APPROVE", "COMMENT", "Automated review"),
-        ("APPROVE", "COMMENT", ""),
-        ("REQUEST_CHANGES", "COMMENT", "Automated review"),
-        ("COMMENT", "COMMENT", "Automated review"),
-        ("COMMENT", "APPROVE", "Automated review"),
-        ("APPROVE", "REQUEST_CHANGES", "Automated review"),
+        ("APPROVE", "COMMENT", "Automated review", False),
+        ("APPROVE", "COMMENT", "", False),
+        ("REQUEST_CHANGES", "COMMENT", "Automated review", False),
+        ("COMMENT", "COMMENT", "Automated review", False),
+        ("COMMENT", "APPROVE", "Automated review", True),
+        ("APPROVE", "REQUEST_CHANGES", "Automated review", True),
     ],
 )
 def test_payload_discloses_only_author_comment_transformation(
-    tmp_path: Path, requested: str, event: str, body: str
+    tmp_path: Path, requested: str, event: str, body: str, raises: bool
 ) -> None:
     request = _request(tmp_path, event=requested, body=body)
     arguments = dict(request=request, operation_key="key", findings=(), omitted=(), event=event)
-    if event != requested and event != "COMMENT":
+    if raises:
         with pytest.raises(
             ValueError, match="unsupported review event transformation"
         ) as exc_info:

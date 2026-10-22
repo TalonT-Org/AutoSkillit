@@ -116,7 +116,7 @@ def _make_fake_gh(tmp_path: Path) -> Path:
     gh.write_text(f"#!{sys.executable}\n" + _FAKE_GH_TEMPLATE, encoding="utf-8")
     gh.chmod(0o755)
     sleep = bin_dir / "sleep"
-    sleep.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    sleep.write_text('#!/bin/sh\nprintf "%s\\n" "$1" >> "$FAKE_SLEEP_LOG"\n', encoding="utf-8")
     sleep.chmod(0o755)
     return bin_dir
 
@@ -222,6 +222,7 @@ def _run_step5(
         FAKE_GH_ATTEMPT_FILE=str(counter),
         FAKE_GH_CALL_LOG=str(call_log),
         FAKE_GH_PRS=str(prs),
+        FAKE_SLEEP_LOG=str(tmp_path / "sleeps"),
         **env_overrides,
     )
     proc = subprocess.run(
@@ -320,6 +321,7 @@ class TestStep5Retry:
         assert attempts == 3
         assert "gh pr create failed after 3 attempt(s):" in proc.stderr
         assert "HTTP 503 attempt 3 unavailable" in proc.stderr
+        assert (tmp_path / "sleeps").read_text(encoding="utf-8").splitlines() == ["1", "2"]
         assert "attempt(s): 4" not in proc.stderr
         assert "$PR_CREATE_ATTEMPT" not in proc.stderr
 

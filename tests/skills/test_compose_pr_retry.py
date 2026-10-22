@@ -390,6 +390,10 @@ class TestStep5Retry:
         _assert_failure(proc)
         assert attempts == 3
 
+        if case == "unresolvable_head":
+            assert "Verified PR recovery is disabled:" in proc.stderr
+            assert "could not resolve the local feature-branch head." in proc.stderr
+
     def test_terminal_validation_error_does_not_retry(self, tmp_path):
         repo, oid = _work_repo(tmp_path)
         proc, attempts, calls = _run_step5(

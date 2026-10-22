@@ -322,6 +322,9 @@ if [ -z "$BASE_BRANCH" ]; then
   exit 1
 fi
 PR_HEAD_SHA=$(git -C "$WORK_DIR" rev-parse --verify --quiet "refs/heads/$FEATURE_BRANCH" 2>/dev/null || true)
+if [ -z "$PR_HEAD_SHA" ]; then
+  printf '%s\n' 'Verified PR recovery is disabled: could not resolve the local feature-branch head.' >&2
+fi
 PR_CREATE_ATTEMPT=1
 PR_CREATE_MAX=3
 PR_CREATE_STATUS=0

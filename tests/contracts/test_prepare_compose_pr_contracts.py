@@ -301,7 +301,7 @@ def _compose_pr_step5_bash() -> str:
         extract_step_sections,
     )
 
-    text = COMPOSE_PR.read_text()
+    text = COMPOSE_PR.read_text(encoding="utf-8")
     sections = extract_step_sections(text)
     step5 = sections.get("Step 5")
     assert step5, "compose-pr/SKILL.md is missing a Step 5 section"
@@ -311,7 +311,7 @@ def _compose_pr_step5_bash() -> str:
 
 
 def test_compose_pr_skill_has_no_branch_keyed_pr_view():
-    assert 'gh pr view "$FEATURE_BRANCH"' not in COMPOSE_PR.read_text()
+    assert 'gh pr view "$FEATURE_BRANCH"' not in COMPOSE_PR.read_text(encoding="utf-8")
 
 
 def test_compose_pr_step5_has_bounded_retry_count_of_three():

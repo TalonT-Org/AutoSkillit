@@ -953,124 +953,144 @@ class AmbientEnvDisposition:
 
 
 DYNAMIC_READ_EXEMPTIONS: dict[str, str] = {
-    "execution/evidence/reader/_contract.py:146": (
+    ("execution/evidence/reader/_contract.py::evidence_reader_provider_environment"): (
         "Dict/generator-comprehension key bound by `for name in _PROVIDER_ENV`; this scanner does"
         "not trace comprehension-bound names back through their iterable's members."
     ),
-    "server/lifecycle/_guards.py:418": (
+    ("server/lifecycle/_guards.py::_profile_to_env"): (
         "`profile.api_key_env` is a per-provider-profile instance attribute resolved at runtime"
         "from config, not a module-level constant this AST scanner can resolve."
     ),
-    "server/lifecycle/_lifespan/_session_boots.py:524": (
+    ("server/lifecycle/_lifespan/_session_boots.py::_evidence_reader_auto_gate_boot"): (
         "Dict-comprehension key bound by `for name in EVIDENCE_READER_ENV_FORWARD_VARS`; the three"
         "forwarded names are already captured directly via that collection's own R4 scan."
     ),
-    "server/lifecycle/_session_type.py:49": (
+    "server/lifecycle/_session_type.py::_evidence_reader_binding_state": (
         "Set-comprehension key bound by `for key in EVIDENCE_READER_ENV_FORWARD_VARS`; the"
         "forwarded names are already captured directly via that collection's own R4 scan."
-    ),
-    "server/lifecycle/_session_type.py:54": (
+        "\n\n"
         "Generator-expression key bound by `for key in EVIDENCE_READER_ENV_FORWARD_VARS`; the"
         "forwarded names are already captured directly via that collection's own R4 scan."
     ),
-    "server/lifecycle/_session_type.py:61": (
+    ("server/lifecycle/_session_type.py::_has_explorer_binding_env"): (
         "Dict-comprehension key bound by `for key in _EXPLORER_BINDING_ENV_KEYS`; the four"
         "explorer-binding names are already captured directly via that collection's own R4 scan."
     ),
-    "server/tools/tools_evidence_reader.py:174": (
+    ("server/tools/tools_evidence_reader.py::_private_environment"): (
         "Dict-comprehension key bound by `for name in EVIDENCE_READER_ENV_FORWARD_VARS`; the three"
         "forwarded names are already captured directly via that collection's own R4 scan."
     ),
-    "server/tools/tools_execution/_candidate_policy.py:191": (
+    ("server/tools/tools_execution/_candidate_policy.py::resolve_candidate_policy"): (
         "`definition.api_key_env` is a per-provider-profile instance attribute resolved at "
         "runtime from config, not a module-level constant this AST scanner can resolve."
     ),
-    "server/tools/tools_execution/_run_skill_prepare.py:123": (
+    ("server/tools/tools_execution/_run_skill_prepare.py::_resolve_provider_binding"): (
         "`definition.api_key_env` is a per-provider-profile instance attribute resolved at "
         "runtime from the persisted launch contract, not a statically resolvable name."
     ),
 }
 
+DYNAMIC_READ_EXEMPTION_COUNTS: dict[str, int] = {
+    "execution/evidence/reader/_contract.py::evidence_reader_provider_environment": 2,
+    "server/lifecycle/_session_type.py::_evidence_reader_binding_state": 2,
+    "server/tools/tools_evidence_reader.py::_private_environment": 2,
+}
+
 FORWARDING_SITES: dict[str, str] = {
-    "cli/install/_marketplace.py:358": (
+    ("cli/install/_marketplace.py::install"): (
         "Unfiltered dict(os.environ) snapshot (`ambient_env`) used as the base for an"
         "install/publish subprocess env; intentional wholesale forward for a maintenance-style"
         "operation."
     ),
-    "cli/app.py:315": (
+    ("cli/app.py::install"): (
         "Bare os.environ passed as `child_env` to the maintenance installer, which itself applies"
         "an explicit allowlist (build_maintenance_env) before spawning; unfiltered by design here."
     ),
-    "cli/session/_session_launch.py:161": (
+    ("cli/session/_session_launch.py::prepare_interactive_launch"): (
         "Unfiltered dict(os.environ) used only to probe an exact executable path before the real"
         "session env is sealed by build_agent_env elsewhere; not the launched child's env."
     ),
-    "cli/update/_transaction.py:440": (
+    ("cli/update/_transaction.py::run_update_transaction"): (
         "Unfiltered dict(os.environ if base_env is None else base_env) snapshot captured for"
         "update-transaction diagnostics/rollback comparison, not for a spawned child process."
     ),
-    "cli/update/_update_checks_source.py:190": (
+    ("cli/update/_update_checks_source.py::_git_ls_remote_sha"): (
         "Bare os.environ passed as `env=` to a read-only `git ls-remote` probe subprocess;"
         "unfiltered wholesale forward for a local diagnostic command."
     ),
-    "execution/backends/_codex_probes.py:411": (
+    ("execution/backends/_codex_probes.py::_validate_generated_codex_home"): (
         "Unfiltered dict(os.environ) base for the global-Codex-home MCP-inventory validation"
         "probe subprocess, with CODEX_RESERVED_HOME_ENV_VARS overridden to the source home."
     ),
-    "execution/backends/claude.py:341": (
+    ("execution/backends/claude.py::ClaudeCodeBackend._prepare_interactive_environment"): (
         "Excludes _INTERACTIVE_ENV_EXCLUSIONS (TERM/NO_COLOR headless-hardening keys) when"
         "building the interactive Claude Code base env."
     ),
-    "execution/backends/_claude/session_commands.py:108": (
+    (
+        "execution/backends/_claude/session_commands.py::"
+        "ClaudeSessionCommandMixin._skill_session_environment_inputs"
+    ): (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for a"
         "headless Claude Code skill-session launch."
     ),
-    "execution/backends/_claude/session_commands.py:326": (
+    (
+        "execution/backends/_claude/session_commands.py::"
+        "ClaudeSessionCommandMixin.build_food_truck_cmd"
+    ): (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for a"
         "headless Claude Code food-truck orchestrator-session launch."
     ),
-    "execution/backends/_codex/headless_commands.py:65": (
+    (
+        "execution/backends/_codex/headless_commands.py::"
+        "CodexOrdinaryHeadlessCommandMixin.build_headless_cmd"
+    ): (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         " Codex generic-prompt launch; the finalized generated home is layered by the caller."
     ),
-    "execution/backends/_codex/session_commands.py:176": (
+    (
+        "execution/backends/_codex/session_commands.py::CodexCommandMixin."
+        "_prepare_skill_session_environment"
+    ): (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex skill-session launch."
     ),
-    "execution/backends/_codex/session_commands.py:494": (
+    ("execution/backends/_codex/session_commands.py::CodexCommandMixin.build_food_truck_cmd"): (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex food-truck orchestrator-session launch."
     ),
-    "execution/backends/_codex/session_commands.py:194": (
+    (
+        "execution/backends/_codex/session_commands.py::CodexCommandMixin."
+        "_prepare_interactive_environment"
+    ): (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before extras merge for a Codex interactive-session"
         "launch base env."
     ),
-    "execution/backends/_codex/session_commands.py:707": (
+    ("execution/backends/_codex/session_commands.py::CodexCommandMixin.build_resume_cmd"): (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex resume-session launch."
     ),
-    "execution/merge_queue/_merge_queue_group_ci.py:109": (
+    ("execution/merge_queue/_merge_queue_group_ci.py::_query_merge_group_ci"): (
         "Unfiltered {**os.environ} base for a local `gh run list` CI-status probe subprocess;"
         "GH_TOKEN is the only key ever added on top."
     ),
-    "execution/runtime/testing.py:50": (
+    ("execution/runtime/testing.py::build_sanitized_env"): (
         "Excludes AUTOSKILLIT_PRIVATE_ENV_VARS before handing the sanitized env to a user-code"
         "`pytest` subprocess spawned by test_check."
     ),
-    "exploration/snapshot/_capture.py:92": (
+    ("exploration/snapshot/_capture.py::_git"): (
         "Unfiltered dict(os.environ) base for a local read-only `git` subprocess (snapshot"
         "diffing); only GIT_OPTIONAL_LOCKS is added on top."
     ),
-    "hooks/_capture_spawn.py:298": (
+    ("hooks/_capture_spawn.py::_scrubbed_user_environment"): (
         "dict(os.environ) followed by an explicit per-key .pop() loop over"
         "PROTECTED_CAPTURE_ENV_VARS; the exclusion happens outside the single expression this"
         "scanner inspects."
     ),
-    "hooks/_dispatch.py:84": (
+    ("hooks/_dispatch.py::main"): (
         "Unfiltered dict(os.environ) base for a same-host hook-script subprocess; only"
         "PYTHONDONTWRITEBYTECODE is added on top."
     ),
-    "smoke_utils/_cross_interpreter_upgrade.py:337": (
+    ("smoke_utils/_cross_interpreter_upgrade.py::run_cross_interpreter_upgrade_smoke"): (
         "Unfiltered dict(os.environ) base for a smoke-test cross-interpreter upgrade subprocess"
         "sandboxed to a scratch HOME/XDG tree overridden immediately after."
     ),

@@ -56,6 +56,12 @@ POLICY_SURFACES: tuple[PolicySurface, ...] = (
         default=0,
     ),
     PolicySurface(
+        "tests/_ambient_env_surface.py",
+        "DYNAMIC_READ_EXEMPTION_COUNTS",
+        "int_map",
+        default=1,
+    ),
+    PolicySurface(
         "tests/arch/_subpackage_isolation_line_limits.py",
         "_LINE_LIMIT_EXEMPTIONS",
         "exemption_map",

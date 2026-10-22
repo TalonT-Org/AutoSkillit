@@ -92,7 +92,7 @@ not yet be created. The recipe routes to `on_context_limit` (typically
 
 **Before emitting structured output tokens:**
 1. If context runs out before Step 5 runs, emit no `pr_url` token and let the `on_context_limit` route handle the incomplete session. Once Step 5 has run, follow the Output rules.
-2. Emit whatever was completed; the orchestrator will handle the context-limit route
+2. Emit whatever was completed.
 
 ## Workflow
 

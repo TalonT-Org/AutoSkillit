@@ -1,4 +1,7 @@
-"""Execute compose-pr Step 5 against a local branch and a gh-compatible PR store."""
+"""Verify bounded retry, terminal fail-fast, and verified response-loss recovery.
+
+Execute compose-pr Step 5 against a local branch and a gh-compatible PR store.
+"""
 
 from __future__ import annotations
 

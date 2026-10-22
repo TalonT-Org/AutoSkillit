@@ -2,8 +2,8 @@
 
 Modelled on `tests/infra/test_canonical_json_producer_convention.py`. The registry binds
 each install site to the response builder that delivers its credential. The scanner counts
-real calls per module in `src/autoskillit/`, preserving multiple calls on one line. The test
-fails when registered and scanned module counts diverge in either direction. A meta-test
+real calls per named scope in `src/autoskillit/`, preserving multiple calls on one line.
+The test fails when registered and scanned scope counts diverge in either direction. A meta-test
 injects a fake site to confirm the guard fires.
 """
 
@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import RECIPE_EXECUTION_INSTALL_SITE_REGISTRY, all_tool_names
-from tests._ast_helpers import count_differences
+from tests._ast_helpers import MODULE_SCOPE, count_differences, scope_qualnames
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.medium]
 
@@ -33,32 +33,37 @@ def _is_install_recipe_execution_call(node: ast.Call) -> bool:
     return False
 
 
-def _scan_install_recipe_execution_sites() -> list[tuple[str, int]]:
+def _scan_install_recipe_execution_sites() -> list[tuple[str, str]]:
     """AST-scan src/autoskillit/ for install_recipe_execution() call sites.
 
-    Returns one (relative_path, line_number) tuple per call, including same-line calls.
+    Returns one (relative_path, qualified_scope) tuple per call, including same-line calls.
     """
-    sites: list[tuple[str, int]] = []
+    sites: list[tuple[str, str]] = []
     for py_file in _SRC_ROOT.rglob("*.py"):
         try:
             tree = ast.parse(py_file.read_text(), filename=str(py_file))
         except SyntaxError:
             continue
+        scopes = scope_qualnames(tree)
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
                 continue
             if not _is_install_recipe_execution_call(node):
                 continue
             rel = str(py_file.relative_to(_SRC_ROOT.parent.parent))
-            sites.append((rel, node.lineno))
+            sites.append((rel, scopes[node]))
     return sites
 
 
-def _install_registry_problems(registered: Counter[str], observed: Counter[str]) -> list[str]:
-    """Report every module whose registered and scanned call counts differ."""
+def _install_registry_problems(
+    registered: Counter[tuple[str, str]], observed: Counter[tuple[str, str]]
+) -> list[str]:
+    """Report every scope whose registered and scanned call counts differ."""
     return [
-        f"{module}: registered {registered_count}, scanned {observed_count}"
-        for module, registered_count, observed_count in count_differences(registered, observed)
+        f"{module}::{scope}: registered {registered_count}, scanned {observed_count}"
+        for (module, scope), registered_count, observed_count in count_differences(
+            registered, observed
+        )
     ]
 
 
@@ -77,15 +82,16 @@ def _function_calls_function(
 
 
 class TestExecutionInstallDelivery:
-    """AST ratchet: registered and scanned install calls must match by module."""
+    """AST ratchet: registered and scanned install calls must match by scope."""
 
     def test_every_install_site_is_registered(self) -> None:
         scanned = _scan_install_recipe_execution_sites()
         assert scanned, "scanner returned no install_recipe_execution sites"
         registered = Counter(
-            entry.installer_module for entry in RECIPE_EXECUTION_INSTALL_SITE_REGISTRY.values()
+            (entry.installer_module, entry.installer_symbol)
+            for entry in RECIPE_EXECUTION_INSTALL_SITE_REGISTRY.values()
         )
-        observed = Counter(path for path, _line in scanned)
+        observed = Counter(scanned)
         problems = _install_registry_problems(registered, observed)
         assert not problems, f"install_recipe_execution registry mismatch: {problems}"
 
@@ -93,52 +99,69 @@ class TestExecutionInstallDelivery:
         ("registered", "observed", "expected"),
         [
             pytest.param(
-                Counter({"a.py": 1, "b.py": 1}),
-                Counter({"a.py": 1}),
-                ["b.py: registered 1, scanned 0"],
+                Counter({("a.py", "install"): 1, ("b.py", "install"): 1}),
+                Counter({("a.py", "install"): 1}),
+                ["b.py::install: registered 1, scanned 0"],
                 id="stale-registered-module",
             ),
             pytest.param(
-                Counter({"a.py": 1}),
-                Counter({"a.py": 2}),
-                ["a.py: registered 1, scanned 2"],
+                Counter({("a.py", "install"): 1}),
+                Counter({("a.py", "install"): 2}),
+                ["a.py::install: registered 1, scanned 2"],
                 id="extra-scanned-call",
             ),
             pytest.param(
-                Counter({"a.py": 2}),
-                Counter({"a.py": 1}),
-                ["a.py: registered 2, scanned 1"],
+                Counter({("a.py", "install"): 2}),
+                Counter({("a.py", "install"): 1}),
+                ["a.py::install: registered 2, scanned 1"],
                 id="lost-scanned-call",
             ),
             pytest.param(
-                Counter({"a.py": 1}),
-                Counter({"a.py": 1}),
+                Counter({("a.py", "install"): 1}),
+                Counter({("a.py", "install"): 1}),
                 [],
                 id="equal-counts",
+            ),
+            pytest.param(
+                Counter({("a.py", "install"): 1}),
+                Counter({("a.py", "other"): 1}),
+                ["a.py::install: registered 1, scanned 0", "a.py::other: registered 0, scanned 1"],
+                id="same-module-moved-scope",
             ),
         ],
     )
     def test_install_registry_diff_is_bidirectional_and_counted(
-        self, registered: Counter[str], observed: Counter[str], expected: list[str]
+        self,
+        registered: Counter[tuple[str, str]],
+        observed: Counter[tuple[str, str]],
+        expected: list[str],
     ) -> None:
         assert _install_registry_problems(registered, observed) == expected
 
+    @pytest.mark.parametrize(
+        ("source", "scope"),
+        [
+            ("install_recipe_execution(); install_recipe_execution()\n", MODULE_SCOPE),
+            (
+                "def install():\n    install_recipe_execution(); install_recipe_execution()\n",
+                "install",
+            ),
+        ],
+    )
     def test_install_scanner_preserves_same_line_multiplicity(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path, monkeypatch, source: str, scope: str
     ) -> None:
         source_root = tmp_path / "src" / "autoskillit"
         source_root.mkdir(parents=True)
-        (source_root / "same_line.py").write_text(
-            "install_recipe_execution(); install_recipe_execution()\n", encoding="utf-8"
-        )
+        (source_root / "same_line.py").write_text(source, encoding="utf-8")
         monkeypatch.setattr("tests.arch.test_execution_install_delivery._SRC_ROOT", source_root)
 
         sites = _scan_install_recipe_execution_sites()
         assert sites == [
-            ("src/autoskillit/same_line.py", 1),
-            ("src/autoskillit/same_line.py", 1),
+            ("src/autoskillit/same_line.py", scope),
+            ("src/autoskillit/same_line.py", scope),
         ]
-        assert Counter(path for path, _line in sites) == Counter(
+        assert Counter(path for path, _scope in sites) == Counter(
             {"src/autoskillit/same_line.py": 2}
         )
 
@@ -168,9 +191,9 @@ class TestExecutionInstallDelivery:
         """Meta-test: a fake install site should cause the ratchet to fail."""
         original_scan = _scan_install_recipe_execution_sites
 
-        def patched_scan() -> list[tuple[str, int]]:
+        def patched_scan() -> list[tuple[str, str]]:
             sites = original_scan()
-            sites.append(("src/autoskillit/fake_install_module.py", 1))
+            sites.append(("src/autoskillit/fake_install_module.py", MODULE_SCOPE))
             return sites
 
         monkeypatch.setattr(

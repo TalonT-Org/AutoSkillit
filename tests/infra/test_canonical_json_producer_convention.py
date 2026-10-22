@@ -20,7 +20,7 @@ from typing import NamedTuple
 
 import pytest
 
-from tests._ast_helpers import MODULE_SCOPE, call_name, scope_qualnames
+from tests._ast_helpers import MODULE_SCOPE, call_name, count_differences, scope_qualnames
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
@@ -197,23 +197,25 @@ def _consumer_registry_problems(
     )
     problems: list[str] = []
 
-    for (path, qualname), count in (expected - strict).items():
-        kinds = sorted(
-            kind
-            for kind, entry in registry.items()
-            if (entry.consumer_path, entry.consumer_function) == (path, qualname)
-        )
-        problems.append(
-            f"{', '.join(kinds)}: {path}::{qualname} is missing count: {count}; "
-            "if the consumer moved or was renamed, update consumer_path/consumer_function; "
-            "if it no longer exists, delete the entry"
-        )
-
-    for (path, qualname), count in (strict - expected).items():
-        problems.append(
-            f"{path}::{qualname} has unregistered count: {count}; register a "
-            "CanonicalArtifactDef in _CANONICAL_JSON_ARTIFACT_REGISTRY naming its producer"
-        )
+    for (path, qualname), expected_count, observed_count in count_differences(expected, strict):
+        if expected_count > observed_count:
+            kinds = sorted(
+                kind
+                for kind, entry in registry.items()
+                if (entry.consumer_path, entry.consumer_function) == (path, qualname)
+            )
+            problems.append(
+                f"{', '.join(kinds)}: {path}::{qualname} is missing count: "
+                f"{expected_count - observed_count}; "
+                "if the consumer moved or was renamed, update consumer_path/consumer_function; "
+                "if it no longer exists, delete the entry"
+            )
+        else:
+            problems.append(
+                f"{path}::{qualname} has unregistered count: {observed_count - expected_count}; "
+                "register a CanonicalArtifactDef in _CANONICAL_JSON_ARTIFACT_REGISTRY "
+                "naming its producer"
+            )
     return sorted(problems)
 
 

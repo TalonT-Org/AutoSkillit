@@ -32,7 +32,7 @@ from tests._ambient_env_surface import (
     production_env_read_surface,
     production_env_write_surface,
 )
-from tests._ast_helpers import MODULE_SCOPE, scope_qualnames
+from tests._ast_helpers import MODULE_SCOPE, count_differences, scope_qualnames
 from tests.arch._helpers import SRC_ROOT
 
 pytestmark = [pytest.mark.small]
@@ -81,12 +81,13 @@ def _site_key(
 
 
 def _site_registry_problems(live: Counter[str], expected: Mapping[str, int]) -> list[str]:
-    problems: list[str] = []
-    for key in sorted(set(live) | set(expected)):
-        live_count = live.get(key, 0)
-        expected_count = expected.get(key, 0)
+    problems = [
+        f"{key}: count must be at least 1 (got {count})"
+        for key, count in expected.items()
+        if count < 1
+    ]
+    for key, expected_count, live_count in count_differences(expected, live):
         if key in expected and expected_count < 1:
-            problems.append(f"{key}: count must be at least 1 (got {expected_count})")
             continue
         if live_count > expected_count:
             problems.append(
@@ -99,7 +100,7 @@ def _site_registry_problems(live: Counter[str], expected: Mapping[str, int]) -> 
                 "if moved or renamed, update the key; "
                 "if removed, delete the entry or lower its count"
             )
-    return problems
+    return sorted(problems)
 
 
 def test_production_read_surface_caches_only_canonical_root(

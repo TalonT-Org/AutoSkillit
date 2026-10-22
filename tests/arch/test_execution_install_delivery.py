@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import RECIPE_EXECUTION_INSTALL_SITE_REGISTRY, all_tool_names
+from tests._ast_helpers import count_differences
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.medium]
 
@@ -56,9 +57,8 @@ def _scan_install_recipe_execution_sites() -> list[tuple[str, int]]:
 def _install_registry_problems(registered: Counter[str], observed: Counter[str]) -> list[str]:
     """Report every module whose registered and scanned call counts differ."""
     return [
-        f"{module}: registered {registered[module]}, scanned {observed[module]}"
-        for module in sorted(registered.keys() | observed.keys())
-        if registered[module] != observed[module]
+        f"{module}: registered {registered_count}, scanned {observed_count}"
+        for module, registered_count, observed_count in count_differences(registered, observed)
     ]
 
 

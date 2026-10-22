@@ -4,10 +4,23 @@ from __future__ import annotations
 
 import ast
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
+from typing import TypeVar
 
 MODULE_SCOPE = "<module>"
+_K = TypeVar("_K")
+
+
+def count_differences(
+    expected: Mapping[_K, int], observed: Mapping[_K, int]
+) -> list[tuple[_K, int, int]]:
+    """Return mismatched registry keys with their expected and observed counts."""
+    return [
+        (key, expected.get(key, 0), observed.get(key, 0))
+        for key in sorted(expected.keys() | observed.keys(), key=str)
+        if expected.get(key, 0) != observed.get(key, 0)
+    ]
 
 
 def call_name(node: ast.Call) -> str | None:
@@ -87,5 +100,6 @@ __all__: Iterable[str] = (
     "call_name",
     "callers_by_function",
     "count_callers",
+    "count_differences",
     "scope_qualnames",
 )

@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from tests._ast_helpers import call_name, scope_qualnames
+from tests._ast_helpers import call_name, count_differences, scope_qualnames
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
@@ -105,13 +105,9 @@ def _is_yaml_dump(node: ast.expr) -> bool:
 
 def _legacy_write_problems(expected: Mapping[str, int], observed: Counter[str]) -> list[str]:
     """Describe per-scope count differences between the registry and source scan."""
-    problems = []
-    for key in sorted(expected.keys() | observed.keys()):
-        expected_count = expected.get(key, 0)
-        observed_count = observed.get(key, 0)
-
+    problems = [f"{key}: count must be at least 1" for key, count in expected.items() if count < 1]
+    for key, expected_count, observed_count in count_differences(expected, observed):
         if key in expected and expected_count < 1:
-            problems.append(f"{key}: count must be at least 1")
             continue
         if observed_count > expected_count:
             problems.append(
@@ -126,7 +122,7 @@ def _legacy_write_problems(expected: Mapping[str, int], observed: Counter[str]) 
         elif observed_count < expected_count:
             problems.append(f"{key}: fewer write sites than expected; lower the count")
 
-    return problems
+    return sorted(problems)
 
 
 # Hard-curated counts of existing atomic_write + json.dumps sites detected by AST scan.

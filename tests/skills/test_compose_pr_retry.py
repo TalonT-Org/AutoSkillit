@@ -80,28 +80,13 @@ if args[:2] == ["pr", "list"]:
               (not head or pr["headRefName"] == head)
               and (not base or pr["baseRefName"] == base)
               and (state == "all" or pr["state"] in states[state])]
-elif args[:2] == ["pr", "view"]:
-    result = [pr for pr in prs if pr["headRefName"] == args[2]
-              and not pr["isCrossRepository"]]
-    result.sort(key=lambda pr: pr["createdAt"], reverse=True)
-    result.sort(key=lambda pr: pr["state"] != "OPEN")
-    if not result:
-        print(f'no pull requests found for branch "{args[2]}"', file=sys.stderr)
-        sys.exit(1)
-    result = result[0]
-    if option("--json") == "url" and option("--jq", "-q") == ".url":
-        print(result["url"])
-        sys.exit(0)
 else:
     sys.exit(99)
 
 fields = option("--json")
 if fields:
     keys = fields.split(",")
-    if isinstance(result, list):
-        result = [{key: pr[key] for key in keys} for pr in result]
-    else:
-        result = {key: result[key] for key in keys}
+    result = [{key: pr[key] for key in keys} for pr in result]
 query = option("--jq", "-q")
 if query:
     sys.exit(subprocess.run(["jq", "-r", query], input=json.dumps(result), text=True).returncode)
@@ -162,7 +147,6 @@ def _pr(
     head: str = "test-branch",
     base: str = "main",
     cross: bool = False,
-    created: str | None = None,
 ) -> dict[str, str | bool]:
     return {
         "url": f"https://github.com/owner/repo/pull/{n}",
@@ -171,7 +155,6 @@ def _pr(
         "headRefOid": oid,
         "baseRefName": base,
         "isCrossRepository": cross,
-        "createdAt": created or f"2026-01-01T00:00:{n:02d}Z",
     }
 
 

@@ -22,7 +22,7 @@ def github_error_detail(data: Any) -> str | None:
     message = github_error_message(data)
     errors = data.get("errors") if isinstance(data, Mapping) else None
     if not isinstance(errors, list) or not errors:
-        return message
+        return message[:500] if message else None
     items = "; ".join(
         item if isinstance(item, str) else json.dumps(item, sort_keys=True) for item in errors
     )

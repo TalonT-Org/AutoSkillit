@@ -31,3 +31,7 @@ def test_error_detail_is_bounded() -> None:
     assert _github_http.github_error_detail({"message": "Unprocessable Entity"}) == (
         "Unprocessable Entity"
     )
+
+
+def test_error_detail_bounds_message_without_errors() -> None:
+    assert _github_http.github_error_detail({"message": "x" * 1000}) == "x" * 500

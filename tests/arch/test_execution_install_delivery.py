@@ -40,10 +40,7 @@ def _scan_install_recipe_execution_sites() -> list[tuple[str, str]]:
     """
     sites: list[tuple[str, str]] = []
     for py_file in _SRC_ROOT.rglob("*.py"):
-        try:
-            tree = ast.parse(py_file.read_text(), filename=str(py_file))
-        except SyntaxError:
-            continue
+        tree = ast.parse(py_file.read_text(), filename=str(py_file))
         scopes = scope_qualnames(tree)
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
@@ -164,6 +161,14 @@ class TestExecutionInstallDelivery:
         assert Counter(path for path, _scope in sites) == Counter(
             {"src/autoskillit/same_line.py": 2}
         )
+
+    def test_install_scanner_reports_parse_failure(self, tmp_path: Path, monkeypatch) -> None:
+        broken = tmp_path / "broken.py"
+        broken.write_text("def broken(:\n", encoding="utf-8")
+        monkeypatch.setattr("tests.arch.test_execution_install_delivery._SRC_ROOT", tmp_path)
+        with pytest.raises(SyntaxError) as error:
+            _scan_install_recipe_execution_sites()
+        assert error.value.filename == str(broken)
 
     def test_registered_delivering_symbols_call_the_sanctioned_producer(self) -> None:
         for entry in RECIPE_EXECUTION_INSTALL_SITE_REGISTRY.values():

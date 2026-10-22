@@ -178,6 +178,7 @@ def _run_step5(
     feature_branch="test-branch",
     base_branch="main",
     work_dir=None,
+    task_title="Test PR",
 ):
     if work_dir is None:
         work_dir, _ = _work_repo(tmp_path, feature_branch)
@@ -196,7 +197,7 @@ def _run_step5(
         "WORK_DIR": str(work_dir),
         "FEATURE_BRANCH": feature_branch,
         "BASE_BRANCH": base_branch,
-        "TASK_TITLE": "Test PR",
+        "TASK_TITLE": task_title,
     }
     harness = (
         "set -u\n"
@@ -311,12 +312,14 @@ class TestStep5Retry:
         assert "attempt(s): 4" not in proc.stderr
         assert "$PR_CREATE_ATTEMPT" not in proc.stderr
 
-    def test_empty_base_branch_stops_before_create(self, tmp_path):
-        proc, attempts, calls = _run_step5(tmp_path, _make_fake_gh(tmp_path), {}, base_branch="")
+    @pytest.mark.parametrize("field", ["work_dir", "feature_branch", "base_branch", "task_title"])
+    def test_empty_required_input_stops_before_create(self, tmp_path, field):
+        inputs = {"work_dir": str(tmp_path), field: ""}
+        proc, attempts, calls = _run_step5(tmp_path, _make_fake_gh(tmp_path), {}, **inputs)
         assert proc.returncode != 0
         assert "pr_url =" not in proc.stdout
         assert "Step 5 could not run:" in proc.stderr
-        assert "base_branch must be non-empty." in proc.stderr
+        assert "must all be non-empty." in proc.stderr
         assert attempts == 0
         assert calls == []
 

@@ -317,8 +317,8 @@ with the denial text; do not claim a create attempt ran.
 
 ```bash
 PR_CREATE_BODY={{AUTOSKILLIT_TEMP}}/compose-pr/pr_body_{run_id}.md
-if [ -z "$BASE_BRANCH" ]; then
-  printf '%s\n' 'Step 5 could not run:' 'base_branch must be non-empty.' >&2
+if [ -z "$WORK_DIR" ] || [ -z "$FEATURE_BRANCH" ] || [ -z "$BASE_BRANCH" ] || [ -z "$TASK_TITLE" ]; then
+  printf '%s\n' 'Step 5 could not run:' 'work_dir, feature_branch, base_branch and task_title must all be non-empty.' >&2
   exit 1
 fi
 PR_HEAD_SHA=$(git -C "$WORK_DIR" rev-parse --verify --quiet "refs/heads/$FEATURE_BRANCH" 2>/dev/null || true)

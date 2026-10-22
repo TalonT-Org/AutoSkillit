@@ -477,9 +477,16 @@ def test_every_unresolved_read_is_declared() -> None:
     live = Counter(_site_key(site, SRC_ROOT) for site in surface.unresolved)
     expected = {key: DYNAMIC_READ_EXEMPTION_COUNTS.get(key, 1) for key in DYNAMIC_READ_EXEMPTIONS}
     problems = _site_registry_problems(live, expected)
-    assert set(DYNAMIC_READ_EXEMPTION_COUNTS) <= set(DYNAMIC_READ_EXEMPTIONS)
-    assert all(count >= 2 for count in DYNAMIC_READ_EXEMPTION_COUNTS.values())
     assert not problems, f"DYNAMIC_READ_EXEMPTIONS registry mismatch: {problems}"
+
+
+def test_dynamic_read_exemption_counts_are_wellformed() -> None:
+    orphaned = set(DYNAMIC_READ_EXEMPTION_COUNTS) - set(DYNAMIC_READ_EXEMPTIONS)
+    assert not orphaned, (
+        f"Count overrides lack DYNAMIC_READ_EXEMPTIONS entries: {sorted(orphaned)}"
+    )
+    invalid = {key: count for key, count in DYNAMIC_READ_EXEMPTION_COUNTS.items() if count < 2}
+    assert not invalid, f"Count overrides must be at least 2: {invalid}"
 
 
 def test_production_env_surface_scan_parses_all_source_files() -> None:

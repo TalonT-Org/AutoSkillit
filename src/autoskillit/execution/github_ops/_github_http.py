@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from email.utils import parsedate_to_datetime
 from typing import Any
@@ -14,6 +15,18 @@ def github_error_message(data: Any) -> str | None:
         return None
     message = data.get("message")
     return message if isinstance(message, str) and message else None
+
+
+def github_error_detail(data: Any) -> str | None:
+    """Return GitHub's message plus bounded string or object ``errors[]`` details."""
+    message = github_error_message(data)
+    errors = data.get("errors") if isinstance(data, Mapping) else None
+    if not isinstance(errors, list) or not errors:
+        return message
+    items = "; ".join(
+        item if isinstance(item, str) else json.dumps(item, sort_keys=True) for item in errors
+    )
+    return (f"{message}: {items}" if message else items)[:500]
 
 
 def is_secondary_rate_limit(

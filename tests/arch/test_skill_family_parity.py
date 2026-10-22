@@ -5,6 +5,8 @@ Each family defines required API patterns; every member must satisfy them.
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 import pytest
 
 from autoskillit.core.paths import pkg_root
@@ -41,11 +43,17 @@ def test_thread_resolvers_require_drift_discipline() -> None:
     assert "drift-discipline" in family.required_patterns
 
 
-class TestGraphqlBatchAliases:
+class _PatternGuard:
+    PATTERN: ClassVar[str]
+
     @pytest.fixture(autouse=True)
     def _filter(self, family_skill: tuple[str, str, SkillFamilyDef]) -> None:
-        if "graphql-batch-aliases" not in family_skill[2].required_patterns:
-            pytest.skip("graphql-batch-aliases not required for this family")
+        if self.PATTERN not in family_skill[2].required_patterns:
+            pytest.skip(f"{self.PATTERN} not required for this family")
+
+
+class TestGraphqlBatchAliases(_PatternGuard):
+    PATTERN = "graphql-batch-aliases"
 
     def test_uses_batch_aliases(self, family_skill: tuple[str, str, SkillFamilyDef]) -> None:
         text = _read_skill_md(family_skill[1])
@@ -55,11 +63,8 @@ class TestGraphqlBatchAliases:
         )
 
 
-class TestMutatingCallDelay:
-    @pytest.fixture(autouse=True)
-    def _filter(self, family_skill: tuple[str, str, SkillFamilyDef]) -> None:
-        if "mutating-call-delay" not in family_skill[2].required_patterns:
-            pytest.skip("mutating-call-delay not required for this family")
+class TestMutatingCallDelay(_PatternGuard):
+    PATTERN = "mutating-call-delay"
 
     def test_has_sleep_delay(self, family_skill: tuple[str, str, SkillFamilyDef]) -> None:
         text = _read_skill_md(family_skill[1])
@@ -68,11 +73,8 @@ class TestMutatingCallDelay:
         )
 
 
-class TestUnpostablePrefilter:
-    @pytest.fixture(autouse=True)
-    def _filter(self, family_skill: tuple[str, str, SkillFamilyDef]) -> None:
-        if "unpostable-prefilter" not in family_skill[2].required_patterns:
-            pytest.skip("unpostable-prefilter not required for this family")
+class TestUnpostablePrefilter(_PatternGuard):
+    PATTERN = "unpostable-prefilter"
 
     def test_has_unpostable_bucket(self, family_skill: tuple[str, str, SkillFamilyDef]) -> None:
         text = _read_skill_md(family_skill[1])
@@ -81,52 +83,8 @@ class TestUnpostablePrefilter:
         )
 
 
-class TestResponseBodyGuard:
-    @pytest.fixture(autouse=True)
-    def _filter(self, family_skill: tuple[str, str, SkillFamilyDef]) -> None:
-        if "response-body-guard" not in family_skill[2].required_patterns:
-            pytest.skip("response-body-guard not required for this family")
-
-    def test_has_response_body_guard(self, family_skill: tuple[str, str, SkillFamilyDef]) -> None:
-        text = _read_skill_md(family_skill[1])
-        text_lower = text.lower()
-        assert "http 200" in text_lower, f"{family_skill[1]} must document HTTP 200 success signal"
-        idx = text_lower.find("http 200")
-        after_http200 = text_lower[idx:]
-        assert (
-            "do not inspect" in after_http200
-            or "regardless of response body" in after_http200
-            or "do not check" in after_http200
-        ), f"{family_skill[1]} must prohibit response body inspection near HTTP 200 reference"
-
-
-class TestOwnPrGuard:
-    @pytest.fixture(autouse=True)
-    def _filter(self, family_skill: tuple[str, str, SkillFamilyDef]) -> None:
-        if "own-pr-guard" not in family_skill[2].required_patterns:
-            pytest.skip("own-pr-guard not required for this family")
-
-    def test_has_own_pr_guard(self, family_skill: tuple[str, str, SkillFamilyDef]) -> None:
-        text = _read_skill_md(family_skill[1])
-        text_lower = text.lower()
-        has_self_ref = (
-            "own pr" in text_lower or "self-review" in text_lower or "authored" in text_lower
-        )
-        has_comment_fallback = (
-            "`comment`" in text_lower
-            or '"comment"' in text_lower
-            or "comment fallback" in text_lower
-        )
-        assert has_self_ref and has_comment_fallback, (
-            f"{family_skill[1]} must include own-PR guard with COMMENT fallback"
-        )
-
-
-class TestDriftDiscipline:
-    @pytest.fixture(autouse=True)
-    def _filter(self, family_skill: tuple[str, str, SkillFamilyDef]) -> None:
-        if "drift-discipline" not in family_skill[2].required_patterns:
-            pytest.skip("drift-discipline not required for this family")
+class TestDriftDiscipline(_PatternGuard):
+    PATTERN = "drift-discipline"
 
     def test_groups_descends_and_rereads_live_source(
         self, family_skill: tuple[str, str, SkillFamilyDef]
@@ -141,3 +99,14 @@ class TestDriftDiscipline:
         assert "live" in text_lower and ("re-read" in text_lower or "reread" in text_lower), (
             f"{family_skill[1]} must re-read live source before each edit"
         )
+
+
+def test_pattern_guards_match_required_patterns() -> None:
+    """Every local guard covers a pattern required by a skill family."""
+    guard_classes = [
+        cls for name, cls in globals().items() if name.startswith("Test") and isinstance(cls, type)
+    ]
+    assert all(issubclass(cls, _PatternGuard) for cls in guard_classes)
+    assert {cls.PATTERN for cls in guard_classes} == set().union(
+        *(family.required_patterns for family in GITHUB_API_SKILL_FAMILIES)
+    )

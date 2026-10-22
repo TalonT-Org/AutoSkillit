@@ -107,7 +107,7 @@ async def resume_pending_retry(
             error=preflight.error,
         )
         return replace(preflight, operation_key=operation_key)
-    scope_material, authenticated_login, pr_author_login = preflight
+    scope_material, authenticated_login, _ = preflight
     retry_indexes = set(attempt.canonical_indexes)
     retry_findings = tuple(
         finding for finding in findings if finding.canonical_index in retry_indexes
@@ -142,7 +142,6 @@ async def resume_pending_retry(
         attempt_number=attempt.attempt_number,
         omitted=attempt.omitted_dispositions,
         authenticated_login=authenticated_login,
-        pr_author_login=pr_author_login,
         resume_pending=True,
     )
 

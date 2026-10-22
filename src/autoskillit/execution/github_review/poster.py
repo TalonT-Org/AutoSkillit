@@ -23,7 +23,7 @@ from autoskillit.core import (
     ReviewResponseClass,
 )
 from autoskillit.execution.github_ops._github_http import (
-    github_error_message,
+    github_error_detail,
     retry_after_seconds,
 )
 
@@ -56,8 +56,6 @@ class ReviewAttemptOutcome(StrEnum):
     SERVER_ERROR = auto()
     SECONDARY_RATE_LIMIT = auto()
     ANCHOR_422 = auto()
-    SELF_REVIEW_422 = auto()
-    COMBINED_422 = auto()
     GENERIC_422 = auto()
     SECOND_422 = auto()
     CLIENT_ERROR = auto()
@@ -68,9 +66,6 @@ def classify_attempt_outcome(
     *,
     attempt_number: int,
     comment_count: int,
-    effective_event: str,
-    authenticated_login: str,
-    pr_author_login: str,
 ) -> tuple[ReviewAttemptOutcome, int | None]:
     if response.succeeded:
         return ReviewAttemptOutcome.SUCCESS, None
@@ -84,22 +79,8 @@ def classify_attempt_outcome(
         if attempt_number != 1:
             return ReviewAttemptOutcome.SECOND_422, None
         invalid_index = _poster_support.structured_invalid_comment_index(response, comment_count)
-        self_review = (
-            effective_event == "REQUEST_CHANGES"
-            and authenticated_login == pr_author_login
-            and _poster_support.is_structured_self_review(response)
-        )
         if invalid_index is not None:
-            return (
-                ReviewAttemptOutcome.COMBINED_422
-                if self_review
-                else ReviewAttemptOutcome.ANCHOR_422
-            ), invalid_index
-        if self_review:
-            # A second error whose anchor is not identifiable must not cause a full-set retry.
-            errors = response.data.get("errors", []) if isinstance(response.data, Mapping) else []
-            if len(errors) == 1:
-                return ReviewAttemptOutcome.SELF_REVIEW_422, None
+            return ReviewAttemptOutcome.ANCHOR_422, invalid_index
         return ReviewAttemptOutcome.GENERIC_422, None
     return ReviewAttemptOutcome.CLIENT_ERROR, None
 
@@ -202,6 +183,18 @@ class DefaultGitHubReviewPoster:
                 preflight, operation_key=operation_key, planned_comment_count=len(findings)
             )
         scope_material, authenticated_login, pr_author_login = preflight
+        effective_event = _poster_support.author_effective_event(
+            request.event,
+            authenticated_login=authenticated_login,
+            pr_author_login=pr_author_login,
+        )
+        prepared_material = _poster_retry.attempt_material(
+            request=request,
+            operation_key=operation_key,
+            findings=findings,
+            omitted=omitted,
+            effective_event=effective_event,
+        )
         persisted_findings = tuple(
             (
                 finding.canonical_index,
@@ -249,11 +242,11 @@ class DefaultGitHubReviewPoster:
             operation_key=operation_key,
             scope_id=scope_id,
             findings=findings,
-            effective_event=request.event,
+            effective_event=effective_event,
             attempt_number=1,
             omitted=omitted,
             authenticated_login=authenticated_login,
-            pr_author_login=pr_author_login,
+            prepared_material=prepared_material,
         )
         return replace(result, planned_comment_count=len(findings))
 
@@ -274,15 +267,18 @@ class DefaultGitHubReviewPoster:
         attempt_number: int,
         omitted: tuple[GitHubReviewFindingDisposition, ...],
         authenticated_login: str,
-        pr_author_login: str,
         resume_pending: bool = False,
+        prepared_material: tuple[dict[str, Any], bytes, str] | None = None,
     ) -> GitHubReviewPostResult:
-        payload, payload_json, attempt_digest = _poster_retry.attempt_material(
-            request=request,
-            operation_key=operation_key,
-            findings=findings,
-            omitted=omitted,
-            effective_event=effective_event,
+        payload, payload_json, attempt_digest = (
+            prepared_material
+            or _poster_retry.attempt_material(
+                request=request,
+                operation_key=operation_key,
+                findings=findings,
+                omitted=omitted,
+                effective_event=effective_event,
+            )
         )
         attempt = self.ledger.begin_attempt(
             operation_key=operation_key,
@@ -334,12 +330,8 @@ class DefaultGitHubReviewPoster:
                     response,
                     attempt_number=attempt_number,
                     comment_count=len(findings),
-                    effective_event=effective_event,
-                    authenticated_login=authenticated_login,
-                    pr_author_login=pr_author_login,
                 )
         retry = False
-        next_event = effective_event
         match outcome:
             case (
                 ReviewAttemptOutcome.RETRY_STALE
@@ -383,7 +375,7 @@ class DefaultGitHubReviewPoster:
                     state=ReviewOperationState.THROTTLED,
                     response_class=response.response_class,
                     status_code=response.status_code,
-                    error=github_error_message(response.data) or response.error,
+                    error=github_error_detail(response.data) or response.error,
                 )
                 _poster_retry.release_slot(
                     self, scope_id, slot, operation_key, keep_in_flight=False
@@ -392,7 +384,7 @@ class DefaultGitHubReviewPoster:
                     request,
                     ReviewOperationState.THROTTLED,
                     response.response_class,
-                    github_error_message(response.data) or "GitHub secondary rate limit",
+                    github_error_detail(response.data) or "GitHub secondary rate limit",
                     operation_key=operation_key,
                     executed_mutations=attempt_number,
                 )
@@ -400,18 +392,9 @@ class DefaultGitHubReviewPoster:
                 attempt_state = ReviewOperationState.COMMITTED_PENDING_VERIFICATION
             case ReviewAttemptOutcome.TRANSPORT_ERROR | ReviewAttemptOutcome.SERVER_ERROR:
                 attempt_state = ReviewOperationState.AMBIGUOUS
-            case (
-                ReviewAttemptOutcome.ANCHOR_422
-                | ReviewAttemptOutcome.SELF_REVIEW_422
-                | ReviewAttemptOutcome.COMBINED_422
-            ):
+            case ReviewAttemptOutcome.ANCHOR_422:
                 attempt_state = ReviewOperationState.AMBIGUOUS
                 retry = True
-                if outcome in {
-                    ReviewAttemptOutcome.SELF_REVIEW_422,
-                    ReviewAttemptOutcome.COMBINED_422,
-                }:
-                    next_event = "COMMENT"
             case (
                 ReviewAttemptOutcome.GENERIC_422
                 | ReviewAttemptOutcome.SECOND_422
@@ -422,7 +405,7 @@ class DefaultGitHubReviewPoster:
                 assert_never(outcome)
         assert response is not None and slot is not None
         response_class = response.response_class
-        error = github_error_message(response.data) or response.error
+        error = github_error_detail(response.data) or response.error
         reconciliation = await self._reconcile_payload(
             request=request,
             operation_key=operation_key,
@@ -501,70 +484,67 @@ class DefaultGitHubReviewPoster:
                 reconciliation=reconciliation.result,
                 executed_mutations=attempt_number,
             )
-        next_findings = findings
-        next_omitted = list(omitted)
-        if invalid_index is not None:
-            scan = await _poster_reconcile.scan_remote_findings(
-                self,
-                request=request,
-                authenticated_login=authenticated_login,
+        assert invalid_index is not None
+        scan = await _poster_reconcile.scan_remote_findings(
+            self,
+            request=request,
+            authenticated_login=authenticated_login,
+        )
+        if not scan.certain:
+            self.ledger.complete_attempt(
+                operation_key=operation_key,
+                attempt_number=attempt_number,
+                state=ReviewOperationState.AMBIGUOUS,
+                response_class=response_class,
+                status_code=response.status_code,
+                error=scan.error,
             )
-            if not scan.certain:
-                self.ledger.complete_attempt(
-                    operation_key=operation_key,
-                    attempt_number=attempt_number,
-                    state=ReviewOperationState.AMBIGUOUS,
-                    response_class=response_class,
-                    status_code=response.status_code,
-                    error=scan.error,
-                )
-                _poster_retry.release_slot(
-                    self, scope_id, slot, operation_key, keep_in_flight=True
-                )
-                return _poster_support.nonfinal_result(
-                    request,
-                    ReviewOperationState.AMBIGUOUS,
-                    response_class,
-                    scan.error or "remote finding deduplication was uncertain",
-                    operation_key=operation_key,
-                    executed_mutations=attempt_number,
-                )
-            rejected = findings[invalid_index]
-            reduced: list[AdmittedFinding] = []
-            for finding in findings:
-                if finding.canonical_index == rejected.canonical_index:
-                    next_omitted.append(
-                        GitHubReviewFindingDisposition(
-                            original_index=finding.original_index,
-                            canonical_index=finding.canonical_index,
-                            kind=ReviewFindingDispositionKind.OMITTED_INVALID,
-                            reason=_poster_support.structured_error_message(response)
-                            or "invalid diff anchor",
-                        )
-                    )
-                elif (remote_id := scan.ids_by_digest.get(finding.digest)) is not None:
-                    next_omitted.append(
-                        GitHubReviewFindingDisposition(
-                            original_index=finding.original_index,
-                            canonical_index=finding.canonical_index,
-                            kind=ReviewFindingDispositionKind.ALREADY_PRESENT,
-                            remote_comment_id=remote_id,
-                        )
-                    )
-                else:
-                    reduced.append(finding)
-            assert len(reduced) < len(findings)
-            next_findings = tuple(reduced)
-            if not next_findings:
-                next_omitted = list(omitted) + [
+            _poster_retry.release_slot(self, scope_id, slot, operation_key, keep_in_flight=True)
+            return _poster_support.nonfinal_result(
+                request,
+                ReviewOperationState.AMBIGUOUS,
+                response_class,
+                scan.error or "remote finding deduplication was uncertain",
+                operation_key=operation_key,
+                executed_mutations=attempt_number,
+            )
+        rejected = findings[invalid_index]
+        next_omitted = list(omitted)
+        reduced: list[AdmittedFinding] = []
+        for finding in findings:
+            if finding.canonical_index == rejected.canonical_index:
+                next_omitted.append(
                     GitHubReviewFindingDisposition(
                         original_index=finding.original_index,
                         canonical_index=finding.canonical_index,
                         kind=ReviewFindingDispositionKind.OMITTED_INVALID,
-                        reason="validation correction exhausted inline findings",
+                        reason=_poster_support.structured_error_message(response)
+                        or "invalid diff anchor",
                     )
-                    for finding in findings
-                ]
+                )
+            elif (remote_id := scan.ids_by_digest.get(finding.digest)) is not None:
+                next_omitted.append(
+                    GitHubReviewFindingDisposition(
+                        original_index=finding.original_index,
+                        canonical_index=finding.canonical_index,
+                        kind=ReviewFindingDispositionKind.ALREADY_PRESENT,
+                        remote_comment_id=remote_id,
+                    )
+                )
+            else:
+                reduced.append(finding)
+        assert len(reduced) < len(findings)
+        next_findings = tuple(reduced)
+        if not next_findings:
+            next_omitted = list(omitted) + [
+                GitHubReviewFindingDisposition(
+                    original_index=finding.original_index,
+                    canonical_index=finding.canonical_index,
+                    kind=ReviewFindingDispositionKind.OMITTED_INVALID,
+                    reason="validation correction exhausted inline findings",
+                )
+                for finding in findings
+            ]
         next_omitted_tuple = tuple(next_omitted)
         _poster_retry.schedule_retry(
             self,
@@ -576,7 +556,7 @@ class DefaultGitHubReviewPoster:
             error=error,
             retry_attempt_number=2,
             retry_findings=next_findings,
-            retry_effective_event=next_event,
+            retry_effective_event=effective_event,
             retry_omitted=next_omitted_tuple,
         )
         _poster_retry.release_slot(self, scope_id, slot, operation_key, keep_in_flight=False)
@@ -585,11 +565,10 @@ class DefaultGitHubReviewPoster:
             operation_key=operation_key,
             scope_id=scope_id,
             findings=next_findings,
-            effective_event=next_event,
+            effective_event=effective_event,
             attempt_number=2,
             omitted=next_omitted_tuple,
             authenticated_login=authenticated_login,
-            pr_author_login=pr_author_login,
             resume_pending=True,
         )
 

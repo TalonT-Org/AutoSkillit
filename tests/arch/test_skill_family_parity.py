@@ -43,6 +43,12 @@ def test_thread_resolvers_require_drift_discipline() -> None:
     assert "drift-discipline" in family.required_patterns
 
 
+@pytest.mark.parametrize("family_name", ["thread-resolvers", "review-posters"])
+def test_review_families_require_response_body_guard(family_name: str) -> None:
+    family = next(family for family in GITHUB_API_SKILL_FAMILIES if family.name == family_name)
+    assert "response-body-guard" in family.required_patterns
+
+
 class _PatternGuard:
     PATTERN: ClassVar[str]
 
@@ -81,6 +87,17 @@ class TestUnpostablePrefilter(_PatternGuard):
         assert "UNPOSTABLE" in text, (
             f"{family_skill[1]} must include UNPOSTABLE_FINDINGS pre-classification"
         )
+
+
+class TestResponseBodyGuard(_PatternGuard):
+    PATTERN = "response-body-guard"
+
+    def test_has_response_body_guard(self, family_skill: tuple[str, str, SkillFamilyDef]) -> None:
+        text = " ".join(_read_skill_md(family_skill[1]).split())
+        assert (
+            "Never infer publication success from the GitHub HTTP response `comments` array "
+            "or its length."
+        ) in text, f"{family_skill[1]} must prohibit inferring success from response comments"
 
 
 class TestDriftDiscipline(_PatternGuard):

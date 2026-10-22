@@ -61,6 +61,9 @@ Called by the research recipe when `audit_claims` routes `changes_requested` via
 
 ## Critical Constraints
 
+Never infer publication success from the GitHub HTTP response `comments` array
+or its length.
+
 **NEVER:**
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 

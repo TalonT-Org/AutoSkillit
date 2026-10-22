@@ -63,6 +63,7 @@ Derived value: `{run_id}` is the timestamp-plus-UUID token generated once in Ste
 ## Critical Constraints
 
 **NEVER:**
+- Report a PR URL that Step 5 neither created nor verified.
 - Invoke any sub-skills or slash commands
 - Fail the pipeline when `gh` is not accessible — emit `pr_url = ` (empty) and exit successfully
 - Create files outside `{{AUTOSKILLIT_TEMP}}/compose-pr/`
@@ -75,7 +76,7 @@ Derived value: `{run_id}` is the timestamp-plus-UUID token generated once in Ste
 
 **ALWAYS:**
 - Check `gh auth status` before attempting GitHub operations
-- Emit `pr_url` token (empty string when GitHub unavailable)
+- Emit `pr_url = <URL>` only for a PR Step 5 created or verified; emit `pr_url = ` (empty) only when Step 4 finds GitHub unavailable; emit no `pr_url` token after a Step 5 failure.
 - Validate diagrams with ★ or ● markers before including them
 - Degrade gracefully when `all_diagram_paths` is empty or all diagrams fail validation
   (omit Architecture Impact section; do not include a placeholder)
@@ -90,8 +91,8 @@ not yet be created. The recipe routes to `on_context_limit` (typically
 `release_issue_failure`), bypassing the normal completion protocol.
 
 **Before emitting structured output tokens:**
-1. Emit `pr_url = ` (empty) if the PR was not successfully created
-2. Emit whatever was completed; the orchestrator will handle the context-limit route
+1. If context runs out before Step 5 runs, emit no `pr_url` token and let the `on_context_limit` route handle the incomplete session. Once Step 5 has run, follow the Output rules.
+2. Emit whatever was completed.
 
 ## Workflow
 
@@ -290,10 +291,11 @@ If exit code is non-zero:
 
 ### Step 5: Create Pull Request
 
-Run `gh pr create` with bounded retry on transient failures. Capture PR URL from stdout.
-On success or successful response-loss recovery, emit `pr_url = <URL>`. On exhausted retries or
-terminal validation failures, print the final `gh pr create` stderr to stderr and return the
-final create status (the empty-`pr_url` path is reserved for Step 4's `gh auth status` preflight).
+Step 5 succeeds only on (a) `gh pr create` exit 0 with a URL on stdout, or (b) exactly
+one OPEN, same-repository PR whose head branch is `FEATURE_BRANCH`, base is `BASE_BRANCH`,
+and head commit matches the work dir's local `refs/heads/$FEATURE_BRANCH`. Stderr
+classification only decides stop vs. retry; it never establishes success. On exhausted
+retries or terminal failures, print the final create diagnostic and return nonzero.
 
 Immediately before the first create attempt, read `PR_CREATE_BODY` and only its
 `with_suffix(".metadata.json")` sibling. Require a regular readable body, the exact
@@ -301,8 +303,28 @@ four-field version-1 schema above, a matching raw-byte digest, and—when issue-
 matching issue number plus exact canonical URL in the body. Any mismatch is terminal and
 must stop before `gh pr create` executes.
 
+At the top of the same Bash invocation, assign `WORK_DIR` (arg[3]), `FEATURE_BRANCH`
+(the value Step 0's `rev-parse --abbrev-ref HEAD` printed), `BASE_BRANCH` (arg[4]) and
+`TASK_TITLE` (verbatim from `## Title`) as single-quoted literals, and substitute the literal
+`{run_id}`. Encode every embedded apostrophe using `'\''`, for example
+`TASK_TITLE='user'\''s title'`. Apply this quoting rule to all four values to preserve
+their exact bytes.
+
+Run the fence unchanged as one command. Never run its commands piecemeal or substitute
+your own judgement for its classification or recovery. If a hook denies it, fix the literal
+substitutions and rerun. If that cannot fix the denial, emit the pre-create failure form
+with the denial text; do not claim a create attempt ran.
+
 ```bash
 PR_CREATE_BODY={{AUTOSKILLIT_TEMP}}/compose-pr/pr_body_{run_id}.md
+if [ -z "$WORK_DIR" ] || [ -z "$FEATURE_BRANCH" ] || [ -z "$BASE_BRANCH" ] || [ -z "$TASK_TITLE" ]; then
+  printf '%s\n' 'Step 5 could not run:' 'work_dir, feature_branch, base_branch and task_title must all be non-empty.' >&2
+  exit 1
+fi
+PR_HEAD_SHA=$(git -C "$WORK_DIR" rev-parse --verify --quiet "refs/heads/$FEATURE_BRANCH" 2>/dev/null || true)
+if [ -z "$PR_HEAD_SHA" ]; then
+  printf '%s\n' 'Verified PR recovery is disabled: could not resolve the local feature-branch head.' >&2
+fi
 PR_CREATE_ATTEMPT=1
 PR_CREATE_MAX=3
 PR_CREATE_STATUS=0
@@ -330,6 +352,12 @@ while [ "$PR_CREATE_ATTEMPT" -le "$PR_CREATE_MAX" ]; do
   fi
   PR_CREATE_ERR=$(cat "{{AUTOSKILLIT_TEMP}}/compose-pr/pr_stderr_{run_id}.txt")
   case "$PR_CREATE_ERR" in
+    # Non-retryable creation rejection — the head has no commits relative to the base.
+    *No\ commits\ between*)
+      break ;;
+    # Duplicate open PR for this head and base — proceed to verified recovery.
+    *already\ exists:*)
+      : ;;
     # Retryable — HTTP 5xx, HTTP 429, secondary rate limit, rate limit, timeout, connection reset/refused.
     # Classified before broad HTTP 4xx terminal handling so retryable rate limits are not shadowed.
     *HTTP\ 429*|*secondary\ rate\ limit*|*rate\ limit*|*HTTP\ 5*|*timeout*|*connection\ reset*|*connection\ refused*|*temporary\ DNS*|*internal\ server\ error*|*remote\ server\ error*)
@@ -337,11 +365,15 @@ while [ "$PR_CREATE_ATTEMPT" -le "$PR_CREATE_MAX" ]; do
     # Terminal — do not retry (broad HTTP 4xx / validation / required-field missing).
     *HTTP\ 4*|*validation*|*required*|*not\ found*)
       break ;;
-    # Ambiguous (empty / unknown stderr) — attempt response-loss recovery, then retry.
+    # Ambiguous (empty / unknown stderr) — attempt verified response-loss recovery, then retry.
     *)
       : ;;
   esac
-  RECOVERED=$(gh pr view "$FEATURE_BRANCH" --json url -q .url 2>/dev/null || true)
+  # PR_HEAD_SHA is git's hex object name (empty matches nothing), safe to splice into jq.
+  RECOVERED=$(gh pr list --head "$FEATURE_BRANCH" --base "$BASE_BRANCH" --state open \
+    --json url,headRefOid,isCrossRepository \
+    --jq '[.[] | select(.headRefOid == "'"$PR_HEAD_SHA"'" and (.isCrossRepository | not))] | if length == 1 then .[0].url else empty end' \
+    2>/dev/null || true)
   if [ -n "$RECOVERED" ]; then
     PR_URL="$RECOVERED"
     PR_CREATE_STATUS=0
@@ -369,6 +401,8 @@ exit "$PR_CREATE_STATUS"
 ```
 
 Bounded retry policy:
+- `No commits between` creation rejections are non-retryable and never recovered
+- `a pull request … already exists:` proceeds to verified recovery
 - Maximum 3 total `gh pr create` attempts
 - Backoff sleeps of 1 second before attempt 2 and 2 seconds before attempt 3
 - Each attempt's stdout/stderr captured under `{{AUTOSKILLIT_TEMP}}/compose-pr/`
@@ -381,11 +415,12 @@ Bounded retry policy:
 - Do not retry terminal validation or usage failures (broad HTTP 4xx, validation errors,
   missing required fields, not-found errors)
 
-Response-loss recovery: when a create attempt fails with a transient/ambiguous status (or empty
-stderr that suggests the create succeeded but the response was lost), run a best-effort
-`gh pr view "$FEATURE_BRANCH" --json url -q .url` before sleeping and retrying. If it returns
-a URL, treat the create as recovered and emit that URL. The recovery path runs only for
-transient/ambiguous failures — never for terminal validation failures.
+Response-loss recovery uses `gh pr list --head/--base/--state open` before sleeping and
+retrying. It selects the local head commit and same repository, accepting exactly one
+match after filtering. CLOSED, MERGED, different-commit, different-base, fork or ambiguous
+candidates are never emitted. An unresolvable local head commit disables recovery.
+Recovery remains reachable when create exits 0 with no URL, and runs for duplicate-PR
+signals and transient/ambiguous failures; terminal failures never recover.
 
 Last-attempt tracking: `PR_CREATE_LAST_ATTEMPT` is set to `$PR_CREATE_ATTEMPT` immediately
 after each `gh pr create` execution for the attempt-count diagnostic. The fixed
@@ -417,5 +452,23 @@ pr_url = https://github.com/owner/repo/pull/N
 When `gh` is not available or not authenticated:
 ```
 pr_url = 
+%%ORDER_UP::<hex>%%
+```
+
+When the Step 5 fence exits nonzero, report its diagnostic, emit no `pr_url` token,
+and still end with the completion marker; `pr_url = ` (empty) is reserved for Step 4.
+
+```text
+gh pr create failed after <N> attempt(s):
+<gh pr create stderr>
+%%ORDER_UP::<hex>%%
+```
+
+For an empty required base or a hook denial that prevents the command from running,
+emit the pre-create diagnostic and completion marker with no `pr_url` token:
+
+```text
+Step 5 could not run:
+<precondition or hook denial diagnostic>
 %%ORDER_UP::<hex>%%
 ```

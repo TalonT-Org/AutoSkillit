@@ -59,6 +59,13 @@ class TestReviewPrRecipeIntegration:
             f"{recipe_name}: guard_pr_url must route to extract_pr_number when pr_url is truthy"
         )
 
+    def test_extract_pr_number_derives_from_verified_pr_url(self, recipe: object) -> None:
+        step = recipe.steps["extract_pr_number"]  # type: ignore[attr-defined]
+        cmd = step.with_args["cmd"]
+        assert "context.pr_url" in cmd
+        assert "merge_target" not in cmd
+        assert step.capture["pr_number"].from_ == "${{ result.stdout | trim }}"
+
     def test_review_pr_step_exists_and_is_run_skill(self, recipe: object) -> None:
         """T_RP2: review_pr step exists and uses run_skill tool."""
         step = recipe.steps["review_pr"]  # type: ignore[attr-defined]

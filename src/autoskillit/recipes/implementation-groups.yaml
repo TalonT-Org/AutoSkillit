@@ -1268,7 +1268,7 @@ steps:
   extract_pr_number:
     tool: run_cmd
     with:
-      cmd: gh pr view '${{ context.merge_target }}' --json number -q .number
+      cmd: gh pr view '${{ context.pr_url }}' --json number -q .number
       cwd: ${{ context.work_dir }}
       step_name: extract_pr_number
     capture:
@@ -1279,7 +1279,7 @@ steps:
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
     note: >
-      Extracts the integer PR number from the feature branch opened by compose_pr.
+      Extracts the integer PR number from compose-pr's verified pr_url.
       pr_number is required by the queue finale steps (enqueue_to_queue, wait_for_queue).
 
   capture_review_repository:

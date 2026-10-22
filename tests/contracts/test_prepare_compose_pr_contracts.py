@@ -310,8 +310,12 @@ def _compose_pr_step5_bash() -> str:
     return blocks[0]
 
 
-def test_compose_pr_skill_has_no_branch_keyed_pr_view():
-    assert 'gh pr view "$FEATURE_BRANCH"' not in COMPOSE_PR.read_text(encoding="utf-8")
+def test_compose_pr_step5_uses_scoped_pr_list_for_recovery():
+    import re
+
+    bash = _compose_pr_step5_bash()
+    assert not re.search(r"\bgh\s+pr\s+view\b", bash)
+    assert re.search(r"\bgh\s+pr\s+list\s+--head\s+\S+\s+--base\b", bash)
 
 
 def test_compose_pr_step5_has_bounded_retry_count_of_three():

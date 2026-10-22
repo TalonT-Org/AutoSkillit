@@ -84,8 +84,6 @@ _PSEUDO_REF_PATTERN: Final = re.compile(
     r"^(?:FETCH_HEAD|HEAD|MERGE_HEAD|ORIG_HEAD|@)(?:(?:\^)|(?:~\d+))*$"
 )
 _SHA_PATTERN: Final = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
-_CLONE_GUARD_PATH: Final = "execution/runtime/clone_guard.py"
-_CMD_RPC_MERGE_PATH: Final = "recipe/cmd_rpc/_cmd_rpc_merge.py"
 
 # (relative path, enclosing class/function, subcommand, classification)
 _EXPECTED_GIT_REF_SITES: tuple[tuple[str, str, str, str], ...] = (

@@ -800,8 +800,11 @@ def test_payload_discloses_only_author_comment_transformation(
     request = _request(tmp_path, event=requested, body=body)
     arguments = dict(request=request, operation_key="key", findings=(), omitted=(), event=event)
     if event != requested and event != "COMMENT":
-        with pytest.raises(ValueError, match="unsupported review event transformation"):
+        with pytest.raises(
+            ValueError, match="unsupported review event transformation"
+        ) as exc_info:
             _poster_support.payload(**arguments)
+        assert f"{requested!r} -> {event!r}" in str(exc_info.value)
         return
     pieces = [body] if body else []
     if event != requested:

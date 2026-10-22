@@ -70,7 +70,9 @@ def _disclose_author_event(body: str, *, requested_event: str, event: str) -> st
     if event == requested_event:
         return body
     if event != "COMMENT" or requested_event not in _AUTHOR_EVENT_DISCLOSURES:
-        raise ValueError("unsupported review event transformation")
+        raise ValueError(
+            f"unsupported review event transformation: {requested_event!r} -> {event!r}"
+        )
     return append_marker(body, _AUTHOR_EVENT_DISCLOSURES[requested_event])
 
 

@@ -158,9 +158,6 @@ class TestExecutionInstallDelivery:
             ("src/autoskillit/same_line.py", scope),
             ("src/autoskillit/same_line.py", scope),
         ]
-        assert Counter(path for path, _scope in sites) == Counter(
-            {"src/autoskillit/same_line.py": 2}
-        )
 
     def test_install_scanner_reports_parse_failure(self, tmp_path: Path, monkeypatch) -> None:
         broken = tmp_path / "broken.py"

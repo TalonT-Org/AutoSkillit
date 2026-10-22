@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ast
 import re
+from collections import Counter
 from dataclasses import dataclass
 from typing import Final
 
@@ -85,144 +86,108 @@ _SHA_PATTERN: Final = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
 _CLONE_GUARD_PATH: Final = "execution/runtime/clone_guard.py"
 _CMD_RPC_MERGE_PATH: Final = "recipe/cmd_rpc/_cmd_rpc_merge.py"
 
-# (relative path, enclosing function, line number, subcommand, classification)
-_EXPECTED_GIT_REF_SITES: tuple[tuple[str, str, int, str, str], ...] = (
-    ("cli/update/_update_checks_source.py", "_git_ls_remote_sha", 186, "ls-remote", "BARE"),
-    ("core/git/git_refs.py", "verify_qualified_ref_sync", 61, "rev-parse", "BARE"),
-    ("core/install/cmd_runner.py", "run_git", 62, "<unresolved>", "UNRESOLVABLE"),
+# (relative path, enclosing class/function, subcommand, classification)
+_EXPECTED_GIT_REF_SITES: tuple[tuple[str, str, str, str], ...] = (
+    ("cli/update/_update_checks_source.py", "_git_ls_remote_sha", "ls-remote", "BARE"),
+    ("core/git/git_refs.py", "verify_qualified_ref_sync", "rev-parse", "BARE"),
+    ("core/install/cmd_runner.py", "run_git", "<unresolved>", "UNRESOLVABLE"),
+    ("core/install/install_detect.py", "_git", "<unresolved>", "UNRESOLVABLE"),
     (
         "execution/headless/_headless_git.py",
         "_capture_main_checkout_state",
-        86,
         "for-each-ref",
         "UNRESOLVABLE",
     ),
-    ("execution/headless/_headless_git.py", "_compute_loc_changed", 380, "diff", "BARE"),
-    (_CLONE_GUARD_PATH, "_prune_stash_overflow", 379, "stash", "UNRESOLVABLE"),
-    (_CLONE_GUARD_PATH, "_prune_stash_overflow", 401, "stash", "UNRESOLVABLE"),
-    (_CLONE_GUARD_PATH, "_stash_and_clean", 326, "stash", "UNRESOLVABLE"),
-    (_CLONE_GUARD_PATH, "revert_contamination", 505, "reset", "BARE"),
-    (_CLONE_GUARD_PATH, "revert_contamination", 524, "reset", "BARE"),
-    (_CLONE_GUARD_PATH, "revert_contamination", 539, "reset", "BARE"),
-    (_CLONE_GUARD_PATH, "validate_pre_session_index", 236, "reset", "BARE"),
-    (_CLONE_GUARD_PATH, "validate_pre_session_index", 267, "rm", "UNRESOLVABLE"),
-    ("exploration/identity.py", "_git_value", 112, "<unresolved>", "UNRESOLVABLE"),
-    ("exploration/snapshot/_capture.py", "_git", 94, "<unresolved>", "UNRESOLVABLE"),
-    ("fleet/_reset.py", "_delete_reset_branches", 258, "push", "BARE"),
+    ("execution/headless/_headless_git.py", "_compute_loc_changed", "diff", "BARE"),
+    ("execution/runtime/clone_guard.py", "_prune_stash_overflow", "stash", "UNRESOLVABLE"),
+    ("execution/runtime/clone_guard.py", "_prune_stash_overflow", "stash", "UNRESOLVABLE"),
+    ("execution/runtime/clone_guard.py", "_stash_and_clean", "stash", "UNRESOLVABLE"),
+    ("execution/runtime/clone_guard.py", "revert_contamination", "reset", "BARE"),
+    ("execution/runtime/clone_guard.py", "revert_contamination", "reset", "BARE"),
+    ("execution/runtime/clone_guard.py", "revert_contamination", "reset", "BARE"),
+    ("execution/runtime/clone_guard.py", "validate_pre_session_index", "reset", "BARE"),
+    ("execution/runtime/clone_guard.py", "validate_pre_session_index", "rm", "UNRESOLVABLE"),
+    ("exploration/identity.py", "_git_value", "<unresolved>", "UNRESOLVABLE"),
+    ("exploration/snapshot/_capture.py", "_git", "<unresolved>", "UNRESOLVABLE"),
+    ("fleet/_reset.py", "_delete_reset_branches", "push", "BARE"),
     (
         "hooks/_runtime/_git_command_classification.py",
         "_git_result",
-        224,
         "<unresolved>",
         "UNRESOLVABLE",
     ),
-    ("hooks/guards/remove_clone_guard.py", "_git", 57, "<unresolved>", "UNRESOLVABLE"),
-    ("recipe/cmd_rpc/_cmd_rpc_guards.py", "_check_regression", 543, "merge-base", "BARE"),
+    ("hooks/guards/remove_clone_guard.py", "_git", "<unresolved>", "UNRESOLVABLE"),
+    ("recipe/cmd_rpc/_cmd_rpc_guards.py", "_check_regression", "<unresolved>", "UNRESOLVABLE"),
+    ("recipe/cmd_rpc/_cmd_rpc_guards.py", "_check_regression", "<unresolved>", "UNRESOLVABLE"),
+    ("recipe/cmd_rpc/_cmd_rpc_guards.py", "_check_regression", "merge-base", "BARE"),
+    ("recipe/cmd_rpc/_cmd_rpc_guards.py", "commit_guard", "<unresolved>", "UNRESOLVABLE"),
+    ("recipe/cmd_rpc/_cmd_rpc_guards.py", "main_repo_guard", "stash", "UNRESOLVABLE"),
     (
-        "recipe/cmd_rpc/_cmd_rpc_guards.py",
-        "_check_regression",
-        548,
-        "<unresolved>",
-        "UNRESOLVABLE",
-    ),
-    (
-        "recipe/cmd_rpc/_cmd_rpc_guards.py",
-        "_check_regression",
-        558,
-        "<unresolved>",
-        "UNRESOLVABLE",
-    ),
-    ("recipe/cmd_rpc/_cmd_rpc_guards.py", "commit_guard", 648, "<unresolved>", "UNRESOLVABLE"),
-    ("recipe/cmd_rpc/_cmd_rpc_guards.py", "main_repo_guard", 167, "stash", "UNRESOLVABLE"),
-    (_CMD_RPC_MERGE_PATH, "_attempt_rebase_with_conflict_report", 211, "fetch", "BARE"),
-    (_CMD_RPC_MERGE_PATH, "_attempt_rebase_with_conflict_report", 212, "fetch", "BARE"),
-    (
-        _CMD_RPC_MERGE_PATH,
+        "recipe/cmd_rpc/_cmd_rpc_merge.py",
         "_attempt_rebase_with_conflict_report",
-        215,
         "<unresolved>",
         "UNRESOLVABLE",
     ),
-    (_CMD_RPC_MERGE_PATH, "_attempt_rebase_with_conflict_report", 216, "rebase", "BARE"),
-    (_CMD_RPC_MERGE_PATH, "create_persistent_integration", 271, "checkout", "BARE"),
-    (_CMD_RPC_MERGE_PATH, "create_persistent_integration", 272, "pull", "UNRESOLVABLE"),
-    (_CMD_RPC_MERGE_PATH, "create_persistent_integration", 274, "push", "BARE"),
-    (_CMD_RPC_MERGE_PATH, "force_push_and_wait_mergeability", 293, "push", "BARE"),
-    (_CMD_RPC_MERGE_PATH, "queue_ejected_fix", 123, "fetch", "BARE"),
-    (_CMD_RPC_MERGE_PATH, "queue_ejected_fix", 126, "rebase", "BARE"),
-    ("server/_self_revert.py", "_scan_commit", 147, "rev-list", "BARE"),
-    ("server/_self_revert.py", "_scan_commit", 147, "rev-list", "BARE"),
-    ("server/_self_revert.py", "_scan_commit", 163, "show", "BARE"),
-    ("server/_self_revert.py", "detect_self_reverts", 236, "rev-list", "BARE"),
-    ("server/git.py", "perform_merge", 322, "<unresolved>", "UNRESOLVABLE"),
-    ("server/git.py", "perform_merge", 327, "<unresolved>", "UNRESOLVABLE"),
-    ("server/git.py", "perform_merge", 445, "log", "BARE"),
-    ("server/git.py", "perform_merge", 468, "rebase", "BARE"),
-    ("server/git.py", "perform_merge", 548, "rev-parse", "BARE"),
-    ("server/git.py", "perform_merge", 565, "merge-base", "BARE"),
-    ("server/git.py", "perform_merge", 565, "merge-base", "BARE"),
-    ("server/git.py", "perform_merge", 617, "merge", "BARE"),
-    ("core/install/install_detect.py", "_git", 64, "<unresolved>", "UNRESOLVABLE"),
-    ("server/tools/tools_ci_watch.py", "_auto_trigger_ci", 408, "push", "BARE"),
-    ("server/tools/tools_git.py", "classify_fix", 177, "fetch", "BARE"),
-    ("server/tools/tools_git.py", "classify_fix", 196, "diff", "BARE"),
+    ("recipe/cmd_rpc/_cmd_rpc_merge.py", "_attempt_rebase_with_conflict_report", "fetch", "BARE"),
+    ("recipe/cmd_rpc/_cmd_rpc_merge.py", "_attempt_rebase_with_conflict_report", "fetch", "BARE"),
+    ("recipe/cmd_rpc/_cmd_rpc_merge.py", "_attempt_rebase_with_conflict_report", "rebase", "BARE"),
+    ("recipe/cmd_rpc/_cmd_rpc_merge.py", "create_persistent_integration", "checkout", "BARE"),
+    ("recipe/cmd_rpc/_cmd_rpc_merge.py", "create_persistent_integration", "pull", "UNRESOLVABLE"),
+    ("recipe/cmd_rpc/_cmd_rpc_merge.py", "create_persistent_integration", "push", "BARE"),
+    ("recipe/cmd_rpc/_cmd_rpc_merge.py", "force_push_and_wait_mergeability", "push", "BARE"),
+    ("recipe/cmd_rpc/_cmd_rpc_merge.py", "queue_ejected_fix", "fetch", "BARE"),
+    ("recipe/cmd_rpc/_cmd_rpc_merge.py", "queue_ejected_fix", "rebase", "BARE"),
+    ("server/_self_revert.py", "_scan_commit", "rev-list", "BARE"),
+    ("server/_self_revert.py", "_scan_commit", "rev-list", "BARE"),
+    ("server/_self_revert.py", "_scan_commit", "show", "BARE"),
+    ("server/_self_revert.py", "detect_self_reverts", "rev-list", "BARE"),
+    ("server/git.py", "perform_merge", "<unresolved>", "UNRESOLVABLE"),
+    ("server/git.py", "perform_merge", "<unresolved>", "UNRESOLVABLE"),
+    ("server/git.py", "perform_merge", "log", "BARE"),
+    ("server/git.py", "perform_merge", "merge", "BARE"),
+    ("server/git.py", "perform_merge", "merge-base", "BARE"),
+    ("server/git.py", "perform_merge", "merge-base", "BARE"),
+    ("server/git.py", "perform_merge", "rebase", "BARE"),
+    ("server/git.py", "perform_merge", "rev-parse", "BARE"),
     (
         "server/tools/_pre_commit_transaction.py",
         "_run_pre_commit_transaction",
-        67,
         "<unresolved>",
         "UNRESOLVABLE",
     ),
-    ("server/tools/_self_revert.py", "validate_self_revert_base", 26, "rev-parse", "BARE"),
-    ("server/tools/_self_revert.py", "validate_self_revert_base", 39, "merge-base", "BARE"),
-    (
-        "server/tools/tools_workspace.py",
-        "_run_commit_transaction",
-        63,
-        "<unresolved>",
-        "UNRESOLVABLE",
-    ),
-    ("smoke_utils/_git.py", "check_commits_ahead", 179, "rev-list", "BARE"),
-    ("smoke_utils/_git.py", "check_ref_state", 235, "ls-remote", "BARE"),
-    ("smoke_utils/_git.py", "check_ref_state", 259, "merge-base", "BARE"),
-    ("smoke_utils/_git.py", "check_ref_state", 259, "merge-base", "BARE"),
-    ("smoke_utils/_git.py", "compute_domain_partitions", 45, "diff", "BARE"),
-    ("smoke_utils/_git.py", "detect_zero_changes", 135, "rev-list", "BARE"),
-    ("smoke_utils/_review.py", "annotate_pr_diff", 297, "merge-base", "BARE"),
-    ("smoke_utils/_review.py", "annotate_pr_diff", 297, "merge-base", "BARE"),
-    ("smoke_utils/_review.py", "annotate_pr_diff", 311, "diff", "BARE"),
-    ("smoke_utils/_review.py", "annotate_pr_diff", 312, "diff", "BARE"),
-    (
-        "smoke_utils/_review.py",
-        "annotate_pr_diff._ensure_provider_objects",
-        242,
-        "cat-file",
-        "BARE",
-    ),
-    (
-        "smoke_utils/_review.py",
-        "annotate_pr_diff._ensure_provider_objects",
-        272,
-        "fetch",
-        "BARE",
-    ),
+    ("server/tools/_self_revert.py", "validate_self_revert_base", "merge-base", "BARE"),
+    ("server/tools/_self_revert.py", "validate_self_revert_base", "rev-parse", "BARE"),
+    ("server/tools/tools_ci_watch.py", "_auto_trigger_ci", "push", "BARE"),
+    ("server/tools/tools_git.py", "classify_fix", "diff", "BARE"),
+    ("server/tools/tools_git.py", "classify_fix", "fetch", "BARE"),
+    ("server/tools/tools_workspace.py", "_run_commit_transaction", "<unresolved>", "UNRESOLVABLE"),
+    ("smoke_utils/_git.py", "check_commits_ahead", "rev-list", "BARE"),
+    ("smoke_utils/_git.py", "check_ref_state", "ls-remote", "BARE"),
+    ("smoke_utils/_git.py", "check_ref_state", "merge-base", "BARE"),
+    ("smoke_utils/_git.py", "check_ref_state", "merge-base", "BARE"),
+    ("smoke_utils/_git.py", "compute_domain_partitions", "diff", "BARE"),
+    ("smoke_utils/_git.py", "detect_zero_changes", "rev-list", "BARE"),
+    ("smoke_utils/_review.py", "annotate_pr_diff", "diff", "BARE"),
+    ("smoke_utils/_review.py", "annotate_pr_diff", "diff", "BARE"),
+    ("smoke_utils/_review.py", "annotate_pr_diff", "merge-base", "BARE"),
+    ("smoke_utils/_review.py", "annotate_pr_diff", "merge-base", "BARE"),
+    ("smoke_utils/_review.py", "annotate_pr_diff._ensure_provider_objects", "cat-file", "BARE"),
+    ("smoke_utils/_review.py", "annotate_pr_diff._ensure_provider_objects", "fetch", "BARE"),
     (
         "workspace/clone/__init__.py",
         "_decontaminate_generated_files",
-        170,
         "<unresolved>",
         "UNRESOLVABLE",
     ),
     (
         "workspace/clone/__init__.py",
         "_decontaminate_generated_files",
-        178,
         "<unresolved>",
         "UNRESOLVABLE",
     ),
-    ("workspace/clone/__init__.py", "push_to_remote", 523, "push", "BARE"),
+    ("workspace/clone/__init__.py", "push_to_remote", "push", "BARE"),
 )
-_DEFERRED_REF_SITES: dict[tuple[str, str, int, str, str], TrackedDeferral] = {}
+_DEFERRED_REF_SITES: dict[tuple[str, str, str, str], TrackedDeferral] = {}
 
 
 @dataclass(frozen=True)
@@ -385,7 +350,9 @@ class _GitRefCollector(ast.NodeVisitor):
         self._functions.pop()
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self._functions.append(node.name)
         self._visit_scope(node)
+        self._functions.pop()
 
     def visit_DictComp(self, node: ast.DictComp) -> None:
         self._visit_scope(node)
@@ -583,8 +550,8 @@ def _scan_source() -> tuple[_GitRefSite, ...]:
     return tuple(sites)
 
 
-def _inventory_key(site: _GitRefSite) -> tuple[str, str, int, str, str]:
-    return site.path, site.function, site.lineno, site.subcommand, site.classification
+def _inventory_key(site: _GitRefSite) -> tuple[str, str, str, str]:
+    return site.path, site.function, site.subcommand, site.classification
 
 
 def _live_violations() -> tuple[_GitRefSite, ...]:
@@ -592,10 +559,10 @@ def _live_violations() -> tuple[_GitRefSite, ...]:
 
 
 def _assert_inventory_matches(
-    observed: tuple[tuple[str, str, int, str, str], ...],
-    expected: tuple[tuple[str, str, int, str, str], ...],
+    observed: tuple[tuple[str, str, str, str], ...],
+    expected: tuple[tuple[str, str, str, str], ...],
 ) -> None:
-    assert sorted(observed) == sorted(expected)
+    assert Counter(observed) == Counter(expected)
 
 
 def test_no_unqualified_ref_site_outside_inventory() -> None:
@@ -772,8 +739,38 @@ def test_path_separator_stops_revision_scan() -> None:
     assert sites == ()
 
 
+def test_inventory_key_is_line_free() -> None:
+    source = 'def push_it(base_branch):\n    subprocess.run(["git", "rev-parse", base_branch])\n'
+    original = _scan_tree(ast.parse(source), "synthetic.py")
+    shifted = _scan_tree(ast.parse("\n" * 25 + source), "synthetic.py")
+
+    assert len(original) == len(shifted) == 1
+    assert [site.classification for site in original] == ["BARE"]
+    assert [site.classification for site in shifted] == ["BARE"]
+    assert shifted[0].lineno == original[0].lineno + 25
+    assert _inventory_key(original[0]) == _inventory_key(shifted[0])
+    assert len(_inventory_key(original[0])) == 4
+
+
+def test_same_named_methods_in_different_classes_have_distinct_keys() -> None:
+    source = (
+        "class A:\n"
+        "    def run(self, base):\n"
+        '        subprocess.run(["git", "rev-parse", base])\n'
+        "class B:\n"
+        "    def run(self, base):\n"
+        '        subprocess.run(["git", "rev-parse", base])\n'
+    )
+    sites = _scan_tree(ast.parse(source), "synthetic.py")
+
+    assert len(sites) == 2
+    keys = [_inventory_key(site) for site in sites]
+    assert [site.function for site in sites] == ["A.run", "B.run"]
+    assert keys[0][1] != keys[1][1]
+
+
 def test_missing_expected_site_is_caught() -> None:
-    observed = (("synthetic.py", "<module>", 1, "diff", "BARE"),)
+    observed = (("synthetic.py", "<module>", "diff", "BARE"),)
     with pytest.raises(AssertionError):
         _assert_inventory_matches(observed, ())
     with pytest.raises(AssertionError):

@@ -310,6 +310,10 @@ def _compose_pr_step5_bash() -> str:
     return blocks[0]
 
 
+def test_compose_pr_skill_has_no_branch_keyed_pr_view():
+    assert 'gh pr view "$FEATURE_BRANCH"' not in COMPOSE_PR.read_text()
+
+
 def test_compose_pr_step5_has_bounded_retry_count_of_three():
     """Step 5 must cap total gh pr create attempts at 3."""
     import re

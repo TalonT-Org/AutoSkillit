@@ -943,7 +943,9 @@ async def test_effective_body_overflow_rejected_before_ledger_state(
 ) -> None:
     clock = ManualClock()
     gateway = StatefulReviewGateway(
-        clock=clock, authenticated_login="pull-author" if own_author else "reviewer"
+        clock=clock,
+        authenticated_login="pull-author" if own_author else "reviewer",
+        pr_author_login="pull-author",
     )
     db = tmp_path / "ledger.sqlite3"
     request = _request(tmp_path, event=event, body="x" * length)

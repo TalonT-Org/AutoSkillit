@@ -86,6 +86,7 @@ _PSEUDO_REF_PATTERN: Final = re.compile(
 _SHA_PATTERN: Final = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
 
 # (relative path, enclosing class/function, subcommand, classification)
+# Repeated tuples represent distinct call sites with the same line-free identity.
 _EXPECTED_GIT_REF_SITES: tuple[tuple[str, str, str, str], ...] = (
     ("cli/update/_update_checks_source.py", "_git_ls_remote_sha", "ls-remote", "BARE"),
     ("core/git/git_refs.py", "verify_qualified_ref_sync", "rev-parse", "BARE"),

@@ -8,6 +8,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -63,7 +64,7 @@ if args[:2] == ["pr", "create"]:
     sys.exit(int(os.environ.get(f"FAKE_GH_CREATE_{attempt}_EXIT", "0")))
 
 
-def option(*names, default=None):
+def option(*names: str, default: str | None = None) -> str | None:
     for name in names:
         if name in args:
             return args[args.index(name) + 1]
@@ -153,7 +154,16 @@ def _work_repo(tmp_path: Path, branch: str = "test-branch") -> tuple[Path, str]:
     return repo, oid
 
 
-def _pr(n, oid, *, state="OPEN", head="test-branch", base="main", cross=False, created=None):
+def _pr(
+    n: int,
+    oid: str,
+    *,
+    state: str = "OPEN",
+    head: str = "test-branch",
+    base: str = "main",
+    cross: bool = False,
+    created: str | None = None,
+) -> dict[str, str | bool]:
     return {
         "url": f"https://github.com/owner/repo/pull/{n}",
         "state": state,
@@ -165,7 +175,7 @@ def _pr(n, oid, *, state="OPEN", head="test-branch", base="main", cross=False, c
     }
 
 
-def _history(branch="test-branch"):
+def _history(branch: str = "test-branch") -> list[dict[str, str | bool]]:
     return [_pr(n, HISTORICAL_OID, state="CLOSED", head=branch) for n in (4, 17, 18, 22)]
 
 
@@ -174,12 +184,12 @@ def _run_step5(
     bin_dir: Path,
     env_overrides: dict[str, str],
     *,
-    store=(),
-    feature_branch="test-branch",
-    base_branch="main",
-    work_dir=None,
-    task_title="Test PR",
-):
+    store: Sequence[dict[str, str | bool]] = (),
+    feature_branch: str = "test-branch",
+    base_branch: str = "main",
+    work_dir: Path | str | None = None,
+    task_title: str = "Test PR",
+) -> tuple[subprocess.CompletedProcess[str], int, list[list[str]]]:
     if work_dir is None:
         work_dir, _ = _work_repo(tmp_path, feature_branch)
     autotemp = tmp_path / "autotemp"

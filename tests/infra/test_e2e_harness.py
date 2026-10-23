@@ -500,7 +500,7 @@ def test_unretained_lists_recorded_files_that_were_not_kept(
         {"cwd": str(clone_a), "outcome_fields": {"remediation_path": missing}},
     )
     home = tmp_path / "home"
-    index = home / ".local/share/autoskillit/logs/sessions.jsonl"
+    index = harness.autoskillit_log_dir(home) / "sessions.jsonl"
     index.parent.mkdir(parents=True, exist_ok=True)
     index.write_text(
         "".join(json.dumps(row) + "\n" for row in rows) + "{malformed line\n",

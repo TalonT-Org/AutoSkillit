@@ -157,6 +157,27 @@ def _uploaded_path(upload: Path, relative: Path) -> Path:
     return upload / "out" / escaped
 
 
+def test_transcripts_are_collected_in_one_walk(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, evidence_sources
+) -> None:
+    home = tmp_path / "home"
+    projects = home / ".claude" / "projects"
+    walked = []
+    original = harness.os.walk
+
+    def walk(source, *args, **kwargs):
+        walked.append(source)
+        return original(source, *args, **kwargs)
+
+    monkeypatch.setattr(harness.os, "walk", walk)
+
+    evidence = harness.collect_run_evidence(tmp_path / "out", home)
+
+    assert walked.count(projects) == 1
+    assert evidence["transcripts"] == 3
+    assert evidence["errors"] == []
+
+
 @pytest.mark.parametrize(
     ("case", "outcome", "passed"),
     (

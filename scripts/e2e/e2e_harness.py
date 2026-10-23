@@ -1141,7 +1141,7 @@ def autoskillit_log_dir(home: Path) -> Path:
 
 
 def _copy_evidence_files(
-    source: Path, dest: Path, boundary: Path, pattern: str, errors: list[str]
+    source: Path, dest: Path, boundary: Path, patterns: tuple[str, ...], errors: list[str]
 ) -> list[Path]:
     relative = source.relative_to(boundary)
     try:
@@ -1160,7 +1160,9 @@ def _copy_evidence_files(
         source, followlinks=False, onerror=lambda exc: errors.append(f"{source}: {exc}")
     ):
         dirs.sort()
-        for name in sorted(fnmatch.filter(files, pattern)):
+        for name in sorted(files):
+            if not any(fnmatch.fnmatch(name, pattern) for pattern in patterns):
+                continue
             path = Path(root) / name
             try:
                 if path.is_symlink() or not path.is_file():
@@ -1211,7 +1213,7 @@ def _collect_stage_files(out: Path, roots: list[Path], errors: list[str]) -> lis
                             entry,
                             out / "pipeline-artifacts" / root.relative_to(workspace) / entry.name,
                             workspace,
-                            file_pattern,
+                            (file_pattern,),
                             errors,
                         )
                     )
@@ -1254,8 +1256,9 @@ def collect_run_evidence(out: Path, home: Path) -> dict[str, Any]:
     errors: list[str] = []
     copied = _collect_stage_files(out, _evidence_roots(errors), errors)
     projects = home / ".claude" / "projects"
-    transcripts = _copy_evidence_files(projects, out / "transcripts", home, "*.jsonl", errors)
-    transcripts += _copy_evidence_files(projects, out / "transcripts", home, "*.txt", errors)
+    transcripts = _copy_evidence_files(
+        projects, out / "transcripts", home, ("*.jsonl", "*.txt"), errors
+    )
     unretained = _unretained_references(
         autoskillit_log_dir(home) / "sessions.jsonl", {os.path.realpath(p) for p in copied}
     )

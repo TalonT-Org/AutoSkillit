@@ -32,29 +32,129 @@ def _isolated_sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
-def failure_sources(tmp_path: Path) -> dict[Path, Path]:
-    runs = harness.SANDBOX_CLONE.parent / harness.PIPELINE_RUNS_DIR
-    project = tmp_path / "home" / ".claude" / "projects" / "project"
-    sources = {
-        runs / "clone-a/.autoskillit/temp/make-plan/a_plan.md": Path(
-            "pipeline-artifacts/clone-a/make-plan/a_plan.md"
+def evidence_sources(tmp_path: Path) -> tuple[dict[Path, Path], dict[Path, Path]]:
+    workspace = harness.SANDBOX_CLONE.parent
+    runs = workspace / "autoskillit-runs"
+    kept: dict[Path, Path] = {}
+    excluded: dict[Path, Path] = {}
+
+    def add_pipeline_files(
+        root: Path,
+        artifact_root: Path,
+        relative_paths: tuple[str, ...],
+        destination: dict[Path, Path],
+    ) -> None:
+        for value in relative_paths:
+            relative = Path(value)
+            source = root / ".autoskillit" / "temp" / relative
+            destination[source] = Path("pipeline-artifacts") / artifact_root / relative
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_bytes(f"evidence for {relative}\n".encode())
+
+    audit_slot = f"sha256:{'a' * 64}"
+    audit_attempt = "b" * 32
+    plan_set_file = "0123456789abcdef01234567.json"
+    worktree_plan_set_file = "fedcba9876543210fedcba98.json"
+    clone_a_artifact_root = Path("autoskillit-runs/clone-a")
+    clone_a = workspace / clone_a_artifact_root
+    add_pipeline_files(
+        harness.SANDBOX_CLONE,
+        Path("sandbox"),
+        ("audit-disposition/a1/p1/disposition-report.json",),
+        kept,
+    )
+    add_pipeline_files(
+        clone_a,
+        clone_a_artifact_root,
+        (
+            "make-plan/a_plan.md",
+            "make-plan/nested/metadata.json",
+            f"plan-set-authority/planset-x/{plan_set_file}",
+            f"plan-set-authority/planset-x/issue.{plan_set_file.removesuffix('.json')}.md",
+            f"audit-admission/{audit_slot}/{audit_attempt}/semantic.json",
+            f"audit-admission/{audit_slot}/{audit_attempt}/inventory.json",
+            f"audit-admission/{audit_slot}/{audit_attempt}/authority.json",
+            "arch-lens-concurrency/arch_diag_x.md",
+            "review-pr/iter_1/local_findings_26.json",
+            "resolve-review/deferred_observations_26.json",
+            "prepare-pr/pr_prep_x.md",
+            "compose-pr/pr_body_x.md",
         ),
-        runs / "clone-b/.autoskillit/temp/rectify/b_plan.md": Path(
-            "pipeline-artifacts/clone-b/rectify/b_plan.md"
+        kept,
+    )
+    add_pipeline_files(
+        workspace / "autoskillit-runs/clone-b",
+        Path("autoskillit-runs/clone-b"),
+        ("rectify/b_plan.md",),
+        kept,
+    )
+    add_pipeline_files(
+        runs / "worktrees/impl-1-x",
+        Path("autoskillit-runs/worktrees/impl-1-x"),
+        (f"plan-set-authority/planset-y/{worktree_plan_set_file}",),
+        kept,
+    )
+
+    add_pipeline_files(
+        clone_a,
+        clone_a_artifact_root,
+        (
+            "audit-admission/ledger.sqlite3",
+            "context-admission/ledger.sqlite3",
+            "kitchen_state/state.json",
+            "guard_decisions.jsonl",
+            "eject_count",
+            "worktrees/impl-1-x/base-branch",
         ),
-        runs / "clone-a/.autoskillit/temp/make-plan/nested/metadata.json": Path(
-            "pipeline-artifacts/clone-a/make-plan/nested/metadata.json"
-        ),
-        project / "session.jsonl": Path("transcripts/project/session.jsonl"),
-        project / "session/subagents/agent-one.jsonl": Path(
-            "transcripts/project/session/subagents/agent-one.jsonl"
-        ),
-    }
-    for source, relative in sources.items():
+        excluded,
+    )
+    add_pipeline_files(
+        harness.SANDBOX_CLONE,
+        Path("sandbox"),
+        ("audit-admission/ledger.sqlite3",),
+        excluded,
+    )
+
+    home = tmp_path / "home"
+    projects = home / ".claude" / "projects"
+    for relative_value in (
+        "project/session.jsonl",
+        "project/session/subagents/agent-one.jsonl",
+        "project/session/tool-results/call_1.txt",
+    ):
+        relative = Path(relative_value)
+        source = projects / relative
+        kept[source] = Path("transcripts") / relative
         source.parent.mkdir(parents=True, exist_ok=True)
         source.write_bytes(f"evidence for {relative}\n".encode())
-    (project / "ignored.txt").write_text("not a transcript")
-    return sources
+    ignored = projects / "project/ignored.md"
+    excluded[ignored] = Path("transcripts/project/ignored.md")
+    ignored.parent.mkdir(parents=True, exist_ok=True)
+    ignored.write_text("not a transcript", encoding="utf-8")
+
+    linked_temp = runs / "worktrees/impl-2-x/.autoskillit/temp"
+    linked_temp.parent.mkdir(parents=True, exist_ok=True)
+    linked_temp.symlink_to(clone_a / ".autoskillit" / "temp", target_is_directory=True)
+    excluded[linked_temp] = Path("pipeline-artifacts/autoskillit-runs/worktrees/impl-2-x")
+    return kept, excluded
+
+
+def _pipeline_file_count(sources: dict[Path, Path]) -> int:
+    return sum(relative.parts[0] == "pipeline-artifacts" for relative in sources.values())
+
+
+def _assert_evidence_sources(
+    out: Path, kept: dict[Path, Path], excluded: dict[Path, Path]
+) -> None:
+    for source, relative in kept.items():
+        assert (out / relative).read_bytes() == source.read_bytes()
+    for relative in excluded.values():
+        assert not (out / relative).exists()
+
+
+def _uploaded_path(upload: Path, relative: Path) -> Path:
+    escaped = Path(*(harness.upload_name(part) for part in relative.parts))
+    return upload / "out" / escaped
 
 
 @pytest.mark.parametrize(
@@ -66,9 +166,11 @@ def failure_sources(tmp_path: Path) -> dict[Path, Path]:
         ("passed", "passed", True),
     ),
 )
-def test_run_test_retains_evidence_only_when_it_does_not_pass(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure_sources, case, outcome, passed
+def test_run_test_retains_evidence_for_every_outcome(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, evidence_sources, case, outcome, passed
 ) -> None:
+    kept, excluded = evidence_sources
+
     def run(*_args, **_kwargs):
         if case == "exception":
             raise RuntimeError("harness crashed")
@@ -83,22 +185,31 @@ def test_run_test_retains_evidence_only_when_it_does_not_pass(
     assert result["passed"] is passed
     assert result["outcome"] == outcome
     assert result["failures"] == failures
-    if passed:
-        assert "evidence" not in result
-        assert not (out / "pipeline-artifacts").exists()
-        assert not (out / "transcripts").exists()
-        return
-    assert result["evidence"] == {"plan_files": 3, "transcripts": 2, "errors": []}
-    for source, relative in failure_sources.items():
-        assert (out / relative).read_bytes() == source.read_bytes()
-    assert not (out / "transcripts/project/ignored.txt").exists()
+    assert result["evidence"] == {
+        "pipeline_files": _pipeline_file_count(kept),
+        "transcripts": 3,
+        "unretained": [],
+        "errors": [],
+    }
+    _assert_evidence_sources(out, kept, excluded)
 
 
 @pytest.mark.parametrize("failure_site", ("copy", "walk"))
+@pytest.mark.parametrize(
+    ("stub_failures", "expected_outcome", "expected_passed"),
+    ((["recipe failed"], "failed", False), ([], "passed", True)),
+)
 def test_evidence_errors_preserve_the_verdict_and_continue_other_sources(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure_sources, failure_site
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    evidence_sources,
+    failure_site,
+    stub_failures,
+    expected_outcome,
+    expected_passed,
 ) -> None:
-    source = next(path for path in failure_sources if path.name == "a_plan.md")
+    kept, _ = evidence_sources
+    source = next(path for path in kept if path.name == "a_plan.md")
     target = source if failure_site == "copy" else source.parent
     owner = harness.shutil if failure_site == "copy" else harness.os
     name = "copyfile" if failure_site == "copy" else "scandir"
@@ -110,19 +221,28 @@ def test_evidence_errors_preserve_the_verdict_and_continue_other_sources(
         return original(path, *args, **kwargs)
 
     monkeypatch.setattr(owner, name, unreadable)
-    monkeypatch.setattr(harness, "_run_test", lambda *_args, **_kwargs: (["test failed"], []))
+    monkeypatch.setattr(harness, "_run_test", lambda *_args, **_kwargs: (stub_failures, []))
     failures, result = _run_recipe(tmp_path, FakeRunner(lambda _argv: None))
-    assert failures == ["test failed"]
-    assert result["outcome"] == "failed"
-    assert result["passed"] is False
-    assert result["evidence"]["transcripts"] == 2
+    assert failures == stub_failures
+    assert result["outcome"] == expected_outcome
+    assert result["passed"] is expected_passed
+    assert result["evidence"]["transcripts"] == 3
     assert any(str(target) in error for error in result["evidence"]["errors"])
-    readable = next(path for path in failure_sources if path.name == "b_plan.md")
-    assert (tmp_path / "out" / failure_sources[readable]).read_bytes() == readable.read_bytes()
+    readable = next(path for path in kept if path.name == "b_plan.md")
+    relative = kept[readable]
+    assert (tmp_path / "out" / relative).read_bytes() == readable.read_bytes()
 
 
+@pytest.mark.parametrize(
+    ("stub_failures", "expected_outcome", "expected_passed"),
+    ((["recipe failed"], "failed", False), ([], "passed", True)),
+)
 def test_unexpected_collection_error_still_writes_the_result(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    stub_failures,
+    expected_outcome,
+    expected_passed,
 ) -> None:
     def crash(*_args, **_kwargs):
         try:
@@ -130,28 +250,48 @@ def test_unexpected_collection_error_still_writes_the_result(
         except ValueError as exc:
             raise RuntimeError("collection crashed") from exc
 
-    monkeypatch.setattr(harness, "collect_failure_evidence", crash)
-    monkeypatch.setattr(harness, "_run_test", lambda *_args, **_kwargs: (["test failed"], []))
+    monkeypatch.setattr(harness, "collect_run_evidence", crash)
+    monkeypatch.setattr(harness, "_run_test", lambda *_args, **_kwargs: (stub_failures, []))
     failures, result = _run_recipe(tmp_path, FakeRunner(lambda _argv: None))
-    assert failures == ["test failed"]
-    assert result["outcome"] == "failed"
-    assert result["evidence"]["plan_files"] == result["evidence"]["transcripts"] == 0
+    assert failures == stub_failures
+    assert result["outcome"] == expected_outcome
+    assert result["passed"] is expected_passed
+    assert set(result["evidence"]) == {
+        "pipeline_files",
+        "transcripts",
+        "unretained",
+        "errors",
+        "exception",
+    }
+    assert result["evidence"]["pipeline_files"] == result["evidence"]["transcripts"] == 0
+    assert result["evidence"]["unretained"] == []
     assert "collection crashed" in result["evidence"]["errors"][0]
     assert "ValueError: collection root cause" in result["evidence"]["exception"]
     assert "RuntimeError: collection crashed" in result["evidence"]["exception"]
     assert 'raise RuntimeError("collection crashed") from exc' in result["evidence"]["exception"]
 
 
+@pytest.mark.parametrize(
+    ("stub_failures", "expected_outcome", "expected_passed"),
+    ((["recipe failed"], "failed", False), ([], "passed", True)),
+)
 def test_nothing_to_collect_adds_no_evidence_key(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    stub_failures,
+    expected_outcome,
+    expected_passed,
 ) -> None:
-    monkeypatch.setattr(harness, "_run_test", lambda *_args, **_kwargs: (["test failed"], []))
-    _, result = _run_recipe(tmp_path, FakeRunner(lambda _argv: None))
+    monkeypatch.setattr(harness, "_run_test", lambda *_args, **_kwargs: (stub_failures, []))
+    failures, result = _run_recipe(tmp_path, FakeRunner(lambda _argv: None))
+    assert failures == stub_failures
+    assert result["outcome"] == expected_outcome
+    assert result["passed"] is expected_passed
     assert "evidence" not in result
 
 
-def test_failure_evidence_skips_symlinks_and_linked_scan_ancestors(tmp_path: Path) -> None:
-    runs = harness.SANDBOX_CLONE.parent / harness.PIPELINE_RUNS_DIR
+def test_evidence_skips_symlinks_and_linked_scan_ancestors(tmp_path: Path) -> None:
+    runs = harness.SANDBOX_CLONE.parent / "autoskillit-runs"
     plans = runs / "clone-a/.autoskillit/temp/make-plan"
     plans.mkdir(parents=True)
     (plans / "kept.md").write_text("kept")
@@ -164,6 +304,7 @@ def test_failure_evidence_skips_symlinks_and_linked_scan_ancestors(tmp_path: Pat
     ancestor.mkdir(parents=True)
     (ancestor / "temp").symlink_to(external, target_is_directory=True)
     (runs / "linked-clone").symlink_to(runs / "clone-a", target_is_directory=True)
+    (runs / "worktrees").symlink_to(external, target_is_directory=True)
     home = tmp_path / "home"
     home.mkdir()
     (external / "projects").mkdir()
@@ -171,37 +312,207 @@ def test_failure_evidence_skips_symlinks_and_linked_scan_ancestors(tmp_path: Pat
     (home / ".claude").symlink_to(external, target_is_directory=True)
     out = tmp_path / "out"
 
-    result = harness.collect_failure_evidence(out, home)
+    result = harness.collect_run_evidence(out, home)
 
-    assert result == {"plan_files": 1, "transcripts": 0, "errors": []}
+    assert result == {
+        "pipeline_files": 1,
+        "transcripts": 0,
+        "unretained": [],
+        "errors": [],
+    }
     assert [path.relative_to(out) for path in out.rglob("*") if path.is_file()] == [
-        Path("pipeline-artifacts/clone-a/make-plan/kept.md")
+        Path("pipeline-artifacts/autoskillit-runs/clone-a/make-plan/kept.md")
     ]
 
 
-def test_collected_plans_and_transcripts_are_redacted(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure_sources
+def test_passing_pipeline_recipe_retains_commissioning_evidence(
+    tmp_path: Path, evidence_sources
 ) -> None:
-    plan = next(path for path in failure_sources if path.name == "a_plan.md")
-    transcript = next(path for path in failure_sources if path.name == "session.jsonl")
+    kept, excluded = evidence_sources
+    out = tmp_path / "out"
+    by_destination = {relative: source for source, relative in kept.items()}
+    semantic = Path(
+        "pipeline-artifacts/autoskillit-runs/clone-a/audit-admission/"
+        f"sha256:{'a' * 64}/{'b' * 32}/semantic.json"
+    )
+    review = Path(
+        "pipeline-artifacts/autoskillit-runs/clone-a/review-pr/iter_1/local_findings_26.json"
+    )
+    transcript = Path("transcripts/project/session.jsonl")
+    tool_results = Path("transcripts/project/session/tool-results/call_1.txt")
+    secrets = (semantic, review, transcript, tool_results)
+    for relative in secrets:
+        source = by_destination[relative]
+        source.write_text(f"{MINIMAX_KEY} and {SANDBOX_TOKEN}", encoding="utf-8")
+
+    clone_a = harness.SANDBOX_CLONE.parent / "autoskillit-runs/clone-a"
+    plan = by_destination[Path("pipeline-artifacts/autoskillit-runs/clone-a/make-plan/a_plan.md")]
+    plan_set = by_destination[
+        Path(
+            "pipeline-artifacts/autoskillit-runs/clone-a/plan-set-authority/"
+            "planset-x/0123456789abcdef01234567.json"
+        )
+    ]
+
+    def seed(argv: list[str]) -> None:
+        if argv[:3] != ["autoskillit", "fleet", "run"]:
+            return None
+        log_dir = _log_dir(tmp_path)
+        log_dir.mkdir(parents=True, exist_ok=True)
+        rows = (
+            {
+                "cwd": str(clone_a),
+                "outcome_fields": {
+                    "plan_path": str(plan),
+                    "audit_semantic_result_path": str(by_destination[semantic]),
+                },
+                "skill_command": f"read {plan_set}\ncontinue",
+            },
+            {
+                "cwd": str(clone_a),
+                "outcome_fields": {
+                    "deferred_observations_path": (
+                        ".autoskillit/temp/resolve-review/deferred_observations_26.json"
+                    )
+                },
+            },
+        )
+        with (log_dir / "sessions.jsonl").open("a", encoding="utf-8") as index:
+            for row in rows:
+                index.write(json.dumps(row) + "\n")
+        return None
+
+    runner = FakeRunner(_recipe_handler(log_dir=_log_dir(tmp_path), extra=seed))
+    failures, result = _run_recipe(tmp_path, runner)
+
+    assert failures == []
+    assert result["outcome"] == "passed"
+    assert result["passed"] is True
+    assert result["evidence"] == {
+        "pipeline_files": _pipeline_file_count(kept),
+        "transcripts": 3,
+        "unretained": [],
+        "errors": [],
+    }
+    _assert_evidence_sources(out, kept, excluded)
+
+    upload = tmp_path / "upload"
+    harness.redact_tree([out], upload, [MINIMAX_KEY, SANDBOX_TOKEN])
+    semantic_upload = _uploaded_path(upload, semantic)
+    assert semantic_upload == (
+        upload
+        / "out"
+        / "pipeline-artifacts/autoskillit-runs/clone-a/audit-admission"
+        / f"sha256~3a{'a' * 64}"
+        / ("b" * 32)
+        / "semantic.json"
+    )
+    for relative in secrets:
+        copied = _uploaded_path(upload, relative)
+        content = copied.read_bytes()
+        assert harness.REDACTED in content
+        assert MINIMAX_KEY.encode() not in content
+        assert SANDBOX_TOKEN.encode() not in content
+    for artifact in upload.rglob("*"):
+        assert not any(
+            character in artifact.relative_to(upload).as_posix()
+            for character in harness.UPLOAD_FORBIDDEN_CHARACTERS
+        )
+        if artifact.is_file():
+            content = artifact.read_bytes()
+            assert MINIMAX_KEY.encode() not in content
+            assert SANDBOX_TOKEN.encode() not in content
+
+
+def test_unretained_lists_recorded_files_that_were_not_kept(
+    tmp_path: Path, evidence_sources
+) -> None:
+    kept, _ = evidence_sources
+    workspace = harness.SANDBOX_CLONE.parent
+    clone_a = workspace / "autoskillit-runs/clone-a"
+    new_producer = clone_a / ".autoskillit/temp/new-producer/verdict.json"
+    cwd_resolved = clone_a / ".autoskillit/temp/new-producer-2/x.json"
+    new_producer.parent.mkdir(parents=True, exist_ok=True)
+    cwd_resolved.parent.mkdir(parents=True, exist_ok=True)
+    new_producer.write_text("new evidence", encoding="utf-8")
+    cwd_resolved.write_text("new evidence", encoding="utf-8")
+
+    semantic = next(
+        source
+        for source, relative in kept.items()
+        if relative.name == "semantic.json" and "audit-admission" in relative.parts
+    )
+    plan_set = next(
+        source
+        for source, relative in kept.items()
+        if relative.name == "0123456789abcdef01234567.json"
+    )
+    symlinked_plan_set = (
+        workspace
+        / "autoskillit-runs/worktrees/impl-2-x/.autoskillit/temp"
+        / plan_set.relative_to(clone_a / ".autoskillit/temp")
+    )
+    missing = ".autoskillit/temp/not-created/missing.json"
+    rows = (
+        {"outcome_fields": {"remediation_path": str(new_producer)}},
+        {
+            "cwd": str(clone_a),
+            "outcome_fields": {"remediation_path": ".autoskillit/temp/new-producer-2/x.json"},
+        },
+        {"outcome_fields": {"audit_semantic_result_path": str(semantic)}},
+        {"skill_command": f"read {symlinked_plan_set}"},
+        {"cwd": str(clone_a), "outcome_fields": {"remediation_path": missing}},
+    )
+    home = tmp_path / "home"
+    index = home / ".local/share/autoskillit/logs/sessions.jsonl"
+    index.parent.mkdir(parents=True, exist_ok=True)
+    index.write_text(
+        "".join(json.dumps(row) + "\n" for row in rows) + "{malformed line\n",
+        encoding="utf-8",
+    )
+
+    evidence = harness.collect_run_evidence(tmp_path / "out", home)
+
+    assert evidence["unretained"] == sorted([str(new_producer), str(cwd_resolved)])
+    assert evidence["errors"] == []
+
+
+def test_upload_name_escapes_forbidden_characters_injectively() -> None:
+    for character in harness.UPLOAD_FORBIDDEN_CHARACTERS + "~":
+        assert harness.upload_name(character) == f"~{ord(character):02x}"
+    assert harness.upload_name("sha256:ab") == "sha256~3aab"
+    names = {harness.upload_name(name) for name in ("a:b", "a~3ab", "a-b")}
+    assert len(names) == 3
+    assert harness.upload_name("plain-name") == "plain-name"
+
+
+@pytest.mark.parametrize("case", ("failed", "passed"))
+def test_collected_plans_and_transcripts_are_redacted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, evidence_sources, case
+) -> None:
+    kept, _ = evidence_sources
+    plan = next(path for path in kept if path.name == "a_plan.md")
+    transcript = next(path for path in kept if path.name == "session.jsonl")
     plan.write_bytes(MINIMAX_KEY.encode())
     transcript.write_bytes(SANDBOX_TOKEN.encode())
-    monkeypatch.setattr(harness, "_run_test", lambda *_args, **_kwargs: (["test failed"], []))
+    stub_failures = ["test failed"] if case == "failed" else []
+    monkeypatch.setattr(harness, "_run_test", lambda *_args, **_kwargs: (stub_failures, []))
     _run_recipe(tmp_path, FakeRunner(lambda _argv: None))
     upload = tmp_path / "upload"
 
     harness.redact_tree([tmp_path / "out"], upload, [MINIMAX_KEY, SANDBOX_TOKEN])
 
     for source, secret in ((plan, MINIMAX_KEY), (transcript, SANDBOX_TOKEN)):
-        copied = (upload / "out" / failure_sources[source]).read_bytes()
+        copied = _uploaded_path(upload, kept[source]).read_bytes()
         assert harness.REDACTED in copied
         assert secret.encode() not in copied
 
 
 def test_runs_scan_error_keeps_readable_transcripts(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure_sources
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, evidence_sources
 ) -> None:
-    runs = harness.SANDBOX_CLONE.parent / harness.PIPELINE_RUNS_DIR
+    kept, _ = evidence_sources
+    runs = harness.SANDBOX_CLONE.parent / "autoskillit-runs"
     original = Path.iterdir
 
     def unreadable(path):
@@ -214,8 +525,14 @@ def test_runs_scan_error_keeps_readable_transcripts(
     failures, result = _run_recipe(tmp_path, FakeRunner(lambda _argv: None))
     assert failures == ["test failed"]
     assert result["outcome"] == "failed"
-    assert result["evidence"]["plan_files"] == 0
-    assert result["evidence"]["transcripts"] == 2
+    expected_pipeline_files = sum(
+        relative.parts[1] == "sandbox"
+        or relative.parts[1:4] == ("autoskillit-runs", "worktrees", "impl-1-x")
+        for relative in kept.values()
+        if relative.parts[0] == "pipeline-artifacts"
+    )
+    assert result["evidence"]["pipeline_files"] == expected_pipeline_files
+    assert result["evidence"]["transcripts"] == 3
     assert str(runs) in result["evidence"]["errors"][0]
 
 
@@ -223,6 +540,12 @@ def test_pipeline_runs_directory_matches_clone_source_of_truth() -> None:
     from autoskillit.workspace.clone._detect import RUNS_DIR
 
     assert harness.PIPELINE_RUNS_DIR == RUNS_DIR
+
+
+def test_worktrees_directory_matches_clone_source_of_truth() -> None:
+    from autoskillit.workspace.clone._worktree import WORKTREES_DIR
+
+    assert harness.PIPELINE_WORKTREES_DIR == WORKTREES_DIR
 
 
 MINIMAX_KEY = "minimax-test-key"

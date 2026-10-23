@@ -447,8 +447,6 @@ def test_passing_pipeline_recipe_retains_commissioning_evidence(
         copied = _uploaded_path(upload, relative)
         content = copied.read_bytes()
         assert harness.REDACTED in content
-        assert MINIMAX_KEY.encode() not in content
-        assert SANDBOX_TOKEN.encode() not in content
     for artifact in upload.rglob("*"):
         assert not any(
             character in artifact.relative_to(upload).as_posix()

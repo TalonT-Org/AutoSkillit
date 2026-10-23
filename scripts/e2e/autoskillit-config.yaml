@@ -3,6 +3,9 @@
 quota_guard:
   enabled: false
 
+branching:
+  default_base_branch: main
+
 model:
   default: sonnet[1m]
 

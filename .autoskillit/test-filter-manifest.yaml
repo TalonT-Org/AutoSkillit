@@ -243,6 +243,9 @@ tests/execution/backends/fixtures/codex_ndjson/*.json:
 tests/execution/fixtures/*.json:
   - execution/
 
+tests/infra/fixtures/e2e_sessions/**:
+  - infra/
+
 tests/execution/fixtures/*.jsonl:
   - execution/
 

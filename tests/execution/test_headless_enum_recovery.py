@@ -23,13 +23,14 @@ from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.recipe._contracts_types import SkillContract, SkillOutput
 from autoskillit.recipe.contracts import get_skill_contract, load_bundled_manifest
 from tests.conftest import _make_result
-from tests.execution.conftest import _launch_inputs, _mock_backend, _success_session_json
+from tests.execution.conftest import (
+    _launch_inputs,
+    _mock_backend,
+    _success_session_json,
+    _unmarked_rollout_snapshot,
+)
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
-
-
-def _unmarked_rollout_snapshot() -> tuple[None, str]:
-    return None, "2000-01-01T00:00:00+00:00"
 
 
 def _make_plan_contract(

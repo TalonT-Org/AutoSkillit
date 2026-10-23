@@ -85,6 +85,15 @@ def test_create_digest_and_canonical_round_trip(tmp_path: Path) -> None:
             },
             "unknown part key",
         ),
+        (
+            {
+                "inventory_mode": InventoryMode.ENUMERATED,
+                "coverage": CoverageResultDef(
+                    CoverageStatus.PASS, parts_without_obligations=("P1",)
+                ),
+            },
+            "invalid for enumerated inventory",
+        ),
     ],
 )
 def test_invalid_authority_states_fail_closed(

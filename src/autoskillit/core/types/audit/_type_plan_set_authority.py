@@ -501,6 +501,10 @@ class PlanSetAuthority:
                 raise ValueError(
                     "coverage.parts_without_obligations must match actual empty parts"
                 )
+        elif self.coverage.parts_without_obligations:
+            raise ValueError(
+                "coverage.parts_without_obligations is invalid for enumerated inventory"
+            )
 
     @classmethod
     def create(

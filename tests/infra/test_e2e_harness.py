@@ -25,6 +25,10 @@ _HARNESS_SCRIPT = REPO_ROOT / "scripts" / "e2e" / "e2e_harness.py"
 harness = load_check_script("_autoskillit_e2e_harness", _HARNESS_SCRIPT)
 e2e_catalog = harness.e2e_catalog
 
+_AUDIT_SLOT = f"sha256:{'a' * 64}"
+_AUDIT_ATTEMPT = "b" * 32
+_PLAN_SET_FILE = "0123456789abcdef01234567.json"
+
 
 @pytest.fixture(autouse=True)
 def _isolated_sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -51,9 +55,6 @@ def evidence_sources(tmp_path: Path) -> tuple[dict[Path, Path], dict[Path, Path]
             source.parent.mkdir(parents=True, exist_ok=True)
             source.write_bytes(f"evidence for {relative}\n".encode())
 
-    audit_slot = f"sha256:{'a' * 64}"
-    audit_attempt = "b" * 32
-    plan_set_file = "0123456789abcdef01234567.json"
     worktree_plan_set_file = "fedcba9876543210fedcba98.json"
     clone_a_artifact_root = Path("autoskillit-runs/clone-a")
     clone_a = workspace / clone_a_artifact_root
@@ -69,11 +70,11 @@ def evidence_sources(tmp_path: Path) -> tuple[dict[Path, Path], dict[Path, Path]
         (
             "make-plan/a_plan.md",
             "make-plan/nested/metadata.json",
-            f"plan-set-authority/planset-x/{plan_set_file}",
-            f"plan-set-authority/planset-x/issue.{plan_set_file.removesuffix('.json')}.md",
-            f"audit-admission/{audit_slot}/{audit_attempt}/semantic.json",
-            f"audit-admission/{audit_slot}/{audit_attempt}/inventory.json",
-            f"audit-admission/{audit_slot}/{audit_attempt}/authority.json",
+            f"plan-set-authority/planset-x/{_PLAN_SET_FILE}",
+            f"plan-set-authority/planset-x/issue.{_PLAN_SET_FILE.removesuffix('.json')}.md",
+            f"audit-admission/{_AUDIT_SLOT}/{_AUDIT_ATTEMPT}/semantic.json",
+            f"audit-admission/{_AUDIT_SLOT}/{_AUDIT_ATTEMPT}/inventory.json",
+            f"audit-admission/{_AUDIT_SLOT}/{_AUDIT_ATTEMPT}/authority.json",
             "arch-lens-concurrency/arch_diag_x.md",
             "review-pr/iter_1/local_findings_26.json",
             "resolve-review/deferred_observations_26.json",
@@ -369,7 +370,7 @@ def test_passing_pipeline_recipe_retains_commissioning_evidence(
     by_destination = {relative: source for source, relative in kept.items()}
     semantic = Path(
         "pipeline-artifacts/autoskillit-runs/clone-a/audit-admission/"
-        f"sha256:{'a' * 64}/{'b' * 32}/semantic.json"
+        f"{_AUDIT_SLOT}/{_AUDIT_ATTEMPT}/semantic.json"
     )
     review = Path(
         "pipeline-artifacts/autoskillit-runs/clone-a/review-pr/iter_1/local_findings_26.json"
@@ -386,7 +387,7 @@ def test_passing_pipeline_recipe_retains_commissioning_evidence(
     plan_set = by_destination[
         Path(
             "pipeline-artifacts/autoskillit-runs/clone-a/plan-set-authority/"
-            "planset-x/0123456789abcdef01234567.json"
+            f"planset-x/{_PLAN_SET_FILE}"
         )
     ]
 
@@ -444,8 +445,8 @@ def test_passing_pipeline_recipe_retains_commissioning_evidence(
         upload
         / "out"
         / "pipeline-artifacts/autoskillit-runs/clone-a/audit-admission"
-        / f"sha256~3a{'a' * 64}"
-        / ("b" * 32)
+        / f"sha256~3a{_AUDIT_SLOT.removeprefix('sha256:')}"
+        / _AUDIT_ATTEMPT
         / "semantic.json"
     )
     for relative in secrets:
@@ -481,11 +482,7 @@ def test_unretained_lists_recorded_files_that_were_not_kept(
         for source, relative in kept.items()
         if relative.name == "semantic.json" and "audit-admission" in relative.parts
     )
-    plan_set = next(
-        source
-        for source, relative in kept.items()
-        if relative.name == "0123456789abcdef01234567.json"
-    )
+    plan_set = next(source for source, relative in kept.items() if relative.name == _PLAN_SET_FILE)
     symlinked_plan_set = (
         workspace
         / "autoskillit-runs/worktrees/impl-2-x/.autoskillit/temp"

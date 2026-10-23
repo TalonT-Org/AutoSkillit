@@ -28,6 +28,7 @@ e2e_catalog = harness.e2e_catalog
 _AUDIT_SLOT = f"sha256:{'a' * 64}"
 _AUDIT_ATTEMPT = "b" * 32
 _PLAN_SET_FILE = "0123456789abcdef01234567.json"
+_RECIPE_OUTCOMES = ((["recipe failed"], "failed", False), ([], "passed", True))
 
 
 @pytest.fixture(autouse=True)
@@ -219,7 +220,7 @@ def test_run_test_retains_evidence_for_every_outcome(
 @pytest.mark.parametrize("failure_site", ("copy", "walk"))
 @pytest.mark.parametrize(
     ("stub_failures", "expected_outcome", "expected_passed"),
-    ((["recipe failed"], "failed", False), ([], "passed", True)),
+    _RECIPE_OUTCOMES,
 )
 def test_evidence_errors_preserve_the_verdict_and_continue_other_sources(
     tmp_path: Path,
@@ -257,7 +258,7 @@ def test_evidence_errors_preserve_the_verdict_and_continue_other_sources(
 
 @pytest.mark.parametrize(
     ("stub_failures", "expected_outcome", "expected_passed"),
-    ((["recipe failed"], "failed", False), ([], "passed", True)),
+    _RECIPE_OUTCOMES,
 )
 def test_unexpected_collection_error_still_writes_the_result(
     tmp_path: Path,
@@ -295,7 +296,7 @@ def test_unexpected_collection_error_still_writes_the_result(
 
 @pytest.mark.parametrize(
     ("stub_failures", "expected_outcome", "expected_passed"),
-    ((["recipe failed"], "failed", False), ([], "passed", True)),
+    _RECIPE_OUTCOMES,
 )
 def test_nothing_to_collect_adds_no_evidence_key(
     tmp_path: Path,

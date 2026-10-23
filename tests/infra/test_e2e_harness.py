@@ -311,6 +311,21 @@ def test_nothing_to_collect_adds_no_evidence_key(
     assert "evidence" not in result
 
 
+def test_evidence_ignores_files_in_run_root_directories(tmp_path: Path) -> None:
+    runs = harness.SANDBOX_CLONE.parent / harness.PIPELINE_RUNS_DIR
+    worktrees = runs / harness.PIPELINE_WORKTREES_DIR
+    worktrees.mkdir(parents=True)
+    (runs / "unrelated.txt").write_text("not a clone")
+    (worktrees / "unrelated.txt").write_text("not a worktree")
+
+    assert harness.collect_run_evidence(tmp_path / "out", tmp_path / "home") == {
+        "pipeline_files": 0,
+        "transcripts": 0,
+        "unretained": [],
+        "errors": [],
+    }
+
+
 def test_evidence_skips_symlinks_and_linked_scan_ancestors(tmp_path: Path) -> None:
     runs = harness.SANDBOX_CLONE.parent / "autoskillit-runs"
     plans = runs / "clone-a/.autoskillit/temp/make-plan"

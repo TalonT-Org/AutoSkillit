@@ -1182,7 +1182,9 @@ def _evidence_roots(errors: list[str]) -> list[Path]:
     for parent, skip in ((runs, PIPELINE_WORKTREES_DIR), (runs / PIPELINE_WORKTREES_DIR, None)):
         try:
             linked = runs.is_symlink() or parent.is_symlink()
-            entries = [] if linked else sorted(parent.iterdir())
+            entries = (
+                [] if linked else sorted(entry for entry in parent.iterdir() if entry.is_dir())
+            )
         except FileNotFoundError:
             entries = []
         except OSError as exc:

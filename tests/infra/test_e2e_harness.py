@@ -557,6 +557,22 @@ def test_upload_name_escapes_forbidden_characters_injectively() -> None:
     assert harness.upload_name("plain-name") == "plain-name"
 
 
+@pytest.mark.parametrize("directory", (False, True))
+def test_redaction_escapes_top_level_source_names(tmp_path: Path, directory: bool) -> None:
+    source = tmp_path / "out:root~3a"
+    artifact = source / "log.txt" if directory else source
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_bytes(MINIMAX_KEY.encode())
+    upload = tmp_path / "upload"
+
+    harness.redact_tree([source], upload, [MINIMAX_KEY])
+
+    target = upload / "out~3aroot~7e3a"
+    copied = target / "log.txt" if directory else target
+    assert copied.read_bytes() == harness.REDACTED
+    assert not (upload / source.name).exists()
+
+
 @pytest.mark.parametrize("case", ("failed", "passed"))
 def test_collected_plans_and_transcripts_are_redacted(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, evidence_sources, case

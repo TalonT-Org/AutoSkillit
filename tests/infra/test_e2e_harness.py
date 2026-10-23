@@ -498,6 +498,41 @@ def test_unretained_lists_recorded_files_that_were_not_kept(
     assert evidence["errors"] == []
 
 
+@pytest.mark.parametrize(
+    "error",
+    (
+        PermissionError("cannot read session index"),
+        UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte"),
+    ),
+)
+def test_index_read_error_preserves_collected_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, evidence_sources, error
+) -> None:
+    kept, excluded = evidence_sources
+    index = harness.autoskillit_log_dir(tmp_path / "home") / "sessions.jsonl"
+    original = Path.read_text
+
+    def unreadable(path, *args, **kwargs):
+        if path == index:
+            raise error
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", unreadable)
+    monkeypatch.setattr(harness, "_run_test", lambda *_args, **_kwargs: ([], []))
+
+    failures, result = _run_recipe(tmp_path, FakeRunner(lambda _argv: None))
+
+    assert failures == []
+    assert result["outcome"] == "passed"
+    assert result["evidence"] == {
+        "pipeline_files": _pipeline_file_count(kept),
+        "transcripts": 3,
+        "unretained": [],
+        "errors": [f"{index}: {error}"],
+    }
+    _assert_evidence_sources(tmp_path / "out", kept, excluded)
+
+
 def test_upload_name_escapes_forbidden_characters_injectively() -> None:
     for character in harness.UPLOAD_FORBIDDEN_CHARACTERS + "~":
         assert harness.upload_name(character) == f"~{ord(character):02x}"

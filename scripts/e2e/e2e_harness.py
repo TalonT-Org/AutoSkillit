@@ -1236,10 +1236,13 @@ def _recorded_temp_paths(line: str) -> list[Path]:
     return paths
 
 
-def _unretained_references(index: Path, retained: set[str]) -> list[str]:
+def _unretained_references(index: Path, retained: set[str], errors: list[str]) -> list[str]:
     try:
         lines = index.read_text(encoding="utf-8").splitlines()
     except FileNotFoundError:
+        return []
+    except (OSError, UnicodeDecodeError) as exc:
+        errors.append(f"{index}: {exc}")
         return []
     return sorted(
         {
@@ -1260,7 +1263,7 @@ def collect_run_evidence(out: Path, home: Path) -> dict[str, Any]:
         projects, out / "transcripts", home, ("*.jsonl", "*.txt"), errors
     )
     unretained = _unretained_references(
-        autoskillit_log_dir(home) / "sessions.jsonl", {os.path.realpath(p) for p in copied}
+        autoskillit_log_dir(home) / "sessions.jsonl", {os.path.realpath(p) for p in copied}, errors
     )
     return {
         "pipeline_files": len(copied),

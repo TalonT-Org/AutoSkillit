@@ -40,6 +40,32 @@ REDACTED = b"[REDACTED]"
 CONFIG_TEMPLATE = Path(__file__).with_name("autoskillit-config.yaml")
 SANDBOX_CLONE = Path("/workspace/sandbox")
 PIPELINE_RUNS_DIR = "autoskillit-runs"
+PIPELINE_WORKTREES_DIR = "worktrees"
+# Select stage artifacts by directory and file name; runtime state stays behind.
+PIPELINE_EVIDENCE: tuple[tuple[str, str], ...] = (
+    ("make-plan", "*"),
+    ("rectify", "*"),
+    ("plan-set-authority", "*"),
+    ("audit-admission", "*.json"),  # ledger.sqlite3 shares this directory
+    ("audit-disposition", "*.json"),
+    ("audit-impl", "*"),
+    ("review-approach", "*"),
+    ("arch-lens-*", "*"),
+    ("prepare-pr", "*"),
+    ("compose-pr", "*"),
+    ("review-pr", "*"),
+    ("resolve-review", "*"),
+    ("diagnose-ci", "*"),
+    ("resolve-failures", "*"),
+    ("resolve-merge-conflicts", "*"),
+    ("retry-worktree", "*"),
+)
+# Rejected in uploaded paths by actions/upload-artifact v4.6.2 (e2e.yml).
+UPLOAD_FORBIDDEN_CHARACTERS = '":<>|*?\r\n'
+_UPLOAD_ESCAPES = str.maketrans({c: f"~{ord(c):02x}" for c in "~" + UPLOAD_FORBIDDEN_CHARACTERS})
+_TEMP_PATH = re.compile(
+    r"(?:/[^\s\"'`\\<>|*?,;()\[\]{}]*)?\.autoskillit/temp/[^\s\"'`\\<>|*?,;()\[\]{}]+"
+)
 
 _SCRUBBED_ENV = frozenset({"CLAUDE_CODE_OAUTH_TOKEN", *SECRET_ENV})
 _STDERR_TAIL_CHARS = 2000
@@ -1105,32 +1131,38 @@ def _run_test(
     token = env["E2E_SANDBOX_TOKEN"]
     recipe_env = {
         **scrubbed,
-        "AUTOSKILLIT_LOG_DIR": str(home / ".local" / "share" / "autoskillit" / "logs"),
+        "AUTOSKILLIT_LOG_DIR": str(autoskillit_log_dir(home)),
     }
     return run_recipe(test, catalog.sandbox_repository, token, out, recipe_env, runner)
 
 
-def _copy_failure_files(
-    source: Path, dest: Path, boundary: Path, pattern: str, errors: list[str]
-) -> int:
+def autoskillit_log_dir(home: Path) -> Path:
+    return home / ".local" / "share" / "autoskillit" / "logs"
+
+
+def _copy_evidence_files(
+    source: Path, dest: Path, boundary: Path, patterns: tuple[str, ...], errors: list[str]
+) -> list[Path]:
     relative = source.relative_to(boundary)
     try:
         if any(
             boundary.joinpath(*relative.parts[:depth]).is_symlink()
             for depth in range(len(relative.parts) + 1)
         ):
-            return 0
+            return []
         if not source.exists():
-            return 0
+            return []
     except OSError as exc:
         errors.append(f"{source}: {exc}")
-        return 0
-    copied = 0
+        return []
+    copied = []
     for root, dirs, files in os.walk(
         source, followlinks=False, onerror=lambda exc: errors.append(f"{source}: {exc}")
     ):
         dirs.sort()
-        for name in sorted(fnmatch.filter(files, pattern)):
+        for name in sorted(files):
+            if not any(fnmatch.fnmatch(name, pattern) for pattern in patterns):
+                continue
             path = Path(root) / name
             try:
                 if path.is_symlink() or not path.is_file():
@@ -1138,37 +1170,109 @@ def _copy_failure_files(
                 target = dest / path.relative_to(source)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(path, target)
-                copied += 1
+                copied.append(path)
             except OSError as exc:
                 errors.append(f"{path}: {exc}")
     return copied
 
 
-def collect_failure_evidence(out: Path, home: Path) -> dict[str, Any]:
-    """Keep pipeline plans and Claude transcripts for an unsuccessful E2E run."""
-    errors: list[str] = []
+def _evidence_roots(errors: list[str]) -> list[Path]:
     runs = SANDBOX_CLONE.parent / PIPELINE_RUNS_DIR
-    try:
-        clones = [] if runs.is_symlink() else sorted(runs.iterdir())
-    except FileNotFoundError:
-        clones = []
-    except OSError as exc:
-        errors.append(f"{runs}: {exc}")
-        clones = []
-    plan_files = 0
-    for clone in clones:
-        for kind in ("make-plan", "rectify"):
-            plan_files += _copy_failure_files(
-                clone / ".autoskillit" / "temp" / kind,
-                out / "pipeline-artifacts" / clone.name / kind,
-                clone,
-                "*",
-                errors,
+    roots = [SANDBOX_CLONE]
+    for parent, skip in ((runs, PIPELINE_WORKTREES_DIR), (runs / PIPELINE_WORKTREES_DIR, None)):
+        try:
+            linked = runs.is_symlink() or parent.is_symlink()
+            entries = (
+                [] if linked else sorted(entry for entry in parent.iterdir() if entry.is_dir())
             )
-    transcripts = _copy_failure_files(
-        home / ".claude" / "projects", out / "transcripts", home, "*.jsonl", errors
+        except FileNotFoundError:
+            entries = []
+        except OSError as exc:
+            errors.append(f"{parent}: {exc}")
+            entries = []
+        roots += [entry for entry in entries if entry.name != skip]
+    return roots
+
+
+def _collect_stage_files(out: Path, roots: list[Path], errors: list[str]) -> list[Path]:
+    workspace = SANDBOX_CLONE.parent
+    copied = []
+    for root in roots:
+        temp = root / ".autoskillit" / "temp"
+        try:
+            # iterdir propagates scan errors instead of hiding unreadable directories.
+            entries = sorted(temp.iterdir())
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            errors.append(f"{temp}: {exc}")
+            continue
+        for entry in entries:
+            for stage_pattern, file_pattern in PIPELINE_EVIDENCE:
+                if fnmatch.fnmatch(entry.name, stage_pattern):
+                    copied.extend(
+                        _copy_evidence_files(
+                            entry,
+                            out / "pipeline-artifacts" / root.relative_to(workspace) / entry.name,
+                            workspace,
+                            (file_pattern,),
+                            errors,
+                        )
+                    )
+    return copied
+
+
+def _recorded_temp_paths(line: str) -> list[Path]:
+    try:
+        row = json.loads(line)
+    except json.JSONDecodeError:
+        return []
+    cwd = row.get("cwd") if isinstance(row, dict) else None
+    paths = []
+    for match in _TEMP_PATH.finditer(line):
+        path = Path(match.group())
+        if path.is_absolute():
+            paths.append(path)
+        elif isinstance(cwd, str):
+            paths.append(Path(cwd) / path)
+    return paths
+
+
+def _unretained_references(index: Path, retained: set[str], errors: list[str]) -> list[str]:
+    try:
+        lines = index.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return []
+    except (OSError, UnicodeDecodeError) as exc:
+        errors.append(f"{index}: {exc}")
+        return []
+    return sorted(
+        {
+            str(path)
+            for line in lines
+            for path in _recorded_temp_paths(line)
+            if path.is_file() and os.path.realpath(path) not in retained
+        }
     )
-    return {"plan_files": plan_files, "transcripts": transcripts, "errors": errors}
+
+
+def collect_run_evidence(out: Path, home: Path) -> dict[str, Any]:
+    """Copy every run's stage artifacts and Claude transcripts into *out*, whatever the verdict."""
+    errors: list[str] = []
+    copied = _collect_stage_files(out, _evidence_roots(errors), errors)
+    projects = home / ".claude" / "projects"
+    transcripts = _copy_evidence_files(
+        projects, out / "transcripts", home, ("*.jsonl", "*.txt"), errors
+    )
+    unretained = _unretained_references(
+        autoskillit_log_dir(home) / "sessions.jsonl", {os.path.realpath(p) for p in copied}, errors
+    )
+    return {
+        "pipeline_files": len(copied),
+        "transcripts": len(transcripts),
+        "unretained": unretained,
+        "errors": errors,
+    }
 
 
 def run_test(
@@ -1197,18 +1301,18 @@ def run_test(
         result.update(
             outcome=outcome, passed=outcome == "passed", expected_findings=matched_findings
         )
-    if not result["passed"]:
-        try:
-            evidence = collect_failure_evidence(out, home)
-        except Exception as exc:
-            evidence = {
-                "plan_files": 0,
-                "transcripts": 0,
-                "errors": [f"{type(exc).__name__}: {exc}"],
-                "exception": traceback.format_exc(),
-            }
-        if any(evidence.values()):
-            result["evidence"] = evidence
+    try:
+        evidence = collect_run_evidence(out, home)
+    except Exception as exc:
+        evidence = {
+            "pipeline_files": 0,
+            "transcripts": 0,
+            "unretained": [],
+            "errors": [f"{type(exc).__name__}: {exc}"],
+            "exception": traceback.format_exc(),
+        }
+    if any(evidence.values()):
+        result["evidence"] = evidence
     (out / "result.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     return failures
 
@@ -1224,16 +1328,23 @@ def _copy_redacted(source: Path, target: Path, needles: Sequence[bytes]) -> None
     target.chmod(0o644)
 
 
+def upload_name(name: str) -> str:
+    """Escape ``~`` and upload-forbidden characters as ``~XX`` without name collisions."""
+    return name.translate(_UPLOAD_ESCAPES)
+
+
 def _copy_tree_redacted(source: Path, target: Path, needles: Sequence[bytes]) -> None:
     for root, _dirs, files in os.walk(source, followlinks=False):
         root_path = Path(root)
-        target_dir = target / root_path.relative_to(source)
+        target_dir = target.joinpath(
+            *(upload_name(part) for part in root_path.relative_to(source).parts)
+        )
         target_dir.mkdir(parents=True, exist_ok=True)
         target_dir.chmod(0o755)
         for name in files:
             path = root_path / name
             if not path.is_symlink() and path.is_file():
-                _copy_redacted(path, target_dir / name, needles)
+                _copy_redacted(path, target_dir / upload_name(name), needles)
 
 
 def _find_leak(dest: Path, needles: Sequence[bytes]) -> Path | None:
@@ -1257,7 +1368,7 @@ def redact_tree(sources: Sequence[Path], dest: Path, secrets: Sequence[str]) -> 
     for source in sources:
         if source.is_symlink() or not source.exists():
             continue
-        target = dest / source.name
+        target = dest / upload_name(source.name)
         if source.is_dir():
             _copy_tree_redacted(source, target, needles)
         else:

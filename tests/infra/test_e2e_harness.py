@@ -608,13 +608,13 @@ def test_runs_scan_error_keeps_readable_transcripts(
 
 
 def test_pipeline_runs_directory_matches_clone_source_of_truth() -> None:
-    from autoskillit.workspace.clone._detect import RUNS_DIR
+    from autoskillit.workspace.clone import RUNS_DIR
 
     assert harness.PIPELINE_RUNS_DIR == RUNS_DIR
 
 
 def test_worktrees_directory_matches_clone_source_of_truth() -> None:
-    from autoskillit.workspace.clone._worktree import WORKTREES_DIR
+    from autoskillit.workspace.clone import WORKTREES_DIR
 
     assert harness.PIPELINE_WORKTREES_DIR == WORKTREES_DIR
 

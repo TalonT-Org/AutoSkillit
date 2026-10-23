@@ -39,7 +39,7 @@ def _isolated_sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 def evidence_sources(tmp_path: Path) -> tuple[dict[Path, Path], dict[Path, Path]]:
     workspace = harness.SANDBOX_CLONE.parent
-    runs = workspace / "autoskillit-runs"
+    runs = workspace / harness.PIPELINE_RUNS_DIR
     kept: dict[Path, Path] = {}
     excluded: dict[Path, Path] = {}
 
@@ -57,7 +57,7 @@ def evidence_sources(tmp_path: Path) -> tuple[dict[Path, Path], dict[Path, Path]
             source.write_bytes(f"evidence for {relative}\n".encode())
 
     worktree_plan_set_file = "fedcba9876543210fedcba98.json"
-    clone_a_artifact_root = Path("autoskillit-runs/clone-a")
+    clone_a_artifact_root = Path(harness.PIPELINE_RUNS_DIR) / "clone-a"
     clone_a = workspace / clone_a_artifact_root
     add_pipeline_files(
         harness.SANDBOX_CLONE,
@@ -85,14 +85,14 @@ def evidence_sources(tmp_path: Path) -> tuple[dict[Path, Path], dict[Path, Path]
         kept,
     )
     add_pipeline_files(
-        workspace / "autoskillit-runs/clone-b",
-        Path("autoskillit-runs/clone-b"),
+        runs / "clone-b",
+        Path(harness.PIPELINE_RUNS_DIR) / "clone-b",
         ("rectify/b_plan.md",),
         kept,
     )
     add_pipeline_files(
-        runs / "worktrees/impl-1-x",
-        Path("autoskillit-runs/worktrees/impl-1-x"),
+        runs / harness.PIPELINE_WORKTREES_DIR / "impl-1-x",
+        Path(harness.PIPELINE_RUNS_DIR) / harness.PIPELINE_WORKTREES_DIR / "impl-1-x",
         (f"plan-set-authority/planset-y/{worktree_plan_set_file}",),
         kept,
     )
@@ -134,10 +134,15 @@ def evidence_sources(tmp_path: Path) -> tuple[dict[Path, Path], dict[Path, Path]
     ignored.parent.mkdir(parents=True, exist_ok=True)
     ignored.write_text("not a transcript", encoding="utf-8")
 
-    linked_temp = runs / "worktrees/impl-2-x/.autoskillit/temp"
+    linked_temp = runs / harness.PIPELINE_WORKTREES_DIR / "impl-2-x/.autoskillit/temp"
     linked_temp.parent.mkdir(parents=True, exist_ok=True)
     linked_temp.symlink_to(clone_a / ".autoskillit" / "temp", target_is_directory=True)
-    excluded[linked_temp] = Path("pipeline-artifacts/autoskillit-runs/worktrees/impl-2-x")
+    excluded[linked_temp] = (
+        Path("pipeline-artifacts")
+        / harness.PIPELINE_RUNS_DIR
+        / harness.PIPELINE_WORKTREES_DIR
+        / "impl-2-x"
+    )
     return kept, excluded
 
 
@@ -329,7 +334,7 @@ def test_evidence_ignores_files_in_run_root_directories(tmp_path: Path) -> None:
 
 
 def test_evidence_skips_symlinks_and_linked_scan_ancestors(tmp_path: Path) -> None:
-    runs = harness.SANDBOX_CLONE.parent / "autoskillit-runs"
+    runs = harness.SANDBOX_CLONE.parent / harness.PIPELINE_RUNS_DIR
     plans = runs / "clone-a/.autoskillit/temp/make-plan"
     plans.mkdir(parents=True)
     (plans / "kept.md").write_text("kept")
@@ -342,7 +347,7 @@ def test_evidence_skips_symlinks_and_linked_scan_ancestors(tmp_path: Path) -> No
     ancestor.mkdir(parents=True)
     (ancestor / "temp").symlink_to(external, target_is_directory=True)
     (runs / "linked-clone").symlink_to(runs / "clone-a", target_is_directory=True)
-    (runs / "worktrees").symlink_to(external, target_is_directory=True)
+    (runs / harness.PIPELINE_WORKTREES_DIR).symlink_to(external, target_is_directory=True)
     home = tmp_path / "home"
     home.mkdir()
     (external / "projects").mkdir()
@@ -359,7 +364,7 @@ def test_evidence_skips_symlinks_and_linked_scan_ancestors(tmp_path: Path) -> No
         "errors": [],
     }
     assert [path.relative_to(out) for path in out.rglob("*") if path.is_file()] == [
-        Path("pipeline-artifacts/autoskillit-runs/clone-a/make-plan/kept.md")
+        Path("pipeline-artifacts") / harness.PIPELINE_RUNS_DIR / "clone-a/make-plan/kept.md"
     ]
 
 
@@ -369,13 +374,9 @@ def test_passing_pipeline_recipe_retains_commissioning_evidence(
     kept, excluded = evidence_sources
     out = tmp_path / "out"
     by_destination = {relative: source for source, relative in kept.items()}
-    semantic = Path(
-        "pipeline-artifacts/autoskillit-runs/clone-a/audit-admission/"
-        f"{_AUDIT_SLOT}/{_AUDIT_ATTEMPT}/semantic.json"
-    )
-    review = Path(
-        "pipeline-artifacts/autoskillit-runs/clone-a/review-pr/iter_1/local_findings_26.json"
-    )
+    clone_artifacts = Path("pipeline-artifacts") / harness.PIPELINE_RUNS_DIR / "clone-a"
+    semantic = clone_artifacts / "audit-admission" / _AUDIT_SLOT / _AUDIT_ATTEMPT / "semantic.json"
+    review = clone_artifacts / "review-pr/iter_1/local_findings_26.json"
     transcript = Path("transcripts/project/session.jsonl")
     tool_results = Path("transcripts/project/session/tool-results/call_1.txt")
     secrets = (semantic, review, transcript, tool_results)
@@ -383,14 +384,9 @@ def test_passing_pipeline_recipe_retains_commissioning_evidence(
         source = by_destination[relative]
         source.write_text(f"{MINIMAX_KEY} and {SANDBOX_TOKEN}", encoding="utf-8")
 
-    clone_a = harness.SANDBOX_CLONE.parent / "autoskillit-runs/clone-a"
-    plan = by_destination[Path("pipeline-artifacts/autoskillit-runs/clone-a/make-plan/a_plan.md")]
-    plan_set = by_destination[
-        Path(
-            "pipeline-artifacts/autoskillit-runs/clone-a/plan-set-authority/"
-            f"planset-x/{_PLAN_SET_FILE}"
-        )
-    ]
+    clone_a = harness.SANDBOX_CLONE.parent / harness.PIPELINE_RUNS_DIR / "clone-a"
+    plan = by_destination[clone_artifacts / "make-plan/a_plan.md"]
+    plan_set = by_destination[clone_artifacts / "plan-set-authority/planset-x" / _PLAN_SET_FILE]
 
     seeded = False
 
@@ -445,7 +441,8 @@ def test_passing_pipeline_recipe_retains_commissioning_evidence(
     assert semantic_upload == (
         upload
         / "out"
-        / "pipeline-artifacts/autoskillit-runs/clone-a/audit-admission"
+        / clone_artifacts
+        / "audit-admission"
         / f"sha256~3a{_AUDIT_SLOT.removeprefix('sha256:')}"
         / _AUDIT_ATTEMPT
         / "semantic.json"
@@ -470,7 +467,7 @@ def test_unretained_lists_recorded_files_that_were_not_kept(
 ) -> None:
     kept, _ = evidence_sources
     workspace = harness.SANDBOX_CLONE.parent
-    clone_a = workspace / "autoskillit-runs/clone-a"
+    clone_a = workspace / harness.PIPELINE_RUNS_DIR / "clone-a"
     new_producer = clone_a / ".autoskillit/temp/new-producer/verdict.json"
     cwd_resolved = clone_a / ".autoskillit/temp/new-producer-2/x.json"
     new_producer.parent.mkdir(parents=True, exist_ok=True)
@@ -486,7 +483,9 @@ def test_unretained_lists_recorded_files_that_were_not_kept(
     plan_set = next(source for source, relative in kept.items() if relative.name == _PLAN_SET_FILE)
     symlinked_plan_set = (
         workspace
-        / "autoskillit-runs/worktrees/impl-2-x/.autoskillit/temp"
+        / harness.PIPELINE_RUNS_DIR
+        / harness.PIPELINE_WORKTREES_DIR
+        / "impl-2-x/.autoskillit/temp"
         / plan_set.relative_to(clone_a / ".autoskillit/temp")
     )
     missing = ".autoskillit/temp/not-created/missing.json"
@@ -600,7 +599,7 @@ def test_runs_scan_error_keeps_readable_transcripts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, evidence_sources
 ) -> None:
     kept, _ = evidence_sources
-    runs = harness.SANDBOX_CLONE.parent / "autoskillit-runs"
+    runs = harness.SANDBOX_CLONE.parent / harness.PIPELINE_RUNS_DIR
     original = Path.iterdir
 
     def unreadable(path):
@@ -615,7 +614,8 @@ def test_runs_scan_error_keeps_readable_transcripts(
     assert result["outcome"] == "failed"
     expected_pipeline_files = sum(
         relative.parts[1] == "sandbox"
-        or relative.parts[1:4] == ("autoskillit-runs", "worktrees", "impl-1-x")
+        or relative.parts[1:4]
+        == (harness.PIPELINE_RUNS_DIR, harness.PIPELINE_WORKTREES_DIR, "impl-1-x")
         for relative in kept.values()
         if relative.parts[0] == "pipeline-artifacts"
     )

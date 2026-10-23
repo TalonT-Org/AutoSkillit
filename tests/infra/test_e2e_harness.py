@@ -390,7 +390,10 @@ def test_passing_pipeline_recipe_retains_commissioning_evidence(
         )
     ]
 
+    seeded = False
+
     def seed(argv: list[str]) -> None:
+        nonlocal seeded
         if argv[:3] != ["autoskillit", "fleet", "run"]:
             return None
         log_dir = _log_dir(tmp_path)
@@ -416,11 +419,13 @@ def test_passing_pipeline_recipe_retains_commissioning_evidence(
         with (log_dir / "sessions.jsonl").open("a", encoding="utf-8") as index:
             for row in rows:
                 index.write(json.dumps(row) + "\n")
+        seeded = True
         return None
 
     runner = FakeRunner(_recipe_handler(log_dir=_log_dir(tmp_path), extra=seed))
     failures, result = _run_recipe(tmp_path, runner)
 
+    assert seeded, "the recipe runner must seed the retained-path session rows"
     assert failures == []
     assert result["outcome"] == "passed"
     assert result["passed"] is True

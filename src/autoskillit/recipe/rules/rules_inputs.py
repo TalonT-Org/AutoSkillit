@@ -21,6 +21,7 @@ from autoskillit.core import (
 )
 from autoskillit.recipe._analysis import ValidationContext, bfs_reachable
 from autoskillit.recipe.contracts import (
+    RESULT_CAPTURE_RE,
     get_skill_contract,
     load_bundled_manifest,
 )
@@ -38,7 +39,10 @@ def _unresolved_template_reason(bound: BoundValue, *, per_item: bool) -> str | N
     scan = value
     for name in bound.template_dependencies:
         scan = scan.replace("{{" + name + "}}", "")
-    if "${{" in scan and not bound.context_dependencies and not bound.input_dependencies:
+    if "${{" in scan and (
+        RESULT_CAPTURE_RE.search(scan)
+        or (not bound.context_dependencies and not bound.input_dependencies)
+    ):
         return (
             "the binder treats this unresolved expression as static, so admission accepts only "
             "the compiled effective value"

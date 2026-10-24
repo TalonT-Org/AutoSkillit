@@ -54,6 +54,14 @@ def _assert_error_names_input(findings: list[RuleFinding], input_name: str) -> N
         pytest.param(" {pr_number} ", id="padded-placeholder"),
         pytest.param("{{ pr_number }}", id="double-braced-placeholder"),
         pytest.param("${{ result.pr_number }}", id="unknown-result-namespace"),
+        pytest.param(
+            "${{ context.pr_number }}/${{ result.x }}",
+            id="context-does-not-hide-result-expression",
+        ),
+        pytest.param(
+            "${{ inputs.pr_number }}/${{ result.x }}",
+            id="input-does-not-hide-result-expression",
+        ),
         pytest.param("${{ context.pr_number", id="unterminated-expression"),
         pytest.param("${{ context.pr_number | trim }}", id="filter-expression"),
         pytest.param(

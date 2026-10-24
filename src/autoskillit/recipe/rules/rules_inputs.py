@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import regex as re
 from packaging.version import Version
 
@@ -11,7 +13,9 @@ from autoskillit.core import (
     CONFIG_AUTHORITY_KEYS,
     SKILL_TOOLS,
     BindingFailureCode,
+    BoundValue,
     BoundValueOrigin,
+    BoundValueState,
     Severity,
     get_logger,
 )
@@ -24,6 +28,64 @@ from autoskillit.recipe.io import iter_steps_with_context
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 logger = get_logger(__name__)
+
+
+_WHOLE_VALUE_PLACEHOLDER_RE = re.compile(r"\{\{?\s*(?!AUTOSKILLIT_)[A-Za-z_]\w*\s*\}\}?")
+
+
+def _unresolved_template_reason(bound: BoundValue, *, per_item: bool) -> str | None:
+    value = cast(str, bound.declared_value)
+    scan = value
+    for name in bound.template_dependencies:
+        scan = scan.replace("{{" + name + "}}", "")
+    if "${{" in scan and not bound.context_dependencies and not bound.input_dependencies:
+        return (
+            "the binder treats this unresolved expression as static, so admission accepts only "
+            "the compiled effective value"
+        )
+    if not per_item and _WHOLE_VALUE_PLACEHOLDER_RE.fullmatch(value.strip()):
+        return "this is a whole-value placeholder the binder treats as a static literal"
+    return None
+
+
+@semantic_rule(
+    name="unresolved-skill-input-template",
+    description=(
+        "Recipe skill inputs must be literals or recognised ${{ context.* }} / ${{ inputs.* }} "
+        "references; unresolved template tokens compile to static values runtime admission "
+        "cannot accept (recipe validation only)."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_unresolved_skill_input_template(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool not in SKILL_TOOLS:
+            continue
+        invocation = ctx.binding_projection.for_step(step_name)
+        if invocation is None or invocation.skill_name is None:
+            continue
+        per_item = "dispatch_items" in (step.declared_with_args or {})
+        for bound in invocation.skill_inputs:
+            if bound.state is not BoundValueState.PRESENT or not isinstance(
+                bound.declared_value, str
+            ):
+                continue
+            reason = _unresolved_template_reason(bound, per_item=per_item)
+            if reason is not None:
+                findings.append(
+                    make_finding(
+                        rule_name="unresolved-skill-input-template",
+                        step_name=step_name,
+                        message=(
+                            f"Skill input '{bound.name}' declares {bound.declared_value!r}: "
+                            f"{reason}. "
+                            "Bind ${{ context.<var> }} from a recipe-level producer step, "
+                            "or ${{ inputs.<name> }}."
+                        ),
+                    )
+                )
+    return findings
 
 
 @semantic_rule(

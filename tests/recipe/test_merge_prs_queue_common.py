@@ -824,13 +824,16 @@ class TestMergePrsPreEnqueueCiGate:
     def pmp(self, pmp_recipe) -> Recipe:
         return pmp_recipe
 
-    def test_get_first_pr_number_routes_to_get_current_pr_branch(self, pmp) -> None:
-        """get_first_pr_number.on_success must route to get_current_pr_branch."""
+    def test_get_first_pr_number_routes_to_route_by_queue_mode(self, pmp) -> None:
+        """The first cursor result routes by queue mode unless the queue is done."""
         step = pmp.steps["get_first_pr_number"]
-        assert step.on_success == "get_current_pr_branch", (
-            f"get_first_pr_number.on_success must be 'get_current_pr_branch', "
-            f"got: {step.on_success!r}"
-        )
+        assert step.on_result is not None
+        done_routes = [c for c in step.on_result.conditions if c.when and "done" in c.when]
+        assert done_routes
+        assert done_routes[0].route == "register_clone_success"
+        fallback = [c for c in step.on_result.conditions if c.when is None]
+        assert fallback
+        assert fallback[0].route == "route_by_queue_mode"
 
     def test_get_current_pr_branch_exists(self, pmp) -> None:
         """get_current_pr_branch step must exist."""

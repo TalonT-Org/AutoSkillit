@@ -203,12 +203,15 @@ def test_staged_temp_guard_permits_non_temp_change_beside_tracked_temp(
 
 def test_staged_temp_guard_sees_gitlink_hidden_by_submodule_ignore(clean_git_repo: Path) -> None:
     _run_git(clean_git_repo, "config", "diff.ignoreSubmodules", "all")
+    commit_sha = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=clean_git_repo, text=True, timeout=30
+    ).strip()
     _run_git(
         clean_git_repo,
         "update-index",
         "--add",
         "--cacheinfo",
-        f"160000,{'1' * 40},.autoskillit/temp/module",
+        f"160000,{commit_sha},.autoskillit/temp/module",
     )
 
     _assert_rejected(_run_staged_temp_guard(clean_git_repo), ".autoskillit/temp/module")

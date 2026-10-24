@@ -246,6 +246,9 @@ def test_staged_temp_guard_rejects_root_symlink_in_real_commit(clean_git_repo: P
     sub.mkdir()
     _stage_entry(clean_git_repo, _TEMP_PATHSPEC, "symlink")
     (clean_git_repo / ".git" / "hooks" / "pre-commit").symlink_to(_STAGED_TEMP_GUARD)
+    head_before = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=clean_git_repo, timeout=30
+    )
 
     result = subprocess.run(
         [
@@ -266,13 +269,9 @@ def test_staged_temp_guard_rejects_root_symlink_in_real_commit(clean_git_repo: P
         check=False,
         timeout=30,
     )
-    _assert_rejected(result, _TEMP_PATHSPEC)
-    tree = subprocess.run(
-        ["git", "ls-tree", "--name-only", "HEAD", "--", _TEMP_PATHSPEC],
-        cwd=clean_git_repo,
-        capture_output=True,
-        text=True,
-        check=True,
-        timeout=30,
+    assert result.returncode != 0
+    assert f"Refusing to stage AutoSkillit temp artifact: {_TEMP_PATHSPEC}\n" in result.stderr
+    assert (
+        subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=clean_git_repo, timeout=30)
+        == head_before
     )
-    assert tree.stdout == ""

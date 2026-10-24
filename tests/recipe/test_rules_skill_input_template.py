@@ -159,7 +159,7 @@ def test_resolved_or_accepted_skill_input_values_are_clean(
     assert findings == []
 
 
-def test_dynamic_skill_with_context_path_placeholder_is_clean() -> None:
+def test_dynamic_skill_templates_are_deferred_to_fanout() -> None:
     findings = _skill_input_template_findings(
         {
             "skill_command": "/autoskillit:arch-lens-{slug}",

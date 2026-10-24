@@ -97,6 +97,13 @@ The rule families live in `src/autoskillit/recipe/rules_*.py` (28 files):
 
 The semantic-rule catalog is defined by the rule modules under `recipe/rules/`.
 
+`typed-skill-input-undeclared-source` is an advisory warning about producer
+declarations. Runtime admission checks the input's actual value independently:
+integer skill inputs accept JSON integers (excluding booleans), or canonical ASCII
+decimal text from exact context or ingredient references, even without an integer
+producer declaration. Malformed text is rejected regardless of the declaration.
+A capture declared `type: integer` also validates its output when it is captured.
+
 ## Contract cards
 
 Every skill referenced by a recipe carries a **contract card** in

@@ -146,6 +146,64 @@ def test_implementation_shape_supplies_unavailable_context(
 
 
 @pytest.mark.parametrize(
+    ("pr_number", "complexity"),
+    [
+        pytest.param("4", "needs_check", id="single-digit-cursor"),
+        pytest.param("123", "simple", id="multi-digit-cursor"),
+    ],
+)
+def test_merge_pr_admits_realistic_cursor_values(
+    pr_number: str,
+    complexity: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.recipe._binding import bind_runtime_skill_invocation
+    from autoskillit.recipe.api import _api_cache
+    from autoskillit.recipe.api._api_cache import LoadCache
+    from autoskillit.server.recipe import _recipe_generation
+
+    monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
+    monkeypatch.setattr(_recipe_generation, "_RECIPE_GENERATION_STORE", RecipeGenerationStore())
+    payload, projection = _full_open_kitchen_generation("merge-prs")
+    tool_ctx = cast(
+        Any,
+        SimpleNamespace(
+            backend=None,
+            **kitchen_identity_fields(f"merge-pr-cursor-{pr_number}-{complexity}"),
+            temp_dir=tmp_path,
+        ),
+    )
+    prepared = prepare_recipe_delivery_generation(
+        payload,
+        recipe_name="merge-prs",
+        tool_ctx=tool_ctx,
+        finalized_projection=projection,
+    )
+    credential = build_recipe_execution_credential(prepared.execution_snapshot)
+    shape = credential.as_wire_block()["skill_input_shapes"]["merge_pr"]
+    assert shape["keys"] == ["pr_number", "complexity"]
+
+    template = prepared.execution_snapshot.templates["merge_pr"]
+    actual_mcp_kwargs = {
+        value.name: value.effective_value
+        for value in template.invocation.mcp_kwargs
+        if isinstance(value.effective_value, (str, int, bool))
+    }
+    skill_inputs = {"pr_number": pr_number, "complexity": complexity}
+    bound = bind_runtime_skill_invocation(
+        template,
+        execution_id=prepared.execution_snapshot.execution_id,
+        step_name="merge_pr",
+        skill_command="/autoskillit:merge-pr",
+        skill_inputs=skill_inputs,
+        actual_mcp_kwargs=actual_mcp_kwargs,
+    )
+
+    assert dict(bound) == skill_inputs
+
+
+@pytest.mark.parametrize(
     "recipe_name", delivery_recipe_names(Path(__file__).resolve().parents[2]), ids=lambda n: n
 )
 def test_completion_receipt_fits_every_delivery_bound(

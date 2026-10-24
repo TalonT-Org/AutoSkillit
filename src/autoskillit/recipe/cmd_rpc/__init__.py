@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ._cmd_rpc import (
-        advance_queue_pr,
         attempt_cheap_rebase,
         batch_create_issues,
         check_dropped_ci_loop,
@@ -25,9 +24,11 @@ if TYPE_CHECKING:
         emit_fallback_map,
         ensure_results,
         export_local_bundle,
+        first_ordered_pr,
         force_push_and_wait_mergeability,
         immediate_merge_conflict_fix,
         main_repo_guard,
+        next_ordered_pr,
         proactive_rebase_next_pr,
         queue_ejected_fix,
         refetch_issues,
@@ -112,7 +113,6 @@ _LAZY_MODULES: frozenset[str] = frozenset(
 )
 
 _LAZY_SYMBOL_TO_MODULE: dict[str, str] = {
-    "advance_queue_pr": "_cmd_rpc_merge",
     "attempt_cheap_rebase": "_cmd_rpc_merge",
     "batch_create_issues": "_cmd_rpc_issues",
     "check_dropped_ci_loop": "_cmd_rpc_guards",
@@ -126,9 +126,11 @@ _LAZY_SYMBOL_TO_MODULE: dict[str, str] = {
     "emit_fallback_map": "_cmd_rpc_issues",
     "ensure_results": "_cmd_rpc_issues",
     "export_local_bundle": "_cmd_rpc_issues",
+    "first_ordered_pr": "_cmd_rpc_merge",
     "force_push_and_wait_mergeability": "_cmd_rpc_merge",
     "immediate_merge_conflict_fix": "_cmd_rpc_merge",
     "main_repo_guard": "_cmd_rpc_guards",
+    "next_ordered_pr": "_cmd_rpc_merge",
     "proactive_rebase_next_pr": "_cmd_rpc_merge",
     "queue_ejected_fix": "_cmd_rpc_merge",
     "refetch_issues": "_cmd_rpc_issues",
@@ -202,7 +204,6 @@ __all__ = [
     "_strip_ticket_body",
     "_validate_mutation_variables",
     "_write_rebase_conflict_report",
-    "advance_queue_pr",
     "atomic_write",
     "attempt_cheap_rebase",
     "batch_create_issues",
@@ -219,12 +220,14 @@ __all__ = [
     "emit_fallback_map",
     "ensure_results",
     "export_local_bundle",
+    "first_ordered_pr",
     "force_push_and_wait_mergeability",
     "get_logger",
     "immediate_merge_conflict_fix",
     "is_generated_path",
     "logger",
     "main_repo_guard",
+    "next_ordered_pr",
     "proactive_rebase_next_pr",
     "queue_ejected_fix",
     "read_stable_contained_bytes",

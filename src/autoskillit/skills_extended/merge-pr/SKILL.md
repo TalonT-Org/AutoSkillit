@@ -45,12 +45,18 @@ conflicts from earlier merges in the queue.
 
 ## Arguments
 
-```
-{pr_number} {complexity}
-```
+The recipe supplies structured `skill_inputs`, for example
+`{"pr_number": "42", "complexity": "simple"}`.
 
-- `pr_number` — GitHub PR number (integer)
-- `complexity` — `simple` or `needs_check` (from `analyze-prs` pr_order JSON)
+- `pr_number` — GitHub PR number as a positive-integer string
+- `complexity` — `simple` or `needs_check`; the recipe cursor selects it from
+  the `analyze-prs` order artifact. This provenance does not require a file argument.
+
+Standalone callers such as `process-issues` may also use inline arguments:
+
+```
+/autoskillit:merge-pr {pr_number} {complexity}
+```
 - Workflow value `{output_dir}` — the literal directory printed in the conflict-plan
   workflow and pasted into its later `mkdir` call; it is not a positional argument.
 
@@ -80,8 +86,10 @@ conflicts from earlier merges in the queue.
 
 ### Step 0: Validate Inputs
 
-- Parse `pr_number` (must be a positive integer)
-- Parse `complexity` (must be `simple` or `needs_check`)
+- Validate the supplied structured `skill_inputs` (or standalone inline arguments).
+- Parse `pr_number` (must be a positive-integer string).
+- Parse `complexity` (must be `simple` or `needs_check`).
+- Use these supplied values; do not reselect a PR or complexity from the order file.
 - Verify git working tree is clean: `git status --porcelain` must be empty. If dirty: abort with error.
 - Identify current branch: `git branch --show-current` (this is the integration branch)
 

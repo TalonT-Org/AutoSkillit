@@ -3683,20 +3683,36 @@ callable_contracts:
     outputs:
     - name: ok
       type: str
-  autoskillit.recipe._cmd_rpc.advance_queue_pr:
+  autoskillit.recipe._cmd_rpc.first_ordered_pr:
     inputs:
-    - name: current_pr_number
-      type: str
-      required: true
-      nullable: false
     - name: pr_order_file
       type: str
       required: true
     outputs:
+    - name: pr_number
+      type: str
+    - name: complexity
+      type: str
+    - name: done
+      type: str
+      allowed_values: ['true', 'false']
+  autoskillit.recipe._cmd_rpc.next_ordered_pr:
+    inputs:
+    - name: pr_order_file
+      type: str
+      required: true
     - name: current_pr_number
       type: str
-    - name: error
+      required: true
+      nullable: false
+    outputs:
+    - name: pr_number
       type: str
+    - name: complexity
+      type: str
+    - name: done
+      type: str
+      allowed_values: ['true', 'false']
   autoskillit.recipe._cmd_rpc.proactive_rebase_next_pr:
     inputs:
     - name: work_dir

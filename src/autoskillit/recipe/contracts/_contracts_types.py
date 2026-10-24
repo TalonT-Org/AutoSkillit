@@ -11,6 +11,8 @@ from autoskillit.core import (
     EXTERNAL_EFFECT_CHOICES,
     VALID_EXTERNAL_EFFECTS,
     BoundScalar,
+    BoundValue,
+    BoundValueOrigin,
     PreflightKind,
 )
 
@@ -18,6 +20,13 @@ _CONTEXT_REF_RE = re.compile(r"\$\{\{\s*context\.([A-Za-z_]\w*)\s*\}\}")
 INPUT_REF_RE = re.compile(r"\$\{\{\s*inputs\.([A-Za-z_]\w*)\s*\}\}")
 _TEMPLATE_REF_RE = re.compile(r"\$\{\{[^}]+\}\}")
 RESULT_CAPTURE_RE = re.compile(r"\$\{\{\s*result\.([\w-]+)\s*\}\}")
+
+
+_TEXT_INPUT_TYPES = frozenset({"str", "string", "optional_string"})
+_PATH_INPUT_TYPES = frozenset({"file_path", "file_path_list", "directory_path"})
+_EXACT_REFERENCE_ORIGINS = frozenset({BoundValueOrigin.CONTEXT, BoundValueOrigin.RECIPE_INPUT})
+_CANONICAL_INTEGER_DIGITS = 19
+_CANONICAL_INTEGER_TEXT = re.compile(rf"0|-?[1-9][0-9]{{0,{_CANONICAL_INTEGER_DIGITS - 1}}}")
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -46,14 +55,7 @@ class SkillInput:
 
     def accepts(self, value: object) -> bool:
         normalized = self.type
-        if normalized in {
-            "str",
-            "string",
-            "optional_string",
-            "file_path",
-            "file_path_list",
-            "directory_path",
-        }:
+        if normalized in _TEXT_INPUT_TYPES | _PATH_INPUT_TYPES:
             return isinstance(value, str)
         if normalized == "integer":
             return isinstance(value, int) and not isinstance(value, bool)
@@ -62,6 +64,44 @@ class SkillInput:
         if normalized in {"boolean", "bool"}:
             return isinstance(value, bool)
         return False
+
+    def admit_runtime_wire(self, value: BoundScalar, bound: BoundValue) -> BoundScalar | None:
+        """Return the bound value, or None when the declared type rejects its wire form."""
+        if self.accepts(value):
+            return value
+        if bound.origin not in _EXACT_REFERENCE_ORIGINS:
+            return None
+        if self.type == "integer":
+            if isinstance(value, str) and _CANONICAL_INTEGER_TEXT.fullmatch(value):
+                return int(value)
+            return None
+        if self.type not in _TEXT_INPUT_TYPES or not isinstance(value, int):
+            return None
+        if bound.absence_value is not None and not value:
+            return None
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        return str(value) if abs(value) < 10**_CANONICAL_INTEGER_DIGITS else None
+
+    def wire_mismatch_message(self, value: BoundScalar, bound: BoundValue) -> str:
+        message = (
+            f"runtime skill input {self.name!r} expects {self.type!r}; "
+            f"received {type(value).__name__}"
+        )
+        if self.type == "integer":
+            message += "; send a JSON integer"
+            if bound.origin in _EXACT_REFERENCE_ORIGINS:
+                message += (
+                    " or canonical ASCII decimal text"
+                    f" (e.g. '31'; at most {_CANONICAL_INTEGER_DIGITS} digits)"
+                )
+        elif self.type in _TEXT_INPUT_TYPES:
+            message += "; send a JSON string"
+        if bound.absence_value is not None and not value:
+            message += (
+                f"; send the advertised absence value {bound.absence_value!r} when unavailable"
+            )
+        return message
 
 
 @dataclasses.dataclass

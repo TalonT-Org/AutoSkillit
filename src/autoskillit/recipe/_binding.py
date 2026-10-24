@@ -708,17 +708,17 @@ def _bind_runtime_skill_values(
                 "recipe_execution_contract_mismatch",
                 f"compiled skill input {value.name!r} is absent from the runtime contract",
             )
-        if not input_def.accepts(actual):
+        admitted = input_def.admit_runtime_wire(actual, value)
+        if admitted is None:
             raise RuntimeBindingError(
-                "recipe_execution_input_type",
-                f"runtime skill input {value.name!r} expects {input_def.type!r}",
+                "recipe_execution_input_type", input_def.wire_mismatch_message(actual, value)
             )
-        if not value.is_dynamic and actual != value.effective_value:
+        if not value.is_dynamic and admitted != value.effective_value:
             raise RuntimeBindingError(
                 "recipe_execution_static_input_mismatch",
                 f"static skill input {value.name!r} differs from the template",
             )
-        bound_inputs.append((value.name, actual))
+        bound_inputs.append((value.name, admitted))
     return tuple(bound_inputs)
 
 

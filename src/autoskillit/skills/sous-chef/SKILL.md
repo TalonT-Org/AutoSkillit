@@ -540,8 +540,9 @@ that target's YAML key rather than the invoking tool-step key.
 **NEVER** append clone numbers, instance indices, retry counts, or any other
 disambiguation strings.
 The telemetry layer aggregates invocations of the same logical step automatically;
-suffixes fragment its token and timing rows. Distinct YAML step keys remain separate
-telemetry rows, even when they invoke the same skill.
+suffixes fragment its token and timing rows.
+Distinct YAML step keys remain separate telemetry rows, even when they
+invoke the same skill.
 
 Correct:
 ```yaml

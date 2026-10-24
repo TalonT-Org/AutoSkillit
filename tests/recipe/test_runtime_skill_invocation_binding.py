@@ -11,9 +11,11 @@ in as an untested proxy for a runtime contract nobody actually exercised.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import Any, cast
 
 import pytest
 
+import autoskillit.recipe._binding as _binding
 from autoskillit.core import (
     BoundScalar,
     InvocationTemplate,
@@ -46,13 +48,34 @@ _MANIFEST = {
         }
     }
 }
+_TYPED_MANIFEST: dict[str, Any] = {
+    "skills": {
+        "typed-skill": {
+            "inputs": [
+                {"name": "count", "type": "integer", "required": True},
+                {"name": "enabled", "type": "boolean", "required": True},
+                {"name": "where", "type": "file_path", "required": True},
+                {
+                    "name": "label",
+                    "type": "string",
+                    "required": False,
+                    "absence_value": "",
+                },
+                {"name": "tag", "type": "string", "required": True},
+            ]
+        }
+    }
+}
 _EXECUTION_ID = "exec-1"
 _STEP_NAME = "verify"
+_DEFAULT = object()
 
 
 def _template(
     *,
     optional_context_refs: list[str] | None = None,
+    skill_name: str = "dry-walkthrough",
+    manifest: dict[str, Any] | None = None,
     **extra_with_args: object,
 ) -> InvocationTemplate:
     """Build a compiled InvocationTemplate the way the production initialization
@@ -62,7 +85,7 @@ def _template(
         name=_STEP_NAME,
         tool="run_skill",
         with_args={
-            "skill_command": "/autoskillit:dry-walkthrough",
+            "skill_command": f"/autoskillit:{skill_name}",
             "cwd": "/repo",
             "skill_inputs": {"plan_path": "/tmp/plan.md"},
             "step_name": _STEP_NAME,
@@ -70,13 +93,15 @@ def _template(
         },
         optional_context_refs=optional_context_refs or [],
     )
-    invocation = bind_step_invocation(_STEP_NAME, step, manifest=_MANIFEST)
+    invocation = bind_step_invocation(
+        _STEP_NAME, step, manifest=manifest if manifest is not None else _MANIFEST
+    )
     assert invocation.is_valid, invocation.failures
     assert invocation.skill_name is not None
     tool_def = get_tool_def("run_skill")
     assert tool_def is not None
     tool_identity = compute_tool_contract_identity(tool_def)
-    skill_identity = compute_skill_contract_identity(invocation.skill_name)
+    skill_identity = compute_skill_contract_identity(invocation.skill_name, manifest=manifest)
     digest = compute_invocation_template_digest(
         execution_id=_EXECUTION_ID,
         recipe_name="test-recipe",
@@ -97,7 +122,7 @@ def _template(
 def _bind(
     template: InvocationTemplate,
     *,
-    skill_inputs: Mapping[str, BoundScalar] | None = None,
+    skill_inputs: Mapping[str, BoundScalar] | None | object = _DEFAULT,
     **overrides: BoundScalar,
 ):
     """Bind values for each compiled MCP kwarg (``ToolDef.mcp_kwarg_names``
@@ -105,18 +130,24 @@ def _bind(
     ``skill_command``/``cwd``/``step_name`` are always compiled (each
     ``_template()`` step declares them); extra kwargs override or supply
     values for other compiled kwargs under test."""
+    assert template.invocation.skill_name is not None
+    skill_command = f"/autoskillit:{template.invocation.skill_name}"
     actual_mcp_kwargs: dict[str, BoundScalar] = {
-        "skill_command": "/autoskillit:dry-walkthrough",
+        "skill_command": skill_command,
         "cwd": "/repo",
         "step_name": _STEP_NAME,
     }
     actual_mcp_kwargs.update(overrides)
+    if skill_inputs is _DEFAULT:
+        runtime_skill_inputs: Mapping[str, BoundScalar] | None = {"plan_path": "/tmp/plan.md"}
+    else:
+        runtime_skill_inputs = cast(Mapping[str, BoundScalar] | None, skill_inputs)
     return bind_runtime_skill_invocation(
         template,
         execution_id=_EXECUTION_ID,
         step_name=_STEP_NAME,
-        skill_command="/autoskillit:dry-walkthrough",
-        skill_inputs=skill_inputs or {"plan_path": "/tmp/plan.md"},
+        skill_command=skill_command,
+        skill_inputs=runtime_skill_inputs,
         actual_mcp_kwargs=actual_mcp_kwargs,
     )
 
@@ -129,6 +160,37 @@ def _template_with_absence_value() -> InvocationTemplate:
             "audit_cycle_path": "${{ context.audit_cycle_path }}",
         },
     )
+
+
+def _typed_template(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    static_count: bool = False,
+) -> InvocationTemplate:
+    monkeypatch.setattr(_binding, "load_bundled_manifest", lambda: _TYPED_MANIFEST)
+    skill_inputs = {
+        "count": 3 if static_count else "${{ context.count }}",
+        "enabled": "${{ context.enabled }}",
+        "where": "${{ context.where }}",
+        "label": "${{ context.label }}",
+        "tag": "tag-${{ context.n }}",
+    }
+    return _template(
+        optional_context_refs=["label"],
+        skill_name="typed-skill",
+        manifest=_TYPED_MANIFEST,
+        skill_inputs=skill_inputs,
+    )
+
+
+def _typed_skill_inputs() -> dict[str, BoundScalar]:
+    return {
+        "count": 3,
+        "enabled": True,
+        "where": "/repo",
+        "label": "",
+        "tag": "tag-3",
+    }
 
 
 @pytest.mark.parametrize(
@@ -171,6 +233,85 @@ def test_non_handler_param_is_authorable_but_not_a_compiled_mcp_kwarg() -> None:
 
     assert "dispatch_items" not in {value.name for value in template.invocation.mcp_kwargs}
     assert _bind(template) == (("plan_path", "/tmp/plan.md"),)
+
+
+@pytest.mark.parametrize(
+    ("input_name", "wire", "expected"),
+    [
+        ("count", "3", 3),
+        ("count", 3, 3),
+        ("label", 1, "1"),
+        ("label", True, "true"),
+        ("label", False, "false"),
+        ("label", 0, "0"),
+    ],
+)
+def test_runtime_binding_decodes_declared_type_canonical_text(
+    monkeypatch: pytest.MonkeyPatch,
+    input_name: str,
+    wire: BoundScalar,
+    expected: BoundScalar,
+) -> None:
+    template = _typed_template(monkeypatch)
+    skill_inputs = _typed_skill_inputs()
+    skill_inputs[input_name] = wire
+
+    bound = dict(_bind(template, skill_inputs=skill_inputs))
+
+    assert bound[input_name] == expected
+
+
+@pytest.mark.parametrize(
+    ("input_name", "input_type", "wire"),
+    [
+        ("count", "integer", "03"),
+        ("count", "integer", " 3"),
+        ("count", "integer", "+3"),
+        ("count", "integer", "3.0"),
+        ("count", "integer", '"3"'),
+        ("count", "integer", True),
+        ("enabled", "boolean", "false"),
+        ("enabled", "boolean", "true"),
+        ("enabled", "boolean", 0),
+        ("where", "file_path", 1),
+        ("where", "file_path", True),
+        ("tag", "string", 3),
+        ("tag", "string", True),
+    ],
+)
+def test_runtime_binding_rejects_noncanonical_wire_scalar(
+    monkeypatch: pytest.MonkeyPatch,
+    input_name: str,
+    input_type: str,
+    wire: BoundScalar,
+) -> None:
+    template = _typed_template(monkeypatch)
+    skill_inputs = _typed_skill_inputs()
+    skill_inputs[input_name] = wire
+
+    with pytest.raises(RuntimeBindingError) as excinfo:
+        _bind(template, skill_inputs=skill_inputs)
+
+    assert excinfo.value.code == "recipe_execution_input_type"
+    assert f"runtime skill input '{input_name}' expects '{input_type}'" in str(excinfo.value)
+    assert "; received" in str(excinfo.value)
+
+
+def test_runtime_binding_static_typed_literal_stays_strict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    template = _typed_template(monkeypatch, static_count=True)
+    skill_inputs = _typed_skill_inputs()
+    skill_inputs["count"] = "3"
+
+    with pytest.raises(RuntimeBindingError) as excinfo:
+        _bind(template, skill_inputs=skill_inputs)
+    assert excinfo.value.code == "recipe_execution_input_type"
+
+    skill_inputs["count"] = 4
+    with pytest.raises(RuntimeBindingError) as excinfo:
+        _bind(template, skill_inputs=skill_inputs)
+    assert excinfo.value.code == "recipe_execution_static_input_mismatch"
 
 
 def test_undeclared_non_empty_value_is_denied() -> None:

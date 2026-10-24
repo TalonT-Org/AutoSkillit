@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Git's pathspec engine decides containment, the same predicate as the tracked-temp
-# policy. A plain pathspec from the top level stays valid under GIT_LITERAL_PATHSPECS.
+# This pathspec intentionally mirrors _TEMP_PATHSPEC in test_temp_tracking_guard.py;
+# its equivalence test guards their alignment. Keep both literals in sync.
+# A plain pathspec from the top level stays valid under GIT_LITERAL_PATHSPECS.
 top_level="$(git rev-parse --show-toplevel)"
 cd "$top_level"
 

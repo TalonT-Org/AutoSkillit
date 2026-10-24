@@ -4,20 +4,22 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import Literal
 
 import pytest
 
 from tests._git_inventory import git_ls_files
 
-pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.medium]
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _TEMP_PATH_ALLOWLIST: dict[str, str] = {}
+_TEMP_PATHSPEC = ".autoskillit/temp"
 _STAGED_TEMP_GUARD = _REPO_ROOT / "scripts" / "check_staged_autoskillit_temp.sh"
 
 
 def test_no_autoskillit_temp_artifacts_are_tracked() -> None:
-    tracked_paths = git_ls_files(_REPO_ROOT, ".autoskillit/temp", allow_empty=True)
+    tracked_paths = git_ls_files(_REPO_ROOT, _TEMP_PATHSPEC, allow_empty=True)
     unexpected = sorted(set(tracked_paths).difference(_TEMP_PATH_ALLOWLIST))
 
     assert not unexpected, (
@@ -46,17 +48,7 @@ def _run_git(repo: Path, *args: str) -> None:
     )
 
 
-@pytest.fixture
-def temporary_git_repo(tmp_path: Path) -> Path:
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    _run_git(repo, "init", "--quiet")
-
-    (repo / "source.txt").write_text("source\n", encoding="utf-8")
-    legacy_temp_artifact = repo / ".autoskillit" / "temp" / "legacy.txt"
-    legacy_temp_artifact.parent.mkdir(parents=True)
-    legacy_temp_artifact.write_text("legacy\n", encoding="utf-8")
-    _run_git(repo, "add", "source.txt", ".autoskillit/temp/legacy.txt")
+def _commit(repo: Path, message: str) -> None:
     _run_git(
         repo,
         "-c",
@@ -66,19 +58,118 @@ def temporary_git_repo(tmp_path: Path) -> Path:
         "commit",
         "--quiet",
         "-m",
-        "initial",
+        message,
     )
+
+
+@pytest.fixture
+def clean_git_repo(tmp_path: Path, isolated_git_config: None) -> Path:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _run_git(repo, "init", "--quiet")
+    (repo / "source.txt").write_text("source\n", encoding="utf-8")
+    _run_git(repo, "add", "source.txt")
+    _commit(repo, "initial")
     return repo
 
 
-def _run_staged_temp_guard(repo: Path) -> subprocess.CompletedProcess[str]:
+@pytest.fixture
+def temporary_git_repo(clean_git_repo: Path) -> Path:
+    legacy_temp_artifact = clean_git_repo / ".autoskillit" / "temp" / "legacy.txt"
+    legacy_temp_artifact.parent.mkdir(parents=True)
+    legacy_temp_artifact.write_text("legacy\n", encoding="utf-8")
+    _run_git(clean_git_repo, "add", ".autoskillit/temp/legacy.txt")
+    _commit(clean_git_repo, "add legacy temp artifact")
+    return clean_git_repo
+
+
+def _stage_entry(repo: Path, relative: str, kind: Literal["file", "symlink"]) -> None:
+    path = repo / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if kind == "file":
+        path.write_text(f"{relative}\n", encoding="utf-8")
+    else:
+        path.symlink_to("link-target")
+    _run_git(repo, "update-index", "--add", "--", relative)
+
+
+def _run_staged_temp_guard(
+    repo: Path, *, cwd: Path | None = None
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [str(_STAGED_TEMP_GUARD)],
-        cwd=repo,
+        cwd=cwd or repo,
         check=False,
         capture_output=True,
         text=True,
     )
+
+
+def _assert_rejected(result: subprocess.CompletedProcess[str], path: str) -> None:
+    assert result.returncode == 1
+    assert result.stderr == f"Refusing to stage AutoSkillit temp artifact: {path}\n"
+
+
+def _assert_permitted(result: subprocess.CompletedProcess[str]) -> None:
+    assert result.returncode == 0, result.stderr
+    assert result.stderr == ""
+
+
+@pytest.mark.parametrize(
+    ("path", "kind", "expect_reject"),
+    [
+        pytest.param(".autoskillit/temp", "file", True, id="root-file"),
+        pytest.param(".autoskillit/temp", "symlink", True, id="root-symlink"),
+        pytest.param(".autoskillit/temp/child.txt", "file", True, id="child-file"),
+        pytest.param(".autoskillit/temporary/x", "file", False, id="sibling-dir"),
+        pytest.param(".autoskillit/temp-x", "file", False, id="sibling-name"),
+        pytest.param("sub/.autoskillit/temp/y", "file", False, id="nested-non-top"),
+    ],
+)
+def test_staged_temp_guard_matches_tracked_temp_policy(
+    clean_git_repo: Path, path: str, kind: Literal["file", "symlink"], expect_reject: bool
+) -> None:
+    _stage_entry(clean_git_repo, path, kind)
+    policy = git_ls_files(clean_git_repo, _TEMP_PATHSPEC, allow_empty=True)
+    assert policy == ((path,) if expect_reject else ())
+
+    result = _run_staged_temp_guard(clean_git_repo)
+    if expect_reject:
+        _assert_rejected(result, path)
+    else:
+        _assert_permitted(result)
+
+
+@pytest.mark.parametrize(
+    ("change", "expect_reject"),
+    [pytest.param("modify", True, id="modify"), pytest.param("delete", False, id="delete")],
+)
+def test_staged_temp_guard_on_committed_temp_root(
+    clean_git_repo: Path, change: Literal["modify", "delete"], expect_reject: bool
+) -> None:
+    _stage_entry(clean_git_repo, _TEMP_PATHSPEC, "symlink")
+    _commit(clean_git_repo, "commit temp root")
+    root = clean_git_repo / _TEMP_PATHSPEC
+    root.unlink()
+    if change == "modify":
+        root.symlink_to("other-target")
+    _run_git(clean_git_repo, "add", "--all")
+
+    result = _run_staged_temp_guard(clean_git_repo)
+    if expect_reject:
+        _assert_rejected(result, _TEMP_PATHSPEC)
+    else:
+        _assert_permitted(result)
+
+
+def test_staged_temp_guard_rejects_temp_child_replaced_by_root(temporary_git_repo: Path) -> None:
+    root = temporary_git_repo / _TEMP_PATHSPEC
+    (root / "legacy.txt").unlink()
+    root.rmdir()
+    root.write_text("legacy\n", encoding="utf-8")
+    _run_git(temporary_git_repo, "add", "--all")
+
+    _assert_rejected(_run_staged_temp_guard(temporary_git_repo), _TEMP_PATHSPEC)
 
 
 def test_staged_temp_guard_rejects_rename_into_temp(temporary_git_repo: Path) -> None:
@@ -89,8 +180,7 @@ def test_staged_temp_guard_rejects_rename_into_temp(temporary_git_repo: Path) ->
 
     result = _run_staged_temp_guard(temporary_git_repo)
 
-    assert result.returncode == 1
-    assert ".autoskillit/temp/source.txt" in result.stderr
+    _assert_rejected(result, ".autoskillit/temp/source.txt")
 
 
 def test_staged_temp_guard_permits_deletion(temporary_git_repo: Path) -> None:
@@ -99,4 +189,125 @@ def test_staged_temp_guard_permits_deletion(temporary_git_repo: Path) -> None:
 
     result = _run_staged_temp_guard(temporary_git_repo)
 
-    assert result.returncode == 0, result.stderr
+    _assert_permitted(result)
+
+
+def test_staged_temp_guard_permits_non_temp_change_beside_tracked_temp(
+    temporary_git_repo: Path,
+) -> None:
+    (temporary_git_repo / "source.txt").write_text("changed\n", encoding="utf-8")
+    _run_git(temporary_git_repo, "add", "--all")
+
+    result = _run_staged_temp_guard(temporary_git_repo)
+    _assert_permitted(result)
+
+
+def test_staged_temp_guard_sees_gitlink_hidden_by_submodule_ignore(clean_git_repo: Path) -> None:
+    _run_git(clean_git_repo, "config", "diff.ignoreSubmodules", "all")
+    commit_sha = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=clean_git_repo, text=True, timeout=30
+    ).strip()
+    _run_git(
+        clean_git_repo,
+        "update-index",
+        "--add",
+        "--cacheinfo",
+        f"160000,{commit_sha},.autoskillit/temp/module",
+    )
+
+    _assert_rejected(_run_staged_temp_guard(clean_git_repo), ".autoskillit/temp/module")
+
+
+@pytest.mark.parametrize(
+    ("path", "expect_reject"),
+    [
+        pytest.param(".autoskillit/temp/child.txt", True, id="top-level"),
+        pytest.param("sub/.autoskillit/temp/y", False, id="nested"),
+    ],
+)
+def test_staged_temp_guard_is_independent_of_invocation_cwd(
+    clean_git_repo: Path, path: str, expect_reject: bool
+) -> None:
+    sub = clean_git_repo / "sub"
+    sub.mkdir()
+    _stage_entry(clean_git_repo, path, "file")
+
+    result = _run_staged_temp_guard(clean_git_repo, cwd=sub)
+    if expect_reject:
+        _assert_rejected(result, path)
+    else:
+        _assert_permitted(result)
+
+
+def test_staged_temp_guard_resolves_relative_alternate_index_from_repo_root(
+    clean_git_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sub = clean_git_repo / "sub"
+    sub.mkdir()
+    _stage_entry(clean_git_repo, ".autoskillit/temp/child.txt", "file")
+    (clean_git_repo / "alternate-index").write_bytes(
+        (clean_git_repo / ".git" / "index").read_bytes()
+    )
+    _run_git(clean_git_repo, "reset", "--quiet", "HEAD")
+    monkeypatch.setenv("GIT_INDEX_FILE", "alternate-index")
+    # Pre-commit hooks start at the repository root; direct invocations normalize there.
+    staged = subprocess.check_output(
+        ["git", "diff", "--cached", "--name-only"],
+        cwd=clean_git_repo,
+        text=True,
+        timeout=30,
+    )
+    assert staged.splitlines() == [".autoskillit/temp/child.txt"]
+
+    _assert_rejected(
+        _run_staged_temp_guard(clean_git_repo, cwd=sub), ".autoskillit/temp/child.txt"
+    )
+
+
+@pytest.mark.parametrize(
+    ("path", "kind"),
+    [
+        pytest.param(_TEMP_PATHSPEC, "symlink", id="root-symlink"),
+        pytest.param(f"{_TEMP_PATHSPEC}/child.txt", "file", id="child-file"),
+    ],
+)
+def test_staged_temp_guard_rejects_temp_in_real_commit(
+    clean_git_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    path: str,
+    kind: Literal["file", "symlink"],
+) -> None:
+    sub = clean_git_repo / "sub"
+    sub.mkdir()
+    _stage_entry(clean_git_repo, path, kind)
+    (clean_git_repo / ".git" / "hooks" / "pre-commit").symlink_to(_STAGED_TEMP_GUARD)
+    monkeypatch.setenv("GIT_LITERAL_PATHSPECS", "1")
+    head_before = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=clean_git_repo, timeout=30
+    )
+
+    result = subprocess.run(
+        [
+            "git",
+            "--literal-pathspecs",
+            "-c",
+            "user.name=AutoSkillit Test",
+            "-c",
+            "user.email=autoskillit-test@example.invalid",
+            "commit",
+            "--quiet",
+            "-m",
+            "reject temp artifact",
+        ],
+        cwd=sub,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert result.returncode != 0
+    assert f"Refusing to stage AutoSkillit temp artifact: {path}\n" in result.stderr
+    assert (
+        subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=clean_git_repo, timeout=30)
+        == head_before
+    )

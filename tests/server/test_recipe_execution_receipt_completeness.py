@@ -222,7 +222,7 @@ async def test_following_the_recovery_yields_an_admitted_digest(
         assert receipt["success"] is True, receipt
         credential = receipt["recipe_execution"]
         current_step = ready.tool_ctx.active_recipe_steps[step_name]
-        with_value = current_step.declared_with_args or current_step.with_args
+        with_value = current_step.with_args
         planner_dispatch = (
             ready.tool_ctx.recipe_initialization_state.recipe_name == "planner"
             and isinstance(with_value, dict)

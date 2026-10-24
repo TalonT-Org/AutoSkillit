@@ -133,6 +133,10 @@ def test_unresolved_inline_skill_arguments_are_errors(skill_command: str) -> Non
         pytest.param("/autoskillit:merge-pr", "pr_number", "{}", id="empty-braces"),
         pytest.param("/autoskillit:merge-pr", "pr_number", "42", id="string-literal"),
         pytest.param("/autoskillit:merge-pr", "pr_number", 42, id="integer-literal"),
+        *[
+            pytest.param("/autoskillit:merge-pr", "pr_number", value, id=f"literal-{value}")
+            for value in ("PR-{pr_number}", "{0}", "{x!r}", "${x}", "<x>")
+        ],
         pytest.param(
             "/autoskillit:investigate",
             "topic",

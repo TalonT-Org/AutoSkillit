@@ -51,9 +51,8 @@ def _unresolved_template_reason(bound: BoundValue, *, per_item: bool) -> str | N
 @semantic_rule(
     name="unresolved-skill-input-template",
     description=(
-        "Recipe skill inputs must be literals or recognised ${{ context.* }} / ${{ inputs.* }} "
-        "references; unresolved template tokens compile to static values runtime admission "
-        "cannot accept (recipe validation only)."
+        "Reject whole-value skill input placeholders and unresolved ${{ ... }} expressions "
+        "that compile to static values runtime admission cannot accept (recipe validation only)."
     ),
     severity=Severity.ERROR,
 )

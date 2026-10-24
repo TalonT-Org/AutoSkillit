@@ -76,8 +76,10 @@ def _declared_skill_inputs(value: object) -> dict[str, BoundScalar]:
         raise TypeError("run_skill skill_inputs must be a mapping")
     declared: dict[str, BoundScalar] = {}
     for key, raw_value in value.items():
-        if not isinstance(key, str) or not isinstance(raw_value, (str, int, bool)):
-            raise TypeError("run_skill skill_inputs must contain scalar string keys")
+        if not isinstance(key, str):
+            raise TypeError("run_skill skill_inputs keys must be strings")
+        if not isinstance(raw_value, (str, int, bool)):
+            raise TypeError(f"run_skill skill_inputs value for {key!r} must be a scalar")
         declared[key] = raw_value
     return declared
 

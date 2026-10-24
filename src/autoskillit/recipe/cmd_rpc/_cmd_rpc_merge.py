@@ -310,29 +310,55 @@ def force_push_and_wait_mergeability(
     raise RuntimeError(msg)
 
 
-def advance_queue_pr(
-    current_pr_number: str,
-    pr_order_file: str,
-) -> dict[str, str]:
-    """Find next PR in queue order file."""
-    if not current_pr_number:
-        return {"error": f"current_pr_number is required, got {current_pr_number!r}"}
+_PR_COMPLEXITIES = frozenset({"simple", "needs_check"})
+
+
+def _load_pr_order(pr_order_file: str) -> list[tuple[str, str]]:
+    if not Path(pr_order_file).is_absolute():
+        raise ValueError(f"pr_order_file must be absolute: {pr_order_file!r}")
     try:
         with open(pr_order_file) as f:
             order = json.load(f)
     except (OSError, json.JSONDecodeError) as exc:
-        raise RuntimeError(str(exc)) from exc
-    current = int(current_pr_number)
-    idx = None
-    for i, entry in enumerate(order):
-        if entry.get("number") == current:
-            idx = i
-            break
-    if idx is None:
-        return {"current_pr_number": "done"}
-    if (idx + 1) < len(order):
-        return {"current_pr_number": str(order[idx + 1]["number"])}
-    return {"current_pr_number": "done"}
+        raise RuntimeError(f"{pr_order_file}: {exc}") from exc
+    if not isinstance(order, dict) or not isinstance(order.get("prs"), list):
+        raise ValueError(f"{pr_order_file}: expected an object with a prs list")
+    entries: list[tuple[str, str]] = []
+    seen: set[int] = set()
+    for index, entry in enumerate(order["prs"]):
+        location = f"{pr_order_file}: prs[{index}]"
+        if not isinstance(entry, dict):
+            raise ValueError(f"{location}: expected an object")
+        number, complexity = entry.get("number"), entry.get("complexity")
+        if isinstance(number, bool) or not isinstance(number, int) or number <= 0:
+            raise ValueError(f"{location}: number must be a positive integer")
+        if not isinstance(complexity, str) or complexity not in _PR_COMPLEXITIES:
+            raise ValueError(f"{location}: complexity must be simple or needs_check")
+        if number in seen:
+            raise ValueError(f"{location}: duplicate PR number {number}")
+        seen.add(number)
+        entries.append((str(number), complexity))
+    return entries
+
+
+def _cursor_result(entry: tuple[str, str], *, done: bool) -> dict[str, str]:
+    return {"pr_number": entry[0], "complexity": entry[1], "done": "true" if done else "false"}
+
+
+def first_ordered_pr(pr_order_file: str) -> dict[str, str]:
+    """Select the first eligible PR from the analyze-prs order artifact."""
+    entries = _load_pr_order(pr_order_file)
+    return _cursor_result(entries[0] if entries else ("", ""), done=not entries)
+
+
+def next_ordered_pr(pr_order_file: str, current_pr_number: str) -> dict[str, str]:
+    """Advance by file order, retaining the last PR when the order is exhausted."""
+    entries = _load_pr_order(pr_order_file)
+    for index, entry in enumerate(entries):
+        if entry[0] == current_pr_number:
+            done = index + 1 == len(entries)
+            return _cursor_result(entry if done else entries[index + 1], done=done)
+    raise ValueError(f"{pr_order_file}: current_pr_number {current_pr_number!r} is not in prs")
 
 
 def review_path_rebase(

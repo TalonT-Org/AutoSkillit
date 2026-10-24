@@ -96,18 +96,6 @@ _PINNED: dict[tuple[str, str], Any] = {
             reason="Blocked by #5307: planner item placeholders compile as static inputs",
         ),
     ),
-    ("merge-prs", "merge_pr"): pytest.param(
-        "merge-prs",
-        "merge_pr",
-        "recipe_execution_static_input_mismatch",
-        "static skill input 'pr_number'",
-        id="merge-prs-merge_pr",
-        marks=pytest.mark.xfail(
-            strict=True,
-            raises=AdmissionDefect,
-            reason="Blocked by #5306: merge item placeholders compile as static inputs",
-        ),
-    ),
     ("bem-wrapper", "run_bem"): pytest.param(
         "bem-wrapper",
         "run_bem",

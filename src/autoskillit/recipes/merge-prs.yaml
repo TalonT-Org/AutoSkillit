@@ -1625,7 +1625,7 @@ steps:
       Extracts the review PR number from context.pr_url and polls GitHub until the
       mergeable field is no longer UNKNOWN. Polls up to 12 times with 15-second
       intervals (3 minutes maximum).
-      Captures the PR number as canonical decimal text, declared `type: integer`.
+      Captures the PR number as canonical ASCII decimal text, declared `type: integer`.
       Integer skill inputs decode it server-side; MCP and run_python consumers
       convert it at their own typed boundaries.
       Required by check_mergeability, review_pr_integration and resolve_review_integration.

@@ -1281,7 +1281,7 @@ steps:
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
     note: >
-      Captures the PR number as canonical decimal text, declared `type: integer`.
+      Captures the PR number as canonical ASCII decimal text, declared `type: integer`.
       Integer skill inputs decode it server-side; MCP and run_python consumers
       convert it at their own typed boundaries.
       Required by review_pr, resolve_review, enqueue_to_queue and wait_for_queue.

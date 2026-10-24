@@ -203,7 +203,7 @@
       },
       "on_success": "capture_review_repository",
       "on_failure": "escalate_stop",
-      "note": "Captures the PR number as canonical decimal text, declared `type: integer`. Integer skill inputs decode it server-side; MCP and run_python consumers convert it at their own typed boundaries. Required by annotate_pr_diff, review_research_pr and audit_claims.\n"
+      "note": "Captures the PR number as canonical ASCII decimal text, declared `type: integer`. Integer skill inputs decode it server-side; MCP and run_python consumers convert it at their own typed boundaries. Required by annotate_pr_diff, review_research_pr and audit_claims.\n"
     },
     "capture_review_repository": {
       "tool": "run_cmd",

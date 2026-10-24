@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -38,7 +40,13 @@ class TestRunSkillDocstring:
 
     def test_step_name_doc_states_attested_key_requirement(self) -> None:
         docstring = _run_skill_docstring()
-        step_name_doc = docstring.split("step_name:", 1)[1].split("\n        order_id:", 1)[0]
+        args = inspect.cleandoc(docstring).split("\nArgs:\n", 1)[1]
+        parameter_lines = args.split("\n    step_name:", 1)[1].splitlines()
+        step_name_doc = parameter_lines[0]
+        for line in parameter_lines[1:]:
+            if line and not line.startswith("        "):
+                break
+            step_name_doc += "\n" + line
         assert "YAML step key" in step_name_doc
         assert "attested" in step_name_doc
 

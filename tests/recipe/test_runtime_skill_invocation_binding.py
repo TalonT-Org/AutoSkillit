@@ -237,6 +237,8 @@ def test_runtime_binding_admits_explicit_advertised_default_without_auto_fill() 
         ("count", 3, 3),
         ("label", 1, "1"),
         ("label", True, "true"),
+        ("label", False, "false"),
+        ("label", 0, "0"),
     ],
 )
 def test_runtime_binding_decodes_declared_type_canonical_text(
@@ -268,8 +270,6 @@ def test_runtime_binding_decodes_declared_type_canonical_text(
         ("enabled", "boolean", 0),
         ("where", "file_path", 1),
         ("where", "file_path", True),
-        ("label", "string", False),
-        ("label", "string", 0),
         ("tag", "string", 3),
         ("tag", "string", True),
     ],

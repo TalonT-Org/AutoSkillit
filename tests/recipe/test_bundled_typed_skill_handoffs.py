@@ -258,9 +258,9 @@ def test_reverse_direction_text_inputs_render_canonically() -> None:
 
     closing_issue = _bind(case, _runtime_skill_inputs(case, {"closing_issue": 1}))
     assert dict(closing_issue)["closing_issue"] == "1"
-    with pytest.raises(RuntimeBindingError) as exc_info:
-        _bind(case, _runtime_skill_inputs(case, {"closing_issue": False}))
-    assert exc_info.value.code == "recipe_execution_input_type"
+    for value, expected in ((False, "false"), (0, "0"), ("", "")):
+        closing_issue = _bind(case, _runtime_skill_inputs(case, {"closing_issue": value}))
+        assert dict(closing_issue)["closing_issue"] == expected
 
     arch_lenses = _bind(case, _runtime_skill_inputs(case, {"arch_lenses": False}))
     assert dict(arch_lenses)["arch_lenses"] == "false"

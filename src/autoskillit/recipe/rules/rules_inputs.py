@@ -192,7 +192,7 @@ def _check_typed_skill_input_sources(ctx: ValidationContext) -> list[RuleFinding
                 reason = "has no supported declared integer source"
                 remedy = (
                     "Bind an exact ${{ context.X }} whose producers declare "
-                    "capture type: integer, "
+                    "scalar capture type: integer (capture_list does not qualify), "
                     "or an exact ${{ inputs.X }} with ingredient type: integer; "
                     "interpolated templates do not qualify."
                 )

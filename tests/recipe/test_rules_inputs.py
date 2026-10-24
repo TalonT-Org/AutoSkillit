@@ -207,6 +207,9 @@ def test_dynamic_typed_skill_inputs_require_declared_sources(
     if remedy_kind == "integer":
         assert "integer" in finding.remedy.lower()
         assert "capture" in finding.remedy.lower() or "ingredient" in finding.remedy.lower()
+        if capture_list_types:
+            assert "scalar capture" in finding.remedy
+            assert "capture_list does not qualify" in finding.remedy
     else:
         assert "literal" in finding.remedy.lower()
         assert "boolean" in finding.remedy.lower() or "bool" in finding.remedy.lower()

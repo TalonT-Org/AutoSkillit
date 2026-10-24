@@ -227,25 +227,12 @@ def test_proactive_rebase_next_pr_publishes_conflict_report(tmp_path):
 def _ordered_pr(number: object, complexity: object = "simple") -> dict[str, object]:
     return {
         "number": number,
-        "title": f"PR {number}",
-        "branch": f"feature/{number}",
         "complexity": complexity,
-        "files_changed": [f"src/{number}.py"],
-        "test_files_changed": [f"tests/test_{number}.py"],
-        "additions": 2,
-        "deletions": 1,
-        "overlap_with_pr_numbers": [],
     }
 
 
 def _order_document(prs: list[dict[str, object]]) -> dict[str, object]:
-    return {
-        "batch_branch": "pr-batch/pr-merge-20261024-120000",
-        "base_branch": "main",
-        "generated_at": "2026-10-24T12:00:00Z",
-        "pr_count": len(prs),
-        "prs": prs,
-    }
+    return {"prs": prs}
 
 
 def _write_order_file(tmp_path: Path, document: object) -> Path:

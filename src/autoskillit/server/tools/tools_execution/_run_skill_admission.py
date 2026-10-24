@@ -192,27 +192,27 @@ def _build_actual_mcp_kwargs(
     handler's locals.
 
     A param missing from ``values``, or a ``values`` key absent from the
-    filtered param set, is a loud construction-time bug: adding a
+    MCP kwarg set, is a loud construction-time bug: adding a
     ``ToolParamDef`` without wiring its runtime value (or vice versa) fails
     the first attested call instead of silently drifting. ``None`` values
     are omitted — the vacancy sentinel for optional params such as
     ``stale_threshold``/``idle_output_timeout`` (subsumes the prior
     hand-typed ``if ... is not None`` special case).
     """
-    handler_param_names = tool_def.mcp_kwarg_names
-    missing = handler_param_names - values.keys()
+    mcp_kwarg_names = tool_def.mcp_kwarg_names
+    missing = mcp_kwarg_names - values.keys()
     if missing:
         raise ValueError(
             f"{tool_def.name}: no runtime value supplied for handler params: {sorted(missing)!r}"
         )
-    unknown = values.keys() - handler_param_names
+    unknown = values.keys() - mcp_kwarg_names
     if unknown:
         raise ValueError(
             f"{tool_def.name}: runtime values supplied for unknown handler params: "
             f"{sorted(unknown)!r}"
         )
     result: dict[str, BoundScalar] = {}
-    for name in handler_param_names:
+    for name in mcp_kwarg_names:
         value = values[name]
         if value is not None:
             result[name] = value

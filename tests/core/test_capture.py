@@ -75,4 +75,4 @@ def test_is_capture_value_type_accepts_declared_types(value: str) -> None:
 
 
 def test_is_capture_value_type_rejects_unknown_type() -> None:
-    assert is_capture_value_type("integer")
+    assert is_capture_value_type("unknown") is False

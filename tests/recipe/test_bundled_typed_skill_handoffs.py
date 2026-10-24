@@ -125,8 +125,6 @@ _HANDOFF_CASES = _integer_handoff_cases()
 
 
 def _native_sample(input_def: Any) -> str | int | bool:
-    if input_def.absence_value is not None:
-        return input_def.absence_value
     for sample in ("fixture", 1, False):
         if input_def.accepts(sample):
             return sample
@@ -148,7 +146,11 @@ def _runtime_skill_inputs(
         if value.name in overrides:
             actual = overrides[value.name]
         elif _has_runtime_dependencies(value):
-            actual = _native_sample(input_defs[value.name])
+            actual = (
+                value.absence_value
+                if value.absence_value is not None
+                else _native_sample(input_defs[value.name])
+            )
         else:
             actual = value.effective_value
         skill_inputs[value.name] = actual

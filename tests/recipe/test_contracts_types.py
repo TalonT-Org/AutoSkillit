@@ -236,6 +236,11 @@ def test_skill_input_wire_mismatch_messages_explain_expected_wire_shape() -> Non
     )
 
 
+def test_skill_input_accepts_stays_strict_for_declared_types() -> None:
+    assert SkillInput("n", "integer", True).accepts("31") is False
+    assert SkillInput("b", "boolean", True).accepts("false") is False
+
+
 def test_skill_input_validates_explicit_absence_value() -> None:
     optional = SkillInput(name="note", type="string", required=False, absence_value="")
     assert optional.has_absence_value

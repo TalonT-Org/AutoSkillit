@@ -1272,16 +1272,19 @@ steps:
       cwd: ${{ context.work_dir }}
       step_name: extract_pr_number
     capture:
-      pr_number: "${{ result.stdout | trim }}"
+      pr_number:
+        from: ${{ result.stdout | trim }}
+        type: integer
     on_success: capture_review_repository
     on_failure: release_issue_failure
     optional: true
     skip_when_false: inputs.open_pr
     on_skip: release_issue_success
     note: >
-      Extracts the integer PR number from compose-pr's verified pr_url.
-      pr_number is required by the queue finale steps (enqueue_to_queue, wait_for_queue).
-
+      Captures the PR number as canonical decimal text, declared `type: integer`.
+      Integer skill inputs decode it server-side; MCP and run_python consumers
+      convert it at their own typed boundaries.
+      Required by review_pr, resolve_review, enqueue_to_queue and wait_for_queue.
   capture_review_repository:
     tool: run_cmd
     with:

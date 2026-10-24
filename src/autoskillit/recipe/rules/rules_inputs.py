@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 import regex as re
 from packaging.version import Version
 
@@ -11,17 +13,20 @@ from autoskillit.core import (
     CONFIG_AUTHORITY_KEYS,
     SKILL_TOOLS,
     BindingFailureCode,
+    BoundValue,
     BoundValueOrigin,
     Severity,
     get_logger,
 )
 from autoskillit.recipe._analysis import ValidationContext, bfs_reachable
 from autoskillit.recipe.contracts import (
+    SkillInput,
     get_skill_contract,
     load_bundled_manifest,
 )
 from autoskillit.recipe.io import iter_steps_with_context
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
+from autoskillit.recipe.schema import Recipe
 
 logger = get_logger(__name__)
 
@@ -125,6 +130,80 @@ def _check_invalid_skill_invocation_binding(
                     rule_name="invalid-skill-invocation-binding",
                     step_name=step_name,
                     message=failure.message,
+                )
+            )
+    return findings
+
+
+def _typed_dynamic_inputs(
+    ctx: ValidationContext, step_name: str
+) -> Iterator[tuple[BoundValue, SkillInput]]:
+    if ctx.recipe.steps[step_name].tool not in SKILL_TOOLS:
+        return
+    invocation = ctx.binding_projection.for_step(step_name)
+    if invocation is None or invocation.skill_name is None:
+        return
+    contract = get_skill_contract(invocation.skill_name, load_bundled_manifest())
+    if contract is None:
+        return
+    for input_def in contract.inputs:
+        bound = invocation.skill_input(input_def.name)
+        if (
+            bound is not None
+            and bound.is_present
+            and bound.is_dynamic
+            and input_def.type in {"integer", "boolean", "bool"}
+        ):
+            yield bound, input_def
+
+
+def _has_declared_integer_source(recipe: Recipe, bound: BoundValue, input_def: SkillInput) -> bool:
+    if input_def.type != "integer":
+        return False
+    if bound.origin is BoundValueOrigin.RECIPE_INPUT:
+        ingredient = recipe.ingredients.get(bound.input_dependencies[0])
+        return ingredient is not None and ingredient.type == "integer"
+    if bound.origin is BoundValueOrigin.CONTEXT:
+        variable = bound.context_dependencies[0]
+        return all(
+            variable in step.capture and step.capture[variable].value_type == "integer"
+            for step in recipe.steps.values()
+            if variable in step.capture or variable in step.capture_list
+        )
+    return False
+
+
+@semantic_rule(
+    name="typed-skill-input-undeclared-source",
+    description="Dynamic integer skill inputs need declared sources; booleans need literals.",
+    severity=Severity.WARNING,
+)
+def _check_typed_skill_input_sources(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name in sorted(ctx.recipe.steps):
+        for bound, input_def in _typed_dynamic_inputs(ctx, step_name):
+            if _has_declared_integer_source(ctx.recipe, bound, input_def):
+                continue
+            if input_def.type == "integer":
+                reason = "has no supported declared integer source"
+                remedy = (
+                    "Bind an exact ${{ context.X }} whose producers declare "
+                    "capture type: integer, "
+                    "or an exact ${{ inputs.X }} with ingredient type: integer; "
+                    "interpolated templates do not qualify."
+                )
+            else:
+                reason = "uses an unsupported dynamic boolean source"
+                remedy = "Bind a boolean literal; no boolean producer declaration is supported."
+            findings.append(
+                make_finding(
+                    rule_name="typed-skill-input-undeclared-source",
+                    step_name=step_name,
+                    message=(
+                        f"Step {step_name!r} input {bound.name!r} from "
+                        f"{bound.declared_value!r} {reason}."
+                    ),
+                    remedy=remedy,
                 )
             )
     return findings

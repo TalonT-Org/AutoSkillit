@@ -82,7 +82,7 @@ The rule families live in `src/autoskillit/recipe/rules_*.py` (28 files):
 | `rules_features.py` | Feature-flag gating rules: steps that reference features not declared in `requires_packs` |
 | `rules_fixing.py` | Fixing/Rectify workflow rules: rectify loops missing a terminal success route |
 | `rules_graph.py` | Step graph reachability and cycle detection |
-| `rules_inputs.py` | Ingredient/version validation — required ingredients are present, types are correct |
+| `rules_inputs.py` | Ingredient/version validation — required ingredients are present, types are correct; `typed-skill-input-undeclared-source` checks dynamic typed inputs. Capture `type: integer` means canonical decimal text. |
 | `rules_isolation.py` | Workspace isolation breaches: `source-isolation-violation` and `git-mutation-on-source` |
 | `rules_merge.py` | `merge_worktree` routing completeness — every `MergeFailedStep` value must have a route |
 | `rules_packs.py` | Unknown pack names in `requires_packs`; packs required by dispatched skill categories or by direct tool steps' food-truck visibility missing from `requires_packs` |

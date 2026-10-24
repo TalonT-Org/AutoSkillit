@@ -59,6 +59,12 @@ def test_value_type_is_required() -> None:
         CaptureEntrySpec(from_="${{ result.x }}")
 
 
+def test_capture_entry_spec_accepts_integer_value_type() -> None:
+    entry = CaptureEntrySpec(from_="${{ result.stdout | trim }}", value_type="integer")
+
+    assert entry.value_type == "integer"
+
+
 def test_valid_value_types_match_the_literal() -> None:
     assert CAPTURE_VALID_VALUE_TYPES == frozenset(get_args(CaptureValueType))
 
@@ -69,4 +75,4 @@ def test_is_capture_value_type_accepts_declared_types(value: str) -> None:
 
 
 def test_is_capture_value_type_rejects_unknown_type() -> None:
-    assert not is_capture_value_type("integer")
+    assert is_capture_value_type("integer")

@@ -5,7 +5,7 @@ import pytest
 import autoskillit.recipe.registry as _patch_recipe_registry
 from autoskillit.core.types import Severity
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
-from autoskillit.recipe.validator import RuleFinding, run_semantic_rules
+from autoskillit.recipe.validator import _RULE_REGISTRY, RuleFinding, run_semantic_rules
 from tests.recipe.conftest import _make_workflow
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
@@ -106,3 +106,13 @@ def test_bundled_workflows_pass_semantic_rules() -> None:
         assert undeclared_findings == [], (
             f"Recipe '{wf.name}' has undeclared-capture-key findings: " + repr(undeclared_findings)
         )
+
+
+def test_bundled_recipes_have_no_typed_skill_input_findings() -> None:
+    rule_name = "typed-skill-input-undeclared-source"
+    assert any(rule.name == rule_name for rule in _RULE_REGISTRY)
+
+    for path in sorted(builtin_recipes_dir().glob("*.yaml")):
+        recipe = load_recipe(path)
+        findings = [finding for finding in run_semantic_rules(recipe) if finding.rule == rule_name]
+        assert findings == [], f"Recipe '{recipe.name}' has {rule_name} findings: {findings}"

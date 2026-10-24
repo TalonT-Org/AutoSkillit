@@ -185,14 +185,16 @@ steps:
       cwd: ${{ inputs.worktree_path }}
       step_name: extract_pr_number
     capture:
-      pr_number: ${{ result.stdout | trim }}
+      pr_number:
+        from: ${{ result.stdout | trim }}
+        type: integer
     on_success: capture_review_repository
     on_failure: escalate_stop
     note: >
-      Extracts the PR number from the PR URL for use by annotate_pr_diff.
-      Review publication is fail-closed when the authoritative PR identity
-      cannot be captured.
-
+      Captures the PR number as canonical decimal text, declared `type: integer`.
+      Integer skill inputs decode it server-side; MCP and run_python consumers
+      convert it at their own typed boundaries.
+      Required by annotate_pr_diff, review_research_pr and audit_claims.
   capture_review_repository:
     tool: run_cmd
     with:

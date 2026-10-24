@@ -36,9 +36,9 @@ def resolve_payload_field(entry: CaptureEntrySpec) -> str | None:
     return m.group(1) if m else None
 
 
-CAPTURE_VALID_VALUE_TYPES = frozenset({"path", "url", "string", "optional_string"})
+CAPTURE_VALID_VALUE_TYPES = frozenset({"path", "url", "string", "optional_string", "integer"})
 
-CaptureValueType = Literal["path", "url", "string", "optional_string"]
+CaptureValueType = Literal["path", "url", "string", "optional_string", "integer"]
 
 
 def is_capture_value_type(value: str) -> TypeGuard[CaptureValueType]:
@@ -53,11 +53,12 @@ class CaptureEntrySpec:
     Attributes:
         from_: The ``${{ result.<field_name> }}`` template string — what was previously
             the plain string value in the ``dict[str, str]`` capture spec.
-        value_type: One of ``path``, ``url``, ``string``, ``optional_string``.
+        value_type: A declared capture type. ``integer`` means canonical ASCII
+            decimal text decoded by integer skill inputs.
     """
 
     from_: str
-    value_type: Literal["path", "url", "string", "optional_string"]
+    value_type: CaptureValueType
 
     def __post_init__(self) -> None:
         if not self.from_ or not self.from_.strip():

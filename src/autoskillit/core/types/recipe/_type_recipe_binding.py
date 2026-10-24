@@ -90,20 +90,16 @@ class ToolInitializationOperation(StrEnum):
 
 
 class ToolParamRole(StrEnum):
-    """The classification authority for what a tool parameter is for.
-
-    The runtime gate's always-admit set and ``RecipeStep`` execution-tuning
-    fallback obligations derive from this field; kwarg membership comes
-    from ``ToolDef.mcp_kwarg_names``. The
-    per-role runtime-admission *policy* is declared once, alongside this
-    enum, in ``RUNTIME_ADMISSION_BY_ROLE`` — see ``runtime_exempt_param_names``
-    (core/tool_registry.py) and ``bind_runtime_skill_invocation``
-    (recipe/_binding.py) for its consumers.
+    """Parameter purposes governing runtime admission and RecipeStep tuning.
+    MCP membership comes from ToolDef.mcp_kwarg_names; admission policy lives
+    in RUNTIME_ADMISSION_BY_ROLE, consumed by runtime_exempt_param_names.
     """
 
     PROTOCOL = "protocol"
-    """Attestation identity (step_name, recipe_execution_id, invocation_template_digest);
-    always admitted."""
+    """Attestation credentials and step guard values; always admitted."""
+
+    STEP_IDENTITY = "step_identity"
+    """The invoking step's YAML key; declared values must match; always admitted."""
 
     CHILD_INPUT = "child_input"
     """Child-skill inputs; admitted iff with:-compiled."""
@@ -128,6 +124,7 @@ class RuntimeAdmission(StrEnum):
 RUNTIME_ADMISSION_BY_ROLE: Mapping[ToolParamRole, RuntimeAdmission] = MappingProxyType(
     {
         ToolParamRole.PROTOCOL: RuntimeAdmission.ALWAYS,
+        ToolParamRole.STEP_IDENTITY: RuntimeAdmission.ALWAYS,
         ToolParamRole.ORCHESTRATOR_SCOPING: RuntimeAdmission.ALWAYS,
         ToolParamRole.CHILD_INPUT: RuntimeAdmission.WITH_DECLARED_ONLY,
         ToolParamRole.EXECUTION_TUNING: RuntimeAdmission.WITH_DECLARED_ONLY,

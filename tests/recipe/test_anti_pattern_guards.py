@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import ToolParamRole, get_tool_def
 from autoskillit.core.io import load_yaml
 from autoskillit.core.types import RecipeSource
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
@@ -50,6 +51,38 @@ def test_all_run_cmd_steps_have_step_name(recipe_path):
                 violations.append(f"{recipe_path.stem}.{step_name}")
     assert not violations, "run_cmd steps missing step_name:\n" + "\n".join(
         f"  - {v}" for v in violations
+    )
+
+
+@pytest.mark.parametrize(
+    "recipe_path", tracked_recipe_paths(_PROJECT_ROOT), ids=lambda path: path.stem
+)
+def test_every_declared_step_identity_equals_its_key(recipe_path):
+    """Every raw tracked step identity parameter must equal the YAML step key."""
+    raw = load_yaml(recipe_path)
+    violations = []
+    for step_name, step_data in raw.get("steps", {}).items():
+        if not isinstance(step_data, dict):
+            continue
+        tool_name = step_data.get("tool")
+        if not isinstance(tool_name, str):
+            continue
+        tool_def = get_tool_def(tool_name)
+        if tool_def is None:
+            continue
+        identity_params = [
+            param.name for param in tool_def.params if param.role is ToolParamRole.STEP_IDENTITY
+        ]
+        with_args = step_data.get("with", {})
+        if not isinstance(with_args, dict):
+            continue
+        for param_name in identity_params:
+            if param_name in with_args and with_args[param_name] != step_name:
+                violations.append(
+                    f"{recipe_path}:{step_name} has {param_name}={with_args[param_name]!r}"
+                )
+    assert not violations, "tracked recipe step identities differ from their keys:\n" + "\n".join(
+        violations
     )
 
 

@@ -2349,7 +2349,7 @@
           "diagnostics_log_dir": "${{ inputs.diagnostics_log_dir }}"
         },
         "cwd": "${{ context.work_dir }}",
-        "step_name": "analyze_pipeline_health"
+        "step_name": "analyze_pipeline_health_error"
       },
       "on_success": "escalate_stop",
       "on_failure": "escalate_stop",

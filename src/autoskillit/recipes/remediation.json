@@ -3044,7 +3044,7 @@
           "diagnostics_log_dir": "${{ inputs.diagnostics_log_dir }}"
         },
         "cwd": "${{ context.work_dir }}",
-        "step_name": "analyze_pipeline_health"
+        "step_name": "analyze_pipeline_health_no_ci"
       },
       "on_success": "escalate_stop_no_ci",
       "on_failure": "escalate_stop_no_ci",
@@ -4144,7 +4144,7 @@
           "diagnostics_log_dir": "${{ inputs.diagnostics_log_dir }}"
         },
         "cwd": "${{ context.work_dir }}",
-        "step_name": "analyze_pipeline_health"
+        "step_name": "analyze_pipeline_health_unconfirmed"
       },
       "on_success": "done_unconfirmed",
       "on_failure": "done_unconfirmed",
@@ -4307,7 +4307,7 @@
           "diagnostics_log_dir": "${{ inputs.diagnostics_log_dir }}"
         },
         "cwd": "${{ context.work_dir }}",
-        "step_name": "analyze_pipeline_health"
+        "step_name": "analyze_pipeline_health_error"
       },
       "on_success": "escalate_stop",
       "on_failure": "escalate_stop",
@@ -4340,7 +4340,7 @@
           "diagnostics_log_dir": "${{ inputs.diagnostics_log_dir }}"
         },
         "cwd": "${{ context.work_dir }}",
-        "step_name": "analyze_pipeline_health"
+        "step_name": "analyze_pipeline_health_no_changes"
       },
       "on_success": "done_no_changes",
       "on_failure": "done_no_changes",
@@ -4373,7 +4373,7 @@
           "diagnostics_log_dir": "${{ inputs.diagnostics_log_dir }}"
         },
         "cwd": "${{ context.work_dir }}",
-        "step_name": "analyze_pipeline_health"
+        "step_name": "analyze_pipeline_health_already_done"
       },
       "on_success": "done_already_done",
       "on_failure": "done_already_done",

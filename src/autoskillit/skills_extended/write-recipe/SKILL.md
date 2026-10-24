@@ -231,7 +231,7 @@ Available tools for use in `tool:` fields:
 
 | Tool | Arguments (`with:`) | Purpose |
 |------|---------------------|---------|
-| `run_skill` | `skill_command`, `cwd`, `model` (optional), `step_name` (optional) | Run a Claude Code headless session with a skill |
+| `run_skill` | `skill_command`, `cwd`, `model` (optional), `step_name` (optional; when present must equal the step's YAML key) | Run a Claude Code headless session with a skill |
 | `test_check` | `worktree_path` | Run test suite, returns PASS/FAIL |
 | `merge_worktree` | `worktree_path`, `base_branch` | Merge after test gate |
 | `reset_test_dir` | `test_dir`, `force` (optional, default false) | Clear test directory (requires reset guard marker) |

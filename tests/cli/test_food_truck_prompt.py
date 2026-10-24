@@ -87,6 +87,20 @@ class TestAdmiralDispatchBlock:
             assert title in block, f"Missing retained section: {title}"
         assert len(re.findall(r"^## ", block, re.MULTILINE)) == 6
 
+    def test_step_name_contract_is_in_delivered_section(self) -> None:
+        match = re.search(
+            r"(?ms)^## STEP NAME IMMUTABILITY[^\n]*\n.*?(?=^## |\Z)",
+            _get_admiral_block(),
+        )
+        assert match is not None
+        section = match.group(0).casefold()
+
+        assert "yaml step key" in section
+        assert "even when" in section
+        assert "`with:`" in section
+        assert "record_pipeline_step.step_name names the target tracked step" in section
+        assert "distinct yaml step keys remain separate telemetry rows" in section
+
     def test_excludes_five_sections(self) -> None:
         block = _get_admiral_block()
         for title in (

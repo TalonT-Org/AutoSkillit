@@ -12,6 +12,7 @@ from autoskillit.core import (
     TOOL_SUBSET_TAGS,
     BindingFailureCode,
     Severity,
+    ToolParamRole,
     get_logger,
     get_tool_def,
 )
@@ -200,6 +201,41 @@ def _check_dead_with_params(ctx: ValidationContext) -> list[RuleFinding]:
                     f"Known parameters: {known_params}",
                 )
             )
+    return findings
+
+
+@semantic_rule(
+    name="step-identity-mismatch",
+    description="A step's with: identity parameter must equal its YAML step key",
+    severity=Severity.ERROR,
+)
+def _check_step_identity(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for key, step in ctx.recipe.steps.items():
+        tool_def = get_tool_def(step.tool) if step.tool else None
+        if tool_def is None:
+            continue
+        for param in tool_def.params:
+            if param.role is not ToolParamRole.STEP_IDENTITY:
+                continue
+            mismatches = [
+                f"{name}[{param.name!r}]={args[param.name]!r}"
+                for name, args in (
+                    ("with_args", step.with_args),
+                    ("declared_with_args", step.declared_with_args or {}),
+                )
+                if args.get(param.name, key) != key
+            ]
+            if mismatches:
+                findings.append(
+                    make_finding(
+                        rule_name="step-identity-mismatch",
+                        step_name=key,
+                        message=f"step '{key}': {'; '.join(mismatches)} must equal "
+                        f"the YAML step key '{key}'",
+                        remedy="set with.step_name to the step's YAML key, or remove it",
+                    )
+                )
     return findings
 
 

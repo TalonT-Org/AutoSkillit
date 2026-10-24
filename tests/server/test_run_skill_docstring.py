@@ -36,6 +36,12 @@ class TestRunSkillDocstring:
         assert "needs_retry" in docstring
         assert "recipe's declared retry route" in docstring
 
+    def test_step_name_doc_states_attested_key_requirement(self) -> None:
+        docstring = _run_skill_docstring()
+        step_name_doc = docstring.split("step_name:", 1)[1].split("\n        order_id:", 1)[0]
+        assert "YAML step key" in step_name_doc
+        assert "attested" in step_name_doc
+
     def test_docstring_has_positive_and_negative_selection_boundaries(self) -> None:
         docstring = _run_skill_docstring().casefold()
         assert "already-selected recipe step" in docstring

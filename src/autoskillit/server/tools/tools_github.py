@@ -211,7 +211,7 @@ async def report_bug(
         cwd: Working directory for the headless session.
         severity: "non_blocking" (fire-and-forget) or "blocking" (await completion).
         model: Model override. Empty string = config default.
-        step_name: Optional label for token tracking.
+        step_name: Optional YAML step key; groups token usage under that step.
 
     Never raises.
     """

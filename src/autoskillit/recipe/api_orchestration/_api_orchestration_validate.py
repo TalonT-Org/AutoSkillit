@@ -84,21 +84,24 @@ def _reconcile_semantic_findings(
                     message=finding.message,
                 )
 
-    gate_skip_findings = [
+    retained_pre_prune_findings = [
         finding
         for finding in pre_prune_findings
-        if finding.rule == STAGE_OBLIGATION_GATE_DOMINANCE_RULE
-        and "cannot declare skip_when_false" in finding.message
+        if finding.rule == "step-identity-mismatch"
+        or (
+            finding.rule == STAGE_OBLIGATION_GATE_DOMINANCE_RULE
+            and "cannot declare skip_when_false" in finding.message
+        )
     ]
     retained_keys = {
         (finding.rule, finding.step_name, finding.message) for finding in semantic_findings
     }
     semantic_findings.extend(
         finding
-        for finding in gate_skip_findings
+        for finding in retained_pre_prune_findings
         if (finding.rule, finding.step_name, finding.message) not in retained_keys
     )
-    if gate_skip_findings:
+    if retained_pre_prune_findings:
         semantic_suggestions = _orch.findings_to_dicts(semantic_findings)
 
     if recipe_name in (suppressed or ()):

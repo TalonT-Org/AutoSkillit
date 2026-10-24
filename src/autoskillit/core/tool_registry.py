@@ -512,7 +512,12 @@ _TOOL_DEFS = (
         wire_types={"offset": ToolWireType.INTEGER, "page_size": ToolWireType.INTEGER},
     ),
     _tool("reload_session"),
-    _tool("record_pipeline_step", ("pipeline_id", "op", "dependencies", "step_name")),
+    # step_name identifies the tracked target step being marked.
+    _tool(
+        "record_pipeline_step",
+        ("pipeline_id", "op", "dependencies", "step_name"),
+        roles={"step_name": ToolParamRole.CHILD_INPUT},
+    ),
     _tool("get_pr_reviews", ("pr_number", "cwd", "repo"), required=("pr_number", "cwd")),
     _verify_review_receipt(),
     _tool(

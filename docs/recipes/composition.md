@@ -43,6 +43,8 @@ declared `on_success` continuation.
 When the gate ingredient is `"true"`, the sub-recipe's steps are **merged inline** at
 the attachment point, with step names prefixed to avoid collisions. The sub-recipe's
 kitchen rules are merged with the parent's kitchen rules.
+When names are prefixed, a composed step's key and its `with.step_name` are prefixed
+together.
 Incoming routes and the ordered entry attachment target the first prefixed child
 step. This gate rewrite is separate from optional-step pruning and does not use
 `on_skip` as a runtime event.

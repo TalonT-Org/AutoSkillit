@@ -141,7 +141,7 @@
         "source_dir": "${{ inputs.source_dir }}",
         "run_name": "${{ inputs.run_name }}",
         "base_branch": "${{ inputs.base_branch }}",
-        "step_name": "bootstrap_clone"
+        "step_name": "clone"
       },
       "capture": {
         "work_dir": "${{ result.work_dir }}",
@@ -191,7 +191,7 @@
         "issue_number": "${{ context.issue_number }}",
         "work_dir": "${{ context.work_dir }}",
         "remote_url": "${{ context.remote_url }}",
-        "step_name": "create_and_publish_branch"
+        "step_name": "create_and_publish"
       },
       "capture": {
         "merge_target": "${{ result.merge_target }}"
@@ -2209,7 +2209,7 @@
           "diagnostics_log_dir": "${{ inputs.diagnostics_log_dir }}"
         },
         "cwd": "${{ context.work_dir }}",
-        "step_name": "analyze_pipeline_health"
+        "step_name": "analyze_pipeline_health_no_ci"
       },
       "on_success": "escalate_stop_no_ci",
       "on_failure": "escalate_stop_no_ci",
@@ -3237,7 +3237,7 @@
           "diagnostics_log_dir": "${{ inputs.diagnostics_log_dir }}"
         },
         "cwd": "${{ context.work_dir }}",
-        "step_name": "analyze_pipeline_health"
+        "step_name": "analyze_pipeline_health_unconfirmed"
       },
       "on_success": "done_unconfirmed",
       "on_failure": "done_unconfirmed",
@@ -3449,7 +3449,7 @@
           "diagnostics_log_dir": "${{ inputs.diagnostics_log_dir }}"
         },
         "cwd": "${{ context.work_dir }}",
-        "step_name": "analyze_pipeline_health"
+        "step_name": "analyze_pipeline_health_error"
       },
       "on_success": "escalate_stop",
       "on_failure": "escalate_stop",

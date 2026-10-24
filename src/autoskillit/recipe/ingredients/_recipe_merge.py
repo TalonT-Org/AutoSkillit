@@ -35,6 +35,7 @@ def _merge_sub_recipe(parent: Any, placeholder_name: str, sub: Any) -> Any:
     Algorithm:
     1. Compute a safe name prefix from the sub-recipe name.
     2. For each step in sub, create a prefixed copy with routing fixed:
+       - Key, name and invoking-step identity parameter are prefixed together
        - Routes to "done" → parent placeholder's on_success
        - Routes to "escalate" → parent placeholder's on_failure
        - Routes to other sub-recipe step names → add prefix
@@ -44,6 +45,7 @@ def _merge_sub_recipe(parent: Any, placeholder_name: str, sub: Any) -> Any:
     """
     # Lazy import to break the ``_recipe_composition`` ↔ ``_recipe_merge`` cycle.
     from autoskillit.recipe.ingredients._recipe_composition import (
+        _rekey_composed_step,
         _rewrite_step_routes,
     )
 
@@ -69,7 +71,9 @@ def _merge_sub_recipe(parent: Any, placeholder_name: str, sub: Any) -> Any:
     prefixed_steps: dict[str, Any] = {}
     for sub_step_name, sub_step in sub.steps.items():
         new_name = prefix + sub_step_name
-        prefixed_steps[new_name] = _rewrite_step_routes(sub_step, redirects)
+        prefixed_steps[new_name] = _rekey_composed_step(
+            sub_step, sub_step_name, new_name, redirects
+        )
 
     # Assemble new steps dict: sub-recipe steps injected in place of placeholder
     new_steps: dict[str, Any] = {}

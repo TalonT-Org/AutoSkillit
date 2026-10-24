@@ -27,6 +27,7 @@ from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 logger = get_logger(__name__)
 
 _ALL_TOOLS: frozenset[str] = frozenset(TOOL_REGISTRY)
+STEP_IDENTITY_MISMATCH_RULE = "step-identity-mismatch"
 
 # Registry of context variables that are captured upstream and MUST be forwarded
 # to any tool step that accepts them. Each entry maps a tool name to the set of
@@ -200,6 +201,39 @@ def _check_dead_with_params(ctx: ValidationContext) -> list[RuleFinding]:
                     f"Known parameters: {known_params}",
                 )
             )
+    return findings
+
+
+@semantic_rule(
+    name=STEP_IDENTITY_MISMATCH_RULE,
+    description="A step's with: identity parameter must equal its YAML step key",
+    severity=Severity.ERROR,
+)
+def _check_step_identity(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for key, step in ctx.recipe.steps.items():
+        tool_def = get_tool_def(step.tool) if step.tool else None
+        if tool_def is None:
+            continue
+        for param in tool_def.step_identity_params:
+            mismatches = [
+                f"{name}[{param.name!r}]={args[param.name]!r}"
+                for name, args in (
+                    ("with_args", step.with_args),
+                    ("declared_with_args", step.declared_with_args or {}),
+                )
+                if args.get(param.name, key) != key
+            ]
+            if mismatches:
+                findings.append(
+                    make_finding(
+                        rule_name=STEP_IDENTITY_MISMATCH_RULE,
+                        step_name=key,
+                        message=f"step '{key}': {'; '.join(mismatches)} must equal "
+                        f"the YAML step key '{key}'",
+                        remedy="set with.step_name to the step's YAML key, or remove it",
+                    )
+                )
     return findings
 
 

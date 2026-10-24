@@ -50,6 +50,27 @@ def _write_tracker_for(ready) -> None:
     )
 
 
+async def test_attested_call_without_step_name_is_denied(tool_ctx_ready_recipe, tmp_path) -> None:
+    from autoskillit.server.tools.tools_execution import run_skill
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    ready = tool_ctx_ready_recipe
+    executor = InMemoryHeadlessExecutor()
+    ready.tool_ctx.executor = executor
+    result = json.loads(
+        await run_skill(
+            ready.with_args["skill_command"],
+            str(tmp_path),
+            recipe_execution_id=ready.credential["execution_id"],
+            invocation_template_digest=ready.template_digest,
+        )
+    )
+
+    assert result["stage"] == "preflight:recipe_execution"
+    assert "recipe_execution_step_missing" in json.dumps(result)
+    assert not executor.calls
+
+
 @pytest.mark.parametrize("param_name", sorted(_DENIAL_TEST_VALUES))
 async def test_forwarding_execution_tuning_param_is_denied_with_actionable_message(
     param_name: str,

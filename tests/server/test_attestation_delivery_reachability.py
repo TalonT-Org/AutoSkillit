@@ -331,6 +331,19 @@ async def test_ready_recipe_load_uses_worker_cache_without_sharing_context(
             },
         ),
         ("planner", "elaborate_phases", {"task": "test task", "source_dir": "."}),
+        (
+            "research-implement",
+            "decompose_phases",
+            {
+                "task": "test task",
+                "source_dir": ".",
+                "worktree_path": "/tmp/autoskillit-step-identity/worktree",
+                "research_dir_rel": "research",
+                "research_dir": "/tmp/autoskillit-step-identity/worktree/research",
+                "experiment_plan": "/tmp/autoskillit-step-identity/experiment-plan.md",
+                "visualization_plan_path": "/tmp/autoskillit-step-identity/visualization-plan.md",
+            },
+        ),
     ],
     indirect=True,
 )

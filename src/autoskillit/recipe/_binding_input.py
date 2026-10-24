@@ -370,7 +370,7 @@ def _inline_skill_inputs(
         bound_declared, bound_effective = pair
         value = _bound_value(input_def.name, bound_declared, bound_effective)
         bound.append(value)
-        unresolved = bool(value.context_dependencies or value.input_dependencies)
+        unresolved = value.is_dynamic
         if not unresolved and not _skill_value_is_valid(bound_effective, input_def):
             failures.append(
                 _failure(
@@ -476,7 +476,7 @@ def _structured_skill_inputs(
             optional_context_refs=optional_context_refs,
         )
         bound.append(value)
-        unresolved = bool(value.context_dependencies or value.input_dependencies)
+        unresolved = value.is_dynamic
         if not unresolved and not _skill_value_is_valid(resolved, input_def):
             failures.append(
                 _failure(

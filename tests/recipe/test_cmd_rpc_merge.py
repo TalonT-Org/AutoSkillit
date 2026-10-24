@@ -383,10 +383,12 @@ def test_first_ordered_pr_reports_invalid_order_document(tmp_path, malformation)
         assert "prs[0]" in message
 
 
-@pytest.mark.parametrize("file_contents", [None, "{"])
+@pytest.mark.parametrize("file_contents", [None, "{", b"\xff"])
 def test_first_ordered_pr_wraps_file_read_errors_as_runtime_error(tmp_path, file_contents):
     path = tmp_path / "pr-order.json"
-    if file_contents is not None:
+    if isinstance(file_contents, bytes):
+        path.write_bytes(file_contents)
+    elif file_contents is not None:
         path.write_text(file_contents, encoding="utf-8")
 
     with pytest.raises(RuntimeError) as exc_info:

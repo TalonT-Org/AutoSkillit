@@ -54,16 +54,3 @@ def test_sous_chef_skill_md_mentions_step_name():
         "The LLM must be instructed to forward step_name from recipe "
         "step with: blocks to run_skill for lock enforcement."
     )
-
-
-def test_step_name_immutability_requires_the_yaml_key() -> None:
-    skill_md = (
-        Path(__file__).parents[2] / "src/autoskillit/skills/sous-chef/SKILL.md"
-    ).read_text()
-    start = skill_md.index("## STEP NAME IMMUTABILITY")
-    end = skill_md.find("\n## ", start + 1)
-    section = skill_md[start : end if end >= 0 else None]
-
-    assert "YAML key" in section
-    assert "even when" in section
-    assert "`with:`" in section

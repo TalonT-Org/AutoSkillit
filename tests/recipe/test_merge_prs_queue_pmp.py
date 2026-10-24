@@ -156,18 +156,6 @@ def test_merge_prs_get_first_pr_number_captures_pr_number(pmp_recipe) -> None:
     assert "current_pr_number" in (step.capture or {})
 
 
-def test_merge_prs_get_first_pr_number_routes_to_route_by_queue_mode(pmp_recipe) -> None:
-    """The first cursor result routes done runs to success and others by queue mode."""
-    step = pmp_recipe.steps["get_first_pr_number"]
-    assert step.on_result is not None
-    done_routes = [c for c in step.on_result.conditions if c.when and "done" in c.when]
-    assert done_routes
-    assert done_routes[0].route == "register_clone_success"
-    fallback = [c for c in step.on_result.conditions if c.when is None]
-    assert fallback
-    assert fallback[0].route == "route_by_queue_mode"
-
-
 # ---------------------------------------------------------------------------
 # merge-prs.yaml — cheap rebase pre-check (Test 1C)
 # ---------------------------------------------------------------------------

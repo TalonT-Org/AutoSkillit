@@ -514,6 +514,7 @@ from .types import BROKER_AUTHORITY_STATUSES as BROKER_AUTHORITY_STATUSES
 from .types import CALLER_SOVEREIGN_INGREDIENTS as CALLER_SOVEREIGN_INGREDIENTS
 from .types import CAMPAIGN_ID_ENV_VAR as CAMPAIGN_ID_ENV_VAR
 from .types import CANONICAL_ACCOUNTING_FIELDS as CANONICAL_ACCOUNTING_FIELDS
+from .types import CANONICAL_INTEGER_DIGITS as CANONICAL_INTEGER_DIGITS
 from .types import CANONICAL_LAUNCH_DIGEST_FIELDS as CANONICAL_LAUNCH_DIGEST_FIELDS
 from .types import CAPTURE_VALID_VALUE_TYPES as CAPTURE_VALID_VALUE_TYPES
 from .types import CATEGORY_TAGS as CATEGORY_TAGS
@@ -1444,6 +1445,7 @@ from .types import extract_skill_name as extract_skill_name
 from .types import fleet_error as fleet_error
 from .types import group_by_pair as group_by_pair
 from .types import hookdef_session_scope as hookdef_session_scope
+from .types import is_canonical_integer_text as is_canonical_integer_text
 from .types import is_canonical_plugin_artifact_digest as is_canonical_plugin_artifact_digest
 from .types import (
     is_canonical_plugin_artifact_incarnation_id as is_canonical_plugin_artifact_incarnation_id,

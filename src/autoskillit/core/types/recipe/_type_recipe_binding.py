@@ -349,6 +349,10 @@ class BoundValue:
     def is_present(self) -> bool:
         return self.state is BoundValueState.PRESENT
 
+    @property
+    def is_dynamic(self) -> bool:
+        return bool(self.context_dependencies or self.input_dependencies)
+
 
 class BindingFailureCode(StrEnum):
     UNKNOWN_TOOL = "unknown_tool"

@@ -7,7 +7,11 @@ import pathlib
 
 import pytest
 
+import autoskillit.recipe._binding as _patch_recipe_binding
+import autoskillit.recipe.rules.rules_inputs as _patch_rules_inputs
 from autoskillit.core import RECIPE_TERMINAL_TARGETS, Severity
+from autoskillit.core.types import CaptureEntrySpec, CaptureValueType
+from autoskillit.recipe import bind_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import (
     Recipe,
@@ -32,6 +36,235 @@ def _make_recipe_with_skill_step(skill_command: str) -> Recipe:
         description="Test recipe for rule validation",
         steps={"review_step": step},
     )
+
+
+_TYPED_INPUT_TEST_MANIFEST = {
+    "skills": {
+        "typed-input-fixture": {
+            "inputs": [
+                {"name": "n", "type": "integer"},
+                {"name": "flag", "type": "boolean"},
+                {"name": "s", "type": "string"},
+            ],
+            "outputs": [],
+        }
+    }
+}
+
+
+def _patch_typed_input_manifest(monkeypatch: pytest.MonkeyPatch) -> None:
+    def manifest_loader() -> dict[str, object]:
+        return _TYPED_INPUT_TEST_MANIFEST
+
+    monkeypatch.setattr(_patch_recipe_binding, "load_bundled_manifest", manifest_loader)
+    monkeypatch.setattr(_patch_rules_inputs, "load_bundled_manifest", manifest_loader)
+
+
+def _make_typed_input_recipe(
+    input_name: str,
+    source: str | int | bool,
+    *,
+    capture_types: tuple[CaptureValueType | None, ...] = (),
+    capture_list_types: tuple[CaptureValueType | None, ...] = (),
+    ingredient: RecipeIngredient | None = None,
+    skill_command: str = "/autoskillit:typed-input-fixture",
+) -> Recipe:
+    steps: dict[str, RecipeStep] = {}
+    capture_expression = "${{ result.stdout | trim }}"
+    for index, value_type in enumerate(capture_types):
+        capture = (
+            capture_expression
+            if value_type is None
+            else CaptureEntrySpec(from_=capture_expression, value_type=value_type)
+        )
+        steps[f"producer_{index}"] = RecipeStep(
+            tool="run_cmd",
+            with_args={"command": "true"},
+            capture={input_name: capture},
+        )
+    for index, value_type in enumerate(capture_list_types):
+        capture = (
+            capture_expression
+            if value_type is None
+            else CaptureEntrySpec(from_=capture_expression, value_type=value_type)
+        )
+        steps[f"list_producer_{index}"] = RecipeStep(
+            tool="run_cmd",
+            with_args={"command": "true"},
+            retries=0,
+            capture_list={input_name: capture},
+        )
+    steps["consume"] = RecipeStep(
+        tool="run_skill",
+        with_args={
+            "skill_command": skill_command,
+            "skill_inputs": {input_name: source},
+        },
+    )
+    ingredients = {} if ingredient is None else {input_name: ingredient}
+    return Recipe(
+        name="typed-input-rule-test",
+        description="Synthetic recipe for typed skill input rule tests",
+        ingredients=ingredients,
+        steps=steps,
+    )
+
+
+@pytest.mark.parametrize(
+    (
+        "input_name",
+        "source",
+        "capture_types",
+        "capture_list_types",
+        "ingredient",
+        "remedy_kind",
+    ),
+    [
+        pytest.param("n", "${{ context.n }}", (), (), None, "integer", id="no-context-producer"),
+        pytest.param(
+            "n", "${{ context.n }}", (None,), (), None, "integer", id="shorthand-capture"
+        ),
+        pytest.param(
+            "n",
+            "pr-${{ context.n }}",
+            ("integer",),
+            (),
+            None,
+            "integer",
+            id="interpolated-context",
+        ),
+        pytest.param(
+            "n",
+            "${{ inputs.n }}",
+            (),
+            (),
+            RecipeIngredient(description="Untyped integer input"),
+            "integer",
+            id="untyped-ingredient",
+        ),
+        pytest.param(
+            "n", "${{ inputs.missing }}", (), (), None, "integer", id="missing-ingredient"
+        ),
+        pytest.param(
+            "n",
+            "${{ context.n }}",
+            (),
+            ("integer",),
+            None,
+            "integer",
+            id="capture-list",
+        ),
+        pytest.param("flag", "${{ context.flag }}", (), (), None, "boolean", id="dynamic-boolean"),
+        pytest.param(
+            "n",
+            "${{ context.n }}",
+            ("integer", None),
+            (),
+            None,
+            "integer",
+            id="mixed-producers",
+        ),
+    ],
+)
+def test_dynamic_typed_skill_inputs_require_declared_sources(
+    monkeypatch: pytest.MonkeyPatch,
+    input_name: str,
+    source: str | int | bool,
+    capture_types: tuple[CaptureValueType | None, ...],
+    capture_list_types: tuple[CaptureValueType | None, ...],
+    ingredient: RecipeIngredient | None,
+    remedy_kind: str,
+) -> None:
+    _patch_typed_input_manifest(monkeypatch)
+    recipe = _make_typed_input_recipe(
+        input_name,
+        source,
+        capture_types=capture_types,
+        capture_list_types=capture_list_types,
+        ingredient=ingredient,
+    )
+
+    invocation = bind_recipe(recipe).for_step("consume")
+    assert invocation is not None
+    bound_input = invocation.skill_input(input_name)
+    assert bound_input is not None
+    assert bound_input.is_present
+    assert bound_input.is_dynamic
+
+    findings = [
+        finding
+        for finding in run_semantic_rules(recipe)
+        if finding.rule == "typed-skill-input-undeclared-source"
+    ]
+
+    assert len(findings) == 1
+    finding = findings[0]
+    assert finding.severity == Severity.WARNING
+    assert finding.step_name == "consume"
+    assert input_name in finding.message
+    assert str(source) in finding.message
+    assert finding.remedy is not None
+    if remedy_kind == "integer":
+        assert "integer" in finding.remedy.lower()
+        assert "capture" in finding.remedy.lower() or "ingredient" in finding.remedy.lower()
+        if capture_list_types:
+            assert "scalar capture" in finding.remedy
+            assert "capture_list does not qualify" in finding.remedy
+    else:
+        assert "literal" in finding.remedy.lower()
+        assert "boolean" in finding.remedy.lower() or "bool" in finding.remedy.lower()
+        assert "type: boolean" not in finding.remedy.lower()
+    assert finding.to_dict()["remedy"] == finding.remedy
+
+
+@pytest.mark.parametrize(
+    ("input_name", "source", "capture_types", "ingredient", "skill_command"),
+    [
+        pytest.param("n", "${{ context.n }}", ("integer",), None, None, id="typed-capture"),
+        pytest.param(
+            "n",
+            "${{ inputs.n }}",
+            (),
+            RecipeIngredient(description="Integer input", type="integer"),
+            None,
+            id="typed-ingredient",
+        ),
+        pytest.param("s", "${{ context.anything }}", (), None, None, id="string-input"),
+        pytest.param("n", 3, (), None, None, id="literal-integer"),
+        pytest.param(
+            "n",
+            "${{ context.n }}",
+            (),
+            None,
+            "the orchestrator selects the skill",
+            id="unresolved-skill",
+        ),
+    ],
+)
+def test_dynamic_typed_skill_inputs_allow_declared_or_out_of_scope_sources(
+    monkeypatch: pytest.MonkeyPatch,
+    input_name: str,
+    source: str | int | bool,
+    capture_types: tuple[CaptureValueType | None, ...],
+    ingredient: RecipeIngredient | None,
+    skill_command: str | None,
+) -> None:
+    _patch_typed_input_manifest(monkeypatch)
+    recipe = _make_typed_input_recipe(
+        input_name,
+        source,
+        capture_types=capture_types,
+        ingredient=ingredient,
+        skill_command=skill_command or "/autoskillit:typed-input-fixture",
+    )
+
+    findings = [
+        finding
+        for finding in run_semantic_rules(recipe)
+        if finding.rule == "typed-skill-input-undeclared-source"
+    ]
+
+    assert findings == []
 
 
 def test_missing_recommended_input_fires_warning_when_not_passed():

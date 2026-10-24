@@ -285,7 +285,7 @@ def _compile_tool_parameters(
         )
         value = _bound_value(param.name, declared, resolved)
         mcp_kwargs.append(value)
-        unresolved = bool(value.context_dependencies or value.input_dependencies)
+        unresolved = value.is_dynamic
         if not unresolved and not _wire_value_is_valid(resolved, param):
             failures.append(
                 _failure(
@@ -565,10 +565,6 @@ def bind_recipe(
     return RecipeBindingProjection(invocations)
 
 
-def _is_dynamic_binding(value: BoundValue) -> bool:
-    return bool(value.context_dependencies or value.input_dependencies)
-
-
 def _undeclared_runtime_param_message(tool_def: ToolDef, undeclared_names: list[str]) -> str:
     """Denial text for undeclared non-empty runtime tool parameters.
 
@@ -712,17 +708,17 @@ def _bind_runtime_skill_values(
                 "recipe_execution_contract_mismatch",
                 f"compiled skill input {value.name!r} is absent from the runtime contract",
             )
-        if not input_def.accepts(actual):
+        admitted = input_def.admit_runtime_wire(actual, value)
+        if admitted is None:
             raise RuntimeBindingError(
-                "recipe_execution_input_type",
-                f"runtime skill input {value.name!r} expects {input_def.type!r}",
+                "recipe_execution_input_type", input_def.wire_mismatch_message(actual, value)
             )
-        if not _is_dynamic_binding(value) and actual != value.effective_value:
+        if not value.is_dynamic and admitted != value.effective_value:
             raise RuntimeBindingError(
                 "recipe_execution_static_input_mismatch",
                 f"static skill input {value.name!r} differs from the template",
             )
-        bound_inputs.append((value.name, actual))
+        bound_inputs.append((value.name, admitted))
     return tuple(bound_inputs)
 
 
@@ -738,7 +734,7 @@ def _validate_runtime_mcp_values(
                 f"compiled tool parameter {value.name!r} is absent",
             )
         actual = actual_mcp_kwargs[value.name]
-        if not _is_dynamic_binding(value) and actual != value.effective_value:
+        if not value.is_dynamic and actual != value.effective_value:
             raise RuntimeBindingError(
                 "recipe_execution_static_tool_mismatch",
                 f"static tool parameter {value.name!r} differs from the template",

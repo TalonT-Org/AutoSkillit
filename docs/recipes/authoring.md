@@ -82,7 +82,7 @@ The rule families live in `src/autoskillit/recipe/rules_*.py` (28 files):
 | `rules_features.py` | Feature-flag gating rules: steps that reference features not declared in `requires_packs` |
 | `rules_fixing.py` | Fixing/Rectify workflow rules: rectify loops missing a terminal success route |
 | `rules_graph.py` | Step graph reachability and cycle detection |
-| `rules_inputs.py` | Ingredient/version validation — required ingredients are present, types are correct |
+| `rules_inputs.py` | Ingredient/version validation — required ingredients are present, types are correct; `typed-skill-input-undeclared-source` checks dynamic typed inputs. Capture `type: integer` means canonical ASCII decimal text. |
 | `rules_isolation.py` | Workspace isolation breaches: `source-isolation-violation` and `git-mutation-on-source` |
 | `rules_merge.py` | `merge_worktree` routing completeness — every `MergeFailedStep` value must have a route |
 | `rules_packs.py` | Unknown pack names in `requires_packs`; packs required by dispatched skill categories or by direct tool steps' food-truck visibility missing from `requires_packs` |
@@ -96,6 +96,13 @@ The rule families live in `src/autoskillit/recipe/rules_*.py` (28 files):
 | `rules_worktree.py` | Worktree retry lifecycle — every step that creates a worktree must have a downstream merge or cleanup |
 
 The semantic-rule catalog is defined by the rule modules under `recipe/rules/`.
+
+`typed-skill-input-undeclared-source` is an advisory warning about producer
+declarations. Runtime admission checks the input's actual value independently:
+integer skill inputs accept JSON integers (excluding booleans), or canonical ASCII
+decimal text from exact context or ingredient references, even without an integer
+producer declaration. Malformed text is rejected regardless of the declaration.
+A capture declared `type: integer` also validates its output when it is captured.
 
 ## Contract cards
 

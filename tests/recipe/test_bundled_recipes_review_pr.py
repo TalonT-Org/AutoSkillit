@@ -215,6 +215,18 @@ def test_implementation_groups_has_ci_watch() -> None:
     assert "re_push" in recipe.steps
 
 
+@pytest.mark.parametrize(
+    "recipe_name",
+    ["implementation", "implementation-groups", "remediation", "research", "research-review"],
+)
+def test_extract_pr_number_declares_integer(recipe_name: str) -> None:
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+
+    capture = recipe.steps["extract_pr_number"].capture["pr_number"]
+    assert capture.value_type == "integer"
+    assert capture.from_ == "${{ result.stdout | trim }}"
+
+
 def test_merge_prs_review_pr_integration_includes_diff_metrics_path() -> None:
     recipe = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
     step = recipe.steps["review_pr_integration"]

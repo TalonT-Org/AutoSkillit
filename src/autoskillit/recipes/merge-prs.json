@@ -1881,11 +1881,14 @@
         "poll_interval": "15"
       },
       "capture": {
-        "review_pr_number": "${{ result.pr_number }}"
+        "review_pr_number": {
+          "from": "${{ result.pr_number }}",
+          "type": "integer"
+        }
       },
       "on_success": "capture_review_repository",
       "on_failure": "register_clone_failure",
-      "note": "Extracts the review PR number from context.pr_url and polls GitHub until the mergeable field is no longer UNKNOWN (GitHub computes this asynchronously after PR creation). Polls up to 12 times with 15-second intervals (3 minutes maximum). Captures review_pr_number for use by check_mergeability and check_mergeability_post_rebase.\n"
+      "note": "Extracts the review PR number from context.pr_url and polls GitHub until the mergeable field is no longer UNKNOWN. Polls up to 12 times with 15-second intervals (3 minutes maximum). Captures the PR number as canonical ASCII decimal text, declared `type: integer`. Integer skill inputs decode it server-side; MCP and run_python consumers convert it at their own typed boundaries. Required by check_mergeability, review_pr_integration and resolve_review_integration.\n"
     },
     "capture_review_repository": {
       "tool": "run_cmd",

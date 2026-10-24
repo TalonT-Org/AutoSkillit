@@ -12,14 +12,17 @@ from autoskillit.core import (
     PACK_REGISTRY,
     FinalizedRecipeProjection,
     build_recipe_execution_credential,
+    compute_runtime_binding_digest,
 )
 from autoskillit.recipe import get_skill_contract, load_bundled_manifest
 from autoskillit.server.recipe._recipe_execution import (
     bind_attested_runtime_invocation,
+    build_bound_child_prompt,
     get_recipe_execution,
 )
 from tests.server._recipe_fixture_parameters import (
     IMPLEMENTATION_OVERRIDES,
+    IMPLEMENTATION_READY_PARAMETERS,
     RESEARCH_OVERRIDES,
 )
 
@@ -271,3 +274,87 @@ async def test_wrong_execution_id_rejection_names_the_call(
             ready.receipt["initialization_id"],
             "recipe_execution_id_mismatch",
         )
+
+
+@pytest.mark.parametrize("tool_ctx_ready_recipe", IMPLEMENTATION_READY_PARAMETERS, indirect=True)
+async def test_attested_review_binds_producer_text_pr_number(tool_ctx_ready_recipe) -> None:
+    ready = tool_ctx_ready_recipe
+    installed = get_recipe_execution(ready.tool_ctx)
+    assert installed is not None
+
+    step_name = "review_pr"
+    template = installed.snapshot.templates[step_name]
+    invocation = template.invocation
+    assert invocation.skill_name is not None
+    contract = get_skill_contract(invocation.skill_name, load_bundled_manifest())
+    assert contract is not None
+    input_defs = {input_def.name: input_def for input_def in contract.inputs}
+    skill_inputs = {}
+    for value in invocation.skill_inputs:
+        if not value.is_present:
+            continue
+        if value.name == "pr_number":
+            assert value.is_dynamic
+            actual = "31"
+        else:
+            actual = value.effective_value
+            if not input_defs[value.name].accepts(actual):
+                assert value.is_dynamic
+                actual = next(
+                    sample
+                    for sample in ("fixture", 1, False)
+                    if input_defs[value.name].accepts(sample)
+                )
+        skill_inputs[value.name] = actual
+
+    credential = ready.credential
+    actual_mcp_kwargs = {
+        **{value.name: value.effective_value for value in invocation.mcp_kwargs},
+        "step_name": step_name,
+        "recipe_execution_id": credential["execution_id"],
+        "invocation_template_digest": credential["invocation_template_digests"][step_name],
+    }
+    skill_command = _skill_command(ready.tool_ctx, step_name)
+    bound_from_text, admitted_template = bind_attested_runtime_invocation(
+        installed,
+        execution_id=credential["execution_id"],
+        step_name=step_name,
+        template_digest=credential["invocation_template_digests"][step_name],
+        skill_command=skill_command,
+        skill_inputs=skill_inputs,
+        actual_mcp_kwargs=actual_mcp_kwargs,
+    )
+    assert admitted_template is template
+    assert ("pr_number", 31) in bound_from_text
+
+    native_skill_inputs = {**skill_inputs, "pr_number": 31}
+    bound_from_native, _ = bind_attested_runtime_invocation(
+        installed,
+        execution_id=credential["execution_id"],
+        step_name=step_name,
+        template_digest=credential["invocation_template_digests"][step_name],
+        skill_command=skill_command,
+        skill_inputs=native_skill_inputs,
+        actual_mcp_kwargs=actual_mcp_kwargs,
+    )
+    assert compute_runtime_binding_digest(
+        execution_id=credential["execution_id"],
+        step_name=step_name,
+        template_digest=template.template_digest,
+        bound_inputs=bound_from_text,
+        actual_mcp_kwargs=actual_mcp_kwargs,
+        preflight=None,
+    ) == compute_runtime_binding_digest(
+        execution_id=credential["execution_id"],
+        step_name=step_name,
+        template_digest=template.template_digest,
+        bound_inputs=bound_from_native,
+        actual_mcp_kwargs=actual_mcp_kwargs,
+        preflight=None,
+    )
+
+    prompt = build_bound_child_prompt(skill_command, bound_from_text, preflight=None)
+    marker = "AUTOSKILLIT_BOUND_INVOCATION_V1\n"
+    assert marker in prompt
+    payload = json.loads(prompt.split(marker, 1)[1])
+    assert {"name": "pr_number", "value": 31} in payload["skill_inputs"]

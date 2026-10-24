@@ -412,6 +412,9 @@ def test_pmp_wait_for_mergeability_captures_review_pr_number(recipe) -> None:
     """B3: wait_for_review_pr_mergeability must capture review_pr_number."""
     step = recipe.steps["wait_for_review_pr_mergeability"]
     assert "review_pr_number" in step.capture
+    capture = step.capture["review_pr_number"]
+    assert capture.value_type == "integer"
+    assert capture.from_ == "${{ result.pr_number }}"
 
 
 def test_pmp_wait_for_mergeability_routes_through_repository_capture(recipe) -> None:

@@ -217,14 +217,26 @@ def test_staged_temp_guard_sees_gitlink_hidden_by_submodule_ignore(clean_git_rep
     _assert_rejected(_run_staged_temp_guard(clean_git_repo), ".autoskillit/temp/module")
 
 
-def test_staged_temp_guard_is_independent_of_invocation_cwd(clean_git_repo: Path) -> None:
+@pytest.mark.parametrize(
+    ("path", "expect_reject"),
+    [
+        pytest.param(".autoskillit/temp/child.txt", True, id="top-level"),
+        pytest.param("sub/.autoskillit/temp/y", False, id="nested"),
+    ],
+)
+def test_staged_temp_guard_is_independent_of_invocation_cwd(
+    clean_git_repo: Path, path: str, expect_reject: bool
+) -> None:
     sub = clean_git_repo / "sub"
     sub.mkdir()
-    _stage_entry(clean_git_repo, ".autoskillit/temp/child.txt", "file")
+    _stage_entry(clean_git_repo, path, "file")
 
-    _assert_rejected(
-        _run_staged_temp_guard(clean_git_repo, cwd=sub), ".autoskillit/temp/child.txt"
-    )
+    result = _run_staged_temp_guard(clean_git_repo, cwd=sub)
+    if expect_reject:
+        _assert_rejected(result, path)
+    else:
+        assert result.returncode == 0, result.stderr
+        assert result.stderr == ""
 
 
 def test_staged_temp_guard_resolves_relative_alternate_index_from_repo_root(

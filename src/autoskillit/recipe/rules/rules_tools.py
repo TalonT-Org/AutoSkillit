@@ -12,7 +12,6 @@ from autoskillit.core import (
     TOOL_SUBSET_TAGS,
     BindingFailureCode,
     Severity,
-    ToolParamRole,
     get_logger,
     get_tool_def,
 )
@@ -216,9 +215,7 @@ def _check_step_identity(ctx: ValidationContext) -> list[RuleFinding]:
         tool_def = get_tool_def(step.tool) if step.tool else None
         if tool_def is None:
             continue
-        for param in tool_def.params:
-            if param.role is not ToolParamRole.STEP_IDENTITY:
-                continue
+        for param in tool_def.step_identity_params:
             mismatches = [
                 f"{name}[{param.name!r}]={args[param.name]!r}"
                 for name, args in (

@@ -249,6 +249,11 @@ class ToolDef:
         return tuple(param.name for param in self.params)
 
     @property
+    def step_identity_params(self) -> tuple[ToolParamDef, ...]:
+        """Parameters carrying the invoking recipe step's YAML key."""
+        return tuple(param for param in self.params if param.role is ToolParamRole.STEP_IDENTITY)
+
+    @property
     def param_set(self) -> frozenset[str]:
         return frozenset(self.param_names)
 

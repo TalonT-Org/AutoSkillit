@@ -16,7 +16,6 @@ from autoskillit.core import (
     RECIPE_TERMINAL_TARGETS,
     SKILL_TOOLS,
     RecipeFlowEdge,
-    ToolParamRole,
     YAMLError,
     get_tool_def,
     load_yaml,
@@ -390,9 +389,7 @@ def _rekey_composed_step(
     declared_with_args = dict(rewritten.declared_with_args or {})
     tool_def = get_tool_def(step.tool) if step.tool else None
     if tool_def is not None:
-        for param in tool_def.params:
-            if param.role is not ToolParamRole.STEP_IDENTITY:
-                continue
+        for param in tool_def.step_identity_params:
             for args in (with_args, declared_with_args):
                 if args.get(param.name) == old_key:
                     args[param.name] = new_key

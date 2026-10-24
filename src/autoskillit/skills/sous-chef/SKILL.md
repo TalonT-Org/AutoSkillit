@@ -539,9 +539,9 @@ that target's YAML key rather than the invoking tool-step key.
 
 **NEVER** append clone numbers, instance indices, retry counts, or any other
 disambiguation strings.
-Repeated executions of the same YAML step key use that key without clone or retry
-suffixes. Distinct YAML step keys remain separate telemetry rows, even when they
-invoke the same skill.
+The telemetry layer aggregates invocations of the same logical step automatically;
+suffixes fragment its token and timing rows. Distinct YAML step keys remain separate
+telemetry rows, even when they invoke the same skill.
 
 Correct:
 ```yaml
@@ -562,8 +562,8 @@ parallel run of the same step reports under the same canonical step name.
 
 ## PARAMETER FORWARDING — step_name, output_dir
 
-Always pass the step's YAML key as the `step_name` parameter of `run_skill`. This
-enables ingredient lock enforcement, pipeline dependency checks, and all per-step
+The STEP NAME IMMUTABILITY rule above enables ingredient lock enforcement,
+pipeline dependency checks, and all per-step
 parameter auto-fills. Omitting it degrades enforcement and may cause the call to be
 denied when locks are active.
 

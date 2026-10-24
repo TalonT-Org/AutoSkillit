@@ -28,6 +28,7 @@ from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 logger = get_logger(__name__)
 
 _ALL_TOOLS: frozenset[str] = frozenset(TOOL_REGISTRY)
+STEP_IDENTITY_MISMATCH_RULE = "step-identity-mismatch"
 
 # Registry of context variables that are captured upstream and MUST be forwarded
 # to any tool step that accepts them. Each entry maps a tool name to the set of
@@ -205,7 +206,7 @@ def _check_dead_with_params(ctx: ValidationContext) -> list[RuleFinding]:
 
 
 @semantic_rule(
-    name="step-identity-mismatch",
+    name=STEP_IDENTITY_MISMATCH_RULE,
     description="A step's with: identity parameter must equal its YAML step key",
     severity=Severity.ERROR,
 )
@@ -229,7 +230,7 @@ def _check_step_identity(ctx: ValidationContext) -> list[RuleFinding]:
             if mismatches:
                 findings.append(
                     make_finding(
-                        rule_name="step-identity-mismatch",
+                        rule_name=STEP_IDENTITY_MISMATCH_RULE,
                         step_name=key,
                         message=f"step '{key}': {'; '.join(mismatches)} must equal "
                         f"the YAML step key '{key}'",

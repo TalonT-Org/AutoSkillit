@@ -83,13 +83,13 @@
     "SEQUENTIAL LOOP: Process one PR at a time through the full merge cycle before advancing to the next PR. Never batch-assess all PRs before starting merges.",
     "SEQUENTIAL EXECUTION: complete full cycle (verify → create_conflict_worktree → implement → test → push_worktree_branch → create_conflict_pr → wait_for_conflict_ci → merge_conflict_pr) per plan part before advancing to the next part or PR.",
     "INTEGRATION BRANCH: Two distinct branches exist. inputs.base_branch is the target branch that PRs point to (e.g. main, develop). context.batch_branch is the per-run batch branch (e.g. pr-batch/pr-merge-{ts}) created from base_branch for this pipeline run. All PR merges and worktree merges target context.batch_branch. The final review PR opens from context.batch_branch into inputs.base_branch.",
-    "PR QUEUE: Only get_first_pr_number and advance_merge_pr write context.current_pr_number and context.current_pr_complexity. Never set or advance these values yourself. The cursor reads the immutable analyze_prs order file.",
+    "PR QUEUE: Only get_first_pr_number, advance_queue_pr and advance_merge_pr write context.current_pr_number and context.current_pr_complexity. Never set or advance these values yourself. The cursor reads the immutable analyze_prs order file.",
     "COMPLEX PR PATH: When merge_pr returns needs_plan=true, context.task is set to the conflict_report_path. Pass context.task to make-plan. The plan+implement cycle creates a worktree from the integration branch; the worktree branch is then pushed to origin and merged into the integration batch branch via GitHub PR (push_worktree_branch → create_conflict_pr → wait_for_conflict_ci → merge_conflict_pr).",
     "SOURCE ISOLATION: After clone_repo returns, the source_dir is strictly off-limits. Never run any command in source_dir — no git checkout, git fetch, git reset, git pull, run_cmd, run_skill, or any other operation. All work — skill invocations, git operations, file reads — happens exclusively in the clone (work_dir). source_dir is used ONLY to read the remote URL inside push_to_remote.",
     "GITHUB API MERGE: All PR merges into the integration branch go through GitHub's merge interface (gh pr merge --squash). This enforces the branch ruleset required status checks. Never use merge_worktree or local git merge to merge into the integration batch branch.",
     "PUSH DISCIPLINE: push_worktree_branch (inside the complex PR cycle), publish_batch_branch / push_batch_branch, force_push_and_wait_mergeability (authorized for conflict-resolution rebases), and push_rebased_next_pr (authorized for proactive pre-enqueue rebase) are the only authorized push steps. Never add ad-hoc run_cmd git push calls elsewhere in the loop.",
     "QUEUE MODE: When context.queue_mode == true, PRs merge directly into base_branch via the merge queue. The batch branch (context.batch_branch) is the same as base_branch. Never invoke create_batch_branch, publish_batch_branch, merge_pr, or push_batch_branch in queue mode.",
-    "QUEUE LOOP: get_first_pr_number initializes the PR number and complexity before selecting either mode. In queue mode, advance_merge_pr selects the successor by file position and returns done after the last PR without changing the artifact.",
+    "QUEUE LOOP: get_first_pr_number initializes the PR number and complexity before selecting either mode. In queue mode, advance_queue_pr selects the successor by file position and returns done after the last PR without changing the artifact.",
     "CONFLICT REPORT PATHS: context.all_conflict_report_paths accumulates conflict_report_path values from resolve_ejected_conflicts and resolve_integration_conflicts via capture_list. Pass it as the 5th argument to open_integration_pr and 4th argument to audit_impl. It is empty string when no conflict resolution occurred — downstream skills treat empty string as absent."
   ],
   "steps": {
@@ -331,7 +331,7 @@
       },
       "on_success": "wait_queue_pr",
       "on_failure": "verify_queue_enrollment",
-      "note": "Queue mode only. Submits a single PR to the merge queue via the unified enqueue_pr tool. Called once per PR in the sequential enqueue loop: get_first_pr_number → route_by_queue_mode → get_current_pr_branch → wait_ci_pre_enqueue → enqueue_current_pr → wait_queue_pr → (merged) → advance_merge_pr → get_current_pr_branch → wait_ci_pre_enqueue → enqueue_current_pr → ...\n"
+      "note": "Queue mode only. Submits a single PR to the merge queue via the unified enqueue_pr tool. Called once per PR in the sequential enqueue loop: get_first_pr_number → route_by_queue_mode → get_current_pr_branch → wait_ci_pre_enqueue → enqueue_current_pr → wait_queue_pr → (merged) → advance_queue_pr → get_current_pr_branch → wait_ci_pre_enqueue → enqueue_current_pr → ...\n"
     },
     "wait_queue_pr": {
       "tool": "wait_for_merge_queue",
@@ -350,7 +350,7 @@
       "on_result": [
         {
           "when": "${{ result.pr_state }} == merged",
-          "route": "advance_merge_pr"
+          "route": "advance_queue_pr"
         },
         {
           "when": "${{ result.pr_state }} == ejected_ci_failure",
@@ -621,7 +621,7 @@
       "on_result": [
         {
           "when": "${{ result.pr_state }} == merged",
-          "route": "advance_merge_pr"
+          "route": "advance_queue_pr"
         },
         {
           "when": "${{ result.pr_state }} == ejected_ci_failure",
@@ -730,7 +730,7 @@
       "on_result": [
         {
           "when": "${{ result.pr_state }} == merged",
-          "route": "advance_merge_pr"
+          "route": "advance_queue_pr"
         },
         {
           "when": "${{ result.pr_state }} == ejected_ci_failure",
@@ -778,6 +778,29 @@
       "on_success": "wait_queue_pr",
       "on_failure": "verify_queue_enrollment",
       "note": "Re-submits the fixed PR to the merge queue after conflict resolution. Routes back to wait_queue_pr to continue monitoring.\n"
+    },
+    "advance_queue_pr": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.recipe._cmd_rpc.next_ordered_pr",
+        "current_pr_number": "${{ context.current_pr_number }}",
+        "pr_order_file": "${{ context.pr_order_file }}"
+      },
+      "capture": {
+        "current_pr_number": "${{ result.pr_number }}",
+        "current_pr_complexity": "${{ result.complexity }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.done }} == true",
+          "route": "collect_and_check_impl_plans"
+        },
+        {
+          "route": "get_next_pr_branch"
+        }
+      ],
+      "on_failure": "register_clone_failure",
+      "note": "Advances by file position and captures the next PR number and complexity. At the end, retains the last PR and returns done. Continues through proactive rebase or collects implementation plans when done."
     },
     "get_next_pr_branch": {
       "tool": "run_cmd",
@@ -1454,15 +1477,11 @@
           "route": "push_batch_branch"
         },
         {
-          "when": "${{ context.queue_mode }} == true",
-          "route": "get_next_pr_branch"
-        },
-        {
           "route": "check_pr_merge_loop"
         }
       ],
       "on_failure": "register_clone_failure",
-      "note": "Advances by file position once per finished PR in either mode. Queue mode continues through proactive rebase or collects implementation plans when done; classic mode continues its merge loop or pushes the batch branch. Queue-mode audit remediation re-enters at the last PR and collects implementation plans without changing the artifact."
+      "note": "Classic and post-remediation advance, keyed on current_pr_number once per finished PR. Queue-mode audit remediation re-enters at the last PR and exits to collect_and_check_impl_plans through the first done arm."
     },
     "select_next_plan_part": {
       "tool": "run_cmd",

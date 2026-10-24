@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from inspect import Parameter, signature
+from typing import cast
 
 from autoskillit.core import BoundScalar
 from autoskillit.server.tools import tools_execution
@@ -147,10 +148,7 @@ def build_run_skill_payload(
 ) -> dict[str, object]:
     """Build one caller payload after orchestrator placeholder substitution."""
     payload = literal_run_skill_payload(step_key, step_body, credential, cwd=cwd)
-    with_value = step_body.get("with", {})
-    if not isinstance(with_value, Mapping):
-        raise TypeError("recipe step 'with' must be a mapping")
-    with_values: Mapping[str, object] = with_value
+    with_values = cast(Mapping[str, object], step_body.get("with", {}))
     for name, value in with_values.items():
         if name == "skill_inputs":
             payload["skill_inputs"] = _skill_input_payload(step_key, value, credential, samples)

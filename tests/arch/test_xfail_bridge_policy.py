@@ -109,12 +109,18 @@ def _strict_xfail_raises_issue(node: ast.Call) -> str | None:
     raises = next((kw.value for kw in node.keywords if kw.arg == "raises"), None)
     if raises is None:
         return "requires a specific raises= exception type"
-    if isinstance(raises, ast.Name) and raises.id in {
-        "Exception",
-        "BaseException",
-        "AssertionError",
-    }:
-        return f"raises={raises.id} is too broad"
+    for exception in ast.walk(raises):
+        name = None
+        if isinstance(exception, ast.Name):
+            name = exception.id
+        elif (
+            isinstance(exception, ast.Attribute)
+            and isinstance(exception.value, ast.Name)
+            and exception.value.id == "builtins"
+        ):
+            name = exception.attr
+        if name in {"Exception", "BaseException", "AssertionError"}:
+            return f"raises={name} is too broad"
     return None
 
 
@@ -156,6 +162,10 @@ def test_strict_xfail_reasons_cite_tracking_issue() -> None:
         pytest.param(", raises=Exception", True, id="exception"),
         pytest.param(", raises=BaseException", True, id="base-exception"),
         pytest.param(", raises=AssertionError", True, id="assertion-error"),
+        pytest.param(", raises=(ValueError, Exception)", True, id="broad-tuple"),
+        pytest.param(", raises=builtins.Exception", True, id="qualified-broad-type"),
+        pytest.param(", raises=(ValueError, LookupError)", False, id="specific-tuple"),
+        pytest.param(", raises=builtins.LookupError", False, id="qualified-specific-type"),
         pytest.param(", raises=LookupError", False, id="specific-type"),
     ],
 )

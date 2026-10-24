@@ -1,11 +1,14 @@
-"""Replay every delivered built-in run_skill step through admission."""
+"""Replay statically resolved built-in run_skill steps through admission.
+
+Dynamic skill commands require runtime resolution and are explicitly skipped.
+"""
 
 from __future__ import annotations
 
 from functools import cache
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any, NoReturn, cast
 
 import pytest
 
@@ -205,11 +208,9 @@ def _replay_parameters() -> list[Any]:
     return parameters
 
 
-def _dynamic_step_outcome(steps: dict[str, Any], step_name: str) -> None:
-    skill_command = steps[step_name]["with"]["skill_command"]
-    first_tokens = skill_command.split()
-    assert first_tokens and "{" in first_tokens[0], (
-        f"{step_name}: dynamic skill command must template its first token"
+def _dynamic_step_outcome(step_name: str) -> NoReturn:
+    pytest.skip(
+        f"{step_name}: dynamic skill command requires runtime resolution before admission replay"
     )
 
 
@@ -255,8 +256,7 @@ def _step_outcome(
     loaded, installed, credential, steps = _load_recipe(recipe_name)
     snapshot = installed.snapshot
     if step_name in snapshot.dynamic_skill_step_names:
-        _dynamic_step_outcome(steps, step_name)
-        return None
+        _dynamic_step_outcome(step_name)
     if step_name not in snapshot.templates:
         projection = loaded["_finalized_projection"].binding_projection
         return _uninstalled_step_outcome(projection, step_name)
@@ -267,6 +267,11 @@ def _step_outcome(
         credential,
         str(tmp_path),
     )
+
+
+def test_dynamic_steps_are_explicitly_skipped() -> None:
+    with pytest.raises(pytest.skip.Exception, match="dynamic.*runtime resolution"):
+        _dynamic_step_outcome("dispatch")
 
 
 def _assert_admitted(

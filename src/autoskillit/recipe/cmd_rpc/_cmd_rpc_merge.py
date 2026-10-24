@@ -317,9 +317,9 @@ def _load_pr_order(pr_order_file: str) -> list[tuple[str, str]]:
     if not Path(pr_order_file).is_absolute():
         raise ValueError(f"pr_order_file must be absolute: {pr_order_file!r}")
     try:
-        with open(pr_order_file) as f:
+        with open(pr_order_file, encoding="utf-8") as f:
             order = json.load(f)
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise RuntimeError(f"{pr_order_file}: {exc}") from exc
     if not isinstance(order, dict) or not isinstance(order.get("prs"), list):
         raise ValueError(f"{pr_order_file}: expected an object with a prs list")

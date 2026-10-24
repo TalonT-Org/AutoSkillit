@@ -11,6 +11,7 @@ import autoskillit.recipe._binding as _patch_recipe_binding
 import autoskillit.recipe.rules.rules_inputs as _patch_rules_inputs
 from autoskillit.core import RECIPE_TERMINAL_TARGETS, Severity
 from autoskillit.core.types import CaptureEntrySpec, CaptureValueType
+from autoskillit.recipe import bind_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import (
     Recipe,
@@ -119,6 +120,7 @@ def _make_typed_input_recipe(
         "remedy_kind",
     ),
     [
+        pytest.param("n", "${{ context.n }}", (), (), None, "integer", id="no-context-producer"),
         pytest.param(
             "n", "${{ context.n }}", (None,), (), None, "integer", id="shorthand-capture"
         ),
@@ -182,6 +184,13 @@ def test_dynamic_typed_skill_inputs_require_declared_sources(
         ingredient=ingredient,
     )
 
+    invocation = bind_recipe(recipe).for_step("consume")
+    assert invocation is not None
+    bound_input = invocation.skill_input(input_name)
+    assert bound_input is not None
+    assert bound_input.is_present
+    assert bound_input.is_dynamic
+
     findings = [
         finding
         for finding in run_semantic_rules(recipe)
@@ -227,7 +236,6 @@ def test_dynamic_typed_skill_inputs_require_declared_sources(
             "the orchestrator selects the skill",
             id="unresolved-skill",
         ),
-        pytest.param("n", "${{ context.n }}", (), None, None, id="no-context-producer"),
     ],
 )
 def test_dynamic_typed_skill_inputs_allow_declared_or_out_of_scope_sources(

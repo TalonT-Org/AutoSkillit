@@ -165,10 +165,14 @@ def _has_declared_integer_source(recipe: Recipe, bound: BoundValue, input_def: S
         return ingredient is not None and ingredient.type == "integer"
     if bound.origin is BoundValueOrigin.CONTEXT:
         variable = bound.context_dependencies[0]
-        return all(
-            variable in step.capture and step.capture[variable].value_type == "integer"
+        producers = [
+            step
             for step in recipe.steps.values()
             if variable in step.capture or variable in step.capture_list
+        ]
+        return bool(producers) and all(
+            variable in step.capture and step.capture[variable].value_type == "integer"
+            for step in producers
         )
     return False
 

@@ -108,42 +108,6 @@ _PINNED: dict[tuple[str, str], Any] = {
             reason="Blocked by #5306: merge item placeholders compile as static inputs",
         ),
     ),
-    ("research-implement", "decompose_phases"): pytest.param(
-        "research-implement",
-        "decompose_phases",
-        "recipe_execution_step_mismatch",
-        "step is not present in the active compiled execution",
-        id="research-implement-decompose_phases",
-        marks=pytest.mark.xfail(
-            strict=True,
-            raises=AdmissionDefect,
-            reason="Blocked by #5305: delivered step_name differs from the recipe step key",
-        ),
-    ),
-    ("research-implement", "adjust_experiment"): pytest.param(
-        "research-implement",
-        "adjust_experiment",
-        "recipe_execution_step_mismatch",
-        "step is not present in the active compiled execution",
-        id="research-implement-adjust_experiment",
-        marks=pytest.mark.xfail(
-            strict=True,
-            raises=AdmissionDefect,
-            reason="Blocked by #5305: delivered step_name differs from the recipe step key",
-        ),
-    ),
-    ("research-implement", "fix_tests"): pytest.param(
-        "research-implement",
-        "fix_tests",
-        "recipe_execution_step_mismatch",
-        "step is not present in the active compiled execution",
-        id="research-implement-fix_tests",
-        marks=pytest.mark.xfail(
-            strict=True,
-            raises=AdmissionDefect,
-            reason="Blocked by #5305: delivered step_name differs from the recipe step key",
-        ),
-    ),
     ("bem-wrapper", "run_bem"): pytest.param(
         "bem-wrapper",
         "run_bem",

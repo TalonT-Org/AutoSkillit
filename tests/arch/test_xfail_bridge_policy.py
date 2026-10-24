@@ -5,7 +5,8 @@ definitions and inside ``pytest.param(..., marks=...)`` — must include a ``#NN
 issue reference in its ``reason`` string and a specific ``raises=`` exception type.
 Bare ``Exception``, ``BaseException``, and ``AssertionError`` do not identify the
 expected failure precisely. Class-valued ``raises=`` matching includes subclasses;
-the replay helper ``_assert_admitted`` checks the exact rejection code and detail.
+``tests.server.test_attested_admission_replay._assert_admitted`` checks the exact
+rejection code and pinned detail substring.
 Files in ``_XFAIL_POLICY_EXEMPT_FILES`` are excluded when they have an alternative
 self-governance mechanism (e.g. a companion meta-test that forces the count
 monotonically non-increasing).

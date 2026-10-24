@@ -1,10 +1,11 @@
-"""Test-side oracle for caller-built ``run_skill`` arguments.
+"""Caller payload oracle and admission assertion protocol for ``run_skill`` tests.
 
 Models the delivered ``with:`` block, the ``recipe_execution`` credential,
 and the sous-chef's forwarding rules. It must never derive actual values from
 the compiled template. Replay xfails use ``raises=AdmissionDefect`` to match
 the class and its subclasses; the marker alone does not check a rejection's
-code or detail. Replay ``_assert_admitted`` checks those fields before raising
+code or detail. ``tests.server.test_attested_admission_replay._assert_admitted``
+checks the exact code and pinned detail substring before raising
 ``AdmissionDefect``; other failures remain plain ``AssertionError`` instances.
 """
 

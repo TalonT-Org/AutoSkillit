@@ -61,9 +61,6 @@ READING_TOKEN_PATTERN: str = r"^(?P<prefix>\w+) = (?P<path>/.+)$"
 
 
 BoundScalar: TypeAlias = str | int | bool
-_TERMINAL_BYPASS_TARGETS = frozenset({"done", "escalate"})
-
-
 RECIPE_TERMINAL_TARGETS: frozenset[str] = frozenset({"done", "escalate"})
 
 
@@ -595,7 +592,7 @@ def _validate_projection_guards(
         raise ValueError("FinalizedRecipeProjection guards must name finalized steps")
     if any(
         guard.bypass_target not in ordered_step_names
-        and guard.bypass_target not in _TERMINAL_BYPASS_TARGETS
+        and guard.bypass_target not in RECIPE_TERMINAL_TARGETS
         for guard in guards
     ):
         raise ValueError(

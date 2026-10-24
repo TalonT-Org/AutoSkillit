@@ -254,6 +254,14 @@ def _step_outcome(
     tmp_path: Path,
 ) -> tuple[str, str] | None:
     loaded, installed, credential, steps = _load_recipe(recipe_name)
+    if (
+        step_name not in loaded["post_prune_step_names"]
+        or steps.get(step_name, {}).get("tool") != "run_skill"
+    ):
+        raise AssertionError(
+            f"stale admission replay pin {recipe_name}.{step_name}: "
+            "no delivered run_skill step matches this pin"
+        )
     snapshot = installed.snapshot
     if step_name in snapshot.dynamic_skill_step_names:
         _dynamic_step_outcome(step_name)

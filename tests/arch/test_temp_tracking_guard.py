@@ -111,6 +111,11 @@ def _assert_rejected(result: subprocess.CompletedProcess[str], path: str) -> Non
     assert result.stderr == f"Refusing to stage AutoSkillit temp artifact: {path}\n"
 
 
+def _assert_permitted(result: subprocess.CompletedProcess[str]) -> None:
+    assert result.returncode == 0, result.stderr
+    assert result.stderr == ""
+
+
 @pytest.mark.parametrize(
     ("path", "kind", "expect_reject"),
     [
@@ -133,8 +138,7 @@ def test_staged_temp_guard_matches_tracked_temp_policy(
     if expect_reject:
         _assert_rejected(result, path)
     else:
-        assert result.returncode == 0, result.stderr
-        assert result.stderr == ""
+        _assert_permitted(result)
 
 
 @pytest.mark.parametrize(
@@ -156,8 +160,7 @@ def test_staged_temp_guard_on_committed_temp_root(
     if expect_reject:
         _assert_rejected(result, _TEMP_PATHSPEC)
     else:
-        assert result.returncode == 0, result.stderr
-        assert result.stderr == ""
+        _assert_permitted(result)
 
 
 def test_staged_temp_guard_rejects_temp_child_replaced_by_root(temporary_git_repo: Path) -> None:
@@ -187,7 +190,7 @@ def test_staged_temp_guard_permits_deletion(temporary_git_repo: Path) -> None:
 
     result = _run_staged_temp_guard(temporary_git_repo)
 
-    assert result.returncode == 0, result.stderr
+    _assert_permitted(result)
 
 
 def test_staged_temp_guard_permits_non_temp_change_beside_tracked_temp(
@@ -197,8 +200,7 @@ def test_staged_temp_guard_permits_non_temp_change_beside_tracked_temp(
     _run_git(temporary_git_repo, "add", "--all")
 
     result = _run_staged_temp_guard(temporary_git_repo)
-    assert result.returncode == 0, result.stderr
-    assert result.stderr == ""
+    _assert_permitted(result)
 
 
 def test_staged_temp_guard_sees_gitlink_hidden_by_submodule_ignore(clean_git_repo: Path) -> None:
@@ -235,8 +237,7 @@ def test_staged_temp_guard_is_independent_of_invocation_cwd(
     if expect_reject:
         _assert_rejected(result, path)
     else:
-        assert result.returncode == 0, result.stderr
-        assert result.stderr == ""
+        _assert_permitted(result)
 
 
 def test_staged_temp_guard_resolves_relative_alternate_index_from_repo_root(

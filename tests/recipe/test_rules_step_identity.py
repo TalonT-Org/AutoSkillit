@@ -51,28 +51,17 @@ def _identity_findings(recipe: Recipe):
 
 
 @pytest.mark.parametrize(
-    ("effective_value", "declared_value", "map_terms", "bad_values"),
+    ("effective_value", "declared_value", "mismatched_maps"),
     [
-        ("decompose", "decompose", (("with", "effective"), ("declared",)), ("decompose",)),
-        (
-            "decompose",
-            _RUN_SKILL_KEY,
-            (("with", "effective"),),
-            ("decompose",),
-        ),
-        (
-            _RUN_SKILL_KEY,
-            "decompose",
-            (("declared",),),
-            ("decompose",),
-        ),
+        ("wrong_step", "wrong_step", ("with_args", "declared_with_args")),
+        ("wrong_step", _RUN_SKILL_KEY, ("with_args",)),
+        (_RUN_SKILL_KEY, "wrong_step", ("declared_with_args",)),
     ],
 )
 def test_divergent_run_skill_identity_is_an_error(
     effective_value: str,
     declared_value: str,
-    map_terms: tuple[tuple[str, ...], ...],
-    bad_values: tuple[str, ...],
+    mismatched_maps: tuple[str, ...],
 ) -> None:
     base_args = {
         "skill_command": "/autoskillit:make-groups",
@@ -93,10 +82,8 @@ def test_divergent_run_skill_identity_is_an_error(
     assert finding.severity is Severity.ERROR
     assert finding.step_name == _RUN_SKILL_KEY
     assert _RUN_SKILL_KEY in finding.message
-    for terms in map_terms:
-        assert any(term in finding.message for term in terms)
-    for value in bad_values:
-        assert value in finding.message
+    for map_name in mismatched_maps:
+        assert f"{map_name}['step_name']='wrong_step'" in finding.message
 
 
 def test_divergent_non_skill_tool_identity_is_an_error() -> None:

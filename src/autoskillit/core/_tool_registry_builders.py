@@ -306,11 +306,10 @@ def _verify_review_receipt() -> ToolDef:
     )
 
 
-# The single classification authority for what each run_skill parameter is
-# for. Every attestation-relevant surface (the runtime gate's always-admit
-# set, the actual-kwargs assembly, the execution-tuning fallback table, and
-# the frozen ledger in tests/contracts/test_run_skill_kwarg_ledger.py) is
-# derived from this mapping — see ToolParamRole for what each role means.
+# Classification authority for run_skill runtime admission and forwarding prose.
+# The gate's always-admit set, execution-tuning fallback table, and frozen ledger
+# derive from this mapping; kwarg membership is ToolDef.mcp_kwarg_names.
+# See ToolParamRole for what each role means.
 _RUN_SKILL_PARAM_ROLES: Mapping[str, ToolParamRole] = MappingProxyType(
     {
         "skill_command": ToolParamRole.CHILD_INPUT,

@@ -24,10 +24,13 @@ from autoskillit.core import (
     RUNTIME_ADMISSION_BY_ROLE,
     RuntimeAdmission,
     ToolParamRole,
+    ToolWireType,
     compute_tool_contract_identity,
     get_tool_def,
     runtime_exempt_param_names,
 )
+from autoskillit.recipe._binding import bind_step_invocation
+from autoskillit.recipe._contracts_manifest import load_bundled_manifest
 from autoskillit.recipe.schema import RecipeStep
 from autoskillit.server.tools.tools_execution import _build_actual_mcp_kwargs
 
@@ -113,20 +116,13 @@ def test_execution_tuning_fallback_tables_cover_role_exactly() -> None:
 
 
 def test_build_actual_mcp_kwargs_fails_fast_on_drift() -> None:
-    """The kwargs-assembly helper must raise on a missing handler param and on an
-    unknown values key, and must NOT demand values for dispatch_items
-    (handler_parameter=False) or skill_inputs (structured_skill_inputs=True) —
-    pinning the filter that keeps assembly aligned with the real handler surface."""
+    """The kwargs-assembly helper must follow the ToolDef wire-kwarg view."""
     tool_def = _run_skill_tool_def()
-    handler_param_names = frozenset(
-        param.name
-        for param in tool_def.params
-        if param.handler_parameter and not param.structured_skill_inputs
-    )
-    assert "dispatch_items" not in handler_param_names
-    assert "skill_inputs" not in handler_param_names
+    mcp_kwarg_names = tool_def.mcp_kwarg_names
+    assert "dispatch_items" not in mcp_kwarg_names
+    assert "skill_inputs" not in mcp_kwarg_names
 
-    complete_values: dict[str, object] = dict.fromkeys(handler_param_names, "")
+    complete_values: dict[str, object] = dict.fromkeys(mcp_kwarg_names, "")
 
     incomplete = dict(complete_values)
     del incomplete["order_id"]
@@ -134,12 +130,43 @@ def test_build_actual_mcp_kwargs_fails_fast_on_drift() -> None:
         _build_actual_mcp_kwargs(tool_def, incomplete)
 
     excess = dict(complete_values)
-    excess["not_a_real_param"] = ""
-    with pytest.raises(ValueError, match="not_a_real_param"):
+    excess["dispatch_items"] = ""
+    with pytest.raises(ValueError, match="dispatch_items"):
         _build_actual_mcp_kwargs(tool_def, excess)
 
     result = _build_actual_mcp_kwargs(tool_def, complete_values)
-    assert set(result) == handler_param_names
+    assert set(result) == mcp_kwarg_names
+
+
+def test_compiled_mcp_kwargs_are_exactly_the_kwarg_view() -> None:
+    tool_def = get_tool_def("run_skill")
+    assert tool_def is not None
+    with_args = {
+        param.name: (
+            "/autoskillit:dry-walkthrough"
+            if param.name == "skill_command"
+            else "/repo"
+            if param.name == "cwd"
+            else "verify"
+            if param.name == "step_name"
+            else 2400
+            if param.wire_type is ToolWireType.INTEGER
+            else {"plan_path": "/tmp/plan.md"}
+            if param.wire_type is ToolWireType.OBJECT
+            else "value"
+        )
+        for param in tool_def.params
+    }
+    step = RecipeStep(name="verify", tool="run_skill", with_args=with_args)
+
+    invocation = bind_step_invocation(
+        "verify",
+        step,
+        manifest=load_bundled_manifest(),
+    )
+
+    assert invocation.is_valid, invocation.failures
+    assert {value.name for value in invocation.mcp_kwargs} == tool_def.mcp_kwarg_names
 
 
 def test_run_skill_attestation_params_is_subset_of_protocol_role() -> None:

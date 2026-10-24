@@ -187,12 +187,9 @@ def _build_actual_mcp_kwargs(
 ) -> dict[str, BoundScalar]:
     """Assemble the actual runtime kwargs the attestation gate checks.
 
-    Iterates ``tool_def``'s handler params only — a param declared
-    ``handler_parameter=False`` (e.g. ``dispatch_items``) or
-    ``structured_skill_inputs=True`` (``skill_inputs``, which has its own
-    dedicated channel) is excluded — and pulls each remaining param's
-    runtime value from ``values``, keyed by param name, which the caller
-    builds from the handler's locals.
+    Uses ``tool_def.mcp_kwarg_names`` and pulls each member's runtime value
+    from ``values``, keyed by param name, which the caller builds from the
+    handler's locals.
 
     A param missing from ``values``, or a ``values`` key absent from the
     filtered param set, is a loud construction-time bug: adding a
@@ -202,11 +199,7 @@ def _build_actual_mcp_kwargs(
     ``stale_threshold``/``idle_output_timeout`` (subsumes the prior
     hand-typed ``if ... is not None`` special case).
     """
-    handler_param_names = frozenset(
-        param.name
-        for param in tool_def.params
-        if param.handler_parameter and not param.structured_skill_inputs
-    )
+    handler_param_names = tool_def.mcp_kwarg_names
     missing = handler_param_names - values.keys()
     if missing:
         raise ValueError(

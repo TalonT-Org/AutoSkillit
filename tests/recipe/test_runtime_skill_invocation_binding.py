@@ -100,13 +100,11 @@ def _bind(
     skill_inputs: Mapping[str, BoundScalar] | None = None,
     **overrides: BoundScalar,
 ):
-    """Bind against ``template``, matching production's shape: the caller
-    always supplies actual values for every compiled (with:-declared)
-    param — see ``_build_actual_mcp_kwargs`` in tools_execution/, which
-    never produces a sparse dict. ``skill_command``/``cwd``/``step_name``
-    are always compiled (every ``_template()`` step declares them); pass
-    extra kwargs to override or to supply values for anything else under
-    test."""
+    """Bind values for each compiled MCP kwarg (``ToolDef.mcp_kwarg_names``
+    intersected with the step's ``with:`` declarations), matching production.
+    ``skill_command``/``cwd``/``step_name`` are always compiled (each
+    ``_template()`` step declares them); extra kwargs override or supply
+    values for other compiled kwargs under test."""
     actual_mcp_kwargs: dict[str, BoundScalar] = {
         "skill_command": "/autoskillit:dry-walkthrough",
         "cwd": "/repo",
@@ -166,6 +164,13 @@ def test_runtime_binding_admits_explicit_advertised_default_without_auto_fill() 
     )
 
     assert bound == (("plan_path", "/tmp/plan.md"), ("audit_cycle_path", ""))
+
+
+def test_non_handler_param_is_authorable_but_not_a_compiled_mcp_kwarg() -> None:
+    template = _template(dispatch_items="P1,P2")
+
+    assert "dispatch_items" not in {value.name for value in template.invocation.mcp_kwargs}
+    assert _bind(template) == (("plan_path", "/tmp/plan.md"),)
 
 
 def test_undeclared_non_empty_value_is_denied() -> None:

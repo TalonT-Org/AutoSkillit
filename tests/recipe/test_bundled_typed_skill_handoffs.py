@@ -184,7 +184,7 @@ def _bind(case: _HandoffCase, skill_inputs: dict[str, Any]) -> tuple[tuple[str, 
     )
 
 
-def _producer_expression(recipe: Any, variable: str) -> str:
+def _producer_expression(recipe: Any, variable: str) -> tuple[str, list[str]]:
     expressions = []
     for step in recipe.steps.values():
         for captures in (step.capture, step.capture_list):
@@ -200,13 +200,13 @@ def _producer_expression(recipe: Any, variable: str) -> str:
     assert all(filter_name == "trim" for filter_name in filters), (
         f"{recipe.name}: unsupported producer filter in {expression!r}"
     )
-    return expression
+    return expression, filters
 
 
 def _producer_text(recipe: Any, variable: str) -> str:
-    expression = _producer_expression(recipe, variable)
+    expression, filters = _producer_expression(recipe, variable)
     emitted = "31\n" if "result.stdout" in expression else "31"
-    if "trim" in (part.strip() for part in expression.removesuffix("}}").split("|")[1:]):
+    if "trim" in filters:
         emitted = emitted.strip()
     return emitted
 

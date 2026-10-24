@@ -828,12 +828,10 @@ class TestMergePrsPreEnqueueCiGate:
         """The first cursor result routes by queue mode unless the queue is done."""
         step = pmp.steps["get_first_pr_number"]
         assert step.on_result is not None
-        done_routes = [c for c in step.on_result.conditions if c.when and "done" in c.when]
-        assert done_routes
-        assert done_routes[0].route == "register_clone_success"
-        fallback = [c for c in step.on_result.conditions if c.when is None]
-        assert fallback
-        assert fallback[0].route == "route_by_queue_mode"
+        assert [(c.when, c.route) for c in step.on_result.conditions] == [
+            ("${{ result.done }} == true", "register_clone_success"),
+            (None, "route_by_queue_mode"),
+        ]
 
     def test_get_current_pr_branch_exists(self, pmp) -> None:
         """get_current_pr_branch step must exist."""

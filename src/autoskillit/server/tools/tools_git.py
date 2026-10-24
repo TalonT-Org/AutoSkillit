@@ -136,7 +136,8 @@ async def classify_fix(
     Args:
         worktree_path: Path to the git worktree with the implemented fix.
         base_branch: The branch the worktree was created from (for merge-base).
-        step_name: Optional YAML step key for wall-clock timing accumulation.
+        step_name: When called from a recipe, the invoking step's YAML key for timing.
+            Optional for direct calls.
 
     Never raises.
     """
@@ -305,7 +306,8 @@ async def create_unique_branch(
         remote: Git remote to check for existing branches (default: "origin").
         base_branch_name: When provided, use this directly as the base name
                           instead of composing from slug+issue_number.
-        step_name: Optional YAML step key for wall-clock timing accumulation.
+        step_name: When called from a recipe, the invoking step's YAML key for timing.
+            Optional for direct calls.
 
     Never raises.
     """

@@ -81,10 +81,10 @@ def test_merge_prs_reenter_queue_exists(pmp_recipe) -> None:
     assert "reenter_queue" in pmp_recipe.steps
 
 
-def test_merge_prs_advance_queue_pr_exists(pmp_recipe) -> None:
-    """advance_queue_pr step must exist with tool=run_python."""
-    assert "advance_queue_pr" in pmp_recipe.steps
-    step = pmp_recipe.steps["advance_queue_pr"]
+def test_merge_prs_advance_merge_pr_exists(pmp_recipe) -> None:
+    """advance_merge_pr step must exist with tool=run_python."""
+    assert "advance_merge_pr" in pmp_recipe.steps
+    step = pmp_recipe.steps["advance_merge_pr"]
     assert step.tool == "run_python"
 
 
@@ -232,16 +232,15 @@ def test_merge_prs_checkout_ejected_pr_removed(pmp_recipe) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_merge_prs_advance_queue_pr_fallthrough_routes_to_get_next_pr_branch(
+def test_merge_prs_advance_merge_pr_queue_route_to_get_next_pr_branch(
     pmp_recipe,
 ) -> None:
-    step = pmp_recipe.steps["advance_queue_pr"]
+    step = pmp_recipe.steps["advance_merge_pr"]
     assert step.on_result is not None
-    fallback_route = next(
-        (c.route for c in step.on_result.conditions if c.when is None),
-        None,
-    )
-    assert fallback_route == "get_next_pr_branch"
+    queue_routes = [
+        c.route for c in step.on_result.conditions if c.when == "${{ context.queue_mode }} == true"
+    ]
+    assert queue_routes == ["get_next_pr_branch"]
 
 
 def test_merge_prs_get_next_pr_branch_exists(pmp_recipe) -> None:
@@ -397,36 +396,36 @@ def test_merge_prs_ci_watch_routes_to_reenter(pmp_recipe) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_merge_prs_advance_queue_pr_is_run_python(pmp_recipe) -> None:
-    """advance_queue_pr step must exist with tool=run_python."""
-    assert "advance_queue_pr" in pmp_recipe.steps
-    step = pmp_recipe.steps["advance_queue_pr"]
+def test_merge_prs_advance_merge_pr_is_run_python(pmp_recipe) -> None:
+    """advance_merge_pr step must exist with tool=run_python."""
+    assert "advance_merge_pr" in pmp_recipe.steps
+    step = pmp_recipe.steps["advance_merge_pr"]
     assert step.tool == "run_python"
 
 
 def test_merge_prs_next_queue_pr_or_done_removed(pmp_recipe) -> None:
-    """next_queue_pr_or_done step must be removed (replaced by advance_queue_pr)."""
+    """next_queue_pr_or_done step must be removed (replaced by advance_merge_pr)."""
     assert "next_queue_pr_or_done" not in pmp_recipe.steps
 
 
-def test_merge_prs_advance_queue_pr_callable_references_pr_order(pmp_recipe) -> None:
-    """advance_queue_pr callable args must reference pr_order_file and current_pr_number."""
-    step = pmp_recipe.steps["advance_queue_pr"]
+def test_merge_prs_advance_merge_pr_callable_references_pr_order(pmp_recipe) -> None:
+    """advance_merge_pr callable args must reference pr_order_file and current_pr_number."""
+    step = pmp_recipe.steps["advance_merge_pr"]
     args = step.with_args
     assert "pr_order_file" in args
     assert "current_pr_number" in args
 
 
-def test_merge_prs_advance_queue_pr_captures_pr_number(pmp_recipe) -> None:
-    """advance_queue_pr must have a capture block for current_pr_number."""
-    step = pmp_recipe.steps["advance_queue_pr"]
+def test_merge_prs_advance_merge_pr_captures_pr_number(pmp_recipe) -> None:
+    """advance_merge_pr must have a capture block for current_pr_number."""
+    step = pmp_recipe.steps["advance_merge_pr"]
     capture = step.capture or {}
     assert "current_pr_number" in capture
 
 
-def test_merge_prs_advance_queue_pr_routing(pmp_recipe) -> None:
-    """advance_queue_pr routes to get_next_pr_branch (default) or collect_and_check_impl_plans."""
-    step = pmp_recipe.steps["advance_queue_pr"]
+def test_merge_prs_advance_merge_pr_routing(pmp_recipe) -> None:
+    """advance_merge_pr handles queue completion and the classic fallback."""
+    step = pmp_recipe.steps["advance_merge_pr"]
     assert step.on_result is not None
     conditions = step.on_result.conditions
     done_routes = [c for c in conditions if c.when and "done" in c.when]
@@ -434,7 +433,7 @@ def test_merge_prs_advance_queue_pr_routing(pmp_recipe) -> None:
     assert done_routes[0].route == "collect_and_check_impl_plans"
     default_routes = [c for c in conditions if c.when is None]
     assert default_routes, "must have a default route"
-    assert default_routes[0].route == "get_next_pr_branch"
+    assert default_routes[0].route == "check_pr_merge_loop"
 
 
 # ---------------------------------------------------------------------------

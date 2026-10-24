@@ -59,7 +59,6 @@ __all__ = ["_record_pipeline_error", "_run_validation_pipeline"]
 
 def _reconcile_semantic_findings(
     semantic_findings: list[_RuleFinding],
-    semantic_suggestions: list[dict[str, Any]],
     *,
     pre_prune_findings: list[_RuleFinding],
     skip_resolutions: dict[str, bool | None],
@@ -314,11 +313,9 @@ def _run_validation_pipeline(
             effective_routing_edges=_effective_analysis_edges,
         )
         semantic_findings = _orch.run_semantic_rules(val_ctx)
-        semantic_suggestions = _orch.findings_to_dicts(semantic_findings)
         t0 = _orch._t("semantic_rules", t0, name)
         semantic_findings, semantic_suggestions = _reconcile_semantic_findings(
             semantic_findings,
-            semantic_suggestions,
             pre_prune_findings=_pre_prune_findings,
             skip_resolutions=_skip_resolutions,
             recipe_name=name,

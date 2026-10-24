@@ -4,12 +4,12 @@ description: "Declare required tool parameters and match registered wire types."
 changes:
   - id: required-tool-parameters-declared
     description: >-
-      Recipe validation rejects missing required tool parameters and values with the
-      wrong wire shape before execution. Quoted numerals and booleans on INTEGER
-      and BOOLEAN parameters, such as stale_threshold: "30", are now rejected even
-      where FastMCP previously coerced them. Whole-value ${{ }} templates on list
-      or mapping parameters were already invalid at runtime and now receive an
-      earlier validation error.
+      Quoted numerals and booleans on INTEGER and BOOLEAN parameters, such as
+      stale_threshold: "30", are now rejected even where FastMCP previously coerced
+      them. Recipe validation also rejects missing required tool parameters and
+      values with the wrong wire shape before execution. Whole-value ${{ }} templates
+      on list or mapping parameters were already invalid at runtime and now receive
+      an earlier validation error.
     instruction: >-
       Write integer and boolean literals without quotes. Add cwd (usually
       "${{ inputs.source_dir }}") under with: for every run_skill and run_cmd step,

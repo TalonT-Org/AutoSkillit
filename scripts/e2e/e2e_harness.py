@@ -23,7 +23,7 @@ from typing import Any
 import e2e_catalog
 
 MINIMAX_BASE_URL = "https://api.minimax.io/anthropic"
-MINIMAX_MODEL = "MiniMax-M3[1m]"
+MINIMAX_MODEL = "MiniMax-M3.1-Flash[1m]"
 MINIMAX_COMPACT_WINDOW_TOKENS = "1000000"
 # tests/infra/test_e2e_harness.py derives this --model value from the shipped config.
 FLEET_MODEL = "claude-sonnet-5[1m]"

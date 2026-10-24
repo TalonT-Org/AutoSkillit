@@ -639,7 +639,7 @@ def test_worktrees_directory_matches_clone_source_of_truth() -> None:
 MINIMAX_KEY = "minimax-test-key"
 SANDBOX_TOKEN = "sandbox-test-token"
 SANDBOX = "owner/sandbox"
-_MINIMAX_MODEL = "MiniMax-M3[1m]"
+_MINIMAX_MODEL = "MiniMax-M3.1-Flash[1m]"
 _EXPECTED_FLEET_MODEL = "claude-sonnet-5[1m]"
 _EXPECTED_REQUIRED_CONTEXT_WINDOW_TOKENS = 1_000_000
 _EXPECTED_SETTINGS_ENV = {
@@ -2054,7 +2054,7 @@ class TestCanaryOutput:
         ("model_usage", "include_model_usage"),
         [
             pytest.param(
-                {"MiniMax-M3[1m]": {"contextWindow": _EXPECTED_REQUIRED_CONTEXT_WINDOW_TOKENS}},
+                {_MINIMAX_MODEL: {"contextWindow": _EXPECTED_REQUIRED_CONTEXT_WINDOW_TOKENS}},
                 True,
                 id="old-model-key",
             ),

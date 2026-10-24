@@ -66,21 +66,21 @@ The harness writes that block (mode `0600`):
 |----------|-------|
 | `ANTHROPIC_BASE_URL` | `https://api.minimax.io/anthropic` |
 | `ANTHROPIC_AUTH_TOKEN` | `MINIMAX_API_KEY` |
-| `ANTHROPIC_MODEL`, `ANTHROPIC_DEFAULT_{SONNET,OPUS,HAIKU}_MODEL` | `MiniMax-M3[1m]` |
+| `ANTHROPIC_MODEL`, `ANTHROPIC_DEFAULT_{SONNET,OPUS,HAIKU}_MODEL` | `MiniMax-M3.1-Flash[1m]` |
 | `CLAUDE_CODE_AUTO_COMPACT_WINDOW` | `1000000` |
 | `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` | `6` |
 
-The env model values carry `[1m]` so sessions resolved through them are sized at 1M;
-they differ from [MiniMax's current Claude Code guide](https://platform.minimax.io/docs/m-plan/claude-code),
-whose manual example uses `MiniMax-M3.1-Flash-Preview[1m]` and a 524,288 compact window
-(checked 2026-10-14). Six concurrent subagents
+The env model values carry `[1m]` so sessions resolved through them are sized at 1M.
+They use the model id from [MiniMax's current Claude Code guide](https://platform.minimax.io/docs/m-plan/claude-code),
+whose manual example sets a 524,288 compact window instead of 1,000,000
+(checked 2026-10-24). Six concurrent subagents
 covers `implement` (four children) and `resolve-review` (three to six); a spawn past the
 limit fails without retry.
 
 | Setting | Sessions it governs in E2E |
 |---|---|
 | `--model claude-sonnet-5[1m]` (from `model.default: sonnet[1m]`) | Fleet food truck and `run_skill` workers, fresh and resumed; also the canary and in-session `sonnet` subagents, which inherit the parent's id. A recipe step's own `model:` replaces this default. Subagent windows are not in turn rows, so the gate does not observe them |
-| `ANTHROPIC_MODEL` | Contract-nudge resumes, which pass no `--model` and resolve to `MiniMax-M3[1m]`. Their single-envelope output records no turn row, so the gate does not observe it |
+| `ANTHROPIC_MODEL` | Contract-nudge resumes, which pass no `--model` and resolve to `MiniMax-M3.1-Flash[1m]`. Their single-envelope output records no turn row, so the gate does not observe it |
 | `ANTHROPIC_DEFAULT_HAIKU_MODEL` | A `haiku`-class step (`--model haiku`) and in-session `haiku` subagents |
 | `ANTHROPIC_DEFAULT_OPUS_MODEL` | In-session `opus` subagents. AutoSkillit's `opus` class passes `claude-opus-5-5`, not the alias |
 | `ANTHROPIC_DEFAULT_SONNET_MODEL` | Provider fallback: AutoSkillit passes no bare `sonnet`, and `sonnet` subagents inherit the parent's id |

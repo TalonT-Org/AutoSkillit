@@ -342,7 +342,8 @@ def _load_pr_order(pr_order_file: str) -> list[tuple[str, str]]:
 
 
 def _cursor_result(entry: tuple[str, str], *, done: bool) -> dict[str, str]:
-    return {"pr_number": entry[0], "complexity": entry[1], "done": "true" if done else "false"}
+    pr_number, complexity = entry
+    return {"pr_number": pr_number, "complexity": complexity, "done": "true" if done else "false"}
 
 
 def first_ordered_pr(pr_order_file: str) -> dict[str, str]:
@@ -355,7 +356,8 @@ def next_ordered_pr(pr_order_file: str, current_pr_number: str) -> dict[str, str
     """Advance by file order, retaining the last PR when the order is exhausted."""
     entries = _load_pr_order(pr_order_file)
     for index, entry in enumerate(entries):
-        if entry[0] == current_pr_number:
+        pr_number, _ = entry
+        if pr_number == current_pr_number:
             done = index + 1 == len(entries)
             return _cursor_result(entry if done else entries[index + 1], done=done)
     raise ValueError(f"{pr_order_file}: current_pr_number {current_pr_number!r} is not in prs")

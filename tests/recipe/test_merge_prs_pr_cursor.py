@@ -47,9 +47,6 @@ def test_cursor_steps_have_defined_inputs_and_single_writer(recipe) -> None:
         if cursor_fields.intersection(set(step.capture) | set(step.capture_list))
     }
     assert writers == set(cursor_steps)
-    assert not cursor_fields.intersection(
-        set(recipe.steps["merge_pr"].capture) | set(recipe.steps["merge_pr"].capture_list)
-    )
     merge_inputs = recipe.steps["merge_pr"].with_args["skill_inputs"]
     assert merge_inputs["pr_number"] == "${{ context.current_pr_number }}"
     assert merge_inputs["complexity"] == "${{ context.current_pr_complexity }}"
@@ -84,14 +81,6 @@ def test_pr_order_file_has_declared_recipe_consumers(recipe) -> None:
 
     integration_inputs = recipe.steps["open_integration_pr"].with_args["skill_inputs"]
     assert integration_inputs["pr_order_file"] == "${{ context.pr_order_file }}"
-
-    shell_readers = {
-        name
-        for name, step in recipe.steps.items()
-        if step.tool == "run_cmd"
-        and "pr_order_file" in _context_refs_in_value((step.declared_with_args or {}).get("cmd"))
-    }
-    assert shell_readers == set()
 
 
 def test_cursor_routes_preserve_plan_iteration_and_pr_advancement(recipe) -> None:

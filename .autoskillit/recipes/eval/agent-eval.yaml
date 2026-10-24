@@ -90,6 +90,7 @@ steps:
     provider: minimax
     with:
       skill_command: "placeholder — see note for orchestration logic"
+      cwd: "${{ inputs.source_dir }}"
     on_success: compile_scorecard
     on_failure: escalate
     note: >-

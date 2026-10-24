@@ -127,12 +127,16 @@ ingredients:
   task:
     description: What to do
     required: true
+  source_dir:
+    description: Absolute path to the repository root
+    required: true
 
 steps:
   step_one:
     tool: run_skill
     with:
       skill_command: "/autoskillit:investigate ${{ inputs.task }}"
+      cwd: "${{ inputs.source_dir }}"
     capture:
       investigation_path: "${{ result.investigation_path }}"
     on_success: done

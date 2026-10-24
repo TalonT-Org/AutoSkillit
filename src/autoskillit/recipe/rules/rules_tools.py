@@ -123,6 +123,7 @@ def _check_constant_step_no_with_args(ctx: ValidationContext) -> list[RuleFindin
     name="unknown-tool",
     description="step.tool must be a registered MCP tool name",
     severity=Severity.ERROR,
+    declaration_scoped=True,
 )
 def _check_unknown_tool(ctx: ValidationContext) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
@@ -178,6 +179,7 @@ def _check_subset_disabled_tool(ctx: ValidationContext) -> list[RuleFinding]:
     name="dead-with-param",
     description="with: key does not match any known parameter of the step's tool",
     severity=Severity.ERROR,
+    declaration_scoped=True,
 )
 def _check_dead_with_params(ctx: ValidationContext) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
@@ -205,9 +207,50 @@ def _check_dead_with_params(ctx: ValidationContext) -> list[RuleFinding]:
 
 
 @semantic_rule(
+    name="invalid-tool-invocation-binding",
+    description=(
+        "Recipe tool steps must supply every required tool parameter with a value "
+        "of the registered wire type."
+    ),
+    severity=Severity.ERROR,
+    declaration_scoped=True,
+)
+def _check_invalid_tool_invocation_binding(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    reported_codes = {
+        BindingFailureCode.MISSING_TOOL_PARAMETER,
+        BindingFailureCode.INVALID_TOOL_PARAMETER_TYPE,
+    }
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool is None:
+            continue
+        invocation = ctx.binding_projection.for_step(step_name)
+        if invocation is None:
+            continue
+        for failure in invocation.failures:
+            if failure.code not in reported_codes:
+                continue
+            message = f"step '{step_name}': tool '{step.tool}' {failure.message}"
+            if failure.code is BindingFailureCode.MISSING_TOOL_PARAMETER and failure.name == "cwd":
+                message += (
+                    ' — add cwd: "${{ inputs.source_dir }}"'
+                    " (or a context worktree path) under with:"
+                )
+            findings.append(
+                make_finding(
+                    rule_name="invalid-tool-invocation-binding",
+                    step_name=step_name,
+                    message=message,
+                )
+            )
+    return findings
+
+
+@semantic_rule(
     name=STEP_IDENTITY_MISMATCH_RULE,
     description="A step's with: identity parameter must equal its YAML step key",
     severity=Severity.ERROR,
+    declaration_scoped=True,
 )
 def _check_step_identity(ctx: ValidationContext) -> list[RuleFinding]:
     findings: list[RuleFinding] = []

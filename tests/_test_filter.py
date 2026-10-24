@@ -146,6 +146,12 @@ _TEST_FILTER_VALIDATORS: frozenset[str] = frozenset(
 # target the scan reaches from it.
 TEST_HELPER_CASCADE: dict[str, frozenset[str]] = {
     "tests/_test_filter.py": _TEST_FILTER_VALIDATORS,
+    "tests/recipe/test_skill_invocation_binding.py": frozenset(
+        {
+            "recipe/test_binding_failure_reachability.py",
+            "recipe/test_skill_invocation_binding.py",
+        }
+    ),
     "tests/arch/_helpers.py": _ARCH_HELPER_TEST_TARGETS,
     "tests/arch/_rules.py": _ARCH_HELPER_TEST_TARGETS,
     "tests/fleet/_reaper_test_support.py": frozenset({"fleet"}),
@@ -1355,6 +1361,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_serve_idempotence.py",
             "server/test_attestation_delivery_reachability.py",
             "server/test_recipe_execution_receipt_completeness.py",
+            "server/test_recipe_execution_snapshot_totality.py",
             "server/test_attested_admission_replay.py",
             "server/test_recipe_checkpoint_delivery_regressions.py",
             "server/test_tools_status_kitchen.py",

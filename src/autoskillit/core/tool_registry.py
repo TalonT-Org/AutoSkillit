@@ -75,10 +75,7 @@ _TOOL_DEFS = (
         "delegate_evidence_reader",
         ("role", "role_data"),
         required=("role", "role_data"),
-        wire_types={
-            "role": ToolWireType.STRING,
-            "role_data": ToolWireType.OBJECT,
-        },
+        wire_types={"role": ToolWireType.STRING, "role_data": ToolWireType.OBJECT},
     ),
     _tool(
         "read_authorized_artifact",
@@ -89,10 +86,7 @@ _TOOL_DEFS = (
         "get_authorized_artifact_page",
         ("continuation", "page_size"),
         required=("continuation",),
-        wire_types={
-            "continuation": ToolWireType.STRING,
-            "page_size": ToolWireType.INTEGER,
-        },
+        wire_types={"continuation": ToolWireType.STRING, "page_size": ToolWireType.INTEGER},
     ),
     _tool("unlock_agent_pack", ("pack_name",), required=("pack_name",)),
     _tool(
@@ -380,7 +374,7 @@ _TOOL_DEFS = (
         "commit_files",
         ("paths", "message", "cwd", "step_name", "self_revert_base_sha"),
         required=("paths", "message", "cwd"),
-        wire_types={"self_revert_base_sha": ToolWireType.STRING},
+        wire_types={"paths": ToolWireType.ARRAY, "self_revert_base_sha": ToolWireType.STRING},
     ),
     _tool(
         "write_audit_semantic_result",
@@ -459,6 +453,7 @@ _TOOL_DEFS = (
         "prepare_issue",
         ("title", "body", "repo", "labels", "dry_run", "split"),
         required=("title", "body"),
+        wire_types={"labels": ToolWireType.ARRAY},
     ),
     _tool("claim_issue", ("issue_url", "label", "allow_reentry"), required=("issue_url",)),
     _tool(
@@ -492,7 +487,11 @@ _TOOL_DEFS = (
         ("project_dir", "_autoskillit_exploration_request_token"),
         roles={"_autoskillit_exploration_request_token": ToolParamRole.ORCHESTRATOR_SCOPING},
     ),
-    _tool("lock_ingredients", ("locked", "pipeline_id", "unlock")),
+    _tool(
+        "lock_ingredients",
+        ("locked", "pipeline_id", "unlock"),
+        wire_types={"locked": ToolWireType.OBJECT, "unlock": ToolWireType.ARRAY},
+    ),
     _tool(
         "declare_join_batch",
         ("skill_name", "assignments", "session_id", "top_level_parent"),
@@ -517,6 +516,7 @@ _TOOL_DEFS = (
         "record_pipeline_step",
         ("pipeline_id", "op", "dependencies", "step_name"),
         roles={"step_name": ToolParamRole.CHILD_INPUT},
+        wire_types={"dependencies": ToolWireType.OBJECT},
     ),
     _tool("get_pr_reviews", ("pr_number", "cwd", "repo"), required=("pr_number", "cwd")),
     _verify_review_receipt(),
@@ -637,7 +637,7 @@ _TOOL_DEFS = (
         "read_db",
         ("db_path", "query", "params", "timeout"),
         required=("db_path", "query"),
-        wire_types={"params": ToolWireType.ARRAY},
+        wire_types={"params": ToolWireType.STRING},
     ),
     _tool(
         "test_check",

@@ -50,8 +50,8 @@ from autoskillit.recipe.ingredients._recipe_composition import (
 )
 from autoskillit.recipe.ingredients._recipe_raw_repair import _resolve_skip_guards_in_content
 from autoskillit.recipe.registry import RuleFinding as _RuleFinding
+from autoskillit.recipe.registry import declaration_scoped_rule_names
 from autoskillit.recipe.rules.rules_plan_set_gate import STAGE_OBLIGATION_GATE_DOMINANCE_RULE
-from autoskillit.recipe.rules.rules_tools import STEP_IDENTITY_MISMATCH_RULE
 from autoskillit.recipe.schema import Recipe, RecipeStep
 
 __all__ = ["_record_pipeline_error", "_run_validation_pipeline"]
@@ -67,9 +67,10 @@ def _reconcile_semantic_findings(
     suppressed: _Sequence[str] | None,
 ) -> tuple[list[_RuleFinding], list[dict[str, Any]]]:
     """Reconcile pruning diagnostics and suppress displayed version findings."""
+    declaration_rules = declaration_scoped_rule_names()
+    semantic_findings = [f for f in semantic_findings if f.rule not in declaration_rules]
     if skip_resolutions and any(value is not True for value in skip_resolutions.values()):
         semantic_findings = filter_pruning_false_positives(semantic_findings, pre_prune_findings)
-        semantic_suggestions = _orch.findings_to_dicts(semantic_findings)
         graph_aware_rules = {"capture-inversion-detection", "dead-output"}
         pre_prune_keys = {(finding.rule, finding.step_name) for finding in pre_prune_findings}
         for finding in semantic_findings:
@@ -88,7 +89,7 @@ def _reconcile_semantic_findings(
     retained_pre_prune_findings = [
         finding
         for finding in pre_prune_findings
-        if finding.rule == STEP_IDENTITY_MISMATCH_RULE
+        if finding.rule in declaration_rules
         or (
             finding.rule == STAGE_OBLIGATION_GATE_DOMINANCE_RULE
             and "cannot declare skip_when_false" in finding.message
@@ -102,8 +103,7 @@ def _reconcile_semantic_findings(
         for finding in retained_pre_prune_findings
         if (finding.rule, finding.step_name, finding.message) not in retained_keys
     )
-    if retained_pre_prune_findings:
-        semantic_suggestions = _orch.findings_to_dicts(semantic_findings)
+    semantic_suggestions = _orch.findings_to_dicts(semantic_findings)
 
     if recipe_name in (suppressed or ()):
         from autoskillit.recipe.validator import filter_version_rule
@@ -358,7 +358,9 @@ def _run_validation_pipeline(
         if check_diagram_staleness(name, recipes_dir, match.path):
             suggestions.extend(diagram_stale_to_suggestions(name))
         t0 = _orch._t("diagram", t0, name)
-        valid = _orch.compute_recipe_validity(errors, semantic_findings, contract_findings)
+        valid = _orch.compute_recipe_validity(
+            errors, semantic_findings, contract_findings, binding_projection=_post_prune_bindings
+        )
 
     except YAMLError as exc:
         _orch.logger.warning("Recipe YAML parse error", name=name, exc_info=True)

@@ -237,6 +237,14 @@ def test_registry_preserves_typed_handler_wire_contracts() -> None:
             "post_state": ToolWireType.STRING,
             "step_name": ToolWireType.STRING,
         },
+        "commit_files": {"paths": ToolWireType.ARRAY},
+        "lock_ingredients": {
+            "locked": ToolWireType.OBJECT,
+            "unlock": ToolWireType.ARRAY,
+        },
+        "prepare_issue": {"labels": ToolWireType.ARRAY},
+        "read_db": {"params": ToolWireType.STRING},
+        "record_pipeline_step": {"dependencies": ToolWireType.OBJECT},
     }
 
     for tool_name, wire_types in expected.items():

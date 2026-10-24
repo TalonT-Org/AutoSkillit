@@ -12,7 +12,7 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from autoskillit.core import Severity
+from autoskillit.core import RecipeBindingProjection, Severity
 
 # Imported at module level for type annotations (no circular import: _analysis.py does
 # not import registry.py). The runtime isinstance() check in run_semantic_rules also
@@ -54,6 +54,7 @@ class RuleDef:
     description: str
     severity: Severity
     check: Callable[[ValidationContext], list[RuleFinding]]
+    declaration_scoped: bool = False
 
 
 _RULE_REGISTRY: list[RuleDef] = []
@@ -89,6 +90,8 @@ def semantic_rule(
     name: str,
     description: str,
     severity: Severity = Severity.WARNING,
+    *,
+    declaration_scoped: bool = False,
 ) -> Callable:
     """Decorator that registers a semantic validation rule."""
 
@@ -100,11 +103,27 @@ def semantic_rule(
                 return fn
             raise RuntimeError(f"Cannot register rule {name!r} after registry finalization")
         _RULE_REGISTRY.append(
-            RuleDef(name=name, description=description, severity=severity, check=fn)
+            RuleDef(
+                name=name,
+                description=description,
+                severity=severity,
+                check=fn,
+                declaration_scoped=declaration_scoped,
+            )
         )
         return fn
 
     return decorator
+
+
+def declaration_scoped_rule_names() -> frozenset[str]:
+    """Return rules that validate declarations independently of surviving pruning.
+
+    Their pre-prune findings are authoritative because that pass sees every
+    declared step. Finding text may describe the unpruned context, such as the
+    prior captures suggested by ``missing-ingredient``.
+    """
+    return frozenset(rule.name for rule in _RULE_REGISTRY if rule.declaration_scoped)
 
 
 def make_finding(
@@ -257,9 +276,20 @@ def compute_recipe_validity(
     errors: list[str],
     semantic_findings: list[RuleFinding],
     contract_findings: list[dict],
+    *,
+    binding_projection: RecipeBindingProjection,
 ) -> bool:
-    """Return True if no schema, semantic, or contract errors are present."""
+    """Require no errors and an installable post-prune binding projection.
+
+    This projection is the object ``build_recipe_execution_snapshot`` installs,
+    so validity includes installability.
+    """
     has_schema_errors = bool(errors)
     has_semantic_errors = any(f.severity == Severity.ERROR for f in semantic_findings)
     has_contract_errors = any(f.get("severity") == "error" for f in contract_findings)
-    return not has_schema_errors and not has_semantic_errors and not has_contract_errors
+    return (
+        not has_schema_errors
+        and not has_semantic_errors
+        and not has_contract_errors
+        and not binding_projection.failures
+    )

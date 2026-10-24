@@ -189,7 +189,9 @@ def validate_from_path(
     if contract:
         contract_findings = validate_recipe_cards(recipe, contract)
 
-    valid = compute_recipe_validity(errors, semantic_findings, contract_findings)
+    valid = compute_recipe_validity(
+        errors, semantic_findings, contract_findings, binding_projection=ctx.binding_projection
+    )
 
     return {
         "valid": valid,

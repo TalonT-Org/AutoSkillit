@@ -307,10 +307,10 @@ def build_recipe_execution_snapshot(
         ):
             dynamic_skill_step_names.add(step_name)
             continue
-        if not invocation.attested:
-            continue
-        if invocation.skill_name is None:
-            raise AssertionError("attested invocation is missing its skill identity")
+        if not invocation.attested or invocation.skill_name is None:
+            raise AssertionError(
+                f"uninstallable run_skill step {step_name!r}: {invocation.failures}"
+            )
         skill_identity = compute_skill_contract_identity(invocation.skill_name)
         digest = compute_invocation_template_digest(
             execution_id=active_execution_id,

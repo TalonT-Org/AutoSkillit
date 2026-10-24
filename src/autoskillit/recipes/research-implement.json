@@ -394,6 +394,7 @@
       "tool": "run_cmd",
       "with": {
         "cmd": "git worktree remove --force \"${{ context.worktree_path }}\"",
+        "cwd": "${{ inputs.source_dir }}",
         "step_name": "cleanup_phase_worktree"
       },
       "on_success": "plan_phase",
@@ -615,6 +616,7 @@
       "tool": "run_cmd",
       "with": {
         "cmd": "git worktree remove --force \"${{ context.worktree_path }}\"",
+        "cwd": "${{ inputs.source_dir }}",
         "step_name": "pre_remediation_cleanup"
       },
       "on_success": "plan_phase",

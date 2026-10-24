@@ -82,7 +82,8 @@
       "task": "Analyze issue dependencies and compute distribution plan",
       "ingredients": {
         "issue_urls": "${{ campaign.issue_urls }}",
-        "base_branch": "${{ inputs.batch_branch }}"
+        "base_branch": "${{ inputs.batch_branch }}",
+        "source_dir": "${{ inputs.source_dir }}"
       },
       "capture": {
         "execution_map": "${{ result.execution_map }}"

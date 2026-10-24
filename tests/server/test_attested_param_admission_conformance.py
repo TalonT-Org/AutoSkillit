@@ -248,11 +248,19 @@ async def test_model_delivered_from_recipe_step_without_caller_forwarding(
     work_dir.mkdir()
     _write_tracker_for(ready)
 
+    samples = {
+        **ORCHESTRATOR_SAMPLES,
+        "context": {
+            **ORCHESTRATOR_SAMPLES["context"],
+            "planner_dir": ".autoskillit/temp/planner/run-test",
+        },
+    }
     payload = build_run_skill_payload(
         ready.step_name,
         ready.step_body,
         ready.credential,
         cwd=str(work_dir),
+        samples=samples,
     )
     installed = get_recipe_execution(ready.tool_ctx)
     assert installed is not None
@@ -270,5 +278,5 @@ async def test_model_delivered_from_recipe_step_without_caller_forwarding(
     result = json.loads(await run_skill(**payload))
 
     assert result.get("stage") != "preflight:recipe_execution", result
-    assert len(executor.calls) == 1
+    assert len(executor.calls) == 1, result
     assert executor.calls[0].model == "opus[1m]"

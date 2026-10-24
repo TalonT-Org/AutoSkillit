@@ -159,6 +159,8 @@ def test_compiled_mcp_kwargs_are_exactly_the_kwarg_view() -> None:
         )
         for param in tool_def.params
     }
+    with_args["dispatch_items"] = "${{ context.plan_paths }}"
+    with_args["skill_inputs"] = {"plan_path": "{plan_path}"}
     step = RecipeStep(name="verify", tool="run_skill", with_args=with_args)
 
     invocation = bind_step_invocation(

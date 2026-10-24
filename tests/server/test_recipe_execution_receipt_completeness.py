@@ -21,6 +21,7 @@ from autoskillit.server.recipe._recipe_execution import (
     get_recipe_execution,
 )
 from tests._run_skill_caller_oracle import (
+    _SINGLE_BRACE_TOKEN,
     ORCHESTRATOR_SAMPLES,
     build_run_skill_payload,
     literal_run_skill_payload,
@@ -220,7 +221,8 @@ async def test_following_the_recovery_yields_an_admitted_digest(
         receipt = json.loads(await complete_recipe_initialization(initialization_id=recovery_id))
         assert receipt["success"] is True, receipt
         credential = receipt["recipe_execution"]
-        with_value = ready.step_body.get("with", {})
+        current_step = ready.tool_ctx.active_recipe_steps[step_name]
+        with_value = current_step.declared_with_args or current_step.with_args
         planner_dispatch = (
             ready.tool_ctx.recipe_initialization_state.recipe_name == "planner"
             and isinstance(with_value, dict)
@@ -229,7 +231,7 @@ async def test_following_the_recovery_yields_an_admitted_digest(
         if planner_dispatch:
             payload = build_run_skill_payload(
                 step_name,
-                ready.step_body,
+                {"with": with_value},
                 credential,
                 cwd=str(git_checkout),
             )
@@ -274,7 +276,11 @@ async def test_following_the_recovery_yields_an_admitted_digest(
         )
         assert admitted_template is expected_template
         if planner_dispatch:
-            assert ORCHESTRATOR_SAMPLES["item"]["phase_id"] in dict(bound_inputs).values()
+            item = _SINGLE_BRACE_TOKEN.search(with_value["skill_command"])
+            assert item is not None
+            assert (
+                ORCHESTRATOR_SAMPLES["item"][item.group(1).strip()] in dict(bound_inputs).values()
+            )
         else:
             assert dict(bound_inputs) == skill_inputs
 

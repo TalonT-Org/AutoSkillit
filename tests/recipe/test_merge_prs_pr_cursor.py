@@ -33,13 +33,13 @@ def test_cursor_steps_have_defined_inputs_and_single_writer(recipe) -> None:
     cursor_fields = {"current_pr_number", "current_pr_complexity"}
     cursor_steps = {
         "get_first_pr_number": "autoskillit.recipe._cmd_rpc.first_ordered_pr",
-        "advance_queue_pr": "autoskillit.recipe._cmd_rpc.next_ordered_pr",
         "advance_merge_pr": "autoskillit.recipe._cmd_rpc.next_ordered_pr",
     }
 
     must_defined = make_validation_context(recipe).must_defined_context
-    for step_name in ("advance_queue_pr", "advance_merge_pr"):
-        assert {"current_pr_number", "pr_order_file"} <= must_defined.get(step_name, frozenset())
+    assert {"current_pr_number", "pr_order_file"} <= must_defined.get(
+        "advance_merge_pr", frozenset()
+    )
 
     writers = {
         name
@@ -71,7 +71,6 @@ def test_pr_order_file_has_declared_recipe_consumers(recipe) -> None:
     }
     assert consumers == {
         "get_first_pr_number",
-        "advance_queue_pr",
         "advance_merge_pr",
         "open_integration_pr",
     }
@@ -111,5 +110,6 @@ def test_cursor_routes_preserve_plan_iteration_and_pr_advancement(recipe) -> Non
             "collect_and_check_impl_plans",
         ),
         ("${{ result.done }} == true", "push_batch_branch"),
+        ("${{ context.queue_mode }} == true", "get_next_pr_branch"),
         (None, "check_pr_merge_loop"),
     ]

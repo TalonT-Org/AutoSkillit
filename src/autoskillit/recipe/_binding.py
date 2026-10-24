@@ -26,6 +26,7 @@ from autoskillit.core import (
 )
 from autoskillit.recipe._binding_input import (
     _AUTOSKILLIT_TEMPLATE_RE,
+    _apply_dispatch_fanout,
     _bound_value,
     _failure,
     _inline_skill_inputs,
@@ -513,7 +514,7 @@ def bind_step_invocation(
             tuple(failures),
         )
 
-    return _bind_run_skill_invocation(
+    invocation = _bind_run_skill_invocation(
         step_name,
         step,
         tool_name=tool_name,
@@ -526,6 +527,7 @@ def bind_step_invocation(
         hidden_inputs=hidden_inputs,
         ingredient_values=ingredient_values,
     )
+    return _apply_dispatch_fanout(invocation, declared_with)
 
 
 def bind_recipe(

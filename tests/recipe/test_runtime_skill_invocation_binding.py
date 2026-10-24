@@ -229,7 +229,10 @@ def test_runtime_binding_admits_explicit_advertised_default_without_auto_fill() 
 
 
 def test_non_handler_param_is_authorable_but_not_a_compiled_mcp_kwarg() -> None:
-    template = _template(dispatch_items="P1,P2")
+    template = _template(
+        dispatch_items="${{ context.plan_paths }}",
+        skill_inputs={"plan_path": "{plan_path}"},
+    )
 
     assert "dispatch_items" not in {value.name for value in template.invocation.mcp_kwargs}
     assert _bind(template) == (("plan_path", "/tmp/plan.md"),)

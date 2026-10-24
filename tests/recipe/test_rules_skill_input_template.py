@@ -2,8 +2,8 @@
 
 Composite values such as ``PR-{pr_number}`` and exotic forms such as ``{0}``,
 ``{x!r}``, ``${x}``, and ``<x>`` remain outside the rule's scope. The
-``dispatch_items`` exemption preserves inline arguments for per-item fan-out;
-revisit that exemption with #5307.
+``dispatch_items`` exemption applies only to the per-item slot of an accepted
+``dispatch_items`` fan-out (origin ``DISPATCH_ITEM``).
 """
 
 from __future__ import annotations
@@ -12,7 +12,9 @@ from typing import Any
 
 import pytest
 
+from autoskillit.core import BindingFailureCode
 from autoskillit.core.types import Severity
+from autoskillit.recipe._binding import bind_recipe
 from autoskillit.recipe.registry import (
     RuleFinding,
     compute_recipe_validity,
@@ -45,6 +47,117 @@ def _assert_error_names_input(findings: list[RuleFinding], input_name: str) -> N
     assert len(findings) == 1
     assert findings[0].severity == Severity.ERROR
     assert input_name in findings[0].message
+
+
+def _planner_dispatch_with(
+    item_argument: str, *, dispatch_items: str = "${{ context.phase_ids }}"
+) -> dict[str, Any]:
+    return {
+        "skill_command": (
+            f"/autoskillit:planner-elaborate-phase /tmp/plan.json {item_argument} /tmp/phases"
+        ),
+        "dispatch_items": dispatch_items,
+    }
+
+
+@pytest.mark.parametrize(
+    "item_argument",
+    [
+        pytest.param("{phase_id}", id="named-placeholder"),
+        pytest.param('"{ phase_id }"', id="quoted-inline-argument"),
+        pytest.param("{phase-id}", id="hyphenated-placeholder"),
+        pytest.param("{phase.id}", id="dotted-placeholder"),
+    ],
+)
+def test_dispatch_items_without_producer_reports_placeholder(item_argument: str) -> None:
+    findings = _skill_input_template_findings(
+        _planner_dispatch_with(item_argument, dispatch_items="P1,P2"),
+        step_name="elaborate_phases",
+    )
+
+    _assert_error_names_input(findings, "target_phase_id")
+
+
+def test_dispatch_step_with_two_placeholder_names_reports_them() -> None:
+    findings = _skill_input_template_findings(
+        {
+            "skill_command": "/autoskillit:planner-elaborate-phase",
+            "skill_inputs": {
+                "plan_snapshot_path": "/tmp/plan.json",
+                "target_phase_id": "{phase_id}",
+                "output_dir": "{other}",
+            },
+            "dispatch_items": "P1,P2",
+        },
+        step_name="elaborate_phases",
+    )
+
+    assert len(findings) == 2
+    assert all(finding.severity == Severity.ERROR for finding in findings)
+    assert any("target_phase_id" in finding.message for finding in findings)
+    assert any("output_dir" in finding.message for finding in findings)
+
+
+@pytest.mark.parametrize(
+    "item_argument",
+    [
+        pytest.param("prefix{phase_id}", id="embedded-placeholder"),
+        pytest.param("{phase_id", id="unterminated-placeholder"),
+        pytest.param("{phase_id} {phase_id}", id="duplicate-slot"),
+    ],
+)
+def test_invalid_dispatch_shape_reports_binding_error(item_argument: str) -> None:
+    recipe = _make_workflow(
+        {
+            "elaborate_phases": {
+                "tool": "run_skill",
+                "with": _planner_dispatch_with(item_argument),
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done"},
+        }
+    )
+    invocation = bind_recipe(recipe).for_step("elaborate_phases")
+    assert invocation is not None
+    failure = next(
+        failure
+        for failure in invocation.failures
+        if failure.code is BindingFailureCode.INVALID_DISPATCH_ITEMS
+    )
+    assert failure.name == "dispatch_items"
+
+    findings = run_semantic_rules(recipe)
+    assert any(
+        finding.rule == "invalid-skill-invocation-binding"
+        and finding.severity == Severity.ERROR
+        and "dispatch_items" in finding.message
+        for finding in findings
+    )
+
+
+def test_well_formed_dispatch_slot_is_not_reported() -> None:
+    with_args = _planner_dispatch_with("{phase_id}")
+    recipe = _make_workflow(
+        {
+            "elaborate_phases": {
+                "tool": "run_skill",
+                "with": with_args,
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done"},
+        }
+    )
+    invocation = bind_recipe(recipe).for_step("elaborate_phases")
+    assert invocation is not None
+    assert not any(
+        failure.code is BindingFailureCode.INVALID_DISPATCH_ITEMS
+        for failure in invocation.failures
+    )
+    assert not any(
+        finding.rule == "invalid-skill-invocation-binding" and "dispatch_items" in finding.message
+        for finding in run_semantic_rules(recipe)
+    )
+    assert _skill_input_template_findings(with_args, step_name="elaborate_phases") == []
 
 
 @pytest.mark.parametrize(

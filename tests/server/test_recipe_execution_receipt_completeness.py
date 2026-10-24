@@ -21,6 +21,8 @@ from autoskillit.server.recipe._recipe_execution import (
     get_recipe_execution,
 )
 from tests._run_skill_caller_oracle import (
+    ORCHESTRATOR_SAMPLES,
+    build_run_skill_payload,
     literal_run_skill_payload,
     run_skill_actual_mcp_kwargs,
 )
@@ -218,32 +220,49 @@ async def test_following_the_recovery_yields_an_admitted_digest(
         receipt = json.loads(await complete_recipe_initialization(initialization_id=recovery_id))
         assert receipt["success"] is True, receipt
         credential = receipt["recipe_execution"]
-        payload = literal_run_skill_payload(
-            step_name,
-            {"with": ready.tool_ctx.active_recipe_steps[step_name].with_args},
-            credential,
-            cwd=str(git_checkout),
+        with_value = ready.step_body.get("with", {})
+        planner_dispatch = (
+            ready.tool_ctx.recipe_initialization_state.recipe_name == "planner"
+            and isinstance(with_value, dict)
+            and "dispatch_items" in with_value
         )
-        payload["skill_command"] = _skill_command(ready.tool_ctx, step_name)
+        if planner_dispatch:
+            payload = build_run_skill_payload(
+                step_name,
+                ready.step_body,
+                credential,
+                cwd=str(git_checkout),
+            )
+        else:
+            payload = literal_run_skill_payload(
+                step_name,
+                {"with": ready.tool_ctx.active_recipe_steps[step_name].with_args},
+                credential,
+                cwd=str(git_checkout),
+            )
+            payload["skill_command"] = _skill_command(ready.tool_ctx, step_name)
         assert payload["step_name"] == step_name
         expected_template = installed.snapshot.templates[step_name]
-        invocation = expected_template.invocation
-        contract = get_skill_contract(invocation.skill_name, load_bundled_manifest())
-        assert contract is not None
-        input_defs = {input_def.name: input_def for input_def in contract.inputs}
-        skill_inputs = {}
-        for value in invocation.skill_inputs:
-            if not value.is_present:
-                continue
-            actual = value.effective_value
-            if not input_defs[value.name].accepts(actual):
-                assert value.context_dependencies or value.input_dependencies
-                actual = next(
-                    sample
-                    for sample in ("fixture", 1, False)
-                    if input_defs[value.name].accepts(sample)
-                )
-            skill_inputs[value.name] = actual
+        if planner_dispatch:
+            skill_inputs = payload.get("skill_inputs")
+        else:
+            invocation = expected_template.invocation
+            contract = get_skill_contract(invocation.skill_name, load_bundled_manifest())
+            assert contract is not None
+            input_defs = {input_def.name: input_def for input_def in contract.inputs}
+            skill_inputs = {}
+            for value in invocation.skill_inputs:
+                if not value.is_present:
+                    continue
+                actual = value.effective_value
+                if not input_defs[value.name].accepts(actual):
+                    assert value.context_dependencies or value.input_dependencies
+                    actual = next(
+                        sample
+                        for sample in ("fixture", 1, False)
+                        if input_defs[value.name].accepts(sample)
+                    )
+                skill_inputs[value.name] = actual
         bound_inputs, admitted_template = bind_attested_runtime_invocation(
             installed,
             execution_id=credential["execution_id"],
@@ -254,7 +273,10 @@ async def test_following_the_recovery_yields_an_admitted_digest(
             actual_mcp_kwargs=run_skill_actual_mcp_kwargs(payload),
         )
         assert admitted_template is expected_template
-        assert dict(bound_inputs) == skill_inputs
+        if planner_dispatch:
+            assert ORCHESTRATOR_SAMPLES["item"]["phase_id"] in dict(bound_inputs).values()
+        else:
+            assert dict(bound_inputs) == skill_inputs
 
 
 @pytest.mark.parametrize("tool_ctx_ready_recipe", _RECIPE_FIXTURE_PARAMETERS, indirect=True)

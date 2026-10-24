@@ -31,6 +31,7 @@ from autoskillit.core import (
     BindingFailure,
     BindingFailureCode,
     BoundScalar,
+    BoundStepInvocation,
     BoundValue,
     BoundValueOrigin,
     BoundValueState,
@@ -49,6 +50,9 @@ from autoskillit.recipe.contracts._contracts_types import (
 _AUTOSKILLIT_TEMPLATE_RE: Final = re.compile(r"\{\{(AUTOSKILLIT_[A-Z0-9_]+)\}\}")
 _EXACT_CONTEXT_REF_RE: Final = re.compile(r"^\$\{\{\s*context\.([A-Za-z_]\w*)\s*\}\}$")
 _EXACT_INPUT_REF_RE: Final = re.compile(r"^\$\{\{\s*inputs\.([A-Za-z_]\w*)\s*\}\}$")
+_DISPATCH_TOKEN_RE: Final = re.compile(
+    r"(?<![{$])\{\s*((?!AUTOSKILLIT_)[A-Za-z_][\w.-]*)\s*\}(?!\})"
+)
 
 # === Scalar tuple constant ===
 
@@ -120,6 +124,131 @@ def _failure(
     message: str,
 ) -> BindingFailure:
     return BindingFailure(code=code, step_name=step_name, name=name, message=message)
+
+
+def _dispatch_producer(value: object) -> tuple[str, str] | None:
+    if isinstance(value, str):
+        for namespace, pattern in (
+            ("context", _EXACT_CONTEXT_REF_RE),
+            ("inputs", _EXACT_INPUT_REF_RE),
+        ):
+            if match := pattern.fullmatch(value.strip()):
+                return namespace, match.group(1)
+    return None
+
+
+def _dispatch_item_slot(values: tuple[BoundValue, ...]) -> tuple[BoundValue, str] | None:
+    occurrences = [
+        (value, match.group(1))
+        for value in values
+        if value.is_present and isinstance(value.declared_value, str)
+        for match in _DISPATCH_TOKEN_RE.finditer(value.declared_value)
+    ]
+    if len(occurrences) != 1:
+        return None
+    value, name = occurrences[0]
+    if not _DISPATCH_TOKEN_RE.fullmatch(str(value.declared_value).strip()):
+        return None
+    return value, name
+
+
+def _dispatch_occurrence_error(
+    invocation: BoundStepInvocation, name: str, *, inline: bool
+) -> str | None:
+    for value in invocation.mcp_kwargs:
+        if not value.is_present or not isinstance(value.declared_value, str):
+            continue
+        count = sum(
+            match.group(1) == name for match in _DISPATCH_TOKEN_RE.finditer(value.declared_value)
+        )
+        expected = int(inline and value.name == "skill_command")
+        if count != expected:
+            return (
+                f"dispatch_items placeholder {name!r} in MCP argument {value.name!r} "
+                f"must occur exactly {expected} time(s); only its inline command may repeat it"
+            )
+    return None
+
+
+def _invalid_dispatch_items(invocation: BoundStepInvocation, message: str) -> BoundStepInvocation:
+    return replace(
+        invocation,
+        failures=invocation.failures
+        + (
+            _failure(
+                BindingFailureCode.INVALID_DISPATCH_ITEMS,
+                invocation.step_name,
+                "dispatch_items",
+                message,
+            ),
+        ),
+    )
+
+
+def _dispatch_dependency(
+    value: BoundValue, namespace: str, name: str, origin: BoundValueOrigin
+) -> BoundValue:
+    context_dependencies = value.context_dependencies
+    input_dependencies = value.input_dependencies
+    if namespace == "context":
+        context_dependencies = tuple(dict.fromkeys((*context_dependencies, name)))
+    else:
+        input_dependencies = tuple(dict.fromkeys((*input_dependencies, name)))
+    return replace(
+        value,
+        origin=origin,
+        context_dependencies=context_dependencies,
+        input_dependencies=input_dependencies,
+    )
+
+
+def _apply_dispatch_fanout(
+    invocation: BoundStepInvocation, declared_with: Mapping[str, object]
+) -> BoundStepInvocation:
+    if "dispatch_items" not in declared_with:
+        return invocation
+    producer = _dispatch_producer(declared_with["dispatch_items"])
+    if producer is None:
+        return _invalid_dispatch_items(
+            invocation,
+            f"dispatch_items producer {declared_with['dispatch_items']!r} must be one exact "
+            "${{ context.<list> }} or ${{ inputs.<list> }} reference",
+        )
+    slot = _dispatch_item_slot(invocation.skill_inputs)
+    if slot is None:
+        names = ", ".join(value.name for value in invocation.skill_inputs)
+        return _invalid_dispatch_items(
+            invocation,
+            "dispatch_items requires exactly one whole-value {placeholder} occurrence "
+            f"in one skill input ({names}); missing, repeated or embedded item tokens are invalid",
+        )
+    candidate, name = slot
+    inline = declared_with.get("skill_inputs") is None
+    if error := _dispatch_occurrence_error(invocation, name, inline=inline):
+        return _invalid_dispatch_items(invocation, error)
+    namespace, producer_name = producer
+    return replace(
+        invocation,
+        skill_inputs=tuple(
+            _dispatch_dependency(value, namespace, producer_name, BoundValueOrigin.DISPATCH_ITEM)
+            if value is candidate
+            else value
+            for value in invocation.skill_inputs
+        ),
+        mcp_kwargs=tuple(
+            _dispatch_dependency(
+                value,
+                namespace,
+                producer_name,
+                BoundValueOrigin.TEMPLATE
+                if value.origin is BoundValueOrigin.LITERAL
+                else value.origin,
+            )
+            if inline and value.name == "skill_command"
+            else value
+            for value in invocation.mcp_kwargs
+        ),
+    )
 
 
 # === Skill-input type validation ===

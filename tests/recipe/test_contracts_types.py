@@ -6,6 +6,8 @@ callable verdict routing rules depend on (recipe-routing-deadlock immunity, #388
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from autoskillit.core import BoundValue, BoundValueOrigin, BoundValueState
@@ -161,6 +163,35 @@ def test_skill_input_admits_only_declared_type_wire_values(
         assert admitted is None
     else:
         assert admitted == expected
+
+
+@pytest.mark.parametrize(
+    ("dependency_field", "producer"),
+    [
+        pytest.param("context_dependencies", "context.phase_ids", id="context-producer"),
+        pytest.param("input_dependencies", "inputs.phase_ids", id="input-producer"),
+    ],
+)
+def test_dispatch_item_rejects_its_own_placeholder(dependency_field: str, producer: str) -> None:
+    skill_input = SkillInput(name="target_phase_id", type="str", required=True)
+    bound = replace(
+        _bound_value(
+            "target_phase_id",
+            BoundValueOrigin.LITERAL,
+            declared_value="{phase_id}",
+        ),
+        origin=BoundValueOrigin.DISPATCH_ITEM,
+        **{dependency_field: ("phase_ids",)},
+    )
+
+    assert skill_input.admit_runtime_wire("{phase_id}", bound) is None
+    assert skill_input.admit_runtime_wire(" {phase_id} ", bound) is None
+    assert skill_input.admit_runtime_wire("P1", bound) == "P1"
+
+    message = skill_input.wire_mismatch_message("{phase_id}", bound)
+    assert "target_phase_id" in message
+    assert "unsubstituted placeholder" in message
+    assert producer in message
 
 
 @pytest.mark.parametrize(

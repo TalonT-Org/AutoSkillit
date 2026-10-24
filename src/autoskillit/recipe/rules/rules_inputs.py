@@ -34,7 +34,7 @@ from autoskillit.recipe.schema import Recipe
 logger = get_logger(__name__)
 
 
-_WHOLE_VALUE_PLACEHOLDER_RE = re.compile(r"\{\{?\s*(?!AUTOSKILLIT_)[A-Za-z_]\w*\s*\}\}?")
+_WHOLE_VALUE_PLACEHOLDER_RE = re.compile(r"\{\{?\s*(?!AUTOSKILLIT_)[A-Za-z_][\w.-]*\s*\}\}?")
 
 
 def _unresolved_template_reason(bound: BoundValue, *, per_item: bool) -> str | None:
@@ -71,13 +71,14 @@ def _check_unresolved_skill_input_template(ctx: ValidationContext) -> list[RuleF
         invocation = ctx.binding_projection.for_step(step_name)
         if invocation is None or invocation.skill_name is None:
             continue
-        per_item = "dispatch_items" in (step.declared_with_args or {})
         for bound in invocation.skill_inputs:
             if bound.state is not BoundValueState.PRESENT or not isinstance(
                 bound.declared_value, str
             ):
                 continue
-            reason = _unresolved_template_reason(bound, per_item=per_item)
+            reason = _unresolved_template_reason(
+                bound, per_item=bound.origin is BoundValueOrigin.DISPATCH_ITEM
+            )
             if reason is not None:
                 findings.append(
                     make_finding(
@@ -87,7 +88,9 @@ def _check_unresolved_skill_input_template(ctx: ValidationContext) -> list[RuleF
                             f"Skill input '{bound.name}' declares {bound.declared_value!r}: "
                             f"{reason}. "
                             "Bind ${{ context.<var> }} from a recipe-level producer step, "
-                            "or ${{ inputs.<name> }}."
+                            "or ${{ inputs.<name> }}. For a per-item fan-out, declare "
+                            "dispatch_items: ${{ context.<list> }} and use exactly one "
+                            "{placeholder}."
                         ),
                     )
                 )
@@ -178,6 +181,7 @@ def _check_invalid_skill_invocation_binding(
         BindingFailureCode.AMBIGUOUS_SKILL_INPUT,
         BindingFailureCode.INVALID_SKILL_INPUT_TYPE,
         BindingFailureCode.INVALID_SKILL_COMMAND,
+        BindingFailureCode.INVALID_DISPATCH_ITEMS,
     }
     for step_name, step in ctx.recipe.steps.items():
         if step.tool not in SKILL_TOOLS:

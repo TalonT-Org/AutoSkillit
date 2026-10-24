@@ -5,6 +5,7 @@ Dynamic skill commands require runtime resolution and are explicitly skipped.
 
 from __future__ import annotations
 
+import re
 from functools import cache
 from pathlib import Path
 from types import SimpleNamespace
@@ -26,6 +27,8 @@ from autoskillit.server.recipe._recipe_execution import (
     build_recipe_execution_snapshot,
 )
 from tests._run_skill_caller_oracle import (
+    _SINGLE_BRACE_TOKEN,
+    ORCHESTRATOR_SAMPLES,
     AdmissionDefect,
     build_run_skill_payload,
     run_skill_actual_mcp_kwargs,
@@ -36,66 +39,6 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _PINNED: dict[tuple[str, str], Any] = {
-    ("planner", "elaborate_phases"): pytest.param(
-        "planner",
-        "elaborate_phases",
-        "recipe_execution_static_input_mismatch",
-        "static skill input 'target_phase_id'",
-        id="planner-elaborate_phases",
-        marks=pytest.mark.xfail(
-            strict=True,
-            raises=AdmissionDefect,
-            reason="Blocked by #5307: planner item placeholders compile as static inputs",
-        ),
-    ),
-    ("planner", "elaborate_assignments"): pytest.param(
-        "planner",
-        "elaborate_assignments",
-        "recipe_execution_static_input_mismatch",
-        "static skill input 'context_file'",
-        id="planner-elaborate_assignments",
-        marks=pytest.mark.xfail(
-            strict=True,
-            raises=AdmissionDefect,
-            reason="Blocked by #5307: planner item placeholders compile as static inputs",
-        ),
-    ),
-    ("planner", "refine_assignments"): pytest.param(
-        "planner",
-        "refine_assignments",
-        "recipe_execution_static_input_mismatch",
-        "static skill input 'context_file'",
-        id="planner-refine_assignments",
-        marks=pytest.mark.xfail(
-            strict=True,
-            raises=AdmissionDefect,
-            reason="Blocked by #5307: planner item placeholders compile as static inputs",
-        ),
-    ),
-    ("planner", "elaborate_wps"): pytest.param(
-        "planner",
-        "elaborate_wps",
-        "recipe_execution_static_input_mismatch",
-        "static skill input 'context_file'",
-        id="planner-elaborate_wps",
-        marks=pytest.mark.xfail(
-            strict=True,
-            raises=AdmissionDefect,
-            reason="Blocked by #5307: planner item placeholders compile as static inputs",
-        ),
-    ),
-    ("planner", "refine_wps"): pytest.param(
-        "planner",
-        "refine_wps",
-        "recipe_execution_static_input_mismatch",
-        "static skill input 'context_file'",
-        id="planner-refine_wps",
-        marks=pytest.mark.xfail(
-            strict=True,
-            raises=AdmissionDefect,
-            reason="Blocked by #5307: planner item placeholders compile as static inputs",
-        ),
-    ),
     ("bem-wrapper", "run_bem"): pytest.param(
         "bem-wrapper",
         "run_bem",
@@ -158,6 +101,46 @@ def _replay_parameters() -> list[Any]:
 
     parameters.extend(pin for key, pin in _PINNED.items() if key not in seen_pins)
     return parameters
+
+
+def _dispatch_step_parameters() -> list[Any]:
+    dispatch_steps: list[tuple[str, str]] = []
+    for info in tracked_recipe_load_result(REPO_ROOT).items:
+        if info.source is not RecipeSource.BUILTIN or info.kind is RecipeKind.CAMPAIGN:
+            continue
+        loaded, _, _, steps = _load_recipe(info.name)
+        post_prune_steps = loaded["post_prune_step_names"]
+        for step_name, step_body in steps.items():
+            with_value = step_body.get("with", {})
+            if (
+                step_name in post_prune_steps
+                and step_body.get("tool") == "run_skill"
+                and isinstance(with_value, dict)
+                and "dispatch_items" in with_value
+            ):
+                dispatch_steps.append((info.name, step_name))
+
+    assert dispatch_steps, "no builtin run_skill dispatch steps were found"
+    assert ("planner", "elaborate_phases") in dispatch_steps
+    return [pytest.param(recipe, step, id=f"{recipe}-{step}") for recipe, step in dispatch_steps]
+
+
+_DISPATCH_STEP_PARAMETERS = _dispatch_step_parameters()
+_DISPATCH_ITEM_INPUTS = {"phase_id": "target_phase_id", "context_path": "context_file"}
+
+
+def _dispatch_item_name(step_body: dict[str, Any]) -> str:
+    with_value = step_body.get("with")
+    if not isinstance(with_value, dict):
+        raise AssertionError("dispatch step must declare a with mapping")
+    names = {
+        match.group(1).strip()
+        for value in with_value.values()
+        for match in _SINGLE_BRACE_TOKEN.finditer(repr(value))
+    }
+    if len(names) != 1:
+        raise AssertionError(f"expected one dispatch item placeholder, found {sorted(names)}")
+    return next(iter(names))
 
 
 def _dynamic_step_outcome(step_name: str) -> NoReturn:
@@ -338,6 +321,62 @@ def test_payload_uses_credential_input_order_and_requires_caller_values(
     skill_inputs = payload["skill_inputs"]
     assert isinstance(skill_inputs, dict)
     assert list(skill_inputs.items()) == [("required", 7), ("optional", "")]
+
+
+@pytest.mark.parametrize(("recipe", "step"), _DISPATCH_STEP_PARAMETERS)
+def test_dispatch_steps_bind_the_orchestrator_item(
+    recipe: str,
+    step: str,
+    tmp_path: Path,
+) -> None:
+    _, installed, credential, steps = _load_recipe(recipe)
+    payload = build_run_skill_payload(step, steps[step], credential, cwd=str(tmp_path))
+
+    bound_inputs, admitted_template = bind_attested_runtime_invocation(
+        installed,
+        execution_id=payload["recipe_execution_id"],
+        step_name=payload["step_name"],
+        template_digest=payload["invocation_template_digest"],
+        skill_command=payload["skill_command"],
+        skill_inputs=payload.get("skill_inputs"),
+        actual_mcp_kwargs=run_skill_actual_mcp_kwargs(payload),
+    )
+
+    assert admitted_template is installed.snapshot.templates[step]
+    item_name = _dispatch_item_name(steps[step])
+    assert ORCHESTRATOR_SAMPLES["item"][item_name] in dict(bound_inputs).values()
+
+
+@pytest.mark.parametrize(("recipe", "step"), _DISPATCH_STEP_PARAMETERS)
+def test_unsubstituted_dispatch_item_is_rejected(
+    recipe: str,
+    step: str,
+    tmp_path: Path,
+) -> None:
+    _, installed, credential, steps = _load_recipe(recipe)
+    payload = build_run_skill_payload(step, steps[step], credential, cwd=str(tmp_path))
+    item_name = _dispatch_item_name(steps[step])
+    sample = str(ORCHESTRATOR_SAMPLES["item"][item_name])
+    command = payload.get("skill_command")
+    assert isinstance(command, str)
+    sample_token = re.compile(rf"(?<!\S){re.escape(sample)}(?!\S)")
+    assert len(list(sample_token.finditer(command))) == 1
+    payload["skill_command"] = sample_token.sub("{" + item_name + "}", command, count=1)
+
+    with pytest.raises(RecipeExecutionAdmissionError) as exc_info:
+        bind_attested_runtime_invocation(
+            installed,
+            execution_id=payload["recipe_execution_id"],
+            step_name=payload["step_name"],
+            template_digest=payload["invocation_template_digest"],
+            skill_command=payload["skill_command"],
+            skill_inputs=payload.get("skill_inputs"),
+            actual_mcp_kwargs=run_skill_actual_mcp_kwargs(payload),
+        )
+
+    assert exc_info.value.code == "recipe_execution_input_type"
+    assert _DISPATCH_ITEM_INPUTS[item_name] in str(exc_info.value)
+    assert "unsubstituted" in str(exc_info.value).lower()
 
 
 @pytest.mark.parametrize(

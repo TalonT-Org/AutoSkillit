@@ -288,6 +288,7 @@ class BoundValueOrigin(StrEnum):
     RECIPE_INPUT = "recipe_input"
     CONTEXT = "context"
     TEMPLATE = "template"
+    DISPATCH_ITEM = "dispatch_item"
     ABSENT = "absent"
 
 
@@ -376,6 +377,7 @@ class BindingFailureCode(StrEnum):
     AMBIGUOUS_SKILL_INPUT = "ambiguous_skill_input"
     INVALID_SKILL_INPUT_TYPE = "invalid_skill_input_type"
     INVALID_SKILL_COMMAND = "invalid_skill_command"
+    INVALID_DISPATCH_ITEMS = "invalid_dispatch_items"
 
 
 @dataclass(frozen=True, slots=True)

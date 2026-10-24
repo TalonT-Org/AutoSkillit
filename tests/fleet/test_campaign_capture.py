@@ -715,6 +715,28 @@ class TestCaptureFieldNameRoundTrip:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("value", ["31", 31])
+def test_extract_integer_capture_accepts_canonical_text_and_native_integer(value):
+    from autoskillit.fleet._capture import _extract_captures
+
+    capture_spec = {"n": CaptureEntrySpec(from_="${{ result.n }}", value_type="integer")}
+
+    assert _extract_captures(capture_spec, {"n": value}) == {"n": "31"}
+
+
+@pytest.mark.parametrize("value", ["031", True])
+def test_extract_integer_capture_rejects_noncanonical_values(value):
+    from autoskillit.core import CaptureValueTypeError
+    from autoskillit.fleet._capture import _extract_captures
+
+    capture_spec = {"n": CaptureEntrySpec(from_="${{ result.n }}", value_type="integer")}
+
+    with pytest.raises(CaptureValueTypeError) as exc_info:
+        _extract_captures(capture_spec, {"n": value})
+    assert exc_info.value.declared_type == "integer"
+    assert exc_info.value.key == "n"
+
+
 def test_extract_path_type_rejects_empty_string():
     """A path-type capture with an empty-string value must raise CaptureValueTypeError."""
     from autoskillit.core import CaptureValueTypeError

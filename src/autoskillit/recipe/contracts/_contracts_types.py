@@ -8,12 +8,14 @@ from enum import StrEnum
 import regex as re
 
 from autoskillit.core import (
+    CANONICAL_INTEGER_DIGITS,
     EXTERNAL_EFFECT_CHOICES,
     VALID_EXTERNAL_EFFECTS,
     BoundScalar,
     BoundValue,
     BoundValueOrigin,
     PreflightKind,
+    is_canonical_integer_text,
 )
 
 _CONTEXT_REF_RE = re.compile(r"\$\{\{\s*context\.([A-Za-z_]\w*)\s*\}\}")
@@ -25,8 +27,6 @@ RESULT_CAPTURE_RE = re.compile(r"\$\{\{\s*result\.([\w-]+)\s*\}\}")
 _TEXT_INPUT_TYPES = frozenset({"str", "string", "optional_string"})
 _PATH_INPUT_TYPES = frozenset({"file_path", "file_path_list", "directory_path"})
 _EXACT_REFERENCE_ORIGINS = frozenset({BoundValueOrigin.CONTEXT, BoundValueOrigin.RECIPE_INPUT})
-_CANONICAL_INTEGER_DIGITS = 19
-_CANONICAL_INTEGER_TEXT = re.compile(rf"0|-?[1-9][0-9]{{0,{_CANONICAL_INTEGER_DIGITS - 1}}}")
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -72,7 +72,7 @@ class SkillInput:
         if bound.origin not in _EXACT_REFERENCE_ORIGINS:
             return None
         if self.type == "integer":
-            if isinstance(value, str) and _CANONICAL_INTEGER_TEXT.fullmatch(value):
+            if isinstance(value, str) and is_canonical_integer_text(value):
                 return int(value)
             return None
         if self.type not in _TEXT_INPUT_TYPES or not isinstance(value, int):
@@ -81,7 +81,7 @@ class SkillInput:
             return None
         if isinstance(value, bool):
             return "true" if value else "false"
-        return str(value) if abs(value) < 10**_CANONICAL_INTEGER_DIGITS else None
+        return str(value) if abs(value) < 10**CANONICAL_INTEGER_DIGITS else None
 
     def wire_mismatch_message(self, value: BoundScalar, bound: BoundValue) -> str:
         message = (
@@ -93,7 +93,7 @@ class SkillInput:
             if bound.origin in _EXACT_REFERENCE_ORIGINS:
                 message += (
                     " or canonical ASCII decimal text"
-                    f" (e.g. '31'; at most {_CANONICAL_INTEGER_DIGITS} digits)"
+                    f" (e.g. '31'; at most {CANONICAL_INTEGER_DIGITS} digits)"
                 )
         elif self.type in _TEXT_INPUT_TYPES:
             message += "; send a JSON string"

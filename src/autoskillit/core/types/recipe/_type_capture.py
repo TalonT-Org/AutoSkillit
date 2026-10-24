@@ -10,15 +10,24 @@ from dataclasses import dataclass
 from typing import Literal, TypeGuard
 
 __all__ = [
+    "CANONICAL_INTEGER_DIGITS",
     "CAPTURE_VALID_VALUE_TYPES",
     "CaptureEntrySpec",
     "CaptureValueType",
     "CaptureValueTypeError",
     "is_capture_value_type",
+    "is_canonical_integer_text",
     "resolve_payload_field",
 ]
 
 _RESULT_REF_RE = re.compile(r"^\$\{\{\s*result\.([\w-]+)\s*\}\}$")
+CANONICAL_INTEGER_DIGITS = 19
+_CANONICAL_INTEGER_TEXT = re.compile(rf"0|-?[1-9][0-9]{{0,{CANONICAL_INTEGER_DIGITS - 1}}}")
+
+
+def is_canonical_integer_text(value: str) -> bool:
+    """Return whether text is an ASCII decimal integer within the wire digit limit."""
+    return _CANONICAL_INTEGER_TEXT.fullmatch(value) is not None
 
 
 def resolve_payload_field(entry: CaptureEntrySpec) -> str | None:

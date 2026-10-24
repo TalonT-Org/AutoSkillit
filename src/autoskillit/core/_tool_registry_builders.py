@@ -200,7 +200,12 @@ def _tool(
                 param,
                 wire_type=declared_wire_types.get(param, ToolWireType.SCALAR),
                 required=param in required_set,
-                role=declared_roles.get(param, ToolParamRole.CHILD_INPUT),
+                role=declared_roles.get(
+                    param,
+                    ToolParamRole.STEP_IDENTITY
+                    if param == "step_name"
+                    else ToolParamRole.CHILD_INPUT,
+                ),
             )
             for param in params
         ),
@@ -301,7 +306,6 @@ def _verify_review_receipt() -> ToolDef:
             "post_state": ToolWireType.STRING,
             "step_name": ToolWireType.STRING,
         },
-        roles={"step_name": ToolParamRole.PROTOCOL},
         recovery_recipe_delivery=True,
     )
 
@@ -315,7 +319,7 @@ _RUN_SKILL_PARAM_ROLES: Mapping[str, ToolParamRole] = MappingProxyType(
         "skill_command": ToolParamRole.CHILD_INPUT,
         "cwd": ToolParamRole.CHILD_INPUT,
         "model": ToolParamRole.EXECUTION_TUNING,
-        "step_name": ToolParamRole.PROTOCOL,
+        "step_name": ToolParamRole.STEP_IDENTITY,
         "recipe_execution_id": ToolParamRole.PROTOCOL,
         "invocation_template_digest": ToolParamRole.PROTOCOL,
         "step_provider": ToolParamRole.EXECUTION_TUNING,

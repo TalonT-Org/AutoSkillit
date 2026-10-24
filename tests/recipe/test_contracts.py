@@ -1075,16 +1075,16 @@ def test_callable_contract_nullable_field() -> None:
 
     manifest = load_bundled_manifest()
     contracts = manifest.get("callable_contracts", {})
-    assert "autoskillit.recipe._cmd_rpc.advance_queue_pr" in contracts, (
-        "advance_queue_pr must be declared in callable_contracts"
+    assert "autoskillit.recipe._cmd_rpc.next_ordered_pr" in contracts, (
+        "next_ordered_pr must be declared in callable_contracts"
     )
-    aq_contract = contracts["autoskillit.recipe._cmd_rpc.advance_queue_pr"]
-    pr_input = next((i for i in aq_contract["inputs"] if i["name"] == "current_pr_number"), None)
+    next_contract = contracts["autoskillit.recipe._cmd_rpc.next_ordered_pr"]
+    pr_input = next((i for i in next_contract["inputs"] if i["name"] == "current_pr_number"), None)
     assert pr_input is not None, "current_pr_number input must be declared"
     assert pr_input.get("nullable") is False, (
         "current_pr_number must be explicitly non-nullable (nullable: false)"
     )
-    parsed = get_callable_contract("autoskillit.recipe._cmd_rpc.advance_queue_pr", manifest)
+    parsed = get_callable_contract("autoskillit.recipe._cmd_rpc.next_ordered_pr", manifest)
     assert parsed is not None
     pr_parsed = next((i for i in parsed.inputs if i.name == "current_pr_number"), None)
     assert pr_parsed is not None

@@ -19,7 +19,7 @@ class TestNullableOptionalContextRefRule:
                 "advance": {
                     "tool": "run_python",
                     "with": {
-                        "callable": "autoskillit.recipe._cmd_rpc.advance_queue_pr",
+                        "callable": "autoskillit.recipe._cmd_rpc.next_ordered_pr",
                         "args": {
                             "current_pr_number": "${{ context.current_pr }}",
                             "pr_order_file": "/some/path",
@@ -43,7 +43,7 @@ class TestNullableOptionalContextRefRule:
                 "advance": {
                     "tool": "run_python",
                     "with": {
-                        "callable": "autoskillit.recipe._cmd_rpc.advance_queue_pr",
+                        "callable": "autoskillit.recipe._cmd_rpc.next_ordered_pr",
                         "args": {
                             "current_pr_number": "${{ context.current_pr }}",
                             "pr_order_file": "/some/path",

@@ -46,6 +46,22 @@ def test_merge_prs_route_by_queue_mode_is_route_action(pmp_recipe) -> None:
     assert step.action == "route"
 
 
+def test_merge_prs_route_by_queue_mode_targets_queue_and_classic_paths(pmp_recipe) -> None:
+    """Queue mode goes through the CI gate; classic mode creates a batch branch."""
+    step = pmp_recipe.steps["route_by_queue_mode"]
+    assert step.on_result is not None
+    queue_route = next(
+        (condition for condition in step.on_result.conditions if condition.when), None
+    )
+    fallback = next(
+        (condition for condition in step.on_result.conditions if condition.when is None), None
+    )
+    assert queue_route is not None
+    assert queue_route.route == "get_current_pr_branch"
+    assert fallback is not None
+    assert fallback.route == "create_batch_branch"
+
+
 def test_merge_prs_enqueue_current_pr_exists(pmp_recipe) -> None:
     """enqueue_current_pr step must exist with tool=enqueue_pr."""
     assert "enqueue_current_pr" in pmp_recipe.steps
@@ -85,10 +101,10 @@ def test_merge_prs_analyze_prs_captures_queue_mode(pmp_recipe) -> None:
     )
 
 
-def test_merge_prs_analyze_prs_routes_to_route_by_queue_mode(pmp_recipe) -> None:
-    """analyze_prs.on_success must route to route_by_queue_mode."""
+def test_merge_prs_analyze_prs_routes_to_get_first_pr_number(pmp_recipe) -> None:
+    """analyze_prs.on_success must route to get_first_pr_number."""
     step = pmp_recipe.steps["analyze_prs"]
-    assert step.on_success == "route_by_queue_mode"
+    assert step.on_success == "get_first_pr_number"
 
 
 # ---------------------------------------------------------------------------
@@ -140,10 +156,16 @@ def test_merge_prs_get_first_pr_number_captures_pr_number(pmp_recipe) -> None:
     assert "current_pr_number" in (step.capture or {})
 
 
-def test_merge_prs_get_first_pr_number_routes_to_enqueue(pmp_recipe) -> None:
-    """get_first_pr_number.on_success must route to get_current_pr_branch (CI gate added)."""
+def test_merge_prs_get_first_pr_number_routes_to_route_by_queue_mode(pmp_recipe) -> None:
+    """The first cursor result routes done runs to success and others by queue mode."""
     step = pmp_recipe.steps["get_first_pr_number"]
-    assert step.on_success == "get_current_pr_branch"
+    assert step.on_result is not None
+    done_routes = [c for c in step.on_result.conditions if c.when and "done" in c.when]
+    assert done_routes
+    assert done_routes[0].route == "register_clone_success"
+    fallback = [c for c in step.on_result.conditions if c.when is None]
+    assert fallback
+    assert fallback[0].route == "route_by_queue_mode"
 
 
 # ---------------------------------------------------------------------------

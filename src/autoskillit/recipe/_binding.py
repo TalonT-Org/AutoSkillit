@@ -174,7 +174,7 @@ def _compile_tool_parameters(
     hidden_inputs: frozenset[str],
     ingredient_values: Mapping[str, BoundScalar] | None,
 ) -> tuple[list[BoundValue], list[BindingFailure]]:
-    """Compile declared tool parameters in canonical registry order."""
+    """Compile declared tool parameters in registry order; return only handler kwargs."""
     failures: list[BindingFailure] = []
     undeclared_effective_params = frozenset(effective_with) - frozenset(declared_with)
     for name in sorted(undeclared_effective_params):
@@ -295,7 +295,7 @@ def _compile_tool_parameters(
                     f"tool parameter {param.name!r} expects {param.wire_type.value!r}",
                 )
             )
-    return mcp_kwargs, failures
+    return [value for value in mcp_kwargs if value.name in tool_def.mcp_kwarg_names], failures
 
 
 def _bind_run_skill_inputs(

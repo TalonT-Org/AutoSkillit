@@ -185,18 +185,6 @@ async def test_step_provider_delivered_from_recipe_step_without_caller_forwardin
     assert resolved_step_providers == ["anthropic"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Blocked by #4775: dispatch_items is filtered out of the runtime "
-        "actual-kwargs assembly (handler_parameter=False) but not out of the "
-        "compile-time mcp_kwargs binding, and _binding.py:1028 demands every "
-        "compiled kwarg be present — so no fan-out step can pass attestation. "
-        "Every bundled recipe step with a literal non-templated model: is a "
-        "dispatch_items fan-out step, so this is the only reachable vehicle. "
-        "Independent of #4707; goes green automatically once #4775 lands."
-    ),
-)
 @pytest.mark.parametrize(
     "tool_ctx_ready_recipe",
     [("planner", "elaborate_phases", _PLANNER_OVERRIDES)],
@@ -216,9 +204,8 @@ async def test_model_delivered_from_recipe_step_without_caller_forwarding(
     engages) would reproduce the exact coverage gap this plan exists to
     close — a green test that is no evidence at all about attestation.
 
-    So it is bridged rather than weakened. See the xfail reason for why it
-    cannot pass today; the assertions below are the real contract and are
-    what will be checked once #4775 is fixed.
+    The assertions below check that the model declared by the recipe reaches
+    the headless executor through the attested admission path.
     """
     from autoskillit.server.tools.tools_execution import run_skill
     from tests.fakes import InMemoryHeadlessExecutor
@@ -233,7 +220,8 @@ async def test_model_delivered_from_recipe_step_without_caller_forwarding(
 
     # elaborate_phases declares no skill_inputs: sub-key — its child inputs come
     # from parsing skill_command's placeholders. Omitting the parameter lets the
-    # runtime binder derive them (_binding.py:965-990) rather than guessing keys.
+    # runtime binder derive them in _normalize_runtime_skill_inputs rather
+    # than guessing keys.
     declared_inputs = with_args.get("skill_inputs")
     optional_inputs = (
         {"skill_inputs": {name: "probe value" for name in declared_inputs}}
@@ -246,7 +234,8 @@ async def test_model_delivered_from_recipe_step_without_caller_forwarding(
             with_args["skill_command"],
             str(work_dir),
             step_name=ready.step_name,
-            output_dir=with_args["output_dir"],
+            # Stands in for context.planner_dir as returned by create_run_dir.
+            output_dir=".autoskillit/temp/planner/run-test",
             recipe_execution_id=ready.credential["execution_id"],
             invocation_template_digest=ready.template_digest,
             **optional_inputs,

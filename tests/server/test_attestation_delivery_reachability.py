@@ -330,20 +330,7 @@ async def test_ready_recipe_load_uses_worker_cache_without_sharing_context(
                 "task_description": "test task",
             },
         ),
-        pytest.param(
-            ("planner", "elaborate_phases", {"task": "test task", "source_dir": "."}),
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason=(
-                    "Blocked by #4775: elaborate_phases declares dispatch_items, "
-                    "which is compiled into mcp_kwargs but filtered out of the "
-                    "runtime actual-kwargs assembly, so the genuine-digest half "
-                    "is denied at preflight:recipe_execution. The fixture itself "
-                    "is sound — only the attested call is unreachable. Independent "
-                    "of #4707; goes green automatically once #4775 lands."
-                ),
-            ),
-        ),
+        ("planner", "elaborate_phases", {"task": "test task", "source_dir": "."}),
     ],
     indirect=True,
 )

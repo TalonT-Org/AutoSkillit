@@ -90,11 +90,11 @@ class ToolInitializationOperation(StrEnum):
 
 
 class ToolParamRole(StrEnum):
-    """The single classification authority for what a tool parameter is for.
+    """The classification authority for what a tool parameter is for.
 
-    The runtime attestation gate's always-admit set, the actual-kwargs
-    assembly, and the server-side ``RecipeStep`` fallback obligation for
-    execution-tuning parameters are all derived from this field. The
+    The runtime gate's always-admit set and ``RecipeStep`` execution-tuning
+    fallback obligations derive from this field; kwarg membership comes
+    from ``ToolDef.mcp_kwarg_names``. The
     per-role runtime-admission *policy* is declared once, alongside this
     enum, in ``RUNTIME_ADMISSION_BY_ROLE`` — see ``runtime_exempt_param_names``
     (core/tool_registry.py) and ``bind_runtime_skill_invocation``
@@ -152,7 +152,11 @@ _assert_admission_policy_total(ToolParamRole, RUNTIME_ADMISSION_BY_ROLE)
 
 @dataclass(frozen=True, slots=True)
 class ToolParamDef:
-    """Static definition of one public MCP handler parameter."""
+    """Static definition of one recipe-authorable tool parameter.
+
+    ``handler_parameter=False`` denotes an orchestrator directive never sent
+    to the handler; ``structured_skill_inputs`` uses the separate child-input channel.
+    """
 
     name: str
     wire_type: ToolWireType = ToolWireType.SCALAR
@@ -254,6 +258,13 @@ class ToolDef:
     @property
     def handler_param_set(self) -> frozenset[str]:
         return frozenset(param.name for param in self.params if param.handler_parameter)
+
+    @property
+    def mcp_kwarg_names(self) -> frozenset[str]:
+        """Sole membership authority for compiled and runtime ``mcp_kwargs``."""
+        return self.handler_param_set - frozenset(
+            param.name for param in self.params if param.structured_skill_inputs
+        )
 
     def param_def(self, name: str) -> ToolParamDef | None:
         return next((param for param in self.params if param.name == name), None)

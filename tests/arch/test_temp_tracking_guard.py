@@ -75,13 +75,12 @@ def clean_git_repo(tmp_path: Path, isolated_git_config: None) -> Path:
 
 @pytest.fixture
 def temporary_git_repo(clean_git_repo: Path) -> Path:
-    repo = clean_git_repo
-    legacy_temp_artifact = repo / ".autoskillit" / "temp" / "legacy.txt"
+    legacy_temp_artifact = clean_git_repo / ".autoskillit" / "temp" / "legacy.txt"
     legacy_temp_artifact.parent.mkdir(parents=True)
     legacy_temp_artifact.write_text("legacy\n", encoding="utf-8")
-    _run_git(repo, "add", ".autoskillit/temp/legacy.txt")
-    _commit(repo, "add legacy temp artifact")
-    return repo
+    _run_git(clean_git_repo, "add", ".autoskillit/temp/legacy.txt")
+    _commit(clean_git_repo, "add legacy temp artifact")
+    return clean_git_repo
 
 
 def _stage_entry(repo: Path, relative: str, kind: Literal["file", "symlink"]) -> None:

@@ -224,7 +224,7 @@ def test_staged_temp_guard_is_independent_of_invocation_cwd(clean_git_repo: Path
     )
 
 
-def test_staged_temp_guard_honors_relative_alternate_index(
+def test_staged_temp_guard_resolves_relative_alternate_index_from_repo_root(
     clean_git_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     sub = clean_git_repo / "sub"
@@ -235,6 +235,14 @@ def test_staged_temp_guard_honors_relative_alternate_index(
     )
     _run_git(clean_git_repo, "reset", "--quiet", "HEAD")
     monkeypatch.setenv("GIT_INDEX_FILE", "alternate-index")
+    # Pre-commit hooks start at the repository root; direct invocations normalize there.
+    staged = subprocess.check_output(
+        ["git", "diff", "--cached", "--name-only"],
+        cwd=clean_git_repo,
+        text=True,
+        timeout=30,
+    )
+    assert staged.splitlines() == [".autoskillit/temp/child.txt"]
 
     _assert_rejected(
         _run_staged_temp_guard(clean_git_repo, cwd=sub), ".autoskillit/temp/child.txt"

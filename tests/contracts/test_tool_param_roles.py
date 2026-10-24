@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from dataclasses import fields as dataclass_fields
 from dataclasses import replace
+from inspect import signature
 
 import pytest
 
@@ -32,7 +33,7 @@ from autoskillit.core import (
 from autoskillit.recipe._binding import bind_step_invocation
 from autoskillit.recipe._contracts_manifest import load_bundled_manifest
 from autoskillit.recipe.schema import RecipeStep
-from autoskillit.server.tools.tools_execution import _build_actual_mcp_kwargs
+from autoskillit.server.tools.tools_execution import _build_actual_mcp_kwargs, run_skill
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
@@ -166,7 +167,9 @@ def test_compiled_mcp_kwargs_are_exactly_the_kwarg_view() -> None:
     )
 
     assert invocation.is_valid, invocation.failures
-    assert {value.name for value in invocation.mcp_kwargs} == tool_def.mcp_kwarg_names
+    expected_names = set(signature(run_skill).parameters) - {"ctx", "skill_inputs"}
+    assert tool_def.mcp_kwarg_names == expected_names
+    assert {value.name for value in invocation.mcp_kwargs} == expected_names
 
 
 def test_run_skill_attestation_params_is_subset_of_protocol_role() -> None:

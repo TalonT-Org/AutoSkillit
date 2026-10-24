@@ -667,11 +667,11 @@ steps:
       '
   advance_queue_pr:
     tool: run_python
-    with: &advance_pr_inputs
+    with:
       callable: autoskillit.recipe._cmd_rpc.next_ordered_pr
       current_pr_number: ${{ context.current_pr_number }}
       pr_order_file: ${{ context.pr_order_file }}
-    capture: &pr_cursor_outputs
+    capture:
       current_pr_number: ${{ result.pr_number }}
       current_pr_complexity: ${{ result.complexity }}
     on_result:
@@ -1262,8 +1262,13 @@ steps:
       otherwise advance_merge_pr determines whether another PR remains.'
   advance_merge_pr:
     tool: run_python
-    with: *advance_pr_inputs
-    capture: *pr_cursor_outputs
+    with:
+      callable: autoskillit.recipe._cmd_rpc.next_ordered_pr
+      current_pr_number: ${{ context.current_pr_number }}
+      pr_order_file: ${{ context.pr_order_file }}
+    capture:
+      current_pr_number: ${{ result.pr_number }}
+      current_pr_complexity: ${{ result.complexity }}
     on_result:
     - when: ${{ context.queue_mode }} == true and ${{ result.done }} == true
       route: collect_and_check_impl_plans

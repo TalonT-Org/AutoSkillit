@@ -142,7 +142,7 @@ def test_staged_temp_guard_matches_tracked_temp_policy(
     [pytest.param("modify", True, id="modify"), pytest.param("delete", False, id="delete")],
 )
 def test_staged_temp_guard_on_committed_temp_root(
-    clean_git_repo: Path, change: str, expect_reject: bool
+    clean_git_repo: Path, change: Literal["modify", "delete"], expect_reject: bool
 ) -> None:
     _stage_entry(clean_git_repo, _TEMP_PATHSPEC, "symlink")
     _commit(clean_git_repo, "commit temp root")

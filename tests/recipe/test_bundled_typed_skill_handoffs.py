@@ -42,10 +42,6 @@ class _HandoffCase(NamedTuple):
     input_name: str
 
 
-def _has_runtime_dependencies(value: Any) -> bool:
-    return bool(value.context_dependencies or value.input_dependencies)
-
-
 def _mcp_value(invocation: Any, name: str) -> Any:
     matches = [value for value in invocation.mcp_kwargs if value.name == name]
     assert len(matches) == 1, f"expected one compiled MCP kwarg named {name!r}"
@@ -92,7 +88,7 @@ def _present_dynamic_context_integer_inputs(
         for value in invocation.skill_inputs
         if value.state is BoundValueState.PRESENT
         and value.origin is BoundValueOrigin.CONTEXT
-        and _has_runtime_dependencies(value)
+        and value.is_dynamic
         and input_defs[value.name].type == "integer"
     ]
 
@@ -145,7 +141,7 @@ def _runtime_skill_inputs(
             continue
         if value.name in overrides:
             actual = overrides[value.name]
-        elif _has_runtime_dependencies(value):
+        elif value.is_dynamic:
             actual = (
                 value.absence_value
                 if value.absence_value is not None
@@ -163,9 +159,7 @@ def _actual_mcp_kwargs(case: _HandoffCase) -> dict[str, Any]:
     for value in invocation.mcp_kwargs:
         if value.state is not BoundValueState.PRESENT:
             continue
-        actual_mcp_kwargs[value.name] = (
-            "fixture" if _has_runtime_dependencies(value) else value.effective_value
-        )
+        actual_mcp_kwargs[value.name] = "fixture" if value.is_dynamic else value.effective_value
     step_name = _mcp_value(invocation, "step_name")
     assert isinstance(step_name, str)
     actual_mcp_kwargs["step_name"] = step_name

@@ -294,12 +294,12 @@ async def test_attested_review_binds_producer_text_pr_number(tool_ctx_ready_reci
         if not value.is_present:
             continue
         if value.name == "pr_number":
-            assert value.context_dependencies or value.input_dependencies
+            assert value.is_dynamic
             actual = "31"
         else:
             actual = value.effective_value
             if not input_defs[value.name].accepts(actual):
-                assert value.context_dependencies or value.input_dependencies
+                assert value.is_dynamic
                 actual = next(
                     sample
                     for sample in ("fixture", 1, False)

@@ -241,11 +241,24 @@ def test_staged_temp_guard_honors_relative_alternate_index(
     )
 
 
-def test_staged_temp_guard_rejects_root_symlink_in_real_commit(clean_git_repo: Path) -> None:
+@pytest.mark.parametrize(
+    ("path", "kind"),
+    [
+        pytest.param(_TEMP_PATHSPEC, "symlink", id="root-symlink"),
+        pytest.param(f"{_TEMP_PATHSPEC}/child.txt", "file", id="child-file"),
+    ],
+)
+def test_staged_temp_guard_rejects_temp_in_real_commit(
+    clean_git_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    path: str,
+    kind: Literal["file", "symlink"],
+) -> None:
     sub = clean_git_repo / "sub"
     sub.mkdir()
-    _stage_entry(clean_git_repo, _TEMP_PATHSPEC, "symlink")
+    _stage_entry(clean_git_repo, path, kind)
     (clean_git_repo / ".git" / "hooks" / "pre-commit").symlink_to(_STAGED_TEMP_GUARD)
+    monkeypatch.setenv("GIT_LITERAL_PATHSPECS", "1")
     head_before = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=clean_git_repo, timeout=30
     )
@@ -261,7 +274,7 @@ def test_staged_temp_guard_rejects_root_symlink_in_real_commit(clean_git_repo: P
             "commit",
             "--quiet",
             "-m",
-            "reject temp root",
+            "reject temp artifact",
         ],
         cwd=sub,
         capture_output=True,
@@ -270,7 +283,7 @@ def test_staged_temp_guard_rejects_root_symlink_in_real_commit(clean_git_repo: P
         timeout=30,
     )
     assert result.returncode != 0
-    assert f"Refusing to stage AutoSkillit temp artifact: {_TEMP_PATHSPEC}\n" in result.stderr
+    assert f"Refusing to stage AutoSkillit temp artifact: {path}\n" in result.stderr
     assert (
         subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=clean_git_repo, timeout=30)
         == head_before

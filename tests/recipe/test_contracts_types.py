@@ -100,8 +100,8 @@ _WIRE_CASES = [
     ("string", BoundValueOrigin.CONTEXT, "label", None, "", 1, "1"),
     ("string", BoundValueOrigin.CONTEXT, "label", None, "", True, "true"),
     ("string", BoundValueOrigin.CONTEXT, "label", None, "", "", ""),
-    ("string", BoundValueOrigin.CONTEXT, "label", None, "", False, None),
-    ("string", BoundValueOrigin.CONTEXT, "label", None, "", 0, None),
+    ("string", BoundValueOrigin.CONTEXT, "label", None, "", False, "false"),
+    ("string", BoundValueOrigin.CONTEXT, "label", None, "", 0, "0"),
     (
         "string",
         BoundValueOrigin.TEMPLATE,
@@ -179,8 +179,10 @@ def test_skill_input_string_rejects_oversized_integer_without_raising(wire: int)
     [
         (False, None, "false"),
         (0, None, "0"),
-        (False, "", None),
-        (0, "", None),
+        (False, "", "false"),
+        (0, "", "0"),
+        (False, "false", None),
+        (0, "0", None),
     ],
 )
 def test_skill_input_string_absence_policy_uses_bound_value_advertisement(
@@ -231,9 +233,7 @@ def test_skill_input_wire_mismatch_messages_explain_expected_wire_shape() -> Non
         dependency="label",
         absence_value="",
     )
-    assert optional_text.wire_mismatch_message(False, advertised_absence).endswith(
-        "; send the advertised absence value '' when unavailable"
-    )
+    assert "absence" not in optional_text.wire_mismatch_message(False, advertised_absence)
 
 
 def test_skill_input_accepts_stays_strict_for_declared_types() -> None:

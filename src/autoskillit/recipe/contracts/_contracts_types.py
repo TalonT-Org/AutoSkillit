@@ -77,11 +77,13 @@ class SkillInput:
             return None
         if self.type not in _TEXT_INPUT_TYPES or not isinstance(value, int):
             return None
-        if bound.absence_value is not None and not value:
-            return None
         if isinstance(value, bool):
-            return "true" if value else "false"
-        return str(value) if abs(value) < 10**CANONICAL_INTEGER_DIGITS else None
+            text = "true" if value else "false"
+        elif abs(value) < 10**CANONICAL_INTEGER_DIGITS:
+            text = str(value)
+        else:
+            return None
+        return None if text == bound.absence_value else text
 
     def wire_mismatch_message(self, value: BoundScalar, bound: BoundValue) -> str:
         message = (
@@ -97,10 +99,6 @@ class SkillInput:
                 )
         elif self.type in _TEXT_INPUT_TYPES:
             message += "; send a JSON string"
-        if bound.absence_value is not None and not value:
-            message += (
-                f"; send the advertised absence value {bound.absence_value!r} when unavailable"
-            )
         return message
 
 

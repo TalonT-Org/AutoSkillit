@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -247,7 +248,7 @@ def _order_document(prs: list[dict[str, object]]) -> dict[str, object]:
     }
 
 
-def _write_order_file(tmp_path, document: object):
+def _write_order_file(tmp_path: Path, document: object) -> Path:
     path = tmp_path / "pr-order.json"
     path.write_text(json.dumps(document), encoding="utf-8")
     return path

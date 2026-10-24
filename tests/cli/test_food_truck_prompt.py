@@ -98,7 +98,9 @@ class TestAdmiralDispatchBlock:
         assert "yaml step key" in section
         assert "even when" in section
         assert "`with:`" in section
-        assert "record_pipeline_step.step_name names the target tracked step" in section
+        assert "record_pipeline_step.step_name names the target tracked step" in section.replace(
+            "`", ""
+        )
         assert "distinct yaml step keys remain separate telemetry rows" in section
 
     def test_excludes_five_sections(self) -> None:

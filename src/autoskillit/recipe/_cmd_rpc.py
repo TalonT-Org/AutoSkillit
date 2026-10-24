@@ -37,8 +37,6 @@ from autoskillit.recipe.cmd_rpc._cmd_rpc import (
 )
 
 __all__ = [
-    "first_ordered_pr",
-    "next_ordered_pr",
     "attempt_cheap_rebase",
     "batch_create_issues",
     "check_dropped_ci_loop",
@@ -52,9 +50,11 @@ __all__ = [
     "emit_fallback_map",
     "ensure_results",
     "export_local_bundle",
+    "first_ordered_pr",
     "force_push_and_wait_mergeability",
     "immediate_merge_conflict_fix",
     "main_repo_guard",
+    "next_ordered_pr",
     "proactive_rebase_next_pr",
     "queue_ejected_fix",
     "refetch_issues",

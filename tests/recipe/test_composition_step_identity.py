@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -12,6 +11,7 @@ from autoskillit.recipe._api import load_and_validate
 from autoskillit.recipe.ingredients._recipe_composition import _build_active_recipe
 from autoskillit.recipe.ingredients._recipe_merge import _merge_sub_recipe
 from autoskillit.recipe.io import load_recipe
+from tests.recipe.conftest import identity_suggestions as _identity_suggestions
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -34,14 +34,6 @@ def _install_composed_recipe(tmp_path: Path, *, child_identity: str | None) -> t
     replacement = "" if child_identity is None else f"      step_name: {child_identity}\n"
     child_path.write_text(child_content.replace(_CHILD_IDENTITY_LINE, replacement))
     return parent_path, child_path
-
-
-def _identity_suggestions(result: dict[str, Any]) -> list[dict[str, Any]]:
-    return [
-        suggestion
-        for suggestion in result.get("suggestions", [])
-        if suggestion.get("rule") == "step-identity-mismatch"
-    ]
 
 
 @pytest.mark.parametrize(

@@ -11,11 +11,12 @@ from autoskillit.core import Severity
 from autoskillit.recipe import make_validation_context
 from autoskillit.recipe._api import load_and_validate
 from autoskillit.recipe.registry import run_semantic_rules
+from autoskillit.recipe.rules.rules_tools import STEP_IDENTITY_MISMATCH_RULE
 from autoskillit.recipe.schema import Recipe, RecipeStep
+from tests.recipe.conftest import identity_suggestions as _identity_suggestions
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
-RULE_NAME = "step-identity-mismatch"
 _RUN_SKILL_KEY = "decompose_phases"
 
 
@@ -42,7 +43,11 @@ def _make_recipe(
 
 def _identity_findings(recipe: Recipe):
     ctx = make_validation_context(recipe)
-    return [finding for finding in run_semantic_rules(ctx) if finding.rule == RULE_NAME]
+    return [
+        finding
+        for finding in run_semantic_rules(ctx)
+        if finding.rule == STEP_IDENTITY_MISMATCH_RULE
+    ]
 
 
 @pytest.mark.parametrize(
@@ -155,14 +160,6 @@ def _stage_recipe_pair(tmp_path: Path, *, guarded: bool) -> tuple[Path, Path]:
             _identity_recipe_yaml(identity, guarded=guarded)
         )
     return project_dirs
-
-
-def _identity_suggestions(result: dict[str, Any]) -> list[dict[str, Any]]:
-    return [
-        suggestion
-        for suggestion in result.get("suggestions", [])
-        if suggestion.get("rule") == RULE_NAME
-    ]
 
 
 def test_identity_mismatch_alone_invalidates_a_recipe(tmp_path: Path) -> None:

@@ -100,6 +100,15 @@ def test_claude_aliases_map_classes_to_5_5_models() -> None:
     }
 
 
+def test_claude_aliases_cannot_be_reassigned() -> None:
+    from operator import setitem
+
+    from autoskillit.core.types.execution._type_backend import CLAUDE_MODEL_ALIASES
+
+    with pytest.raises(TypeError):
+        setitem(CLAUDE_MODEL_ALIASES, "haiku", "haiku")
+
+
 def test_claude_floor_supports_every_pinned_model() -> None:
     from packaging.version import Version
 

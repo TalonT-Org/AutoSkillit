@@ -345,11 +345,13 @@ ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS: tuple[str, ...] = (
 
 _CONTEXT_WINDOW_SUFFIX_RE: _re.Pattern[str] = _re.compile(r"\[\d+[mk]?\]$", _re.IGNORECASE)
 
-CLAUDE_MODEL_ALIASES: dict[str, str] = {
-    "sonnet": "claude-sonnet-5-5",
-    "opus": "claude-opus-5-5",
-    "haiku": "claude-haiku-5-5",
-}
+CLAUDE_MODEL_ALIASES: Mapping[str, str] = MappingProxyType(
+    {
+        "sonnet": "claude-sonnet-5-5",
+        "opus": "claude-opus-5-5",
+        "haiku": "claude-haiku-5-5",
+    }
+)
 
 CODEX_MODEL_ALIASES: Mapping[str, str] = MappingProxyType(
     {

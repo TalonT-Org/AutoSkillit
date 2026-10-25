@@ -159,14 +159,22 @@ def test_step_without_dispatch_items_is_unchanged() -> None:
 
 
 @pytest.mark.parametrize(
-    ("dispatch_items", "skill_inputs", "output_dir", "producer_contexts"),
+    ("dispatch_items", "skill_inputs", "output_dir", "producer_contexts", "expected_reason"),
     [
-        pytest.param("P1,P2", None, "${{ context.planner_dir }}", (), id="literal-producer"),
+        pytest.param(
+            "P1,P2",
+            None,
+            "${{ context.planner_dir }}",
+            (),
+            "must be one exact",
+            id="literal-producer",
+        ),
         pytest.param(
             "${{ context.a }},${{ context.b }}",
             None,
             "${{ context.planner_dir }}",
             ("a", "b"),
+            "must be one exact",
             id="non-exact-producer",
         ),
         pytest.param(
@@ -174,6 +182,7 @@ def test_step_without_dispatch_items_is_unchanged() -> None:
             _structured_skill_inputs("{phase_id}", output_dir="{other}"),
             "${{ context.planner_dir }}",
             ("phase_ids",),
+            "requires exactly one whole-value {placeholder}",
             id="distinct-item-placeholders",
         ),
         pytest.param(
@@ -181,6 +190,7 @@ def test_step_without_dispatch_items_is_unchanged() -> None:
             _structured_skill_inputs("{phase_id}", output_dir="{phase_id}"),
             "${{ context.planner_dir }}",
             ("phase_ids",),
+            "requires exactly one whole-value {placeholder}",
             id="same-placeholder-in-two-inputs",
         ),
         pytest.param(
@@ -188,6 +198,7 @@ def test_step_without_dispatch_items_is_unchanged() -> None:
             _structured_skill_inputs("{phase_id}/{phase_id}"),
             "${{ context.planner_dir }}",
             ("phase_ids",),
+            "requires exactly one whole-value {placeholder}",
             id="repeated-placeholder-in-one-input",
         ),
         pytest.param(
@@ -195,6 +206,7 @@ def test_step_without_dispatch_items_is_unchanged() -> None:
             _structured_skill_inputs("/out/{phase_id}/x.json"),
             "${{ context.planner_dir }}",
             ("phase_ids",),
+            "requires exactly one whole-value {placeholder}",
             id="embedded-item-value",
         ),
         pytest.param(
@@ -202,6 +214,7 @@ def test_step_without_dispatch_items_is_unchanged() -> None:
             _structured_skill_inputs("{phase_id"),
             "${{ context.planner_dir }}",
             ("phase_ids",),
+            "requires exactly one whole-value {placeholder}",
             id="unterminated-item-value",
         ),
         pytest.param(
@@ -209,6 +222,7 @@ def test_step_without_dispatch_items_is_unchanged() -> None:
             _structured_skill_inputs("P1"),
             "/tmp/{build_id}/out.json",
             ("phase_ids",),
+            "requires exactly one whole-value {placeholder}",
             id="mcp-path-is-not-an-item-input",
         ),
         pytest.param(
@@ -216,6 +230,7 @@ def test_step_without_dispatch_items_is_unchanged() -> None:
             None,
             "/tmp/{phase_id}/out.json",
             ("phase_ids",),
+            "in MCP argument 'output_dir' must not occur outside the inline skill command",
             id="item-token-also-in-mcp-kwarg",
         ),
     ],
@@ -225,6 +240,7 @@ def test_invalid_dispatch_declaration_is_not_attested(
     skill_inputs: dict[str, object] | None,
     output_dir: str,
     producer_contexts: tuple[str, ...],
+    expected_reason: str,
 ) -> None:
     invocation = _bind(
         _step(
@@ -248,10 +264,7 @@ def test_invalid_dispatch_declaration_is_not_attested(
     )
     assert failure.name == "dispatch_items"
     assert "dispatch_items" in failure.message
-    assert failure.message.strip()
-    assert any(
-        reason in failure.message.lower() for reason in ("must", "requires", "expected", "only")
-    )
+    assert expected_reason in failure.message
     assert not invocation.attested
     assert invocation.skill_inputs == baseline.skill_inputs
     assert invocation.mcp_kwargs == baseline.mcp_kwargs

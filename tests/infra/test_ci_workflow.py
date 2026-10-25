@@ -832,6 +832,11 @@ def test_one_producer_builds_api_simulator_and_test_jobs_only_restore_it() -> No
         'api_simulator.http, api_simulator.mcp"'
     )
     assert test_steps.index(verify) == test_steps.index(install) + 1
+    project = tomllib.loads((_repo_root() / "pyproject.toml").read_text(encoding="utf-8"))
+    assert (
+        "api-simulator; sys_platform == 'linux'"
+        in project["project"]["optional-dependencies"]["dev"]
+    )
     assert not any(
         step.get("uses", "").startswith("dtolnay/rust-toolchain@")
         or "git config --global" in step.get("run", "")

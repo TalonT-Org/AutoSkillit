@@ -68,9 +68,13 @@ class CompactedFrameSizer:
 
     def __init__(self) -> None:
         self._frame_sizes: dict[str, tuple[Record, int, int]] = {}
+        self._opaque_bytes = 0
 
     def reset(self) -> None:
         self._frame_sizes.clear()
+
+    def set_opaque_frames(self, frames: tuple[bytes, ...]) -> None:
+        self._opaque_bytes = sum(map(len, frames))
 
     def retain_records(self, records: Mapping[str, Record]) -> None:
         for capture_id in tuple(self._frame_sizes):
@@ -114,7 +118,7 @@ class CompactedFrameSizer:
             )
             self._frame_sizes[record.capture_id] = (record, compaction_epoch, size)
             total += size
-        return total
+        return total + self._opaque_bytes
 
 
 _REASON_DETAILS = {
@@ -251,8 +255,10 @@ def transition_reason(
     projected = _projected(records, candidate)
     encoded = sizer.total_bytes(projected, compaction_epoch, spec)
     recovery_state = transition_compaction_bound(candidate, spec) == spec.hard_ledger_bytes
+    previous = records.get(candidate.capture_id)
+    state_changes = previous is None or previous.state is not candidate.state
     if encoded > transition_compaction_bound(candidate, spec):
         return CaptureCapacityReason.HARD_LEDGER_CAPACITY
-    if not recovery_state and encoded > spec.compaction_low_bytes:
+    if state_changes and not recovery_state and encoded > spec.compaction_low_bytes:
         return CaptureCapacityReason.PROJECTED_COMPACTED_BYTES
     return None

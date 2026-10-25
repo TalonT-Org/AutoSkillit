@@ -30,12 +30,12 @@ __all__ = [
     "DEBT_ASSIST_BUDGET",
     "DEBT_ASSIST_MAX_TRANSITIONS",
     "HOT_PATH_LOCK_WAIT",
-    "MEASURED_BYTES_PER_RECORD",
-    "REQUIRED_RETENTION_BYTES",
+    "PLANNED_RECORD_FRAME_BYTES",
     "SUPPORTED_ADMISSIONS_PER_PRODUCER_SECOND",
     "SUPPORTED_PEAK_ADMISSIONS_PER_SECOND",
     "SUPPORTED_PEAK_PRODUCERS",
     "classify_cleanup_outcome",
+    "capacity_envelope_violations",
     "lock_wait_for_budget",
 ]
 
@@ -383,29 +383,42 @@ TRANSITION_RESCUE_BUDGET = SweepBudgetSpec(
     max_directory_entries_scanned=0,
 )
 
-# Static sustained-admission envelope for the shared project store. Issue
-# #4511 observed 13-16 concurrent producers and found that roughly one hour of
-# fleet admissions filled the 1,962-record window. One admission per producer
-# every 30 seconds declares the sustained envelope represented by that event;
-# short bursts above it consume remaining byte headroom, while sustained excess
-# is governed by debt assist and stall admission.
+# Static success-path envelope for the shared project store. It covers records
+# held for the reference lifetime, debt accumulated before assistance starts,
+# and retained tombstones. Unsettled captures keep their one-hour forensic hold
+# outside the declared load; the byte projection accounts for their cost.
 SUPPORTED_PEAK_PRODUCERS = 16
 SUPPORTED_ADMISSIONS_PER_PRODUCER_SECOND = 1.0 / 30.0
 SUPPORTED_PEAK_ADMISSIONS_PER_SECOND = (
     SUPPORTED_PEAK_PRODUCERS * SUPPORTED_ADMISSIONS_PER_PRODUCER_SECOND
 )
-MEASURED_BYTES_PER_RECORD = 2004
-REQUIRED_RETENTION_BYTES = math.ceil(
-    SUPPORTED_PEAK_ADMISSIONS_PER_SECOND
-    * _lifecycle_policy.SWEEP_GRACE_SECONDS
-    * MEASURED_BYTES_PER_RECORD
-)
+PLANNED_RECORD_FRAME_BYTES = 2608
 
-if CaptureCapacitySpec().compaction_low_bytes < REQUIRED_RETENTION_BYTES:
-    raise AssertionError(
-        "production capture capacity must cover the supported admission envelope "
-        "for the complete sweep-grace interval"
+
+def capacity_envelope_violations(spec: CaptureCapacitySpec) -> tuple[str, ...]:
+    """Return production envelope limits that a capacity specification misses."""
+    held = (
+        math.ceil(
+            SUPPORTED_PEAK_ADMISSIONS_PER_SECOND * _lifecycle_policy.REFERENCE_LIFETIME_SECONDS
+        )
+        + SUPPORTED_PEAK_PRODUCERS
     )
+    records = held + spec.reclamation_debt_assist_records - 1
+    requirements = (
+        (
+            "compaction_low_bytes",
+            PLANNED_RECORD_FRAME_BYTES * (records + spec.max_tombstones),
+            spec.compaction_low_bytes,
+        ),
+        ("max_operational_records", records, spec.max_operational_records),
+        ("max_retained_records", records, spec.max_retained_records),
+        ("max_evidence_records", records, spec.max_evidence_records),
+    )
+    return tuple(field for field, required, actual in requirements if actual < required)
+
+
+if capacity_envelope_violations(CaptureCapacitySpec()):
+    raise AssertionError("production capture capacity must cover the declared retention envelope")
 
 DEBT_ASSIST_MAX_TRANSITIONS = 16
 DEBT_ASSIST_BUDGET = SweepBudgetSpec(

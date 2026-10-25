@@ -185,6 +185,9 @@ hook can be retired in favor of that mechanism.
    rejected. Physical path strings are display hints, not filesystem authority.
 5. General retrieval, publication/privacy policy, quota accounting, and upstream
    live visibility remain downstream work identified by ADR-0008.
+6. Undelivered and otherwise unsettled-delivery anomalies retain the one-hour
+   hold and sit outside the declared load; their encoded frames still count
+   against actual capacity.
 
 ## Resolved
 
@@ -226,10 +229,53 @@ classification applied to a reason that should be `DISCARD_OUTPUT`).
 The same enforcement surface bounds admission by measured reclamation debt:
 assist and stall are admission-only capacity reasons, and import-time totality
 requires their gate, failure, disposition, detail, and blocker classifications.
-The production compaction floor is derived from the code-owned sustained
-admission envelope, the canonical one-hour sweep grace, and the incident's
-measured bytes per record. Runtime policy overrides below that derived floor
-are rejected in favor of the safe production default.
+
+The capacity model derives the production byte floor and the operational,
+retained, and evidence record caps from one required record count.
+`capacity_envelope_violations(spec)` supplies both the import-time check for the
+production default and runtime override validation. The import-time assertion
+checks only the static default; live admission and transition gates use actual
+projected bytes. The success-path hold uses `REFERENCE_LIFETIME_SECONDS`: at the
+declared peak of 0.5333 admissions per
+second and a 1,800-second reference lifetime, `ceil(0.5333… * 1,800) + 16`
+producers yields 976 held records. The floor adds the due debt that can accrue
+before reclamation assist engages, `reclamation_debt_assist_records - 1`; this
+produces 1,231 required records at the default 256-record assist threshold.
+The same count is required by each record cap.
+
+`PLANNED_RECORD_FRAME_BYTES` is 2,608 bytes: the largest measured encoding of
+real `FINALIZED`, `DELETED`, and `FAILED` record shapes under the declared
+numeric profile, rounded up to a multiple of eight. The measurement sets
+non-schema counters and identities to `2**63 - 1`, uses the same compaction
+epoch, valid finite timestamps, and bounded command outcomes. Adding the
+default 256 tombstones gives `(1,231 + 256) * 2,608 = 3,878,096` bytes, below
+the default `compaction_low_bytes` of 3,932,160. The declared allowance models
+that load and profile; `CompactedFrameSizer` counts every encoded byte in the
+retained projection, including opaque frames, for both admission and compaction.
+A remeasured allowance above 2,644 bytes makes the default
+import-time check fail and requires re-deriving the floor. Overrides that break
+the byte or shared record-count envelope are rejected by the same function.
+
+`compaction_low_bytes` is a soft limit for state-advancing work. Admission is
+gated separately; transitions that advance a record through stage, publish,
+and finalize may be refused above it. Same-state bookkeeping, including
+delivery and reference updates, open-time normalization, and sweep expiry,
+remains subject to the hard bound. Recovery transitions retain their reserved
+headroom. `_with_capacity_rescue` first attempts the operation; for its existing
+rescuable refusal reasons, it performs one bounded sweep and retries from a
+fresh locked load before final refusal.
+
+The retained-record envelope is a compacted projection of latest record
+frames, allowed tombstones, and opaque bytes. Superseded transition frames
+remain in the physical ledger until compaction, so they are temporary physical
+amplification and are not multiplied into the retained-record floor.
+`_append_locked` checks prospective physical size and compacts instead of
+appending when the append trigger would be crossed. Compaction output may itself
+exceed that trigger while remaining within the hard `MAX_LEDGER_BYTES` bound;
+the trigger is not a universal ceiling. A projected-capacity refusal is a
+`CaptureCapacityError`; an existing physical file above `MAX_LEDGER_BYTES` is
+rejected on load as `CaptureLedgerError` and does not enter the capacity-only
+degraded path.
 
 ## Consequences
 

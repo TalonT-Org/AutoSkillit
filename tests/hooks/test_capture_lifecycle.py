@@ -53,11 +53,6 @@ from autoskillit.hooks._capture._types import (
     DEBT_ASSIST_BUDGET,
     DEBT_ASSIST_MAX_TRANSITIONS,
     HOT_PATH_LOCK_WAIT,
-    MEASURED_BYTES_PER_RECORD,
-    REQUIRED_RETENTION_BYTES,
-    SUPPORTED_ADMISSIONS_PER_PRODUCER_SECOND,
-    SUPPORTED_PEAK_ADMISSIONS_PER_SECOND,
-    SUPPORTED_PEAK_PRODUCERS,
     TRANSITION_RESCUE_BUDGET,
     CaptureCapacitySpec,
     CaptureCleanupOutcome,
@@ -944,6 +939,52 @@ def _frame_from_payload(payload: bytes) -> bytes:
     )
 
 
+def _opaque_frame_pair(record: CaptureLifecycleRecord) -> tuple[bytes, bytes]:
+    epoch = record.compaction_epoch
+    future = capture_lifecycle._capture_lifecycle_record.record_to_dict(
+        replace(record, revision=record.revision + 1)
+    )
+    future["state"] = "future-state"
+    opaque = capture_lifecycle._capture_ledger.encode_frame(
+        future,
+        compaction_epoch=epoch,
+    )
+    later = capture_lifecycle._capture_ledger.encode_frame(
+        capture_lifecycle._capture_lifecycle_record.record_to_dict(
+            replace(record, revision=record.revision + 2)
+        ),
+        compaction_epoch=epoch,
+    )
+    return opaque, later
+
+
+def _append_opaque_frames(store: CaptureLifecycleStore, frames: tuple[bytes, ...]) -> None:
+    with store._locked():
+        fd = store._open_ledger()
+        try:
+            os.lseek(fd, 0, os.SEEK_END)
+            capture_lifecycle._capture_ledger.write_all(fd, b"".join(frames))
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
+
+def _encoded_compacted_bytes(
+    records: dict[str, CaptureLifecycleRecord],
+    compaction_epoch: int,
+    capacity: CaptureCapacitySpec,
+) -> int:
+    return sum(
+        len(
+            capture_lifecycle._capture_ledger.encode_frame(
+                capture_lifecycle._capture_lifecycle_record.record_to_dict(record),
+                compaction_epoch=compaction_epoch,
+            )
+        )
+        for record in capture_capacity.compacted_records(records, capacity)
+    )
+
+
 def _legacy_frame(record: dict[str, object], *, generation: int = 1) -> bytes:
     payload = capture_lifecycle._capture_lifecycle_record.canonical_json(
         {
@@ -1701,6 +1742,211 @@ def test_delivery_transition_rejects_illegal_predecessor_target_pair(
                 expected=CaptureDeliveryStatus.NOT_ATTEMPTED,
                 target=CaptureDeliveryStatus.DELIVERED,
             )
+    finally:
+        artifact.close_artifact_fd()
+        artifact.release_lease()
+        root.close()
+        anchor.close()
+
+
+@pytest.mark.parametrize(
+    ("delivery_status", "expected_reference_status", "expected_delivery_status"),
+    [
+        pytest.param(
+            CaptureDeliveryStatus.ATTEMPTING,
+            CaptureReferenceStatus.PUBLISHED,
+            CaptureDeliveryStatus.UNKNOWN,
+            id="attempting",
+        ),
+        pytest.param(
+            CaptureDeliveryStatus.NOT_ATTEMPTED,
+            CaptureReferenceStatus.UNAVAILABLE,
+            CaptureDeliveryStatus.NOT_ATTEMPTED,
+            id="published-not-attempted",
+        ),
+    ],
+)
+def test_store_open_normalization_succeeds_above_soft_limit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    delivery_status: CaptureDeliveryStatus,
+    expected_reference_status: CaptureReferenceStatus,
+    expected_delivery_status: CaptureDeliveryStatus,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock(1_000.0)
+    due_capture_id = "1111111111111111"
+    with ExitStack() as cleanup:
+        anchor, root, store = _open_store(project, clock)
+        cleanup.callback(anchor.close)
+        cleanup.callback(root.close)
+
+        due_artifact = create_capture_artifact(root, due_capture_id, store)
+        cleanup.callback(due_artifact.release_lease)
+        cleanup.callback(due_artifact.close_artifact_fd)
+        os.write(due_artifact.fd, b"due")
+        _commit_verified(store, due_artifact, b"due", clock)
+
+        clock.advance(100_000.0)
+        crash_artifact = create_capture_artifact(root, _CAPTURE_ID, store)
+        cleanup.callback(crash_artifact.release_lease)
+        cleanup.callback(crash_artifact.close_artifact_fd)
+        os.write(crash_artifact.fd, b"crash-left")
+        finalized = store.commit_verified_snapshot(
+            _verified_snapshot(store, crash_artifact, b"crash-left", clock),
+            issue_reference=True,
+        )
+        published = store.publish_reference(finalized)
+        if delivery_status is CaptureDeliveryStatus.ATTEMPTING:
+            store.transition_delivery(
+                published,
+                expected=CaptureDeliveryStatus.NOT_ATTEMPTED,
+                target=CaptureDeliveryStatus.ATTEMPTING,
+            )
+        crash_record = store.get_record(_CAPTURE_ID)
+        due_record = store.get_record(due_capture_id)
+        assert crash_record is not None
+        assert due_record is not None
+        assert crash_record.reference_status is CaptureReferenceStatus.PUBLISHED
+        assert crash_record.delivery_status is delivery_status
+        assert due_record.next_attempt_at <= clock.wall() < crash_record.next_attempt_at
+
+        with store._locked():
+            records, compaction_epoch, _size = store._load_locked()
+            projected = store._ledger_view.sizer.total_bytes(
+                records,
+                compaction_epoch,
+                store._capacity,
+            )
+        base_capacity = store._capacity
+        scaled_capacity = replace(
+            base_capacity,
+            compaction_low_bytes=projected - 1,
+            compaction_high_bytes=projected,
+            hard_ledger_bytes=projected + base_capacity.recovery_headroom_bytes + 64,
+        )
+        assert scaled_capacity.compaction_low_bytes < projected
+        assert (
+            scaled_capacity.hard_ledger_bytes - scaled_capacity.recovery_headroom_bytes
+            >= projected + 64
+        )
+        cleanup.close()
+
+        @contextmanager
+        def open_scaled_store(
+            requested_cwd: str,
+            *,
+            create: bool = False,
+            lock_wait: LockWaitSpec,
+        ) -> Iterator[CaptureLifecycleStore]:
+            opened_anchor = open_project_anchor(requested_cwd)
+            opened_root: CaptureRoot | None = None
+            try:
+                opened_root = open_capture_root(opened_anchor, create=create)
+                yield CaptureLifecycleStore.from_open_authorities(
+                    opened_anchor,
+                    opened_root,
+                    wall_clock=clock.wall,
+                    monotonic=clock.monotonic,
+                    lock_wait=lock_wait,
+                    capacity=scaled_capacity,
+                )
+            finally:
+                try:
+                    if opened_root is not None:
+                        opened_root.close()
+                finally:
+                    opened_anchor.close()
+
+        monkeypatch.setattr(
+            capture_reconcile._authority,
+            "open_capture_lifecycle",
+            open_scaled_store,
+        )
+        outcome = capture_reconcile.reconcile_capture_store(
+            str(project),
+            capture_reconcile.RUNNER_TAIL_BUDGET,
+        )
+
+        assert outcome.deleted == 1
+        assert outcome.progress is CleanupProgress.RETIRED
+        with open_scaled_store(
+            str(project),
+            create=False,
+            lock_wait=HOT_PATH_LOCK_WAIT,
+        ) as reopened:
+            normalized = reopened.get_record(_CAPTURE_ID)
+            due = reopened.get_record(due_capture_id)
+
+        assert normalized is not None
+        assert normalized.state is CaptureState.FINALIZED
+        assert normalized.reference_status is expected_reference_status
+        assert normalized.delivery_status is expected_delivery_status
+        assert normalized.next_attempt_at > clock.wall()
+        assert due is not None and due.state is CaptureState.DELETED
+
+
+def test_state_advancing_transition_above_soft_limit_is_refused(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = _Clock()
+    anchor, root, store = _open_store(tmp_path / "project", clock)
+    artifact = create_capture_artifact(root, _CAPTURE_ID, store)
+    try:
+        os.write(artifact.fd, b"captured")
+        snapshot = _verified_snapshot(store, artifact, b"captured", clock)
+        writing = store.get_record(_CAPTURE_ID)
+        assert writing is not None
+        assert writing.state is CaptureState.PUBLISHED_WRITING
+        scaled_capacity = replace(
+            store._capacity,
+            compaction_low_bytes=1,
+            compaction_high_bytes=2,
+        )
+        monkeypatch.setattr(store, "_capacity", scaled_capacity)
+
+        with pytest.raises(CaptureCapacityError) as failure:
+            store.commit_verified_snapshot(snapshot, issue_reference=False)
+
+        assert failure.value.reason is CaptureCapacityReason.PROJECTED_COMPACTED_BYTES
+        current = store.get_record(_CAPTURE_ID)
+        assert current is not None and current.state is CaptureState.PUBLISHED_WRITING
+    finally:
+        artifact.close_artifact_fd()
+        artifact.release_lease()
+        root.close()
+        anchor.close()
+
+
+def test_recovery_transitions_pass_between_low_and_hard(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = _Clock()
+    project = tmp_path / "project"
+    anchor, root, store = _open_store(project, clock)
+    artifact = create_capture_artifact(root, _CAPTURE_ID, store)
+    try:
+        os.write(artifact.fd, b"captured")
+        _commit_verified(store, artifact, b"captured", clock)
+        artifact.close_artifact_fd()
+        artifact.release_lease()
+        clock.advance(SWEEP_GRACE_SECONDS + 1.0)
+        scaled_capacity = replace(
+            store._capacity,
+            compaction_low_bytes=1,
+            compaction_high_bytes=2,
+        )
+        monkeypatch.setattr(store, "_capacity", scaled_capacity)
+
+        outcome = store.sweep(capture_reconcile.RUNNER_TAIL_BUDGET)
+
+        record = store.get_record(_CAPTURE_ID)
+        assert outcome.deleted == 1
+        assert outcome.progress is CleanupProgress.RETIRED
+        assert record is not None and record.state is CaptureState.DELETED
+        assert not (project.joinpath(*CAPTURE_PATH_COMPONENTS) / artifact.name).exists()
     finally:
         artifact.close_artifact_fd()
         artifact.release_lease()
@@ -4852,6 +5098,167 @@ def test_unknown_lifecycle_enum_frames_survive_incremental_load_and_compaction(
         anchor.close()
 
 
+def test_admission_and_compaction_agree_on_opaque_frames(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, seed_store = _open_store(project, clock)
+    try:
+        seed_store.reserve_capture(_CAPTURE_ID)
+        source_a = seed_store.reserve_capture("1" * 16)
+        seed_store.reserve_capture("2" * 16)
+        first_pair = _opaque_frame_pair(source_a)
+        _append_opaque_frames(seed_store, first_pair)
+
+        base_store = CaptureLifecycleStore.from_open_authorities(
+            anchor,
+            root,
+            wall_clock=clock.wall,
+            monotonic=clock.monotonic,
+            lock_wait=HOT_PATH_LOCK_WAIT,
+        )
+        with base_store._locked():
+            initial_records, initial_epoch, _size = base_store._load_locked()
+        assert base_store._ledger_view.opaque_frames == first_pair
+        initial_opaque_bytes = sum(map(len, first_pair))
+        assert (
+            base_store._ledger_view.sizer.total_bytes(
+                initial_records,
+                initial_epoch,
+                base_store._capacity,
+            )
+            == _encoded_compacted_bytes(
+                initial_records,
+                initial_epoch,
+                base_store._capacity,
+            )
+            + initial_opaque_bytes
+        )
+
+        other_store = CaptureLifecycleStore.from_open_authorities(
+            anchor,
+            root,
+            wall_clock=clock.wall,
+            monotonic=clock.monotonic,
+            lock_wait=HOT_PATH_LOCK_WAIT,
+        )
+        source_b = other_store.get_record("2" * 16)
+        assert source_b is not None
+        second_pair = _opaque_frame_pair(source_b)
+        _append_opaque_frames(other_store, second_pair)
+        expected_opaque_frames = first_pair + second_pair
+        expected_opaque_bytes = sum(map(len, expected_opaque_frames))
+
+        full_store = CaptureLifecycleStore.from_open_authorities(
+            anchor,
+            root,
+            wall_clock=clock.wall,
+            monotonic=clock.monotonic,
+            lock_wait=HOT_PATH_LOCK_WAIT,
+        )
+        with full_store._locked():
+            full_records, full_epoch, _size = full_store._load_locked()
+        assert full_store._ledger_view.opaque_frames == expected_opaque_frames
+        assert (
+            full_store._ledger_view.sizer.total_bytes(
+                full_records,
+                full_epoch,
+                full_store._capacity,
+            )
+            == _encoded_compacted_bytes(
+                full_records,
+                full_epoch,
+                full_store._capacity,
+            )
+            + expected_opaque_bytes
+        )
+
+        full_reload_count = 0
+        real_decode_full = capture_ledger_view._decode_full
+
+        def count_full_reload(*args, **kwargs):
+            nonlocal full_reload_count
+            full_reload_count += 1
+            return real_decode_full(*args, **kwargs)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(capture_ledger_view, "_decode_full", count_full_reload)
+            with base_store._locked():
+                records, compaction_epoch, _size = base_store._load_locked()
+
+        assert full_reload_count == 0
+        assert base_store._ledger_view.opaque_frames == expected_opaque_frames
+        assert (
+            base_store._ledger_view.sizer.total_bytes(
+                records,
+                compaction_epoch,
+                base_store._capacity,
+            )
+            == _encoded_compacted_bytes(
+                records,
+                compaction_epoch,
+                base_store._capacity,
+            )
+            + expected_opaque_bytes
+        )
+
+        candidate_id = "f" * 16
+        candidate = CaptureLifecycleRecord(
+            capture_id=candidate_id,
+            state=CaptureState.RESERVED,
+            staging_name=f".capture-staging-{candidate_id}-{'0' * 16}",
+            public_name=f"shell_{candidate_id}.log",
+            project_identity=base_store._project_identity,
+            root_identity=base_store._root_identity,
+            created_at=clock.wall(),
+            next_attempt_at=clock.wall() + SWEEP_GRACE_SECONDS,
+            incarnation="e" * 32,
+            revision=1,
+        )
+        projected_records = {**records, candidate_id: candidate}
+        visible_projection = _encoded_compacted_bytes(
+            projected_records,
+            compaction_epoch,
+            base_store._capacity,
+        )
+        projection_with_opaque = base_store._ledger_view.sizer.total_bytes(
+            projected_records,
+            compaction_epoch,
+            base_store._capacity,
+        )
+        low = visible_projection + expected_opaque_bytes // 2
+        assert visible_projection < low < projection_with_opaque
+        scaled_capacity = replace(
+            base_store._capacity,
+            compaction_low_bytes=low,
+            compaction_high_bytes=low + 1,
+        )
+        monkeypatch.setattr(base_store, "_capacity", scaled_capacity)
+
+        with pytest.raises(CaptureCapacityError) as failure:
+            base_store.reserve_capture(candidate_id)
+
+        assert failure.value.reason is CaptureCapacityReason.PROJECTED_COMPACTED_BYTES
+        assert base_store.get_record(candidate_id) is None
+        with base_store._locked():
+            records, compaction_epoch, _size = base_store._load_locked()
+            base_store._compact_locked(records, compaction_epoch + 1)
+            records, compaction_epoch, _size = base_store._load_locked()
+        assert base_store._ledger_view.opaque_frames == expected_opaque_frames
+        assert base_store._ledger_view.sizer.total_bytes(
+            records,
+            compaction_epoch,
+            scaled_capacity,
+        ) == _encoded_compacted_bytes(records, compaction_epoch, scaled_capacity) + (
+            expected_opaque_bytes
+        )
+    finally:
+        root.close()
+        anchor.close()
+
+
 def test_future_ledger_format_reports_observed_and_current_versions(
     tmp_path: Path,
 ) -> None:
@@ -5507,17 +5914,6 @@ def test_session_start_orphan_adoption_suppresses_nested_debt_assist(
             artifact.release_lease()
         root.close()
         anchor.close()
-
-
-def test_capacity_window_covers_the_supported_retention_envelope() -> None:
-    expected_admission_rate = SUPPORTED_PEAK_PRODUCERS * SUPPORTED_ADMISSIONS_PER_PRODUCER_SECOND
-    expected_retention_bytes = math.ceil(
-        expected_admission_rate * SWEEP_GRACE_SECONDS * MEASURED_BYTES_PER_RECORD
-    )
-
-    assert SUPPORTED_PEAK_ADMISSIONS_PER_SECOND == expected_admission_rate
-    assert REQUIRED_RETENTION_BYTES == expected_retention_bytes
-    assert CaptureCapacitySpec().compaction_low_bytes >= REQUIRED_RETENTION_BYTES
 
 
 def test_installed_reclamation_owners_include_a_directory_scan_budget() -> None:

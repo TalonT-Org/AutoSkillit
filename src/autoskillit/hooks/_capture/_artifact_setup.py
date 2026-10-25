@@ -254,9 +254,8 @@ def _policy_capacity(value: object) -> CaptureCapacitySpec | None:
         candidate = replace(CaptureCapacitySpec(), **validated)
     except (TypeError, ValueError):
         return None
-    if (
-        candidate.compaction_low_bytes < _types.REQUIRED_RETENTION_BYTES
-        or candidate.hard_ledger_bytes > _capture_lifecycle.MAX_LEDGER_BYTES
+    if _types.capacity_envelope_violations(candidate) or (
+        candidate.hard_ledger_bytes > _capture_lifecycle.MAX_LEDGER_BYTES
     ):
         return None
     return candidate

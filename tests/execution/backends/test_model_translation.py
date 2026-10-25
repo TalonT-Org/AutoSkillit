@@ -89,8 +89,8 @@ class TestClaudeTranslateModel:
         """Unrecognized or backend-foreign model ids pass through untranslated."""
         assert ClaudeCodeBackend().translate_model(model_id) == model_id
 
-    def test_haiku_identity(self) -> None:
-        assert ClaudeCodeBackend().translate_model("haiku") == "haiku"
+    def test_haiku_alias(self) -> None:
+        assert ClaudeCodeBackend().translate_model("haiku") == CLAUDE_MODEL_ALIASES["haiku"]
 
     def test_suffix_case_insensitive(self) -> None:
         assert (

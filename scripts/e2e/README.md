@@ -79,29 +79,35 @@ limit fails without retry.
 
 | Setting | Sessions it governs in E2E |
 |---|---|
-| `--model claude-sonnet-5[1m]` (from `model.default: sonnet[1m]`) | Fleet food truck and `run_skill` workers, fresh and resumed; also the canary and in-session `sonnet` subagents, which inherit the parent's id. A recipe step's own `model:` replaces this default. Subagent windows are not in turn rows, so the gate does not observe them |
+| `--model claude-sonnet-5-5` (the packaged `model.default: sonnet`) | Fleet food truck and `run_skill` workers, fresh and resumed; also the canary and in-session `sonnet` subagents, which inherit the parent's id. A recipe step's own `model:` replaces this default. Subagent windows are not in turn rows, so the gate does not observe them |
 | `ANTHROPIC_MODEL` | Contract-nudge resumes, which pass no `--model` and resolve to `MiniMax-M3[1m]`. Their single-envelope output records no turn row, so the gate does not observe it |
-| `ANTHROPIC_DEFAULT_HAIKU_MODEL` | A `haiku`-class step (`--model haiku`) and in-session `haiku` subagents |
+| `ANTHROPIC_DEFAULT_HAIKU_MODEL` | In-session `haiku` subagents. AutoSkillit's `haiku` class passes `claude-haiku-5-5`, not the alias |
 | `ANTHROPIC_DEFAULT_OPUS_MODEL` | In-session `opus` subagents. AutoSkillit's `opus` class passes `claude-opus-5-5`, not the alias |
 | `ANTHROPIC_DEFAULT_SONNET_MODEL` | Provider fallback: AutoSkillit passes no bare `sonnet`, and `sonnet` subagents inherit the parent's id |
 | `CLAUDE_CODE_AUTO_COMPACT_WINDOW` | Every session, capped at that session's model window |
 
-The live probe confirms the explicit `[1m]` declaration yields 1M on the pinned
-2.1.280/custom-endpoint path. [Claude Code 2.1.285](https://github.com/anthropics/claude-code/releases/tag/v2.1.285)
-changed custom-endpoint sessions to use Sonnet 5's native 1M window; the
-[current model-config docs](https://code.claude.com/docs/en/model-config) describe
-`[1m]` as having no effect when Sonnet already has a native 1M window. The harness
-retains the suffix while supporting the pinned path.
+From [Claude Code 2.1.285](https://github.com/anthropics/claude-code/releases/tag/v2.1.285),
+a recognized model with a native 1M window keeps that window behind a custom
+`ANTHROPIC_BASE_URL`. At the 2.1.296 floor, the canary measured `claude-sonnet-5-5`
+and `claude-haiku-5-5` at 1M without `[1m]`. Adding the suffix would only add the
+context-1m beta header. The pin preserves a configured suffix: `sonnet[1m]` would
+pass `claude-sonnet-5-5[1m]`, so the harness config drops the suffix itself.
+
+Claude Code does not recognize `MiniMax-M3`. For an unrecognized ID containing
+`[1m]`, it assumes a 1M window, as the
+[model-config docs](https://code.claude.com/docs/en/model-config) describe. The
+provider env values therefore keep `[1m]`.
 
 [Claude Code 2.1.295](https://github.com/anthropics/claude-code/releases/tag/v2.1.295)
-documents retrying without a rejected context-1m beta. Do not assume that fallback
-exists at the pinned floor or that every older release had the same defect;
-attribute failures from the probe's actual responses. The floor change belongs to #5276.
+documents retrying without a rejected context-1m beta. Attribute failures from the
+probe's actual responses.
 
 The harness relies on this provider contract: the Anthropic Messages API at
 `ANTHROPIC_BASE_URL`, Bearer authentication from `ANTHROPIC_AUTH_TOKEN`, tool use, and
-successful calls using the exact `claude-sonnet-5[1m]` id that fleet sessions and the
+successful calls using the exact `claude-sonnet-5-5` id that fleet sessions and the
 canary pass with `--model`, including any beta-header behavior of the pinned client.
+Haiku-class steps pass `claude-haiku-5-5`, and opus-class steps pass `claude-opus-5-5`.
+A step's own `opus[1m]` keeps its suffix.
 The canary passes `--model` `FLEET_MODEL` and fails unless
 `modelUsage[FLEET_MODEL].contextWindow` is 1,000,000.
 
@@ -160,8 +166,6 @@ executes it explicitly.
 
 For model tests, `autoskillit-config.yaml` becomes `~/.autoskillit/config.yaml` in the container:
 
-- `model.default: sonnet[1m]` — puts the window declaration on the id AutoSkillit
-  passes with `--model`; `tests/infra/test_e2e_harness.py` derives `FLEET_MODEL` from it;
 - `quota_guard.enabled: false` — the guard measures Anthropic account quota through Claude
   credentials (`~/.claude/.credentials.json`) the container does not have; `fleet run` also
   gets `--disable-quota-guard`;

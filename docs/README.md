@@ -37,4 +37,5 @@ multi-level orchestrator. The bundled recipes implement issue → plan → workt
 - [audit/surface-freeze-checklist.md](audit/surface-freeze-checklist.md) — commands.py public import surface freeze checklist
 - [verification/review-pr-immunity.md](verification/review-pr-immunity.md) — deterministic review-pr projection matrix and live provider-attempt record
 - [verification/child-terminal-reasons-4623.md](verification/child-terminal-reasons-4623.md) — child-terminal-reason taxonomy implementation and test-coverage verification record
+- [verification/model-pins-5276.md](verification/model-pins-5276.md) — Claude 5.5 model pins and the Claude Code 2.1.296 floor: launch, effort, canary and resume record
 - [phoropter/](phoropter/README.md) — phoropter lens framework: execution contracts, recipe blocks, synthesis strategies, and authoring guide

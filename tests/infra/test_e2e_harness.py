@@ -640,7 +640,7 @@ MINIMAX_KEY = "minimax-test-key"
 SANDBOX_TOKEN = "sandbox-test-token"
 SANDBOX = "owner/sandbox"
 _MINIMAX_MODEL = "MiniMax-M3[1m]"
-_EXPECTED_FLEET_MODEL = "claude-sonnet-5[1m]"
+_EXPECTED_FLEET_MODEL = "claude-sonnet-5-5"
 _EXPECTED_REQUIRED_CONTEXT_WINDOW_TOKENS = 1_000_000
 _EXPECTED_SETTINGS_ENV = {
     "ANTHROPIC_BASE_URL": "https://api.minimax.io/anthropic",

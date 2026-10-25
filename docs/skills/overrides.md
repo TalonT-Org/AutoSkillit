@@ -66,7 +66,8 @@ When an override is rejected, every AutoSkillit-mediated surface — `run_skill`
 `/autoskillit:<name>`, and the session add-dir — falls back to serving the bundled twin.
 Claude Code, however, still discovers the project's `.claude/skills/<name>` directory
 natively as `/<name>`, independent of AutoSkillit's own admission decision. Claude Code
-2.1.280 was observed to prefer that native copy over a same-named add-dir copy. This is
+2.1.280, an earlier AutoSkillit support floor, was observed to prefer that native copy over a
+same-named add-dir copy; the observation has not been repeated on later releases. This is
 observed behavior, not a documented contract, and it was verified for Claude Code only.
 
 An admitted override is also published into the add-dir, so both the native

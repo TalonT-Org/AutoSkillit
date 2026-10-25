@@ -195,7 +195,7 @@ async def _triage_batch(
             ClaudeFlags.PRINT,
             prompt,
             ClaudeFlags.MODEL,
-            "claude-haiku-4-5-20251001",
+            backend.translate_model("haiku"),
             ClaudeFlags.OUTPUT_FORMAT,
             fmt.value,
         ]
@@ -219,6 +219,9 @@ async def _triage_batch(
             logger.warning(
                 "triage_staleness batch parse failed; treating all as meaningful",
                 batch=[i.skill for i in triageable],
+                returncode=result.returncode,
+                stderr=result.stderr[:1000],
+                session_result=session.result[:1000],
             )
             triageable_results = [
                 {"skill": i.skill, "meaningful": True, "summary": "Batch triage parse failed."}

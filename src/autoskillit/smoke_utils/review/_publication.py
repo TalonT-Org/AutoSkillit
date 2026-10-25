@@ -7,11 +7,24 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import cast
 
-from autoskillit.smoke_utils._review_contracts import _is_non_empty_string
+from autoskillit.core import (
+    ContainmentError,
+    GitHubReviewReceipt,
+    github_review_receipt_filename,
+    is_final_github_review_state,
+    read_stable_contained_bytes,
+)
+from autoskillit.core.runtime.private_file import fsync_directory, fsync_file
+from autoskillit.smoke_utils._review_contracts import (
+    _is_non_empty_string,
+    review_handoff_pair_error,
+)
 from autoskillit.smoke_utils.review._constants import _bounded_utf8
 
 _MAX_GITHUB_REVIEW_BODY_BYTES = 60 * 1024
@@ -24,8 +37,15 @@ _PUBLICATION_FILENAMES = {
     "raw_findings": "raw_findings_{pr_number}.json",
     "diff_context": "diff_context_{pr_number}.json",
     "local_findings": "local_findings_{pr_number}.json",
-    "review_receipt": "batch_review_response_{pr_number}.json",
+    "github_review_binding": "github_review_binding_{pr_number}.json",
 }
+_GENERATION_IDENTITY_KEYS = (
+    "_head_sha",
+    "_base_sha",
+    "_merge_base_sha",
+    "annotation_generation_id",
+    "review_generation_id",
+)
 
 
 def render_review_finding_body(finding: Mapping[str, object]) -> str:
@@ -112,12 +132,11 @@ def prepare_experimental_review_publication(
     mode: str,
     snapshot_is_fresh: bool,
     handoff_metadata: Mapping[str, object] | None = None,
-    receipt: Mapping[str, object] | None = None,
     unpostable: Sequence[Mapping[str, object]] = (),
     review_level_findings: Sequence[Mapping[str, object]] = (),
 ) -> dict[str, object]:
     """Build one immutable publication generation or suppress stale effects."""
-    if mode not in {"github", "local"}:
+    if mode not in ("github", "local"):
         raise ValueError(f"mode must be 'github' or 'local', got {mode!r}")
     head_sha = snapshot.get("head_sha", snapshot.get("_head_sha", ""))
     base_sha = snapshot.get("base_sha", snapshot.get("_base_sha", ""))
@@ -195,6 +214,7 @@ def prepare_experimental_review_publication(
     }
     if not snapshot_is_fresh:
         return {
+            "mode": mode,
             "state": "stale_snapshot",
             "artifact_order": ["raw_findings"],
             "artifacts": {"raw_findings": raw_findings},
@@ -222,18 +242,96 @@ def prepare_experimental_review_publication(
         }
         artifacts["local_findings"] = local_findings
         artifact_order.append("local_findings")
-    elif receipt is not None:
-        normalized_receipt = json.loads(
-            json.dumps(dict(receipt), sort_keys=True, separators=(",", ":"))
-        )
-        review_receipt = {**normalized_receipt, **identity}
-        artifacts["review_receipt"] = review_receipt
-        artifact_order.append("review_receipt")
     return {
+        "mode": mode,
         "state": "complete",
         "artifact_order": artifact_order,
         "artifacts": artifacts,
     }
+
+
+def _load_github_review_receipt(
+    root: Path,
+    pr_number: str,
+    *,
+    head_sha: str,
+) -> GitHubReviewReceipt:
+    if re.fullmatch(r"[1-9][0-9]*", pr_number) is None:
+        raise ValueError("pr_number must be canonical decimal")
+    try:
+        identifier = int(pr_number)
+    except ValueError as exc:
+        raise ValueError("pr_number must be canonical decimal") from exc
+    try:
+        _resolved, data = read_stable_contained_bytes(
+            root / github_review_receipt_filename(identifier),
+            root,
+            max_size_bytes=1_000_000,
+        )
+    except (ContainmentError, OSError) as exc:
+        raise ValueError(f"receipt unreadable: {exc}") from exc
+    try:
+        receipt = GitHubReviewReceipt.from_wire(json.loads(data))
+    except (
+        KeyError,
+        TypeError,
+        ValueError,
+        OverflowError,
+        RecursionError,
+    ) as exc:
+        raise ValueError(f"receipt malformed: {exc}") from exc
+    if (
+        receipt.pr_number != identifier
+        or not is_final_github_review_state(receipt.state.value)
+        or type(receipt.review_id) is not int
+        or receipt.review_id <= 0
+    ):
+        raise ValueError("receipt is not a final successful review")
+    if receipt.head_sha != head_sha:
+        raise ValueError("receipt head does not match the review generation")
+    return receipt
+
+
+def _publication_order(
+    publication: Mapping[str, object],
+    root: Path,
+    identifier: str,
+) -> tuple[list[str], dict[str, object]]:
+    raw_order = publication.get("artifact_order")
+    raw_artifacts = publication.get("artifacts")
+    if not isinstance(raw_order, list) or not isinstance(raw_artifacts, Mapping):
+        raise ValueError("publication must contain artifact_order and artifacts")
+    order = [str(name) for name in raw_order]
+    if len(order) != len(set(order)) or set(order) != set(raw_artifacts):
+        raise ValueError("artifact_order must name every artifact exactly once")
+    if any(name not in _PUBLICATION_FILENAMES for name in order):
+        raise ValueError("publication contains an unknown artifact")
+    if not order or order[0] != "raw_findings":
+        raise ValueError("raw_findings must be the first publication")
+    if "local_findings" in order and order[-1] != "local_findings":
+        raise ValueError("local_findings must be the final publication marker")
+    if "github_review_binding" in order and order[-1] != "github_review_binding":
+        raise ValueError("github_review_binding must be the final publication marker")
+    mode = publication.get("mode")
+    if mode not in {"github", "local"}:
+        raise ValueError("publication mode must be 'github' or 'local'")
+
+    artifacts: dict[str, object] = dict(raw_artifacts)
+    if publication.get("state") == "complete" and mode == "github":
+        if order != ["raw_findings", "diff_context"]:
+            raise ValueError("complete github publication requires raw findings and diff context")
+        diff_context = cast(Mapping[str, object], artifacts["diff_context"])
+        receipt = _load_github_review_receipt(
+            root,
+            identifier,
+            head_sha=cast(str, diff_context["_head_sha"]),
+        )
+        artifacts["github_review_binding"] = {
+            **{key: diff_context[key] for key in _GENERATION_IDENTITY_KEYS if key in diff_context},
+            "receipt_operation_key": receipt.operation_key,
+        }
+        order.append("github_review_binding")
+    return order, artifacts
 
 
 def _write_temp_bytes(directory: Path, final_name: str, content: bytes) -> Path:
@@ -252,10 +350,63 @@ def _write_temp_bytes(directory: Path, final_name: str, content: bytes) -> Path:
     try:
         with stream:
             stream.write(content)
+        fsync_file(temporary_path)
     except Exception:
         temporary_path.unlink(missing_ok=True)
         raise
     return temporary_path
+
+
+def _restore_publication_files(
+    root: Path,
+    final_paths: Mapping[str, Path],
+    prior_bytes: Mapping[str, bytes | None],
+    changed: Sequence[str],
+    marker_names: tuple[str, ...],
+) -> OSError | None:
+    try:
+        for name in marker_names:
+            if final_paths[name].exists():
+                final_paths[name].unlink()
+        fsync_directory(root)
+    except OSError as error:
+        return error
+
+    rollback_error: OSError | None = None
+    payload_names = [name for name in dict.fromkeys(changed) if name not in marker_names]
+    for name in payload_names:
+        try:
+            previous = prior_bytes[name]
+            if previous is None:
+                final_paths[name].unlink(missing_ok=True)
+            else:
+                rollback_path = _write_temp_bytes(root, final_paths[name].name, previous)
+                try:
+                    os.replace(rollback_path, final_paths[name])
+                finally:
+                    rollback_path.unlink(missing_ok=True)
+            fsync_directory(root)
+        except OSError as error:
+            rollback_error = error
+
+    marker_names_to_restore = (
+        [name for name in marker_names if prior_bytes[name] is not None]
+        if rollback_error is None
+        else []
+    )
+    for name in marker_names_to_restore:
+        try:
+            rollback_path = _write_temp_bytes(
+                root, final_paths[name].name, prior_bytes[name] or b""
+            )
+            try:
+                os.replace(rollback_path, final_paths[name])
+            finally:
+                rollback_path.unlink(missing_ok=True)
+            fsync_directory(root)
+        except OSError as error:
+            rollback_error = error
+    return rollback_error
 
 
 def publish_experimental_review_artifacts(
@@ -264,7 +415,10 @@ def publish_experimental_review_artifacts(
     output_dir: str,
     pr_number: str,
 ) -> dict[str, object]:
-    """Atomically publish a prepared generation and roll back partial renames."""
+    """Publish artifacts using a marker derived at commit time from the sibling server receipt.
+
+    The publisher never writes, replaces, or deletes the server receipt.
+    """
     root = Path(output_dir)
     if not root.is_absolute():
         raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
@@ -272,35 +426,22 @@ def publish_experimental_review_artifacts(
     if not identifier or Path(identifier).name != identifier or identifier in {".", ".."}:
         raise ValueError(f"pr_number must be a path-safe identifier, got {pr_number!r}")
 
-    raw_order = publication.get("artifact_order")
-    raw_artifacts = publication.get("artifacts")
-    if not isinstance(raw_order, list) or not isinstance(raw_artifacts, Mapping):
-        raise ValueError("publication must contain artifact_order and artifacts")
-    order = [str(name) for name in raw_order]
-    if len(order) != len(set(order)) or set(order) != set(raw_artifacts):
-        raise ValueError("artifact_order must name every artifact exactly once")
-    if any(name not in _PUBLICATION_FILENAMES for name in order):
-        raise ValueError("publication contains an unknown artifact")
-    if not order or order[0] != "raw_findings":
-        raise ValueError("raw_findings must be the first publication")
-    if "local_findings" in order and order[-1] != "local_findings":
-        raise ValueError("local_findings must be the final publication marker")
-    if "review_receipt" in order and order[-1] != "review_receipt":
-        raise ValueError("review_receipt must be published after raw findings and handoffs")
+    order, artifacts = _publication_order(publication, root, identifier)
 
     root.mkdir(parents=True, exist_ok=True)
     final_paths = {
         name: root / filename.format(pr_number=identifier)
         for name, filename in _PUBLICATION_FILENAMES.items()
     }
-    retired_names = [name for name in final_paths if name not in order]
+    marker_names = ("local_findings", "github_review_binding")
+    retired_names = [
+        name for name in final_paths if name not in order and name not in marker_names
+    ]
     prior_bytes = {
         name: path.read_bytes() if path.exists() else None for name, path in final_paths.items()
     }
     documents = {
-        name: (
-            json.dumps(raw_artifacts[name], sort_keys=True, separators=(",", ":")) + "\n"
-        ).encode()
+        name: (json.dumps(artifacts[name], sort_keys=True, separators=(",", ":")) + "\n").encode()
         for name in order
     }
     staged: dict[str, Path] = {}
@@ -312,36 +453,44 @@ def publish_experimental_review_artifacts(
                 final_paths[name].name,
                 documents[name],
             )
-        for name in order[:-1]:
+
+        for name in marker_names:
+            if final_paths[name].exists():
+                final_paths[name].unlink()
+                changed.append(name)
+        fsync_directory(root)
+
+        marker_name = order[-1] if order[-1] in marker_names else None
+        payload_order = order[:-1] if marker_name is not None else order
+        for name in payload_order:
             os.replace(staged[name], final_paths[name])
             staged.pop(name)
             changed.append(name)
+            fsync_directory(root)
         for name in retired_names:
             if final_paths[name].exists():
                 final_paths[name].unlink()
                 changed.append(name)
-        marker_name = order[-1]
-        os.replace(staged[marker_name], final_paths[marker_name])
-        staged.pop(marker_name)
-        changed.append(marker_name)
+                fsync_directory(root)
+        if marker_name is not None:
+            os.replace(staged[marker_name], final_paths[marker_name])
+            staged.pop(marker_name)
+            changed.append(marker_name)
+            fsync_directory(root)
     except Exception as publication_error:
-        rollback_error: Exception | None = None
         for temporary_path in staged.values():
             temporary_path.unlink(missing_ok=True)
-        for name in reversed(changed):
-            try:
-                previous = prior_bytes[name]
-                if previous is None:
-                    final_paths[name].unlink(missing_ok=True)
-                else:
-                    rollback_path = _write_temp_bytes(
-                        root,
-                        final_paths[name].name,
-                        previous,
-                    )
-                    os.replace(rollback_path, final_paths[name])
-            except OSError as error:  # pragma: no cover - exceptional filesystem failure
-                rollback_error = error
+        rollback_error = (
+            _restore_publication_files(
+                root,
+                final_paths,
+                prior_bytes,
+                changed,
+                marker_names,
+            )
+            if changed
+            else None
+        )
         if rollback_error is not None:
             raise ExceptionGroup(
                 "publication failed and rollback was incomplete",
@@ -365,3 +514,39 @@ def publish_experimental_review_artifacts(
         "published_paths": {name: str(final_paths[name]) for name in order},
         "publication_records": publication_records,
     }
+
+
+def github_review_handoff_error(*, output_dir: str, pr_number: str) -> str | None:
+    """Return a stable reason when the GitHub binding cannot be paired to its receipt."""
+    root = Path(output_dir)
+    if not root.is_absolute():
+        return f"output_dir must be absolute, got {output_dir!r}"
+
+    documents: dict[str, object] = {}
+    for name in ("diff_context", "github_review_binding"):
+        path = root / _PUBLICATION_FILENAMES[name].format(pr_number=pr_number)
+        try:
+            _resolved, data = read_stable_contained_bytes(path, root)
+            documents[name] = json.loads(data)
+        except (ContainmentError, OSError, ValueError, RecursionError) as exc:
+            return f"{name} unreadable: {exc}"
+
+    pair_error = review_handoff_pair_error(
+        documents["diff_context"],
+        documents["github_review_binding"],
+    )
+    if pair_error is not None:
+        return pair_error
+
+    binding = cast(Mapping[str, object], documents["github_review_binding"])
+    try:
+        receipt = _load_github_review_receipt(
+            root,
+            pr_number,
+            head_sha=cast(str, binding["_head_sha"]),
+        )
+    except ValueError as exc:
+        return str(exc)
+    if binding.get("receipt_operation_key") != receipt.operation_key:
+        return "receipt operation key does not match the github review binding"
+    return None

@@ -175,6 +175,9 @@ def test_review_publisher_captures_receipt_identity(
     assert skill_inputs["pr_head_sha"] == "${{ context.pr_head_sha }}"
     assert skill_inputs["anchor_authority_path"] == ("${{ context.anchor_authority_path }}")
     assert skill_inputs["receipt_path"].endswith(f"/batch_review_response_{consumer.pr_ref}.json")
+    assert skill_inputs["receipt_path"].rsplit("/", 1)[0] == review["with"]["output_dir"].rstrip(
+        "/"
+    )
     assert capture["review_operation_key"] == "${{ result.review_operation_key }}"
     assert capture["review_head_sha"] == "${{ result.review_head_sha }}"
     assert capture["review_post_state"] == "${{ result.review_post_state }}"

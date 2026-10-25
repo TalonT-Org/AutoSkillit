@@ -21,6 +21,7 @@ __all__ = [
     "ReviewOperationState",
     "ReviewReconciliationResult",
     "ReviewResponseClass",
+    "github_review_receipt_filename",
     "is_final_github_review_state",
     "is_valid_github_review_head_sha",
     "is_valid_github_review_logical_iteration",
@@ -58,6 +59,11 @@ def is_valid_github_review_operation_key(value: object) -> bool:
 def is_valid_github_review_repository(value: object) -> bool:
     """Return whether a value is a canonical lowercase owner/repository identity."""
     return isinstance(value, str) and _REPOSITORY_RE.fullmatch(value) is not None
+
+
+def github_review_receipt_filename(pr_number: int) -> str:
+    """Return the server receipt filename for a pull request."""
+    return f"batch_review_response_{pr_number}.json"
 
 
 class ReviewOperationState(StrEnum):

@@ -812,8 +812,9 @@ If an initially valid retained snapshot is now unavailable or differs, finalizat
 survivor sets from effect-producing consumers, permits only diagnostic raw/summary envelopes with
 empty survivors, and emits `stale_snapshot`. In that movement branch revalidation sets
 `FINAL_SNAPSHOT_STATE=stale` before any consumer is selected. Initial gate degradation remains
-`authority_degraded` and emits `needs_human`. Do not publish diff context, local findings, receipts,
-comments, reviews, or approvals from either state. On freshness, set
+`authority_degraded` and emits `needs_human`. Do not publish diff context, local
+findings, the GitHub binding marker, comments, reviews, or approvals from either state.
+On freshness, set
 `COMMIT_ID="$METRICS_HEAD_SHA"` once and never query a later head to replace it.
 
 ### Step 4.5: Echo Primary Obligation
@@ -962,7 +963,7 @@ Resolve `repository` from the canonical `nameWithOwner` value supplied by the ca
 require it to match `owner/repo`. Require a positive caller-supplied `pr_number`, and validate
 the caller-supplied `pr_head_sha` against `^[0-9a-f]{40}$` before publication. Require the
 caller-supplied `logical_iteration` to be namespaced and require `receipt_path` to be the
-contained `batch_review_response_${pr_number}.json` destination under
+contained `batch_review_response_${pr_number}.json` destination directly inside
 `{review_output_dir}` for this invocation. Reject a logical iteration that does not start
 with `review-pr:`.
 
@@ -1034,7 +1035,7 @@ additional GitHub review write.
 
 Re-run the final freshness guard before every `diff_context` handoff publication. Derive
 `review_generation_id` from the snapshot authority and canonical normalized raw
-ledger. Every artifact in a successful invocation carries the same
+ledger. Every publisher-written artifact in a successful invocation carries the same
 `review_generation_id`, `_head_sha`, `_base_sha`, optional `_merge_base_sha`, and
 `annotation_generation_id`.
 
@@ -1044,13 +1045,16 @@ to a fixed destination. Publish effect-bearing artifacts in this order:
 
 1. diagnostic/raw ledger;
 2. diff context;
-3. GitHub receipt/publication records when applicable;
+3. `github_review_binding_{pr_number}.json` last in GitHub mode as the GitHub generation
+   commit marker. The publisher derives it from the server-written
+   `batch_review_response_{pr_number}.json` and never writes, replaces, or deletes that
+   receipt;
 4. `local_findings_{pr_number}.json last` in local mode as the local generation
    commit marker.
 
 On `stale_snapshot`, publish only bounded diagnostic raw and summary envelopes with
-empty survivor sets. Do not publish diff context, local findings, receipts, comments,
-reviews, or approvals.
+empty survivor sets. Do not publish diff context, local findings, the GitHub binding
+marker, comments, reviews, or approvals.
 
 The raw ledger contains immutable linked arrays named `candidate_records`,
 `validation_records`, `disposition_records`, `aggregation_records`,
@@ -1076,7 +1080,7 @@ bash "{{AUTOSKILLIT_SCRIPTS}}/review_pr_gate.sh" revalidate "{authority_path}"
 
 Bind `FINAL_SNAPSHOT_STATE` using Step 2.7's failure rule, then assign
 `FINAL_SNAPSHOT_STATE == "fresh"` to the Python boolean `SNAPSHOT_IS_FRESH`.
-Parse `RECEIPT_DOCUMENT` only when it is non-empty:
+Re-finalize when the snapshot state changed:
 
 ```text
 if FINAL_SNAPSHOT_STATE != FINALIZED_SNAPSHOT_STATE:
@@ -1097,8 +1101,6 @@ if FINAL_SNAPSHOT_STATE != FINALIZED_SNAPSHOT_STATE:
 ```
 
 ```python
-import json
-
 from autoskillit.smoke_utils import (
     prepare_experimental_review_publication,
     publish_experimental_review_artifacts,
@@ -1137,7 +1139,6 @@ else:
         mode=MODE,
         snapshot_is_fresh=SNAPSHOT_IS_FRESH,
         handoff_metadata=HANDOFF_METADATA,
-        receipt=(json.loads(RECEIPT_DOCUMENT) if MODE == "github" and RECEIPT_DOCUMENT else None),
     )
     if SNAPSHOT_IS_FRESH:
         publication_generation_id = PUBLICATION["artifacts"]["raw_findings"][
@@ -1145,18 +1146,30 @@ else:
         ]
         if publication_generation_id != REVIEW_GENERATION_ID:
             raise RuntimeError("publication generation changed after external effects")
-    PUBLICATION_RESULT = publish_experimental_review_artifacts(
-        publication=PUBLICATION,
-        output_dir="{review_output_dir}",
-        pr_number=str(pr_number),
-    )
+    try:
+        PUBLICATION_RESULT = publish_experimental_review_artifacts(
+            publication=PUBLICATION,
+            output_dir="{review_output_dir}",
+            pr_number=str(pr_number),
+        )
+    except ValueError as exc:
+        print(f"Publication skipped: {exc}")
+        PUBLICATION_RESULT = {
+            "state": "publication_skipped",
+            "error": str(exc),
+            "publication_records": [],
+        }
 ```
 
+The server receipt remains the effect authority, so continue to emit the verdict and
+receipt tokens if publication is skipped.
+
 This publisher is the only writer of the fixed raw-findings, diff-context,
-GitHub-receipt, and local-findings paths. Its executable order is raw findings,
-diff context, then the GitHub receipt; local mode instead publishes local findings
-last. Every downstream finding is copied from `FINAL_REVIEW_FINDINGS`, retains
-opaque fields, and carries both `file` and the normalized `path` alias plus
+GitHub-binding, and local-findings paths. Its executable order is raw findings,
+diff context, then the GitHub binding marker; local mode instead publishes local findings
+last. The server is the only writer of the GitHub receipt. Every downstream finding is
+copied from `FINAL_REVIEW_FINDINGS`, retains opaque fields, and carries both `file` and
+the normalized `path` alias plus
 `body`, `side`, and `code_region`.
 
 **Write Raw Findings JSON (first):**
@@ -1165,7 +1178,7 @@ As the first publication, build the complete raw ledger in memory using the sche
 specified below. The sole publisher renders it into a same-directory temporary path
 and atomically renames it to
 `{review_output_dir}raw_findings_{pr_number}.json`. Do not begin diff-context,
-receipt, or local-findings publication until this rename succeeds. On
+GitHub-binding, or local-findings publication until this rename succeeds. On
 `stale_snapshot`, the raw ledger is a bounded diagnostic envelope with empty
 survivor and publication sets.
 
@@ -1232,7 +1245,7 @@ best-effort and its absence is handled gracefully by resolve-review.
 
 Do not independently render or rename this fixed path: the helper invocation above
 normalizes and publishes it in the same transaction as raw findings and the final
-receipt/local marker.
+GitHub binding/local marker.
 
 Version 2 requires a non-empty `anchor_digest` on every context entry whose `line`
 is an integer. For `line: null`, omit the digest and do not manufacture source bytes.

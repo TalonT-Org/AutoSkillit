@@ -349,7 +349,7 @@ def test_mode_specific_handoff_pairs_use_executable_identity_validator() -> None
     text = _skill_text()
 
     assert "review_handoff_pair_error(diff_context, local_findings)" in text
-    assert "review_handoff_pair_error(diff_context, batch_review_response)" in text
+    assert "github_review_handoff_error(" in text
 
 
 def test_local_mode_recognizes_overengineering_dimensions() -> None:

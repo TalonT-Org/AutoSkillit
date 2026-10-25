@@ -16,7 +16,6 @@ from autoskillit.core.types import (
     GitHubReviewReceipt,
     GitHubReviewRequest,
     ReviewOperationState,
-    ReviewReconciliationResult,
     ReviewResponseClass,
 )
 from autoskillit.pipeline.gate import DefaultGateState
@@ -29,6 +28,7 @@ from autoskillit.server.tools.tools_pr_ops import (
     post_pr_review,
     verify_review_receipt,
 )
+from tests.execution.github_review.fakes import authoritative_receipt
 from tests.server._recipe_fixture_parameters import (
     IMPLEMENTATION_READY_PARAMETERS,
 )
@@ -164,32 +164,6 @@ async def test_close_issues_sequentially_delays_between_calls() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _authoritative_receipt() -> GitHubReviewReceipt:
-    return GitHubReviewReceipt(
-        schema_version=1,
-        operation_key="f" * 64,
-        repository="owner/repo",
-        pr_number=7,
-        head_sha="a" * 40,
-        logical_iteration="review-pr:1",
-        requested_event="COMMENT",
-        effective_event="COMMENT",
-        requested_body_digest="b" * 64,
-        effective_body_digest="b" * 64,
-        canonical_finding_digest="c" * 64,
-        state=ReviewOperationState.SUCCEEDED,
-        response_class=ReviewResponseClass.SUCCESS,
-        review_id=901,
-        comment_ids=(),
-        canonical_finding_count=0,
-        reconciliation_result=ReviewReconciliationResult.NOT_NEEDED,
-        finding_dispositions=(),
-        created_at=1.0,
-        updated_at=2.0,
-        final_attempt_digest="d" * 64,
-    )
-
-
 def _write_receipt(cwd: Path, payload: dict[str, object]) -> Path:
     path = cwd / ".autoskillit" / "temp" / "batch_review_response_7.json"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -219,7 +193,7 @@ async def test_ledger_receipt_is_authoritative(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    receipt = _authoritative_receipt()
+    receipt = authoritative_receipt()
     poster = _FakeReviewPoster()
     poster.receipts[receipt.operation_key] = receipt
     monkeypatch.setattr(tool_ctx_kitchen_open, "github_review_poster", poster)
@@ -240,11 +214,14 @@ async def test_handcrafted_receipt_without_ledger_row_is_rejected(
 ) -> None:
     monkeypatch.setattr(tool_ctx_kitchen_open, "github_review_poster", _FakeReviewPoster())
     monkeypatch.setattr(tools_pr_ops, "_get_ctx", lambda: tool_ctx_kitchen_open)
-    receipt_path = _write_receipt(tmp_path, _authoritative_receipt().to_dict())
+    receipt_path = _write_receipt(tmp_path, authoritative_receipt().to_dict())
 
     result = await _verify_receipt(tmp_path, receipt_path)
 
-    assert result == {"reviews_posted": "false"}
+    assert result == {
+        "reviews_posted": "false",
+        "rejection_reason": "ledger_receipt_missing",
+    }
 
 
 @pytest.mark.anyio
@@ -264,7 +241,7 @@ async def test_receipt_identity_must_match_independently_supplied_values(
     parameter: str,
     value: object,
 ) -> None:
-    receipt = _authoritative_receipt()
+    receipt = authoritative_receipt()
     poster = _FakeReviewPoster()
     poster.receipts[receipt.operation_key] = receipt
     monkeypatch.setattr(tool_ctx_kitchen_open, "github_review_poster", poster)
@@ -273,7 +250,10 @@ async def test_receipt_identity_must_match_independently_supplied_values(
 
     result = await _verify_receipt(tmp_path, receipt_path, **{parameter: value})
 
-    assert result == {"reviews_posted": "false"}
+    assert result == {
+        "reviews_posted": "false",
+        "rejection_reason": "identity_mismatch",
+    }
 
 
 @pytest.mark.anyio
@@ -293,7 +273,7 @@ async def test_receipt_contents_must_match_ledger_row_field_for_field(
     field: str,
     value: object,
 ) -> None:
-    receipt = _authoritative_receipt()
+    receipt = authoritative_receipt()
     poster = _FakeReviewPoster()
     poster.receipts[receipt.operation_key] = receipt
     monkeypatch.setattr(tool_ctx_kitchen_open, "github_review_poster", poster)
@@ -304,7 +284,10 @@ async def test_receipt_contents_must_match_ledger_row_field_for_field(
 
     result = await _verify_receipt(tmp_path, receipt_path)
 
-    assert result == {"reviews_posted": "false"}
+    assert result == {
+        "reviews_posted": "false",
+        "rejection_reason": "receipt_wire_mismatch",
+    }
 
 
 @pytest.mark.anyio
@@ -322,7 +305,13 @@ async def test_local_mode_gate_requires_explicit_local_marker(
         post_state=post_state,
     )
 
-    assert result == {"reviews_posted": expected}
+    if expected == "true":
+        assert result == {"reviews_posted": expected}
+    else:
+        assert result == {
+            "reviews_posted": expected,
+            "rejection_reason": "invalid_request",
+        }
 
 
 @pytest.mark.anyio

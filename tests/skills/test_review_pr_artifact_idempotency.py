@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import ast
+import builtins
+import re
 from pathlib import Path
 
 import pytest
@@ -30,6 +33,23 @@ _VULNERABLE_FILES = [
 
 _WINDOW = 600
 _RECEIPT_PREFIX = "batch_review_response_"
+_UPSTREAM_BINDINGS: dict[str, str] = {
+    "FINAL_SNAPSHOT_STATE": "Bind `FINAL_SNAPSHOT_STATE` from the one printed word",
+    "FINALIZED_SNAPSHOT_STATE": "Update `FINALIZED_SNAPSHOT_STATE` to the state passed",
+    "AUDIT_FINALIZATION": "AUDIT_FINALIZATION = finalize_review_audit(",
+    "FINAL_REVIEW_FINDINGS": "`FINAL_REVIEW_FINDINGS = FILTERED_FINDINGS = survivors`",
+    "UNPOSTABLE_FINDINGS": "`UNPOSTABLE_FINDINGS = unpostable`",
+    "REVIEW_LEVEL_FINDINGS": "`REVIEW_LEVEL_FINDINGS = review_level_findings`",
+    "RAW_LEDGER": "Before Step 6, finish `RAW_LEDGER` and `HANDOFF_METADATA` in memory",
+    "HANDOFF_METADATA": "Before Step 6, finish `RAW_LEDGER` and `HANDOFF_METADATA` in memory",
+    "GATE_AUTHORITY": "parse the one printed JSON object as `GATE_AUTHORITY`",
+    "ANNOTATION_GENERATION_ID": (
+        "`ANNOTATION_GENERATION_ID` from its `snapshot` and generation fields"
+    ),
+    "MODE": 'MODE="github"',
+    "REVIEW_GENERATION_ID": "REVIEW_GENERATION_ID = PUBLICATION_SEED[",
+    "pr_number": "read -r pr_number pr_url",
+}
 
 
 def _all_surrounding_windows(text: str, target: str) -> list[str]:
@@ -45,6 +65,26 @@ def _all_surrounding_windows(text: str, target: str) -> list[str]:
         windows.append(text[w_start:w_end])
         start = idx + 1
     return windows
+
+
+def _python_names_in_fence(source: str) -> tuple[set[str], set[str]]:
+    nodes = list(ast.walk(ast.parse(source)))
+    loaded = {
+        node.id for node in nodes if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)
+    }
+    bound = {
+        node.id for node in nodes if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store)
+    }
+    for node in nodes:
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            bound.update(
+                alias.asname
+                or (alias.name.partition(".")[0] if isinstance(node, ast.Import) else alias.name)
+                for alias in node.names
+            )
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            bound.add(node.name)
+    return loaded, bound
 
 
 @pytest.mark.parametrize("filename_pattern", _VULNERABLE_FILES)
@@ -91,11 +131,37 @@ def test_publication_uses_same_directory_temporary_and_atomic_rename() -> None:
     assert "same-directory temporary file" in step8
     assert "atomic rename" in step8
     assert "local_findings_{pr_number}.json last" in step8
+    assert "`github_review_binding_{pr_number}.json` last" in step8
     assert "review_generation_id" in step8
     assert "annotation_generation_id" in step8
     assert step8.index("**Write Raw Findings JSON (first):**") < step8.index(
         "**Write Diff-Scoped Context Handoff"
     )
+    assert step8.index("2. diff context;") < step8.index(
+        "`github_review_binding_{pr_number}.json` last"
+    )
+
+
+def test_step8_python_names_are_bound() -> None:
+    text = _SKILL_PATH.read_text()
+    step8 = text[text.index("### Step 8") :]
+    fences = re.findall(r"```python\s*\n(.*?)\n```", step8, flags=re.DOTALL)
+    assert fences, "Step 8 must contain executable Python fences"
+
+    loaded: set[str] = set()
+    for fence_index, source in enumerate(fences, start=1):
+        loaded_in_fence, stored_or_imported = _python_names_in_fence(source)
+        loaded.update(loaded_in_fence)
+        unresolved = loaded_in_fence - stored_or_imported - set(dir(builtins))
+        undocumented = unresolved - set(_UPSTREAM_BINDINGS)
+        assert not undocumented, (
+            f"Step 8 Python fence {fence_index} uses undocumented names: {sorted(undocumented)}"
+        )
+    assert set(_UPSTREAM_BINDINGS) <= loaded, (
+        f"Step 8 no longer consumes documented inputs: {sorted(set(_UPSTREAM_BINDINGS) - loaded)}"
+    )
+    for name, binding in _UPSTREAM_BINDINGS.items():
+        assert binding in text, f"Step 8 input {name!r} has no matching skill binding"
 
 
 def test_runtime_threads_validation_aggregation_and_publication_results() -> None:
@@ -107,7 +173,9 @@ def test_runtime_threads_validation_aggregation_and_publication_results() -> Non
     assert "FINAL_REVIEW_FINDINGS = FILTERED_FINDINGS = survivors" in step4
     assert "PUBLICATION = prepare_experimental_review_publication(" in step8
     assert "survivors=FINAL_REVIEW_FINDINGS" in step8
-    assert "receipt=" in step8
+    assert "receipt=" not in step8
+    assert "github_review_binding_{pr_number}.json" in step8
+    assert "Every publisher-written artifact" in step8
     assert "PUBLICATION_RESULT = publish_experimental_review_artifacts(" in step8
     assert "if not SNAPSHOT_IS_FRESH:" in step8
     assert 'verdict = AUDIT_FINALIZATION["verdict"]' in step8
@@ -123,6 +191,7 @@ def test_fixed_destinations_reject_direct_redirects() -> None:
     for filename in (
         "diff_context_{pr_number}.json",
         "raw_findings_{pr_number}.json",
+        "github_review_binding_{pr_number}.json",
         "local_findings_{pr_number}.json",
     ):
         assert f'> "{{review_output_dir}}{filename}"' not in text

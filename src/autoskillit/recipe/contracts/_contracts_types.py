@@ -22,11 +22,22 @@ _CONTEXT_REF_RE = re.compile(r"\$\{\{\s*context\.([A-Za-z_]\w*)\s*\}\}")
 INPUT_REF_RE = re.compile(r"\$\{\{\s*inputs\.([A-Za-z_]\w*)\s*\}\}")
 _TEMPLATE_REF_RE = re.compile(r"\$\{\{[^}]+\}\}")
 RESULT_CAPTURE_RE = re.compile(r"\$\{\{\s*result\.([\w-]+)\s*\}\}")
+_PLACEHOLDER_NAME_PATTERN = r"(?!AUTOSKILLIT_)[A-Za-z_][\w.-]*"
+DISPATCH_TOKEN_RE = re.compile(r"(?<![{$])\{\s*(" + _PLACEHOLDER_NAME_PATTERN + r")\s*\}(?!\})")
+WHOLE_VALUE_PLACEHOLDER_RE = re.compile(r"\{\{?\s*" + _PLACEHOLDER_NAME_PATTERN + r"\s*\}\}?")
 
 
 _TEXT_INPUT_TYPES = frozenset({"str", "string", "optional_string"})
 _PATH_INPUT_TYPES = frozenset({"file_path", "file_path_list", "directory_path"})
 _EXACT_REFERENCE_ORIGINS = frozenset({BoundValueOrigin.CONTEXT, BoundValueOrigin.RECIPE_INPUT})
+
+
+def _is_unsubstituted_dispatch_item(value: BoundScalar, bound: BoundValue) -> bool:
+    return (
+        bound.origin is BoundValueOrigin.DISPATCH_ITEM
+        and isinstance(value, str)
+        and value.strip() == str(bound.declared_value).strip()
+    )
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -66,7 +77,9 @@ class SkillInput:
         return False
 
     def admit_runtime_wire(self, value: BoundScalar, bound: BoundValue) -> BoundScalar | None:
-        """Return the bound value, or None when the declared type rejects its wire form."""
+        """Return the bound value, or None when its wire form violates the input contract."""
+        if _is_unsubstituted_dispatch_item(value, bound):
+            return None
         if self.accepts(value):
             return value
         if bound.origin not in _EXACT_REFERENCE_ORIGINS:
@@ -86,6 +99,19 @@ class SkillInput:
         return None if text == bound.absence_value else text
 
     def wire_mismatch_message(self, value: BoundScalar, bound: BoundValue) -> str:
+        if _is_unsubstituted_dispatch_item(value, bound):
+            producer = ", ".join(
+                f"{namespace}.{name}"
+                for namespace, dependencies in (
+                    ("context", bound.context_dependencies),
+                    ("inputs", bound.input_dependencies),
+                )
+                for name in dependencies
+            )
+            return (
+                f"per-item skill input {self.name!r} received its unsubstituted placeholder "
+                f"{value!r}; substitute one item from the step's dispatch_items {producer}"
+            )
         message = (
             f"runtime skill input {self.name!r} expects {self.type!r}; "
             f"received {type(value).__name__}"

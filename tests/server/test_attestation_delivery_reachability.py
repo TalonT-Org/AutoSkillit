@@ -20,6 +20,7 @@ from autoskillit._recipe_delivery_framing import RECIPE_BODY_START
 from autoskillit.core import (
     RECIPE_EXECUTION_CREDENTIAL_WIRE_FIELDS,
     RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
+    BoundValueOrigin,
     RecipeDeliveryMode,
     build_recipe_execution_credential,
 )
@@ -33,6 +34,8 @@ from autoskillit.server.recipe._recipe_delivery import (
 from autoskillit.server.recipe._recipe_delivery_helpers import _attested_render
 from autoskillit.server.recipe._recipe_execution import (
     RecipeExecutionAdmissionError,
+    bind_attested_runtime_invocation,
+    get_recipe_execution,
     install_recipe_execution,
 )
 from autoskillit.server.recipe._recipe_generation import RecipeGenerationStore
@@ -42,6 +45,12 @@ from autoskillit.server.recipe._recipe_initialization import (
     recipe_initialization_receipt,
 )
 from tests._helpers import kitchen_identity_fields
+from tests._run_skill_caller_oracle import (
+    _SINGLE_BRACE_TOKEN,
+    ORCHESTRATOR_SAMPLES,
+    build_run_skill_payload,
+    run_skill_actual_mcp_kwargs,
+)
 from tests.conftest import _make_result
 from tests.contracts.test_delivery_bound_fitness import _full_open_kitchen_generation
 from tests.server._pipeline_test_helpers import _write_tracker
@@ -387,40 +396,55 @@ async def test_tool_ctx_ready_recipe_fixture_yields_genuine_attestation(
         )
     )
 
-    # A step may declare no skill_inputs: sub-key and instead carry its child
-    # inputs as placeholders inside skill_command; omitting the parameter lets
-    # the runtime binder derive them rather than guessing key names.
     declared_inputs = with_args.get("skill_inputs")
-    optional_inputs = (
-        {"skill_inputs": {name: "probe value" for name in declared_inputs}}
-        if declared_inputs
-        else {}
-    )
-
-    genuine = json.loads(
-        await run_skill(
-            with_args["skill_command"],
-            str(work_dir),
-            step_name=ready.step_name,
-            output_dir=with_args["output_dir"],
-            recipe_execution_id=ready.credential["execution_id"],
-            invocation_template_digest=ready.template_digest,
-            **optional_inputs,
+    if "dispatch_items" in ready.step_body.get("with", {}):
+        payload = build_run_skill_payload(
+            ready.step_name,
+            ready.step_body,
+            ready.credential,
+            cwd=str(work_dir),
         )
-    )
+        installed = get_recipe_execution(ready.tool_ctx)
+        assert installed is not None
+        bound_inputs, _ = bind_attested_runtime_invocation(
+            installed,
+            execution_id=payload["recipe_execution_id"],
+            step_name=payload["step_name"],
+            template_digest=payload["invocation_template_digest"],
+            skill_command=payload["skill_command"],
+            skill_inputs=payload.get("skill_inputs"),
+            actual_mcp_kwargs=run_skill_actual_mcp_kwargs(payload),
+        )
+        dispatch_input = next(
+            value
+            for value in installed.snapshot.templates[ready.step_name].invocation.skill_inputs
+            if value.origin is BoundValueOrigin.DISPATCH_ITEM
+        )
+        declared = dispatch_input.declared_value
+        assert isinstance(declared, str)
+        item = _SINGLE_BRACE_TOKEN.fullmatch(declared.strip())
+        assert item is not None
+        assert (
+            dict(bound_inputs)[dispatch_input.name]
+            == ORCHESTRATOR_SAMPLES["item"][item.group(1).strip()]
+        )
+    else:
+        payload = {
+            "skill_command": with_args["skill_command"],
+            "cwd": str(work_dir),
+            "step_name": ready.step_name,
+            "output_dir": with_args["output_dir"],
+            "recipe_execution_id": ready.credential["execution_id"],
+            "invocation_template_digest": ready.template_digest,
+        }
+        if declared_inputs:
+            payload["skill_inputs"] = {name: "probe value" for name in declared_inputs}
+
+    genuine = json.loads(await run_skill(**payload))
     assert genuine.get("stage") != "preflight:recipe_execution", genuine
 
-    fabricated = json.loads(
-        await run_skill(
-            with_args["skill_command"],
-            str(work_dir),
-            step_name=ready.step_name,
-            output_dir=with_args["output_dir"],
-            recipe_execution_id=ready.credential["execution_id"],
-            invocation_template_digest="sha256:" + "0" * 64,
-            **optional_inputs,
-        )
-    )
+    fabricated_payload = {**payload, "invocation_template_digest": "sha256:" + "0" * 64}
+    fabricated = json.loads(await run_skill(**fabricated_payload))
     assert fabricated.get("stage") == "preflight:recipe_execution", fabricated
 
 

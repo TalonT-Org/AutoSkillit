@@ -61,9 +61,6 @@ READING_TOKEN_PATTERN: str = r"^(?P<prefix>\w+) = (?P<path>/.+)$"
 
 
 BoundScalar: TypeAlias = str | int | bool
-_TERMINAL_BYPASS_TARGETS = frozenset({"done", "escalate"})
-
-
 RECIPE_TERMINAL_TARGETS: frozenset[str] = frozenset({"done", "escalate"})
 
 
@@ -291,6 +288,7 @@ class BoundValueOrigin(StrEnum):
     RECIPE_INPUT = "recipe_input"
     CONTEXT = "context"
     TEMPLATE = "template"
+    DISPATCH_ITEM = "dispatch_item"
     ABSENT = "absent"
 
 
@@ -379,6 +377,7 @@ class BindingFailureCode(StrEnum):
     AMBIGUOUS_SKILL_INPUT = "ambiguous_skill_input"
     INVALID_SKILL_INPUT_TYPE = "invalid_skill_input_type"
     INVALID_SKILL_COMMAND = "invalid_skill_command"
+    INVALID_DISPATCH_ITEMS = "invalid_dispatch_items"
 
 
 @dataclass(frozen=True, slots=True)
@@ -595,7 +594,7 @@ def _validate_projection_guards(
         raise ValueError("FinalizedRecipeProjection guards must name finalized steps")
     if any(
         guard.bypass_target not in ordered_step_names
-        and guard.bypass_target not in _TERMINAL_BYPASS_TARGETS
+        and guard.bypass_target not in RECIPE_TERMINAL_TARGETS
         for guard in guards
     ):
         raise ValueError(

@@ -395,10 +395,10 @@ async def post_pr_review(
                     state=ReviewOperationState.AMBIGUOUS,
                     response_class=ReviewResponseClass.SERVER_ERROR,
                 )
-            if not os.path.isdir(cwd):
+            if not os.path.isdir(cwd) or type(pr_number) is not int or pr_number <= 0:
                 return _review_post_error(
                     head_sha=head_sha,
-                    error="cwd must be an existing directory",
+                    error="cwd must be an existing directory and pr_number a positive integer",
                     state=ReviewOperationState.TERMINAL,
                     response_class=ReviewResponseClass.CLIENT_ERROR,
                 )

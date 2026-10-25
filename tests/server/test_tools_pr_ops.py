@@ -528,6 +528,45 @@ def _successful_review_result(receipt_path: str) -> GitHubReviewPostResult:
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("pr_number", [True, 0])
+async def test_post_pr_review_rejects_invalid_pr_before_receipt_path_formatting(
+    pr_number: int,
+    tool_ctx,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    poster = _FakeReviewPoster()
+    monkeypatch.setattr(tool_ctx, "github_review_poster", poster)
+    monkeypatch.setattr(tools_pr_ops, "_get_ctx", lambda: tool_ctx)
+
+    result = json.loads(
+        await post_pr_review(
+            cwd=str(tmp_path),
+            receipt_path=str(
+                tmp_path / ".autoskillit" / "temp" / github_review_receipt_filename(7)
+            ),
+            anchor_authority_path=str(
+                tmp_path / ".autoskillit" / "temp" / "anchor_authority_7.json"
+            ),
+            repository="owner/repo",
+            pr_number=pr_number,
+            head_sha="a" * 40,
+            logical_iteration="review-pr:1",
+            event="COMMENT",
+            body="Review",
+            comments=[],
+            dry_run=False,
+            ctx=Mock(),
+        )
+    )
+
+    assert result["state"] == "TERMINAL"
+    assert result["response_class"] == "CLIENT_ERROR"
+    assert "positive integer" in result["error"]
+    assert poster.requests == []
+
+
+@pytest.mark.anyio
 async def test_post_pr_review_uses_injected_poster_with_exact_typed_request(
     tool_ctx,
     monkeypatch: pytest.MonkeyPatch,

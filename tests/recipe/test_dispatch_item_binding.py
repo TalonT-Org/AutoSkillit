@@ -263,12 +263,24 @@ def test_invalid_dispatch_declaration_is_not_attested(
         assert not (set(producer_contexts) & set(value.context_dependencies))
 
 
-@pytest.mark.parametrize("phase_token", ["{phase_id}", "{ phase_id }", "{phase-id}", "{phase.id}"])
-def test_dispatch_tokens_match_general_whole_value_placeholders(phase_token: str) -> None:
-    dispatch_token_re = _binding_input._DISPATCH_TOKEN_RE
-
-    assert dispatch_token_re.fullmatch(phase_token)
-    assert rules_inputs._WHOLE_VALUE_PLACEHOLDER_RE.fullmatch(phase_token)
+@pytest.mark.parametrize(
+    ("phase_token", "dispatch", "unresolved"),
+    [
+        ("{phase_id}", True, True),
+        ("{ phase_id }", True, True),
+        ("{phase-id}", True, True),
+        ("{phase.id}", True, True),
+        ("{{phase_id}}", False, True),
+        ("{{phase_id}", False, True),
+        ("{phase_id}}", False, True),
+        ("${{ context.phase_ids }}", False, False),
+    ],
+)
+def test_placeholder_grammar_distinguishes_dispatch_tokens(
+    phase_token: str, dispatch: bool, unresolved: bool
+) -> None:
+    assert bool(_binding_input._DISPATCH_TOKEN_RE.fullmatch(phase_token)) is dispatch
+    assert bool(rules_inputs._WHOLE_VALUE_PLACEHOLDER_RE.fullmatch(phase_token)) is unresolved
 
 
 @pytest.mark.parametrize("value", ["{AUTOSKILLIT_TEMP}", "{{AUTOSKILLIT_TEMP}}"])

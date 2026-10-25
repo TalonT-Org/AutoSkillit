@@ -27,14 +27,14 @@ from autoskillit.recipe.contracts import (
     get_skill_contract,
     load_bundled_manifest,
 )
+from autoskillit.recipe.contracts._contracts_types import (
+    WHOLE_VALUE_PLACEHOLDER_RE as _WHOLE_VALUE_PLACEHOLDER_RE,
+)
 from autoskillit.recipe.io import iter_steps_with_context
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 from autoskillit.recipe.schema import Recipe
 
 logger = get_logger(__name__)
-
-
-_WHOLE_VALUE_PLACEHOLDER_RE = re.compile(r"\{\{?\s*(?!AUTOSKILLIT_)[A-Za-z_][\w.-]*\s*\}\}?")
 
 
 def _unresolved_template_reason(bound: BoundValue, *, per_item: bool) -> str | None:

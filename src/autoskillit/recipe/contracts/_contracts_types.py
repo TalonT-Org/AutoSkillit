@@ -22,6 +22,9 @@ _CONTEXT_REF_RE = re.compile(r"\$\{\{\s*context\.([A-Za-z_]\w*)\s*\}\}")
 INPUT_REF_RE = re.compile(r"\$\{\{\s*inputs\.([A-Za-z_]\w*)\s*\}\}")
 _TEMPLATE_REF_RE = re.compile(r"\$\{\{[^}]+\}\}")
 RESULT_CAPTURE_RE = re.compile(r"\$\{\{\s*result\.([\w-]+)\s*\}\}")
+_PLACEHOLDER_NAME_PATTERN = r"(?!AUTOSKILLIT_)[A-Za-z_][\w.-]*"
+DISPATCH_TOKEN_RE = re.compile(r"(?<![{$])\{\s*(" + _PLACEHOLDER_NAME_PATTERN + r")\s*\}(?!\})")
+WHOLE_VALUE_PLACEHOLDER_RE = re.compile(r"\{\{?\s*" + _PLACEHOLDER_NAME_PATTERN + r"\s*\}\}?")
 
 
 _TEXT_INPUT_TYPES = frozenset({"str", "string", "optional_string"})

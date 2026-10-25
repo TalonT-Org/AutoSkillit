@@ -42,6 +42,9 @@ from autoskillit.recipe.contracts._contracts_types import (
     SkillInput,
 )
 from autoskillit.recipe.contracts._contracts_types import (
+    DISPATCH_TOKEN_RE as _DISPATCH_TOKEN_RE,
+)
+from autoskillit.recipe.contracts._contracts_types import (
     INPUT_REF_RE as _INPUT_REF_RE,
 )
 
@@ -50,9 +53,6 @@ from autoskillit.recipe.contracts._contracts_types import (
 _AUTOSKILLIT_TEMPLATE_RE: Final = re.compile(r"\{\{(AUTOSKILLIT_[A-Z0-9_]+)\}\}")
 _EXACT_CONTEXT_REF_RE: Final = re.compile(r"^\$\{\{\s*context\.([A-Za-z_]\w*)\s*\}\}$")
 _EXACT_INPUT_REF_RE: Final = re.compile(r"^\$\{\{\s*inputs\.([A-Za-z_]\w*)\s*\}\}$")
-_DISPATCH_TOKEN_RE: Final = re.compile(
-    r"(?<![{$])\{\s*((?!AUTOSKILLIT_)[A-Za-z_][\w.-]*)\s*\}(?!\})"
-)
 
 # === Scalar tuple constant ===
 

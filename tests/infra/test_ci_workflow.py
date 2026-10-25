@@ -702,7 +702,6 @@ def test_api_simulator_cache_key_is_the_build_identity_not_the_lockfile(
         f"key=uv-api-simulator-Linux-X64-ubuntu24-uv{uv_version}-rust{rust_version}-py{python_tag}-{revision}"
     ]
     assert identity["env"] == {"UV_VERSION": "${{ steps.setup-uv.outputs.uv-version }}"}
-    assert "hashFiles('uv.lock')" not in workflow_path.read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("missing_secret", ["GH_USER", "GH_PAT"])

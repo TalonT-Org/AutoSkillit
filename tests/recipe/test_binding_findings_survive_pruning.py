@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.recipe._api import load_and_validate
+from autoskillit.recipe.api._api_listing import validate_from_path
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -146,4 +147,16 @@ def test_pruned_step_binding_failure_is_reported(tmp_path: Path) -> None:
         and suggestion.get("step") == "maybe"
         and suggestion.get("severity") == "error"
         for suggestion in result["suggestions"]
+    )
+
+    path_result = validate_from_path(
+        tmp_path / ".autoskillit/recipes/pruned-binding-failure.yaml",
+        ingredient_overrides={"flag": "false"},
+    )
+    assert path_result["valid"] is False
+    assert any(
+        finding.get("rule") == "invalid-tool-invocation-binding"
+        and finding.get("step") == "maybe"
+        and finding.get("severity") == "error"
+        for finding in path_result["findings"]
     )

@@ -34,7 +34,10 @@ from autoskillit.recipe.api_orchestration._api_orchestration_types import (
     _LoadPipelineInputs,
     _ValidationResult,
 )
-from autoskillit.recipe.helpers._rule_helpers import filter_pruning_false_positives
+from autoskillit.recipe.helpers._rule_helpers import (
+    filter_pruning_false_positives,
+    retain_declaration_findings,
+)
 from autoskillit.recipe.ingredients._recipe_composition import (
     _analysis_edges_from_effective_routes,
     _assert_content_integrity,
@@ -50,7 +53,6 @@ from autoskillit.recipe.ingredients._recipe_composition import (
 )
 from autoskillit.recipe.ingredients._recipe_raw_repair import _resolve_skip_guards_in_content
 from autoskillit.recipe.registry import RuleFinding as _RuleFinding
-from autoskillit.recipe.registry import declaration_scoped_rule_names
 from autoskillit.recipe.rules.rules_plan_set_gate import STAGE_OBLIGATION_GATE_DOMINANCE_RULE
 from autoskillit.recipe.schema import Recipe, RecipeStep
 
@@ -66,8 +68,6 @@ def _reconcile_semantic_findings(
     suppressed: _Sequence[str] | None,
 ) -> tuple[list[_RuleFinding], list[dict[str, Any]]]:
     """Reconcile pruning diagnostics and suppress displayed version findings."""
-    declaration_rules = declaration_scoped_rule_names()
-    semantic_findings = [f for f in semantic_findings if f.rule not in declaration_rules]
     if skip_resolutions and any(value is not True for value in skip_resolutions.values()):
         semantic_findings = filter_pruning_false_positives(semantic_findings, pre_prune_findings)
         graph_aware_rules = {"capture-inversion-detection", "dead-output"}
@@ -85,14 +85,12 @@ def _reconcile_semantic_findings(
                     message=finding.message,
                 )
 
+    semantic_findings = retain_declaration_findings(semantic_findings, pre_prune_findings)
     retained_pre_prune_findings = [
         finding
         for finding in pre_prune_findings
-        if finding.rule in declaration_rules
-        or (
-            finding.rule == STAGE_OBLIGATION_GATE_DOMINANCE_RULE
-            and "cannot declare skip_when_false" in finding.message
-        )
+        if finding.rule == STAGE_OBLIGATION_GATE_DOMINANCE_RULE
+        and "cannot declare skip_when_false" in finding.message
     ]
     retained_keys = {
         (finding.rule, finding.step_name, finding.message) for finding in semantic_findings

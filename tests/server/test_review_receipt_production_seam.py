@@ -206,6 +206,31 @@ async def test_new_post_without_republication_is_rejected_by_consumer(
     )
 
 
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"cwd": "relative"},
+        {"repository": "invalid"},
+        {"pr_number": True},
+        {"pr_number": 0},
+        {"head_sha": "invalid"},
+        {"logical_iteration": "review-pr"},
+        {"post_state": "PREPARED"},
+    ],
+)
+async def test_verifier_rejects_malformed_request_fields(
+    overrides: dict[str, object],
+    tool_ctx_kitchen_open: Any,
+    tmp_path: Path,
+) -> None:
+    _, receipt_path = _review_paths(tmp_path)
+
+    assert await _verify_review(tmp_path, receipt_path, **overrides) == {
+        "reviews_posted": "false",
+        "rejection_reason": "invalid_request",
+    }
+
+
 def _configure_verifier_rejection(
     case: str,
     tmp_path: Path,

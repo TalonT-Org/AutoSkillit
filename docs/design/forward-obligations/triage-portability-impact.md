@@ -17,7 +17,7 @@ an LLM subprocess.
 - `ClaudeCodeBackend`: `triage_capable=True` (set in `CLAUDE_CODE_CAPABILITIES`). Uses
   a `claude -p` subprocess with the `haiku` model class resolved through
   `backend.translate_model("haiku")` (`claude-haiku-5-5`).
-- `CodexBackend`: `triage_capable=False` (set in `CODEX_CAPABILITIES`). Triage is skipped entirely.
+- `CodexBackend`: `triage_capable=False` (set in `CodexBackend.capabilities`). Triage is skipped entirely.
 
 ## Contract Gaps
 

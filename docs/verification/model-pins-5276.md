@@ -137,18 +137,52 @@ A session started with `--model claude-sonnet-5` then resumed with
 model and new usage entry were `claude-sonnet-5-5`, and the served assistant model
 was also `claude-sonnet-5-5`. Cumulative usage retained the earlier Sonnet 5 entry.
 
-AutoSkillit's resume checks remain separate from that direct CLI success.
-The managed adapter stores the configured class in `physical_model`; the generic
-`validate_resume` rejects changed plugin identities and projection digests.
-Child model policies include translated pins in adaptation digests, so changing a
-pin can change the projection and trigger a refusal for those skills. An installed
-publication also mints a new plugin incarnation. The plan expected an installed-update
-refusal through plugin identity, but the current headless skill preparation supplies
-an empty plugin identity. That scenario was not established by these CLI probes;
-this change does not alter resume identity handling. The generic drift checks are
-covered by `tests/execution/test_launch_resolution.py`.
+### AutoSkillit resume refusals
 
-## Haiku launches and quota
+The managed adapter stores the configured class in `physical_model`. Claude's
+headless skill launch selects `PluginLoadMode.EXPLICIT_PLUGIN_DIR` in
+`execution/headless/_managed/_attempt.py::_headless_plugin_load_mode`: both
+skill injection and plugin installation are supported. That mode consumes an
+artifact, so `core/runtime/artifact_lease.py::plugin_launch_binding_scope`
+acquires a real binding. `_headless_launch.py::_run_headless_attempt` replaces
+the preliminary launch preparation's plugin identity with `_binding_identity(binding)`
+before finalization and resume validation. The resulting identity includes
+`incarnation_id` and `artifact_digest`.
+
+An existing persisted Claude headless-skill manifest corroborates the binding:
+`~/.local/share/autoskillit/logs/skill-session-contracts/sessions/7c392e2dec109c442d5b39eccd1bbab78a2166a7b858d99102b28bb36b03c860/manifest.json`
+records `explicit_plugin_dir`, incarnation `fd2d6ec8d0484031bea2b8f450e3be2b`, and
+artifact digest `88ca7e7b590bdc2fbdbcc2063ad29989932eab10b27a25faed78ed3cac2eef3c`.
+The selected metadata is retained as `.autoskillit/temp/5276/plugin-binding-evidence.json`.
+This historical manifest uses launch schema 3; it was inspected as binding evidence,
+not migrated into the current schema 5 validator.
+
+`execution/runtime/launch_resolution.py::DefaultLaunchResolver.validate_resume`
+establishes these independent fail-closed conditions. `_run_headless_attempt`
+calls it before dispatching the resumed process:
+
+| Resume change | Establishing evidence | Refusal diagnostic |
+|---|---|---|
+| Plugin identity across an installed update | `validate_resume` compares the persisted and current plugin identities. `workspace/_installed/_artifact.py::write_installed_plugin_artifact_manifest_locked` mints a fresh incarnation when none is supplied. The acquired binding carries that incarnation and its artifact digest. | `resume launch plugin identity drifted from persisted contract` |
+| Projection for a skill declaring `child_model_policies` | `ClaudeCodeBackend.adapt_skill_semantics` translates the child class into `model_effort_policy`; `SkillSemanticAdaptationResult.digest` includes that policy, and `SkillProjectionBinding.projection_digest` includes its adaptation digests. `validate_resume` compares the persisted and current projection digests. | `resume launch projection digest drifted from persisted contract` |
+
+This pin change moves both axes: the translated child model changes from Sonnet 5
+to Sonnet 5.5, changing the adaptation and projection digests; publishing the changed
+projection under its new key also mints a new plugin incarnation in
+`workspace/_projected_artifact/authority.py`. If both identities
+drift, the projection comparison precedes the plugin comparison, so the first refusal
+can report projection drift. Existing deterministic coverage is in
+`tests/execution/test_launch_resolution.py`.
+
+**Evidence scope and deviation:** these refusals are established by the launch-path
+trace and persisted binding metadata. The direct CLI probes above bypass AutoSkillit's
+launch machinery. No live installed-update or cross-pin `run_skill` resume was
+performed: replacing the shared installation or resuming another job's persisted
+session would affect work outside this verification. This documentation correction
+preserves runtime behavior and records that limit explicitly; it does not claim
+either refusal was observed during the direct CLI probes.
+
+## Haiku launches
 
 Triage, haiku-class `run_skill` calls, and recipe-step models now pass
 `claude-haiku-5-5`. In-session `Agent(..., model='haiku')` subagents and
@@ -164,8 +198,26 @@ describes higher per-token rates for prompts above 100K tokens. This session did
 not exercise that threshold or refusal classifiers. Existing consumers now select
 Haiku 5.5 rather than retaining Haiku 4.5 behavior.
 
-Quota `long_window_patterns` classify usage-API window names in `_is_long_window`,
-not model IDs. No quota-pattern change is needed.
+## Quota guard
+
+Quota `long_window_patterns` classify usage-API window names in
+`execution/quota/_quota_gate.py::_is_long_window`, not model IDs. No quota-pattern
+change is needed.
+
+## Local gate evidence
+
+For the initial implementation at `05b4e0f4f`, the session completed
+`pre-commit run --all-files`, then the configured `task test-local-gate` through
+`test_check`, before creating the commit. The gate returned 41,389 passed,
+508 skipped, and 13 xfailed. Retained local records are
+`.autoskillit/temp/5276/pre-commit-staged.log`,
+`.autoskillit/temp/5276/test-check-result.json`, and
+`.autoskillit/temp/5276/commit.log`. The ordering is in the original session's
+tool-call transcript; these files alone do not independently attest that ordering.
+
+The audit corrections use a new documentation commit under the repository's
+new-commit rule. The original model pins and client floor remain together in
+their original commit.
 
 ## Remaining external verification
 

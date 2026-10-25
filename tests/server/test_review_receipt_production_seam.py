@@ -12,22 +12,18 @@ import pytest
 
 import autoskillit.server.tools.tools_pr_ops as tools_pr_ops
 from autoskillit.server.tools.tools_pr_ops import post_pr_review, verify_review_receipt
-from autoskillit.smoke_utils import (
-    github_review_handoff_error,
-    prepare_experimental_review_publication,
-    publish_experimental_review_artifacts,
-)
+from autoskillit.smoke_utils import github_review_handoff_error
 from tests.execution.github_review.fakes import (
     CreateOutcome,
     ManualClock,
     StatefulReviewGateway,
     _poster,
 )
+from tests.smoke_utils._review_publication_fixtures import _publish
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
 _HEAD_SHA = "a" * 40
-_BASE_SHA = "b" * 40
 _LOGICAL_ITERATION = "review-pr:2"
 
 
@@ -94,29 +90,6 @@ async def _verify_review(
     }
     arguments.update(overrides)
     return json.loads(await verify_review_receipt(**arguments))  # type: ignore[arg-type]
-
-
-def _publish(
-    output_dir: Path,
-    mode: str,
-    *,
-    written_at: str,
-    fresh: bool = True,
-) -> dict[str, Any]:
-    publication = prepare_experimental_review_publication(
-        raw_ledger={"candidate_records": []},
-        survivors=[],
-        snapshot={"head_sha": _HEAD_SHA, "base_sha": _BASE_SHA},
-        annotation_generation_id="g" * 64,
-        mode=mode,
-        snapshot_is_fresh=fresh,
-        handoff_metadata={"written_at": written_at, "schema_version": 2},
-    )
-    return publish_experimental_review_artifacts(
-        publication=publication,
-        output_dir=str(output_dir),
-        pr_number="42",
-    )
 
 
 def _handoff_error(output_dir: Path) -> str | None:

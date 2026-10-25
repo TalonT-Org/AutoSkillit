@@ -152,6 +152,25 @@ def test_code_reaches_expected_rule(code: BindingFailureCode) -> None:
         assert _EXPECTED_PARAMETER[code] in finding.message
 
 
+def test_complete_tool_invocation_has_no_binding_error() -> None:
+    recipe = Recipe(
+        name="r",
+        description="d",
+        steps={
+            "s": RecipeStep(
+                name="s",
+                tool="commit_files",
+                with_args={"paths": ["plan.md"], "message": "Save plan", "cwd": "/r"},
+            )
+        },
+    )
+    projection = bind_recipe(recipe, manifest=_manifest())
+    assert projection.for_step("s").is_valid
+
+    findings = run_semantic_rules(make_validation_context(recipe, binding_projection=projection))
+    assert not any(finding.rule == "invalid-tool-invocation-binding" for finding in findings)
+
+
 def test_binding_reporters_are_error_and_declaration_scoped() -> None:
     expected_rules = set(_EXPECTED_RULE.values()) | {
         "step-identity-mismatch",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import subprocess
 import sys
 import zipfile
@@ -66,7 +67,9 @@ def test_uv_tool_install_verifies_clean(tmp_path: Path, monkeypatch: pytest.Monk
             "lib/python*/site-packages/autoskillit-1.0.0.dist-info/RECORD"
         )
     )
-    assert any(row.startswith("../") for row in record.read_text().splitlines())
+    assert "../../../bin/autoskillit" in {
+        row[0] for row in csv.reader(record.read_text().splitlines())
+    }
 
     monkeypatch.setattr(_integrity, "_active_record_paths", lambda: iter(()))
     findings = _integrity.verify_installations(home=home)

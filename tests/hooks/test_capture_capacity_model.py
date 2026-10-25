@@ -27,14 +27,14 @@ _PRE_ASSIST_RECORDS = 1231
 
 
 def _capacity_spec(**changes: int) -> capture_types.CaptureCapacitySpec:
-    return replace(
+    base = replace(
         capture_types.CaptureCapacitySpec(),
         max_operational_records=_PRE_ASSIST_RECORDS,
         max_retained_records=_PRE_ASSIST_RECORDS,
         max_evidence_records=_PRE_ASSIST_RECORDS,
         compaction_low_bytes=_PROFILE_LOW_BYTES,
-        **changes,
     )
+    return replace(base, **changes)
 
 
 def test_envelope_counts_tombstones_and_pre_assist_debt() -> None:

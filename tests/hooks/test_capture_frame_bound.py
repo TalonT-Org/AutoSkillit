@@ -52,20 +52,36 @@ def _profile_record(
                 inline_length=_MAX_NUMERIC,
                 head_length=_MAX_NUMERIC,
                 tail_length=_MAX_NUMERIC,
+                command_outcome_value=(
+                    255
+                    if wire.command_outcome_kind is capture_snapshot.CommandOutcomeKind.EXITED
+                    else 127
+                ),
             )
         )
         manifest_bytes = capture_snapshot.encode_capture_final_manifest(manifest)
         finalized_at_revision = _MAX_NUMERIC
+    failure = record.failure
+    if failure is not None:
+        failure = replace(
+            failure,
+            stage="a" + "b" * (capture_failure_policy.FAILURE_STAGE_MAX_BYTES - 1),
+            settlement_returncode=255,
+            failure_reason=(
+                capture_failure_policy.CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED
+            ).value,
+        )
     candidate = replace(
         record,
         project_identity=identity,
         root_identity=identity,
-        artifact_identity=identity if record.artifact_identity is not None else None,
+        artifact_identity=identity,
         observed_size=_MAX_NUMERIC,
         revision=_MAX_NUMERIC,
         finalized_at_revision=finalized_at_revision,
         compaction_epoch=_MAX_NUMERIC,
         retry_count=_MAX_NUMERIC,
+        failure=failure,
         manifest=manifest,
         manifest_bytes=manifest_bytes,
     )

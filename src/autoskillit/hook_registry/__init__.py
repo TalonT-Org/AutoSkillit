@@ -66,6 +66,7 @@ from ._rendering import (
     render_hook_scope_table,
     render_hooks_json_text,
     render_relocatable_hook_command,
+    serialize_hooks_json,
 )
 from ._risky_operations import (
     _contract_session_scopes,
@@ -133,6 +134,7 @@ __all__ = [
     "quarantine_hook_payload",
     "render_hook_scope_table",
     "render_hooks_json_text",
+    "serialize_hooks_json",
     "render_relocatable_hook_command",
     "validate_lifecycle_contracts",
     "validate_protection_coverage",

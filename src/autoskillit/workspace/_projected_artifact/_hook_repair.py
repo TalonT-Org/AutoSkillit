@@ -34,6 +34,7 @@ from autoskillit.hook_registry import (
     is_hook_payload_quarantined,
     quarantine_hook_payload,
     render_relocatable_hook_command,
+    serialize_hooks_json,
 )
 from autoskillit.workspace._installed._artifact import (
     write_installed_plugin_artifact_manifest_locked,
@@ -358,7 +359,7 @@ def _repair_hook_payload_under_lease(
     try:
         atomic_write(
             hooks_json_path,
-            json.dumps({"hooks": fresh["hooks"]}, indent=2) + "\n",
+            serialize_hooks_json(fresh),
             strict_durability=True,
         )
         write_manifest_refresh(manifest_refresh)

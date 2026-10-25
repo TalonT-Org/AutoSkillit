@@ -100,7 +100,22 @@ def render_hooks_json_text(
     digests them; keeping the serialization in one place prevents the three
     from drifting apart.
     """
-    return json.dumps(generate_hooks_json(registry, lifecycle_contracts), indent=2) + "\n"
+    return serialize_hooks_json(generate_hooks_json(registry, lifecycle_contracts))
+
+
+def serialize_hooks_json(payload: dict) -> str:
+    """Serialize a hook document without AutoSkillit's retired private key.
+
+    Repair uses the installed incarnation's payload rather than the running
+    registry, preserving its hooks and consumer-owned document metadata.
+    """
+    return (
+        json.dumps(
+            {key: value for key, value in payload.items() if key != "_autoskillit_registry_hash"},
+            indent=2,
+        )
+        + "\n"
+    )
 
 
 def render_hook_scope_table(

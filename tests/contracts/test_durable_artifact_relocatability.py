@@ -385,6 +385,7 @@ class TestNonMachineLocalWritersAreRelocatable:
             json.dumps(
                 {
                     "_autoskillit_registry_hash": "legacy",
+                    "description": "Installed incarnation hooks",
                     "hooks": {
                         "PreToolUse": [
                             {
@@ -414,7 +415,8 @@ class TestNonMachineLocalWritersAreRelocatable:
 
         assert outcomes[0].status is PluginHookRepairStatus.REPAIRED
         payload = json.loads((hooks_dir / "hooks.json").read_text())
-        assert set(payload) == {"hooks"}
+        assert set(payload) == {"hooks", "description"}
+        assert payload["description"] == "Installed incarnation hooks"
         assert payload["hooks"]["PreToolUse"][0]["hooks"][0]["command"].endswith(
             " guards/tool_guard"
         )

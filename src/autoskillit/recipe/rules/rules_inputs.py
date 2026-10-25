@@ -89,7 +89,8 @@ def _check_unresolved_skill_input_template(ctx: ValidationContext) -> list[RuleF
                             f"{reason}. "
                             "Bind ${{ context.<var> }} from a recipe-level producer step, "
                             "or ${{ inputs.<name> }}. For a per-item fan-out, declare "
-                            "dispatch_items: ${{ context.<list> }} and use exactly one "
+                            "dispatch_items: ${{ context.<list> }} or "
+                            "${{ inputs.<list> }} and use exactly one "
                             "{placeholder}."
                         ),
                     )

@@ -21,8 +21,6 @@ from autoskillit.server.recipe._recipe_execution import (
     get_recipe_execution,
 )
 from tests._run_skill_caller_oracle import (
-    _SINGLE_BRACE_TOKEN,
-    ORCHESTRATOR_SAMPLES,
     build_run_skill_payload,
     literal_run_skill_payload,
     run_skill_actual_mcp_kwargs,
@@ -275,14 +273,7 @@ async def test_following_the_recovery_yields_an_admitted_digest(
             actual_mcp_kwargs=run_skill_actual_mcp_kwargs(payload),
         )
         assert admitted_template is expected_template
-        if planner_dispatch:
-            item = _SINGLE_BRACE_TOKEN.search(with_value["skill_command"])
-            assert item is not None
-            assert (
-                ORCHESTRATOR_SAMPLES["item"][item.group(1).strip()] in dict(bound_inputs).values()
-            )
-        else:
-            assert dict(bound_inputs) == skill_inputs
+        assert dict(bound_inputs) == skill_inputs
 
 
 @pytest.mark.parametrize("tool_ctx_ready_recipe", _RECIPE_FIXTURE_PARAMETERS, indirect=True)

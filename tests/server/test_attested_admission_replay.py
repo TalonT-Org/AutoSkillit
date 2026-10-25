@@ -14,6 +14,7 @@ from typing import Any, NoReturn, cast
 import pytest
 
 from autoskillit.core import (
+    BoundValueOrigin,
     InstalledRecipeExecution,
     RecipeSource,
     build_recipe_execution_credential,
@@ -126,7 +127,6 @@ def _dispatch_step_parameters() -> list[Any]:
 
 
 _DISPATCH_STEP_PARAMETERS = _dispatch_step_parameters()
-_DISPATCH_ITEM_INPUTS = {"phase_id": "target_phase_id", "context_path": "context_file"}
 
 
 def _dispatch_item_name(step_body: dict[str, Any]) -> str:
@@ -375,7 +375,12 @@ def test_unsubstituted_dispatch_item_is_rejected(
         )
 
     assert exc_info.value.code == "recipe_execution_input_type"
-    assert _DISPATCH_ITEM_INPUTS[item_name] in str(exc_info.value)
+    dispatch_input = next(
+        value
+        for value in installed.snapshot.templates[step].invocation.skill_inputs
+        if value.origin is BoundValueOrigin.DISPATCH_ITEM
+    )
+    assert dispatch_input.name in str(exc_info.value)
     assert "unsubstituted" in str(exc_info.value).lower()
 
 

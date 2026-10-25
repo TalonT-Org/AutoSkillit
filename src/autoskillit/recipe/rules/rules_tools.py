@@ -27,6 +27,7 @@ from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 logger = get_logger(__name__)
 
 _ALL_TOOLS: frozenset[str] = frozenset(TOOL_REGISTRY)
+INVALID_TOOL_INVOCATION_BINDING_RULE = "invalid-tool-invocation-binding"
 STEP_IDENTITY_MISMATCH_RULE = "step-identity-mismatch"
 
 # Registry of context variables that are captured upstream and MUST be forwarded
@@ -207,7 +208,7 @@ def _check_dead_with_params(ctx: ValidationContext) -> list[RuleFinding]:
 
 
 @semantic_rule(
-    name="invalid-tool-invocation-binding",
+    name=INVALID_TOOL_INVOCATION_BINDING_RULE,
     description=(
         "Recipe tool steps must supply every required tool parameter with a value "
         "of the registered wire type."
@@ -238,7 +239,7 @@ def _check_invalid_tool_invocation_binding(ctx: ValidationContext) -> list[RuleF
                 )
             findings.append(
                 make_finding(
-                    rule_name="invalid-tool-invocation-binding",
+                    rule_name=INVALID_TOOL_INVOCATION_BINDING_RULE,
                     step_name=step_name,
                     message=message,
                 )

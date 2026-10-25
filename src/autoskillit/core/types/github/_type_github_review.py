@@ -63,6 +63,8 @@ def is_valid_github_review_repository(value: object) -> bool:
 
 def github_review_receipt_filename(pr_number: int) -> str:
     """Return the server receipt filename for a pull request."""
+    if not _is_positive_int(pr_number):
+        raise ValueError("pr_number must be a positive integer")
     return f"batch_review_response_{pr_number}.json"
 
 

@@ -457,12 +457,13 @@ def _scheme_base(site_packages: Path) -> Path:
 
     Installers record console scripts and data relative to purelib, e.g.
     ``../../../bin/autoskillit`` from ``<base>/lib/pythonX.Y/site-packages``
-    (also ``lib64``; ``<base>/Lib/site-packages`` on Windows). Standard
+    (also ``lib64`` and ``dist-packages``; ``<base>/Lib/site-packages``
+    on Windows). Standard
     script and data targets lie under ``<base>``. Other layouts, such as
     an unpacked uv cache archive, are bounded to themselves.
     """
     lib = site_packages.parent
-    if site_packages != site_packages.parent / "site-packages":
+    if site_packages not in (lib / "site-packages", lib / "dist-packages"):
         return site_packages
     if re.fullmatch(r"python[0-9]+\.[0-9]+t?", lib.name) and lib.parent.name in {"lib", "lib64"}:
         base = lib.parent.parent

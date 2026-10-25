@@ -73,6 +73,7 @@ def _findings(*roots: Path) -> list:
     [
         ("lib", "python3.14", "site-packages"),
         ("lib64", "python3.14", "site-packages"),
+        ("lib", "python3.14", "dist-packages"),
         ("Lib", "site-packages"),
     ],
 )
@@ -184,7 +185,7 @@ def test_unrecognized_layout_is_bounded_to_itself(tmp_path: Path) -> None:
         ("/e/lib64/python3.13/site-packages", "/e"),
         ("/e/lib/python3.13t/site-packages", "/e"),
         ("/e/Lib/site-packages", "/e"),
-        ("/e/lib/python3.13/dist-packages", "/e/lib/python3.13/dist-packages"),
+        ("/e/lib/python3.13/dist-packages", "/e"),
         ("/e/share/python3.13/site-packages", "/e/share/python3.13/site-packages"),
         ("/e/lib/pythonjunk/site-packages", "/e/lib/pythonjunk/site-packages"),
         ("/c/archive-v0/abc", "/c/archive-v0/abc"),

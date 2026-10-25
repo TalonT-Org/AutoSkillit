@@ -16,17 +16,19 @@ _STR_RX = re.compile(r"(?:^|[/\"'`\s(~])\.autoskillit/([A-Za-z0-9._-]+)")
 # These names are accounted for elsewhere: home-level artifacts, a read-only
 # legacy path, and a runtime directory with a real-git proof.
 _CLASSIFIED_ELSEWHERE: dict[str, int] = {
-    # Home-level hook state: hooks/guards/mcp_health_advisor.py:36.
+    # Home-level hook state: hooks/guards/mcp_health_advisor.py:_active_kitchens_path.
     "active_kitchens.json": 1,
-    # Home-level marketplace shape: core/types/constants/_type_constants_retirements.py:309.
+    # Home-level marketplace shape:
+    # core/types/constants/_type_constants_retirements.py:RETIRED_INSTALL_ARTIFACT_SHAPES.
     "marketplace": 1,
-    # Home-level plugin storage: cli/doctor/_doctor_install.py:358.
+    # Home-level plugin storage: cli/doctor/_doctor_install.py:_owned_installation_roots.
     "plugin-generations": 1,
-    # Home-level hook projection repair: workspace/_projected_artifact/_hook_repair.py:538.
+    # Home-level hook projection repair:
+    # workspace/_projected_artifact/_hook_repair.py:repair_broken_projection_hooks.
     "plugin-projections": 1,
-    # Home-level dismissal state: cli/update/_update_checks.py:79.
+    # Home-level dismissal state: cli/update/_update_checks.py:_read_dismiss_state.
     "update_check.json": 1,
-    # Legacy path is read only for migration: cli/install/_marketplace.py:162.
+    # Legacy path is read only for migration: cli/install/_marketplace.py:_ensure_workspace_ready.
     "scripts": 1,
     # Runtime self-ignore is proven by tests/workspace/test_clone_gate_runtime_state.py.
     "managed-headless-session-lineage": 1,

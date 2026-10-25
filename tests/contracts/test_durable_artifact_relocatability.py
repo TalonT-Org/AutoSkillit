@@ -384,6 +384,7 @@ class TestNonMachineLocalWritersAreRelocatable:
         (hooks_dir / "hooks.json").write_text(
             json.dumps(
                 {
+                    "_autoskillit_registry_hash": "legacy",
                     "hooks": {
                         "PreToolUse": [
                             {
@@ -399,7 +400,7 @@ class TestNonMachineLocalWritersAreRelocatable:
                                 ],
                             }
                         ]
-                    }
+                    },
                 }
             )
         )
@@ -412,6 +413,11 @@ class TestNonMachineLocalWritersAreRelocatable:
         outcomes = repair_broken_plugin_cache_hooks(cache_dir, home=managed_home_for(tmp_path))
 
         assert outcomes[0].status is PluginHookRepairStatus.REPAIRED
+        payload = json.loads((hooks_dir / "hooks.json").read_text())
+        assert set(payload) == {"hooks"}
+        assert payload["hooks"]["PreToolUse"][0]["hooks"][0]["command"].endswith(
+            " guards/tool_guard"
+        )
         _assert_relocatable((hooks_dir / "hooks.json").read_text())
 
     def test_projection_repair_outputs_are_relocatable(self, tmp_path: Path) -> None:

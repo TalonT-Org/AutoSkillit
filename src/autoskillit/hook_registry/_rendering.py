@@ -12,7 +12,6 @@ import shlex
 from collections.abc import Sequence
 from pathlib import Path
 
-from ._hashing import compute_registry_hash
 from ._hooks_defs import (
     _LOGICAL_HOOK_COMPONENT,
     HookDef,
@@ -23,7 +22,6 @@ from ._registry_data import (
     LIFECYCLE_CONTRACTS,
     PLUGIN_ROOT_TOKEN,
     PROTECTION_WAIVERS,
-    RETIRED_SCRIPT_BASENAMES,
 )
 
 
@@ -174,10 +172,4 @@ def generate_hooks_json(
     by_event: dict[str, list] = {}
     for (event_type, _), entry in groups.items():
         by_event.setdefault(event_type, []).append(entry)
-    registry_hash = compute_registry_hash(
-        registry,
-        RETIRED_SCRIPT_BASENAMES,
-        lifecycle_contracts,
-        PROTECTION_WAIVERS,
-    )
-    return {"hooks": by_event, "_autoskillit_registry_hash": registry_hash}
+    return {"hooks": by_event}

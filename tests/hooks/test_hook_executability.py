@@ -223,14 +223,7 @@ def test_generated_hooks_json_includes_ask_user_question_gate() -> None:
     assert "AskUserQuestion" in matchers
 
 
-def test_generated_hooks_json_embeds_registry_hash() -> None:
-    from autoskillit.hook_registry import HOOK_REGISTRY_HASH, generate_hooks_json
-
-    h = generate_hooks_json()
-    assert h.get("_autoskillit_registry_hash") == HOOK_REGISTRY_HASH
-
-
-def test_synced_settings_json_embeds_registry_hash(tmp_path: Path, monkeypatch) -> None:
+def test_synced_settings_json_adds_only_the_hooks_key(tmp_path: Path, monkeypatch) -> None:
     import autoskillit.cli._hooks as _hooks_mod
     import autoskillit.cli._init_helpers as init_helpers
 
@@ -238,9 +231,16 @@ def test_synced_settings_json_embeds_registry_hash(tmp_path: Path, monkeypatch) 
     monkeypatch.setattr(init_helpers, "_is_plugin_installed", lambda **kwargs: False)
 
     from autoskillit.cli._hooks import sync_hooks_to_settings
-    from autoskillit.hook_registry import HOOK_REGISTRY_HASH
 
     settings_path = tmp_path / "settings.json"
+    seed = {
+        "permissions": {"allow": ["Bash(git status)"]},
+        "env": {"PROJECT_MODE": "test"},
+        "includeCoAuthoredBy": False,
+    }
+    settings_path.write_text(json.dumps(seed))
     sync_hooks_to_settings(settings_path)
     data = json.loads(settings_path.read_text())
-    assert data.get("_autoskillit_registry_hash") == HOOK_REGISTRY_HASH
+    assert set(data) - set(seed) == {"hooks"}
+    for key, value in seed.items():
+        assert data[key] == value

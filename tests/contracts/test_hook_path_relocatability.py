@@ -19,7 +19,6 @@ from typing import Any
 
 import pytest
 
-import autoskillit.cli._init_helpers as _patch_cli__init_helpers
 from autoskillit.hook_registry import PLUGIN_ROOT_TOKEN, generate_hooks_json
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
@@ -51,36 +50,6 @@ def test_generate_hooks_json_commands_are_relocatable() -> None:
                         f"{event_type} command embeds a process-local path "
                         f"segment {segment!r}: {cmd}"
                     )
-
-
-def test_compute_registry_hash_is_identical_for_absolute_and_relocatable_renderings(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """compute_registry_hash hashes logical registry rows (scripts, event
-    type, matcher, timeout) — never the rendered command string — so the
-    embedded ``_autoskillit_registry_hash`` must be identical whether the
-    hooks are rendered in relocatable (hooks.json) form or absolute
-    (settings.json, dev-mode) form. This test pins the invariant so a future
-    refactor that accidentally threads the rendered command into the hash
-    cannot regress silently.
-    """
-    import autoskillit.cli._hooks as _hooks_mod
-    from autoskillit.cli._hooks import sync_hooks_to_settings
-
-    # sync_hooks_to_settings() refuses to run from a git worktree (its own
-    # dev-machine safety guard, unrelated to the property under test) and
-    # short-circuits to an eviction-only no-op when the plugin is installed
-    # — same idiom as tests/cli/conftest.py's autouse fixture.
-    monkeypatch.setattr(_hooks_mod, "is_git_worktree", lambda _path: False)
-    monkeypatch.setattr(_patch_cli__init_helpers, "_is_plugin_installed", lambda **kwargs: False)
-
-    relocatable_hash = generate_hooks_json()["_autoskillit_registry_hash"]
-
-    settings_path = tmp_path / "settings.json"
-    sync_hooks_to_settings(settings_path)
-    absolute_hash = json.loads(settings_path.read_text())["_autoskillit_registry_hash"]
-
-    assert relocatable_hash == absolute_hash
 
 
 # ---------------------------------------------------------------------------
@@ -117,15 +86,10 @@ def test_self_healed_bundled_hooks_json_is_relocatable(
     assert PLUGIN_ROOT_TOKEN in regenerated
 
 
-def test_content_complete_drift_healing_catches_hash_matching_staleness(
+def test_content_complete_drift_healing_replaces_legacy_key_and_stale_commands(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """T-A2: Drift healing detects stale commands even when the registry hash matches.
-
-    The incident precondition: _autoskillit_registry_hash equals the live
-    HOOK_REGISTRY_HASH but the command strings are absolute-path pinned.
-    The previous hash-only gate was blind to this shape.
-    """
+    """T-A2: Drift healing removes a legacy registry key and stale absolute commands."""
     import autoskillit.core.paths as _paths
     from autoskillit.hook_registry import HOOK_REGISTRY_HASH, render_hooks_json_text
     from autoskillit.server.lifecycle._lifespan import run_startup_drift_check
@@ -133,7 +97,7 @@ def test_content_complete_drift_healing_catches_hash_matching_staleness(
     fake_pkg_root = tmp_path / "pkg"
     hooks_dir = fake_pkg_root / "hooks"
     hooks_dir.mkdir(parents=True)
-    # Plant: correct hash, stale absolute commands
+    # Plant: legacy key with the live hash, plus stale absolute commands.
     stale_json = {
         "_autoskillit_registry_hash": HOOK_REGISTRY_HASH,
         "hooks": {
@@ -161,10 +125,11 @@ def test_content_complete_drift_healing_catches_hash_matching_staleness(
     run_startup_drift_check()
 
     regenerated = (hooks_dir / "hooks.json").read_text()
+    assert "_autoskillit_registry_hash" not in json.loads(regenerated)
     expected = render_hooks_json_text()
     assert regenerated == expected, (
-        "content-complete drift check failed to heal a stale file whose "
-        "registry hash matched but whose commands were absolute"
+        "content-complete drift check failed to replace a legacy "
+        "_autoskillit_registry_hash key plus stale absolute commands"
     )
 
 

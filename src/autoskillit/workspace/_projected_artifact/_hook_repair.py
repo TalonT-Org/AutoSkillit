@@ -358,7 +358,7 @@ def _repair_hook_payload_under_lease(
     try:
         atomic_write(
             hooks_json_path,
-            json.dumps(fresh, indent=2) + "\n",
+            json.dumps({"hooks": fresh["hooks"]}, indent=2) + "\n",
             strict_durability=True,
         )
         write_manifest_refresh(manifest_refresh)

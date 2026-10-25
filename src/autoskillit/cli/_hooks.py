@@ -104,6 +104,7 @@ def _evict_stale_autoskillit_hooks(settings_path: Path) -> None:
                 entry["hooks"] = non_autoskillit
                 cleaned.append(entry)
         hooks[event_type] = cleaned
+    data.pop("_autoskillit_registry_hash", None)
     _write_settings_data(settings_path, data)
 
 
@@ -120,7 +121,6 @@ def sync_hooks_to_settings(settings_path: Path, *, force: bool = False) -> None:
     correctly checks plugin status before writing.
     """
     from autoskillit.cli._init_helpers import _is_plugin_installed
-    from autoskillit.hook_registry import HOOK_REGISTRY_HASH
 
     root = pkg_root()
     if is_git_worktree(root):
@@ -159,7 +159,6 @@ def sync_hooks_to_settings(settings_path: Path, *, force: bool = False) -> None:
     for (event_type, _), entry in groups.items():
         event_list: list[dict] = data.setdefault("hooks", {}).setdefault(event_type, [])
         event_list.append(entry)
-    data["_autoskillit_registry_hash"] = HOOK_REGISTRY_HASH
     _write_settings_data(settings_path, data)
 
 

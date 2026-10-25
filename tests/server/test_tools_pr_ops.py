@@ -28,7 +28,7 @@ from autoskillit.server.tools.tools_pr_ops import (
     post_pr_review,
     verify_review_receipt,
 )
-from tests.execution.github_review.fakes import authoritative_receipt
+from tests._github_review_fixtures import authoritative_receipt
 from tests.server._recipe_fixture_parameters import (
     IMPLEMENTATION_READY_PARAMETERS,
 )

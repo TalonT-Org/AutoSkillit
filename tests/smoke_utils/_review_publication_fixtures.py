@@ -11,7 +11,7 @@ from autoskillit.smoke_utils import (
     prepare_experimental_review_publication,
     publish_experimental_review_artifacts,
 )
-from tests.execution.github_review.fakes import authoritative_receipt
+from tests._github_review_fixtures import authoritative_receipt
 
 _REVIEW_HEAD = "a" * 40
 _REVIEW_BASE = "b" * 40

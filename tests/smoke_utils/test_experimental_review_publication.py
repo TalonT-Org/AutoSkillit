@@ -17,7 +17,7 @@ from autoskillit.smoke_utils import (
     render_unpostable_review_section,
     validate_experimental_auditor_outputs,
 )
-from tests.execution.github_review.fakes import authoritative_receipt
+from tests._github_review_fixtures import authoritative_receipt
 from tests.smoke_utils._experimental_helpers import (
     _experimental_candidate,
 )

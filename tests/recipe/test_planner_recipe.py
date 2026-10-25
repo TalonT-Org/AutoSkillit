@@ -1,7 +1,6 @@
 """Structural assertions for the planner recipe."""
 
 import importlib
-import re
 from pathlib import Path
 
 import pytest
@@ -9,6 +8,7 @@ import pytest
 from autoskillit.core.io import load_yaml
 from autoskillit.core.types import BoundValueOrigin, Severity
 from autoskillit.recipe._api import load_and_validate
+from autoskillit.recipe._binding_input import _dispatch_producer
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import run_semantic_rules
 from tests.recipe.conftest import assert_no_rule_errors
@@ -424,9 +424,15 @@ def test_every_dispatch_step_binds_exactly_one_dispatch_item():
         assert len(dispatch_inputs) == 1, name
 
         dispatch_items = raw_step["with"]["dispatch_items"]
-        match = re.fullmatch(r"\$\{\{\s*context\.([A-Za-z_]\w*)\s*\}\}", dispatch_items)
-        assert match is not None, name
-        assert dispatch_inputs[0].context_dependencies == (match.group(1),), name
+        producer = _dispatch_producer(dispatch_items)
+        assert producer is not None, name
+        namespace, producer_name = producer
+        assert dispatch_inputs[0].context_dependencies == (
+            (producer_name,) if namespace == "context" else ()
+        ), name
+        assert dispatch_inputs[0].input_dependencies == (
+            (producer_name,) if namespace == "inputs" else ()
+        ), name
         assert invocation.attested, name
 
 

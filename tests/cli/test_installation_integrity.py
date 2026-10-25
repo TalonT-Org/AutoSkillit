@@ -86,10 +86,6 @@ def test_console_script_mutation_detected(tmp_path: Path) -> None:
 def test_record_row_outside_installation_is_invalid(tmp_path: Path, case: str) -> None:
     package = _write_install(tmp_path)
     outside = tmp_path / "outside.txt"
-    outside.write_bytes(b"x")
-    sibling = tmp_path / "autoskillit-evil" / "x.py"
-    sibling.parent.mkdir()
-    sibling.write_bytes(b"x")
     row = {
         "parent_escape": "../../../../outside.txt",
         "sibling_prefix": "../../../../autoskillit-evil/x.py",

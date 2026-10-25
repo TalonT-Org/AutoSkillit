@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.smoke_utils import (
+    github_review_handoff_error,
     prepare_experimental_review_publication,
     publish_experimental_review_artifacts,
 )
@@ -266,8 +267,6 @@ def test_actual_publisher_output_matches_resolve_review_path_line_boundary(
     tmp_path: Path,
     mode: str,
 ) -> None:
-    from autoskillit.smoke_utils import github_review_handoff_error
-
     findings = [
         {
             "file": "src/reach.py",

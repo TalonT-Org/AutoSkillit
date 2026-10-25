@@ -13,6 +13,7 @@ import pytest
 import autoskillit.server.tools.tools_pr_ops as tools_pr_ops
 from autoskillit.server.tools.tools_pr_ops import post_pr_review, verify_review_receipt
 from autoskillit.smoke_utils import (
+    github_review_handoff_error,
     prepare_experimental_review_publication,
     publish_experimental_review_artifacts,
 )
@@ -119,8 +120,6 @@ def _publish(
 
 
 def _handoff_error(output_dir: Path) -> str | None:
-    from autoskillit.smoke_utils import github_review_handoff_error
-
     return github_review_handoff_error(output_dir=str(output_dir), pr_number="42")
 
 

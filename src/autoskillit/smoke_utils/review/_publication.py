@@ -42,6 +42,7 @@ _PUBLICATION_FILENAMES = {
     "local_findings": "local_findings_{pr_number}.json",
     "github_review_binding": "github_review_binding_{pr_number}.json",
 }
+_MARKER_ARTIFACT_NAMES = ("local_findings", "github_review_binding")
 _GENERATION_IDENTITY_KEYS = (
     "_head_sha",
     "_base_sha",
@@ -331,13 +332,15 @@ def _publication_order(
         raise ValueError("publication contains an unknown artifact")
     if not order or order[0] != "raw_findings":
         raise ValueError("raw_findings must be the first publication")
-    if "local_findings" in order and order[-1] != "local_findings":
-        raise ValueError("local_findings must be the final publication marker")
-    if "github_review_binding" in order and order[-1] != "github_review_binding":
-        raise ValueError("github_review_binding must be the final publication marker")
+    misplaced_markers = set(order[:-1]).intersection(_MARKER_ARTIFACT_NAMES)
+    if misplaced_markers:
+        raise ValueError(f"{min(misplaced_markers)} must be the final publication marker")
     mode = publication.get("mode")
     if mode not in {"github", "local"}:
         raise ValueError("publication mode must be 'github' or 'local'")
+    incompatible_marker = "github_review_binding" if mode == "local" else "local_findings"
+    if incompatible_marker in order:
+        raise ValueError(f"{incompatible_marker} is incompatible with {mode} mode")
 
     artifacts: dict[str, object] = dict(raw_artifacts)
     if publication.get("state") == "complete" and mode == "github":
@@ -449,7 +452,7 @@ def publish_experimental_review_artifacts(
         name: root / filename.format(pr_number=identifier)
         for name, filename in _PUBLICATION_FILENAMES.items()
     }
-    marker_names = ("local_findings", "github_review_binding")
+    marker_names = _MARKER_ARTIFACT_NAMES
     retired_names = [
         name for name in final_paths if name not in order and name not in marker_names
     ]

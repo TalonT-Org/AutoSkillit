@@ -60,6 +60,28 @@ def test_github_publication_rejects_malformed_diff_context_before_writes(
     assert not output_dir.exists()
 
 
+@pytest.mark.parametrize("mode", ["local", "github"])
+def test_publication_rejects_mode_incompatible_marker_before_writes(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    publication = _prepared_publication(mode)
+    marker = "github_review_binding" if mode == "local" else "local_findings"
+    publication["artifacts"].pop("local_findings", None)
+    publication["artifacts"][marker] = {}
+    publication["artifact_order"] = ["raw_findings", "diff_context", marker]
+    output_dir = tmp_path / "review-output"
+
+    with pytest.raises(ValueError, match=f"{marker} is incompatible with {mode} mode"):
+        publish_experimental_review_artifacts(
+            publication=publication,
+            output_dir=str(output_dir),
+            pr_number="42",
+        )
+
+    assert not output_dir.exists()
+
+
 def _authority(right_side_lines: dict[str, list[int]]) -> DiffAnchorAuthority:
     return DiffAnchorAuthority.authoritative(
         repository="openai/autoskillit",

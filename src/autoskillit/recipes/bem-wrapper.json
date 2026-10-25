@@ -22,7 +22,7 @@
       "authority": "config"
     },
     "source_dir": {
-      "description": "Absolute path to the repository root. Required — no default prevents silent cwd inheritance from the MCP server when an empty string is passed.",
+      "description": "Absolute path to the repository root",
       "required": true
     }
   },

@@ -29,6 +29,14 @@ _PATH_INPUT_TYPES = frozenset({"file_path", "file_path_list", "directory_path"})
 _EXACT_REFERENCE_ORIGINS = frozenset({BoundValueOrigin.CONTEXT, BoundValueOrigin.RECIPE_INPUT})
 
 
+def _is_unsubstituted_dispatch_item(value: BoundScalar, bound: BoundValue) -> bool:
+    return (
+        bound.origin is BoundValueOrigin.DISPATCH_ITEM
+        and isinstance(value, str)
+        and value.strip() == str(bound.declared_value).strip()
+    )
+
+
 @dataclasses.dataclass(frozen=True, slots=True)
 class SkillInput:
     name: str
@@ -66,12 +74,8 @@ class SkillInput:
         return False
 
     def admit_runtime_wire(self, value: BoundScalar, bound: BoundValue) -> BoundScalar | None:
-        """Return the bound value, or None when the declared type rejects its wire form."""
-        if (
-            bound.origin is BoundValueOrigin.DISPATCH_ITEM
-            and isinstance(value, str)
-            and value.strip() == str(bound.declared_value).strip()
-        ):
+        """Return the bound value, or None when its wire form violates the input contract."""
+        if _is_unsubstituted_dispatch_item(value, bound):
             return None
         if self.accepts(value):
             return value
@@ -92,11 +96,7 @@ class SkillInput:
         return None if text == bound.absence_value else text
 
     def wire_mismatch_message(self, value: BoundScalar, bound: BoundValue) -> str:
-        if (
-            bound.origin is BoundValueOrigin.DISPATCH_ITEM
-            and isinstance(value, str)
-            and value.strip() == str(bound.declared_value).strip()
-        ):
+        if _is_unsubstituted_dispatch_item(value, bound):
             producer = ", ".join(
                 f"{namespace}.{name}"
                 for namespace, dependencies in (

@@ -17,6 +17,7 @@ import regex as re
 from autoskillit.core import (
     ContainmentError,
     GitHubReviewReceipt,
+    decode_github_review_json_object,
     fsync_directory,
     fsync_file,
     github_review_receipt_filename,
@@ -273,7 +274,7 @@ def _load_github_review_receipt(
     except (ContainmentError, OSError) as exc:
         raise ValueError(f"receipt unreadable: {exc}") from exc
     try:
-        receipt = GitHubReviewReceipt.from_wire(json.loads(data))
+        receipt = GitHubReviewReceipt.from_wire(decode_github_review_json_object(data))
     except (
         KeyError,
         TypeError,

@@ -1430,6 +1430,7 @@ from .types import (
 from .types import compute_remaining as compute_remaining
 from .types import compute_runtime_binding_digest as compute_runtime_binding_digest
 from .types import context_admission_envelope_header as context_admission_envelope_header
+from .types import decode_github_review_json_object as decode_github_review_json_object
 from .types import (
     decode_stored_context_admission_envelope as decode_stored_context_admission_envelope,
 )

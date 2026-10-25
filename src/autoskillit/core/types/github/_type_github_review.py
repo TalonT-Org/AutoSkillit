@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
@@ -21,6 +22,7 @@ __all__ = [
     "ReviewOperationState",
     "ReviewReconciliationResult",
     "ReviewResponseClass",
+    "decode_github_review_json_object",
     "github_review_receipt_filename",
     "is_final_github_review_state",
     "is_valid_github_review_head_sha",
@@ -66,6 +68,23 @@ def github_review_receipt_filename(pr_number: int) -> str:
     if not _is_positive_int(pr_number):
         raise ValueError("pr_number must be a positive integer")
     return f"batch_review_response_{pr_number}.json"
+
+
+def decode_github_review_json_object(data: bytes) -> dict[str, object]:
+    """Decode a review JSON object, rejecting duplicate keys and preserving all fields."""
+
+    def unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"duplicate JSON object key: {key!r}")
+            result[key] = value
+        return result
+
+    value = json.loads(data, object_pairs_hook=unique_object)
+    if not isinstance(value, dict):
+        raise TypeError("review receipt must be a JSON object")
+    return value
 
 
 class ReviewOperationState(StrEnum):

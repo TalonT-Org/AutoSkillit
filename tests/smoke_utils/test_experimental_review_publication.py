@@ -764,6 +764,7 @@ def test_github_binding_marker_is_published_last_and_binds_server_receipt(
     [
         ("missing", "receipt unreadable"),
         ("invalid_json", "receipt malformed"),
+        ("duplicate_keys", "receipt malformed"),
         ("empty", "receipt malformed"),
         ("overflow_created_at", "receipt malformed"),
         ("dry_run", "receipt is not a final successful review"),
@@ -797,10 +798,10 @@ def test_github_publication_rejects_unbindable_receipt(
             payload["state"] = "DRY_RUN"
         elif receipt_case == "missing_review_id":
             payload["review_id"] = None
-        _write_receipt_payload(
-            output_dir,
-            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(),
-        )
+        data = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        if receipt_case == "duplicate_keys":
+            data = b'{"pr_number":42,' + data[1:]
+        _write_receipt_payload(output_dir, data)
 
     with pytest.raises(ValueError, match=f"^{re.escape(expected_error)}"):
         publish_experimental_review_artifacts(

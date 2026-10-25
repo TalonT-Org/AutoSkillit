@@ -57,6 +57,7 @@ _PUBLIC_NAMES = {
     "ReviewReconciliationResult",
     "ReviewFindingDispositionKind",
     "github_review_receipt_filename",
+    "decode_github_review_json_object",
     "is_final_github_review_state",
     "is_valid_github_review_head_sha",
     "is_valid_github_review_logical_iteration",

@@ -8,7 +8,6 @@ import os
 import time
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
 
 import structlog
 from fastmcp import Context
@@ -23,6 +22,7 @@ from autoskillit.core import (
     ReviewOperationState,
     ReviewResponseClass,
     atomic_write,
+    decode_github_review_json_object,
     destination_location,
     get_logger,
     github_review_receipt_filename,
@@ -91,21 +91,6 @@ def _map_pr_view_reviews(data: dict) -> list:
     ]
 
 
-def _load_unique_json_object(data: bytes) -> dict[str, object]:
-    def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        for key, value in pairs:
-            if key in result:
-                raise ValueError(f"duplicate JSON object key: {key!r}")
-            result[key] = value
-        return result
-
-    value = json.loads(data, object_pairs_hook=_unique_object)
-    if not isinstance(value, dict):
-        raise TypeError("review receipt must be a JSON object")
-    return value
-
-
 def _review_verification_result(rejection: str | None) -> str:
     if rejection is None:
         return json.dumps({"reviews_posted": "true"})
@@ -122,7 +107,7 @@ def _load_receipt_payload(receipt: Path, root: Path) -> dict[str, object] | str:
     except (ContainmentError, OSError):
         return "receipt_unreadable"
     try:
-        return _load_unique_json_object(receipt_bytes)
+        return decode_github_review_json_object(receipt_bytes)
     except (TypeError, ValueError):
         return "receipt_malformed"
 
@@ -481,7 +466,7 @@ async def post_pr_review(
                         max_size_bytes=1_000_000,
                     )
                     authority = DiffAnchorAuthority.from_wire(
-                        _load_unique_json_object(authority_bytes)
+                        decode_github_review_json_object(authority_bytes)
                     )
                 except (ContainmentError, OSError) as exc:
                     return _review_post_error(

@@ -20,7 +20,7 @@ _CLASSIFIED_ELSEWHERE: dict[str, int] = {
     "active_kitchens.json": 1,
     # Home-level marketplace shape: core/types/constants/_type_constants_retirements.py:309.
     "marketplace": 1,
-    # Home-level plugin storage: cli/doctor/_doctor_install.py:355.
+    # Home-level plugin storage: cli/doctor/_doctor_install.py:358.
     "plugin-generations": 1,
     # Home-level hook projection repair: workspace/_projected_artifact/_hook_repair.py:538.
     "plugin-projections": 1,

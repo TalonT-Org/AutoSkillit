@@ -7,6 +7,7 @@ import csv
 import hashlib
 import importlib.metadata
 import json
+import os
 import shutil
 import stat
 import subprocess
@@ -14,6 +15,8 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import regex as re
 
 from autoskillit.core import Severity, file_url_path, get_logger, is_python_bytecode_path
 
@@ -450,22 +453,41 @@ def _regular_files(root: Path) -> Iterator[Path]:
         return
 
 
+def _scheme_base(site_packages: Path) -> Path:
+    """Return the install-scheme base that bounds RECORD rows.
+
+    Installers record console scripts and data relative to purelib, e.g.
+    ``../../../bin/autoskillit`` from ``<base>/lib/pythonX.Y/site-packages``
+    (also ``lib64``; ``<base>/Lib/site-packages`` on Windows). Standard
+    script and data targets lie under ``<base>``. Other layouts, such as
+    an unpacked uv cache archive, are bounded to themselves.
+    """
+    lib = site_packages.parent
+    if site_packages != site_packages.parent / "site-packages":
+        return site_packages
+    if re.fullmatch(r"python[0-9]+\.[0-9]+t?", lib.name) and lib.parent.name in {"lib", "lib64"}:
+        return lib.parent.parent
+    if lib == lib.parent / "Lib":
+        return lib.parent
+    return site_packages
+
+
 def _verify_record_entry(
     installation: _Installation,
     site_packages: Path,
+    bound: Path,
     row: list[str],
     tracked: set[str],
 ) -> DoctorResult | None:
     if len(row) < 2:
         return None
-    relative = Path(row[0])
-    if relative.is_absolute() or ".." in relative.parts:
+    candidate = Path(os.path.normpath(site_packages / row[0]))
+    if not candidate.is_relative_to(bound):
         return DoctorResult(
             Severity.ERROR,
             "installation_record_invalid",
-            f"Invalid RECORD path {row[0]!r} in {_display(installation)}",
+            f"Invalid RECORD path {row[0]!r} outside {bound} in {_display(installation)}",
         )
-    candidate = site_packages / relative
     try:
         package_relative = candidate.relative_to(installation.package_root)
     except ValueError:
@@ -483,19 +505,21 @@ def _verify_record_entry(
         )
     algorithm, expected = parsed_hash
     try:
-        observed = hashlib.new(algorithm, candidate.read_bytes()).digest()
-    except ValueError:
-        return DoctorResult(
-            Severity.ERROR,
-            "installation_record_unknown_algorithm",
-            f"Unknown RECORD hash algorithm {algorithm!r} "
-            f"for {candidate} in {_display(installation)}",
-        )
-    except OSError:
+        content = candidate.read_bytes()
+    except (OSError, ValueError):
         return DoctorResult(
             Severity.ERROR,
             "installation_record_unreadable_entry",
             f"Unreadable RECORD entry {candidate} in {_display(installation)}",
+        )
+    try:
+        observed = hashlib.new(algorithm, content).digest()
+    except (TypeError, ValueError):
+        return DoctorResult(
+            Severity.ERROR,
+            "installation_record_unsupported_algorithm",
+            f"Unsupported RECORD hash algorithm {algorithm!r} "
+            f"for {candidate} in {_display(installation)}",
         )
     if observed != expected:
         return DoctorResult(
@@ -511,10 +535,11 @@ def _verify_record(installation: _Installation) -> tuple[list[DoctorResult], set
     results: list[DoctorResult] = []
     tracked: set[str] = set()
     site_packages = installation.record_path.parent.parent
+    bound = _scheme_base(site_packages)
     try:
         rows = csv.reader(installation.record_path.read_text(encoding="utf-8").splitlines())
         for row in rows:
-            result = _verify_record_entry(installation, site_packages, row, tracked)
+            result = _verify_record_entry(installation, site_packages, bound, row, tracked)
             if result is not None:
                 results.append(result)
     except (OSError, UnicodeDecodeError, csv.Error) as exc:

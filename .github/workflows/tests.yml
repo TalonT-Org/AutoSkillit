@@ -6,8 +6,6 @@ on:
   pull_request:
     branches: [main, develop, stable]
   merge_group:
-  schedule:
-    - cron: "17 3 * * *"
 
 permissions:
   contents: read
@@ -15,7 +13,6 @@ permissions:
 jobs:
   preflight:
     name: Preflight checks
-    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     outputs:
       os-matrix: ${{ steps.ci-policy.outputs.os-matrix }}
@@ -42,20 +39,30 @@ jobs:
           echo "uv: $(uv --version)"
           uv run python --version
 
-  cache_metadata:
-    name: Resolve uv cache identity
+  api_simulator_cache:
+    name: Provide api-simulator build
     runs-on: ubuntu-latest
+    cache-mode: write
     outputs:
-      python_cache_tag: ${{ steps.cache-identity.outputs.python_cache_tag }}
-      api_simulator_rev: ${{ steps.cache-identity.outputs.api_simulator_rev }}
+      cache-key: ${{ steps.cache-identity.outputs.key }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install uv
+        id: setup-uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.9.21"
+          enable-cache: false
 
       - name: Resolve cache identity
         id: cache-identity
         shell: bash
+        env:
+          UV_VERSION: ${{ steps.setup-uv.outputs.uv-version }}
         run: |
           python3 <<'PY' >> "$GITHUB_OUTPUT"
+          import os
           import re
           import tomllib
           from pathlib import Path
@@ -70,23 +77,24 @@ jobs:
           if not isinstance(revision, str) or re.fullmatch(r"[0-9a-fA-F]{40}", revision) is None:
               raise SystemExit(f"invalid api-simulator revision: {revision!r}")
 
-          print(f"python_cache_tag={python_selector.replace('.', '')}")
-          print(f"api_simulator_rev={revision}")
+          rust_pin = re.search(
+              r"^ARG RUST_VERSION=(\S+)$",
+              Path("scripts/docker/Dockerfile").read_text(encoding="utf-8"),
+              re.MULTILINE,
+          )
+          if rust_pin is None:
+              raise SystemExit("missing Dockerfile RUST_VERSION pin")
+          rust_version = rust_pin.group(1)
+
+          uv_version = os.environ["UV_VERSION"]
+          if re.fullmatch(r"\d+\.\d+\.\d+", uv_version) is None:
+              raise SystemExit("invalid resolved uv version")
+
+          # Label the producer's image family; consumers separately verify native imports.
+          runner = f"{os.environ['RUNNER_OS']}-{os.environ['RUNNER_ARCH']}-{os.environ['ImageOS']}"
+          python_tag = python_selector.replace(".", "")
+          print(f"key=uv-api-simulator-{runner}-uv{uv_version}-rust{rust_version}-py{python_tag}-{revision}")
           PY
-
-  cache_prime:
-    name: Prime uv cache
-    if: github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
-    needs: cache_metadata
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
-        with:
-          version: "0.9.21"
-          enable-cache: false
 
       - name: Resolve uv cache directory
         id: uv-cache-dir
@@ -96,39 +104,52 @@ jobs:
           echo "UV_CACHE_DIR=$UV_CACHE_DIR" >> "$GITHUB_ENV"
           echo "path=$UV_CACHE_DIR" >> "$GITHUB_OUTPUT"
 
-      - name: Restore uv cache
-        id: uv-cache-restore
+      - name: Look up api-simulator build
+        id: cache-lookup
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ steps.uv-cache-dir.outputs.path }}
-          key: uv-${{ runner.os }}-py${{ needs.cache_metadata.outputs.python_cache_tag }}-${{ needs.cache_metadata.outputs.api_simulator_rev }}-${{ hashFiles('uv.lock') }}
-          restore-keys: uv-${{ runner.os }}-py${{ needs.cache_metadata.outputs.python_cache_tag }}-${{ needs.cache_metadata.outputs.api_simulator_rev }}-
+          key: ${{ steps.cache-identity.outputs.key }}
+          lookup-only: true
 
       - name: Configure git auth for private deps
-        run: git config --global url."https://${{ secrets.GH_USER }}:${{ secrets.GH_PAT }}@github.com/TalonT-Org/".insteadOf "https://github.com/TalonT-Org/"
+        if: steps.cache-lookup.outputs.cache-hit != 'true'
+        env:
+          GH_USER: ${{ secrets.GH_USER }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          : "${GH_USER:?private-dependency credentials unavailable: GH_USER}"
+          : "${GH_PAT:?private-dependency credentials unavailable: GH_PAT}"
+          git config --global url."https://${GH_USER}:${GH_PAT}@github.com/TalonT-Org/".insteadOf "https://github.com/TalonT-Org/"
 
       - name: Install Rust toolchain
+        if: steps.cache-lookup.outputs.cache-hit != 'true'
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           toolchain: "1.98.1"
 
-      - name: Install dependencies
-        run: uv sync --locked --extra dev
+      - name: Build api-simulator into the uv cache
+        if: steps.cache-lookup.outputs.cache-hit != 'true'
+        env:
+          # Keeps cargo's build output out of uv's Git checkout, which the cached entry includes.
+          CARGO_TARGET_DIR: ${{ runner.temp }}/api-simulator-target
+        run: |
+          uv sync --locked --extra dev
+          uv cache prune --ci
 
-      - name: Prune uv cache
-        run: uv cache prune --ci
-
-      - name: Save uv cache
-        if: steps.uv-cache-restore.outputs.cache-hit != 'true'
+      - name: Save api-simulator build
+        if: steps.cache-lookup.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ steps.uv-cache-dir.outputs.path }}
-          key: ${{ steps.uv-cache-restore.outputs.cache-primary-key }}
+          key: ${{ steps.cache-identity.outputs.key }}
 
   test:
     name: Test (${{ matrix.shard }}) on ${{ matrix.os }}
-    if: github.event_name != 'schedule'
-    needs: [preflight, cache_metadata]
+    cache-mode: read
+    # Keep required matrix contexts reporting failure when the cache producer fails.
+    if: ${{ !cancelled() && needs.preflight.result == 'success' }}
+    needs: [preflight, api_simulator_cache]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -155,13 +176,21 @@ jobs:
           echo "UV_CACHE_DIR=$UV_CACHE_DIR" >> "$GITHUB_ENV"
           echo "path=$UV_CACHE_DIR" >> "$GITHUB_OUTPUT"
 
-      - name: Restore uv cache
+      - name: Require api-simulator build
+        id: require-api-simulator-cache
+        if: ${{ !cancelled() && runner.os == 'Linux' && needs.api_simulator_cache.result != 'success' }}
+        run: |
+          echo 'api-simulator cache producer did not succeed' >&2
+          exit 1
+
+      - name: Restore api-simulator build
         id: uv-cache-restore
+        if: runner.os == 'Linux'
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ steps.uv-cache-dir.outputs.path }}
-          key: uv-${{ runner.os }}-py${{ needs.cache_metadata.outputs.python_cache_tag }}-${{ needs.cache_metadata.outputs.api_simulator_rev }}-${{ hashFiles('uv.lock') }}
-          restore-keys: uv-${{ runner.os }}-py${{ needs.cache_metadata.outputs.python_cache_tag }}-${{ needs.cache_metadata.outputs.api_simulator_rev }}-
+          key: ${{ needs.api_simulator_cache.outputs.cache-key }}
+          fail-on-cache-miss: true
 
       - name: Install go-task
         uses: arduino/setup-task@24c5e13bce349197642746563945fcdf9355e8f4 # v2
@@ -175,14 +204,6 @@ jobs:
           echo "uv: $(uv --version)"
           echo "task: $(task --version)"
           uv run python --version
-
-      - name: Configure git auth for private deps
-        run: git config --global url."https://${{ secrets.GH_USER }}:${{ secrets.GH_PAT }}@github.com/TalonT-Org/".insteadOf "https://github.com/TalonT-Org/"
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-        with:
-          toolchain: "1.98.1"
 
       - name: Install ripgrep
         shell: bash
@@ -223,6 +244,11 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --locked --extra dev
+
+      - name: Verify api-simulator imports
+        id: verify-api-simulator
+        if: runner.os == 'Linux'
+        run: uv run --no-sync python -B -c "import api_simulator.claude, api_simulator.http, api_simulator.mcp"
 
       - name: Generate recipe diagrams
         run: uv run autoskillit recipes render

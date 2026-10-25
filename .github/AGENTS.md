@@ -37,12 +37,20 @@ wheel cache consumed by downstream jobs:
     enable-cache: false   # required for jobs that skip uv sync
 ```
 
-Jobs that run `uv sync --locked` may normally omit `enable-cache` (defaults to `auto`,
-enabled on GitHub-hosted runners). In `.github/workflows/tests.yml`, however, the `test`
-and `cache_prime` jobs deliberately set `enable-cache: false` despite syncing because
-explicit `actions/cache` owns their uv-cache I/O. That workflow's matrix jobs restore only;
-its schedule-or-`main`-push default-branch primer is the sole saver for the uv dependency
-cache. This single-saver rule does not apply to unrelated workflows or non-uv caches.
+Jobs that run `uv sync --locked` may normally omit `enable-cache`. In
+`.github/workflows/tests.yml`, explicit `actions/cache` owns their uv-cache I/O,
+so setup-uv caching stays disabled. `api_simulator_cache` is the sole saver; Linux
+matrix jobs restore only and verify imports of the native api-simulator submodules.
+The build identity uses the runner image family and toolchain pins, never `uv.lock`,
+so package-only version bumps reuse the build. Keep `preflight` independent and
+the required `Test (*)` contexts reporting producer failures instead of leaving
+the merge queue waiting for missing checks.
+
+If an entry is unusable, delete it with `gh cache delete <key>` and rerun. Cached
+api-simulator source is readable by pull requests into this public repository;
+the owner of both repositories accepted that visibility.
+
+This single-saver rule applies only to this workflow's uv cache.
 
 ## Branch-targeted test policy
 
@@ -61,9 +69,10 @@ shallow without providing a coordinated fallback for merge-base computation.
 
 ## Rust toolchain scope
 
-`dtolnay/rust-toolchain` is only needed in jobs that compile native Python extensions
-(i.e., jobs that run `uv sync`). Do not add it to preflight, lint, or other utility jobs
-that only run `uv lock --check` or similar commands.
+`dtolnay/rust-toolchain` is only needed in jobs that compile native Python extensions. In
+`.github/workflows/tests.yml` only `api_simulator_cache` compiles, and only on a cache miss;
+the test matrix restores that build and must not install Rust. Do not add it to preflight,
+lint, or other utility jobs that only run `uv lock --check` or similar commands.
 
 ## Lockfile verification
 

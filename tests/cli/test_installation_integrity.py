@@ -179,6 +179,8 @@ def test_unrecognized_layout_is_bounded_to_itself(tmp_path: Path) -> None:
     ("site_packages", "expected"),
     [
         ("/e/lib/python3.13/site-packages", "/e"),
+        ("/lib/python3.13/site-packages", "/lib/python3.13/site-packages"),
+        ("/Lib/site-packages", "/Lib/site-packages"),
         ("/e/lib64/python3.13/site-packages", "/e"),
         ("/e/lib/python3.13t/site-packages", "/e"),
         ("/e/Lib/site-packages", "/e"),

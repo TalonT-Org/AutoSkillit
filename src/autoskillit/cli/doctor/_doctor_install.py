@@ -465,10 +465,12 @@ def _scheme_base(site_packages: Path) -> Path:
     if site_packages != site_packages.parent / "site-packages":
         return site_packages
     if re.fullmatch(r"python[0-9]+\.[0-9]+t?", lib.name) and lib.parent.name in {"lib", "lib64"}:
-        return lib.parent.parent
-    if lib == lib.parent / "Lib":
-        return lib.parent
-    return site_packages
+        base = lib.parent.parent
+    elif lib == lib.parent / "Lib":
+        base = lib.parent
+    else:
+        return site_packages
+    return base if base.parent != base else site_packages
 
 
 def _verify_record_entry(

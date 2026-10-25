@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import ast
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from fastmcp.tools import FunctionTool
 
 import autoskillit.core.tool_registry as tool_registry
 from autoskillit.core import (
@@ -17,6 +19,13 @@ from autoskillit.core import (
     ToolParamRole,
     ToolWireType,
     compute_tool_contract_identity,
+)
+from autoskillit.server.tools import (
+    tools_issue_headless,
+    tools_kitchen,
+    tools_pipeline_tracker,
+    tools_status,
+    tools_workspace,
 )
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -252,6 +261,30 @@ def test_registry_preserves_typed_handler_wire_contracts() -> None:
             param = TOOL_REGISTRY[tool_name].param_def(param_name)
             assert param is not None
             assert param.wire_type is wire_type
+
+
+@pytest.mark.parametrize(
+    ("handler", "parameter_names"),
+    [
+        (tools_workspace.commit_files, ("paths",)),
+        (tools_issue_headless.prepare_issue, ("labels",)),
+        (tools_kitchen.lock_ingredients, ("locked", "unlock")),
+        (tools_pipeline_tracker.record_pipeline_step, ("dependencies",)),
+        (tools_status.read_db, ("params",)),
+    ],
+    ids=lambda value: value.__name__ if callable(value) else None,
+)
+def test_binding_wire_types_match_handler_schemas(
+    handler: Callable[..., object], parameter_names: tuple[str, ...]
+) -> None:
+    properties = FunctionTool.from_function(handler).parameters["properties"]
+    registry_params = {param.name: param for param in TOOL_REGISTRY[handler.__name__].params}
+
+    for name in parameter_names:
+        schema = properties[name]
+        variants = schema.get("anyOf", [schema])
+        wire_types = {variant["type"] for variant in variants} - {"null"}
+        assert wire_types == {registry_params[name].wire_type.value}, f"{handler.__name__}.{name}"
 
 
 def test_evidence_reader_registry_parameter_contracts_are_exact() -> None:

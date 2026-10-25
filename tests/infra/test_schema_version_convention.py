@@ -135,15 +135,6 @@ _LEGACY_JSON_WRITE_COUNTS: dict[str, int] = {
     "src/autoskillit/workspace/clone/_registry.py::CloneRegistry.__exit__": 1,
     # staleness_cache.py — cache dict
     "src/autoskillit/recipe/contracts/staleness_cache.py::write_staleness_cache": 1,
-    # _hook_repair.py — hooks.json self-heal for plugin cache and projection scopes,
-    # triggered by the in-process repair primitive instead of startup drift detection
-    # (co-owned with Claude plugin system). The shared lease-held hook transaction in
-    # _repair_hook_payload_under_lease rewrites hooks.json for both cache and projection
-    # artifacts. Manifest refresh stays versioned separately.
-    (
-        "src/autoskillit/workspace/_projected_artifact/_hook_repair.py::"
-        "_repair_hook_payload_under_lease"
-    ): 1,
     # tools_kitchen/_hook_config.py — hook config, quota guard, and git_ops_policy
     "src/autoskillit/server/tools/tools_kitchen/_hook_config.py::_write_hook_config": 1,
     (

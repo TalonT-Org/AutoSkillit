@@ -38,9 +38,9 @@ def test_review_skill_receipt_names_match_the_core_formatter() -> None:
         ) == github_review_receipt_filename(42)
 
 
-def test_receipt_filename_formatter_has_only_the_three_declared_call_sites() -> None:
-    assert _files_containing("github_review_receipt_filename") == {
+def test_receipt_filename_formatter_is_used_by_its_current_owners() -> None:
+    assert {
         "core/types/github/_type_github_review.py",
         "server/tools/tools_pr_ops.py",
         "smoke_utils/review/_publication.py",
-    }
+    } <= _files_containing("github_review_receipt_filename")

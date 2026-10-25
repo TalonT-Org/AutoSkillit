@@ -785,7 +785,7 @@ def test_one_producer_builds_api_simulator_and_test_jobs_only_restore_it() -> No
     build = builds[0]
     assert "uv sync --locked --extra dev" in build["run"]
     assert "uv cache prune --ci" in build["run"]
-    assert "CARGO_TARGET_DIR" in build["env"]
+    assert build["env"]["CARGO_TARGET_DIR"] == "${{ runner.temp }}/api-simulator-target"
     save_steps = [
         (job_name, step)
         for job_name, job in jobs.items()

@@ -7,7 +7,11 @@ import pytest
 from autoskillit.core import BindingFailureCode, Severity
 from autoskillit.recipe import make_validation_context
 from autoskillit.recipe._binding import bind_recipe
-from autoskillit.recipe.registry import _RULE_REGISTRY, run_semantic_rules
+from autoskillit.recipe.registry import (
+    _RULE_REGISTRY,
+    declaration_scoped_rule_names,
+    run_semantic_rules,
+)
 from autoskillit.recipe.schema import Recipe, RecipeStep
 from tests.recipe._binding_helpers import _manifest, _required_inputs
 
@@ -154,6 +158,7 @@ def test_binding_reporters_are_error_and_declaration_scoped() -> None:
         "unresolved-skill-input-template",
     }
     rules = {rule.name: rule for rule in _RULE_REGISTRY}
+    assert declaration_scoped_rule_names() == expected_rules
 
     for name in expected_rules:
         rule = rules[name]

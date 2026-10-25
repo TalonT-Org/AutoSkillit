@@ -163,9 +163,10 @@ def _dispatch_occurrence_error(
         )
         expected = int(inline and value.name == "skill_command")
         if count != expected:
-            return (
-                f"dispatch_items placeholder {name!r} in MCP argument {value.name!r} "
-                f"must occur exactly {expected} time(s); only its inline command may repeat it"
+            return f"dispatch_items placeholder {name!r} in MCP argument {value.name!r} " + (
+                "must occur exactly once in the inline skill command"
+                if expected
+                else "must not occur outside the inline skill command"
             )
     return None
 

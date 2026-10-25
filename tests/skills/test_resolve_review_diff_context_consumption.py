@@ -5,10 +5,13 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import github_review_receipt_filename
 from autoskillit.smoke_utils import (
+    github_review_handoff_error,
     prepare_experimental_review_publication,
     publish_experimental_review_artifacts,
 )
+from tests._github_review_fixtures import authoritative_receipt
 
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
@@ -86,7 +89,8 @@ def test_step2_uses_mode_appropriate_generation_pair() -> None:
 
     assert "In `mode=local`, read `local_findings_{pr_number}.json`" in normalized
     assert "In `mode=github`, pair `diff_context_{pr_number}.json`" in normalized
-    assert "`batch_review_response_{pr_number}.json` receipt" in normalized
+    assert "`github_review_binding_{pr_number}.json` marker" in normalized
+    assert "github_review_handoff_error(" in normalized
     assert "Do not require a local-findings artifact in GitHub mode" in normalized
 
 
@@ -135,8 +139,9 @@ def test_step4_still_reads_file_for_editing():
 
 def test_diff_context_path_matches_review_pr_output_path():
     """resolve-review's diff_context path must reference the review-pr handoff file."""
-    full = _skill_text()
-    assert "diff_context_" in full and "REVIEW_PR_OUTPUT" in full
+    section = _step2_section()
+    assert "diff_context_" in section and "REVIEW_PR_OUTPUT" in section
+    assert "${AUTOSKILLIT_TEMP}" not in section
 
 
 def test_step2_map_type_is_dict_of_dicts():
@@ -182,10 +187,20 @@ def test_v2_review_level_findings_enter_the_resolver_without_thread_identity() -
     step2 = _step2_section()
     step3 = _step3_section()
 
-    pair_check = step2.find("review_handoff_pair_error")
+    pair_check = step2.find("github_review_handoff_error(")
     schema_check = step2.find("schema_version == 2", pair_check)
     review_level_load = step2.find("review_level_findings", schema_check)
     assert 0 <= pair_check < schema_check < review_level_load
+    rejection = step2.find("On a non-null result", pair_check)
+    assert pair_check < rejection < schema_check
+    normalized = " ".join(step2.split())
+    for instruction in (
+        "diff_context_map = {}",
+        "Pre-built context rejected:",
+        "skip schema processing and pre-built review-level ingestion",
+        "use the existing fallback path",
+    ):
+        assert instruction in normalized
 
     for field in ("candidate_id", "path", "line", "message", "severity", "dimension"):
         assert field in step2
@@ -296,23 +311,37 @@ def test_actual_publisher_output_matches_resolve_review_path_line_boundary(
             "candidate_id": "deletion",
         },
     ]
+    output_dir = tmp_path / mode
+    receipt = authoritative_receipt() if mode == "github" else None
+    pr_number = str(receipt.pr_number) if receipt is not None else "51"
+    if receipt is not None:
+        output_dir.mkdir(parents=True)
+        receipt_path = output_dir / github_review_receipt_filename(receipt.pr_number)
+        receipt_path.write_text(
+            json.dumps(receipt.to_dict(), sort_keys=True, separators=(",", ":"))
+        )
+
     publication = prepare_experimental_review_publication(
         raw_ledger={"candidate_records": findings},
         survivors=findings,
-        snapshot={"head_sha": "head", "base_sha": "base", "merge_base_sha": "merge"},
+        snapshot={
+            "head_sha": receipt.head_sha if receipt is not None else "head",
+            "base_sha": "base",
+            "merge_base_sha": "merge",
+        },
         annotation_generation_id="annotation",
         mode=mode,
         snapshot_is_fresh=True,
-        handoff_metadata={"pr_number": 51, "iteration": 3},
-        receipt=(
-            {"posted": True, "http_status": 200, "commit_id": "head"} if mode == "github" else None
-        ),
+        handoff_metadata={"pr_number": int(pr_number), "iteration": 3},
     )
     published = publish_experimental_review_artifacts(
         publication=publication,
-        output_dir=str(tmp_path / mode),
-        pr_number="51",
+        output_dir=str(output_dir),
+        pr_number=pr_number,
     )
+
+    if mode == "github":
+        assert github_review_handoff_error(output_dir=str(output_dir), pr_number=pr_number) is None
 
     diff_context = json.loads(Path(published["published_paths"]["diff_context"]).read_text())
     resolve_review_map = {

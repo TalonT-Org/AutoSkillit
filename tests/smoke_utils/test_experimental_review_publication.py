@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
-from typing import Any
 
 import pytest
 
-from autoskillit.core import DiffAnchorAuthority
+from autoskillit.core import DiffAnchorAuthority, github_review_receipt_filename
 from autoskillit.smoke_utils import (
     EXPERIMENTAL_REVIEW_AUDITORS,
     aggregate_combined_review_candidates,
@@ -17,34 +17,69 @@ from autoskillit.smoke_utils import (
     render_unpostable_review_section,
     validate_experimental_auditor_outputs,
 )
+from tests._github_review_fixtures import authoritative_receipt
 from tests.smoke_utils._experimental_helpers import (
     _experimental_candidate,
+)
+from tests.smoke_utils._review_publication_fixtures import (
+    _GENERATION_IDENTITY_KEYS,
+    _REVIEW_BASE,
+    _REVIEW_HEAD,
+    _prepared_publication,
+    _publish,
+    _write_server_receipt,
 )
 
 pytestmark = [pytest.mark.medium]
 
 
-def _prepared_local_experimental_publication() -> dict[str, Any]:
-    return prepare_experimental_review_publication(
-        raw_ledger={"candidate_records": [{"candidate_id": "candidate-1"}]},
-        survivors=[
-            {
-                "candidate_id": "candidate-1",
-                "disposition_id": "disposition-1",
-                "file": "src/app.py",
-                "line": 42,
-            }
-        ],
-        snapshot={
-            "head_sha": "head",
-            "base_sha": "base",
-            "merge_base_sha": "merge",
-            "diff_sha256": "diff",
-        },
-        annotation_generation_id="annotation-generation",
-        mode="local",
-        snapshot_is_fresh=True,
-    )
+def _write_receipt_payload(output_dir: Path, payload: bytes, *, pr_number: int = 42) -> Path:
+    receipt_path = output_dir / github_review_receipt_filename(pr_number)
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    receipt_path.write_bytes(payload)
+    receipt_path.chmod(0o600)
+    return receipt_path
+
+
+@pytest.mark.parametrize("diff_context", [[], {}, {"_head_sha": 42}])
+def test_github_publication_rejects_malformed_diff_context_before_writes(
+    tmp_path: Path,
+    diff_context: object,
+) -> None:
+    publication = _prepared_publication("github")
+    publication["artifacts"]["diff_context"] = diff_context
+    output_dir = tmp_path / "review-output"
+
+    with pytest.raises(ValueError, match="diff_context must contain a non-empty _head_sha"):
+        publish_experimental_review_artifacts(
+            publication=publication,
+            output_dir=str(output_dir),
+            pr_number="42",
+        )
+
+    assert not output_dir.exists()
+
+
+@pytest.mark.parametrize("mode", ["local", "github"])
+def test_publication_rejects_mode_incompatible_marker_before_writes(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    publication = _prepared_publication(mode)
+    marker = "github_review_binding" if mode == "local" else "local_findings"
+    publication["artifacts"].pop("local_findings", None)
+    publication["artifacts"][marker] = {}
+    publication["artifact_order"] = ["raw_findings", "diff_context", marker]
+    output_dir = tmp_path / "review-output"
+
+    with pytest.raises(ValueError, match=f"{marker} is incompatible with {mode} mode"):
+        publish_experimental_review_artifacts(
+            publication=publication,
+            output_dir=str(output_dir),
+            pr_number="42",
+        )
+
+    assert not output_dir.exists()
 
 
 def _authority(right_side_lines: dict[str, list[int]]) -> DiffAnchorAuthority:
@@ -196,72 +231,54 @@ def test_experimental_publication_preserves_provenance_and_suppresses_stale_effe
 
 def test_experimental_publication_retires_obsolete_artifacts(tmp_path: Path) -> None:
     output_dir = tmp_path / "review-output"
-    base_arguments = {
-        "raw_ledger": {"candidate_records": [{"candidate_id": "candidate-1"}]},
-        "survivors": [{"file": "src/app.py", "line": 42}],
-        "snapshot": {"head_sha": "head", "base_sha": "base"},
-        "annotation_generation_id": "annotation-generation",
-    }
+    _, receipt_path = _write_server_receipt(output_dir, pr_number=18)
+    receipt_bytes = receipt_path.read_bytes()
+    receipt_inode = receipt_path.stat().st_ino
+    assert receipt_path.stat().st_mode & 0o777 == 0o600
 
-    local = prepare_experimental_review_publication(
-        **base_arguments,
-        mode="local",
-        snapshot_is_fresh=True,
-    )
-    publish_experimental_review_artifacts(
-        publication=local,
-        output_dir=str(output_dir),
-        pr_number="18",
-    )
+    local = _publish(output_dir, "local", pr_number="18")
     assert {path.name for path in output_dir.iterdir()} == {
         "raw_findings_18.json",
         "diff_context_18.json",
         "local_findings_18.json",
+        receipt_path.name,
     }
+    assert receipt_path.read_bytes() == receipt_bytes
+    assert receipt_path.stat().st_ino == receipt_inode
 
-    github_with_receipt = prepare_experimental_review_publication(
-        **base_arguments,
-        mode="github",
-        snapshot_is_fresh=True,
-        receipt={"posted": True, "http_status": 200},
-    )
-    publish_experimental_review_artifacts(
-        publication=github_with_receipt,
-        output_dir=str(output_dir),
-        pr_number="18",
-    )
+    github = _publish(output_dir, "github", pr_number="18")
+    binding_path = output_dir / "github_review_binding_18.json"
     assert {path.name for path in output_dir.iterdir()} == {
         "raw_findings_18.json",
         "diff_context_18.json",
-        "batch_review_response_18.json",
+        binding_path.name,
+        receipt_path.name,
     }
+    binding_bytes = binding_path.read_bytes()
+    assert github["publication_records"][-1]["artifact"] == "github_review_binding"
+    assert receipt_path.read_bytes() == receipt_bytes
+    assert receipt_path.stat().st_ino == receipt_inode
 
-    github_without_receipt = prepare_experimental_review_publication(
-        **base_arguments,
-        mode="github",
-        snapshot_is_fresh=True,
-    )
-    publish_experimental_review_artifacts(
-        publication=github_without_receipt,
-        output_dir=str(output_dir),
-        pr_number="18",
-    )
+    local = _publish(output_dir, "local", pr_number="18", written_at="t1")
     assert {path.name for path in output_dir.iterdir()} == {
         "raw_findings_18.json",
         "diff_context_18.json",
+        "local_findings_18.json",
+        receipt_path.name,
     }
+    assert local["publication_records"][-1]["artifact"] == "local_findings"
+    assert receipt_path.read_bytes() == receipt_bytes
+    assert receipt_path.stat().st_ino == receipt_inode
 
-    stale = prepare_experimental_review_publication(
-        **base_arguments,
-        mode="github",
-        snapshot_is_fresh=False,
-    )
-    publish_experimental_review_artifacts(
-        publication=stale,
-        output_dir=str(output_dir),
-        pr_number="18",
-    )
-    assert {path.name for path in output_dir.iterdir()} == {"raw_findings_18.json"}
+    binding_path.write_bytes(binding_bytes)
+    stale = _publish(output_dir, "github", pr_number="18", fresh=False, written_at="t2")
+    assert {path.name for path in output_dir.iterdir()} == {
+        "raw_findings_18.json",
+        receipt_path.name,
+    }
+    assert stale["publication_records"][-1]["artifact"] == "raw_findings"
+    assert receipt_path.read_bytes() == receipt_bytes
+    assert receipt_path.stat().st_ino == receipt_inode
 
 
 def _combined_review_survivors(gate_state: str) -> list[dict[str, object]]:
@@ -702,7 +719,7 @@ def test_combined_findings_survive_local_publication_for_every_gate_state(
     assert standard_finding["snapshot"] == {"head_sha": "head", "base_sha": "base"}
 
 
-def test_github_receipt_shares_prederived_generation_and_is_published_last(
+def test_github_binding_marker_is_published_last_and_binds_server_receipt(
     tmp_path: Path,
 ) -> None:
     survivors = _combined_review_survivors("valid_true")
@@ -713,18 +730,20 @@ def test_github_receipt_shares_prederived_generation_and_is_published_last(
             for item in survivors
         ],
     }
-    metadata = {"pr_number": 23, "schema_version": 1}
-    snapshot = {"head_sha": "head", "base_sha": "base", "merge_base_sha": "merge"}
-    seed = prepare_experimental_review_publication(
-        raw_ledger=ledger,
-        survivors=survivors,
-        snapshot=snapshot,
-        annotation_generation_id="annotation",
-        mode="github",
-        snapshot_is_fresh=True,
-        handoff_metadata=metadata,
+    output_dir = tmp_path / "github"
+    receipt, receipt_path = _write_server_receipt(
+        output_dir,
+        pr_number=23,
+        head_sha=_REVIEW_HEAD,
     )
-    generation_id = seed["artifacts"]["raw_findings"]["review_generation_id"]
+    receipt_bytes = receipt_path.read_bytes()
+    receipt_inode = receipt_path.stat().st_ino
+    metadata = {"pr_number": 23, "schema_version": 1}
+    snapshot = {
+        "head_sha": _REVIEW_HEAD,
+        "base_sha": _REVIEW_BASE,
+        "merge_base_sha": "c" * 40,
+    }
     publication = prepare_experimental_review_publication(
         raw_ledger=ledger,
         survivors=survivors,
@@ -733,35 +752,29 @@ def test_github_receipt_shares_prederived_generation_and_is_published_last(
         mode="github",
         snapshot_is_fresh=True,
         handoff_metadata=metadata,
-        receipt={
-            "posted": True,
-            "http_status": 200,
-            "commit_id": "head",
-            "review_generation_id": "must-be-overridden",
-        },
     )
+    generation_id = publication["artifacts"]["raw_findings"]["review_generation_id"]
 
     assert publication["artifact_order"] == [
         "raw_findings",
         "diff_context",
-        "review_receipt",
     ]
-    assert publication["artifacts"]["review_receipt"]["review_generation_id"] == generation_id
     result = publish_experimental_review_artifacts(
         publication=publication,
-        output_dir=str(tmp_path / "github"),
+        output_dir=str(output_dir),
         pr_number="23",
     )
 
     assert [Path(record["path"]).name for record in result["publication_records"]] == [
         "raw_findings_23.json",
         "diff_context_23.json",
-        "batch_review_response_23.json",
+        "github_review_binding_23.json",
     ]
     documents = {
         name: json.loads(Path(path).read_text())
         for name, path in result["published_paths"].items()
     }
+    assert set(documents) == {"raw_findings", "diff_context", "github_review_binding"}
     assert {document["review_generation_id"] for document in documents.values()} == {generation_id}
     consumer_index = {
         (entry["path"], entry["line"]): entry
@@ -774,205 +787,134 @@ def test_github_receipt_shares_prederived_generation_and_is_published_last(
         "overengineering_abstraction_surface",
     }
     assert consumer_index[("src/app.py", 42)]["disposition_id"] == ("disposition-reachability")
-    assert documents["review_receipt"]["commit_id"] == "head"
+    binding = documents["github_review_binding"]
+    assert binding == {
+        **{
+            key: documents["diff_context"][key]
+            for key in _GENERATION_IDENTITY_KEYS
+            if key in documents["diff_context"]
+        },
+        "receipt_operation_key": receipt.operation_key,
+    }
+    assert receipt_path.read_bytes() == receipt_bytes
+    assert receipt_path.stat().st_ino == receipt_inode
 
 
-def test_write_temp_bytes_closes_descriptor_when_fdopen_fails(
+@pytest.mark.parametrize(
+    ("receipt_case", "expected_error"),
+    [
+        ("missing", "receipt unreadable"),
+        ("invalid_json", "receipt malformed"),
+        ("duplicate_keys", "receipt malformed"),
+        ("empty", "receipt malformed"),
+        ("overflow_created_at", "receipt malformed"),
+        ("dry_run", "receipt is not a final successful review"),
+        ("missing_review_id", "receipt is not a final successful review"),
+        ("different_pr", "receipt is not a final successful review"),
+        ("different_head", "receipt head does not match the review generation"),
+        ("noncanonical_pr", "pr_number must be canonical decimal"),
+    ],
+)
+def test_github_publication_rejects_unbindable_receipt(
+    tmp_path: Path,
+    receipt_case: str,
+    expected_error: str,
+) -> None:
+    output_dir = tmp_path / "github"
+    pr_number = "042" if receipt_case == "noncanonical_pr" else "42"
+    if receipt_case == "invalid_json":
+        _write_receipt_payload(output_dir, b"not json")
+    elif receipt_case == "empty":
+        _write_receipt_payload(output_dir, b"{}")
+    elif receipt_case not in {"missing", "noncanonical_pr"}:
+        receipt_pr = 43 if receipt_case == "different_pr" else 42
+        receipt_head = "c" * 40 if receipt_case == "different_head" else _REVIEW_HEAD
+        payload = authoritative_receipt(
+            pr_number=receipt_pr,
+            head_sha=receipt_head,
+        ).to_dict()
+        if receipt_case == "overflow_created_at":
+            payload["created_at"] = int("9" * 400)
+        elif receipt_case == "dry_run":
+            payload["state"] = "DRY_RUN"
+        elif receipt_case == "missing_review_id":
+            payload["review_id"] = None
+        data = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        if receipt_case == "duplicate_keys":
+            data = b'{"pr_number":42,' + data[1:]
+        _write_receipt_payload(output_dir, data)
+
+    with pytest.raises(ValueError, match=f"^{re.escape(expected_error)}"):
+        publish_experimental_review_artifacts(
+            publication=_prepared_publication("github"),
+            output_dir=str(output_dir),
+            pr_number=pr_number,
+        )
+
+
+@pytest.mark.parametrize("mode_state", ["missing", "unsupported"])
+def test_github_publication_rejects_invalid_mode_before_writes(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    mode_state: str,
 ) -> None:
     import autoskillit.smoke_utils.review._publication as publication_module
 
-    real_close = os.close
-    opened_fd = -1
-    closed_fds: list[int] = []
-
-    def failing_fdopen(fd: int, mode: str) -> None:
-        nonlocal opened_fd
-        opened_fd = fd
-        raise OSError("injected fdopen failure")
-
-    def recording_close(fd: int) -> None:
-        closed_fds.append(fd)
-        real_close(fd)
-
-    monkeypatch.setattr(publication_module.os, "fdopen", failing_fdopen)
-    monkeypatch.setattr(publication_module.os, "close", recording_close)
-
-    with pytest.raises(OSError, match="injected fdopen failure"):
-        publication_module._write_temp_bytes(tmp_path, "artifact.json", b"payload")
-
-    assert closed_fds == [opened_fd]
-    assert not list(tmp_path.iterdir())
-
-
-def test_experimental_publication_executes_same_directory_marker_last_renames(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    import autoskillit.smoke_utils.review._publication as publication_module
-
-    publication = _prepared_local_experimental_publication()
-    output_dir = tmp_path / "review-output"
-    real_replace = os.replace
-    rename_calls: list[tuple[Path, Path]] = []
-
-    def recording_replace(source: str | os.PathLike[str], destination: str | os.PathLike[str]):
-        rename_calls.append((Path(source), Path(destination)))
-        real_replace(source, destination)
-
-    monkeypatch.setattr(publication_module.os, "replace", recording_replace)
-    result = publish_experimental_review_artifacts(
-        publication=publication,
-        output_dir=str(output_dir),
-        pr_number="17",
-    )
-
-    expected_names = [
-        "raw_findings_17.json",
-        "diff_context_17.json",
-        "local_findings_17.json",
-    ]
-    assert [destination.name for _, destination in rename_calls] == expected_names
-    assert all(
-        source.parent == destination.parent == output_dir for source, destination in rename_calls
-    )
-    assert all(source.name.endswith(".tmp") for source, _ in rename_calls)
-    assert list(result["published_paths"]) == [
-        "raw_findings",
-        "diff_context",
-        "local_findings",
-    ]
-    for artifact_name, path in result["published_paths"].items():
-        assert json.loads(Path(path).read_text()) == publication["artifacts"][artifact_name]
-    assert result["publication_records"][-1]["artifact"] == "local_findings"
-    assert not list(output_dir.glob(".*.tmp"))
-
-
-@pytest.mark.parametrize("failure_index", [0, 1, 2])
-def test_experimental_publication_rolls_back_each_write_boundary(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    failure_index: int,
-) -> None:
-    import autoskillit.smoke_utils.review._publication as publication_module
-
-    publication = _prepared_local_experimental_publication()
-    output_dir = tmp_path / "review-output"
-    output_dir.mkdir()
-    final_paths = [
-        output_dir / "raw_findings_18.json",
-        output_dir / "diff_context_18.json",
-        output_dir / "local_findings_18.json",
-    ]
-    for index, path in enumerate(final_paths):
-        path.write_text(f"old-{index}")
+    publication = _prepared_publication("github")
+    if mode_state == "missing":
+        publication.pop("mode")
+    else:
+        publication["mode"] = "unsupported"
+    writes: list[str] = []
+    replacements: list[str] = []
     original_write = publication_module._write_temp_bytes
-    write_index = 0
+    original_replace = os.replace
 
-    def failing_write(directory: Path, final_name: str, content: bytes) -> Path:
-        nonlocal write_index
-        current_index = write_index
-        write_index += 1
-        if current_index == failure_index:
-            raise OSError("injected write failure")
+    def recording_write(directory: Path, final_name: str, content: bytes) -> Path:
+        writes.append(final_name)
         return original_write(directory, final_name, content)
 
-    monkeypatch.setattr(publication_module, "_write_temp_bytes", failing_write)
-    with pytest.raises(RuntimeError, match="publication failed"):
+    def recording_replace(source: str | os.PathLike[str], destination: str | os.PathLike[str]):
+        replacements.append(Path(destination).name)
+        original_replace(source, destination)
+
+    monkeypatch.setattr(publication_module, "_write_temp_bytes", recording_write)
+    monkeypatch.setattr(publication_module.os, "replace", recording_replace)
+    output_dir = tmp_path / "github"
+
+    with pytest.raises(ValueError, match="mode"):
         publish_experimental_review_artifacts(
             publication=publication,
             output_dir=str(output_dir),
-            pr_number="18",
+            pr_number="42",
         )
 
-    assert [path.read_text() for path in final_paths] == ["old-0", "old-1", "old-2"]
-    assert not list(output_dir.glob(".*.tmp"))
+    assert writes == []
+    assert replacements == []
+    assert not output_dir.exists()
 
 
-@pytest.mark.parametrize("failure_index", [0, 1, 2])
-def test_experimental_publication_rolls_back_each_rename_boundary(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    ("artifact", "corruption"),
+    [("diff_context", "missing"), ("github_review_binding", "malformed")],
+)
+def test_github_handoff_reports_unreadable_artifact(
     tmp_path: Path,
-    failure_index: int,
+    artifact: str,
+    corruption: str,
 ) -> None:
-    import autoskillit.smoke_utils.review._publication as publication_module
+    from autoskillit.smoke_utils import github_review_handoff_error
 
-    publication = _prepared_local_experimental_publication()
-    output_dir = tmp_path / "review-output"
-    output_dir.mkdir()
-    final_paths = [
-        output_dir / "raw_findings_19.json",
-        output_dir / "diff_context_19.json",
-        output_dir / "local_findings_19.json",
-    ]
-    for index, path in enumerate(final_paths):
-        path.write_text(f"old-{index}")
-    real_replace = os.replace
-    rename_index = 0
-    failure_injected = False
+    output_dir = tmp_path / "github"
+    _write_server_receipt(output_dir)
+    result = _publish(output_dir, "github")
+    artifact_path = Path(result["published_paths"][artifact])
+    if corruption == "missing":
+        artifact_path.unlink()
+    else:
+        artifact_path.write_text("not json")
 
-    def failing_replace(source: str | os.PathLike[str], destination: str | os.PathLike[str]):
-        nonlocal failure_injected, rename_index
-        if not failure_injected:
-            current_index = rename_index
-            rename_index += 1
-            if current_index == failure_index:
-                failure_injected = True
-                raise OSError("injected rename failure")
-        real_replace(source, destination)
+    error = github_review_handoff_error(output_dir=str(output_dir), pr_number="42")
 
-    monkeypatch.setattr(publication_module.os, "replace", failing_replace)
-    with pytest.raises(RuntimeError, match="publication failed"):
-        publish_experimental_review_artifacts(
-            publication=publication,
-            output_dir=str(output_dir),
-            pr_number="19",
-        )
-
-    assert [path.read_text() for path in final_paths] == ["old-0", "old-1", "old-2"]
-    assert not list(output_dir.glob(".*.tmp"))
-
-
-def test_experimental_publication_preserves_publication_and_rollback_failures(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    import autoskillit.smoke_utils.review._publication as publication_module
-
-    publication = _prepared_local_experimental_publication()
-    output_dir = tmp_path / "review-output"
-    output_dir.mkdir()
-    final_paths = [
-        output_dir / "raw_findings_20.json",
-        output_dir / "diff_context_20.json",
-        output_dir / "local_findings_20.json",
-    ]
-    for index, path in enumerate(final_paths):
-        path.write_text(f"old-{index}")
-    real_replace = os.replace
-    replace_count = 0
-
-    def failing_replace(source: str | os.PathLike[str], destination: str | os.PathLike[str]):
-        nonlocal replace_count
-        replace_count += 1
-        if replace_count == 2:
-            raise OSError("injected publication failure")
-        if replace_count == 3:
-            raise OSError("injected rollback failure")
-        real_replace(source, destination)
-
-    monkeypatch.setattr(publication_module.os, "replace", failing_replace)
-    with pytest.raises(ExceptionGroup) as exc_info:
-        publish_experimental_review_artifacts(
-            publication=publication,
-            output_dir=str(output_dir),
-            pr_number="20",
-        )
-
-    errors = exc_info.value.exceptions
-    assert [str(error) for error in errors] == [
-        "injected publication failure",
-        "injected rollback failure",
-    ]
-    assert [path.read_text() for path in final_paths[1:]] == ["old-1", "old-2"]
+    assert error is not None
+    assert error.startswith(f"{artifact} unreadable:")

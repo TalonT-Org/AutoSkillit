@@ -29,6 +29,7 @@ from autoskillit.smoke_utils.review._auditor_output import (
     parse_auditor_findings_output,
 )
 from autoskillit.smoke_utils.review._publication import (
+    github_review_handoff_error,
     normalize_local_review_finding,
     prepare_experimental_review_publication,
     publish_experimental_review_artifacts,
@@ -54,6 +55,7 @@ __all__ = [
     "determine_experimental_review_verdict",
     "evaluate_review_audit_slots",
     "finalize_review_audit",
+    "github_review_handoff_error",
     "load_review_audit_manifest",
     "normalize_local_review_finding",
     "parse_auditor_findings_output",

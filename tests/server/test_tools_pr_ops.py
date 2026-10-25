@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 import autoskillit.server.tools.tools_pr_ops as tools_pr_ops
+from autoskillit.core import github_review_receipt_filename
 from autoskillit.core.types import (
     DiffAnchorAuthority,
     GitHubReviewComment,
@@ -16,7 +17,6 @@ from autoskillit.core.types import (
     GitHubReviewReceipt,
     GitHubReviewRequest,
     ReviewOperationState,
-    ReviewReconciliationResult,
     ReviewResponseClass,
 )
 from autoskillit.pipeline.gate import DefaultGateState
@@ -29,6 +29,7 @@ from autoskillit.server.tools.tools_pr_ops import (
     post_pr_review,
     verify_review_receipt,
 )
+from tests._github_review_fixtures import authoritative_receipt
 from tests.server._recipe_fixture_parameters import (
     IMPLEMENTATION_READY_PARAMETERS,
 )
@@ -164,34 +165,8 @@ async def test_close_issues_sequentially_delays_between_calls() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _authoritative_receipt() -> GitHubReviewReceipt:
-    return GitHubReviewReceipt(
-        schema_version=1,
-        operation_key="f" * 64,
-        repository="owner/repo",
-        pr_number=7,
-        head_sha="a" * 40,
-        logical_iteration="review-pr:1",
-        requested_event="COMMENT",
-        effective_event="COMMENT",
-        requested_body_digest="b" * 64,
-        effective_body_digest="b" * 64,
-        canonical_finding_digest="c" * 64,
-        state=ReviewOperationState.SUCCEEDED,
-        response_class=ReviewResponseClass.SUCCESS,
-        review_id=901,
-        comment_ids=(),
-        canonical_finding_count=0,
-        reconciliation_result=ReviewReconciliationResult.NOT_NEEDED,
-        finding_dispositions=(),
-        created_at=1.0,
-        updated_at=2.0,
-        final_attempt_digest="d" * 64,
-    )
-
-
 def _write_receipt(cwd: Path, payload: dict[str, object]) -> Path:
-    path = cwd / ".autoskillit" / "temp" / "batch_review_response_7.json"
+    path = cwd / ".autoskillit" / "temp" / github_review_receipt_filename(7)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")))
     return path
@@ -219,7 +194,7 @@ async def test_ledger_receipt_is_authoritative(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    receipt = _authoritative_receipt()
+    receipt = authoritative_receipt()
     poster = _FakeReviewPoster()
     poster.receipts[receipt.operation_key] = receipt
     monkeypatch.setattr(tool_ctx_kitchen_open, "github_review_poster", poster)
@@ -233,6 +208,29 @@ async def test_ledger_receipt_is_authoritative(
 
 
 @pytest.mark.anyio
+async def test_verify_review_receipt_reports_unexpected_error(
+    tool_ctx_kitchen_open,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    receipt = authoritative_receipt()
+    poster = _FakeReviewPoster()
+    verify = Mock(side_effect=RuntimeError("ledger verification failed"))
+    monkeypatch.setattr(poster, "verify_receipt", verify)
+    monkeypatch.setattr(tool_ctx_kitchen_open, "github_review_poster", poster)
+    monkeypatch.setattr(tools_pr_ops, "_get_ctx", lambda: tool_ctx_kitchen_open)
+    receipt_path = _write_receipt(tmp_path, receipt.to_dict())
+
+    result = await _verify_receipt(tmp_path, receipt_path)
+
+    assert result == {
+        "reviews_posted": "false",
+        "rejection_reason": "unexpected_error",
+    }
+    verify.assert_called_once_with(receipt.operation_key)
+
+
+@pytest.mark.anyio
 async def test_handcrafted_receipt_without_ledger_row_is_rejected(
     tool_ctx_kitchen_open,
     monkeypatch: pytest.MonkeyPatch,
@@ -240,11 +238,14 @@ async def test_handcrafted_receipt_without_ledger_row_is_rejected(
 ) -> None:
     monkeypatch.setattr(tool_ctx_kitchen_open, "github_review_poster", _FakeReviewPoster())
     monkeypatch.setattr(tools_pr_ops, "_get_ctx", lambda: tool_ctx_kitchen_open)
-    receipt_path = _write_receipt(tmp_path, _authoritative_receipt().to_dict())
+    receipt_path = _write_receipt(tmp_path, authoritative_receipt().to_dict())
 
     result = await _verify_receipt(tmp_path, receipt_path)
 
-    assert result == {"reviews_posted": "false"}
+    assert result == {
+        "reviews_posted": "false",
+        "rejection_reason": "ledger_receipt_missing",
+    }
 
 
 @pytest.mark.anyio
@@ -264,7 +265,7 @@ async def test_receipt_identity_must_match_independently_supplied_values(
     parameter: str,
     value: object,
 ) -> None:
-    receipt = _authoritative_receipt()
+    receipt = authoritative_receipt()
     poster = _FakeReviewPoster()
     poster.receipts[receipt.operation_key] = receipt
     monkeypatch.setattr(tool_ctx_kitchen_open, "github_review_poster", poster)
@@ -273,7 +274,10 @@ async def test_receipt_identity_must_match_independently_supplied_values(
 
     result = await _verify_receipt(tmp_path, receipt_path, **{parameter: value})
 
-    assert result == {"reviews_posted": "false"}
+    assert result == {
+        "reviews_posted": "false",
+        "rejection_reason": "identity_mismatch",
+    }
 
 
 @pytest.mark.anyio
@@ -293,7 +297,7 @@ async def test_receipt_contents_must_match_ledger_row_field_for_field(
     field: str,
     value: object,
 ) -> None:
-    receipt = _authoritative_receipt()
+    receipt = authoritative_receipt()
     poster = _FakeReviewPoster()
     poster.receipts[receipt.operation_key] = receipt
     monkeypatch.setattr(tool_ctx_kitchen_open, "github_review_poster", poster)
@@ -304,7 +308,10 @@ async def test_receipt_contents_must_match_ledger_row_field_for_field(
 
     result = await _verify_receipt(tmp_path, receipt_path)
 
-    assert result == {"reviews_posted": "false"}
+    assert result == {
+        "reviews_posted": "false",
+        "rejection_reason": "receipt_wire_mismatch",
+    }
 
 
 @pytest.mark.anyio
@@ -322,7 +329,13 @@ async def test_local_mode_gate_requires_explicit_local_marker(
         post_state=post_state,
     )
 
-    assert result == {"reviews_posted": expected}
+    if expected == "true":
+        assert result == {"reviews_posted": expected}
+    else:
+        assert result == {
+            "reviews_posted": expected,
+            "rejection_reason": "invalid_request",
+        }
 
 
 @pytest.mark.anyio
@@ -515,13 +528,52 @@ def _successful_review_result(receipt_path: str) -> GitHubReviewPostResult:
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("pr_number", [True, 0])
+async def test_post_pr_review_rejects_invalid_pr_before_receipt_path_formatting(
+    pr_number: int,
+    tool_ctx,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    poster = _FakeReviewPoster()
+    monkeypatch.setattr(tool_ctx, "github_review_poster", poster)
+    monkeypatch.setattr(tools_pr_ops, "_get_ctx", lambda: tool_ctx)
+
+    result = json.loads(
+        await post_pr_review(
+            cwd=str(tmp_path),
+            receipt_path=str(
+                tmp_path / ".autoskillit" / "temp" / github_review_receipt_filename(7)
+            ),
+            anchor_authority_path=str(
+                tmp_path / ".autoskillit" / "temp" / "anchor_authority_7.json"
+            ),
+            repository="owner/repo",
+            pr_number=pr_number,
+            head_sha="a" * 40,
+            logical_iteration="review-pr:1",
+            event="COMMENT",
+            body="Review",
+            comments=[],
+            dry_run=False,
+            ctx=Mock(),
+        )
+    )
+
+    assert result["state"] == "TERMINAL"
+    assert result["response_class"] == "CLIENT_ERROR"
+    assert "positive integer" in result["error"]
+    assert poster.requests == []
+
+
+@pytest.mark.anyio
 async def test_post_pr_review_uses_injected_poster_with_exact_typed_request(
     tool_ctx,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
     """The headless tool delegates through _get_ctx without opening the kitchen gate."""
-    receipt_path = str(tmp_path / ".autoskillit" / "temp" / "batch_review_response_7.json")
+    receipt_path = str(tmp_path / ".autoskillit" / "temp" / github_review_receipt_filename(7))
     authority_path = tmp_path / ".autoskillit" / "temp" / "anchor_authority_7.json"
     authority_path.parent.mkdir(parents=True, exist_ok=True)
     authority = DiffAnchorAuthority.authoritative(
@@ -613,7 +665,7 @@ async def test_post_pr_review_dry_run_is_delegated_without_gate(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    receipt_path = str(tmp_path / ".autoskillit" / "temp" / "batch_review_response_7.json")
+    receipt_path = str(tmp_path / ".autoskillit" / "temp" / github_review_receipt_filename(7))
     expected = GitHubReviewPostResult(
         operation_key="f" * 64,
         head_sha="a" * 40,
@@ -679,7 +731,9 @@ async def test_post_pr_review_missing_poster_returns_structured_error(
     result = json.loads(
         await post_pr_review(
             cwd=str(tmp_path),
-            receipt_path=str(tmp_path / ".autoskillit" / "temp" / "batch_review_response_7.json"),
+            receipt_path=str(
+                tmp_path / ".autoskillit" / "temp" / github_review_receipt_filename(7)
+            ),
             anchor_authority_path=str(
                 tmp_path / ".autoskillit" / "temp" / "anchor_authority_7.json"
             ),
@@ -724,7 +778,9 @@ async def test_post_pr_review_never_raises_when_poster_fails(
     result = json.loads(
         await post_pr_review(
             cwd=str(tmp_path),
-            receipt_path=str(tmp_path / ".autoskillit" / "temp" / "batch_review_response_7.json"),
+            receipt_path=str(
+                tmp_path / ".autoskillit" / "temp" / github_review_receipt_filename(7)
+            ),
             anchor_authority_path=str(
                 tmp_path / ".autoskillit" / "temp" / "anchor_authority_7.json"
             ),
@@ -754,7 +810,7 @@ async def test_post_pr_review_never_raises_on_invalid_comment_shape(
 ) -> None:
     poster = _FakeReviewPoster(
         _successful_review_result(
-            str(tmp_path / ".autoskillit" / "temp" / "batch_review_response_7.json")
+            str(tmp_path / ".autoskillit" / "temp" / github_review_receipt_filename(7))
         )
     )
     monkeypatch.setattr(tool_ctx, "github_review_poster", poster)
@@ -772,7 +828,9 @@ async def test_post_pr_review_never_raises_on_invalid_comment_shape(
     result = json.loads(
         await post_pr_review(
             cwd=str(tmp_path),
-            receipt_path=str(tmp_path / ".autoskillit" / "temp" / "batch_review_response_7.json"),
+            receipt_path=str(
+                tmp_path / ".autoskillit" / "temp" / github_review_receipt_filename(7)
+            ),
             anchor_authority_path=str(
                 tmp_path / ".autoskillit" / "temp" / "anchor_authority_7.json"
             ),

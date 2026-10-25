@@ -24,6 +24,24 @@ def test_review_handoff_pair_requires_one_ordered_identity_contract() -> None:
     assert review_handoff_pair_error(identity, dict(identity)) is None
 
 
+def test_github_binding_pairs_with_diff_context_by_generation_identity() -> None:
+    diff_context = {
+        "_head_sha": "head",
+        "_base_sha": "base",
+        "_merge_base_sha": "merge-base",
+        "annotation_generation_id": "annotation",
+        "review_generation_id": "review",
+    }
+    binding = {**diff_context, "receipt_operation_key": "f" * 64}
+
+    assert review_handoff_pair_error(diff_context, binding) is None
+
+    binding["review_generation_id"] = "another-review"
+    assert "mismatched review_generation_id" in str(
+        review_handoff_pair_error(diff_context, binding)
+    )
+
+
 @pytest.mark.parametrize(
     ("field", "second_value", "expected_error"),
     [

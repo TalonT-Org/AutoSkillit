@@ -376,7 +376,7 @@ def _restore_publication_files(
         return [error]
 
     rollback_errors: list[OSError] = []
-    payload_names = [name for name in dict.fromkeys(changed) if name not in marker_names]
+    payload_names = [name for name in changed if name not in marker_names]
     for name in payload_names:
         try:
             previous = prior_bytes[name]

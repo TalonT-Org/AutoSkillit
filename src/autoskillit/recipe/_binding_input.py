@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import replace
-from typing import Final, TypeGuard
+from typing import Final, TypeGuard, cast
 
 import regex as re
 
@@ -147,7 +147,7 @@ def _dispatch_item_slot(values: tuple[BoundValue, ...]) -> tuple[BoundValue, str
     if len(occurrences) != 1:
         return None
     value, name = occurrences[0]
-    if not _DISPATCH_TOKEN_RE.fullmatch(str(value.declared_value).strip()):
+    if not _DISPATCH_TOKEN_RE.fullmatch(cast(str, value.declared_value).strip()):
         return None
     return value, name
 

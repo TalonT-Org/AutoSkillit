@@ -89,6 +89,15 @@ _TRIGGERS: dict[BindingFailureCode, tuple[str, dict[str, object]]] = {
             "cwd": "/r",
         },
     ),
+    BindingFailureCode.INVALID_DISPATCH_ITEMS: (
+        "run_skill",
+        {
+            "skill_command": _DRY_WALKTHROUGH,
+            "cwd": "/r",
+            "skill_inputs": dict(_REQUIRED_INPUTS),
+            "dispatch_items": "literal_items",
+        },
+    ),
 }
 
 _EXPECTED_RULE: dict[BindingFailureCode, str] = {
@@ -103,6 +112,7 @@ _EXPECTED_RULE: dict[BindingFailureCode, str] = {
     BindingFailureCode.DEAD_SKILL_INPUT: "invalid-skill-invocation-binding",
     BindingFailureCode.INVALID_SKILL_INPUT_TYPE: "invalid-skill-invocation-binding",
     BindingFailureCode.INVALID_SKILL_COMMAND: "invalid-skill-invocation-binding",
+    BindingFailureCode.INVALID_DISPATCH_ITEMS: "invalid-skill-invocation-binding",
 }
 
 _EXPECTED_MESSAGE = {
@@ -117,6 +127,7 @@ _EXPECTED_MESSAGE = {
     BindingFailureCode.DEAD_SKILL_INPUT: "more positional values than the contract",
     BindingFailureCode.INVALID_SKILL_INPUT_TYPE: "round",
     BindingFailureCode.INVALID_SKILL_COMMAND: "effective skill arguments do not align",
+    BindingFailureCode.INVALID_DISPATCH_ITEMS: "dispatch_items producer",
 }
 
 

@@ -21,6 +21,9 @@ pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
 _BASE_SHA = "0123456789abcdef0123456789abcdef01234567"
 _POLICY_MODULE_NAME = "_autoskillit_ci_target_policy"
+_PRODUCER_MISS = "steps.cache-lookup.outputs.cache-hit != 'true'"
+_PRODUCER_KEY = "${{ steps.cache-identity.outputs.key }}"
+_CONSUMER_KEY = "${{ needs.api_simulator_cache.outputs.cache-key }}"
 
 
 def _repo_root() -> Path:
@@ -648,110 +651,96 @@ def test_complexity_gate_follows_policy_gate() -> None:
     assert complexity_index == relaxation_index + 1
 
 
-def test_workflow_uses_one_explicit_uv_cache_writer() -> None:
-    workflow = load_yaml(_repo_root() / ".github" / "workflows" / "tests.yml")
-    triggers = workflow.get("on", workflow.get(True))
-    assert {"push", "pull_request", "merge_group", "schedule"} <= set(triggers)
-    cron = triggers["schedule"][0]["cron"]
-    assert cron == "17 3 * * *"
-    assert int(cron.split()[0]) != 0
-
-    jobs = workflow["jobs"]
-    preflight = jobs["preflight"]
-    test_job = jobs["test"]
-    metadata = jobs["cache_metadata"]
-    primer = jobs["cache_prime"]
-
-    assert preflight["if"] == "github.event_name != 'schedule'"
-    assert test_job["if"] == "github.event_name != 'schedule'"
-    assert test_job["needs"] == ["preflight", "cache_metadata"]
-    assert "if" not in metadata
-    assert metadata["runs-on"] == "ubuntu-latest"
-    assert primer["if"] == (
-        "github.event_name == 'schedule' || "
-        "(github.event_name == 'push' && github.ref == 'refs/heads/main')"
+def test_api_simulator_cache_key_is_the_build_identity_not_the_lockfile() -> None:
+    workflow_path = _repo_root() / ".github" / "workflows" / "tests.yml"
+    producer = load_yaml(workflow_path)["jobs"]["api_simulator_cache"]
+    identity = next(step for step in producer["steps"] if step.get("id") == "cache-identity")
+    lines = identity["run"].splitlines()
+    assert lines[0] == "python3 <<'PY' >> \"$GITHUB_OUTPUT\""
+    assert lines[-1] == "PY"
+    setup_uv = next(
+        step
+        for step in producer["steps"]
+        if step.get("uses", "").startswith("astral-sh/setup-uv@")
     )
-    assert primer["needs"] == "cache_metadata"
-    assert primer["runs-on"] == "ubuntu-latest"
-    assert "strategy" not in primer
-
-    metadata_step = next(step for step in metadata["steps"] if step.get("id") == "cache-identity")
-    metadata_script = metadata_step["run"]
-    project = tomllib.loads((_repo_root() / "pyproject.toml").read_text(encoding="utf-8"))
-    expected_revision = project["tool"]["uv"]["sources"]["api-simulator"]["rev"]
-    expected_python_tag = (
-        (_repo_root() / ".python-version").read_text(encoding="utf-8").strip().replace(".", "")
-    )
-    assert ".python-version" in metadata_script
-    assert '["tool"]["uv"]["sources"]["api-simulator"]["rev"]' in metadata_script
-    assert "[0-9a-fA-F]{40}" in metadata_script
-    assert r"\d+\.\d+" in metadata_script
-    metadata_lines = metadata_script.splitlines()
-    assert metadata_lines[0] == "python3 <<'PY' >> \"$GITHUB_OUTPUT\""
-    assert metadata_lines[-1] == "PY"
-    metadata_result = subprocess.run(
-        [sys.executable, "-B", "-c", "\n".join(metadata_lines[1:-1])],
+    uv_version = setup_uv["with"]["version"]
+    result = subprocess.run(
+        [sys.executable, "-B", "-c", "\n".join(lines[1:-1])],
         cwd=_repo_root(),
         capture_output=True,
         text=True,
-        env=production_interpreter_env(),
+        env=production_interpreter_env()
+        | {
+            "RUNNER_OS": "Linux",
+            "RUNNER_ARCH": "X64",
+            "ImageOS": "ubuntu24",
+            "UV_VERSION": uv_version,
+        },
         check=False,
     )
-    assert metadata_result.returncode == 0, metadata_result.stderr
-    assert metadata_result.stdout.splitlines() == [
-        f"python_cache_tag={expected_python_tag}",
-        f"api_simulator_rev={expected_revision}",
+    project = tomllib.loads((_repo_root() / "pyproject.toml").read_text(encoding="utf-8"))
+    revision = project["tool"]["uv"]["sources"]["api-simulator"]["rev"]
+    python_tag = (
+        (_repo_root() / ".python-version").read_text(encoding="utf-8").strip().replace(".", "")
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == [
+        f"key=uv-api-simulator-Linux-X64-ubuntu24-uv{uv_version}-py{python_tag}-{revision}"
     ]
-    assert metadata["outputs"] == {
-        "python_cache_tag": "${{ steps.cache-identity.outputs.python_cache_tag }}",
-        "api_simulator_rev": "${{ steps.cache-identity.outputs.api_simulator_rev }}",
+    assert identity["env"] == {"UV_VERSION": "${{ steps.setup-uv.outputs.uv-version }}"}
+    assert "hashFiles('uv.lock')" not in workflow_path.read_text(encoding="utf-8")
+
+
+def test_one_producer_builds_api_simulator_and_test_jobs_only_restore_it() -> None:
+    workflow = load_yaml(_repo_root() / ".github" / "workflows" / "tests.yml")
+    assert set(workflow.get("on", workflow.get(True))) == {"push", "pull_request", "merge_group"}
+    jobs = workflow["jobs"]
+    producer = jobs["api_simulator_cache"]
+    producer_steps = producer["steps"]
+    assert "if" not in producer
+    assert producer["runs-on"] == "ubuntu-latest"
+    assert "strategy" not in producer
+    assert producer["cache-mode"] == "write"
+    assert producer["outputs"] == {"cache-key": _PRODUCER_KEY}
+    producer_uv = next(
+        step for step in producer_steps if step.get("uses", "").startswith("astral-sh/setup-uv@")
+    )
+    test_job = jobs["test"]
+    test_steps = test_job["steps"]
+    test_uv = next(
+        step for step in test_steps if step.get("uses", "").startswith("astral-sh/setup-uv@")
+    )
+    assert producer_uv["id"] == "setup-uv"
+    assert producer_uv["with"]["enable-cache"] is False
+    assert test_uv["with"]["enable-cache"] is False
+    assert producer_uv["with"]["version"] == test_uv["with"]["version"]
+    lookup = next(step for step in producer_steps if step.get("id") == "cache-lookup")
+    assert lookup["uses"].startswith("actions/cache/restore@")
+    assert lookup["with"] == {
+        "lookup-only": True,
+        "key": _PRODUCER_KEY,
+        "path": "${{ steps.uv-cache-dir.outputs.path }}",
     }
-
-    setup_uv_steps = {
-        job_name: next(
-            step for step in job["steps"] if "astral-sh/setup-uv@" in step.get("uses", "")
-        )
-        for job_name, job in jobs.items()
-        if any("astral-sh/setup-uv@" in step.get("uses", "") for step in job.get("steps", []))
-    }
-    assert set(setup_uv_steps) == {"preflight", "test", "cache_prime"}
-    assert all(step["with"]["version"] == "0.9.21" for step in setup_uv_steps.values())
-    assert setup_uv_steps["test"]["with"]["enable-cache"] is False
-    assert setup_uv_steps["cache_prime"]["with"]["enable-cache"] is False
-
-    restore_pin = "actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830"
-    save_pin = "actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830"
-    primary_key = (
-        "uv-${{ runner.os }}-py${{ needs.cache_metadata.outputs.python_cache_tag }}-"
-        "${{ needs.cache_metadata.outputs.api_simulator_rev }}-${{ hashFiles('uv.lock') }}"
+    auth = [step for step in producer_steps if "git config --global" in step.get("run", "")]
+    rust = [
+        step
+        for step in producer_steps
+        if step.get("uses", "").startswith("dtolnay/rust-toolchain@")
+    ]
+    builds = [step for step in producer_steps if "uv sync" in step.get("run", "")]
+    saves = [
+        step for step in producer_steps if step.get("uses", "").startswith("actions/cache/save@")
+    ]
+    assert auth and rust and builds and saves
+    assert all(step["if"] == _PRODUCER_MISS for step in auth + rust + builds + saves)
+    assert all(
+        producer_steps.index(lookup) < producer_steps.index(step)
+        for step in auth + rust + builds + saves
     )
-    restore_prefix = (
-        "uv-${{ runner.os }}-py${{ needs.cache_metadata.outputs.python_cache_tag }}-"
-        "${{ needs.cache_metadata.outputs.api_simulator_rev }}-"
-    )
-    for job in (test_job, primer):
-        cache_dir = next(step for step in job["steps"] if step.get("id") == "uv-cache-dir")
-        restore = next(step for step in job["steps"] if step.get("id") == "uv-cache-restore")
-        assert "uv cache dir" in cache_dir["run"]
-        assert "UV_CACHE_DIR=" in cache_dir["run"]
-        assert '"$GITHUB_ENV"' in cache_dir["run"]
-        assert "path=" in cache_dir["run"]
-        assert '"$GITHUB_OUTPUT"' in cache_dir["run"]
-        assert restore["uses"] == restore_pin
-        assert restore["with"] == {
-            "path": "${{ steps.uv-cache-dir.outputs.path }}",
-            "key": primary_key,
-            "restore-keys": restore_prefix,
-        }
-
-    test_restore = next(step for step in test_job["steps"] if step.get("id") == "uv-cache-restore")
-    test_sync = next(step for step in test_job["steps"] if "uv sync" in step.get("run", ""))
-    assert test_job["steps"].index(test_restore) < test_job["steps"].index(test_sync)
-    assert not any(
-        step.get("uses", "").startswith("actions/cache/save@") for step in test_job["steps"]
-    )
-    assert not any(step.get("uses", "").startswith("actions/cache@") for step in test_job["steps"])
-
+    build = builds[0]
+    assert "uv sync --locked --extra dev" in build["run"]
+    assert "uv cache prune --ci" in build["run"]
+    assert "CARGO_TARGET_DIR" in build["env"]
     save_steps = [
         (job_name, step)
         for job_name, job in jobs.items()
@@ -760,50 +749,51 @@ def test_workflow_uses_one_explicit_uv_cache_writer() -> None:
     ]
     assert len(save_steps) == 1
     save_owner, save = save_steps[0]
-    assert save_owner == "cache_prime"
-    assert save["uses"] == save_pin
-    assert save["if"] == "steps.uv-cache-restore.outputs.cache-hit != 'true'"
+    assert save_owner == "api_simulator_cache"
     assert save["with"] == {
+        "key": _PRODUCER_KEY,
         "path": "${{ steps.uv-cache-dir.outputs.path }}",
-        "key": "${{ steps.uv-cache-restore.outputs.cache-primary-key }}",
     }
-
-    primer_steps = primer["steps"]
-    primer_restore = next(step for step in primer_steps if step.get("id") == "uv-cache-restore")
-    primer_auth = next(
-        step for step in primer_steps if "git config --global" in step.get("run", "")
+    assert producer_steps.index(build) < producer_steps.index(save)
+    assert not any(
+        step.get("uses", "").startswith("actions/cache@")
+        for job in jobs.values()
+        for step in job.get("steps", [])
     )
-    primer_rust = next(
-        step for step in primer_steps if "dtolnay/rust-toolchain@" in step.get("uses", "")
+    assert not jobs["preflight"].get("needs")
+    assert test_job["cache-mode"] == "read"
+    assert {"preflight", "api_simulator_cache"} <= set(test_job["needs"])
+    assert test_job["if"] == "${{ !cancelled() && needs.preflight.result == 'success' }}"
+    require = next(step for step in test_steps if step.get("id") == "require-api-simulator-cache")
+    assert require["if"] == (
+        "${{ !cancelled() && runner.os == 'Linux' && "
+        "needs.api_simulator_cache.result != 'success' }}"
     )
-    primer_sync = next(step for step in primer_steps if "uv sync" in step.get("run", ""))
-    primer_prune = next(
-        step for step in primer_steps if "uv cache prune --ci" in step.get("run", "")
+    assert "exit 1" in require["run"]
+    restore = next(step for step in test_steps if step.get("id") == "uv-cache-restore")
+    assert restore["uses"].startswith("actions/cache/restore@")
+    assert restore["if"] == "runner.os == 'Linux'"
+    assert restore["with"] == {
+        "path": "${{ steps.uv-cache-dir.outputs.path }}",
+        "key": _CONSUMER_KEY,
+        "fail-on-cache-miss": True,
+    }
+    install = next(step for step in test_steps if step.get("name") == "Install dependencies")
+    verify = next(step for step in test_steps if step.get("id") == "verify-api-simulator")
+    assert test_steps.index(require) < test_steps.index(restore) < test_steps.index(install)
+    assert verify["if"] == "runner.os == 'Linux'"
+    assert verify["run"] == (
+        'uv run --no-sync python -B -c "import api_simulator.claude, '
+        'api_simulator.http, api_simulator.mcp"'
     )
-    assert primer_steps.index(primer_restore) < primer_steps.index(primer_sync)
-    assert primer_steps.index(primer_auth) < primer_steps.index(primer_sync)
-    assert primer_steps.index(primer_rust) < primer_steps.index(primer_sync)
-    assert primer_steps.index(primer_sync) < primer_steps.index(primer_prune)
-    assert primer_steps.index(primer_prune) < primer_steps.index(save)
-
-    preflight_runs = [step.get("run", "") for step in preflight["steps"]]
-    assert any(run == "uv lock --check" for run in preflight_runs)
-    assert not any("uv sync" in run for run in preflight_runs)
-    test_checkout = next(
-        step for step in test_job["steps"] if step.get("uses", "").startswith("actions/checkout@")
-    )
-    assert test_checkout["with"]["fetch-depth"] == 0
-    sync_jobs = {
-        job_name
+    assert test_steps.index(verify) == test_steps.index(install) + 1
+    assert not any(
+        step.get("uses", "").startswith("dtolnay/rust-toolchain@")
+        or "git config --global" in step.get("run", "")
         for job_name, job in jobs.items()
-        if any("uv sync" in step.get("run", "") for step in job.get("steps", []))
-    }
-    rust_jobs = {
-        job_name
-        for job_name, job in jobs.items()
-        if any("dtolnay/rust-toolchain@" in step.get("uses", "") for step in job.get("steps", []))
-    }
-    assert rust_jobs == sync_jobs == {"test", "cache_prime"}
+        if job_name != "api_simulator_cache"
+        for step in job.get("steps", [])
+    )
 
 
 def test_ci_policy_is_recorded_in_durable_contributor_instructions() -> None:
@@ -847,6 +837,8 @@ def test_ci_policy_is_recorded_in_durable_contributor_instructions() -> None:
     assert "explicit `actions/cache` owns their uv-cache I/O" in agent_rules
     assert "matrix jobs restore only" in agent_rules
     assert "sole saver" in agent_rules
+    assert "never `uv.lock`" in agent_rules
+    assert "`gh cache delete <key>`" in agent_rules
     assert "`api-simulator.rev`" in agent_rules
     assert "regenerated `uv.lock`" in agent_rules
     assert "`fetch-depth: 0`" in agent_rules

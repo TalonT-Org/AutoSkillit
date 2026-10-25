@@ -7,7 +7,6 @@ import csv
 import hashlib
 import importlib.metadata
 import json
-import os
 import shutil
 import stat
 import subprocess
@@ -481,32 +480,33 @@ def _verify_record_entry(
 ) -> DoctorResult | None:
     if len(row) < 2:
         return None
-    candidate = Path(os.path.normpath(site_packages / row[0]))
-    if not candidate.is_relative_to(bound):
-        return DoctorResult(
-            Severity.ERROR,
-            "installation_record_invalid",
-            f"Invalid RECORD path {row[0]!r} outside {bound} in {_display(installation)}",
-        )
+    candidate = site_packages / row[0]
     try:
-        package_relative = candidate.relative_to(installation.package_root)
-    except ValueError:
-        pass
-    else:
-        tracked.add(package_relative.as_posix())
-    if not row[1]:
-        return None
-    parsed_hash = _record_hash(row[1])
-    if parsed_hash is None:
-        return DoctorResult(
-            Severity.ERROR,
-            "installation_record_invalid",
-            f"Invalid RECORD hash for {row[0]} in {_display(installation)}",
-        )
-    algorithm, expected = parsed_hash
-    try:
+        candidate = candidate.resolve()
+        if not candidate.is_relative_to(bound):
+            return DoctorResult(
+                Severity.ERROR,
+                "installation_record_invalid",
+                f"Invalid RECORD path {row[0]!r} outside {bound} in {_display(installation)}",
+            )
+        try:
+            package_relative = candidate.relative_to(installation.package_root)
+        except ValueError:
+            pass
+        else:
+            tracked.add(package_relative.as_posix())
+        if not row[1]:
+            return None
+        parsed_hash = _record_hash(row[1])
+        if parsed_hash is None:
+            return DoctorResult(
+                Severity.ERROR,
+                "installation_record_invalid",
+                f"Invalid RECORD hash for {row[0]} in {_display(installation)}",
+            )
+        algorithm, expected = parsed_hash
         content = candidate.read_bytes()
-    except (OSError, ValueError):
+    except (OSError, RuntimeError, ValueError):
         return DoctorResult(
             Severity.ERROR,
             "installation_record_unreadable_entry",
@@ -535,7 +535,7 @@ def _verify_record(installation: _Installation) -> tuple[list[DoctorResult], set
     results: list[DoctorResult] = []
     tracked: set[str] = set()
     site_packages = installation.record_path.parent.parent
-    bound = _scheme_base(site_packages)
+    bound = _scheme_base(site_packages).resolve()
     try:
         rows = csv.reader(installation.record_path.read_text(encoding="utf-8").splitlines())
         for row in rows:

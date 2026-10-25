@@ -116,7 +116,17 @@ def test_record_row_outside_installation_is_invalid(tmp_path: Path, case: str) -
     )
 
 
-@pytest.mark.parametrize("case", ["absolute_script", "redundant_dotdot"])
+@pytest.mark.parametrize(
+    "case",
+    [
+        "absolute_script",
+        "redundant_dotdot",
+        pytest.param(
+            "double_slash",
+            marks=pytest.mark.skipif(os.name == "nt", reason="POSIX double-leading slash"),
+        ),
+    ],
+)
 def test_equivalent_spellings_inside_installation_stay_clean(tmp_path: Path, case: str) -> None:
     package = _write_install(tmp_path)
     record = _record(package)
@@ -125,9 +135,34 @@ def test_equivalent_spellings_inside_installation_stay_clean(tmp_path: Path, cas
         if case == "absolute_script"
         else ("autoskillit/__init__.py", "autoskillit/../autoskillit/__init__.py")
     )
+    if case == "double_slash":
+        old = "../../../bin/autoskillit"
+        new = "/" + str((tmp_path / "autoskillit/bin/autoskillit").resolve())
     record.write_text(record.read_text().replace(old, new))
 
     assert _findings(tmp_path) == [_CLEAN]
+
+
+@pytest.mark.parametrize(
+    ("target", "expected"),
+    [
+        ("outside", "installation_record_invalid"),
+        ("loop", "installation_record_unreadable_entry"),
+    ],
+)
+def test_record_symlink_target_is_checked(tmp_path: Path, target: str, expected: str) -> None:
+    package = _write_install(tmp_path)
+    link = package / "linked.py"
+    if target == "outside":
+        destination = tmp_path / "outside.py"
+        destination.write_bytes(b"x")
+    else:
+        destination = link
+    link.symlink_to(destination)
+    record = _record(package)
+    record.write_text(record.read_text() + f"autoskillit/linked.py,{_record_hash(b'x')},1\n")
+
+    assert any(finding.check == expected for finding in _findings(tmp_path))
 
 
 def test_unrecognized_layout_is_bounded_to_itself(tmp_path: Path) -> None:

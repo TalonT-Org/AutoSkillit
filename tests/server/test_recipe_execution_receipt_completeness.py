@@ -21,6 +21,8 @@ from autoskillit.server.recipe._recipe_execution import (
     get_recipe_execution,
 )
 from tests._run_skill_caller_oracle import (
+    ORCHESTRATOR_SAMPLES,
+    _substitute_scalar,
     build_run_skill_payload,
     literal_run_skill_payload,
     run_skill_actual_mcp_kwargs,
@@ -245,6 +247,10 @@ async def test_following_the_recovery_yields_an_admitted_digest(
         expected_template = installed.snapshot.templates[step_name]
         if planner_dispatch:
             skill_inputs = payload.get("skill_inputs")
+            expected_inputs = {
+                name: _substitute_scalar(value, ORCHESTRATOR_SAMPLES)
+                for name, value in expected_template.invocation.canonical_child_invocation
+            }
         else:
             invocation = expected_template.invocation
             contract = get_skill_contract(invocation.skill_name, load_bundled_manifest())
@@ -263,6 +269,7 @@ async def test_following_the_recovery_yields_an_admitted_digest(
                         if input_defs[value.name].accepts(sample)
                     )
                 skill_inputs[value.name] = actual
+            expected_inputs = skill_inputs
         bound_inputs, admitted_template = bind_attested_runtime_invocation(
             installed,
             execution_id=credential["execution_id"],
@@ -273,7 +280,7 @@ async def test_following_the_recovery_yields_an_admitted_digest(
             actual_mcp_kwargs=run_skill_actual_mcp_kwargs(payload),
         )
         assert admitted_template is expected_template
-        assert dict(bound_inputs) == skill_inputs
+        assert dict(bound_inputs) == expected_inputs
 
 
 @pytest.mark.parametrize("tool_ctx_ready_recipe", _RECIPE_FIXTURE_PARAMETERS, indirect=True)

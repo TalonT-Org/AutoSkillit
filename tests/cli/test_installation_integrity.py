@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import base64
-import hashlib
 import os
 import sys
 from pathlib import Path
@@ -12,22 +10,11 @@ import pytest
 
 import autoskillit.cli.doctor._doctor_install as _integrity
 import autoskillit.cli.update._update_checks as _update_checks
-from autoskillit.cli.doctor._doctor_types import DoctorResult
 from autoskillit.cli.install._install_info import InstallInfo, InstallType
 from autoskillit.core import Severity
+from tests.cli._installation_integrity_helpers import CLEAN, record_hash
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
-
-_CLEAN = DoctorResult(
-    Severity.OK,
-    "installation_integrity",
-    "All discoverable AutoSkillit installations match their RECORD files",
-)
-
-
-def _record_hash(content: bytes) -> str:
-    encoded = base64.urlsafe_b64encode(hashlib.sha256(content).digest()).rstrip(b"=")
-    return f"sha256={encoded.decode()}"
 
 
 def _write_install(
@@ -53,7 +40,7 @@ def _write_install(
     record = site_packages / "autoskillit-1.0.0.dist-info" / "RECORD"
     record.parent.mkdir()
     rows = [
-        f"{Path(os.path.relpath(path, site_packages)).as_posix()},{_record_hash(data)},{len(data)}"
+        f"{Path(os.path.relpath(path, site_packages)).as_posix()},{record_hash(data)},{len(data)}"
         for path, data in files.items()
     ]
     record.write_text("\n".join([*rows, "autoskillit-1.0.0.dist-info/RECORD,,"]) + "\n")
@@ -80,7 +67,7 @@ def _findings(*roots: Path) -> list:
 def test_clean_install_reports_integrity_ok(tmp_path: Path, layout: tuple[str, ...]) -> None:
     _write_install(tmp_path, layout=layout)
 
-    assert _findings(tmp_path) == [_CLEAN]
+    assert _findings(tmp_path) == [CLEAN]
 
 
 def test_console_script_mutation_detected(tmp_path: Path) -> None:
@@ -109,7 +96,7 @@ def test_record_row_outside_installation_is_invalid(tmp_path: Path, case: str) -
         "absolute": str(outside.resolve()),
     }[case]
     record = _record(package)
-    record.write_text(record.read_text() + f"{row},{_record_hash(b'x')},1\n")
+    record.write_text(record.read_text() + f"{row},{record_hash(b'x')},1\n")
 
     assert any(
         finding.check == "installation_record_invalid" and repr(row) in finding.message
@@ -141,7 +128,7 @@ def test_equivalent_spellings_inside_installation_stay_clean(tmp_path: Path, cas
         new = "/" + str((tmp_path / "autoskillit/bin/autoskillit").resolve())
     record.write_text(record.read_text().replace(old, new))
 
-    assert _findings(tmp_path) == [_CLEAN]
+    assert _findings(tmp_path) == [CLEAN]
 
 
 @pytest.mark.parametrize(
@@ -161,7 +148,7 @@ def test_record_symlink_target_is_checked(tmp_path: Path, target: str, expected:
         destination = link
     link.symlink_to(destination)
     record = _record(package)
-    record.write_text(record.read_text() + f"autoskillit/linked.py,{_record_hash(b'x')},1\n")
+    record.write_text(record.read_text() + f"autoskillit/linked.py,{record_hash(b'x')},1\n")
 
     assert any(finding.check == expected for finding in _findings(tmp_path))
 
@@ -215,11 +202,11 @@ def test_read_and_digest_failures_are_distinguished(
     record = _record(package)
     rows = record.read_text()
     if case == "nul_path":
-        rows += f"autoskillit/a\x00b.py,{_record_hash(b'x')},1\n"
+        rows += f"autoskillit/a\x00b.py,{record_hash(b'x')},1\n"
     else:
         algorithm = "shake_128" if case == "variable_length_digest" else "not_a_hash_algorithm"
         rows = rows.replace(
-            _record_hash((package / "__init__.py").read_bytes()), f"{algorithm}=AAAA"
+            record_hash((package / "__init__.py").read_bytes()), f"{algorithm}=AAAA"
         )
     record.write_text(rows)
 

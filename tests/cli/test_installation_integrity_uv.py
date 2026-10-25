@@ -10,9 +10,8 @@ from pathlib import Path
 import pytest
 
 import autoskillit.cli.doctor._doctor_install as _integrity
+from tests.cli._installation_integrity_helpers import CLEAN, record_hash
 from tests.conftest import production_interpreter_env
-
-from .test_installation_integrity import _CLEAN, _record_hash
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -30,7 +29,7 @@ def test_uv_tool_install_verifies_clean(tmp_path: Path, monkeypatch: pytest.Monk
         ),
         f"{dist_info}/entry_points.txt": b"[console_scripts]\nautoskillit = autoskillit:main\n",
     }
-    rows = [f"{name},{_record_hash(content)},{len(content)}" for name, content in members.items()]
+    rows = [f"{name},{record_hash(content)},{len(content)}" for name, content in members.items()]
     with zipfile.ZipFile(wheel, "w") as archive:
         for name, content in members.items():
             archive.writestr(name, content)
@@ -71,4 +70,4 @@ def test_uv_tool_install_verifies_clean(tmp_path: Path, monkeypatch: pytest.Monk
 
     monkeypatch.setattr(_integrity, "_active_record_paths", lambda: iter(()))
     findings = _integrity.verify_installations(home=home)
-    assert findings == [_CLEAN], "\n".join(finding.message for finding in findings)
+    assert findings == [CLEAN], "\n".join(finding.message for finding in findings)

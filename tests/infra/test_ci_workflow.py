@@ -764,8 +764,10 @@ def test_one_producer_builds_api_simulator_and_test_jobs_only_restore_it() -> No
             'echo "path=$UV_CACHE_DIR" >> "$GITHUB_OUTPUT"',
         ]
     assert producer_uv["id"] == "setup-uv"
-    assert producer_uv["with"]["enable-cache"] is False
-    assert test_uv["with"]["enable-cache"] is False
+    for job in jobs.values():
+        for step in job.get("steps", []):
+            if step.get("uses", "").startswith("astral-sh/setup-uv@"):
+                assert step["with"]["enable-cache"] is False
     assert producer_uv["with"]["version"] == test_uv["with"]["version"]
     lookup = next(step for step in producer_steps if step.get("id") == "cache-lookup")
     assert lookup["uses"] == "actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830"

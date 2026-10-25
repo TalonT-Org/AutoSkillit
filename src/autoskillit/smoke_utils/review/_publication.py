@@ -7,20 +7,22 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import re
 import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import cast
 
+import regex as re
+
 from autoskillit.core import (
     ContainmentError,
     GitHubReviewReceipt,
+    fsync_directory,
+    fsync_file,
     github_review_receipt_filename,
     is_final_github_review_state,
     read_stable_contained_bytes,
 )
-from autoskillit.core.runtime.private_file import fsync_directory, fsync_file
 from autoskillit.smoke_utils._review_contracts import (
     _is_non_empty_string,
     review_handoff_pair_error,

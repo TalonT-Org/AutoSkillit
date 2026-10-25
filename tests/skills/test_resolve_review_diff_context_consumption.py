@@ -192,13 +192,14 @@ def test_v2_review_level_findings_enter_the_resolver_without_thread_identity() -
     assert 0 <= pair_check < schema_check < review_level_load
     rejection = step2.find("On a non-null result", pair_check)
     assert pair_check < rejection < schema_check
+    normalized = " ".join(step2.split())
     for instruction in (
         "diff_context_map = {}",
         "Pre-built context rejected:",
         "skip schema processing and pre-built review-level ingestion",
         "use the existing fallback path",
     ):
-        assert instruction in step2
+        assert instruction in normalized
 
     for field in ("candidate_id", "path", "line", "message", "severity", "dimension"):
         assert field in step2

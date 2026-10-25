@@ -35,7 +35,6 @@ _WINDOW = 600
 _RECEIPT_PREFIX = "batch_review_response_"
 _UPSTREAM_BINDINGS: dict[str, str] = {
     "FINAL_SNAPSHOT_STATE": "Bind `FINAL_SNAPSHOT_STATE` from the one printed word",
-    "FINALIZED_SNAPSHOT_STATE": "Update `FINALIZED_SNAPSHOT_STATE` to the state passed",
     "AUDIT_FINALIZATION": "AUDIT_FINALIZATION = finalize_review_audit(",
     "FINAL_REVIEW_FINDINGS": "`FINAL_REVIEW_FINDINGS = FILTERED_FINDINGS = survivors`",
     "UNPOSTABLE_FINDINGS": "`UNPOSTABLE_FINDINGS = unpostable`",

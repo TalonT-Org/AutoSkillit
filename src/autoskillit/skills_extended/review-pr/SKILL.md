@@ -812,8 +812,9 @@ If an initially valid retained snapshot is now unavailable or differs, finalizat
 survivor sets from effect-producing consumers, permits only diagnostic raw/summary envelopes with
 empty survivors, and emits `stale_snapshot`. In that movement branch revalidation sets
 `FINAL_SNAPSHOT_STATE=stale` before any consumer is selected. Initial gate degradation remains
-`authority_degraded` and emits `needs_human`. Do not publish diff context, local
-findings, the GitHub binding marker, comments, reviews, or approvals from either state.
+`authority_degraded` and emits `needs_human`.
+Do not publish diff context, local findings, the GitHub binding marker, comments,
+reviews, or approvals from either state.
 On freshness, set
 `COMMIT_ID="$METRICS_HEAD_SHA"` once and never query a later head to replace it.
 

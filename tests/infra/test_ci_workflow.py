@@ -768,7 +768,7 @@ def test_one_producer_builds_api_simulator_and_test_jobs_only_restore_it() -> No
     assert test_uv["with"]["enable-cache"] is False
     assert producer_uv["with"]["version"] == test_uv["with"]["version"]
     lookup = next(step for step in producer_steps if step.get("id") == "cache-lookup")
-    assert lookup["uses"].startswith("actions/cache/restore@")
+    assert lookup["uses"] == "actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830"
     assert lookup["with"] == {
         "lookup-only": True,
         "key": _PRODUCER_KEY,
@@ -803,6 +803,7 @@ def test_one_producer_builds_api_simulator_and_test_jobs_only_restore_it() -> No
     assert len(save_steps) == 1
     save_owner, save = save_steps[0]
     assert save_owner == "api_simulator_cache"
+    assert save["uses"] == "actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830"
     assert save["with"] == {
         "key": _PRODUCER_KEY,
         "path": "${{ steps.uv-cache-dir.outputs.path }}",
@@ -836,7 +837,7 @@ def test_one_producer_builds_api_simulator_and_test_jobs_only_restore_it() -> No
     assert failure.returncode == 1
     assert failure.stderr.strip() == "api-simulator cache producer did not succeed"
     restore = next(step for step in test_steps if step.get("id") == "uv-cache-restore")
-    assert restore["uses"].startswith("actions/cache/restore@")
+    assert restore["uses"] == "actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830"
     assert restore["if"] == "runner.os == 'Linux'"
     assert restore["with"] == {
         "path": "${{ steps.uv-cache-dir.outputs.path }}",

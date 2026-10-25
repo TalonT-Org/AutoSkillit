@@ -755,6 +755,14 @@ def test_one_producer_builds_api_simulator_and_test_jobs_only_restore_it() -> No
     test_uv = next(
         step for step in test_steps if step.get("uses", "").startswith("astral-sh/setup-uv@")
     )
+    for steps in (producer_steps, test_steps):
+        cache_dir = next(step for step in steps if step.get("id") == "uv-cache-dir")
+        assert cache_dir["shell"] == "bash"
+        assert cache_dir["run"].splitlines() == [
+            'UV_CACHE_DIR="$(uv cache dir)"',
+            'echo "UV_CACHE_DIR=$UV_CACHE_DIR" >> "$GITHUB_ENV"',
+            'echo "path=$UV_CACHE_DIR" >> "$GITHUB_OUTPUT"',
+        ]
     assert producer_uv["id"] == "setup-uv"
     assert producer_uv["with"]["enable-cache"] is False
     assert test_uv["with"]["enable-cache"] is False

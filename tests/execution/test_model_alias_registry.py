@@ -6,6 +6,8 @@ import pytest
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small, pytest.mark.model_contract]
 
+# Test-only evidence for the global product floor; runtime checks use
+# CLAUDE_CODE_CAPABILITIES.min_version rather than per-model thresholds.
 # Lowest Claude Code release that serves each pinned id correctly: model-config requires
 # 2.1.280 for Opus 5.5, 2.1.284 for Sonnet 5.5 and 2.1.293 for Haiku 5.5; 2.1.296 fixes
 # Haiku 5.5 token counts behind gateways.

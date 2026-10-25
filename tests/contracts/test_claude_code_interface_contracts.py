@@ -405,6 +405,11 @@ class TestMcpJsonContract:
         )
 
 
+# ---------------------------------------------------------------------------
+# CC-HOOKS: Claude Code hooks.json key contract
+# ---------------------------------------------------------------------------
+
+
 # Supported keys of a Claude Code plugin hooks/hooks.json. Sources (retrieved 2026-10-25):
 #   https://code.claude.com/docs/en/hooks.md — top level description, hooks; matcher group
 #     matcher, hooks; handler fields type, if, timeout, statusMessage, and command

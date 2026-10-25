@@ -21,6 +21,8 @@ import autoskillit.cli.session._session_onboarding as _patch_session__session_on
 import autoskillit.cli.session._session_process as _patch_session__session_process
 import autoskillit.cli.session._session_reload as _patch_session__session_reload
 import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
+
+# Populate HOOK_REGISTRY before rendering; hook_registry defers this to avoid an import cycle.
 import autoskillit.hooks  # noqa: F401
 from autoskillit.hook_registry import generate_hooks_json, render_hooks_json_text
 

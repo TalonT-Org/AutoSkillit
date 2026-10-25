@@ -9,7 +9,7 @@ from autoskillit.recipe import make_validation_context
 from autoskillit.recipe._binding import bind_recipe
 from autoskillit.recipe.registry import _RULE_REGISTRY, run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep
-from tests.recipe.test_skill_invocation_binding import _manifest, _required_inputs
+from tests.recipe._binding_helpers import _manifest, _required_inputs
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 

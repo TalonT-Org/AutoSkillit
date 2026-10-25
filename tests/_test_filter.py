@@ -146,7 +146,7 @@ _TEST_FILTER_VALIDATORS: frozenset[str] = frozenset(
 # target the scan reaches from it.
 TEST_HELPER_CASCADE: dict[str, frozenset[str]] = {
     "tests/_test_filter.py": _TEST_FILTER_VALIDATORS,
-    "tests/recipe/test_skill_invocation_binding.py": frozenset(
+    "tests/recipe/_binding_helpers.py": frozenset(
         {
             "recipe/test_binding_failure_reachability.py",
             "recipe/test_skill_invocation_binding.py",

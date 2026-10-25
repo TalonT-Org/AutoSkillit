@@ -10,6 +10,7 @@ Governance model mirrors: tests/execution/test_flag_contracts.py
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -451,8 +452,6 @@ class TestClaudeHooksJsonContract:
     """
 
     def test_rendered_hooks_json_uses_only_claude_accepted_keys(self) -> None:
-        import json
-
         doc = json.loads(render_hooks_json_text())
         assert "hooks" in doc
         unknown = _unknown_claude_hook_keys(doc)

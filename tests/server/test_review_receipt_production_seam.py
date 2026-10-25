@@ -151,11 +151,12 @@ async def test_server_receipt_survives_github_publication_and_verifies(
     assert receipt_path.is_file()
     assert receipt_path.stat().st_mode & 0o777 == 0o600
     receipt_bytes = receipt_path.read_bytes()
-    receipt_inode = receipt_path.stat().st_ino
+    receipt_stat = receipt_path.stat()
     publication = _publish(output_dir, "github", written_at="t0")
 
     assert receipt_path.read_bytes() == receipt_bytes
-    assert receipt_path.stat().st_ino == receipt_inode
+    assert receipt_path.stat().st_ino == receipt_stat.st_ino
+    assert receipt_path.stat().st_mtime_ns == receipt_stat.st_mtime_ns
     assert await _verify_review(tmp_path, receipt_path, post_state=expected_state) == {
         "reviews_posted": "true"
     }

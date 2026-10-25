@@ -207,6 +207,29 @@ async def test_ledger_receipt_is_authoritative(
 
 
 @pytest.mark.anyio
+async def test_verify_review_receipt_reports_unexpected_error(
+    tool_ctx_kitchen_open,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    receipt = authoritative_receipt()
+    poster = _FakeReviewPoster()
+    verify = Mock(side_effect=RuntimeError("ledger verification failed"))
+    monkeypatch.setattr(poster, "verify_receipt", verify)
+    monkeypatch.setattr(tool_ctx_kitchen_open, "github_review_poster", poster)
+    monkeypatch.setattr(tools_pr_ops, "_get_ctx", lambda: tool_ctx_kitchen_open)
+    receipt_path = _write_receipt(tmp_path, receipt.to_dict())
+
+    result = await _verify_receipt(tmp_path, receipt_path)
+
+    assert result == {
+        "reviews_posted": "false",
+        "rejection_reason": "unexpected_error",
+    }
+    verify.assert_called_once_with(receipt.operation_key)
+
+
+@pytest.mark.anyio
 async def test_handcrafted_receipt_without_ledger_row_is_rejected(
     tool_ctx_kitchen_open,
     monkeypatch: pytest.MonkeyPatch,

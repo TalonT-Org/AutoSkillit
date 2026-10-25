@@ -26,7 +26,6 @@ from autoskillit.core import (
     ReviewOperationState,
     ReviewReconciliationResult,
     ReviewResponseClass,
-    github_review_receipt_filename,
     is_final_github_review_state,
     is_valid_github_review_head_sha,
     is_valid_github_review_logical_iteration,
@@ -156,7 +155,9 @@ def test_contract_module_exports_exact_public_surface() -> None:
 
 
 def test_github_review_receipt_filename_formats_the_server_artifact_name() -> None:
-    assert github_review_receipt_filename(42) == "batch_review_response_42.json"
+    from autoskillit.core import github_review_receipt_filename
+
+    assert github_review_receipt_filename(7) == "batch_review_response_7.json"
 
 
 def test_contract_module_imports_only_stdlib_and_anchor_sibling() -> None:

@@ -41,6 +41,25 @@ def _write_receipt_payload(output_dir: Path, payload: bytes, *, pr_number: str =
     return receipt_path
 
 
+@pytest.mark.parametrize("diff_context", [[], {}, {"_head_sha": 42}])
+def test_github_publication_rejects_malformed_diff_context_before_writes(
+    tmp_path: Path,
+    diff_context: object,
+) -> None:
+    publication = _prepared_publication("github")
+    publication["artifacts"]["diff_context"] = diff_context
+    output_dir = tmp_path / "review-output"
+
+    with pytest.raises(ValueError, match="diff_context must contain a non-empty _head_sha"):
+        publish_experimental_review_artifacts(
+            publication=publication,
+            output_dir=str(output_dir),
+            pr_number="42",
+        )
+
+    assert not output_dir.exists()
+
+
 def _authority(right_side_lines: dict[str, list[int]]) -> DiffAnchorAuthority:
     return DiffAnchorAuthority.authoritative(
         repository="openai/autoskillit",

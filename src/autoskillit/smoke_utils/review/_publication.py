@@ -295,6 +295,26 @@ def _load_github_review_receipt(
     return receipt
 
 
+def _github_review_binding(
+    root: Path,
+    identifier: str,
+    diff_context: object,
+) -> dict[str, object]:
+    if not isinstance(diff_context, Mapping) or not _is_non_empty_string(
+        diff_context.get("_head_sha")
+    ):
+        raise ValueError("diff_context must contain a non-empty _head_sha")
+    receipt = _load_github_review_receipt(
+        root,
+        identifier,
+        head_sha=cast(str, diff_context["_head_sha"]),
+    )
+    return {
+        **{key: diff_context[key] for key in _GENERATION_IDENTITY_KEYS if key in diff_context},
+        "receipt_operation_key": receipt.operation_key,
+    }
+
+
 def _publication_order(
     publication: Mapping[str, object],
     root: Path,
@@ -323,16 +343,9 @@ def _publication_order(
     if publication.get("state") == "complete" and mode == "github":
         if order != ["raw_findings", "diff_context"]:
             raise ValueError("complete github publication requires raw findings and diff context")
-        diff_context = cast(Mapping[str, object], artifacts["diff_context"])
-        receipt = _load_github_review_receipt(
-            root,
-            identifier,
-            head_sha=cast(str, diff_context["_head_sha"]),
+        artifacts["github_review_binding"] = _github_review_binding(
+            root, identifier, artifacts["diff_context"]
         )
-        artifacts["github_review_binding"] = {
-            **{key: diff_context[key] for key in _GENERATION_IDENTITY_KEYS if key in diff_context},
-            "receipt_operation_key": receipt.operation_key,
-        }
         order.append("github_review_binding")
     return order, artifacts
 

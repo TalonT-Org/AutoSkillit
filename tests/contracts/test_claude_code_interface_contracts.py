@@ -10,6 +10,7 @@ Governance model mirrors: tests/execution/test_flag_contracts.py
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,10 @@ import autoskillit.cli.session._session_onboarding as _patch_session__session_on
 import autoskillit.cli.session._session_process as _patch_session__session_process
 import autoskillit.cli.session._session_reload as _patch_session__session_reload
 import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
+
+# Populate HOOK_REGISTRY before rendering; hook_registry defers this to avoid an import cycle.
+import autoskillit.hooks  # noqa: F401
+from autoskillit.hook_registry import generate_hooks_json, render_hooks_json_text
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
@@ -400,6 +405,87 @@ class TestMcpJsonContract:
             f"Expected command='autoskillit', got {entry['command']!r}. "
             "Claude Code uses this string to invoke the MCP server binary."
         )
+
+
+# ---------------------------------------------------------------------------
+# CC-HOOKS: Claude Code hooks.json key contract
+# ---------------------------------------------------------------------------
+
+
+# Supported keys of a Claude Code plugin hooks/hooks.json. Sources (retrieved 2026-10-25):
+#   https://code.claude.com/docs/en/hooks.md — top level description, hooks; matcher group
+#     matcher, hooks; handler fields type, if, timeout, statusMessage, and command
+#     fields command, args, async, asyncRewake, shell
+#   https://code.claude.com/docs/en/plugins/mods/reference.md — top level modules
+#   Claude Code CHANGELOG 2.1.274 — top level $schema; 2.1.295 — handler onFailure
+_CLAUDE_HOOKS_FILE_KEYS = frozenset({"$schema", "description", "hooks", "modules"})
+_CLAUDE_MATCHER_GROUP_KEYS = frozenset({"matcher", "hooks"})
+# once is honored only in skill frontmatter.
+_CLAUDE_COMMAND_HANDLER_KEYS = frozenset(
+    {
+        "type",
+        "command",
+        "args",
+        "async",
+        "asyncRewake",
+        "shell",
+        "onFailure",
+        "timeout",
+        "if",
+        "statusMessage",
+    }
+)
+
+
+def _unknown_claude_hook_keys(doc: dict) -> dict[str, set[str]]:
+    """Report unsupported keys in a document with a required hooks mapping."""
+    unknown = {}
+    if extra := set(doc) - _CLAUDE_HOOKS_FILE_KEYS:
+        unknown["$"] = extra
+    for event, groups in doc["hooks"].items():
+        for group_index, group in enumerate(groups):
+            group_path = f"$.hooks.{event}[{group_index}]"
+            if extra := set(group) - _CLAUDE_MATCHER_GROUP_KEYS:
+                unknown[group_path] = extra
+            for handler_index, handler in enumerate(group["hooks"]):
+                if extra := set(handler) - _CLAUDE_COMMAND_HANDLER_KEYS:
+                    unknown[f"{group_path}.hooks[{handler_index}]"] = extra
+    return unknown
+
+
+class TestClaudeHooksJsonContract:
+    """Strict key hygiene for generated command hooks, not full schema validation.
+
+    Recheck the upstream hooks reference and CHANGELOG when revising these key sets.
+    """
+
+    def test_generated_hooks_json_contains_only_hooks(self) -> None:
+        assert set(generate_hooks_json()) == {"hooks"}
+
+    def test_rendered_hooks_json_uses_only_claude_accepted_keys(self) -> None:
+        doc = json.loads(render_hooks_json_text())
+        assert "hooks" in doc
+        unknown = _unknown_claude_hook_keys(doc)
+        assert not unknown, {path: sorted(keys) for path, keys in unknown.items()}
+
+    @pytest.mark.parametrize(
+        "path",
+        [None, "$", "$.hooks.PreToolUse[0]", "$.hooks.PreToolUse[0].hooks[0]"],
+        ids=["valid", "root", "matcher-group", "handler"],
+    )
+    def test_hooks_key_checker_reports_unknown_keys_by_path(self, path: str | None) -> None:
+        handler = {"type": "command", "command": "echo ok"}
+        group = {"matcher": "Bash", "hooks": [handler]}
+        doc = {"hooks": {"PreToolUse": [group]}}
+        if path is not None:
+            target = {
+                "$": doc,
+                "$.hooks.PreToolUse[0]": group,
+                "$.hooks.PreToolUse[0].hooks[0]": handler,
+            }[path]
+            target["_unexpected"] = True
+        expected = {} if path is None else {path: {"_unexpected"}}
+        assert _unknown_claude_hook_keys(doc) == expected
 
 
 # ---------------------------------------------------------------------------

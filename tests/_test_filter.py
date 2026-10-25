@@ -1583,7 +1583,6 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_preflight_explicit_backend.py",
             "server/test_managed_join_prelaunch.py",
             "server/test_tools_fleet_dispatch_preflight.py",
-            "server/test_lifespan.py",
             # file-level: live output-budget E2E imports the hook registry directly
             "server/test_output_budget_e2e.py",
             "execution/backends/test_claude_join_recovery_live_gate.py",

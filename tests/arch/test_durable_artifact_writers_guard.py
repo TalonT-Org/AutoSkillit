@@ -96,9 +96,7 @@ _NON_HOOK_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("workspace/_projected_artifact/_publication.py", "materialize_sanitized_plugin_root"),
         # Verbatim byte-for-byte asset copy — no path is baked into the copy.
         ("workspace/_projected_artifact/_publication.py", "_copy_non_skill_plugin_assets"),
-        # Drift-check re-renders hooks.json from the registry hash; same content
-        # unless the registry changes, so this is the canonical hook-config writer,
-        # not a hook-artifact writer.
+        # Drift-check re-renders hooks.json when its bytes differ from render_hooks_json_text().
         ("server/lifecycle/_lifespan/_startup_checks.py", "run_startup_drift_check"),
     }
 )

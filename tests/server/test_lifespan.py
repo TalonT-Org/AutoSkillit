@@ -390,28 +390,6 @@ def test_startup_install_state_levels_follow_severity(monkeypatch: pytest.Monkey
     assert not [entry for entry in logs if "remediation" in entry]
 
 
-def test_serve_startup_regenerates_on_hash_mismatch(tmp_path: Path, monkeypatch) -> None:
-    """run_startup_drift_check() regenerates hooks.json when hash is mismatched."""
-    import json as _json
-
-    import autoskillit.core.paths as _paths
-    from autoskillit.hook_registry import HOOK_REGISTRY_HASH
-    from autoskillit.server.lifecycle import _lifespan
-
-    fake_pkg_root = tmp_path / "pkg"
-    hooks_dir = fake_pkg_root / "hooks"
-    hooks_dir.mkdir(parents=True)
-    stale_json = {"_autoskillit_registry_hash": "deadbeef", "hooks": {}}
-    (hooks_dir / "hooks.json").write_text(_json.dumps(stale_json))
-
-    monkeypatch.setattr(_paths, "pkg_root", lambda: fake_pkg_root)
-
-    _lifespan.run_startup_drift_check()
-
-    updated = _json.loads((hooks_dir / "hooks.json").read_text())
-    assert updated.get("_autoskillit_registry_hash") == HOOK_REGISTRY_HASH
-
-
 def test_startup_refuses_when_a_fixed_set_backend_omits_a_join_guard(monkeypatch) -> None:
     """Startup names the incomplete fixed-set backend and its missing guard."""
     import autoskillit.server.lifecycle._lifespan._startup_checks as startup_checks

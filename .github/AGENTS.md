@@ -37,26 +37,20 @@ wheel cache consumed by downstream jobs:
     enable-cache: false   # required for jobs that skip uv sync
 ```
 
-Jobs that run `uv sync --locked` may normally omit `enable-cache` (defaults to `auto`,
-enabled on GitHub-hosted runners). In `.github/workflows/tests.yml`, however, the
-`api_simulator_cache` and `test` jobs deliberately set `enable-cache: false` despite syncing
-because explicit `actions/cache` owns their uv-cache I/O. `api_simulator_cache` runs on
-every event and is the sole saver: its key is the runner OS, architecture and image, the uv
-version, `.python-version` and `api-simulator.rev`, and never `uv.lock`; the
-regenerated `uv.lock` changes its version line on every bump. It builds api-simulator only
-on a lookup miss. The test
-matrix jobs restore only, with `fail-on-cache-miss`, and configure no private-dependency git
-credentials, and install no Rust toolchain. The `test` job runs even when the producer fails,
-so the required `Test (*)` contexts report the failure through an explicit Linux
-producer-status check before restore, instead of waiting out the merge-queue timeout.
-Keep `preflight` independent, with no `needs`, so a producer failure cannot skip preflight
-and suppress those contexts. Set `cache-mode: write` on the producer and `cache-mode: read`
-on `test`. After syncing, Linux legs must import the api-simulator submodules that load
-its native extension; importing the top-level package alone does not check compatibility.
-If a saved entry is unusable, delete it with `gh cache delete <key>` and rerun. The entry contains
-api-simulator's source and is readable by pull requests into this public repository; the
-owner of both repositories accepted that. This single-saver rule does not apply to
-unrelated workflows or non-uv caches.
+Jobs that run `uv sync --locked` may normally omit `enable-cache`. In
+`.github/workflows/tests.yml`, explicit `actions/cache` owns their uv-cache I/O,
+so setup-uv caching stays disabled. `api_simulator_cache` is the sole saver; Linux
+matrix jobs restore only and verify imports of the native api-simulator submodules.
+The build identity uses the runner image family and toolchain pins, never `uv.lock`,
+so package-only version bumps reuse the build. Keep `preflight` independent and
+the required `Test (*)` contexts reporting producer failures instead of leaving
+the merge queue waiting for missing checks.
+
+If an entry is unusable, delete it with `gh cache delete <key>` and rerun. Cached
+api-simulator source is readable by pull requests into this public repository;
+the owner of both repositories accepted that visibility.
+
+This single-saver rule applies only to this workflow's uv cache.
 
 ## Branch-targeted test policy
 

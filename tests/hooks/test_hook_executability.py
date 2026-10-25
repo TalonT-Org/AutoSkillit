@@ -223,7 +223,10 @@ def test_generated_hooks_json_includes_ask_user_question_gate() -> None:
     assert "AskUserQuestion" in matchers
 
 
-def test_synced_settings_json_adds_only_the_hooks_key(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize("legacy_hash", [None, "legacy"], ids=["clean", "legacy"])
+def test_synced_settings_json_adds_only_the_hooks_key(
+    tmp_path: Path, monkeypatch, legacy_hash: str | None
+) -> None:
     import autoskillit.cli._hooks as _hooks_mod
     import autoskillit.cli._init_helpers as init_helpers
 
@@ -238,9 +241,13 @@ def test_synced_settings_json_adds_only_the_hooks_key(tmp_path: Path, monkeypatc
         "env": {"PROJECT_MODE": "test"},
         "includeCoAuthoredBy": False,
     }
-    settings_path.write_text(json.dumps(seed))
+    initial = dict(seed)
+    if legacy_hash is not None:
+        initial["_autoskillit_registry_hash"] = legacy_hash
+    settings_path.write_text(json.dumps(initial))
     sync_hooks_to_settings(settings_path)
     data = json.loads(settings_path.read_text())
+    assert "_autoskillit_registry_hash" not in data
     assert set(data) - set(seed) == {"hooks"}
     for key, value in seed.items():
         assert data[key] == value

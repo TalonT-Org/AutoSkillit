@@ -25,6 +25,7 @@ from autoskillit.hooks import HOOK_REGISTRY
 
 def _write_settings_data(settings_path: Path, data: dict) -> None:
     """Write settings data back atomically, creating parent dirs if needed."""
+    data.pop("_autoskillit_registry_hash", None)
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write(settings_path, json.dumps(data, indent=2))
 
@@ -104,7 +105,6 @@ def _evict_stale_autoskillit_hooks(settings_path: Path) -> None:
                 entry["hooks"] = non_autoskillit
                 cleaned.append(entry)
         hooks[event_type] = cleaned
-    data.pop("_autoskillit_registry_hash", None)
     _write_settings_data(settings_path, data)
 
 

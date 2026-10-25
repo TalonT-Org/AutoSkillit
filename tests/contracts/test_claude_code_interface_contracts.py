@@ -430,7 +430,8 @@ _CLAUDE_COMMAND_HANDLER_KEYS = frozenset(
 )
 
 
-def _unknown_claude_hook_keys(doc) -> dict[str, set[str]]:
+def _unknown_claude_hook_keys(doc: dict) -> dict[str, set[str]]:
+    """Report unsupported keys in a document with a required hooks mapping."""
     unknown = {}
     if extra := set(doc) - _CLAUDE_HOOKS_FILE_KEYS:
         unknown["$"] = extra

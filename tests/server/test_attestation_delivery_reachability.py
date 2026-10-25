@@ -20,6 +20,7 @@ from autoskillit._recipe_delivery_framing import RECIPE_BODY_START
 from autoskillit.core import (
     RECIPE_EXECUTION_CREDENTIAL_WIRE_FIELDS,
     RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
+    BoundValueOrigin,
     RecipeDeliveryMode,
     build_recipe_execution_credential,
 )
@@ -45,6 +46,7 @@ from autoskillit.server.recipe._recipe_initialization import (
 )
 from tests._helpers import kitchen_identity_fields
 from tests._run_skill_caller_oracle import (
+    _SINGLE_BRACE_TOKEN,
     ORCHESTRATOR_SAMPLES,
     build_run_skill_payload,
     run_skill_actual_mcp_kwargs,
@@ -413,7 +415,19 @@ async def test_tool_ctx_ready_recipe_fixture_yields_genuine_attestation(
             skill_inputs=payload.get("skill_inputs"),
             actual_mcp_kwargs=run_skill_actual_mcp_kwargs(payload),
         )
-        assert ORCHESTRATOR_SAMPLES["item"]["phase_id"] in dict(bound_inputs).values()
+        dispatch_input = next(
+            value
+            for value in installed.snapshot.templates[ready.step_name].invocation.skill_inputs
+            if value.origin is BoundValueOrigin.DISPATCH_ITEM
+        )
+        declared = dispatch_input.declared_value
+        assert isinstance(declared, str)
+        item = _SINGLE_BRACE_TOKEN.fullmatch(declared.strip())
+        assert item is not None
+        assert (
+            dict(bound_inputs)[dispatch_input.name]
+            == ORCHESTRATOR_SAMPLES["item"][item.group(1).strip()]
+        )
     else:
         payload = {
             "skill_command": with_args["skill_command"],

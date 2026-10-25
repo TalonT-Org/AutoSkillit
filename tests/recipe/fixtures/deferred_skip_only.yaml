@@ -10,6 +10,7 @@ steps:
     tool: run_python
     with:
       step_name: guarded
+      callable: autoskillit.smoke_utils.check_loop_iteration
     skip_when_false: inputs.enabled
     on_success: Z
     on_failure: escalate

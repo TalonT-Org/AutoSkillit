@@ -6,6 +6,7 @@ import textwrap
 
 import pytest
 
+from autoskillit.core import RecipeBindingProjection
 from autoskillit.core.io import load_yaml
 from autoskillit.core.types import Severity
 from autoskillit.recipe.io import _parse_recipe
@@ -178,6 +179,7 @@ class TestCaptureOutputCoverageRule:
             errors=[],
             semantic_findings=findings,
             contract_findings=[],
+            binding_projection=RecipeBindingProjection({}),
         )
 
 

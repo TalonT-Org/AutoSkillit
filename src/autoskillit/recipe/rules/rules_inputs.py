@@ -62,6 +62,7 @@ def _unresolved_template_reason(bound: BoundValue, *, per_item: bool) -> str | N
         "that compile to static values runtime admission cannot accept (recipe validation only)."
     ),
     severity=Severity.ERROR,
+    declaration_scoped=True,
 )
 def _check_unresolved_skill_input_template(ctx: ValidationContext) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
@@ -127,6 +128,7 @@ def _check_outdated_version(ctx: ValidationContext) -> list[RuleFinding]:
     name="missing-ingredient",
     description="Skill steps must provide all required ingredients via context or recipe inputs.",
     severity=Severity.ERROR,
+    declaration_scoped=True,
 )
 def _check_unsatisfied_skill_input(ctx: ValidationContext) -> list[RuleFinding]:
     wf = ctx.recipe
@@ -170,6 +172,7 @@ def _check_unsatisfied_skill_input(ctx: ValidationContext) -> list[RuleFinding]:
     name="invalid-skill-invocation-binding",
     description="Structured child-skill inputs must bind unambiguously to the selected contract.",
     severity=Severity.ERROR,
+    declaration_scoped=True,
 )
 def _check_invalid_skill_invocation_binding(
     ctx: ValidationContext,

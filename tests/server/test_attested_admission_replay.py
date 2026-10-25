@@ -41,16 +41,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _PINNED: dict[tuple[str, str], Any] = {
     ("bem-wrapper", "run_bem"): pytest.param(
-        "bem-wrapper",
-        "run_bem",
-        "step_not_installed",
-        "missing_tool_parameter: cwd",
-        id="bem-wrapper-run_bem",
-        marks=pytest.mark.xfail(
-            strict=True,
-            raises=AdmissionDefect,
-            reason="Blocked by #5310: missing required cwd silently prevents step installation",
-        ),
+        "bem-wrapper", "run_bem", None, None, id="bem-wrapper-run_bem"
     ),
 }
 
@@ -149,12 +140,6 @@ def _dynamic_step_outcome(step_name: str) -> NoReturn:
     )
 
 
-def _uninstalled_step_outcome(projection: Any, step_name: str) -> tuple[str, str]:
-    failures = projection.invocations[step_name].failures
-    detail = "; ".join(f"{failure.code.value}: {failure.name}" for failure in failures)
-    return "step_not_installed", detail
-
-
 def _templated_step_outcome(
     step_name: str,
     step_body: dict[str, Any],
@@ -200,9 +185,6 @@ def _step_outcome(
     snapshot = installed.snapshot
     if step_name in snapshot.dynamic_skill_step_names:
         _dynamic_step_outcome(step_name)
-    if step_name not in snapshot.templates:
-        projection = loaded["_finalized_projection"].binding_projection
-        return _uninstalled_step_outcome(projection, step_name)
     return _templated_step_outcome(
         step_name,
         steps[step_name],

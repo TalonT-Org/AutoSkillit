@@ -20,6 +20,10 @@
       "description": "Base branch for dependency analysis",
       "default": "develop",
       "authority": "config"
+    },
+    "source_dir": {
+      "description": "Absolute path to the repository root",
+      "required": true
     }
   },
   "steps": {
@@ -56,6 +60,7 @@
           "issue_numbers": "${{ context.issue_numbers }}",
           "base_ref": "${{ inputs.base_branch }}"
         },
+        "cwd": "${{ inputs.source_dir }}",
         "step_name": "run_bem",
         "output_dir": "."
       },
@@ -83,6 +88,7 @@
       "tool": "run_cmd",
       "with": {
         "cmd": "echo 'execution_map=${{ context.execution_map }}'",
+        "cwd": "${{ inputs.source_dir }}",
         "step_name": "emit_result"
       },
       "on_success": "done",
@@ -92,6 +98,7 @@
       "tool": "run_cmd",
       "with": {
         "cmd": "echo 'execution_map=none'",
+        "cwd": "${{ inputs.source_dir }}",
         "step_name": "emit_empty_result"
       },
       "on_success": "done",

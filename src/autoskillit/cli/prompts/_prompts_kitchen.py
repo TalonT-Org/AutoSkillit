@@ -298,6 +298,7 @@ has been produced and read.
        ingredients={{
            "issue_urls": "<comma-separated issue URLs>",
            "base_branch": "<target branch, e.g. main>",
+           "source_dir": "{project_root}",
        }},
        capture={{"execution_map": "${{{{ result.execution_map }}}}"}},
        dispatch_name="bem-pre-step",

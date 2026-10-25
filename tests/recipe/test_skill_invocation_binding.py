@@ -26,30 +26,9 @@ from autoskillit.recipe._contracts_manifest import get_skill_contract
 from autoskillit.recipe._recipe_composition import _prune_skipped_steps
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.schema import RecipeStep
+from tests.recipe._binding_helpers import _manifest, _required_inputs
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
-
-
-def _manifest() -> dict[str, object]:
-    return {
-        "skills": {
-            "dry-walkthrough": {
-                "inputs": [
-                    {"name": "plan_path", "type": "file_path", "required": True},
-                    {"name": "issue_url", "type": "string", "required": True},
-                    {"name": "optional_note", "type": "string"},
-                    {"name": "audit_cycle_path", "type": "file_path", "required": True},
-                    {
-                        "name": "plan_disposition_path",
-                        "type": "file_path",
-                        "required": True,
-                    },
-                    {"name": "enabled", "type": "boolean"},
-                    {"name": "round", "type": "integer"},
-                ]
-            }
-        }
-    }
 
 
 def _step(
@@ -69,15 +48,6 @@ def _step(
         },
         optional_context_refs=optional_context_refs or [],
     )
-
-
-def _required_inputs() -> dict[str, str]:
-    return {
-        "plan_path": "/tmp/plans/current plan.md",
-        "issue_url": "https://example.test/issues/42?x=a&y=b",
-        "audit_cycle_path": "/tmp/audit/cycle.json",
-        "plan_disposition_path": "/tmp/audit/plan disposition.json",
-    }
 
 
 @pytest.mark.parametrize(

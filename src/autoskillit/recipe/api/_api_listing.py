@@ -17,7 +17,10 @@ from autoskillit.core import (
 )
 from autoskillit.recipe.analysis._analysis import make_validation_context
 from autoskillit.recipe.contracts.contracts import load_recipe_card, validate_recipe_cards
-from autoskillit.recipe.helpers._rule_helpers import filter_pruning_false_positives
+from autoskillit.recipe.helpers._rule_helpers import (
+    filter_pruning_false_positives,
+    retain_declaration_findings,
+)
 from autoskillit.recipe.ingredients._recipe_composition import _prune_skipped_steps
 from autoskillit.recipe.ingredients._recipe_ingredients import RecipeListItem
 from autoskillit.recipe.io import (
@@ -178,6 +181,8 @@ def validate_from_path(
         # this rule. The filter remains useful for other rules like
         # dead-output where pruning genuinely introduces new findings.
         semantic_findings = filter_pruning_false_positives(semantic_findings, _pre_prune_findings)
+    if ingredient_overrides:
+        semantic_findings = retain_declaration_findings(semantic_findings, _pre_prune_findings)
 
     quality = build_quality_dict(report)
     semantic = findings_to_dicts(semantic_findings)
@@ -189,7 +194,9 @@ def validate_from_path(
     if contract:
         contract_findings = validate_recipe_cards(recipe, contract)
 
-    valid = compute_recipe_validity(errors, semantic_findings, contract_findings)
+    valid = compute_recipe_validity(
+        errors, semantic_findings, contract_findings, binding_projection=ctx.binding_projection
+    )
 
     return {
         "valid": valid,

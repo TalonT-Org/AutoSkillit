@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from autoskillit.core import BindingFailureCode
+from autoskillit.core import BindingFailureCode, RecipeBindingProjection
 from autoskillit.core.types import Severity
 from autoskillit.recipe._binding import bind_recipe
 from autoskillit.recipe.registry import (
@@ -324,4 +324,7 @@ def test_merge_pr_structured_placeholder_reproduction_is_invalid() -> None:
     assert all(finding.severity == Severity.ERROR for finding in findings)
     assert any("complexity" in finding.message for finding in findings)
     assert any("pr_number" in finding.message for finding in findings)
-    assert compute_recipe_validity([], findings, []) is False
+    assert (
+        compute_recipe_validity([], findings, [], binding_projection=RecipeBindingProjection({}))
+        is False
+    )

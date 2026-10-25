@@ -91,7 +91,7 @@ The rule families live in `src/autoskillit/recipe/rules_*.py` (28 files):
 | `rules_skill_content.py` | SKILL.md bash-block placeholder validation (`undefined-bash-placeholder`) |
 | `rules_temp_path.py` | Temp-path hygiene: steps that write to paths outside `.autoskillit/temp/` |
 | `rules_skills.py` | `skill_command` resolvability against the bundled skill registry (`unknown-skill-command`) |
-| `rules_tools.py` | MCP tool name and parameter validity (`unknown-tool`, `dead-with-param`) |
+| `rules_tools.py` | MCP tool name and parameter validity (`unknown-tool`, `dead-with-param`, `invalid-tool-invocation-binding`) |
 | `rules_verdict.py` | Skill verdict routing completeness — every emitted verdict value must be routed |
 | `rules_worktree.py` | Worktree retry lifecycle — every step that creates a worktree must have a downstream merge or cleanup |
 

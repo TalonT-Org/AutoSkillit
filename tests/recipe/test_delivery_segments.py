@@ -188,6 +188,7 @@ steps:
     tool: run_python
     with:
       step_name: start
+      callable: autoskillit.smoke_utils.check_loop_iteration
     on_success: finish
     on_failure: escalate
   finish:

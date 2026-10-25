@@ -195,7 +195,7 @@ async def _triage_batch(
             ClaudeFlags.PRINT,
             prompt,
             ClaudeFlags.MODEL,
-            "claude-haiku-4-5-20251001",
+            backend.translate_model("haiku"),
             ClaudeFlags.OUTPUT_FORMAT,
             fmt.value,
         ]

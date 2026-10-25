@@ -18,7 +18,7 @@ Claude interactive launches seal these values after caller environment overlays:
 |---|---:|---|
 | `MCP_CONNECTION_NONBLOCKING` | `0` | Ask Claude to wait for the connection batch |
 | `MCP_CONNECT_TIMEOUT_MS` | `30000` | Bound the connection batch and tool-list snapshot |
-| minimum Claude Code version | `2.1.280` | [Anthropic's 2.1.280 release](https://github.com/anthropics/claude-code/releases/tag/v2.1.280) adds Claude Opus 5.5, the pinned `opus` target |
+| minimum Claude Code version | `2.1.296` | The lowest release that serves every pinned model: 2.1.280 adds Opus 5.5, 2.1.284 Sonnet 5.5 and 2.1.293 Haiku 5.5 ([model configuration](https://code.claude.com/docs/en/model-config)), and [2.1.296](https://github.com/anthropics/claude-code/releases/tag/v2.1.296) fixes Haiku 5.5 token counts behind gateways |
 | fresh prompt attempts | `3` | Defense-in-depth dispatch cap after a pre-dispatch failure |
 
 `MCP_CONNECT_TIMEOUT_MS` is the connection batch/list-snapshot deadline. It is
@@ -73,8 +73,8 @@ The weekly `conformance-probes.yml` workflow runs these pinned rows:
 
 | Platform | Claude Code |
 |---|---|
-| Ubuntu 22.04 | 2.1.280 |
-| macOS 14 | 2.1.280 |
+| Ubuntu 22.04 | 2.1.296 |
+| macOS 14 | 2.1.296 |
 
 Each row installs the named version, exports its canonical path as
 `CLAUDE_CODE_EXECPATH`, and runs the exact restricted interactive surface with

@@ -194,10 +194,10 @@ jobs:
       matrix:
         include:
           - os: ubuntu-22.04
-            claude-version: "2.1.280"
+            claude-version: "2.1.296"
             probe-tmpdir: /dev/shm/pytest-probes
           - os: macos-14
-            claude-version: "2.1.280"
+            claude-version: "2.1.296"
             probe-tmpdir: /tmp/pytest-probes
     env:
       CLAUDE_CODE_SMOKE_TEST: "1"

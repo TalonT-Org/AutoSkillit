@@ -346,9 +346,9 @@ ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS: tuple[str, ...] = (
 _CONTEXT_WINDOW_SUFFIX_RE: _re.Pattern[str] = _re.compile(r"\[\d+[mk]?\]$", _re.IGNORECASE)
 
 CLAUDE_MODEL_ALIASES: dict[str, str] = {
-    "sonnet": "claude-sonnet-5",
+    "sonnet": "claude-sonnet-5-5",
     "opus": "claude-opus-5-5",
-    "haiku": "haiku",
+    "haiku": "claude-haiku-5-5",
 }
 
 CODEX_MODEL_ALIASES: Mapping[str, str] = MappingProxyType(
@@ -468,7 +468,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     ),
     write_guard_tool_names=frozenset({"Write", "Edit", "Bash", "apply_patch"}),
     env_denylist_prefixes=(),
-    min_version="2.1.280",
+    min_version="2.1.296",
     version_check_command="claude --version",
     process_name="claude",
     process_name_aliases=frozenset({"claude"}),

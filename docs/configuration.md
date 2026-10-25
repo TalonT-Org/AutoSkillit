@@ -32,7 +32,7 @@ test_check:
   command: ["task", "test-check"]
 
 model:
-  default: "claude-sonnet-5"
+  default: "claude-sonnet-5-5"
 
 worktree_setup:
   command: ["task", "install-worktree"]
@@ -70,7 +70,7 @@ AutoSkillit uses [dynaconf](https://www.dynaconf.com/) for configuration. Enviro
 
 ```bash
 AUTOSKILLIT_TEST_CHECK__TIMEOUT=300           # sets test_check.timeout to 300
-AUTOSKILLIT_MODEL__DEFAULT=claude-sonnet-5    # sets model.default
+AUTOSKILLIT_MODEL__DEFAULT=claude-sonnet-5-5  # sets model.default
 AUTOSKILLIT_QUOTA_GUARD__ENABLED=false        # disables quota guard
 ```
 
@@ -102,13 +102,31 @@ model:
 
 Recipe steps can also specify a `model` field per-step in their YAML definition.
 
-The logical `opus` class resolves to the canonical `claude-opus-5-5` model ID by
-default. Projects that route Claude through a provider whose deployment does
-not accept that raw ID (Amazon Bedrock, Microsoft Foundry, or a custom
-gateway) should supply the provider's own accepted deployment/model
-identifier via a `providers.profiles` entry and a matching `step_overrides` /
-`recipe_overrides` / `model_overrides` binding — those overrides are resolved
-before this alias and always take precedence.
+AutoSkillit pins the model classes to canonical Anthropic IDs: `sonnet` resolves to
+`claude-sonnet-5-5`, `opus` to `claude-opus-5-5`, and `haiku` to `claude-haiku-5-5`.
+Claude Code's own aliases can select older versions on Claude Platform on AWS,
+Amazon Bedrock, Google Cloud's Agent Platform (Vertex AI), and Microsoft Foundry.
+The supported minimum is Claude Code 2.1.296: interactive launches below it fail,
+and `autoskillit doctor` warns.
+
+[Claude Code's model configuration](https://code.claude.com/docs/en/model-config)
+describes provider mapping. On Amazon Bedrock and Google Cloud's Agent Platform,
+Claude Code maps an Anthropic ID passed with `--model` to the provider's ID when
+that provider serves the version. For a different deployment name, its
+`modelOverrides` setting maps each Anthropic ID to a Microsoft Foundry deployment,
+Bedrock inference profile ARN, or custom gateway model name. This applies to every
+`--model` AutoSkillit passes, including triage.
+
+AutoSkillit can select a step's model through `model.step_overrides`,
+`model.recipe_overrides`, or `providers.model_overrides`. Values can be literal IDs
+or names in `providers.profiles`; profiles resolve only with the experimental
+`providers` feature enabled. See [Model precedence](#model-precedence):
+`model.override` outranks these sources, and each ladder ignores the other's sources.
+
+Contract-staleness triage always uses the `haiku` class ID and ignores AutoSkillit's
+model overrides. The pre-launch version check does not cover triage. If the provider
+rejects the ID without a matching `modelOverrides` entry, or `claude` on `PATH` is
+older than 2.1.293, triage treats every changed skill as meaningful.
 
 ### Operator escape hatches
 
@@ -548,7 +566,7 @@ test_check:
   command: ["pytest", "-v", "--tb=short"]
 
 model:
-  default: "claude-sonnet-5"
+  default: "claude-sonnet-5-5"
 
 worktree_setup:
   command: ["task", "install-worktree"]

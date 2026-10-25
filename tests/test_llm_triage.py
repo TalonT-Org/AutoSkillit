@@ -713,11 +713,9 @@ async def test_triage_env_excludes_ide_vars(tmp_path: Path, monkeypatch: pytest.
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.anyio
-async def test_triage_command_uses_backend_binary_name(
+async def _captured_single_item_triage_cmd(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
-    """The triage command first element must equal ClaudeCodeBackend().binary_name()."""
+) -> list[str]:
     from unittest.mock import AsyncMock
 
     from autoskillit._llm_triage import triage_staleness
@@ -759,11 +757,28 @@ async def test_triage_command_uses_backend_binary_name(
     )
     await triage_staleness([item], project_root=tmp_path, backend=ClaudeCodeBackend())
 
-    cmd = mock_run.call_args.kwargs["cmd"]
+    return mock_run.call_args.kwargs["cmd"]
+
+
+@pytest.mark.anyio
+async def test_triage_command_uses_backend_binary_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cmd = await _captured_single_item_triage_cmd(tmp_path, monkeypatch)
     expected_binary = ClaudeCodeBackend().binary_name()
     assert cmd[0] == expected_binary, (
         f"triage_cmd[0] must equal get_backend().binary_name(), got {cmd[0]!r}"
     )
+
+
+@pytest.mark.anyio
+async def test_triage_command_uses_haiku_class_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from autoskillit.core import CLAUDE_MODEL_ALIASES, ClaudeFlags
+
+    cmd = await _captured_single_item_triage_cmd(tmp_path, monkeypatch)
+    assert cmd[cmd.index(ClaudeFlags.MODEL) + 1] == CLAUDE_MODEL_ALIASES["haiku"]
 
 
 @pytest.mark.anyio

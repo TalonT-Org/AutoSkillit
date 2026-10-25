@@ -25,8 +25,8 @@ import e2e_catalog
 MINIMAX_BASE_URL = "https://api.minimax.io/anthropic"
 MINIMAX_MODEL = "MiniMax-M3[1m]"
 MINIMAX_COMPACT_WINDOW_TOKENS = "1000000"
-# tests/infra/test_e2e_harness.py derives this --model value from the shipped config.
-FLEET_MODEL = "claude-sonnet-5[1m]"
+# tests/infra/test_e2e_harness.py derives this --model value from the effective config.
+FLEET_MODEL = "claude-sonnet-5-5"
 REQUIRED_CONTEXT_WINDOW_TOKENS = 1_000_000
 # implement runs four concurrent children and resolve-review three to six; a spawn past the
 # limit fails without retry.

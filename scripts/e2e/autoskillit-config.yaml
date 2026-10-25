@@ -3,9 +3,6 @@
 quota_guard:
   enabled: false
 
-model:
-  default: sonnet[1m]
-
 features:
   fleet: true
   fleet_headless_run: true

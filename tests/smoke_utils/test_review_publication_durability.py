@@ -559,9 +559,11 @@ def test_experimental_publication_rolls_back_each_rename_boundary(
     assert not list(output_dir.glob(".*.tmp"))
 
 
+@pytest.mark.parametrize("publication_failure_at", [2, 3])
 def test_experimental_publication_preserves_publication_and_rollback_failures(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    publication_failure_at: int,
 ) -> None:
     import autoskillit.smoke_utils.review._publication as publication_module
 
@@ -582,10 +584,10 @@ def test_experimental_publication_preserves_publication_and_rollback_failures(
     def failing_replace(source: str | os.PathLike[str], destination: str | os.PathLike[str]):
         nonlocal replace_count
         replace_count += 1
-        if replace_count == 2:
+        if replace_count == publication_failure_at:
             raise OSError("injected publication failure")
-        if replace_count == 3:
-            raise OSError("injected rollback failure")
+        if replace_count > publication_failure_at:
+            raise OSError(f"injected rollback failure {replace_count - publication_failure_at}")
         real_replace(source, destination)
 
     monkeypatch.setattr(publication_module.os, "replace", failing_replace)
@@ -599,8 +601,9 @@ def test_experimental_publication_preserves_publication_and_rollback_failures(
     errors = exc_info.value.exceptions
     assert [str(error) for error in errors] == [
         "injected publication failure",
-        "injected rollback failure",
+        *[f"injected rollback failure {index}" for index in range(1, publication_failure_at)],
     ]
-    assert final_paths[1].read_text() == "old-1"
+    if publication_failure_at == 2:
+        assert final_paths[1].read_text() == "old-1"
     assert not final_paths[2].exists()
     assert not final_paths[3].exists()

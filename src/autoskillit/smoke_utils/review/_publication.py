@@ -366,16 +366,16 @@ def _restore_publication_files(
     prior_bytes: Mapping[str, bytes | None],
     changed: Sequence[str],
     marker_names: tuple[str, ...],
-) -> OSError | None:
+) -> list[OSError]:
     try:
         for name in marker_names:
             if final_paths[name].exists():
                 final_paths[name].unlink()
         fsync_directory(root)
     except OSError as error:
-        return error
+        return [error]
 
-    rollback_error: OSError | None = None
+    rollback_errors: list[OSError] = []
     payload_names = [name for name in dict.fromkeys(changed) if name not in marker_names]
     for name in payload_names:
         try:
@@ -390,11 +390,11 @@ def _restore_publication_files(
                     rollback_path.unlink(missing_ok=True)
             fsync_directory(root)
         except OSError as error:
-            rollback_error = error
+            rollback_errors.append(error)
 
     marker_names_to_restore = (
         [name for name in marker_names if prior_bytes[name] is not None]
-        if rollback_error is None
+        if not rollback_errors
         else []
     )
     for name in marker_names_to_restore:
@@ -408,8 +408,8 @@ def _restore_publication_files(
                 rollback_path.unlink(missing_ok=True)
             fsync_directory(root)
         except OSError as error:
-            rollback_error = error
-    return rollback_error
+            rollback_errors.append(error)
+    return rollback_errors
 
 
 def publish_experimental_review_artifacts(
@@ -483,7 +483,7 @@ def publish_experimental_review_artifacts(
     except Exception as publication_error:
         for temporary_path in staged.values():
             temporary_path.unlink(missing_ok=True)
-        rollback_error = (
+        rollback_errors = (
             _restore_publication_files(
                 root,
                 final_paths,
@@ -492,12 +492,12 @@ def publish_experimental_review_artifacts(
                 marker_names,
             )
             if changed
-            else None
+            else []
         )
-        if rollback_error is not None:
+        if rollback_errors:
             raise ExceptionGroup(
                 "publication failed and rollback was incomplete",
-                [publication_error, rollback_error],
+                [publication_error, *rollback_errors],
             )
         raise RuntimeError(
             "experimental review artifact publication failed"

@@ -22,7 +22,7 @@ import autoskillit.cli.session._session_process as _patch_session__session_proce
 import autoskillit.cli.session._session_reload as _patch_session__session_reload
 import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
 import autoskillit.hooks  # noqa: F401
-from autoskillit.hook_registry import render_hooks_json_text
+from autoskillit.hook_registry import generate_hooks_json, render_hooks_json_text
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
@@ -450,6 +450,9 @@ class TestClaudeHooksJsonContract:
 
     Recheck the upstream hooks reference and CHANGELOG when revising these key sets.
     """
+
+    def test_generated_hooks_json_contains_only_hooks(self) -> None:
+        assert set(generate_hooks_json()) == {"hooks"}
 
     def test_rendered_hooks_json_uses_only_claude_accepted_keys(self) -> None:
         doc = json.loads(render_hooks_json_text())

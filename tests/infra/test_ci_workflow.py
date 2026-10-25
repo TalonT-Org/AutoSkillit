@@ -805,7 +805,15 @@ def test_one_producer_builds_api_simulator_and_test_jobs_only_restore_it() -> No
         for job in jobs.values()
         for step in job.get("steps", [])
     )
-    assert not jobs["preflight"].get("needs")
+    preflight = jobs["preflight"]
+    preflight_steps = preflight["steps"]
+    assert not preflight.get("needs")
+    assert any(step.get("run") == "uv lock --check" for step in preflight_steps)
+    assert not any("uv sync" in step.get("run", "") for step in preflight_steps)
+    preflight_uv = next(
+        step for step in preflight_steps if step.get("uses", "").startswith("astral-sh/setup-uv@")
+    )
+    assert preflight_uv["with"]["version"] == producer_uv["with"]["version"]
     assert test_job["cache-mode"] == "read"
     assert {"preflight", "api_simulator_cache"} <= set(test_job["needs"])
     assert test_job["if"] == "${{ !cancelled() && needs.preflight.result == 'success' }}"

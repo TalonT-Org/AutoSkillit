@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import GitHubReviewReceipt
+from autoskillit.core import GitHubReviewReceipt, github_review_receipt_filename
 from autoskillit.smoke_utils import (
     prepare_experimental_review_publication,
     publish_experimental_review_artifacts,
@@ -32,7 +32,7 @@ def _write_server_receipt(
     **overrides: object,
 ) -> tuple[GitHubReviewReceipt, Path]:
     receipt = authoritative_receipt(pr_number=pr_number, head_sha=head_sha, **overrides)
-    receipt_path = output_dir / f"batch_review_response_{pr_number}.json"
+    receipt_path = output_dir / github_review_receipt_filename(pr_number)
     receipt_path.parent.mkdir(parents=True, exist_ok=True)
     receipt_path.write_text(json.dumps(receipt.to_dict(), sort_keys=True, separators=(",", ":")))
     receipt_path.chmod(0o600)

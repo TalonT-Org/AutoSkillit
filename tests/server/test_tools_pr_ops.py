@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 import autoskillit.server.tools.tools_pr_ops as tools_pr_ops
+from autoskillit.core import github_review_receipt_filename
 from autoskillit.core.types import (
     DiffAnchorAuthority,
     GitHubReviewComment,
@@ -165,7 +166,7 @@ async def test_close_issues_sequentially_delays_between_calls() -> None:
 
 
 def _write_receipt(cwd: Path, payload: dict[str, object]) -> Path:
-    path = cwd / ".autoskillit" / "temp" / "batch_review_response_7.json"
+    path = cwd / ".autoskillit" / "temp" / github_review_receipt_filename(7)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")))
     return path
@@ -533,7 +534,7 @@ async def test_post_pr_review_uses_injected_poster_with_exact_typed_request(
     tmp_path,
 ) -> None:
     """The headless tool delegates through _get_ctx without opening the kitchen gate."""
-    receipt_path = str(tmp_path / ".autoskillit" / "temp" / "batch_review_response_7.json")
+    receipt_path = str(tmp_path / ".autoskillit" / "temp" / github_review_receipt_filename(7))
     authority_path = tmp_path / ".autoskillit" / "temp" / "anchor_authority_7.json"
     authority_path.parent.mkdir(parents=True, exist_ok=True)
     authority = DiffAnchorAuthority.authoritative(
@@ -625,7 +626,7 @@ async def test_post_pr_review_dry_run_is_delegated_without_gate(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    receipt_path = str(tmp_path / ".autoskillit" / "temp" / "batch_review_response_7.json")
+    receipt_path = str(tmp_path / ".autoskillit" / "temp" / github_review_receipt_filename(7))
     expected = GitHubReviewPostResult(
         operation_key="f" * 64,
         head_sha="a" * 40,
@@ -691,7 +692,9 @@ async def test_post_pr_review_missing_poster_returns_structured_error(
     result = json.loads(
         await post_pr_review(
             cwd=str(tmp_path),
-            receipt_path=str(tmp_path / ".autoskillit" / "temp" / "batch_review_response_7.json"),
+            receipt_path=str(
+                tmp_path / ".autoskillit" / "temp" / github_review_receipt_filename(7)
+            ),
             anchor_authority_path=str(
                 tmp_path / ".autoskillit" / "temp" / "anchor_authority_7.json"
             ),
@@ -736,7 +739,9 @@ async def test_post_pr_review_never_raises_when_poster_fails(
     result = json.loads(
         await post_pr_review(
             cwd=str(tmp_path),
-            receipt_path=str(tmp_path / ".autoskillit" / "temp" / "batch_review_response_7.json"),
+            receipt_path=str(
+                tmp_path / ".autoskillit" / "temp" / github_review_receipt_filename(7)
+            ),
             anchor_authority_path=str(
                 tmp_path / ".autoskillit" / "temp" / "anchor_authority_7.json"
             ),
@@ -766,7 +771,7 @@ async def test_post_pr_review_never_raises_on_invalid_comment_shape(
 ) -> None:
     poster = _FakeReviewPoster(
         _successful_review_result(
-            str(tmp_path / ".autoskillit" / "temp" / "batch_review_response_7.json")
+            str(tmp_path / ".autoskillit" / "temp" / github_review_receipt_filename(7))
         )
     )
     monkeypatch.setattr(tool_ctx, "github_review_poster", poster)
@@ -784,7 +789,9 @@ async def test_post_pr_review_never_raises_on_invalid_comment_shape(
     result = json.loads(
         await post_pr_review(
             cwd=str(tmp_path),
-            receipt_path=str(tmp_path / ".autoskillit" / "temp" / "batch_review_response_7.json"),
+            receipt_path=str(
+                tmp_path / ".autoskillit" / "temp" / github_review_receipt_filename(7)
+            ),
             anchor_authority_path=str(
                 tmp_path / ".autoskillit" / "temp" / "anchor_authority_7.json"
             ),

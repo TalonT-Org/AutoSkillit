@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import DiffAnchorAuthority
+from autoskillit.core import DiffAnchorAuthority, github_review_receipt_filename
 from autoskillit.smoke_utils import (
     EXPERIMENTAL_REVIEW_AUDITORS,
     aggregate_combined_review_candidates,
@@ -33,8 +33,8 @@ from tests.smoke_utils._review_publication_fixtures import (
 pytestmark = [pytest.mark.medium]
 
 
-def _write_receipt_payload(output_dir: Path, payload: bytes, *, pr_number: str = "42") -> Path:
-    receipt_path = output_dir / f"batch_review_response_{pr_number}.json"
+def _write_receipt_payload(output_dir: Path, payload: bytes, *, pr_number: int = 42) -> Path:
+    receipt_path = output_dir / github_review_receipt_filename(pr_number)
     receipt_path.parent.mkdir(parents=True, exist_ok=True)
     receipt_path.write_bytes(payload)
     receipt_path.chmod(0o600)

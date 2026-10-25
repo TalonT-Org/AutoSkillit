@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 import autoskillit.server.tools.tools_pr_ops as tools_pr_ops
+from autoskillit.core import github_review_receipt_filename
 from autoskillit.server.tools.tools_pr_ops import post_pr_review, verify_review_receipt
 from autoskillit.smoke_utils import github_review_handoff_error
 from tests.execution.github_review.fakes import (
@@ -29,7 +30,7 @@ _LOGICAL_ITERATION = "review-pr:2"
 
 def _review_paths(tmp_path: Path) -> tuple[Path, Path]:
     output_dir = tmp_path / ".autoskillit" / "temp" / "review-pr" / "iter_2"
-    return output_dir, output_dir / "batch_review_response_42.json"
+    return output_dir, output_dir / github_review_receipt_filename(42)
 
 
 def _prepare_review_context(

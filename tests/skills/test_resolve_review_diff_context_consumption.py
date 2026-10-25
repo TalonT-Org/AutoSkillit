@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import github_review_receipt_filename
 from autoskillit.smoke_utils import (
     github_review_handoff_error,
     prepare_experimental_review_publication,
@@ -315,7 +316,7 @@ def test_actual_publisher_output_matches_resolve_review_path_line_boundary(
     pr_number = str(receipt.pr_number) if receipt is not None else "51"
     if receipt is not None:
         output_dir.mkdir(parents=True)
-        receipt_path = output_dir / f"batch_review_response_{pr_number}.json"
+        receipt_path = output_dir / github_review_receipt_filename(receipt.pr_number)
         receipt_path.write_text(
             json.dumps(receipt.to_dict(), sort_keys=True, separators=(",", ":"))
         )

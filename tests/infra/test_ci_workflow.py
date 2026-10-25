@@ -697,6 +697,37 @@ def test_api_simulator_cache_key_is_the_build_identity_not_the_lockfile() -> Non
     assert "hashFiles('uv.lock')" not in workflow_path.read_text(encoding="utf-8")
 
 
+@pytest.mark.parametrize("missing_secret", ["GH_USER", "GH_PAT"])
+def test_cache_build_reports_missing_credentials(tmp_path: Path, missing_secret: str) -> None:
+    workflow = load_yaml(_repo_root() / ".github" / "workflows" / "tests.yml")
+    auth = next(
+        step
+        for step in workflow["jobs"]["api_simulator_cache"]["steps"]
+        if "git config --global" in step.get("run", "")
+    )
+    assert auth["env"] == {
+        "GH_USER": "${{ secrets.GH_USER }}",
+        "GH_PAT": "${{ secrets.GH_PAT }}",
+    }
+    config = tmp_path / "gitconfig"
+    result = subprocess.run(
+        ["bash", "-c", auth["run"]],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=production_interpreter_env()
+        | {
+            "GH_USER": "test-user",
+            "GH_PAT": "test-token",
+            missing_secret: "",
+            "GIT_CONFIG_GLOBAL": str(config),
+        },
+    )
+    assert result.returncode != 0
+    assert f"private-dependency credentials unavailable: {missing_secret}" in result.stderr
+    assert not config.exists()
+
+
 def test_one_producer_builds_api_simulator_and_test_jobs_only_restore_it() -> None:
     workflow = load_yaml(_repo_root() / ".github" / "workflows" / "tests.yml")
     assert set(workflow.get("on", workflow.get(True))) == {"push", "pull_request", "merge_group"}

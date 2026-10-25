@@ -110,7 +110,13 @@ jobs:
 
       - name: Configure git auth for private deps
         if: steps.cache-lookup.outputs.cache-hit != 'true'
-        run: git config --global url."https://${{ secrets.GH_USER }}:${{ secrets.GH_PAT }}@github.com/TalonT-Org/".insteadOf "https://github.com/TalonT-Org/"
+        env:
+          GH_USER: ${{ secrets.GH_USER }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          : "${GH_USER:?private-dependency credentials unavailable: GH_USER}"
+          : "${GH_PAT:?private-dependency credentials unavailable: GH_PAT}"
+          git config --global url."https://${GH_USER}:${GH_PAT}@github.com/TalonT-Org/".insteadOf "https://github.com/TalonT-Org/"
 
       - name: Install Rust toolchain
         if: steps.cache-lookup.outputs.cache-hit != 'true'

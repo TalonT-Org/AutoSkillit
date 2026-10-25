@@ -126,7 +126,7 @@ or names in `providers.profiles`; profiles resolve only with the experimental
 Contract-staleness triage always uses the `haiku` class ID and ignores AutoSkillit's
 model overrides. The pre-launch version check does not cover triage. If the provider
 rejects the ID without a matching `modelOverrides` entry, or `claude` on `PATH` is
-older than 2.1.293, triage treats every changed skill as meaningful.
+older than 2.1.296, triage treats every changed skill as meaningful.
 
 ### Operator escape hatches
 

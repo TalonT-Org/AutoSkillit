@@ -28,6 +28,12 @@ logger = get_logger(__name__)
 
 _ALL_TOOLS: frozenset[str] = frozenset(TOOL_REGISTRY)
 INVALID_TOOL_INVOCATION_BINDING_RULE = "invalid-tool-invocation-binding"
+_TOOL_INVOCATION_BINDING_FAILURE_CODES = frozenset(
+    {
+        BindingFailureCode.MISSING_TOOL_PARAMETER,
+        BindingFailureCode.INVALID_TOOL_PARAMETER_TYPE,
+    }
+)
 STEP_IDENTITY_MISMATCH_RULE = "step-identity-mismatch"
 
 # Registry of context variables that are captured upstream and MUST be forwarded
@@ -218,10 +224,6 @@ def _check_dead_with_params(ctx: ValidationContext) -> list[RuleFinding]:
 )
 def _check_invalid_tool_invocation_binding(ctx: ValidationContext) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
-    reported_codes = {
-        BindingFailureCode.MISSING_TOOL_PARAMETER,
-        BindingFailureCode.INVALID_TOOL_PARAMETER_TYPE,
-    }
     for step_name, step in ctx.recipe.steps.items():
         if step.tool is None:
             continue
@@ -229,7 +231,7 @@ def _check_invalid_tool_invocation_binding(ctx: ValidationContext) -> list[RuleF
         if invocation is None:
             continue
         for failure in invocation.failures:
-            if failure.code not in reported_codes:
+            if failure.code not in _TOOL_INVOCATION_BINDING_FAILURE_CODES:
                 continue
             message = f"step '{step_name}': tool '{step.tool}' {failure.message}"
             if failure.code is BindingFailureCode.MISSING_TOOL_PARAMETER and failure.name == "cwd":

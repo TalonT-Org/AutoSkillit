@@ -236,7 +236,7 @@ async def test_following_the_recovery_yields_an_admitted_digest(
         else:
             payload = literal_run_skill_payload(
                 step_name,
-                {"with": ready.tool_ctx.active_recipe_steps[step_name].with_args},
+                {"with": with_value},
                 credential,
                 cwd=str(git_checkout),
             )

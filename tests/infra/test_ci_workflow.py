@@ -664,6 +664,12 @@ def test_api_simulator_cache_key_is_the_build_identity_not_the_lockfile() -> Non
         if step.get("uses", "").startswith("astral-sh/setup-uv@")
     )
     uv_version = setup_uv["with"]["version"]
+    rust = next(
+        step
+        for step in producer["steps"]
+        if step.get("uses", "").startswith("dtolnay/rust-toolchain@")
+    )
+    rust_version = rust["with"]["toolchain"]
     result = subprocess.run(
         [sys.executable, "-B", "-c", "\n".join(lines[1:-1])],
         cwd=_repo_root(),
@@ -685,7 +691,7 @@ def test_api_simulator_cache_key_is_the_build_identity_not_the_lockfile() -> Non
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.splitlines() == [
-        f"key=uv-api-simulator-Linux-X64-ubuntu24-uv{uv_version}-py{python_tag}-{revision}"
+        f"key=uv-api-simulator-Linux-X64-ubuntu24-uv{uv_version}-rust{rust_version}-py{python_tag}-{revision}"
     ]
     assert identity["env"] == {"UV_VERSION": "${{ steps.setup-uv.outputs.uv-version }}"}
     assert "hashFiles('uv.lock')" not in workflow_path.read_text(encoding="utf-8")

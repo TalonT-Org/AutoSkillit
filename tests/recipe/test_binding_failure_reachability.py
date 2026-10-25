@@ -105,10 +105,18 @@ _EXPECTED_RULE: dict[BindingFailureCode, str] = {
     BindingFailureCode.INVALID_SKILL_COMMAND: "invalid-skill-invocation-binding",
 }
 
-_EXPECTED_PARAMETER = {
+_EXPECTED_MESSAGE = {
+    BindingFailureCode.UNKNOWN_TOOL: "no_such_tool",
     BindingFailureCode.UNKNOWN_TOOL_PARAMETER: "bogus",
     BindingFailureCode.MISSING_TOOL_PARAMETER: "cwd",
     BindingFailureCode.INVALID_TOOL_PARAMETER_TYPE: "issue_numbers",
+    BindingFailureCode.UNKNOWN_SKILL: "selected skill has no canonical contract",
+    BindingFailureCode.UNKNOWN_SKILL_INPUT: "unknown_child",
+    BindingFailureCode.MISSING_SKILL_INPUT: "plan_path",
+    BindingFailureCode.AMBIGUOUS_SKILL_INPUT: "may not mix inline arguments",
+    BindingFailureCode.DEAD_SKILL_INPUT: "more positional values than the contract",
+    BindingFailureCode.INVALID_SKILL_INPUT_TYPE: "round",
+    BindingFailureCode.INVALID_SKILL_COMMAND: "effective skill arguments do not align",
 }
 
 
@@ -125,7 +133,9 @@ def _recipe_for(code: BindingFailureCode) -> Recipe:
 
 def test_tables_cover_every_code() -> None:
     assert len(BindingFailureCode.__members__) == len(BindingFailureCode)
-    assert set(_TRIGGERS) == set(_EXPECTED_RULE) == set(BindingFailureCode)
+    assert (
+        set(_TRIGGERS) == set(_EXPECTED_RULE) == set(_EXPECTED_MESSAGE) == set(BindingFailureCode)
+    )
 
 
 @pytest.mark.parametrize("code", list(_TRIGGERS), ids=lambda code: code.name.lower())
@@ -144,12 +154,11 @@ def test_code_reaches_expected_rule(code: BindingFailureCode) -> None:
             if candidate.rule == _EXPECTED_RULE[code]
             and candidate.step_name == "s"
             and candidate.severity is Severity.ERROR
+            and _EXPECTED_MESSAGE[code] in candidate.message
         ),
         None,
     )
     assert finding is not None
-    if code in _EXPECTED_PARAMETER:
-        assert _EXPECTED_PARAMETER[code] in finding.message
 
 
 def test_complete_tool_invocation_has_no_binding_error() -> None:

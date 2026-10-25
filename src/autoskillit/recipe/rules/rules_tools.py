@@ -233,8 +233,8 @@ def _check_invalid_tool_invocation_binding(ctx: ValidationContext) -> list[RuleF
             message = f"step '{step_name}': tool '{step.tool}' {failure.message}"
             if failure.code is BindingFailureCode.MISSING_TOOL_PARAMETER and failure.name == "cwd":
                 message += (
-                    ' — add cwd: "${{ inputs.source_dir }}"'
-                    " (or a context worktree path) under with:"
+                    " — add cwd under with:, bound to the recipe's repository"
+                    " or context worktree path"
                 )
             findings.append(
                 make_finding(

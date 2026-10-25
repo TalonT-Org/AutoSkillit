@@ -39,7 +39,11 @@ from tests._tracked_recipes import tracked_recipe_load_result
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-_PINNED: dict[tuple[str, str], Any] = {}
+_PINNED: dict[tuple[str, str], Any] = {
+    ("bem-wrapper", "run_bem"): pytest.param(
+        "bem-wrapper", "run_bem", None, None, id="bem-wrapper-run_bem"
+    ),
+}
 
 
 @cache

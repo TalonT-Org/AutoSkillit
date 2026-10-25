@@ -814,7 +814,11 @@ def test_one_producer_builds_api_simulator_and_test_jobs_only_restore_it() -> No
         "${{ !cancelled() && runner.os == 'Linux' && "
         "needs.api_simulator_cache.result != 'success' }}"
     )
-    assert "exit 1" in require["run"]
+    failure = subprocess.run(
+        ["bash", "-c", require["run"]], capture_output=True, text=True, check=False
+    )
+    assert failure.returncode == 1
+    assert failure.stderr.strip() == "api-simulator cache producer did not succeed"
     restore = next(step for step in test_steps if step.get("id") == "uv-cache-restore")
     assert restore["uses"].startswith("actions/cache/restore@")
     assert restore["if"] == "runner.os == 'Linux'"

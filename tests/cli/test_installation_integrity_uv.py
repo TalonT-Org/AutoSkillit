@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 import autoskillit.cli.doctor._doctor_install as _integrity
-from tests.cli._installation_integrity_helpers import CLEAN, record_hash
+from tests.cli._installation_integrity_helpers import CLEAN, record_hash, record_text
 from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
@@ -33,7 +33,7 @@ def test_uv_tool_install_verifies_clean(tmp_path: Path, monkeypatch: pytest.Monk
     with zipfile.ZipFile(wheel, "w") as archive:
         for name, content in members.items():
             archive.writestr(name, content)
-        archive.writestr(f"{dist_info}/RECORD", "\n".join([*rows, f"{dist_info}/RECORD,,"]) + "\n")
+        archive.writestr(f"{dist_info}/RECORD", record_text(rows, dist_info))
 
     home = tmp_path / "home"
     tool_dir = home / ".local" / "share" / "uv" / "tools"

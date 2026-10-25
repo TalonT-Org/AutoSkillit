@@ -12,7 +12,7 @@ import autoskillit.cli.doctor._doctor_install as _integrity
 import autoskillit.cli.update._update_checks as _update_checks
 from autoskillit.cli.install._install_info import InstallInfo, InstallType
 from autoskillit.core import Severity
-from tests.cli._installation_integrity_helpers import CLEAN, record_hash
+from tests.cli._installation_integrity_helpers import CLEAN, record_hash, record_text
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -43,7 +43,7 @@ def _write_install(
         f"{Path(os.path.relpath(path, site_packages)).as_posix()},{record_hash(data)},{len(data)}"
         for path, data in files.items()
     ]
-    record.write_text("\n".join([*rows, "autoskillit-1.0.0.dist-info/RECORD,,"]) + "\n")
+    record.write_text(record_text(rows, record.parent.name))
     return package
 
 

@@ -281,10 +281,13 @@ def test_binding_wire_types_match_handler_schemas(
     registry_params = {param.name: param for param in TOOL_REGISTRY[handler.__name__].params}
 
     for name in parameter_names:
-        schema = properties[name]
+        schema = properties.get(name)
+        assert schema is not None, f"{handler.__name__}.{name}: handler parameter missing"
+        registry_param = registry_params.get(name)
+        assert registry_param is not None, f"{handler.__name__}.{name}: registry parameter missing"
         variants = schema.get("anyOf", [schema])
-        wire_types = {variant["type"] for variant in variants} - {"null"}
-        assert wire_types == {registry_params[name].wire_type.value}, f"{handler.__name__}.{name}"
+        wire_types = {variant.get("type") for variant in variants} - {"null"}
+        assert wire_types == {registry_param.wire_type.value}, f"{handler.__name__}.{name}"
 
 
 def test_evidence_reader_registry_parameter_contracts_are_exact() -> None:

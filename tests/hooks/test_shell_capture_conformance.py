@@ -199,9 +199,6 @@ def _assert_expectation(
             expected = raw.stdout
             assert raw.stderr is None
             assert runner.stderr == b""
-            artifacts = _artifact_files(runner_project)
-            assert len(artifacts) == 1
-            assert artifacts[0].read_bytes() == expected
             if len(expected) <= _INLINE_BYTES:
                 assert runner.stdout == expected
             else:
@@ -218,7 +215,6 @@ def _assert_expectation(
         assert b"late" in raw.stdout
         assert runner.stdout == raw.stdout
         assert runner.stderr == b""
-        assert _artifact_files(runner_project)[0].read_bytes() == raw.stdout
         return
 
     if expectation is ConformanceExpectation.LATE_PIPE_BYTES_SETTLED:
@@ -450,7 +446,11 @@ def test_command_conformance(
 
     runner = _run_runner(case.command, projects[mode.value], mode=mode.value)
     if mode is ConformanceMode.CAPTURE:
-        assert len(_artifact_files(projects[mode.value])) == 1
+        published = any(
+            line.startswith(b"[AutoSkillit shell capture v2:")
+            for line in runner.stdout.splitlines()
+        )
+        assert len(_artifact_files(projects[mode.value])) == int(published)
     else:
         assert not _artifact_files(projects[mode.value])
     _assert_expectation(case, mode, raw, runner, projects)
@@ -603,19 +603,8 @@ def test_runner_keeps_project_and_execution_authorities_distinct(
     assert not (project / "execution-sentinel").exists()
     assert not _artifact_files(execution_dir)
 
-    project_artifacts = _artifact_files(project)
-    assert bool(project_artifacts) is expect_capture
+    assert not _artifact_files(project)
     if expect_capture:
-        assert len(project_artifacts) == 1
-        capture_id = project_artifacts[0].stem.removeprefix("shell_")
-        with open_capture_lifecycle(
-            str(project),
-            create=False,
-            lock_wait=HOT_PATH_LOCK_WAIT,
-        ) as lifecycle:
-            record = lifecycle.get_record(capture_id)
-        assert record is not None
-        assert record.state is CaptureState.FINALIZED
         assert (_capture_dir(project) / ".capture-lifecycle.ledger").is_file()
         assert not _capture_dir(execution_dir).exists()
     else:
@@ -680,9 +669,7 @@ def test_retained_pipe_waits_for_actual_eof_and_includes_late_bytes(
             assert process.returncode == 0
             assert stdout == expected
             assert stderr == b""
-            artifacts = _artifact_files(tmp_path)
-            assert len(artifacts) == 1
-            assert artifacts[0].read_bytes() == expected
+            assert not _artifact_files(tmp_path)
             with open_capture_lifecycle(
                 str(tmp_path),
                 create=False,
@@ -690,7 +677,7 @@ def test_retained_pipe_waits_for_actual_eof_and_includes_late_bytes(
             ) as lifecycle:
                 finalized = lifecycle.get_record(capture_id)
             assert finalized is not None and finalized.manifest is not None
-            assert finalized.state is CaptureState.FINALIZED
+            assert finalized.state is CaptureState.DELETED
             assert finalized.manifest.total_bytes == len(expected)
             assert finalized.manifest.sha256 == hashlib.sha256(expected).hexdigest()
             assert finalized.manifest.inline_length == len(expected)
@@ -741,7 +728,8 @@ def test_detached_child_with_closed_pipe_does_not_delay_finalization(
             ) as lifecycle:
                 finalized = lifecycle.get_record(capture_id)
             assert finalized is not None and finalized.manifest is not None
-            assert finalized.state is CaptureState.FINALIZED
+            assert finalized.state is CaptureState.DELETED
+            assert not _artifact_files(tmp_path)
             assert finalized.manifest.total_bytes == len(stdout)
             assert finalized.manifest.sha256 == hashlib.sha256(stdout).hexdigest()
         finally:
@@ -761,14 +749,10 @@ def test_interleaved_stdout_stderr_ordering(tmp_path: Path) -> None:
 
     assert wrapped.returncode == raw_merged.returncode == 0
 
-    artifacts = _artifact_files(tmp_path)
-    if artifacts:
-        actual = artifacts[0].read_bytes()
-    else:
-        actual = wrapped.stdout
-
-    assert actual == raw_merged.stdout, (
-        f"Interleaved ordering mismatch.\n  raw_merged={raw_merged.stdout!r}\n  actual={actual!r}"
+    assert not _artifact_files(tmp_path)
+    assert wrapped.stdout == raw_merged.stdout, (
+        f"Interleaved ordering mismatch.\n  raw_merged={raw_merged.stdout!r}"
+        f"\n  actual={wrapped.stdout!r}"
     )
 
 
@@ -861,7 +845,7 @@ def test_main_generated_wrapper_accepts_symlinked_cwd(
 
     assert completed.returncode == 0
     assert completed.stdout == b"anchored"
-    assert len(_artifact_files(project)) == 1
+    assert not _artifact_files(project)
 
 
 @pytest.mark.parametrize("collision", ["symlink", "hardlink", "regular"])

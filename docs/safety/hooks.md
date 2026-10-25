@@ -195,9 +195,9 @@ is implemented.
 | Publication | Oversized FINAL issues one bearer token and stores only its bound hash; publication verifies that tuple and can return published or unavailable but cannot mint another token |
 | Delivery | Checked write-all rejects invalid/no-progress writes and flushes hook stdout before `delivered`; this boundary does not prove host, UI, history, or model visibility |
 | Reader | `open_verified_capture()` authenticates the token, takes a shared lease, revalidates the descriptor, and exposes exact bounded reads without a path, descriptor, or write API |
-| Retention | References expire no later than the one-hour retention deadline; active producer-exclusive and reader-shared leases block cleanup |
+| Retention | After delivery completes, captures with no outstanding bearer become eligible immediately; a delivered capture with a published reference remains readable until expiry; unsettled deliveries and failed artifacts keep the one-hour hold; active producer-exclusive and reader-shared leases block cleanup |
 | Ownership | The producer transfers the retained carrier while preserving exclusive ownership through initial publication and delivery |
-| Cleanup — installed runner | Every valid run/reject invocation performs one bounded sweep after producer resources release |
+| Cleanup — installed runner | Every valid run/reject invocation performs one bounded sweep after producer resources release and prioritizes its just-delivered inline capture before the cursor-rotated backlog within the existing `RUNNER_TAIL_BUDGET` |
 | Cleanup — session lifecycle | `capture_lifecycle_hook.py` performs the same bounded sweep at `SessionStart` in both interactive and headless sessions |
 | Naming contract | `shell_[0-9a-f]{16}.log` — files not matching this pattern are never deleted |
 | Safety | Capture components reject symlinks; artifacts reject collisions, hardlinks, unsafe modes, and identity changes; a hostile same-UID process that ignores advisory locks is excluded |
@@ -212,9 +212,10 @@ it with capped backoff. FINAL also carries independent reference
 `revoked`) and
 delivery (`not_attempted`, `attempting`, `delivered`, `failed`, `unknown`) states.
 Lost pre-delivery tokens become unavailable; an interrupted attempting delivery
-becomes unknown and is never re-emitted. Finalized and failed records use their
-terminal transition as the retention clock; abandoned records use their durable
-creation time.
+becomes unknown and is never re-emitted. FINALIZED records derive eligibility
+from readability as described in the Retention row above; `FAILED` records keep
+their one-hour hold from terminal transition and abandoned records keep their
+one-hour hold from durable creation time.
 
 Eligibility is not a wall-clock scheduler. Deletion occurs on the next enabled,
 trusted installed runner-tail or cleanup-only `SessionStart` trigger. If hooks

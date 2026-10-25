@@ -102,6 +102,8 @@ def _failure_blocker(reason: CaptureFailureReason) -> CleanupBlocker:
 def reconcile_capture_store(
     project_cwd: str,
     budget: SweepBudgetSpec,
+    *,
+    priority_capture_id: str | None = None,
 ) -> CaptureCleanupOutcome:
     if not isinstance(project_cwd, str) or not project_cwd or type(budget) is not SweepBudgetSpec:
         return _failure_outcome(CleanupBlocker.FILESYSTEM_AUTHORITY)
@@ -110,7 +112,7 @@ def reconcile_capture_store(
         with _authority.open_capture_lifecycle(
             project_cwd, create=False, lock_wait=lock_wait_for_budget(budget)
         ) as lifecycle:
-            return lifecycle.sweep(budget)
+            return lifecycle.sweep(budget, priority_capture_id=priority_capture_id)
     except _authority.CaptureStoreAbsentError:
         return CaptureCleanupOutcome(blocker=CleanupBlocker.STORE_ABSENT)
     except LockContended:

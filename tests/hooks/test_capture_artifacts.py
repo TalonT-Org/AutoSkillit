@@ -232,7 +232,14 @@ def _create_artifact(anchor, root, capture_id: str = _CAPTURE_ID):
     return create_capture_artifact(root, capture_id, lifecycle)
 
 
-def _finalize_artifact(anchor, root, artifact, data: bytes = b"captured"):
+def _finalize_artifact(
+    anchor,
+    root,
+    artifact,
+    data: bytes = b"captured",
+    *,
+    issue_reference: bool = True,
+):
     lifecycle = CaptureLifecycleStore.from_open_authorities(
         anchor,
         root,
@@ -253,7 +260,16 @@ def _finalize_artifact(anchor, root, artifact, data: bytes = b"captured"):
         finalized_at=1_000_000.0,
         retention_deadline=1_003_600.0,
     )
-    return lifecycle.commit_verified_snapshot(verified, issue_reference=True)
+    return lifecycle.commit_verified_snapshot(verified, issue_reference=issue_reference)
+
+
+def _seed_due_inline_capture(anchor, root, capture_id: str) -> None:
+    artifact = _create_artifact(anchor, root, capture_id)
+    try:
+        _finalize_artifact(anchor, root, artifact, data=b"due", issue_reference=False)
+    finally:
+        artifact.close_artifact_fd()
+        artifact.release_lease()
 
 
 def _issue_artifact(anchor, root, artifact, data: bytes = b"captured"):
@@ -1368,9 +1384,10 @@ def test_valid_reject_runs_one_runner_tail_sweep(
 ) -> None:
     events: list[str] = []
 
-    def reconcile(requested_cwd, budget):
+    def reconcile(requested_cwd, budget, *, priority_capture_id=None):
         assert requested_cwd == "/abs/project"
         assert budget is capture_reconcile.RUNNER_TAIL_BUDGET
+        assert priority_capture_id == _CAPTURE_ID
         events.append("reconcile")
         return CaptureCleanupOutcome()
 
@@ -1388,10 +1405,10 @@ def test_valid_reject_runs_one_runner_tail_sweep(
 def test_runner_tail_consumes_byte_pressure_budget(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    budgets = []
+    reconciliations = []
 
-    def reconcile(_requested_cwd, budget):
-        budgets.append(budget)
+    def reconcile(_requested_cwd, budget, *, priority_capture_id=None):
+        reconciliations.append((budget, priority_capture_id))
         return CaptureCleanupOutcome()
 
     monkeypatch.setattr(capture_runner, "_BYTE_PRESSURE_OBSERVED", True)
@@ -1401,13 +1418,95 @@ def test_runner_tail_consumes_byte_pressure_budget(
         reconcile,
     )
 
-    capture_runner._sweep_after_runner("/abs/project")
-    capture_runner._sweep_after_runner("/abs/project")
+    capture_runner._sweep_after_runner("/abs/project", _CAPTURE_ID)
+    capture_runner._sweep_after_runner("/abs/project", _CAPTURE_ID)
 
-    assert budgets == [
-        capture_types.TRANSITION_RESCUE_BUDGET,
-        capture_reconcile.RUNNER_TAIL_BUDGET,
+    assert reconciliations == [
+        (capture_types.TRANSITION_RESCUE_BUDGET, _CAPTURE_ID),
+        (capture_reconcile.RUNNER_TAIL_BUDGET, _CAPTURE_ID),
     ]
+
+
+def test_runner_tail_reclaims_its_own_inline_capture(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    process = _FakeCaptureProcess(b"inline")
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
+
+    assert capture_runner._main(_runner_args(cwd=str(project))) == 0
+
+    captured = capfd.readouterr()
+    record = _capture_record(project)
+    assert captured.out == "inline"
+    assert record.state is CaptureState.DELETED
+    assert not (_capture_dir(project) / f"shell_{_CAPTURE_ID}.log").exists()
+
+
+def test_runner_tail_reclaims_own_capture_before_backlog(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    anchor, root = _open_authority(project)
+    backlog_ids = [
+        f"{index:016x}" for index in range(capture_reconcile.RUNNER_TAIL_BUDGET.max_attempts + 1)
+    ]
+    try:
+        for capture_id in backlog_ids:
+            _seed_due_inline_capture(anchor, root, capture_id)
+    finally:
+        root.close()
+        anchor.close()
+
+    process = _FakeCaptureProcess(b"inline")
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
+
+    assert capture_runner._main(_runner_args(cwd=str(project))) == 0
+
+    record = _capture_record(project)
+    assert record.state is CaptureState.DELETED
+    assert not (_capture_dir(project) / f"shell_{_CAPTURE_ID}.log").exists()
+
+
+def test_runner_tail_retains_referenced_capture(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    expected = b"published-output"
+    process = _FakeCaptureProcess(expected)
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(
+        capture_runner,
+        "read_capture_policy",
+        lambda _anchor: CapturePolicy(inline_bytes=8),
+    )
+
+    assert capture_runner._main(_runner_args(cwd=str(project))) == 0
+
+    marker = _single_v2_marker(capfd.readouterr().out)
+    record = _capture_record(project)
+    artifact_path = _capture_dir(project) / f"shell_{_CAPTURE_ID}.log"
+    assert marker.reference_status == "published"
+    assert marker.reference is not None
+    assert record.state is CaptureState.FINALIZED
+    assert record.reference_status is CaptureReferenceStatus.PUBLISHED
+    assert record.delivery_status is CaptureDeliveryStatus.DELIVERED
+    assert artifact_path.is_file()
+    with open_capture_lifecycle(
+        str(project),
+        create=False,
+        lock_wait=capture_types.HOT_PATH_LOCK_WAIT,
+    ) as lifecycle:
+        with lifecycle.open_verified_capture(marker.reference) as reader:
+            assert reader.read(0, len(expected)) == expected
 
 
 def test_runner_tail_preserves_dispatch_result_and_order(
@@ -1419,7 +1518,8 @@ def test_runner_tail_preserves_dispatch_result_and_order(
         events.append("dispatch")
         return 37
 
-    def reconcile(_requested_cwd, _budget):
+    def reconcile(_requested_cwd, _budget, *, priority_capture_id=None):
+        assert priority_capture_id == _CAPTURE_ID
         events.append("reconcile")
         return CaptureCleanupOutcome()
 
@@ -1440,7 +1540,7 @@ def test_runner_tail_cleanup_failure_does_not_replace_user_result(
 ) -> None:
     monkeypatch.setattr(capture_runner, "_dispatch_runner", lambda *_args: 23)
 
-    def fail_reconcile(_requested_cwd, _budget):
+    def fail_reconcile(_requested_cwd, _budget, **_kwargs):
         raise RuntimeError("🔥" * 512)
 
     monkeypatch.setattr(
@@ -1465,7 +1565,7 @@ def test_runner_tail_reports_sweep_outcome_errors(
     monkeypatch.setattr(
         capture_reconcile,
         "reconcile_capture_store",
-        lambda requested_cwd, budget: CaptureCleanupOutcome(
+        lambda _requested_cwd, _budget, **_kwargs: CaptureCleanupOutcome(
             errors=2,
             remaining_due=1,
             blocker=CleanupBlocker.LEDGER_INTEGRITY,
@@ -1489,7 +1589,7 @@ def test_runner_tail_deferred_outcome_emits_nothing_per_command(
     monkeypatch.setattr(
         capture_reconcile,
         "reconcile_capture_store",
-        lambda requested_cwd, budget: CaptureCleanupOutcome(
+        lambda _requested_cwd, _budget, **_kwargs: CaptureCleanupOutcome(
             examined=2,
             deleted=2,
             remaining_due=3,
@@ -1514,7 +1614,7 @@ def test_runner_tail_still_sweeps_after_unexpected_dispatch_exception(
     def fail_dispatch(*_args):
         raise RuntimeError("fault injection")
 
-    def reconcile(_requested_cwd, _budget):
+    def reconcile(_requested_cwd, _budget, **_kwargs):
         swept.append(True)
         return CaptureCleanupOutcome()
 
@@ -1535,7 +1635,7 @@ def test_malformed_runner_invocation_reconciles_only_with_absolute_cwd(
 ) -> None:
     reconciled: list[str] = []
 
-    def reconcile(requested_cwd, _budget):
+    def reconcile(requested_cwd, _budget, **_kwargs):
         reconciled.append(requested_cwd)
         return CaptureCleanupOutcome()
 

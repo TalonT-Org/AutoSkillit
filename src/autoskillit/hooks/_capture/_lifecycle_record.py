@@ -79,6 +79,7 @@ __all__ = [
     "is_retention_successor",
     "is_state_successor",
     "legacy_record_from_dict",
+    "readable_until",
     "record_from_dict",
     "record_to_dict",
     "same_record",
@@ -136,6 +137,30 @@ class CaptureLifecycleRecord:
     @property
     def sha256(self) -> str:
         return self.manifest.sha256 if self.manifest is not None else ""
+
+
+_NO_BEARER_REFERENCES = frozenset(
+    {
+        CaptureReferenceStatus.NOT_REQUESTED,
+        CaptureReferenceStatus.UNAVAILABLE,
+        CaptureReferenceStatus.EXPIRED,
+        CaptureReferenceStatus.REVOKED,
+    }
+)
+
+
+def readable_until(record: CaptureLifecycleRecord) -> float:
+    """Return the last authorized read time for a finalized capture."""
+    if record.state is not CaptureState.FINALIZED or record.manifest is None:
+        raise LedgerCodecError("readability requires a finalized capture manifest")
+    manifest = record.manifest
+    if record.delivery_status is CaptureDeliveryStatus.DELIVERED:
+        if record.reference_status in _NO_BEARER_REFERENCES:
+            return manifest.finalized_at
+        if record.reference_status is CaptureReferenceStatus.PUBLISHED:
+            assert manifest.reference_expiry is not None
+            return manifest.reference_expiry
+    return manifest.retention_deadline
 
 
 def same_record(

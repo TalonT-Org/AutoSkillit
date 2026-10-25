@@ -3607,8 +3607,8 @@ def test_sweep_reserves_one_attempt_after_discovery_consumes_elapsed_budget(
     anchor, root, store = _open_store(project, clock)
     real_due_keys = store._due_keys
 
-    def slow_discovery(now: float, max_records: int):
-        result = real_due_keys(now, max_records)
+    def slow_discovery(now: float, max_records: int, *, priority_capture_id: str | None = None):
+        result = real_due_keys(now, max_records, priority_capture_id=priority_capture_id)
         clock.advance(0.051)
         return result
 

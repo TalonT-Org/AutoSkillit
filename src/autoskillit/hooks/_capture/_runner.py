@@ -570,7 +570,7 @@ def _emit_runner_tail_crash_diagnostic() -> None:
     )
 
 
-def _sweep_after_runner(requested_cwd: str) -> None:
+def _sweep_after_runner(requested_cwd: str, capture_id: str) -> None:
     global _BYTE_PRESSURE_OBSERVED
     byte_pressure_observed = _BYTE_PRESSURE_OBSERVED
     _BYTE_PRESSURE_OBSERVED = False
@@ -580,7 +580,9 @@ def _sweep_after_runner(requested_cwd: str) -> None:
             if byte_pressure_observed
             else _capture_reconcile.RUNNER_TAIL_BUDGET
         )
-        outcome = _capture_reconcile.reconcile_capture_store(requested_cwd, budget)
+        outcome = _capture_reconcile.reconcile_capture_store(
+            requested_cwd, budget, priority_capture_id=capture_id
+        )
         _capture_reconcile.emit_owner_diagnostic(
             outcome, owner=_RUNNER_TAIL_OWNER, write=sys.stderr.write
         )
@@ -620,5 +622,5 @@ def _main(argv: list[str] | None = None) -> int:
                 )
             )
     finally:
-        _sweep_after_runner(request.cwd)
+        _sweep_after_runner(request.cwd, request.capture_id)
     return user_result

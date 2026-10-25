@@ -184,9 +184,11 @@ nonblocking exclusive lease and defers while the producer or any reader remains
 live. The existing runner-tail and cleanup-only `SessionStart` owners remain the
 only owners of the single `shell-captures` lifecycle resource.
 
-References expire no later than the one-hour retention deadline. Expiry stops new
-resolution, as does an explicit revoked state; cleanup removes an eligible carrier
-only after leases release and descriptor-relative identity checks pass.
+After the `delivered` transition commits, a capture with no outstanding bearer
+becomes eligible for reclamation immediately. A published reference expires no
+later than the one-hour retention deadline. Expiry stops new resolution, as does
+an explicit revoked state; cleanup removes an eligible carrier only after producer
+and reader leases release and descriptor-relative identity checks pass.
 
 ### Ledger, filesystem, and durability boundary
 

@@ -99,10 +99,24 @@ process-lifetime contract is defined against that host model in ADR-0008.
 The lifecycle store records `RESERVED`, `STAGED`, `PUBLISHED_WRITING`,
 `FINALIZED`, `FAILED`, `ABANDONED`, `DELETING`, `DELETED`, and `TAMPERED`.
 The immutable FINAL, reference, delivery, and reader semantics belong to
-ADR-0008. A finalized or failed artifact becomes eligible one hour after its
-terminal transition; an abandoned producer becomes eligible one hour after its
-durable creation time. Eligibility is reclaimed only on the next enabled,
-trusted trigger, not by a wall-clock scheduler.
+ADR-0008. Retention follows readability: after delivery completes, captures
+with no outstanding bearer become eligible immediately; a delivered capture
+with a published reference remains readable until expiry; unsettled deliveries
+and failed artifacts keep the one-hour hold.
+
+| FINALIZED record | Eligibility time | Why |
+|---|---|---|
+| Delivered with no outstanding bearer (`not_requested`, `unavailable`, `expired`, `revoked`) | Immediately after the delivered transition commits; its due timestamp is `manifest.finalized_at` | Inline bytes have already been delivered and no bearer can open the artifact |
+| Delivered with a `published` reference | `manifest.reference_expiry` | The bearer remains readable until expiry |
+| Any other FINALIZED state (undelivered, delivery `failed`/`unknown`, or reference `unknown`) | `manifest.retention_deadline` | Preserve the one-hour forensic hold |
+
+`FAILED` artifacts, including pre-FINAL failures, remain eligible one hour after
+their terminal transition; abandoned producers remain eligible one hour after
+durable creation time. A FINALIZED record with no outstanding bearer is not due
+until delivery completes, even though its due timestamp is `manifest.finalized_at`.
+
+Eligibility is reclaimed only on the next enabled, trusted trigger, not by a
+wall-clock scheduler.
 
 Admission participates in that trigger-owned model. When store-wide due debt
 reaches the assist threshold, the admitting runner performs one debt-scaled
@@ -121,6 +135,19 @@ Trigger-only ownership remains adequate while assist work stays bounded and
 at least one installed reclamation owner retains a positive directory-scan
 budget. Removing either condition requires a new ownership decision; the
 read-only doctor must not become a scheduler implicitly.
+
+The producer's own runner tail tries its just-delivered inline capture first,
+before the cursor-rotated backlog, within the existing `RUNNER_TAIL_BUDGET`;
+this moves the same required deletion work earlier without increasing total
+deletion work or adding an owner or scheduler.
+
+Eligibility is distinct from access and deletion. Inline output has already
+been delivered as in-memory bytes and grants no later artifact-opening
+authority; `open_verified_capture()` requires a published bearer. A holder of a
+delivered published reference may open it until expiry. Expiry prevents new
+authorized opens but does not erase previously delivered bytes. An already-open
+verified reader's shared lease prevents reclamation until it closes, after which
+identity checks still have to pass before deletion.
 
 Deletion is confined to the shared store's identity-revalidated quarantine
 transaction. Only lifecycle-recorded `shell_[0-9a-f]{16}.log` artifacts are
@@ -215,5 +242,6 @@ are rejected in favor of the safe production default.
 - Complete Codex shell output is captured to a descriptor-anchored carrier.
   Oversized replay reports an opaque V2 reference or an unavailable status,
   never an authoritative pathname.
-- One-hour lifecycle reclamation is owned by the installed runner tail and the
-  cleanup-only `SessionStart` hook, with bounded retry and quarantine recovery.
+- Readability-derived lifecycle reclamation is owned by the installed runner
+  tail and the cleanup-only `SessionStart` hook, with bounded retry and
+  quarantine recovery; unsettled artifacts retain the one-hour hold.

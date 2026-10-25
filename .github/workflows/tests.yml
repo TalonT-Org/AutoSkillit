@@ -86,10 +86,14 @@ jobs:
               raise SystemExit("missing Dockerfile RUST_VERSION pin")
           rust_version = rust_pin.group(1)
 
+          uv_version = os.environ["UV_VERSION"]
+          if re.fullmatch(r"\d+\.\d+\.\d+", uv_version) is None:
+              raise SystemExit("invalid resolved uv version")
+
           # Label the producer's image family; consumers separately verify native imports.
           runner = f"{os.environ['RUNNER_OS']}-{os.environ['RUNNER_ARCH']}-{os.environ['ImageOS']}"
           python_tag = python_selector.replace(".", "")
-          print(f"key=uv-api-simulator-{runner}-uv{os.environ['UV_VERSION']}-rust{rust_version}-py{python_tag}-{revision}")
+          print(f"key=uv-api-simulator-{runner}-uv{uv_version}-rust{rust_version}-py{python_tag}-{revision}")
           PY
 
       - name: Resolve uv cache directory

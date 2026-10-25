@@ -651,7 +651,10 @@ def test_complexity_gate_follows_policy_gate() -> None:
     assert complexity_index == relaxation_index + 1
 
 
-def test_api_simulator_cache_key_is_the_build_identity_not_the_lockfile() -> None:
+@pytest.mark.parametrize("empty_uv_version", [False, True])
+def test_api_simulator_cache_key_is_the_build_identity_not_the_lockfile(
+    empty_uv_version: bool,
+) -> None:
     workflow_path = _repo_root() / ".github" / "workflows" / "tests.yml"
     producer = load_yaml(workflow_path)["jobs"]["api_simulator_cache"]
     identity = next(step for step in producer["steps"] if step.get("id") == "cache-identity")
@@ -680,7 +683,7 @@ def test_api_simulator_cache_key_is_the_build_identity_not_the_lockfile() -> Non
             "RUNNER_OS": "Linux",
             "RUNNER_ARCH": "X64",
             "ImageOS": "ubuntu24",
-            "UV_VERSION": uv_version,
+            "UV_VERSION": "" if empty_uv_version else uv_version,
         },
         check=False,
     )
@@ -689,6 +692,11 @@ def test_api_simulator_cache_key_is_the_build_identity_not_the_lockfile() -> Non
     python_tag = (
         (_repo_root() / ".python-version").read_text(encoding="utf-8").strip().replace(".", "")
     )
+    if empty_uv_version:
+        assert result.returncode != 0
+        assert "invalid resolved uv version" in result.stderr
+        assert not result.stdout
+        return
     assert result.returncode == 0, result.stderr
     assert result.stdout.splitlines() == [
         f"key=uv-api-simulator-Linux-X64-ubuntu24-uv{uv_version}-rust{rust_version}-py{python_tag}-{revision}"

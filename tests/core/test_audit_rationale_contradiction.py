@@ -1,4 +1,4 @@
-"""Regression coverage for audit substitutions of prescribed mechanisms."""
+"""Regression coverage for the audit rationale-contradiction rule."""
 
 from __future__ import annotations
 

@@ -36,7 +36,7 @@ from _command_classification import (  # noqa: E402
 from _guard_decision_diagnostics import (  # noqa: E402
     record_guard_decision,
 )
-from _path_identity import destination_location  # noqa: E402
+from _path_identity import destination_within  # noqa: E402
 
 if TYPE_CHECKING:
     from .._runtime._hook_output import deny_tool_use
@@ -332,16 +332,13 @@ def _entry_paths_validation_error(
 ) -> str | None:
     for path in paths:
         try:
-            location = str(destination_location(Path(path)))
+            allowed = any(destination_within(path, prefix) for prefix in norm_prefixes)
         except (OSError, RuntimeError, ValueError):
             return (
                 f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
                 f"Only writes to {display_prefix} are permitted."
             )
-        if not any(
-            location.startswith(prefix) or location == prefix.rstrip("/")
-            for prefix in norm_prefixes
-        ):
+        if not allowed:
             return (
                 f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
                 f"Only writes to {display_prefix} are permitted."

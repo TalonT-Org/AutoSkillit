@@ -78,6 +78,7 @@ from autoskillit.hooks._runtime._hook_settings import (
     enforce_session_scope,
     hook_session_shape,
 )
+from autoskillit.hooks._runtime._path_identity import destination_within
 from autoskillit.hooks._session_binding import LoadedSkillEntry
 from autoskillit.hooks.formatters._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 from autoskillit.hooks.guards.branch_protection_guard import BRANCH_PROTECTION_DENY_TRIGGER
@@ -95,6 +96,7 @@ _hr.HOOK_REGISTRY_HASH = _hr.compute_registry_hash(
 del _HOOK_REGISTRY_LIST
 
 __all__ = [
+    "destination_within",
     "BRANCH_PROTECTION_DENY_TRIGGER",
     "CODEX_AUTO_COMPACTION_DENIED_REASON",
     "DENY_REASON_BY_GUARD",

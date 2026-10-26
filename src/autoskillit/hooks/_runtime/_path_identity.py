@@ -45,6 +45,11 @@ def destination_location(destination: str | os.PathLike[str]) -> Path:
     return path.parent.resolve() / path.name
 
 
+def destination_within(candidate: str | os.PathLike[str], root: str | os.PathLike[str]) -> bool:
+    """Compare an entry's physical location with a resolved directory boundary."""
+    return destination_location(candidate).is_relative_to(Path(root).resolve())
+
+
 def realpath_within(candidate: str | os.PathLike[str], root: str | os.PathLike[str]) -> bool:
     """Return whether *candidate* lies at or under *root* after resolving both."""
     try:

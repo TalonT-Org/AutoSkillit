@@ -33,7 +33,7 @@ from _hook_payload import (  # noqa: E402
     normalize_payload_cwd,
     parse_hook_command,
 )
-from _path_identity import destination_location, realpath_within  # noqa: E402
+from _path_identity import destination_location, destination_within, realpath_within  # noqa: E402
 from _policy_event import (  # noqa: E402
     PolicyEvent,
     render_provenance_prefix,
@@ -149,12 +149,10 @@ def _is_protected_entry_target(path: str) -> bool:
         return True
     for root in _known_roots():
         try:
-            root_locations = {destination_location(root), root.resolve()}
+            if location == destination_location(root) or destination_within(path, root):
+                return True
         except (OSError, RuntimeError, ValueError):
             return True
-        for root_location in root_locations:
-            if location == root_location or str(location).startswith(str(root_location) + os.sep):
-                return True
     try:
         entry = os.lstat(path)
     except OSError:

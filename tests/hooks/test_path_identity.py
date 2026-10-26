@@ -10,6 +10,7 @@ from autoskillit.core import destination_location as core_destination_location
 from autoskillit.hooks._runtime._path_identity import (
     PathIdentityError,
     destination_location,
+    destination_within,
     hooks_relative_key,
     realpath_within,
 )
@@ -105,7 +106,20 @@ def test_destination_location_core_and_hook_conformance(tmp_path: Path, name: st
     linked_parent.symlink_to(real_parent, target_is_directory=True)
     (real_parent / "final-link").symlink_to(tmp_path / "missing")
     destination = linked_parent / name
-    expected = tmp_path if name == ".." else real_parent / name
+    expected = tmp_path if name == ".." else linked_parent if name == "." else real_parent / name
 
     for resolve_location in (destination_location, core_destination_location):
         assert resolve_location(destination) == expected
+
+
+def test_destination_within_uses_physical_parent_and_preserves_final_link(tmp_path: Path) -> None:
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (allowed / "parent").symlink_to(outside, target_is_directory=True)
+    (allowed / "link").symlink_to(outside / "target")
+    assert destination_within(allowed / "link", allowed)
+    assert not destination_within(allowed / "parent" / "entry", allowed)
+    assert not destination_within(allowed / "..", allowed)
+    assert not destination_within(tmp_path / "allowed-neighbor" / "entry", allowed)

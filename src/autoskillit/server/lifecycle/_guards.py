@@ -15,7 +15,6 @@ from autoskillit.core import (
     BackendPinResolution,
     FaultDomain,
     InputContractResolver,
-    destination_location,
     extract_path_arg,
     extract_positional_args,
     extract_skill_name,
@@ -28,6 +27,7 @@ from autoskillit.hooks import (
     PROTECTED_SOURCE_PATH_PATTERNS,
     UNRESOLVED_WRITE_TARGET_REMEDIATION,
     command_has_blocked_protected_path_read,
+    destination_within,
     scan_write_targets,
 )
 from autoskillit.pipeline import gate_error_result
@@ -168,13 +168,13 @@ def _check_write_target_boundary(
             )
     for target in scan.entry_targets:
         try:
-            location = str(destination_location(Path(target)))
+            allowed = any(destination_within(target, prefix) for prefix in allowed_prefixes)
         except (OSError, RuntimeError, ValueError):
             return gate_error_result(
                 "run_cmd write target could not be resolved safely. "
                 + UNRESOLVED_WRITE_TARGET_REMEDIATION
             )
-        if not any(location.startswith(pfx) or location == pfx.rstrip("/") for pfx in normalized):
+        if not allowed:
             return gate_error_result(
                 f"run_cmd write target {target!r} is outside allowed write prefixes: "
                 f"{', '.join(allowed_prefixes)}"

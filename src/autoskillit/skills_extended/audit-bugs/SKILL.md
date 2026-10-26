@@ -84,7 +84,7 @@ The user may provide a "since" date (e.g., `2/7`, `2026-02-07`, `last week`). If
 
 ### Step 1: Locate Project Logs
 
-Claude Code stores conversation logs under `~/.claude/projects/`. Resolve the current project's directory through the installed CLI:
+Claude Code stores conversation logs under `~/.claude/projects/`. Resolve the directory for the current working directory through the installed CLI:
 
 ```bash
 actual_absolute_cwd=$(pwd -P)

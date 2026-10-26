@@ -464,9 +464,8 @@ class TestRunSkillExecutionMarker:
         home = tmp_path / "home"
         caller_prefix = tmp_path / "caller"
         caller_cwd = caller_prefix / "project.with.dot"
-        child_cwd = tmp_path / "child" / "different-workspace"
+        child_cwd = Path("/tmp")
         caller_cwd.mkdir(parents=True)
-        child_cwd.mkdir(parents=True)
         monkeypatch.setattr(Path, "home", lambda: home)
         monkeypatch.setattr(tool_ctx_kitchen_open, "project_dir", caller_cwd)
         monkeypatch.delenv(LAUNCH_ID_ENV_VAR, raising=False)
@@ -523,7 +522,7 @@ class TestRunSkillExecutionMarker:
         claude_calls = [
             call for call in runner.call_args_list if Path(call[0][0]).name == "claude"
         ]
-        assert len(claude_calls) == 1
+        assert len(claude_calls) == 1, payload
         assert claude_calls[0][1] == child_cwd.resolve()
         assert "marker_dir" not in claude_calls[0][3]
         assert "session_id" not in claude_calls[0][3]

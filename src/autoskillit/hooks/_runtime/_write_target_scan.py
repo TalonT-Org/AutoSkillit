@@ -285,6 +285,7 @@ def _npm_install_targets(
     prefix: tuple[str, str | None] | None = None
     missing_prefix = False
     command_index: int | None = None
+    uncertain_command = False
     index = 1
     while index < separator:
         token = argv[index]
@@ -300,14 +301,14 @@ def _npm_install_targets(
                 prefix = (value, source)
             index = next_index
             continue
-        if command_index is None and token == "install":
+        if command_index is None and token in {"install", "i", "add", "ci"}:
             command_index = index
         elif command_index is None and not token.startswith("-"):
-            return [], False, False
+            uncertain_command = True
         index += 1
-    if command_index is None or (prefix is None and not missing_prefix):
+    if prefix is None and not missing_prefix:
         return [], False, False
-    if missing_prefix or prefix is None:
+    if command_index is None or uncertain_command or missing_prefix or prefix is None:
         return [], True, True
     target = _classification.resolve_write_target(prefix[0], cwd, shell_source=prefix[1])
     return ([target], False, True) if target is not None else ([], True, True)

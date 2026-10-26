@@ -156,6 +156,11 @@ def test_scan_write_target_expectations(
         ('npm install --prefix="$NPM_UNKNOWN" pkg', (), True, True),
         ("npm install --prefix", (), True, True),
         ("npm install -- --prefix /opt/app", (), False, False),
+        ("npm ci --prefix /opt/app", ("/opt/app",), False, True),
+        ("npm --prefix /opt/app i pkg", ("/opt/app",), False, True),
+        ("npm add pkg --prefix=/opt/app", ("/opt/app",), False, True),
+        ("npm --registry https://example install --prefix /opt/app pkg", (), True, True),
+        ("npm --prefix /opt/app unsupported", (), True, True),
     ],
     ids=(
         "detached-after-install",
@@ -167,6 +172,11 @@ def test_scan_write_target_expectations(
         "attached-unknown-variable",
         "missing-prefix-value",
         "option-terminator",
+        "clean-install-prefix",
+        "install-alias-prefix",
+        "add-alias-prefix",
+        "uncertain-global-option-value",
+        "unsupported-prefixed-command",
     ),
 )
 def test_npm_install_explicit_prefix(

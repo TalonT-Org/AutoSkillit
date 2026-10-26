@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import replace
 
 import pytest
@@ -25,6 +26,7 @@ from tests.hooks.test_capture_lifecycle import (
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 _MAX_NUMERIC = 2**63 - 1
+_MAX_TIMESTAMP = sys.float_info.max
 _COMPACTION_EPOCH = _MAX_NUMERIC
 _REFERENCE_CAPTURE_ID = "0000000000000001"
 _FAILURE_CAPTURE_ID = "0000000000000002"
@@ -74,6 +76,9 @@ def _profile_record(
         project_identity=identity,
         root_identity=identity,
         artifact_identity=identity,
+        created_at=_MAX_TIMESTAMP,
+        next_attempt_at=_MAX_TIMESTAMP,
+        retention_at=_MAX_TIMESTAMP if record.retention_at is not None else None,
         observed_size=_MAX_NUMERIC,
         revision=_MAX_NUMERIC,
         finalized_at_revision=finalized_at_revision,

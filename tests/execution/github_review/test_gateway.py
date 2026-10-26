@@ -1,5 +1,7 @@
 """HTTP response classification at the real GitHub review gateway boundary."""
 
+from collections.abc import Callable
+
 import httpx
 import pytest
 
@@ -11,6 +13,15 @@ from tests.fixtures.github_rest import (
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+
+def _gateway(handler: Callable[[httpx.Request], httpx.Response]) -> DefaultGitHubReviewGateway:
+    transport = httpx.MockTransport(handler)
+    return DefaultGitHubReviewGateway(
+        token_factory=lambda: "test-token",
+        api_log=None,
+        client_factory=lambda **kwargs: httpx.AsyncClient(transport=transport, **kwargs),
+    )
 
 
 @pytest.mark.anyio
@@ -38,14 +49,7 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 async def test_gateway_classifies_http_responses(
     status: int, message: str, expected: ReviewResponseClass
 ) -> None:
-    transport = httpx.MockTransport(
-        lambda request: httpx.Response(status, json={"message": message})
-    )
-    gateway = DefaultGitHubReviewGateway(
-        token_factory=lambda: "test-token",
-        api_log=None,
-        client_factory=lambda **kwargs: httpx.AsyncClient(transport=transport, **kwargs),
-    )
+    gateway = _gateway(lambda request: httpx.Response(status, json={"message": message}))
 
     result = await gateway.create_review("owner/repo", 1, {"event": "COMMENT", "body": "Review"})
 
@@ -94,12 +98,7 @@ async def test_review_comment_collection_uses_pr_wide_endpoint_and_paginates() -
             )
         raise AssertionError(f"unexpected request: {request.method} {request.url}")
 
-    transport = httpx.MockTransport(handler)
-    gateway = DefaultGitHubReviewGateway(
-        token_factory=lambda: "test-token",
-        api_log=None,
-        client_factory=lambda **kwargs: httpx.AsyncClient(transport=transport, **kwargs),
-    )
+    gateway = _gateway(handler)
 
     result = await gateway.list_pull_review_comments("owner/repo", 1)
 
@@ -142,12 +141,7 @@ async def test_review_comment_collection_returns_later_page_http_failure() -> No
             )
         raise AssertionError(f"unexpected request: {request.method} {request.url}")
 
-    transport = httpx.MockTransport(handler)
-    gateway = DefaultGitHubReviewGateway(
-        token_factory=lambda: "test-token",
-        api_log=None,
-        client_factory=lambda **kwargs: httpx.AsyncClient(transport=transport, **kwargs),
-    )
+    gateway = _gateway(handler)
 
     result = await gateway.list_pull_review_comments("owner/repo", 1)
 
@@ -185,12 +179,7 @@ async def test_review_comment_collection_rejects_unsafe_next_link(link: str) -> 
             )
         raise AssertionError(f"unexpected request: {request.method} {request.url}")
 
-    transport = httpx.MockTransport(handler)
-    gateway = DefaultGitHubReviewGateway(
-        token_factory=lambda: "test-token",
-        api_log=None,
-        client_factory=lambda **kwargs: httpx.AsyncClient(transport=transport, **kwargs),
-    )
+    gateway = _gateway(handler)
 
     result = await gateway.list_pull_review_comments("owner/repo", 1)
 

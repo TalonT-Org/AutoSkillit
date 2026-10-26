@@ -17,6 +17,9 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
             "-workspace-repro--autoskillit-temp-sandbox",
         ),
         ("/home/user/projects/my_project", "-home-user-projects-my-project"),
+        ("/home/user/projects/my_project/", "-home-user-projects-my-project"),
+        ("/home/user/projects/my_project/.", "-home-user-projects-my-project"),
+        ("workspace/repro/.", "-workspace-repro"),
     ],
 )
 def test_claude_project_log_dir_prints_one_exact_path_without_mcp_activation(
@@ -28,6 +31,7 @@ def test_claude_project_log_dir_prints_one_exact_path_without_mcp_activation(
 ) -> None:
     home = tmp_path / "home"
     monkeypatch.setattr(Path, "home", lambda: home)
+    monkeypatch.chdir("/")
     from autoskillit.cli.app import app
 
     with pytest.raises(SystemExit) as exc_info:

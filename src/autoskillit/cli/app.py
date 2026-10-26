@@ -348,7 +348,7 @@ def update() -> None:
 @app.command
 def claude_project_log_dir(cwd: str) -> None:
     """Write the Claude project log directory for an explicit working directory."""
-    sys.stdout.write(str(claude_code_project_dir(cwd)) + "\n")
+    sys.stdout.write(str(claude_code_project_dir(str(Path(cwd).resolve()))) + "\n")
 
 
 @app.command

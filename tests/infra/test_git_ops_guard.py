@@ -1175,6 +1175,20 @@ class TestCheckedOutRefAmbiguity:
         assert _checked_out_ref_result(out)["attempted_value"] == "<unresolved>"
 
 
+def test_link_entry_parent_loop_fails_closed(linked_repo: dict[str, Path | str]) -> None:
+    linked = linked_repo["linked"]
+    assert isinstance(linked, Path)
+    loop = linked / "loop"
+    loop.symlink_to(loop)
+
+    out = _run_guard(
+        f"ln -s source {shlex.quote(str(loop / 'entry'))}", kitchen_open=True, tmpdir=linked
+    )
+
+    assert _is_denied(out)
+    assert _checked_out_ref_result(out)["attempted_value"] == "<unresolved>"
+
+
 class TestCheckedOutRefWriteTargets:
     @pytest.mark.parametrize(
         "command",

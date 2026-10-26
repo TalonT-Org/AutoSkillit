@@ -272,7 +272,12 @@ def _raw_target_mutations(
                 if not target_cwd:
                     return [("", "<unresolved>", True)]
                 target = Path(target_cwd) / target
-            resolved_targets.append(destination_location(target) if is_entry else target.resolve())
+            try:
+                resolved_targets.append(
+                    destination_location(target) if is_entry else target.resolve()
+                )
+            except (OSError, RuntimeError, ValueError):
+                return [("", "<unresolved>", True)]
     if context is None:
         return []
     common = Path(str(context["common_git_dir"])).resolve()

@@ -43,6 +43,11 @@ class _RecordingMaterializer:
         self.request = request
         return await self.delegate.bind(request)
 
+    def lookup_binding(
+        self, execution_generation: str, authority_path: str
+    ) -> tuple[Path, str] | None:
+        return self.delegate.lookup_binding(execution_generation, authority_path)
+
 
 async def test_headless_bind_writes_snapshot_and_tracks_response(
     tmp_path: Path, tool_ctx, monkeypatch: pytest.MonkeyPatch

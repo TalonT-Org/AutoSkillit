@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -27,6 +28,7 @@ from autoskillit.server.lifecycle._guards import _check_dry_walkthrough_plan
 from autoskillit.server.recipe._plan_set_preflight import DefaultPlanSetPreflightResolver
 from autoskillit.server.recipe._recipe_execution import install_recipe_execution
 from autoskillit.server.tools.tools_execution import run_skill
+from autoskillit.server.tools.tools_pipeline_tracker import complete_run_skill_result
 from tests.fakes import InMemoryHeadlessExecutor
 from tests.server._helpers import _ready_recipe_segment_step, _skill_ok
 from tests.server._pipeline_test_helpers import _write_tracker
@@ -243,6 +245,7 @@ async def test_resumed_execution_consumes_original_authority_without_rebinding(
     kitchen = ready.tool_ctx.kitchen_id
     materializer = ready.tool_ctx.plan_set_materializer
     assert isinstance(materializer, DefaultPlanSetMaterializer)
+    monkeypatch.setattr(materializer, "_github_client", _GitHub())
     bound, parts, _ = await _bind(
         tmp_path, kitchen=kitchen, generation=original_id, materializer=materializer
     )
@@ -377,6 +380,17 @@ async def test_clone_authority_admits_implement_and_retry_from_fresh_sibling_wor
         assert exclude_path.read_bytes() == exclude_before
         assert not worktree_temp.exists()
         assert part_a.is_file() and authority_path.is_file()
+        # Direct tool calls model delivery before the next orchestrator invocation.
+        completion = tool_ctx.run_skill_completion
+        assert completion is not None
+        receipt = completion.publish(response["receipt_id"])
+        acknowledgement = json.loads(
+            await complete_run_skill_result(
+                receipt.receipt_id,
+                ctx=SimpleNamespace(session_id=receipt.request_session_id),
+            )
+        )
+        assert acknowledgement["success"] is True, acknowledgement
 
     materializer = tool_ctx.plan_set_materializer
     assert materializer is not None

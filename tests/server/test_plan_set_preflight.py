@@ -362,7 +362,7 @@ async def test_audit_rejects_foreign_or_unsealed_authority(
             generation=generation,
         )
     expected = (
-        "recipe_execution_preflight_unavailable"
+        "input_preflight_plan_set_authority_invalid"
         if generation != "generation"
         else f"input_preflight_plan_set_{reason}"
     )

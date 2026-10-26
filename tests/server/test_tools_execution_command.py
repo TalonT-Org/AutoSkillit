@@ -459,6 +459,8 @@ class TestRunSkillExecutionMarker:
         from autoskillit.hooks.guards.fabricated_completion_guard import (
             _has_fresh_matching_marker,
         )
+        from autoskillit.pipeline.exploration_context import OwnerBoundExplorationContextStore
+        from autoskillit.server._exploration_service import DefaultExplorationService
         from tests.fakes import MockSubprocessRunner
 
         home = tmp_path / "home"
@@ -514,15 +516,25 @@ class TestRunSkillExecutionMarker:
         runner.push(_make_result(returncode=1))  # clone guard snapshot
         runner.push(_make_result(returncode=0, stdout=_SUCCESS_JSON))
 
-        payload = json.loads(
-            await run_skill("/investigate marker attestation", cwd=str(child_cwd))
-        )
-        _ack_direct_run_skill_result(tool_ctx_kitchen_open, payload)
+        with OwnerBoundExplorationContextStore(
+            trusted_root=caller_cwd, service=DefaultExplorationService()
+        ) as exploration_store:
+            monkeypatch.setattr(
+                tool_ctx_kitchen_open, "exploration_context_store", exploration_store
+            )
+            payload = json.loads(
+                await run_skill("/investigate marker attestation", cwd=str(child_cwd))
+            )
+            _ack_direct_run_skill_result(tool_ctx_kitchen_open, payload)
 
         claude_calls = [
             call for call in runner.call_args_list if Path(call[0][0]).name == "claude"
         ]
-        assert len(claude_calls) == 1, payload
+        if len(claude_calls) != 1:
+            pytest.fail(
+                "run_skill response before Claude launch:\n" + json.dumps(payload, indent=2),
+                pytrace=False,
+            )
         assert claude_calls[0][1] == child_cwd.resolve()
         assert "marker_dir" not in claude_calls[0][3]
         assert "session_id" not in claude_calls[0][3]

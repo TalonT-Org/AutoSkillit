@@ -54,7 +54,7 @@ from autoskillit.recipe import (
     compute_skill_contract_identity,
 )
 from autoskillit.server._misc import clear_run_skill_state
-from autoskillit.server.recipe._admission import RecipeExecutionAdmissionError
+from autoskillit.server._recipe_admission import RecipeExecutionAdmissionError
 from autoskillit.server.recipe._plan_set_preflight import (
     _resolve_plan_set_preflight,
 )

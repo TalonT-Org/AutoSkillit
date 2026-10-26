@@ -1,4 +1,4 @@
-"""Shared recipe execution admission failures."""
+"""Recipe execution admission failures shared by server recipe and tool code."""
 
 
 class RecipeExecutionAdmissionError(RuntimeError):

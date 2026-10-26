@@ -27,7 +27,7 @@ from autoskillit.pipeline import (
     record_initialization_page,
 )
 from autoskillit.server._factory import make_recipe_execution
-from autoskillit.server.recipe._admission import RecipeExecutionAdmissionError
+from autoskillit.server._recipe_admission import RecipeExecutionAdmissionError
 from autoskillit.server.recipe._recipe_execution import (
     build_recipe_execution_snapshot,
     install_recipe_execution,

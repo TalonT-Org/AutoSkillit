@@ -33,8 +33,8 @@ from autoskillit.pipeline import (
     record_initialization_page,
     start_recipe_initialization,
 )
+from autoskillit.server._recipe_admission import RecipeExecutionAdmissionError
 from autoskillit.server.lifecycle._state import _get_ctx_or_none
-from autoskillit.server.recipe._admission import RecipeExecutionAdmissionError
 from autoskillit.server.recipe._recipe_execution import (
     install_recipe_execution,
     prepare_recipe_execution,

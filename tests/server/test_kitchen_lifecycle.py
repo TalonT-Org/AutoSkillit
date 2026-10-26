@@ -355,7 +355,7 @@ async def test_same_campaign_reopen_issues_fresh_recipe_authority(
         write_initial_state,
     )
     from autoskillit.pipeline import ReadyRecipe
-    from autoskillit.server.recipe._admission import RecipeExecutionAdmissionError
+    from autoskillit.server._recipe_admission import RecipeExecutionAdmissionError
     from autoskillit.server.recipe._recipe_execution import (
         bind_attested_runtime_invocation,
     )

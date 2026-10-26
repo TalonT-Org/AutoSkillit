@@ -26,7 +26,7 @@ from autoskillit.core import (
 )
 from autoskillit.execution import CODEX_RECIPE_DELIVERY_BUDGET
 from autoskillit.pipeline import ReadyRecipe
-from autoskillit.server.recipe._admission import RecipeExecutionAdmissionError
+from autoskillit.server._recipe_admission import RecipeExecutionAdmissionError
 from autoskillit.server.recipe._recipe_delivery import (
     load_recipe_artifact,
     persist_recipe_artifact,

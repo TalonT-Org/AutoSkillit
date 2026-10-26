@@ -18,7 +18,7 @@ from autoskillit.core import (
     RecipeExecutionId,
 )
 from autoskillit.server._plan_set_materializer import DefaultPlanSetMaterializer
-from autoskillit.server.recipe._admission import RecipeExecutionAdmissionError
+from autoskillit.server._recipe_admission import RecipeExecutionAdmissionError
 from autoskillit.server.recipe._plan_set_preflight import DefaultPlanSetPreflightResolver
 from autoskillit.server.recipe._recipe_execution import (
     build_bound_child_prompt,

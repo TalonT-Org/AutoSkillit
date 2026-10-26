@@ -37,9 +37,9 @@ from autoskillit.server._audit_authority_materializer import (
     load_current_prior_authority,
     normalize_audited_plan_refs,
 )
+from autoskillit.server._recipe_admission import RecipeExecutionAdmissionError
 from autoskillit.server._tracker_authority import _restore_reserved_tracker_authority
 from autoskillit.server.lifecycle._guards import _check_dry_walkthrough_plan
-from autoskillit.server.recipe._admission import RecipeExecutionAdmissionError
 from autoskillit.server.recipe._recipe_execution import (
     bind_attested_runtime_invocation,
     build_bound_child_prompt,

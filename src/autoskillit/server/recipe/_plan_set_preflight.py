@@ -19,7 +19,7 @@ from autoskillit.core import (
     RecipeExecutionId,
     verify_plan_set_authority,
 )
-from autoskillit.server.recipe._admission import RecipeExecutionAdmissionError
+from autoskillit.server._recipe_admission import RecipeExecutionAdmissionError
 
 if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext

@@ -22,7 +22,7 @@ from autoskillit.core import (
 from autoskillit.core.io import load_yaml
 from autoskillit.recipe import load_and_validate
 from autoskillit.recipe.schema import RecipeKind
-from autoskillit.server.recipe._admission import RecipeExecutionAdmissionError
+from autoskillit.server._recipe_admission import RecipeExecutionAdmissionError
 from autoskillit.server.recipe._recipe_execution import (
     bind_attested_runtime_invocation,
     build_recipe_execution_snapshot,

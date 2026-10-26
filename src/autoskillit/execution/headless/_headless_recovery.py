@@ -19,6 +19,7 @@ from autoskillit.core import (
     SkillResult,
     TokenMeasure,
     TurnTokenEntry,
+    destination_location,
     get_logger,
     is_parent_assistant_record,
 )
@@ -99,13 +100,22 @@ def _tool_write_path_warnings(
         command = inputs.get("command", "")
         if isinstance(command, str):
             scan = scan_write_targets(command, cwd)
-            if scan.unresolved or not scan.parseable:
+            unresolved = scan.unresolved or not scan.parseable
+            paths = [(path, cwd) for path in scan.targets]
+            for path in scan.entry_targets:
+                try:
+                    location = str(destination_location(Path(path)))
+                    physical_cwd = str(Path(cwd).resolve()) if os.path.isabs(cwd) else cwd
+                    paths.append((location, physical_cwd))
+                except (OSError, RuntimeError, ValueError):
+                    unresolved = True
+            if unresolved:
                 warnings.append(
                     "Bash command contained a write target that could not be statically resolved. "
                     + UNRESOLVED_WRITE_TARGET_REMEDIATION
                 )
-            for path in (*scan.targets, *scan.entry_targets):
-                if _is_path_outside_cwd(path, cwd):
+            for path, comparison_cwd in paths:
+                if _is_path_outside_cwd(path, comparison_cwd):
                     normalized = os.path.normpath(path)
                     warnings.append(
                         f"Bash command contained write target '{normalized}'"

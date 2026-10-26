@@ -11,6 +11,29 @@ from tests.execution.conftest import _make_tool_use_line
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
+@pytest.mark.parametrize("symlinked_parent", [False, True])
+def test_entry_advisory_resolves_parent_but_not_final_symlink(tmp_path, symlinked_parent):
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    if symlinked_parent:
+        (cwd / "parent").symlink_to(outside, target_is_directory=True)
+        destination = cwd / "parent" / "entry"
+    else:
+        destination = cwd / "entry"
+        destination.symlink_to(outside / "target")
+    line = _make_tool_use_line("Bash", {"command": f"ln -sT source {destination}"})
+
+    warnings = _scan_jsonl_write_paths(line, str(cwd))
+
+    if symlinked_parent:
+        assert len(warnings) == 1
+        assert str(outside / "entry") in warnings[0]
+    else:
+        assert warnings == []
+
+
 class TestScanJsonlCustomToolNames:
     CWD = "/clone/worktree"
 

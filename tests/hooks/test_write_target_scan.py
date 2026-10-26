@@ -348,6 +348,27 @@ def test_install_target_directory_emits_child_content_destinations(
 
 
 @pytest.mark.parametrize(
+    ("command", "children"),
+    [
+        ("install -d {dest}/one {dest}/two", ("one", "two")),
+        ("install -T source {dest}/entry", ("entry",)),
+        ("install source {dest}", ("source",)),
+    ],
+    ids=("create-directories", "no-target-directory", "existing-directory"),
+)
+def test_install_destination_modes(
+    tmp_path: Path, command: str, children: tuple[str, ...]
+) -> None:
+    destination = tmp_path / "destination"
+    destination.mkdir()
+    result = scan_write_targets(command.format(dest=destination), _WORKSPACE)
+    assert result.targets == tuple(str(destination / child) for child in children)
+    assert result.entry_targets == ()
+    assert result.has_write
+    assert not result.unresolved
+
+
+@pytest.mark.parametrize(
     ("command", "targets", "entry_targets"),
     [
         (

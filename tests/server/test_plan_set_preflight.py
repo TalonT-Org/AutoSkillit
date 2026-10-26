@@ -275,7 +275,7 @@ async def _publication_authority(tmp_path: Path, *, sealed: bool = True):
 def _audit_preflight(
     tmp_path,
     path,
-    materializer=None,
+    materializer,
     *,
     kitchen="kitchen",
     generation="generation",
@@ -339,7 +339,13 @@ async def test_audit_scope_has_stage_outcomes_while_implementer_scope_has_only_c
 
 
 def test_audit_without_authority_preserves_existing_scope(tmp_path):
-    assert _audit_preflight(tmp_path, "").plan_set is None
+    assert _audit_preflight(tmp_path, "", None).plan_set is None
+
+
+def test_audit_with_authority_requires_materializer(tmp_path):
+    with pytest.raises(RecipeExecutionAdmissionError) as exc_info:
+        _audit_preflight(tmp_path, "authority.json", None)
+    assert exc_info.value.code == "recipe_execution_preflight_unavailable"
 
 
 @pytest.mark.parametrize(

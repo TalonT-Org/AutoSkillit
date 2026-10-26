@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import errno
+import io
 import json
 import os
 import subprocess
@@ -313,6 +314,28 @@ def test_entry_stat_errors_only_allow_absent_entries(
     assert guard._is_protected_entry_target(str(target)) is (
         error not in {errno.ENOENT, errno.ENOTDIR}
     )
+
+
+@pytest.mark.parametrize("failure_site", ["destination_location", "destination_within"])
+def test_entry_resolution_failure_has_unresolved_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys, failure_site: str
+) -> None:
+    from autoskillit.hooks.guards import installation_integrity_guard as guard
+
+    def fail_resolution(*args):
+        raise RuntimeError("injected resolution failure")
+
+    event = _bash(f"ln -s source {tmp_path / 'entry'}")
+    event["cwd"] = str(tmp_path)
+    monkeypatch.setattr(guard, "_known_roots", lambda: (tmp_path / "protected",))
+    monkeypatch.setattr(guard, failure_site, fail_resolution)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    with pytest.raises(SystemExit) as result:
+        guard.main()
+    assert result.value.code == 0
+    output = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+    assert output["permissionDecision"] == "deny"
+    assert "code=unresolved-write-target" in output["permissionDecisionReason"]
 
 
 def test_blocks_hardlink_alias_of_uv_tool_file(tmp_path: Path) -> None:

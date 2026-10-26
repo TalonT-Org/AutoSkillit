@@ -142,17 +142,11 @@ def _is_protected_target(path: str) -> bool:
 
 
 def _is_protected_entry_target(path: str) -> bool:
-    try:
-        location = destination_location(Path(path))
-    except (OSError, RuntimeError, ValueError):
-        return True
+    location = destination_location(Path(path))
     if _has_install_layout(str(location)):
         return True
     for root in _known_roots():
-        try:
-            if location == destination_location(root) or destination_within(path, root):
-                return True
-        except (OSError, RuntimeError, ValueError):
+        if location == destination_location(root) or destination_within(path, root):
             return True
     try:
         entry = os.lstat(path)
@@ -225,9 +219,15 @@ def main() -> None:
             "unresolved-write-target",
             "Write target could not be resolved safely. " + UNRESOLVED_WRITE_TARGET_REMEDIATION,
         )
-    if any(_is_protected_target(path) for path in targets) or any(
-        _is_protected_entry_target(path) for path in entry_targets
-    ):
+    try:
+        protected_entry = any(_is_protected_entry_target(path) for path in entry_targets)
+    except (OSError, RuntimeError, ValueError):
+        _deny(
+            "unresolved-write-target",
+            "Link entry destination could not be resolved safely. "
+            "Check its path components and symlinks.",
+        )
+    if any(_is_protected_target(path) for path in targets) or protected_entry:
         _deny(
             "protected-installation-target",
             f"Writing a {INSTALLATION_INTEGRITY_DENY_TRIGGER} is prohibited.",

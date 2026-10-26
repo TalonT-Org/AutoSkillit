@@ -54,8 +54,8 @@ from autoskillit.recipe import (
     compute_skill_contract_identity,
 )
 from autoskillit.server._misc import clear_run_skill_state
+from autoskillit.server.recipe._admission import RecipeExecutionAdmissionError
 from autoskillit.server.recipe._plan_set_preflight import (
-    RecipeExecutionAdmissionError,
     _resolve_plan_set_preflight,
 )
 
@@ -72,7 +72,6 @@ if TYPE_CHECKING:
 
 __all__ = [
     "DefaultInputPreflightResolver",
-    "RecipeExecutionAdmissionError",
     "bind_attested_runtime_invocation",
     "build_bound_child_prompt",
     "build_recipe_execution_snapshot",

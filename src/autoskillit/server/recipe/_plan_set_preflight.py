@@ -19,17 +19,10 @@ from autoskillit.core import (
     RecipeExecutionId,
     verify_plan_set_authority,
 )
+from autoskillit.server.recipe._admission import RecipeExecutionAdmissionError
 
 if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
-
-
-class RecipeExecutionAdmissionError(RuntimeError):
-    """Stable pre-launch attested-execution rejection."""
-
-    def __init__(self, code: str, message: str) -> None:
-        super().__init__(message)
-        self.code = code
 
 
 def _resolve_plan_set_preflight(

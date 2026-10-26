@@ -8,8 +8,8 @@ from types import SimpleNamespace
 import pytest
 
 from autoskillit.core import AdmissionStatus
+from autoskillit.server.recipe._admission import RecipeExecutionAdmissionError
 from autoskillit.server.recipe._recipe_execution import (
-    RecipeExecutionAdmissionError,
     resolve_attested_input_preflight,
 )
 

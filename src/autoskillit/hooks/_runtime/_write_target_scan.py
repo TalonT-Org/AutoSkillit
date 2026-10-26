@@ -71,13 +71,19 @@ def _destination_operands(
             "--suffix": value,
         }
         boolean_long = {
+            "--backup",
+            "--directory",
+            "--interactive",
+            "--logical",
+            "--physical",
+            "--relative",
             "--symbolic",
             "--force",
             "--no-dereference",
             "--no-target-directory",
             "--verbose",
         }
-        boolean_short = frozenset("sfnTv")
+        boolean_short = frozenset("sfnTvbdiFLPr")
     else:
         value_spec = {
             "-t": value,
@@ -127,8 +133,12 @@ def _destination_operands(
                     target_directory = (option_value, source)
                 index = next_index
                 continue
-            if token in boolean_long or (
-                not token.startswith("--") and all(char in boolean_short for char in token[1:])
+            if (
+                token in boolean_long
+                or (verb == "ln" and token.startswith("--backup="))
+                or (
+                    not token.startswith("--") and all(char in boolean_short for char in token[1:])
+                )
             ):
                 no_target_directory |= token in {"-T", "--no-target-directory"} or (
                     not token.startswith("--") and "T" in token[1:]

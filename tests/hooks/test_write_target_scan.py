@@ -238,6 +238,25 @@ def test_ln_literal_entry_destinations(command: str, entry_targets: tuple[str, .
     assert result.has_write is True
 
 
+@pytest.mark.parametrize(
+    "option",
+    [
+        "-b",
+        "-di",
+        "--backup",
+        "--backup=numbered",
+        "--interactive",
+        "--logical",
+        "--physical",
+        "--relative",
+    ],
+)
+def test_ln_options_preserve_entry_destination(option: str) -> None:
+    result = scan_write_targets(f"ln {option} source link", _WORKSPACE)
+    assert result.entry_targets == ("/workspace/link",)
+    assert not result.unresolved
+
+
 def test_ln_directory_and_final_symlink_semantics(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

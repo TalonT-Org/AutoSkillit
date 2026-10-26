@@ -95,6 +95,7 @@ class TestClaudeCodeLogPath:
                 "-workspace-repro--autoskillit-temp-sandbox",
             ),
             ("/workspace/repro/project.with.dot", "-workspace-repro-project-with-dot"),
+            ("/workspace/A b+C@dé", "-workspace-A-b-C-d-"),
         ],
     )
     def test_claude_code_project_dir_encoding(

@@ -126,10 +126,10 @@ def resolve_project_dir() -> Path:
 def claude_code_project_dir(cwd: str) -> Path:
     """Derive the Claude Code project log directory from a working directory path.
 
-    For the supported Claude Code baseline, replace slashes, underscores, and
-    dots with hyphens under ~/.claude/projects/.
+    Replace every character outside ASCII letters and digits with a hyphen
+    under ~/.claude/projects/.
     """
-    project_hash = cwd.replace("/", "-").replace("_", "-").replace(".", "-")
+    project_hash = "".join(char if char.isascii() and char.isalnum() else "-" for char in cwd)
     return Path.home() / ".claude" / "projects" / project_hash
 
 

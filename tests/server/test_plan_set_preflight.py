@@ -221,6 +221,26 @@ def test_accepted_plan_set_verification_without_evidence_fails_closed(tmp_path: 
     assert exc_info.value.code == "recipe_execution_preflight_unavailable"
 
 
+def test_accepted_plan_set_digest_must_match_issued_digest(tmp_path: Path) -> None:
+    with pytest.raises(RecipeExecutionAdmissionError) as exc_info:
+        _plan_preflight(
+            SimpleNamespace(
+                lookup_binding=lambda execution_id, authority_path: (tmp_path, "sha256:issued")
+            ),
+            SimpleNamespace(
+                resolve=lambda request, *, allowed_root: SimpleNamespace(
+                    accepted=True,
+                    evidence=SimpleNamespace(plan_set_authority_digest="sha256:different"),
+                )
+            ),
+            bound_inputs=(
+                ("plan_path", "plan.md"),
+                ("plan_set_authority_path", "authority.json"),
+            ),
+        )
+    assert exc_info.value.code == "input_preflight_plan_set_authority_digest"
+
+
 async def _publication_authority(tmp_path: Path, *, sealed: bool = True):
     from tests.server._plan_set_test_helpers import PlanSetGitHub
 

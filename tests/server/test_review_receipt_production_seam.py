@@ -140,7 +140,7 @@ async def test_real_gateway_recovers_pending_relocated_left_multiline_review(
         left_side_lines={path: range(original_start_line, original_line + 1)},
     )
     authority_path = tmp_path / ".autoskillit" / "temp" / "anchor_authority_42.json"
-    authority_path.parent.mkdir(parents=True)
+    authority_path.parent.mkdir(parents=True, exist_ok=True)
     authority_path.write_text(
         json.dumps(authority.to_wire(), sort_keys=True, separators=(",", ":")),
         encoding="utf-8",

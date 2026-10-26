@@ -328,15 +328,21 @@ class TestCacheGate:
             f"probe-{backend}-${{{{ steps.resolve-version.outputs.cli_version }}}}-"
             "${{ steps.resolve-policy.outputs.policy_identity }}-${{ runner.os }}-"
         )
-        key = restore["with"]["key"]
+        key_index, key_step = next(
+            (index, step)
+            for index, step in enumerate(steps)
+            if step.get("id") == "resolve-cache-key"
+        )
+        key = key_step["env"]["PROBE_CACHE_KEY"]
         cache_inputs = _probe_cache_inputs(key)
         expected_cache_inputs = {
             "path": f".autoskillit/temp/probe-cache/{backend}",
-            "key": key,
+            "key": "${{ steps.resolve-cache-key.outputs.key }}",
         }
 
-        assert checkout_index < restore_index
+        assert checkout_index < key_index < restore_index
         assert key.startswith(key_prefix)
+        assert key_step["run"] == 'echo "key=$PROBE_CACHE_KEY" >> "$GITHUB_OUTPUT"'
         assert restore["with"] == expected_cache_inputs
         assert save["with"] == expected_cache_inputs
         targets = re.findall(r"\btests/[\w/.-]+\.py\b", probe["run"])
@@ -359,12 +365,12 @@ class TestCacheGate:
     def test_cache_hash_inputs_match_tracked_repository_files(
         self, workflow: dict, job_name: str
     ) -> None:
-        restore = next(
+        key_step = next(
             step
             for step in workflow["jobs"][job_name]["steps"]
-            if "cache/restore" in (step.get("uses") or "")
+            if step.get("id") == "resolve-cache-key"
         )
-        for pathspec in _probe_cache_inputs(restore["with"]["key"]):
+        for pathspec in _probe_cache_inputs(key_step["env"]["PROBE_CACHE_KEY"]):
             assert git_ls_files(_REPO_ROOT, pathspec), pathspec
 
 

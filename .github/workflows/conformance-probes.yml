@@ -138,12 +138,18 @@ jobs:
           POLICY_IDENTITY=$(.venv/bin/python -c 'from autoskillit.execution.backends._probe_cache import PROBE_POLICY_IDENTITY; print(PROBE_POLICY_IDENTITY)')
           echo "policy_identity=${POLICY_IDENTITY}" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve probe cache key
+        id: resolve-cache-key
+        env:
+          PROBE_CACHE_KEY: probe-codex-${{ steps.resolve-version.outputs.cli_version }}-${{ steps.resolve-policy.outputs.policy_identity }}-${{ runner.os }}-${{ hashFiles('src/autoskillit/**', 'tests/**', '.autoskillit/recipes/**', 'pyproject.toml', 'uv.lock', '.github/workflows/conformance-probes.yml') }}
+        run: echo "key=$PROBE_CACHE_KEY" >> "$GITHUB_OUTPUT"
+
       - name: Restore probe cache
         id: restore-cache
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .autoskillit/temp/probe-cache/codex
-          key: probe-codex-${{ steps.resolve-version.outputs.cli_version }}-${{ steps.resolve-policy.outputs.policy_identity }}-${{ runner.os }}-${{ hashFiles('src/autoskillit/**', 'tests/**', '.autoskillit/recipes/**', 'pyproject.toml', 'uv.lock', '.github/workflows/conformance-probes.yml') }}
+          key: ${{ steps.resolve-cache-key.outputs.key }}
 
       - name: Run Codex conformance probes
         if: steps.restore-cache.outputs.cache-hit != 'true'
@@ -172,7 +178,7 @@ jobs:
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .autoskillit/temp/probe-cache/codex
-          key: probe-codex-${{ steps.resolve-version.outputs.cli_version }}-${{ steps.resolve-policy.outputs.policy_identity }}-${{ runner.os }}-${{ hashFiles('src/autoskillit/**', 'tests/**', '.autoskillit/recipes/**', 'pyproject.toml', 'uv.lock', '.github/workflows/conformance-probes.yml') }}
+          key: ${{ steps.resolve-cache-key.outputs.key }}
 
       - name: Post probe failure
         if: failure()
@@ -269,12 +275,18 @@ jobs:
           POLICY_IDENTITY=$(.venv/bin/python -c 'from autoskillit.execution.backends._probe_cache import PROBE_POLICY_IDENTITY; print(PROBE_POLICY_IDENTITY)')
           echo "policy_identity=${POLICY_IDENTITY}" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve probe cache key
+        id: resolve-cache-key
+        env:
+          PROBE_CACHE_KEY: probe-claude-${{ steps.resolve-version.outputs.cli_version }}-${{ steps.resolve-policy.outputs.policy_identity }}-${{ runner.os }}-${{ hashFiles('src/autoskillit/**', 'tests/**', '.autoskillit/recipes/**', 'pyproject.toml', 'uv.lock', '.github/workflows/conformance-probes.yml') }}
+        run: echo "key=$PROBE_CACHE_KEY" >> "$GITHUB_OUTPUT"
+
       - name: Restore probe cache
         id: restore-cache
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .autoskillit/temp/probe-cache/claude
-          key: probe-claude-${{ steps.resolve-version.outputs.cli_version }}-${{ steps.resolve-policy.outputs.policy_identity }}-${{ runner.os }}-${{ hashFiles('src/autoskillit/**', 'tests/**', '.autoskillit/recipes/**', 'pyproject.toml', 'uv.lock', '.github/workflows/conformance-probes.yml') }}
+          key: ${{ steps.resolve-cache-key.outputs.key }}
 
       - name: Run Claude Code conformance probes
         if: steps.restore-cache.outputs.cache-hit != 'true'
@@ -300,7 +312,7 @@ jobs:
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .autoskillit/temp/probe-cache/claude
-          key: probe-claude-${{ steps.resolve-version.outputs.cli_version }}-${{ steps.resolve-policy.outputs.policy_identity }}-${{ runner.os }}-${{ hashFiles('src/autoskillit/**', 'tests/**', '.autoskillit/recipes/**', 'pyproject.toml', 'uv.lock', '.github/workflows/conformance-probes.yml') }}
+          key: ${{ steps.resolve-cache-key.outputs.key }}
 
       - name: Upload bounded startup-readiness traces
         if: always()

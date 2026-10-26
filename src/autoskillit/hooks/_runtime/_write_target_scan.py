@@ -562,7 +562,7 @@ def _scan_executable(
     argv_tokens: Sequence[ArgvToken] | None,
     state: _ShellDirectoryState,
     path: tuple[int, ...] | None,
-) -> tuple[list[str], list[str], bool, bool, _ShellDirectoryState | None]:
+) -> tuple[WriteTargetScan, _ShellDirectoryState | None]:
     _classification = _classification_module()
 
     start = _classification._verb_start_index(executable)
@@ -571,12 +571,12 @@ def _scan_executable(
     if setting is not None:
         state.cdpath_unknown = setting[0]
     if start is None:
-        return [], [], False, False, None
+        return WriteTargetScan((), False, True, False), None
     handled = _apply_shell_builtin(executable, start, argv_tokens, state)
     if setting is not None and setting[1]:
         state.cdpath_unknown = previous_cdpath
     if handled or _classification.is_gh_command(executable):
-        return [], [], False, False, None
+        return WriteTargetScan((), False, True, False), None
     argv = executable[start:]
     verb = argv[0]
     verb_cwd = _classification._wrapped_verb_cwd(executable, start, state.cwd, argv_tokens)
@@ -585,24 +585,24 @@ def _scan_executable(
     verb_name = os.path.basename(verb)
     if verb_name == "npm":
         targets, unresolved, has_write = _npm_install_targets(argv, verb_cwd, verb_tokens)
-        return targets, [], unresolved, has_write, invoked
+        return WriteTargetScan(tuple(targets), unresolved, True, has_write), invoked
     if verb_name == "ln":
         targets, unresolved = _ln_entry_targets(argv, verb_cwd, verb_tokens)
-        return [], targets, unresolved, True, invoked
+        return WriteTargetScan((), unresolved, True, True, entry_targets=tuple(targets)), invoked
     if verb_name == "install":
         targets, unresolved = _install_targets(argv, verb_cwd, verb_tokens)
-        return targets, [], unresolved, True, invoked
+        return WriteTargetScan(tuple(targets), unresolved, True, True), invoked
     if verb in WRITE_VERBS:
         targets, unresolved = _classification.extract_write_verb_targets(
             verb, argv, verb_cwd, argv_tokens=verb_tokens
         )
-        return targets, [], unresolved, True, invoked
+        return WriteTargetScan(tuple(targets), unresolved, True, True), invoked
     if verb == "git" or verb.endswith("/git"):
         targets, unresolved, has_write = _classification._git_write_targets(
             argv, verb_cwd, executable[:start], verb_tokens
         )
-        return targets, [], unresolved, has_write, invoked
-    return [], [], False, False, invoked
+        return WriteTargetScan(tuple(targets), unresolved, True, has_write), invoked
+    return WriteTargetScan((), False, True, False), invoked
 
 
 def scan_write_targets(command: str, cwd: str) -> WriteTargetScan:
@@ -644,14 +644,14 @@ def scan_write_targets(command: str, cwd: str) -> WriteTargetScan:
             if record.argv_tokens is None
             else [record.argv_tokens[index] for index in partition.segments]
         )
-        verb_targets, verb_entries, verb_unresolved, verb_has_write, invoked = _scan_executable(
+        verb_scan, invoked = _scan_executable(
             executable, executable_tokens, state, record.subshell_path
         )
-        targets.extend(verb_targets)
-        entry_targets.extend(verb_entries)
+        targets.extend(verb_scan.targets)
+        entry_targets.extend(verb_scan.entry_targets)
         targets.extend(partition.targets)
-        unresolved |= verb_unresolved
-        has_write |= verb_has_write
+        unresolved |= verb_scan.unresolved
+        has_write |= verb_scan.has_write
         if record.subshell_path is not None:
             pending_children[record.subshell_path] = (pre_command_state, invoked)
     return WriteTargetScan(

@@ -57,7 +57,7 @@ def _classification_module() -> ModuleType:
 
 @dataclass(frozen=True, slots=True)
 class _DestinationOperands:
-    operands: list[int]
+    operands: tuple[int, ...]
     target_directory: tuple[str, str | None] | None
     no_target_directory: bool
     no_dereference: bool
@@ -176,7 +176,7 @@ def _destination_operands(
         index += 1
     invalid |= target_directory is not None and no_target_directory
     return _DestinationOperands(
-        operands=operands,
+        operands=tuple(operands),
         target_directory=target_directory,
         no_target_directory=no_target_directory,
         no_dereference=no_dereference,
@@ -214,7 +214,7 @@ def _source_basename(
 
 def _directory_children(
     directory: str,
-    source_indices: list[int],
+    source_indices: Sequence[int],
     argv: list[str],
     cwd: str,
     argv_tokens: Sequence[ArgvToken] | None,
@@ -232,7 +232,7 @@ def _directory_children(
 
 def _target_directory_children(
     target_directory: tuple[str, str | None],
-    source_indices: list[int],
+    source_indices: Sequence[int],
     argv: list[str],
     cwd: str,
     argv_tokens: Sequence[ArgvToken] | None,

@@ -99,6 +99,10 @@ async def test_skill_headless_without_auto_gate_only_headless(monkeypatch):
     tools = list(await mcp.list_tools())
     tool_names = {t.name for t in tools}
     assert "test_check" in tool_names, "test_check should be visible for skill+headless"
+    assert HEADLESS_TOOLS <= tool_names, (
+        f"Headless tools should be visible for skill+headless; missing "
+        f"{sorted(HEADLESS_TOOLS - tool_names)}"
+    )
     for name in GATED_TOOLS - HEADLESS_TOOLS:
         assert name not in tool_names, f"{name} (kitchen) should be hidden for skill+headless"
 

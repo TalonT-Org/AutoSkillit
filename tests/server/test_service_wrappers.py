@@ -17,6 +17,7 @@ import autoskillit
 import autoskillit.recipe as recipe
 import autoskillit.recipe.io as recipe_io
 import autoskillit.recipe.repository as recipe_repository
+from tests._helpers import MINIMAL_VALID_RECIPE_YAML
 from tests.recipe._testing import count_discovery_calls, isolate_recipe_discovery_cache
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -285,13 +286,8 @@ class TestDefaultMigrationService:
         (fake_mig_dir / "0.0.0-migration.yaml").write_text(migration_yaml)
         monkeypatch.setattr(ml, "_migrations_dir", lambda: fake_mig_dir)
 
-        # Create temp output file so RecipeMigrationAdapter finds migrated content
         temp_mig_dir = tmp_path / ".autoskillit" / "temp" / "migrations"
-        temp_mig_dir.mkdir(parents=True)
-        migrated_content = (
-            f"name: test-recipe\nsteps: []\nautoskillit_version: '{installed_ver}'\n"
-        )
-        (temp_mig_dir / "test-recipe.yaml").write_text(migrated_content)
+        migrated_content = f"autoskillit_version: '{installed_ver}'\n" + MINIMAL_VALID_RECIPE_YAML
 
         success_result = SkillResult(
             success=True,
@@ -304,8 +300,14 @@ class TestDefaultMigrationService:
             retry_reason=RetryReason.NONE,
             stderr="",
         )
+
+        async def write_output(**_kwargs: object):
+            temp_mig_dir.mkdir(parents=True, exist_ok=True)
+            (temp_mig_dir / "test-recipe.yaml").write_text(migrated_content)
+            return success_result
+
         service = DefaultMigrationService(
-            default_migration_engine(), run_headless=AsyncMock(return_value=success_result)
+            default_migration_engine(), run_headless=AsyncMock(side_effect=write_output)
         )
 
         monkeypatch.setattr(recipe, "load_recipe_card", lambda *a, **kw: None)

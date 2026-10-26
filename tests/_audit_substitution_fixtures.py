@@ -1,4 +1,4 @@
-"""Committed fixtures for audit substitution probes and server-floor tests.
+"""Committed fixtures for audit substitution server-floor tests.
 
 The historical incident (REQ-004/REQ-006/REQ-007) was preserved here as a
 single source of truth so the regression suite never silently skips when a
@@ -8,7 +8,14 @@ unavailable.
 
 from __future__ import annotations
 
-from autoskillit.core import ProbedRequirement
+from typing import NamedTuple
+
+
+class IncidentRequirement(NamedTuple):
+    requirement_id: str
+    requirement_text: str
+    evidence_summary: str
+
 
 INCIDENT_REQUIREMENT: str = (
     "For a CPU-active child that never stops, child_deferral_ceiling=1.0, "
@@ -23,19 +30,8 @@ LITERAL_EVIDENCE: str = (
     "psutil that the real child process remains active until termination."
 )
 
-INCIDENT_DIFF: str = '''\
-"""Child-process liveness is simulated via a mock on
-``_has_active_child_processes`` rather than relying on real psutil CPU-percent
-sampling."""
-+    monkeypatch.setattr(
-+        _patch_process__termination,
-+        "_has_active_child_processes",
-+        lambda pid: True,
-+    )
-'''
-
-INCIDENT_REQUIREMENTS: tuple[ProbedRequirement, ...] = (
-    ProbedRequirement(
+INCIDENT_REQUIREMENTS: tuple[IncidentRequirement, ...] = (
+    IncidentRequirement(
         requirement_id="REQ-004",
         requirement_text=(
             "child_deferral_ceiling must be honored exactly for any CPU-active "
@@ -46,7 +42,7 @@ INCIDENT_REQUIREMENTS: tuple[ProbedRequirement, ...] = (
             "return True instead of observing real psutil CPU sampling."
         ),
     ),
-    ProbedRequirement(
+    IncidentRequirement(
         requirement_id="REQ-006",
         requirement_text=(
             "For a CPU-active child that never stops, child_deferral_ceiling=1.0, "
@@ -54,7 +50,7 @@ INCIDENT_REQUIREMENTS: tuple[ProbedRequirement, ...] = (
         ),
         evidence_summary=INCIDENT_EVIDENCE,
     ),
-    ProbedRequirement(
+    IncidentRequirement(
         requirement_id="REQ-007",
         requirement_text=(
             "Real subprocess.Popen and psutil must drive the child-process "

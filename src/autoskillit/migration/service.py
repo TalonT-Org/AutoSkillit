@@ -125,11 +125,11 @@ async def _get_diagram_advisory(
     return None
 
 
-def default_migration_engine() -> MigrationEngine:
+def default_migration_engine(*, temp_dir_override: str | None = None) -> MigrationEngine:
     """Create a MigrationEngine with all bundled adapters registered."""
     return MigrationEngine(
         [
-            RecipeMigrationAdapter(),
+            RecipeMigrationAdapter(temp_dir_override=temp_dir_override),
             ContractMigrationAdapter(),
             DiagramMigrationAdapter(),
             SkillMigrationAdapter(),

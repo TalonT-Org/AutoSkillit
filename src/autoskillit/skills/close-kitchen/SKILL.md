@@ -4,6 +4,7 @@ write_paths: inherit
 uses_capabilities: [open_kitchen]
 description: Close the AutoSkillit kitchen — hides kitchen MCP tools for this session.
 disable-model-invocation: true
+interactive_only: true
 ---
 
 # Close Kitchen

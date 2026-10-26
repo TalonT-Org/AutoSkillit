@@ -459,7 +459,7 @@ def test_no_unintended_new_test_files_under_tests_core() -> None:
             "test_audit_cycle_attacks.py",
             "test_audit_cycle_authority.py",
             "test_audit_semantic_codec.py",
-            "test_audit_substitution_probe.py",
+            "test_audit_rationale_contradiction.py",
             "test_backend_capabilities.py",
             "test_backend_dataclasses.py",
             "test_backend_event_kind.py",

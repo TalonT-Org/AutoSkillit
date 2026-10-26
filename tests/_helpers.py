@@ -28,6 +28,22 @@ from autoskillit.core import (
     strip_markdown_code_regions as strip_markdown_code_regions,
 )
 
+MINIMAL_VALID_RECIPE_YAML = """\
+name: minimal-recipe
+description: minimal test recipe
+kitchen_rules:
+  - Use the included stop step sentinel protocol.
+ingredients:
+  task:
+    description: A task ingredient
+    required: true
+    default: my-default-task-value
+steps:
+  done:
+    action: stop
+    message: Task completed successfully with full sentinel L3 block emitted for completion.
+"""
+
 _RUN_SKILL_WINDOW = 400
 _PROSE_TRIGGER_WINDOW = 60
 _PROSE_TRIGGER_WORDS = ("parameter", "pass", "forward")

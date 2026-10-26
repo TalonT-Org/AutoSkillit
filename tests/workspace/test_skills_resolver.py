@@ -465,6 +465,27 @@ def test_resolve_instance_cache_caches_none(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 class TestSkillExecutionRoleParsing:
+    @pytest.mark.parametrize(
+        ("declaration", "expected"),
+        [
+            ("interactive_only: true\n", True),
+            ("", False),
+            ('interactive_only: "yes"\n', False),
+        ],
+    )
+    def test_interactive_only_requires_literal_true(
+        self,
+        tmp_path: Path,
+        declaration: str,
+        expected: bool,
+    ) -> None:
+        from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+        skill_md = tmp_path / "SKILL.md"
+        skill_md.write_text(f"---\nname: test\nwrite_paths: inherit\n{declaration}---\n# body")
+        info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
+        assert info.interactive_only is expected
+
     def test_valid_omission_defaults_to_session(self, tmp_path: Path) -> None:
         from autoskillit.workspace.skills import _skill_info_from_frontmatter
 

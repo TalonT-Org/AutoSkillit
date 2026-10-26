@@ -61,7 +61,9 @@ class TestCorridorCompositionExplorerAdvertisement:
         source_infos = tuple(
             s
             for s in resolver.list_all()
-            if s.source is SkillSource.BUNDLED and not s.exploration_vectors
+            if s.source is SkillSource.BUNDLED
+            and not s.exploration_vectors
+            and not s.interactive_only
         )[:1]
         if not source_infos:
             pytest.skip("need at least one bundled skill without exploration vectors")
@@ -105,7 +107,9 @@ class TestCorridorCompositionExplorerAdvertisement:
         source_infos = tuple(
             s
             for s in resolver.list_all()
-            if s.source is SkillSource.BUNDLED and not s.exploration_vectors
+            if s.source is SkillSource.BUNDLED
+            and not s.exploration_vectors
+            and not s.interactive_only
         )[:1]
         if not source_infos:
             pytest.skip("need at least one bundled skill without exploration vectors")

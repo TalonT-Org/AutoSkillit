@@ -23,12 +23,27 @@ async def _inspect(**kwargs: Any) -> dict[str, Any]:
 
 
 @pytest.mark.asyncio
-async def test_inspection_requires_an_open_kitchen(tool_ctx) -> None:
-    result = json.loads(await session_logs.inspect_session_logs(operation="index"))
+async def test_inspection_does_not_require_an_open_kitchen(tool_ctx, retained_logs) -> None:
+    result = await _inspect(operation="index", session_ids=["session-one"])
 
-    assert result["success"] is False
-    assert result["subtype"] == "gate_error"
-    assert "open_kitchen" in result["result"]
+    assert tool_ctx.gate.enabled is False
+    assert result["status"] == "answered"
+    assert result["sessions"] == [
+        {
+            "session_id": "session-one",
+            "dir_name": "session-one",
+            "backend": "claude-code",
+            "kitchen_id": "kitchen-one",
+            "step_name": "implement",
+            "handles": ["summary", "anomalies", "audit", "turn_usage", "transcript"],
+            "retry": {
+                "success": False,
+                "subtype": "missing_completion_marker",
+                "needs_retry": True,
+                "retry_reason": "early_stop",
+            },
+        }
+    ]
 
 
 @pytest.fixture
@@ -73,7 +88,6 @@ def retained_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, 
         backend=None,
     )
     monkeypatch.setattr(session_logs, "_get_ctx", lambda: ctx)
-    monkeypatch.setattr(session_logs, "_require_enabled", lambda: None)
     monkeypatch.setattr(session_logs, "claude_code_log_path", lambda cwd, session_id: transcript)
     monkeypatch.setattr(session_logs, "_CONTINUATION_KEY", b"k" * 32)
     monkeypatch.setattr(session_logs, "_CONTINUATION_CLOCK", lambda: 1_000.0)

@@ -173,7 +173,6 @@ async def test_exact_readback_scopes_review_before_marker_accounting(
     request = _request(tmp_path)
     first = await poster.post(request)
     remote = gateway.comments_by_review[700][0]
-    remote["pull_request_review_id"] = 700
     # Synthetic associations isolate scoping from otherwise identical anchors.
     gateway.comments_by_review[700].extend(
         [

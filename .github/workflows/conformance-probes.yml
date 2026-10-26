@@ -143,7 +143,7 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .autoskillit/temp/probe-cache/codex
-          key: probe-codex-${{ steps.resolve-version.outputs.cli_version }}-${{ steps.resolve-policy.outputs.policy_identity }}-${{ runner.os }}-${{ hashFiles('src/autoskillit/**/*.py', 'tests/execution/backends/test_cli_conformance_probes.py', 'tests/execution/test_smoke_codex.py', 'tests/execution/backends/test_codex_recipe_delivery_conformance.py', 'tests/server/test_output_budget_e2e.py', '.github/workflows/conformance-probes.yml') }}
+          key: probe-codex-${{ steps.resolve-version.outputs.cli_version }}-${{ steps.resolve-policy.outputs.policy_identity }}-${{ runner.os }}-${{ hashFiles('src/autoskillit/**', 'tests/**', '.autoskillit/recipes/**', 'pyproject.toml', 'uv.lock', '.github/workflows/conformance-probes.yml') }}
 
       - name: Run Codex conformance probes
         if: steps.restore-cache.outputs.cache-hit != 'true'
@@ -172,7 +172,7 @@ jobs:
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .autoskillit/temp/probe-cache/codex
-          key: probe-codex-${{ steps.resolve-version.outputs.cli_version }}-${{ steps.resolve-policy.outputs.policy_identity }}-${{ runner.os }}-${{ hashFiles('src/autoskillit/**/*.py', 'tests/execution/backends/test_cli_conformance_probes.py', 'tests/execution/test_smoke_codex.py', 'tests/execution/backends/test_codex_recipe_delivery_conformance.py', 'tests/server/test_output_budget_e2e.py', '.github/workflows/conformance-probes.yml') }}
+          key: probe-codex-${{ steps.resolve-version.outputs.cli_version }}-${{ steps.resolve-policy.outputs.policy_identity }}-${{ runner.os }}-${{ hashFiles('src/autoskillit/**', 'tests/**', '.autoskillit/recipes/**', 'pyproject.toml', 'uv.lock', '.github/workflows/conformance-probes.yml') }}
 
       - name: Post probe failure
         if: failure()
@@ -274,7 +274,7 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .autoskillit/temp/probe-cache/claude
-          key: probe-claude-${{ steps.resolve-version.outputs.cli_version }}-${{ steps.resolve-policy.outputs.policy_identity }}-${{ runner.os }}-${{ hashFiles('src/autoskillit/**/*.py', 'tests/execution/backends/test_cli_conformance_probes.py', 'tests/execution/test_smoke_codex.py', 'tests/execution/backends/test_codex_recipe_delivery_conformance.py', 'tests/server/test_output_budget_e2e.py', '.github/workflows/conformance-probes.yml') }}
+          key: probe-claude-${{ steps.resolve-version.outputs.cli_version }}-${{ steps.resolve-policy.outputs.policy_identity }}-${{ runner.os }}-${{ hashFiles('src/autoskillit/**', 'tests/**', '.autoskillit/recipes/**', 'pyproject.toml', 'uv.lock', '.github/workflows/conformance-probes.yml') }}
 
       - name: Run Claude Code conformance probes
         if: steps.restore-cache.outputs.cache-hit != 'true'
@@ -300,7 +300,7 @@ jobs:
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .autoskillit/temp/probe-cache/claude
-          key: probe-claude-${{ steps.resolve-version.outputs.cli_version }}-${{ steps.resolve-policy.outputs.policy_identity }}-${{ runner.os }}-${{ hashFiles('src/autoskillit/**/*.py', 'tests/execution/backends/test_cli_conformance_probes.py', 'tests/execution/test_smoke_codex.py', 'tests/execution/backends/test_codex_recipe_delivery_conformance.py', 'tests/server/test_output_budget_e2e.py', '.github/workflows/conformance-probes.yml') }}
+          key: probe-claude-${{ steps.resolve-version.outputs.cli_version }}-${{ steps.resolve-policy.outputs.policy_identity }}-${{ runner.os }}-${{ hashFiles('src/autoskillit/**', 'tests/**', '.autoskillit/recipes/**', 'pyproject.toml', 'uv.lock', '.github/workflows/conformance-probes.yml') }}
 
       - name: Upload bounded startup-readiness traces
         if: always()

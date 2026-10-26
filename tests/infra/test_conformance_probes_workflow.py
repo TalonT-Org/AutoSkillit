@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from fnmatch import fnmatchcase
 from pathlib import Path
 
 import pytest
@@ -16,17 +17,14 @@ _WORKFLOW_PATH = (
     Path(__file__).resolve().parents[2] / ".github" / "workflows" / "conformance-probes.yml"
 )
 _REPO_ROOT = _WORKFLOW_PATH.parents[2]
-_PROBE_CACHE_INPUTS = (
-    "src/autoskillit/**/*.py",
-    "tests/execution/backends/test_cli_conformance_probes.py",
-    "tests/execution/test_smoke_codex.py",
-    "tests/execution/backends/test_codex_recipe_delivery_conformance.py",
-    "tests/server/test_output_budget_e2e.py",
-    ".github/workflows/conformance-probes.yml",
-)
-_PROBE_CACHE_HASH = (
-    "${{ hashFiles(" + ", ".join(f"'{path}'" for path in _PROBE_CACHE_INPUTS) + ") }}"
-)
+
+
+def _probe_cache_inputs(expression: str) -> tuple[str, ...]:
+    match = re.search(r"hashFiles\(([^)]+)\)", expression)
+    assert match is not None
+    inputs = tuple(re.findall(r"'([^']+)'", match.group(1)))
+    assert inputs
+    return inputs
 
 
 def _on(workflow: dict) -> dict:
@@ -326,25 +324,48 @@ class TestCacheGate:
         save = save_steps[0]
         probe = next(step for step in steps if step.get("name") == probe_step_name)
 
-        expected_key = (
+        key_prefix = (
             f"probe-{backend}-${{{{ steps.resolve-version.outputs.cli_version }}}}-"
             "${{ steps.resolve-policy.outputs.policy_identity }}-${{ runner.os }}-"
-            f"{_PROBE_CACHE_HASH}"
         )
+        key = restore["with"]["key"]
+        cache_inputs = _probe_cache_inputs(key)
         expected_cache_inputs = {
             "path": f".autoskillit/temp/probe-cache/{backend}",
-            "key": expected_key,
+            "key": key,
         }
 
         assert checkout_index < restore_index
+        assert key.startswith(key_prefix)
         assert restore["with"] == expected_cache_inputs
         assert save["with"] == expected_cache_inputs
+        targets = re.findall(r"\btests/[\w/.-]+\.py\b", probe["run"])
+        assert targets
+        assert all(
+            any(fnmatchcase(target, pattern) for pattern in cache_inputs) for target in targets
+        )
+        assert {
+            "src/autoskillit/**",
+            "tests/**",
+            ".autoskillit/recipes/**",
+            "pyproject.toml",
+            "uv.lock",
+            ".github/workflows/conformance-probes.yml",
+        } <= set(cache_inputs)
         assert probe["if"] == "steps.restore-cache.outputs.cache-hit != 'true'"
         assert save["if"] == "success() && steps.restore-cache.outputs.cache-hit != 'true'"
 
-    @pytest.mark.parametrize("pathspec", _PROBE_CACHE_INPUTS)
-    def test_cache_hash_input_matches_tracked_repository_file(self, pathspec: str) -> None:
-        assert git_ls_files(_REPO_ROOT, pathspec)
+    @pytest.mark.parametrize("job_name", ["codex-probe", "claude-probe"])
+    def test_cache_hash_inputs_match_tracked_repository_files(
+        self, workflow: dict, job_name: str
+    ) -> None:
+        restore = next(
+            step
+            for step in workflow["jobs"][job_name]["steps"]
+            if "cache/restore" in (step.get("uses") or "")
+        )
+        for pathspec in _probe_cache_inputs(restore["with"]["key"]):
+            assert git_ls_files(_REPO_ROOT, pathspec), pathspec
 
 
 class TestOutputBudgetE2E:

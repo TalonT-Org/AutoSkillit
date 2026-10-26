@@ -30,6 +30,8 @@ def test_claude_project_log_dir_prints_one_exact_path_without_mcp_activation(
     monkeypatch.setattr(Path, "home", lambda: home)
     from autoskillit.cli.app import app
 
-    app(["claude-project-log-dir", cwd])
+    with pytest.raises(SystemExit) as exc_info:
+        app(["claude-project-log-dir", cwd])
+    assert exc_info.value.code == 0
 
     assert capsys.readouterr().out == f"{home / '.claude' / 'projects' / encoded}\n"

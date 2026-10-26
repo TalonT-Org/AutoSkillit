@@ -9,6 +9,22 @@ import pytest
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
 
+@pytest.mark.parametrize(
+    ("heading", "expected"),
+    [("## Step 1", frozenset({"claude_dir"})), ("## Examples", frozenset())],
+)
+def test_project_log_cli_requires_claude_dir_only_in_executable_instructions(
+    heading: str, expected: frozenset[str]
+) -> None:
+    from autoskillit.workspace.skill_capabilities import detect_skill_capabilities
+
+    body = (
+        f"{heading}\n```bash\n"
+        'LOG_DIR=$(autoskillit claude-project-log-dir "$actual_absolute_cwd")\n```\n'
+    )
+    assert detect_skill_capabilities(body, "log-mining") == expected
+
+
 def _parsed_body(path: Path) -> str:
     from autoskillit.workspace import read_skill_frontmatter
 

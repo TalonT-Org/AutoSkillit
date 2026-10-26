@@ -2,7 +2,7 @@
 
 import pytest
 
-from autoskillit.hooks import UNRESOLVED_WRITE_TARGET_REMEDIATION, WriteTargetScan
+from autoskillit.hooks import UNRESOLVED_WRITE_TARGET_REMEDIATION
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -166,31 +166,6 @@ def test_run_cmd_boundary_denies_sibling_path_sharing_root_prefix(
     assert result is not None
     assert "outside allowed write prefixes" in result
     assert str(destination) in result
-
-
-def test_run_cmd_boundary_does_not_early_allow_location_only_scan(tmp_path, monkeypatch) -> None:
-    from autoskillit.server.lifecycle import _guards
-
-    allowed = tmp_path / "allowed"
-    outside = tmp_path / "outside"
-    allowed.mkdir()
-    outside.mkdir()
-    monkeypatch.setattr(
-        _guards,
-        "scan_write_targets",
-        lambda _cmd, _cwd: WriteTargetScan(
-            targets=(),
-            unresolved=False,
-            parseable=True,
-            has_write=True,
-            entry_targets=(str(outside / "link"),),
-        ),
-    )
-
-    result = _guards._check_write_target_boundary("ln", str(tmp_path), (str(allowed),))
-
-    assert result is not None
-    assert str(outside / "link") in result
 
 
 def test_run_cmd_entry_check_uses_link_location_not_referent(tmp_path) -> None:

@@ -491,7 +491,7 @@ async def test_attested_implementation_rejects_untrusted_authority_provenance(
             )
         )
     )
-    assert expected_code in json.dumps(response)
+    assert response["error"].startswith(f"RECIPE EXECUTION REJECTED [{expected_code}]:")
     assert executor.calls == []
 
 

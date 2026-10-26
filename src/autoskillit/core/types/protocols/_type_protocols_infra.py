@@ -236,7 +236,7 @@ class CampaignProtector(Protocol):
 
 @runtime_checkable
 class PlanSetMaterializer(Protocol):
-    """Server-owned plan-set binder and successful recipe-bind provenance lookup."""
+    """Context-held plan-set binding and successful recipe-bind provenance service."""
 
     async def bind(self, request: PlanSetBindRequest) -> PlanSetBindResult: ...
 

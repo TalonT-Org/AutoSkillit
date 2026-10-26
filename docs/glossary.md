@@ -14,8 +14,10 @@ lines; aggregate coverage is decided only by the server-side
 never the artifact itself. The canonical authority digest is an unkeyed integrity
 hash covering the sealed state; it does not establish server issuance.
 
-For recipe admission, the context-owned materializer retains each successful
-bind's root and issued digest for that execution and authority path. Admission
+For recipe admission, the `PlanSetMaterializer` service held by `ToolContext`
+retains each successful bind's root and issued digest for that execution and
+authority path. The default implementation, `DefaultPlanSetMaterializer`, stores
+these records in memory. Admission
 verifies the original path beneath its recorded bind root and compares the
 verified digest with that issuance record. Audit inputs retain their invocation
 cwd root; standalone binding retains cwd containment and creates no recipe record.

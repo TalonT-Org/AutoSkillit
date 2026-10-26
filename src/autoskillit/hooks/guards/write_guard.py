@@ -338,7 +338,10 @@ def _entry_paths_validation_error(
         try:
             allowed = any(destination_within(path, prefix) for prefix in norm_prefixes)
         except (OSError, RuntimeError, ValueError):
-            return _write_boundary_message(display_prefix)
+            return (
+                f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} "
+                f"(unresolved write target {path!r}). Check its path components and symlinks."
+            )
         if not allowed:
             return _write_boundary_message(display_prefix)
     return None

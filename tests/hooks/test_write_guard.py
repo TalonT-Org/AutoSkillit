@@ -826,6 +826,19 @@ def test_ln_entry_resolves_symlinked_parent(monkeypatch: pytest.MonkeyPatch, tmp
     )
 
 
+def test_entry_resolution_failure_reports_unresolved_target(monkeypatch, tmp_path) -> None:
+    def fail_resolution(*args):
+        raise RuntimeError("injected resolution failure")
+
+    monkeypatch.setattr(write_guard, "destination_within", fail_resolution)
+    reason = write_guard._bash_validation_error(
+        f"ln -s source {tmp_path / 'entry'}", str(tmp_path), [str(tmp_path)], str(tmp_path)
+    )
+    assert reason is not None
+    assert "unresolved write target" in reason
+    assert "path components and symlinks" in reason
+
+
 @pytest.mark.parametrize("command", ['echo x > "$F"', 'cp a "$F"'])
 def test_denies_unresolved_bash_write_target(
     monkeypatch: pytest.MonkeyPatch, tmp_path, command: str

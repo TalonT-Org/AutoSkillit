@@ -76,6 +76,8 @@ class StatefulReviewGateway:
         head_sha: str = "a" * 40,
         authenticated_login: str = "autoskillit-bot",
         pr_author_login: str = "pull-author",
+        next_review_id: int = 700,
+        next_comment_id: int = 900,
     ) -> None:
         self.clock = clock
         self.outcomes = list(outcomes or [CreateOutcome(200, commit=True)])
@@ -93,8 +95,8 @@ class StatefulReviewGateway:
         self.review_read_calls = 0
         self.comment_read_calls = 0
         self.fail_reads = False
-        self._next_review_id = 700
-        self._next_comment_id = 900
+        self._next_review_id = next_review_id
+        self._next_comment_id = next_comment_id
 
     async def scope_material(self) -> CredentialScopeMaterial:
         self.scope_calls += 1

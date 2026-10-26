@@ -63,9 +63,9 @@ async def test_recovery_uses_observed_original_anchor(
         clock=clock,
         head_sha=request.head_sha,
         outcomes=[CreateOutcome(200, commit=True, fail_reads_after=True)],
+        next_review_id=int(remote["pull_request_review_id"]),
+        next_comment_id=int(remote["id"]),
     )
-    gateway._next_review_id = int(remote["pull_request_review_id"])
-    gateway._next_comment_id = int(remote["id"])
     poster = _poster(tmp_path / "ledger.sqlite3", gateway, clock)
     first = await poster.post(request)
     assert first.state is ReviewOperationState.COMMITTED_PENDING_VERIFICATION

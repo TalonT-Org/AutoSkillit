@@ -236,9 +236,13 @@ class CampaignProtector(Protocol):
 
 @runtime_checkable
 class PlanSetMaterializer(Protocol):
-    """Server-owned binder for a content-addressed plan-set authority."""
+    """Context-held plan-set binding and successful recipe-bind provenance service."""
 
     async def bind(self, request: PlanSetBindRequest) -> PlanSetBindResult: ...
+
+    def lookup_binding(
+        self, execution_generation: str, authority_path: str
+    ) -> tuple[Path, str] | None: ...
 
 
 @dataclass(frozen=True, slots=True)

@@ -1307,9 +1307,22 @@ class TestWorktreeCreationAtOrchestratorLevel:
     def test_implement_uses_worktree_path_as_cwd(self, recipe) -> None:
         impl_step = recipe.steps["implement"]
         cwd = impl_step.with_args.get("cwd", "")
-        assert "context.worktree_path" in cwd, (
+        assert cwd == "${{ context.worktree_path }}", (
             f"implement step cwd must reference context.worktree_path, got {cwd!r}"
         )
+
+    def test_implement_retains_clone_plan_set_bindings(self, recipe) -> None:
+        skill_inputs = recipe.steps["implement"].with_args["skill_inputs"]
+        assert skill_inputs["plan_path"] == "${{ context.plan_path }}"
+        assert skill_inputs["plan_set_authority_path"] == "${{ context.plan_set_authority_path }}"
+
+    def test_retry_uses_worktree_and_retained_plan_set_bindings(self, recipe) -> None:
+        retry = recipe.steps["retry_worktree"]
+        assert retry.with_args["cwd"] == "${{ context.worktree_path }}"
+        skill_inputs = retry.with_args["skill_inputs"]
+        assert skill_inputs["plan_path"] == "${{ context.plan_path }}"
+        assert skill_inputs["plan_set_authority_path"] == "${{ context.plan_set_authority_path }}"
+        assert skill_inputs["worktree_path"] == "${{ context.worktree_path }}"
 
 
 # ---------------------------------------------------------------------------

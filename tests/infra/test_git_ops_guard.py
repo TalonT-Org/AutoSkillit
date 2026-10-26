@@ -562,7 +562,7 @@ class TestStdinLiteralConsumers:
         _git(tmp_path, "add", "f.txt")
         _git(tmp_path, "commit", "-m", "initial")
         out = _run_guard(
-            "cat > f.md <<< 'git push --force origin main'",
+            "cat <<< 'git push --force origin main'",
             kitchen_open=True,
             tmpdir=tmp_path,
             include_execution_cwd=include_execution_cwd,
@@ -1152,8 +1152,9 @@ class TestCheckedOutRefAmbiguity:
             lambda root: f"npm install --prefix {shlex.quote(str(root / 'npm-root'))} package",
             lambda root: f"ln -sf /tmp/source {shlex.quote(str(root / 'link'))}",
             lambda root: f"install -t {shlex.quote(str(root / 'install-root'))} /tmp/source",
+            lambda _root: "cat > f.md <<< 'git push --force origin main'",
         ],
-        ids=["npm-prefix", "ln-entry", "install-target-directory"],
+        ids=["npm-prefix", "ln-entry", "install-target-directory", "relative-redirect"],
     )
     def test_structural_write_without_execution_cwd_fails_closed(
         self,

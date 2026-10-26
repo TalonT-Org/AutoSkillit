@@ -103,7 +103,7 @@ async def test_recovery_uses_observed_original_anchor(
         (pulls_comments_relocated_right, "start_side", "RIGHT"),
         (pulls_comments_relocated_left, "original_start_line", None),
         (pulls_comments_relocated_left, "original_start_line", 12),
-        (pulls_comments_relocated_left, "original_start_line", False),
+        (pulls_comments_relocated_left, "original_start_line", True),
         (pulls_comments_relocated_left, "start_side", None),
         (pulls_comments_relocated_left, "start_side", "RIGHT"),
     ],
@@ -115,6 +115,9 @@ async def test_incomplete_historical_anchor_stays_pending(
     value: object,
 ) -> None:
     remote = capture()
+    if value is True:
+        remote["original_line"] = 1
+        remote["original_start_line"] = 1
     request = _request(
         tmp_path,
         head_sha=remote["original_commit_id"],

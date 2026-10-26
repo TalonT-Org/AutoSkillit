@@ -139,6 +139,24 @@ async def test_absent_authority_omits_evidence_and_kitchen_error_is_namespaced(
     assert exc_info.value.code == "input_preflight_plan_set_kitchen_mismatch"
 
 
+def _plan_preflight(materializer, resolver, bound_inputs):
+    return resolve_attested_input_preflight(
+        SimpleNamespace(
+            kitchen_id="kitchen",
+            plan_set_materializer=materializer,
+            skill_contract_resolver=lambda _: SimpleNamespace(
+                input_preflight=("plan_set_coverage",)
+            ),
+        ),
+        SimpleNamespace(plan_set_preflight_resolver=resolver),
+        skill_command="/autoskillit:dry-walkthrough",
+        execution_id="generation",
+        step_name="verify",
+        template=SimpleNamespace(invocation=SimpleNamespace(skill_name="dry-walkthrough")),
+        bound_inputs=bound_inputs,
+    )
+
+
 @pytest.mark.parametrize("kind", ("symlink", "hardlink"))
 async def test_recorded_authority_still_rejects_file_links(tmp_path: Path, kind: str) -> None:
     authority_path, part, materializer = await _authority(tmp_path)
@@ -149,23 +167,9 @@ async def test_recorded_authority_still_rejects_file_links(tmp_path: Path, kind:
     else:
         os.link(original, path)
     with pytest.raises(RecipeExecutionAdmissionError) as exc_info:
-        resolve_attested_input_preflight(
-            SimpleNamespace(
-                kitchen_id="kitchen",
-                plan_set_materializer=materializer,
-                skill_contract_resolver=lambda _: SimpleNamespace(
-                    input_preflight=("plan_set_coverage",)
-                ),
-            ),
-            SimpleNamespace(
-                plan_set_preflight_resolver=DefaultPlanSetPreflightResolver(
-                    RecipeExecutionId("generation"), "kitchen"
-                )
-            ),
-            skill_command="/autoskillit:dry-walkthrough",
-            execution_id="generation",
-            step_name="verify",
-            template=SimpleNamespace(invocation=SimpleNamespace(skill_name="dry-walkthrough")),
+        _plan_preflight(
+            materializer,
+            DefaultPlanSetPreflightResolver(RecipeExecutionId("generation"), "kitchen"),
             bound_inputs=(("plan_path", str(part)), ("plan_set_authority_path", authority_path)),
         )
     assert exc_info.value.code == f"input_preflight_plan_set_{kind}"
@@ -183,26 +187,12 @@ def test_plan_only_preflight_uses_issued_root_without_invocation_root(tmp_path: 
             evidence=SimpleNamespace(plan_set_authority_digest=issued_digest),
         )
 
-    resolved = resolve_attested_input_preflight(
+    resolved = _plan_preflight(
         SimpleNamespace(
-            kitchen_id="kitchen",
-            plan_set_materializer=SimpleNamespace(
-                lookup_binding=lambda execution_id, authority_path: (
-                    issued_root,
-                    issued_digest,
-                )
-            ),
-            skill_contract_resolver=lambda _: SimpleNamespace(
-                input_preflight=("plan_set_coverage",)
-            ),
+            lookup_binding=lambda execution_id, authority_path: (issued_root, issued_digest)
         ),
-        SimpleNamespace(plan_set_preflight_resolver=SimpleNamespace(resolve=resolve)),
-        skill_command="/autoskillit:dry-walkthrough",
-        execution_id="generation",
-        step_name="verify",
-        template=SimpleNamespace(invocation=SimpleNamespace(skill_name="dry-walkthrough")),
+        SimpleNamespace(resolve=resolve),
         bound_inputs=(("plan_path", "plan.md"), ("plan_set_authority_path", "authority.json")),
-        allowed_root=None,
     )
 
     assert resolved.plan_set is not None
@@ -212,28 +202,16 @@ def test_plan_only_preflight_uses_issued_root_without_invocation_root(tmp_path: 
 def test_accepted_plan_set_verification_without_evidence_fails_closed(tmp_path: Path) -> None:
     digest = "sha256:issued"
     with pytest.raises(RecipeExecutionAdmissionError) as exc_info:
-        resolve_attested_input_preflight(
+        _plan_preflight(
             SimpleNamespace(
-                kitchen_id="kitchen",
-                plan_set_materializer=SimpleNamespace(
-                    lookup_binding=lambda execution_id, authority_path: (tmp_path, digest)
-                ),
-                skill_contract_resolver=lambda _: SimpleNamespace(
-                    input_preflight=("plan_set_coverage",)
-                ),
+                lookup_binding=lambda execution_id, authority_path: (tmp_path, digest)
             ),
             SimpleNamespace(
-                plan_set_preflight_resolver=SimpleNamespace(
-                    resolve=lambda request, *, allowed_root: SimpleNamespace(
-                        accepted=True,
-                        evidence=None,
-                    )
+                resolve=lambda request, *, allowed_root: SimpleNamespace(
+                    accepted=True,
+                    evidence=None,
                 )
             ),
-            skill_command="/autoskillit:dry-walkthrough",
-            execution_id="generation",
-            step_name="verify",
-            template=SimpleNamespace(invocation=SimpleNamespace(skill_name="dry-walkthrough")),
             bound_inputs=(
                 ("plan_path", "plan.md"),
                 ("plan_set_authority_path", "authority.json"),

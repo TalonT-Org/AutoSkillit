@@ -145,6 +145,11 @@ def claude_code_log_path(cwd: str, session_id: str) -> Path | None:
     return claude_code_project_dir(cwd) / f"{session_id}.jsonl"
 
 
+def is_claude_session_log(path: Path) -> bool:
+    """Return whether a path names a session transcript rather than an orphaned copy."""
+    return path.suffix == ".jsonl" and ".orphaned-" not in path.name
+
+
 def find_latest_session_id(cwd: str | None = None) -> str | None:
     """Return the session_id of the most recent Claude Code session for cwd.
 
@@ -163,7 +168,7 @@ def find_latest_session_id(cwd: str | None = None) -> str | None:
         return None
 
     jsonl_files = sorted(
-        (f for f in project_dir.glob("*.jsonl") if ".orphaned-" not in f.name),
+        (f for f in project_dir.glob("*.jsonl") if is_claude_session_log(f)),
         key=lambda f: safe_mtime(f) or 0.0,
         reverse=True,
     )

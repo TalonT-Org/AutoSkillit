@@ -60,25 +60,14 @@ async def test_gateway_classifies_http_responses(
 @pytest.mark.anyio
 async def test_review_comment_collection_uses_pr_wide_endpoint_and_paginates() -> None:
     target = pulls_comments_relocated_right()
-    review_id = target["pull_request_review_id"]
-    assert isinstance(review_id, int)
     foreign_review = {
         **pulls_comments_outdated_right(),
         "pull_request_review_id": 88,
-    }
-    legacy_shape = {
-        "id": target["id"],
-        "pull_request_review_id": target["pull_request_review_id"],
-        "path": target["path"],
-        "position": 37,
-        "original_position": 37,
     }
     trace: list[tuple[str, str]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         trace.append((request.method, str(request.url)))
-        if request.url.path.endswith(f"/reviews/{review_id}/comments"):
-            return httpx.Response(200, json=[legacy_shape])
         if (
             request.url.path.endswith("/pulls/1/comments")
             and request.url.params.get("page") == "2"

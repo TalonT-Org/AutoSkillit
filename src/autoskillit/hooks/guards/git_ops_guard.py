@@ -33,6 +33,7 @@ if _GUARDS_DIR not in sys.path:
 from _command_classification import (  # noqa: E402
     _GIT_GLOBAL_FLAG_SPEC,
     StdinConsumer,
+    WriteTargetScan,
     _consume_str_flag,
     _extract_interpreter_segment_specs,
     command_verb_and_args,
@@ -203,8 +204,8 @@ def _raw_write_targets(
     additional_segments: list[list[str]],
     additional_owners: list[int | None],
     interpreter_cwd: str,
+    scan: WriteTargetScan,
 ) -> tuple[list[tuple[str, str]], list[tuple[str, str]], bool]:
-    scan = scan_write_targets(text, initial_cwd)
     targets = [(target, initial_cwd) for target in scan.targets]
     entry_targets = [(target, initial_cwd) for target in scan.entry_targets]
     ambiguous = scan.unresolved
@@ -250,6 +251,7 @@ def _raw_target_mutations(
     additional_owners: list[int | None],
     interpreter_cwd: str,
     context: dict[str, object] | None,
+    scan: WriteTargetScan,
 ) -> list[tuple[str, str, bool]]:
     targets, entry_targets, ambiguous = _raw_write_targets(
         text,
@@ -258,6 +260,7 @@ def _raw_target_mutations(
         additional_segments,
         additional_owners,
         interpreter_cwd,
+        scan,
     )
     if ambiguous:
         return [("", "<unresolved>", True)]
@@ -374,7 +377,7 @@ def _preflight_segments(
 
 
 def _is_structural_mutation(
-    live_text: str, outer: list[list[str]], additional: list[list[str]]
+    live_text: str, outer: list[list[str]], additional: list[list[str]], *, has_write: bool
 ) -> bool:
     return bool(
         re.search(
@@ -382,7 +385,7 @@ def _is_structural_mutation(
             r"reset\b|fetch\b|push\b|symbolic-ref\s+HEAD)\b",
             live_text,
         )
-        or scan_write_targets(live_text, "").has_write
+        or has_write
         or any(
             os.path.basename(command_verb_and_args(segment)[0]) in _RAW_WRITE_VERBS
             for segment in [*outer, *additional]
@@ -493,7 +496,10 @@ def _preflight_checked_out_ref_mutation(
     # "git push --force" as prose no longer matches, while a heredoc/pipe-fed
     # shell that actually runs it still does.
     live_text = live_command_text(command)
-    structural_mutation = _is_structural_mutation(live_text, outer_segments, additional_segments)
+    scan = scan_write_targets(live_text, execution_cwd)
+    structural_mutation = _is_structural_mutation(
+        live_text, outer_segments, additional_segments, has_write=scan.has_write
+    )
     if not execution_cwd:
         if structural_mutation:
             _deny_checked_out_ref(
@@ -525,6 +531,7 @@ def _preflight_checked_out_ref_mutation(
             additional_owners=additional_owners,
             interpreter_cwd=current_cwd,
             context=raw_context,
+            scan=scan,
         )
     )
     if interpreter_unresolved and structural_mutation:

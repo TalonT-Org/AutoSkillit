@@ -392,7 +392,7 @@ def _is_structural_mutation(
         )
         or has_write
         or any(
-            os.path.basename(command_verb_and_args(segment)[0]) in _RAW_WRITE_VERBS
+            os.path.basename(command_verb_and_args(segment)[0]) in _RAW_WRITE_VERBS | {"install"}
             for segment in [*outer, *additional]
         )
     )

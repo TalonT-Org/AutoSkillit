@@ -536,6 +536,15 @@ class TestStdinLiteralConsumers:
         )
         assert _is_denied(out)
 
+    def test_denies_piped_install_heredoc_without_execution_cwd(self, tmp_path) -> None:
+        out = _run_guard(
+            "cat <<'EOF' | bash\ninstall source destination\nEOF",
+            kitchen_open=True,
+            tmpdir=tmp_path,
+            include_execution_cwd=False,
+        )
+        assert _checked_out_ref_result(out)["execution_cwd"] == ""
+
     def test_allows_inert_backtick_heredoc_git_push(self, tmp_path) -> None:
         """cat-redirect-heredoc-inline-backtick: an inert `cat` body mentioning
         `git push --force` inside a single backtick pair must not deny."""

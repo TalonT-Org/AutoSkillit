@@ -568,7 +568,7 @@ steps:
         valid, message = RecipeMigrationAdapter().validate(recipe_path)
 
         assert not valid
-        assert message
+        assert "no_such_tool" in message
 
     @pytest.mark.anyio
     async def test_adapter_passes_temp_display_to_both_validations(

@@ -9,6 +9,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -309,7 +310,7 @@ def test_entry_stat_errors_only_allow_absent_entries(
         return original_lstat(path, *args, **kwargs)
 
     monkeypatch.setattr(guard, "_known_roots", lambda: ())
-    monkeypatch.setattr(guard.os, "lstat", lstat)
+    monkeypatch.setattr(guard, "os", SimpleNamespace(**(vars(os) | {"lstat": lstat})))
 
     assert guard._is_protected_entry_target(str(target)) is (
         error not in {errno.ENOENT, errno.ENOTDIR}

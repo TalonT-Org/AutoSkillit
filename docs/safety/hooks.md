@@ -199,9 +199,14 @@ is implemented.
 | Ownership | The producer transfers the retained carrier while preserving exclusive ownership through initial publication and delivery |
 | Cleanup — installed runner | Every valid run/reject invocation performs one bounded sweep after producer resources release and prioritizes its just-delivered inline capture before the cursor-rotated backlog within the existing `RUNNER_TAIL_BUDGET` |
 | Cleanup — session lifecycle | `capture_lifecycle_hook.py` performs the same bounded sweep at `SessionStart` in both interactive and headless sessions |
+| Setup capacity fallback | A capacity refusal runs the command uncaptured within the `shell_max_inline_bytes` head/tail bound; oversized output gets a fixed elision line, with no artifact or reference. The `capture_degraded` marker at `capture_setup` carries the capacity reason and measurement. Other setup failures remain fail closed |
 | Naming contract | `shell_[0-9a-f]{16}.log` — files not matching this pattern are never deleted |
 | Safety | Capture components reject symlinks; artifacts reject collisions, hardlinks, unsafe modes, and identity changes; a hostile same-UID process that ignores advisory locks is excluded |
 | Failure mode | Pre-FINAL failure has no manifest/reference/success marker; post-FINAL failure preserves FINAL and changes only reference or delivery state; cleanup remains bounded and fail open |
+
+The `capture_degraded` marker signals degradation for that command; lineage
+observations continue to describe the launch's capture/direct routing. It is
+not an aggregate degradation rate or alarm.
 
 The durable lifecycle is `RESERVED` → `STAGED` → `PUBLISHED_WRITING` →
 `FINALIZED` or `FAILED`. An unlocked active record becomes `ABANDONED`.

@@ -226,6 +226,9 @@ bookkeeping failure discards or misreports a verified primary result outside
 of what the import-time assertion alone can catch (e.g. a `PRESERVE_OUTPUT`
 classification applied to a reason that should be `DISCARD_OUTPUT`).
 
+Containment remains in force under setup-stage capacity degradation because
+agent-visible output stays bounded by `shell_max_inline_bytes`.
+
 The same enforcement surface bounds admission by measured reclamation debt:
 assist and stall are admission-only capacity reasons, and import-time totality
 requires their gate, failure, disposition, detail, and blocker classifications.

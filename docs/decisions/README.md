@@ -8,7 +8,7 @@
 - [0006-output-containment.md](0006-output-containment.md) — Retire pre-execution command-shape classification in favor of per-backend output-boundary bounding on measured bytes
 - [0007-context-admission.md](0007-context-admission.md) — Freeze the versioned cumulative context-admission boundary, authority contract, producer coverage, and privacy rules
 - [0008-shell-capture-snapshot-authority.md](0008-shell-capture-snapshot-authority.md) — Make verified pipe-EOF snapshots, opaque V2 references, and checked delivery the sole Codex shell-capture authority
-- [0009-verified-output-delivery-disposition.md](0009-verified-output-delivery-disposition.md) — A checksum-verified capture is delivered or the failure explicitly says why not; a bookkeeping failure never discards it
+- [0009-verified-output-delivery-disposition.md](0009-verified-output-delivery-disposition.md) — A checksum-verified capture is delivered or the failure explains why; eligible post-verification bookkeeping faults preserve it, while setup-stage capacity refusals may run uncaptured within the inline bound with a degradation marker; other setup failures fail closed
 - [0010-systemd-scope-defense-in-depth.md](0010-systemd-scope-defense-in-depth.md) — systemd scope wrapping is a best-effort kernel backstop on top of the tether sweep, never the ceiling of record
 - [0015-write-containment.md](0015-write-containment.md) — typed skill write scopes composed by union across interactive and headless sessions
 - [0016-owner-scope.md](0016-owner-scope.md) — a fleet dispatch settles every funnel-spawned descendant of its L2, selected by owner-scope registration, before it persists or returns

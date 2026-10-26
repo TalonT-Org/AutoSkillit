@@ -15,6 +15,7 @@ from ._module_identity import register_module_aliases
 
 if TYPE_CHECKING:
     from autoskillit.hooks._capture._snapshot import (
+        CaptureMeasurement,
         FinalizedCapture,
         PublishedCaptureReference,
         UnavailableCaptureReference,
@@ -29,6 +30,7 @@ if TYPE_CHECKING:
     )
 else:
     from ._snapshot import (
+        CaptureMeasurement,
         FinalizedCapture,
         PublishedCaptureReference,
         UnavailableCaptureReference,
@@ -187,6 +189,17 @@ def render_inline_capture(finalized: FinalizedCapture) -> bytes:
     if len(snapshot.measurement.inline) != snapshot.manifest.total_bytes:
         raise _ReplayError("inline replay does not cover verified snapshot")
     return snapshot.measurement.inline
+
+
+def render_uncaptured_bounded(measurement: CaptureMeasurement) -> bytes:
+    if measurement.total_bytes <= measurement.inline_bytes:
+        return measurement.inline
+    omitted = measurement.total_bytes - len(measurement.head) - len(measurement.tail)
+    elision = (
+        b"[AutoSkillit shell capture elided: %d of %d bytes omitted; no capture artifact]"
+        % (omitted, measurement.total_bytes)
+    )
+    return measurement.head + b"\n" + elision + b"\n" + measurement.tail
 
 
 def render_oversized_capture(

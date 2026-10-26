@@ -1821,7 +1821,7 @@ def test_store_open_normalization_succeeds_above_soft_limit(
         base_capacity = store._capacity
         scaled_capacity = replace(
             base_capacity,
-            compaction_low_bytes=projected - 1,
+            compaction_low_bytes=projected - 64,
             compaction_high_bytes=projected,
             hard_ledger_bytes=projected + base_capacity.recovery_headroom_bytes + 64,
         )

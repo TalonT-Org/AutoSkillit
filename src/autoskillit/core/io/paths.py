@@ -93,7 +93,7 @@ def destination_location(destination: Path) -> Path:
     existing artifacts rather than future write targets.
     """
     destination = Path(destination)
-    if not destination.name:
+    if not destination.name or destination.name == "..":
         return destination.resolve()
     return destination.parent.resolve() / destination.name
 

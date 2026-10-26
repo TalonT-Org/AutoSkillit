@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import destination_location as core_destination_location
 from autoskillit.hooks._runtime._path_identity import (
     PathIdentityError,
     destination_location,
@@ -94,3 +95,17 @@ def test_destination_location_preserves_dangling_final_symlink(tmp_path: Path) -
 
 def test_destination_location_handles_root_destination() -> None:
     assert destination_location(Path("/")) == Path("/")
+
+
+@pytest.mark.parametrize("name", ["entry", "final-link", "..", "."])
+def test_destination_location_core_and_hook_conformance(tmp_path: Path, name: str) -> None:
+    real_parent = tmp_path / "real"
+    real_parent.mkdir()
+    linked_parent = tmp_path / "linked"
+    linked_parent.symlink_to(real_parent, target_is_directory=True)
+    (real_parent / "final-link").symlink_to(tmp_path / "missing")
+    destination = linked_parent / name
+    expected = tmp_path if name == ".." else real_parent / name
+
+    for resolve_location in (destination_location, core_destination_location):
+        assert resolve_location(destination) == expected

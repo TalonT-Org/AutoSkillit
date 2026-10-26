@@ -40,7 +40,7 @@ def hooks_relative_key(script_identity: str | os.PathLike[str], hooks_dir: Path)
 def destination_location(destination: str | os.PathLike[str]) -> Path:
     """Resolve a destination's parent without following its final component."""
     path = Path(destination)
-    if not path.name:
+    if not path.name or path.name == "..":
         return path.resolve()
     return path.parent.resolve() / path.name
 

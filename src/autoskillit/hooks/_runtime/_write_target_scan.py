@@ -62,6 +62,7 @@ class _DestinationOperands:
     no_target_directory: bool
     no_dereference: bool
     create_directories: bool
+    read_only: bool
     invalid: bool
 
 
@@ -108,6 +109,7 @@ def _destination_operands(
             "--suffix": value,
         }
         boolean_long = {
+            "--backup",
             "--compare",
             "--directory",
             "--preserve-timestamps",
@@ -123,6 +125,7 @@ def _destination_operands(
     no_dereference = False
     directory_mode = False
     invalid = False
+    read_only = False
     options = True
     index = 1
     while index < len(argv):
@@ -132,6 +135,10 @@ def _destination_operands(
             index += 1
             continue
         if options and token.startswith("-") and token != "-":
+            if token in {"--help", "--version"}:
+                read_only = True
+                index += 1
+                continue
             option_value, source, next_index, recognized = (
                 _classification._consume_destination_option(argv, argv_tokens, index, value_spec)
             )
@@ -145,7 +152,7 @@ def _destination_operands(
                 continue
             if (
                 token in boolean_long
-                or (verb == "ln" and token.startswith("--backup="))
+                or token.startswith("--backup=")
                 or (
                     not token.startswith("--") and all(char in boolean_short for char in token[1:])
                 )
@@ -174,6 +181,7 @@ def _destination_operands(
         no_target_directory=no_target_directory,
         no_dereference=no_dereference,
         create_directories=directory_mode,
+        read_only=read_only,
         invalid=invalid,
     )
 
@@ -240,8 +248,8 @@ def _install_targets(
     argv: list[str],
     cwd: str,
     argv_tokens: Sequence[ArgvToken] | None,
+    options: _DestinationOperands,
 ) -> tuple[list[str], bool]:
-    options = _destination_operands("install", argv, argv_tokens)
     operands = options.operands
     target_directory = options.target_directory
     if options.invalid or not operands:
@@ -273,8 +281,8 @@ def _ln_entry_targets(
     argv: list[str],
     cwd: str,
     argv_tokens: Sequence[ArgvToken] | None,
+    options: _DestinationOperands,
 ) -> tuple[list[str], bool]:
-    options = _destination_operands("ln", argv, argv_tokens)
     operands = options.operands
     target_directory = options.target_directory
     if options.invalid or not operands:
@@ -561,6 +569,22 @@ def _invoked_child_state(
     return None
 
 
+def _scan_destination_command(
+    verb: str,
+    argv: list[str],
+    cwd: str,
+    argv_tokens: Sequence[ArgvToken] | None,
+) -> WriteTargetScan:
+    options = _destination_operands(verb, argv, argv_tokens)
+    if options.read_only:
+        return WriteTargetScan((), False, True, False)
+    if verb == "ln":
+        targets, unresolved = _ln_entry_targets(argv, cwd, argv_tokens, options)
+        return WriteTargetScan((), unresolved, True, True, entry_targets=tuple(targets))
+    targets, unresolved = _install_targets(argv, cwd, argv_tokens, options)
+    return WriteTargetScan(tuple(targets), unresolved, True, True)
+
+
 def _scan_executable(
     executable: list[str],
     argv_tokens: Sequence[ArgvToken] | None,
@@ -590,12 +614,8 @@ def _scan_executable(
     if verb_name == "npm":
         targets, unresolved, has_write = _npm_install_targets(argv, verb_cwd, verb_tokens)
         return WriteTargetScan(tuple(targets), unresolved, True, has_write), invoked
-    if verb_name == "ln":
-        targets, unresolved = _ln_entry_targets(argv, verb_cwd, verb_tokens)
-        return WriteTargetScan((), unresolved, True, True, entry_targets=tuple(targets)), invoked
-    if verb_name == "install":
-        targets, unresolved = _install_targets(argv, verb_cwd, verb_tokens)
-        return WriteTargetScan(tuple(targets), unresolved, True, True), invoked
+    if verb_name in {"ln", "install"}:
+        return _scan_destination_command(verb_name, argv, verb_cwd, verb_tokens), invoked
     if verb in WRITE_VERBS:
         targets, unresolved = _classification.extract_write_verb_targets(
             verb, argv, verb_cwd, argv_tokens=verb_tokens

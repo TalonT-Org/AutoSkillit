@@ -257,6 +257,28 @@ def test_ln_options_preserve_entry_destination(option: str) -> None:
     assert not result.unresolved
 
 
+@pytest.mark.parametrize("command", ["ln --help", "install --version"])
+def test_coreutils_informational_options_do_not_write(command: str) -> None:
+    result = scan_write_targets(command, _WORKSPACE)
+    assert not result.has_write
+    assert not result.unresolved
+
+
+@pytest.mark.parametrize("command", ["ln -t --help source", "ln -- --help source"])
+def test_help_spelling_as_an_operand_still_writes(command: str) -> None:
+    result = scan_write_targets(command, _WORKSPACE)
+    assert result.has_write
+    assert result.entry_targets
+    assert not result.unresolved
+
+
+@pytest.mark.parametrize("option", ["--backup", "--backup=numbered"])
+def test_install_backup_option_preserves_destination(option: str) -> None:
+    result = scan_write_targets(f"install {option} source destination", _WORKSPACE)
+    assert result.targets == ("/workspace/destination",)
+    assert not result.unresolved
+
+
 def test_ln_directory_and_final_symlink_semantics(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

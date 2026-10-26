@@ -175,6 +175,70 @@ def _admission_decision(
     )
 
 
+@pytest.mark.parametrize(
+    ("reason", "limit_field", "existing_count"),
+    [
+        (
+            capture_lifecycle.CaptureCapacityReason.ACTIVE_CAPACITY,
+            "max_operational_records",
+            3,
+        ),
+        (
+            capture_lifecycle.CaptureCapacityReason.RETENTION_CAPACITY,
+            "max_retained_records",
+            1,
+        ),
+        (
+            capture_lifecycle.CaptureCapacityReason.EVIDENCE_CAPACITY,
+            "max_evidence_records",
+            2,
+        ),
+    ],
+    ids=("active", "retention", "evidence"),
+)
+def test_admission_reason_reports_record_count_and_limit(
+    tmp_path: Path,
+    reason: capture_lifecycle.CaptureCapacityReason,
+    limit_field: str,
+    existing_count: int,
+) -> None:
+    spec = _capacity_spec(
+        max_operational_records=4,
+        max_retained_records=4,
+        max_evidence_records=4,
+        reclamation_debt_assist_records=1,
+        reclamation_debt_stall_records=2,
+    )
+    clock = _Clock()
+    anchor, root, store = _open_store(tmp_path / "project", clock)
+    try:
+        candidate = _finalize_template(
+            store,
+            root,
+            clock,
+            "aaaaaaaaaaaaaaa1",
+            delivered=False,
+        )
+        assert candidate is not None
+        records = {
+            f"{index:016x}": _replicate_record(candidate, f"{index:016x}")
+            for index in range(1, existing_count + 1)
+        }
+        decision = _admission_decision(
+            records,
+            candidate,
+            replace(spec, **{limit_field: existing_count}),
+            clock,
+        )
+    finally:
+        root.close()
+        anchor.close()
+
+    assert decision.reason is reason
+    assert decision.record_count == existing_count + 1
+    assert decision.record_limit == existing_count
+
+
 def test_pre_assist_debt_is_refused_by_assist_not_bytes(tmp_path: Path) -> None:
     clock = _Clock()
     anchor, root, store = _open_store(tmp_path / "project", clock)

@@ -68,6 +68,8 @@ class AdmissionDecision:
     projected_bytes: int | None = None
     limit_bytes: int | None = None
     due_records: int | None = None
+    record_count: int | None = None
+    record_limit: int | None = None
 
 
 class CompactedFrameSizer:
@@ -173,6 +175,10 @@ def measurement_detail(decision: AdmissionDecision) -> str:
             if decision.projected_bytes is not None
             else None,
             f"limit={decision.limit_bytes}" if decision.limit_bytes is not None else None,
+            f"records={decision.record_count}" if decision.record_count is not None else None,
+            f"limit_records={decision.record_limit}"
+            if decision.record_limit is not None
+            else None,
             f"due={decision.due_records}" if decision.due_records is not None else None,
         )
         if value is not None
@@ -248,11 +254,26 @@ def admission_reason(
         forensic += is_forensic
         due += _sweep_cursor.is_due_record(record, now, terminal_states)
     if operational > active_limit:
-        return AdmissionDecision(CaptureCapacityReason.ACTIVE_CAPACITY, due_records=due)
+        return AdmissionDecision(
+            CaptureCapacityReason.ACTIVE_CAPACITY,
+            due_records=due,
+            record_count=operational,
+            record_limit=active_limit,
+        )
     if retained > spec.max_retained_records:
-        return AdmissionDecision(CaptureCapacityReason.RETENTION_CAPACITY, due_records=due)
+        return AdmissionDecision(
+            CaptureCapacityReason.RETENTION_CAPACITY,
+            due_records=due,
+            record_count=retained,
+            record_limit=spec.max_retained_records,
+        )
     if operational + forensic > spec.max_evidence_records:
-        return AdmissionDecision(CaptureCapacityReason.EVIDENCE_CAPACITY, due_records=due)
+        return AdmissionDecision(
+            CaptureCapacityReason.EVIDENCE_CAPACITY,
+            due_records=due,
+            record_count=operational + forensic,
+            record_limit=spec.max_evidence_records,
+        )
     encoded = sizer.total_bytes(projected, compaction_epoch, spec)
     if encoded + spec.recovery_headroom_bytes > spec.hard_ledger_bytes:
         return AdmissionDecision(

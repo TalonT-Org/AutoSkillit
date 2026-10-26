@@ -219,12 +219,35 @@ def _install_reserve_capacity_refusal(
     monkeypatch: pytest.MonkeyPatch,
     reason: CaptureCapacityReason,
 ) -> capture_capacity.AdmissionDecision:
-    decision = capture_capacity.AdmissionDecision(
-        reason,
-        projected_bytes=18_422,
-        limit_bytes=18_421,
-        due_records=7,
-    )
+    if reason in (
+        CaptureCapacityReason.ACTIVE_CAPACITY,
+        CaptureCapacityReason.RETENTION_CAPACITY,
+        CaptureCapacityReason.EVIDENCE_CAPACITY,
+    ):
+        decision = capture_capacity.AdmissionDecision(
+            reason,
+            record_count=3,
+            record_limit=2,
+            due_records=7,
+        )
+    elif reason in (
+        CaptureCapacityReason.HARD_LEDGER_CAPACITY,
+        CaptureCapacityReason.PROJECTED_COMPACTED_BYTES,
+    ):
+        decision = capture_capacity.AdmissionDecision(
+            reason,
+            projected_bytes=18_422,
+            limit_bytes=18_421,
+            due_records=7,
+        )
+    elif reason is CaptureCapacityReason.RECLAMATION_DEBT_ASSIST:
+        decision = capture_capacity.AdmissionDecision(
+            reason,
+            assist_transition_limit=1,
+            due_records=7,
+        )
+    else:
+        decision = capture_capacity.AdmissionDecision(reason, due_records=7)
 
     def refuse(_store: CaptureLifecycleStore, _capture_id: str) -> CaptureLifecycleRecord:
         raise CaptureCapacityError(reason, decision=decision)
@@ -1314,19 +1337,52 @@ def test_reserve_capacity_refusal_detail_carries_measurement(
     assert process.wait_calls == 1
 
 
-@pytest.mark.parametrize("reason", tuple(CaptureCapacityReason))
+@pytest.mark.parametrize(
+    ("reason", "expected_detail"),
+    [
+        (
+            CaptureCapacityReason.ACTIVE_CAPACITY,
+            "active lifecycle record bound reached: records=3 limit_records=2 due=7",
+        ),
+        (
+            CaptureCapacityReason.RETENTION_CAPACITY,
+            "retention capacity reached: records=3 limit_records=2 due=7",
+        ),
+        (
+            CaptureCapacityReason.EVIDENCE_CAPACITY,
+            "evidence record capacity reached: records=3 limit_records=2 due=7",
+        ),
+        (
+            CaptureCapacityReason.PROJECTED_COMPACTED_BYTES,
+            "compacted lifecycle capacity reached: projected=18422 limit=18421 due=7",
+        ),
+        (
+            CaptureCapacityReason.HARD_LEDGER_CAPACITY,
+            "hard lifecycle ledger capacity reached: projected=18422 limit=18421 due=7",
+        ),
+        (
+            CaptureCapacityReason.RECLAMATION_DEBT_ASSIST,
+            "reclamation debt requires bounded assist: due=7",
+        ),
+        (
+            CaptureCapacityReason.RECLAMATION_DEBT_STALL,
+            "reclamation debt admission ceiling reached: due=7",
+        ),
+    ],
+)
 @pytest.mark.parametrize("child_returncode", [0, 7], ids=("zero", "nonzero"))
 def test_capacity_setup_refusal_runs_command_bounded_uncaptured(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capfd: pytest.CaptureFixture[str],
     reason: CaptureCapacityReason,
+    expected_detail: str,
     child_returncode: int,
 ) -> None:
     project = tmp_path / "project"
     project.mkdir()
     expected = b"uncaptured child output"
-    decision = _install_reserve_capacity_refusal(monkeypatch, reason)
+    _install_reserve_capacity_refusal(monkeypatch, reason)
     process = _FakeCaptureProcess(expected, returncode=child_returncode)
     spawn_calls = _install_fake_capture_process(monkeypatch, process)
 
@@ -1339,7 +1395,7 @@ def test_capacity_setup_refusal_runs_command_bounded_uncaptured(
     assert process.wait_calls == 1
     assert degraded.stage == "capture_setup"
     assert degraded.reason is capture_capacity.failure_reason(reason)
-    assert degraded.detail == capture_capacity.measurement_detail(decision)
+    assert degraded.detail == expected_detail
     assert degraded.shell_returncode == child_returncode
     assert "shell capture failure v3:" not in captured.err
     assert not list(_capture_dir(project).glob("shell_*.log"))
@@ -1361,7 +1417,7 @@ def test_capacity_setup_refusal_bounds_large_output(
     inline_bytes = 12
     expected = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     assert len(expected) == 3 * inline_bytes
-    decision = _install_reserve_capacity_refusal(
+    _install_reserve_capacity_refusal(
         monkeypatch,
         CaptureCapacityReason.PROJECTED_COMPACTED_BYTES,
     )
@@ -1387,7 +1443,9 @@ def test_capacity_setup_refusal_bounds_large_output(
     assert len(measurement.head) + len(measurement.tail) == inline_bytes
     assert b"shell capture v2:" not in expected_output
     degraded = _single_degraded_marker(captured.err)
-    assert degraded.detail == capture_capacity.measurement_detail(decision)
+    assert degraded.detail == (
+        "compacted lifecycle capacity reached: projected=18422 limit=18421 due=7"
+    )
 
 
 @pytest.mark.parametrize("child_returncode", [0, 7], ids=("zero", "nonzero"))

@@ -16,9 +16,9 @@ from autoskillit.core import DiffAnchorAuthority, github_review_receipt_filename
 from autoskillit.execution import (
     DefaultGitHubReviewPoster,
     GitHubReviewLedger,
-    GitHubReviewMutationCoordinator,
 )
 from autoskillit.execution.github_review.gateway import DefaultGitHubReviewGateway
+from autoskillit.server._factory import _make_github_review_poster
 from autoskillit.server.tools.tools_pr_ops import post_pr_review, verify_review_receipt
 from autoskillit.smoke_utils import github_review_handoff_error
 from tests.execution.github_review.fakes import (
@@ -230,17 +230,12 @@ async def test_real_gateway_recovers_pending_relocated_left_multiline_review(
             api_log=None,
             client_factory=lambda **kwargs: httpx.AsyncClient(transport=transport, **kwargs),
         )
-        ledger = GitHubReviewLedger(database_path)
-        return DefaultGitHubReviewPoster(
-            ledger=ledger,
-            coordinator=GitHubReviewMutationCoordinator(
-                ledger=ledger,
-                clock=clock,
-                sleeper=AdvancingSleeper(clock),
-                minimum_interval_seconds=1.0,
-                lease_ttl_seconds=60.0,
-            ),
+        return _make_github_review_poster(
+            ledger=GitHubReviewLedger(database_path),
             gateway=gateway,
+            review_comment_cap=tool_ctx_kitchen_open.config.github.review_comment_cap,
+            clock=clock,
+            sleeper=AdvancingSleeper(clock),
             wall_clock=clock,
         )
 

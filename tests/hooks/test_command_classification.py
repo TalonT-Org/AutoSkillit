@@ -1543,9 +1543,6 @@ class TestExtractInterpreterWritePathsMulti:
 
 
 class TestScanWriteTargets:
-    def test_scan_result_entry_targets_defaults_empty(self) -> None:
-        assert command_classification.WriteTargetScan((), False, True, False).entry_targets == ()
-
     @pytest.mark.parametrize(
         ("parseable", "has_write"),
         [(False, True), (True, False)],

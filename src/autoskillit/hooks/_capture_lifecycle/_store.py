@@ -279,6 +279,26 @@ class CaptureLifecycleStore:
         finally:
             os.close(fd)
 
+    def read_stats(self) -> tuple[dict[str, CaptureLifecycleRecord], int, int, int]:
+        """Read records and byte statistics for a capture-store report.
+
+        The tuple contains records, physical ledger bytes, projected compacted
+        bytes, and the compaction low-water limit.
+        """
+        with self._locked():
+            records, compaction_epoch, ledger_bytes = self._load_locked()
+            projected_compacted_bytes = self._ledger_view.sizer.total_bytes(
+                records,
+                compaction_epoch,
+                self._capacity,
+            )
+            return (
+                records,
+                ledger_bytes,
+                projected_compacted_bytes,
+                self._capacity.compaction_low_bytes,
+            )
+
     def _append_locked(
         self,
         record: CaptureLifecycleRecord,

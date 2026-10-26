@@ -22,6 +22,8 @@ import pytest
 
 import autoskillit.cli.doctor._doctor_capture_store as doctor_capture_store
 import autoskillit.cli.ops._capture_store as capture_store_command
+import autoskillit.hooks._capture._capacity as capture_capacity
+import autoskillit.hooks._capture_lifecycle as capture_lifecycle
 from autoskillit.cli.doctor._doctor_capture_store import _check_capture_store_stats
 from autoskillit.cli.ops import run_capture_store
 from autoskillit.core import Severity
@@ -180,11 +182,15 @@ def test_capture_store_stats_reports_due_finalized_record_to_operators(
         )
         with projection_store._locked():
             records, epoch, _physical_size = projection_store._load_locked()
-            expected_projection = projection_store._ledger_view.sizer.total_bytes(
-                records,
-                epoch,
-                projection_store._capacity,
+        expected_projection = sum(
+            len(
+                capture_lifecycle._capture_ledger.encode_frame(
+                    capture_lifecycle._capture_lifecycle_record.record_to_dict(record),
+                    compaction_epoch=epoch,
+                )
             )
+            for record in capture_capacity.compacted_records(records, CaptureCapacitySpec())
+        )
     finally:
         projection_root.close()
         projection_anchor.close()

@@ -200,12 +200,12 @@ def capture_store_stats(project_cwd: str) -> CaptureStoreStats:
             create=False,
             lock_wait=lock_wait_for_budget(RUNNER_TAIL_BUDGET),
         ) as store:
-            with store._locked():
-                records, compaction_epoch, ledger_bytes = store._load_locked()
-                projected_compacted_bytes = store._ledger_view.sizer.total_bytes(
-                    records, compaction_epoch, store._capacity
-                )
-                compaction_low_bytes = store._capacity.compaction_low_bytes
+            (
+                records,
+                ledger_bytes,
+                projected_compacted_bytes,
+                compaction_low_bytes,
+            ) = store.read_stats()
             tracked = frozenset(
                 record.public_name
                 for record in records.values()

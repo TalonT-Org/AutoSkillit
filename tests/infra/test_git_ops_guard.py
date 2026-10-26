@@ -552,8 +552,16 @@ class TestStdinLiteralConsumers:
         )
         assert out.strip() == ""
 
-    @pytest.mark.parametrize("include_execution_cwd", [True, False])
-    def test_allows_inert_herestring_git_push(self, tmp_path, include_execution_cwd: bool) -> None:
+    @pytest.mark.parametrize(
+        ("command", "include_execution_cwd"),
+        [
+            ("cat > f.md <<< 'git push --force origin main'", True),
+            ("cat <<< 'git push --force origin main'", False),
+        ],
+    )
+    def test_allows_inert_herestring_git_push(
+        self, tmp_path, command: str, include_execution_cwd: bool
+    ) -> None:
         """A `cat` herestring containing an inert git push must not deny."""
         _git(tmp_path, "init", "-b", "develop")
         _git(tmp_path, "config", "user.name", "Guard Test")
@@ -562,7 +570,7 @@ class TestStdinLiteralConsumers:
         _git(tmp_path, "add", "f.txt")
         _git(tmp_path, "commit", "-m", "initial")
         out = _run_guard(
-            "cat <<< 'git push --force origin main'",
+            command,
             kitchen_open=True,
             tmpdir=tmp_path,
             include_execution_cwd=include_execution_cwd,

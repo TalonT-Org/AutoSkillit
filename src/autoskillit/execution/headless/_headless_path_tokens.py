@@ -11,12 +11,14 @@ global set.
 from __future__ import annotations
 
 import os
-from typing import NewType
+from pathlib import Path
+from typing import Any, NewType
 
 import regex as re
 
-from autoskillit.core import get_logger, load_yaml, pkg_root
+from autoskillit.core import destination_location, get_logger, load_yaml, pkg_root
 from autoskillit.execution.session._session_content import _normalize_model_output
+from autoskillit.hooks import UNRESOLVED_WRITE_TARGET_REMEDIATION, scan_write_targets
 
 logger = get_logger(__name__)
 NormalizedMessages = NewType("NormalizedMessages", list[str])
@@ -185,3 +187,43 @@ def _validate_output_paths(extracted_paths: dict[str, str], cwd: str) -> str | N
         if _is_path_outside_cwd(path, cwd, allow_relative=False)
     ]
     return "; ".join(violations) if violations else None
+
+
+def _tool_write_path_warnings(
+    tool_name: Any,
+    inputs: dict[str, Any],
+    cwd: str,
+    write_tool_names: frozenset[str],
+    bash_tool_name: str,
+) -> list[str]:
+    warnings: list[str] = []
+    if tool_name == bash_tool_name:
+        command = inputs.get("command", "")
+        if isinstance(command, str):
+            scan = scan_write_targets(command, cwd)
+            unresolved = scan.unresolved or not scan.parseable
+            paths = [(path, cwd) for path in scan.targets]
+            for path in scan.entry_targets:
+                try:
+                    location = str(destination_location(Path(path)))
+                    physical_cwd = str(Path(cwd).resolve()) if os.path.isabs(cwd) else cwd
+                    paths.append((location, physical_cwd))
+                except (OSError, RuntimeError, ValueError):
+                    unresolved = True
+            if unresolved:
+                warnings.append(
+                    "Bash command contained a write target that could not be statically resolved. "
+                    + UNRESOLVED_WRITE_TARGET_REMEDIATION
+                )
+            for path, comparison_cwd in paths:
+                if _is_path_outside_cwd(path, comparison_cwd):
+                    normalized = os.path.normpath(path)
+                    warnings.append(
+                        f"Bash command contained write target '{normalized}'"
+                        f" outside session cwd '{cwd}'"
+                    )
+    elif tool_name in write_tool_names:
+        file_path = inputs.get("file_path", "")
+        if isinstance(file_path, str) and _is_path_outside_cwd(file_path, cwd):
+            warnings.append(f"{tool_name} tool targeted '{file_path}' outside session cwd '{cwd}'")
+    return warnings

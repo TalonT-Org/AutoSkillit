@@ -23,9 +23,9 @@ from autoskillit.core import (
     is_parent_assistant_record,
 )
 from autoskillit.execution.backends._codex_parse import extract_codex_turn_usage
-from autoskillit.execution.headless._headless_evidence import _tool_write_path_warnings
 from autoskillit.execution.headless._headless_path_tokens import (
     _RECOVERABLE_PATH_TOKENS,
+    _tool_write_path_warnings,
 )
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import (

@@ -34,6 +34,10 @@ def _resolve_plan_set_preflight(
     template: InvocationTemplate,
     kind: PreflightKind,
 ) -> PlanSetPreflightEvidence | None:
+    """Use recipe_execution_preflight_* for input or service failures.
+
+    Authority and verifier rejections use input_preflight_plan_set_* codes.
+    """
     authority_path = bound_input_map.get("plan_set_authority_path")
     if authority_path in (None, ""):
         return None

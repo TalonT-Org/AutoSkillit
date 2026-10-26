@@ -24,7 +24,7 @@ import time
 import tomllib
 import uuid
 from collections.abc import Callable
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -3856,11 +3856,13 @@ def test_claude_transcript_path_matches_native_cli(
         assert acknowledgement_path.is_file()
         evidence["status"] = "passed"
     finally:
-        evidence_dir.mkdir(parents=True, exist_ok=True)
-        evidence_path.write_text(
-            json.dumps(evidence, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
+        suppressed_errors = (OSError,) if sys.exc_info()[0] is not None else ()
+        with suppress(*suppressed_errors):
+            evidence_dir.mkdir(parents=True, exist_ok=True)
+            evidence_path.write_text(
+                json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
 
 
 @_skip_unless_claude_startup_smoke

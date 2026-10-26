@@ -126,10 +126,13 @@ def resolve_project_dir() -> Path:
 def claude_code_project_dir(cwd: str) -> Path:
     """Derive the Claude Code project log directory from a working directory path.
 
-    Encodes the cwd by replacing '/' and '_' with '-', matching Claude Code's
-    internal convention for ~/.claude/projects/<encoded-path>/.
+    Replace every UTF-16 unit outside ASCII letters and digits with a hyphen
+    under ~/.claude/projects/, matching the native JavaScript slug rule.
     """
-    project_hash = cwd.replace("/", "-").replace("_", "-")
+    project_hash = "".join(
+        char if char.isascii() and char.isalnum() else "-" * (2 if ord(char) > 0xFFFF else 1)
+        for char in cwd
+    )
     return Path.home() / ".claude" / "projects" / project_hash
 
 
@@ -143,6 +146,11 @@ def claude_code_log_path(cwd: str, session_id: str) -> Path | None:
     if not session_id or session_id.startswith("no_session_") or session_id.startswith("crashed_"):
         return None
     return claude_code_project_dir(cwd) / f"{session_id}.jsonl"
+
+
+def is_claude_session_log(path: Path) -> bool:
+    """Return whether a path names a session transcript rather than an orphaned copy."""
+    return path.suffix == ".jsonl" and ".orphaned-" not in path.name
 
 
 def find_latest_session_id(cwd: str | None = None) -> str | None:
@@ -163,7 +171,7 @@ def find_latest_session_id(cwd: str | None = None) -> str | None:
         return None
 
     jsonl_files = sorted(
-        (f for f in project_dir.glob("*.jsonl")),
+        (f for f in project_dir.glob("*.jsonl") if is_claude_session_log(f)),
         key=lambda f: safe_mtime(f) or 0.0,
         reverse=True,
     )

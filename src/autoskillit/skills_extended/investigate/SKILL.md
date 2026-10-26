@@ -293,12 +293,11 @@ Before writing the report, check whether the root cause identified in Step 3 has
 <!-- autoskillit:exploration-vector id="standard-recurrence-history" -->
 #### Part A: Mine Past Investigation Logs
 
-Derive the Claude project log directory from the current working directory:
+Resolve the current project's JSONL directory under `~/.claude/projects/` through the installed CLI:
 
 ```bash
-PROJECT_PATH=$(pwd)
-LOG_DIR="$HOME/.claude/projects/-${PROJECT_PATH//\//-}"
-LOG_DIR="${LOG_DIR//--/-}"
+actual_absolute_cwd=$(pwd -P)
+LOG_DIR=$(autoskillit claude-project-log-dir "$actual_absolute_cwd")
 ```
 
 Search for `.jsonl` files containing prior AutoSkillit investigate-skill invocations, **excluding subagent log subdirectories** (`*/subagents/*`) so prior subagent conversations are not double-counted:

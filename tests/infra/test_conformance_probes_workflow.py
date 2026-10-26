@@ -3,17 +3,28 @@
 from __future__ import annotations
 
 import re
+from fnmatch import fnmatchcase
 from pathlib import Path
 
 import pytest
 
 from autoskillit.core.io import load_yaml
+from tests._git_inventory import git_ls_files
 
-pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
 _WORKFLOW_PATH = (
     Path(__file__).resolve().parents[2] / ".github" / "workflows" / "conformance-probes.yml"
 )
+_REPO_ROOT = _WORKFLOW_PATH.parents[2]
+
+
+def _probe_cache_inputs(expression: str) -> tuple[str, ...]:
+    match = re.search(r"hashFiles\(([^)]+)\)", expression)
+    assert match is not None
+    inputs = tuple(re.findall(r"'([^']+)'", match.group(1)))
+    assert inputs
+    return inputs
 
 
 def _on(workflow: dict) -> dict:
@@ -285,52 +296,84 @@ class TestCacheGate:
         assert "policy_identity=${POLICY_IDENTITY}" in run
         assert "GITHUB_OUTPUT" in run
 
-    @pytest.mark.parametrize("job_name", ["codex-probe", "claude-probe"])
-    def test_cache_restore_step(self, workflow: dict, job_name: str) -> None:
-        steps = workflow["jobs"][job_name]["steps"]
-        restore_steps = [s for s in steps if "cache/restore" in (s.get("uses") or "")]
-        assert len(restore_steps) >= 1, f"No cache restore step in {job_name}"
-
-    @pytest.mark.parametrize("job_name", ["codex-probe", "claude-probe"])
-    def test_cache_save_step(self, workflow: dict, job_name: str) -> None:
-        steps = workflow["jobs"][job_name]["steps"]
-        save_steps = [s for s in steps if "cache/save" in (s.get("uses") or "")]
-        assert len(save_steps) >= 1, f"No cache save step in {job_name}"
-
-    @pytest.mark.parametrize("job_name", ["codex-probe", "claude-probe"])
-    def test_probe_gated_on_cache_miss(self, workflow: dict, job_name: str) -> None:
-        steps = workflow["jobs"][job_name]["steps"]
-        gated_steps = [s for s in steps if "cache-hit" in (s.get("if") or "")]
-        assert len(gated_steps) >= 1, f"No cache-gated probe step in {job_name}"
-
     @pytest.mark.parametrize(
-        ("job_name", "expected_backend"),
-        [("codex-probe", "codex"), ("claude-probe", "claude")],
+        ("job_name", "backend", "probe_step_name"),
+        [
+            ("codex-probe", "codex", "Run Codex conformance probes"),
+            ("claude-probe", "claude", "Run Claude Code conformance probes"),
+        ],
     )
-    def test_cache_key_contains_backend(
-        self, workflow: dict, job_name: str, expected_backend: str
+    def test_cache_is_exact_and_invalidated_by_all_probe_inputs(
+        self, workflow: dict, job_name: str, backend: str, probe_step_name: str
     ) -> None:
         steps = workflow["jobs"][job_name]["steps"]
-        restore_steps = [s for s in steps if "cache/restore" in (s.get("uses") or "")]
-        assert restore_steps, f"No cache/restore step found in {job_name}"
-        for step in restore_steps:
-            key = step.get("with", {}).get("key", "")
-            assert f"probe-{expected_backend}" in key
+        checkout_index = next(
+            index
+            for index, step in enumerate(steps)
+            if (step.get("uses") or "").startswith("actions/checkout@")
+        )
+        restore_steps = [
+            (index, step)
+            for index, step in enumerate(steps)
+            if "cache/restore" in (step.get("uses") or "")
+        ]
+        save_steps = [step for step in steps if "cache/save" in (step.get("uses") or "")]
+        assert len(restore_steps) == 1
+        assert len(save_steps) == 1
+        restore_index, restore = restore_steps[0]
+        save = save_steps[0]
+        probe = next(step for step in steps if step.get("name") == probe_step_name)
+
+        key_prefix = (
+            f"probe-{backend}-${{{{ steps.resolve-version.outputs.cli_version }}}}-"
+            "${{ steps.resolve-policy.outputs.policy_identity }}-${{ runner.os }}-"
+        )
+        key_index, key_step = next(
+            (index, step)
+            for index, step in enumerate(steps)
+            if step.get("id") == "resolve-cache-key"
+        )
+        key = key_step["env"]["PROBE_CACHE_KEY"]
+        cache_inputs = _probe_cache_inputs(key)
+        expected_cache_inputs = {
+            "path": f".autoskillit/temp/probe-cache/{backend}",
+            "key": "${{ steps.resolve-cache-key.outputs.key }}",
+        }
+
+        assert checkout_index < key_index < restore_index
+        assert key.startswith(key_prefix)
+        assert key_step["run"] == 'echo "key=$PROBE_CACHE_KEY" >> "$GITHUB_OUTPUT"'
+        assert restore["with"] == expected_cache_inputs
+        assert save["with"] == expected_cache_inputs
+        targets = re.findall(r"\btests/[\w/.-]+\.py\b", probe["run"])
+        assert targets
+        assert all(
+            any(fnmatchcase(target, pattern) for pattern in cache_inputs) for target in targets
+        )
+        assert {
+            "src/autoskillit/**",
+            "tests/**",
+            ".autoskillit/recipes/**",
+            "pyproject.toml",
+            "uv.lock",
+            ".github/workflows/conformance-probes.yml",
+            "!**/__pycache__/**",
+        } <= set(cache_inputs)
+        assert probe["if"] == "steps.restore-cache.outputs.cache-hit != 'true'"
+        assert save["if"] == "success() && steps.restore-cache.outputs.cache-hit != 'true'"
 
     @pytest.mark.parametrize("job_name", ["codex-probe", "claude-probe"])
-    def test_restore_and_save_keys_include_policy_identity(
+    def test_cache_hash_inputs_match_tracked_repository_files(
         self, workflow: dict, job_name: str
     ) -> None:
-        steps = workflow["jobs"][job_name]["steps"]
-        cache_steps = [
-            s
-            for s in steps
-            if "cache/restore" in (s.get("uses") or "") or "cache/save" in (s.get("uses") or "")
-        ]
-        assert len(cache_steps) == 2
-        for step in cache_steps:
-            key = step.get("with", {}).get("key", "")
-            assert "steps.resolve-policy.outputs.policy_identity" in key
+        key_step = next(
+            step
+            for step in workflow["jobs"][job_name]["steps"]
+            if step.get("id") == "resolve-cache-key"
+        )
+        for pathspec in _probe_cache_inputs(key_step["env"]["PROBE_CACHE_KEY"]):
+            if not pathspec.startswith("!"):
+                assert git_ls_files(_REPO_ROOT, pathspec), pathspec
 
 
 class TestOutputBudgetE2E:

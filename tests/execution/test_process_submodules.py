@@ -36,6 +36,7 @@ _EXPECTED_PROCESS_SYMBOLS: frozenset[str] = frozenset(
         "OwnerScope",
         "OwnerScopeSealedError",
         "OwnerScopeSettlement",
+        "SessionMonitorResult",
         "TetherRecord",
         "TetherSpec",
         "TetherSweepOutcome",

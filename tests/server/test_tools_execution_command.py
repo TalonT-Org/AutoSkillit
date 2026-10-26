@@ -452,19 +452,39 @@ class TestRunSkillExecutionMarker:
 
     @pytest.mark.anyio
     async def test_run_skill_attestation_stays_live_without_l1_marker_key(
-        self, tool_ctx_kitchen_open, monkeypatch
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path: Path
     ):
         from autoskillit.core import LAUNCH_ID_ENV_VAR
         from autoskillit.core.pipeline._execution_marker import execution_marker
         from autoskillit.hooks.guards.fabricated_completion_guard import (
             _has_fresh_matching_marker,
         )
+        from autoskillit.pipeline.exploration_context import OwnerBoundExplorationContextStore
+        from autoskillit.server._exploration_service import DefaultExplorationService
         from tests.fakes import MockSubprocessRunner
 
+        home = tmp_path / "home"
+        caller_prefix = tmp_path / "caller"
+        caller_cwd = caller_prefix / "project.with.dot"
+        child_cwd = Path("/tmp")
+        caller_cwd.mkdir(parents=True)
+        monkeypatch.setattr(Path, "home", lambda: home)
+        monkeypatch.setattr(tool_ctx_kitchen_open, "project_dir", caller_cwd)
         monkeypatch.delenv(LAUNCH_ID_ENV_VAR, raising=False)
         monkeypatch.setattr(
             tools_execution, "find_caller_session_id", lambda **_kwargs: "session-a"
         )
+        assert "." not in str(caller_prefix)
+        encoded_prefix = str(caller_prefix).replace("/", "-").replace("_", "-")
+        actual_transcript = (
+            home
+            / ".claude"
+            / "projects"
+            / f"{encoded_prefix}-project-with-dot"
+            / "session-a.jsonl"
+        )
+        actual_transcript.parent.mkdir(parents=True)
+        actual_transcript.write_text('{"type":"assistant","message":{"content":"caller"}}\n')
         marker_state: dict[str, object] = {}
 
         @contextlib.asynccontextmanager
@@ -488,22 +508,41 @@ class TestRunSkillExecutionMarker:
                 marker_payload = json.loads(marker_path.read_text(encoding="utf-8"))
                 assert marker_payload["label"] == "run-skill"
                 assert marker_payload["session_id"] == session_id
-                assert _has_fresh_matching_marker(marker_path, session_id)
+                assert marker_path.parent == actual_transcript.parent
+                assert _has_fresh_matching_marker(actual_transcript, session_id)
             return await runner(cmd, **kwargs)
 
         monkeypatch.setattr(tool_ctx_kitchen_open, "runner", check_marker_during_launch)
         runner.push(_make_result(returncode=1))  # clone guard snapshot
         runner.push(_make_result(returncode=0, stdout=_SUCCESS_JSON))
 
-        payload = json.loads(await run_skill("/investigate marker attestation", cwd="/tmp"))
-        _ack_direct_run_skill_result(tool_ctx_kitchen_open, payload)
+        with OwnerBoundExplorationContextStore(
+            trusted_root=caller_cwd, service=DefaultExplorationService()
+        ) as exploration_store:
+            monkeypatch.setattr(
+                tool_ctx_kitchen_open, "exploration_context_store", exploration_store
+            )
+            payload = json.loads(
+                await run_skill("/investigate marker attestation", cwd=str(child_cwd))
+            )
+            _ack_direct_run_skill_result(tool_ctx_kitchen_open, payload)
 
         claude_calls = [
             call for call in runner.call_args_list if Path(call[0][0]).name == "claude"
         ]
-        assert len(claude_calls) == 1
+        if len(claude_calls) != 1:
+            pytest.fail(
+                "run_skill response before Claude launch:\n" + json.dumps(payload, indent=2),
+                pytrace=False,
+            )
+        assert claude_calls[0][1] == child_cwd.resolve()
         assert "marker_dir" not in claude_calls[0][3]
         assert "session_id" not in claude_calls[0][3]
+        marker_path = marker_state["path"]
+        assert isinstance(marker_path, Path)
+        assert marker_path.parent == actual_transcript.parent
+        assert not marker_path.exists()
+        assert not _has_fresh_matching_marker(actual_transcript, "session-a")
 
     @pytest.mark.anyio
     async def test_marker_dir_routes_through_session_locator(

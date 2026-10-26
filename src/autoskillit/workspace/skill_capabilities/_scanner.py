@@ -21,7 +21,10 @@ import regex as re
 from autoskillit.core import SKILL_CAPABILITY_REGISTRY
 
 _STATIC_PATTERNS: dict[str, tuple[re.Pattern[str], ...]] = {
-    "claude_dir": (re.compile(r"\.claude/"),),
+    "claude_dir": (
+        re.compile(r"\.claude/"),
+        re.compile(r"\bautoskillit\s+claude-project-log-dir\b"),
+    ),
     "commit_files": (re.compile(r"\bcommit_files\s*\("),),
     "write_audit_semantic_result": (re.compile(r"\bwrite_audit_semantic_result\s*\("),),
     "write_standalone_audit_evidence": (re.compile(r"\bwrite_standalone_audit_evidence\s*\("),),

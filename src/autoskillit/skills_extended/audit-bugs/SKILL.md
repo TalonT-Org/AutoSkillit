@@ -84,22 +84,18 @@ The user may provide a "since" date (e.g., `2/7`, `2026-02-07`, `last week`). If
 
 ### Step 1: Locate Project Logs
 
-Claude Code stores conversation logs at `~/.claude/projects/` in a folder derived from the project's absolute path with `/` replaced by `-`.
+Claude Code stores conversation logs under `~/.claude/projects/`. Resolve the directory for the current working directory through the installed CLI:
 
-Derive the log directory:
 ```bash
-# Convert current working directory to Claude's folder naming scheme
-PROJECT_PATH=$(pwd)
-LOG_DIR="$HOME/.claude/projects/-${PROJECT_PATH//\//-}"
-# Remove leading double dash if present
-LOG_DIR="${LOG_DIR//--/-}"
+actual_absolute_cwd=$(pwd -P)
+LOG_DIR=$(autoskillit claude-project-log-dir "$actual_absolute_cwd")
 ```
 
 Verify the directory exists and contains `.jsonl` files.
 
 ### Step 2: Filter by Date and Investigate Skill
 
-1. Use `find` with `-newermt` to filter `.jsonl` files modified since the target date
+1. Use `find "$LOG_DIR"` with `-maxdepth 1`, `-name '*.jsonl'`, `! -name '*.orphaned-*.jsonl'`, and `-newermt` to filter session files modified since the target date, excluding orphaned copies
 2. From those, `grep -l '"skill".*"investigate"'` to find files where the investigate skill was invoked (tool invocation pattern)
 3. Also `grep -l '/autoskillit:investigate'` to catch user-typed invocations
 4. Combine and deduplicate. Only use top-level files (not subagent logs under `*/subagents/`)

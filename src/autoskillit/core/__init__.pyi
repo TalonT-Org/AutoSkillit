@@ -148,6 +148,7 @@ from .io import fast_dumps as fast_dumps
 from .io import fast_loads as fast_loads
 from .io import find_latest_session_id as find_latest_session_id
 from .io import github_review_ledger_path as github_review_ledger_path
+from .io import is_claude_session_log as is_claude_session_log
 from .io import is_generated_path as is_generated_path
 from .io import is_git_main_checkout as is_git_main_checkout
 from .io import is_git_worktree as is_git_worktree

@@ -782,6 +782,125 @@ class TestSessionIdBasedSelection:
         assert selected == [expected_file, competing_file]
 
 
+class TestClaudeProjectDirectoryMonitor:
+    @pytest.mark.anyio
+    async def test_real_locator_monitors_dotted_cwd_transcript_after_initial_eof(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        home = tmp_path / "home"
+        monkeypatch.setattr(Path, "home", lambda: home)
+        from autoskillit.execution.backends._claude.session_locator import (
+            ClaudeSessionLocator,
+        )
+
+        cwd_prefix = tmp_path / "workspace" / "repro"
+        cwd = cwd_prefix / ".autoskillit" / "temp" / "sandbox"
+        cwd.mkdir(parents=True)
+        locator = ClaudeSessionLocator()
+        located_dir = locator.project_log_dir(str(cwd))
+        located_dir.mkdir(parents=True)
+
+        assert "." not in str(cwd_prefix)
+        producer_prefix = str(cwd_prefix).replace("/", "-").replace("_", "-")
+        producer_dir = (
+            home / ".claude" / "projects" / (f"{producer_prefix}--autoskillit-temp-sandbox")
+        )
+        producer_dir.mkdir(parents=True, exist_ok=True)
+        native_session_id = "6427e502-e026-4c71-a420-eeb03e0dc3cd"
+        transcript = producer_dir / f"{native_session_id}.jsonl"
+        spawn_time = time.time() - 1
+        transcript.write_text(
+            json.dumps(
+                {
+                    "type": "user",
+                    "cwd": str(cwd),
+                    "sessionId": native_session_id,
+                    "message": {"content": "initial"},
+                }
+            )
+            + "\n"
+        )
+        selected: list[Path] = []
+        marker_written = False
+
+        def append_marker_after_initial_eof() -> None:
+            nonlocal marker_written
+            if marker_written:
+                return
+            marker_written = True
+            with transcript.open("a") as stream:
+                stream.write(
+                    json.dumps(
+                        {
+                            "type": "assistant",
+                            "message": {"content": "done\n\nMARKER"},
+                        }
+                    )
+                    + "\n"
+                )
+
+        with anyio.fail_after(1.0):
+            result = await _session_log_monitor(
+                located_dir,
+                "MARKER",
+                stale_threshold=0.25,
+                spawn_time=spawn_time,
+                expected_session_id=native_session_id,
+                _phase1_poll=0.005,
+                _phase2_poll=0.005,
+                _phase1_timeout=0.25,
+                _on_poll=append_marker_after_initial_eof,
+                on_session_file_selected=lambda path, _cursor: selected.append(path),
+            )
+
+        assert result.status is ChannelBStatus.COMPLETION
+        assert result.session_id == native_session_id
+        assert selected == [transcript]
+        assert json.loads(selected[0].read_text().splitlines()[0])["cwd"] == str(cwd)
+        assert located_dir == producer_dir
+        assert locator.session_log_path(str(cwd), native_session_id) == transcript
+        from autoskillit.core import claude_code_log_path
+
+        assert claude_code_log_path(str(cwd), native_session_id) == transcript
+
+    @pytest.mark.anyio
+    async def test_existing_directory_with_only_orphaned_transcript_stays_unselected(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        home = tmp_path / "home"
+        monkeypatch.setattr(Path, "home", lambda: home)
+        from autoskillit.execution.backends._claude.session_locator import (
+            ClaudeSessionLocator,
+        )
+
+        cwd = tmp_path / "workspace" / "project.with.dot"
+        cwd.mkdir(parents=True)
+        session_log_dir = ClaudeSessionLocator().project_log_dir(str(cwd))
+        session_log_dir.mkdir(parents=True)
+        spawn_time = time.time() - 1
+        orphaned = session_log_dir / "native.orphaned-2000-deadbeef.jsonl"
+        orphaned.write_text(
+            json.dumps({"type": "assistant", "message": {"content": "MARKER"}}) + "\n"
+        )
+        selected: list[Path] = []
+
+        with anyio.fail_after(1.0):
+            result = await _session_log_monitor(
+                session_log_dir,
+                "MARKER",
+                stale_threshold=0.1,
+                spawn_time=spawn_time,
+                _phase1_poll=0.005,
+                _phase2_poll=0.005,
+                _phase1_timeout=0.05,
+                on_session_file_selected=lambda path, _cursor: selected.append(path),
+            )
+
+        assert result.status is ChannelBStatus.STALE
+        assert result.session_id == ""
+        assert selected == []
+
+
 class TestSessionLogMonitorDirMissing:
     """DIR_MISSING is reserved for a missing session-log directory."""
 

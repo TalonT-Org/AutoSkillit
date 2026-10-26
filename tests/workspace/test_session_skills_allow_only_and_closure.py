@@ -142,6 +142,7 @@ def _write_invocation_skill(
     execution_role: str = "session",
     deps: tuple[str, ...] = (),
     categories: tuple[str, ...] = (),
+    interactive_only: bool = False,
 ) -> None:
     skill_path = root / name / "SKILL.md"
     skill_path.parent.mkdir(parents=True, exist_ok=True)
@@ -157,6 +158,8 @@ def _write_invocation_skill(
         frontmatter.append(f"activate_deps: [{', '.join(deps)}]")
     if categories:
         frontmatter.append(f"categories: [{', '.join(categories)}]")
+    if interactive_only:
+        frontmatter.append("interactive_only: true")
     evidence = {
         "github_api_write": "Run `gh issue edit 1 --body-file issue.md`.",
         "test_check": "Call `test_check()`.",
@@ -183,6 +186,35 @@ def _make_effective_resolver(tmp_path: Path, monkeypatch, skills: dict[str, dict
 
 class TestEffectiveInvocationClosurePolicy:
     """The complete direct/pack closure supplies one validated capability contract."""
+
+    def test_interactive_only_root_is_rejected(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.core import SkillExecutionRole
+
+        resolver = _make_effective_resolver(
+            tmp_path,
+            monkeypatch,
+            {"root": {"interactive_only": True}},
+        )
+        with pytest.raises(SkillContractError, match="interactive-only"):
+            resolver.resolve_invocation("root", tmp_path, SkillExecutionRole.SESSION)
+
+    def test_interactive_only_closure_member_is_rejected(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.core import SkillExecutionRole
+
+        resolver = _make_effective_resolver(
+            tmp_path,
+            monkeypatch,
+            {
+                "root": {"deps": ("interactive-dependency",)},
+                "interactive-dependency": {"interactive_only": True},
+            },
+        )
+        with pytest.raises(SkillContractError, match="interactive-only"):
+            resolver.resolve_invocation("root", tmp_path, SkillExecutionRole.SESSION)
 
     def test_direct_closure_does_not_scan_unrelated_catalog(
         self, tmp_path: Path, monkeypatch

@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import SkillExecutionRole, SkillSource
 from autoskillit.core.types.constants._type_constants import SKILL_ACTIVATE_DEPS_REQUIRED
 from autoskillit.core.types.constants._type_constants_registries import PACK_REGISTRY
 from autoskillit.workspace.session_skills import (
@@ -158,6 +159,43 @@ def test_required_activate_deps_present() -> None:
                     f"{dep!r} in activate_deps, but only {sorted(declared)!r} declared"
                 )
     assert not failures, "Missing required activate_deps:\n" + "\n".join(failures)
+
+
+def test_noninteractive_session_skill_closures_exclude_interactive_only(
+    provider: SkillsDirectoryProvider,
+) -> None:
+    failures: dict[str, list[str]] = {}
+    for skill in provider.resolver.list_all():
+        if (
+            skill.source not in {SkillSource.BUNDLED, SkillSource.BUNDLED_EXTENDED}
+            or skill.execution_role is not SkillExecutionRole.SESSION
+            or skill.interactive_only
+        ):
+            continue
+        interactive_members = sorted(
+            name
+            for name in compute_skill_closure(skill.name, provider)
+            if (member := provider.resolver.resolve(name)) is not None and member.interactive_only
+        )
+        if interactive_members:
+            failures[skill.name] = interactive_members
+    assert not failures, f"headless skill closures contain interactive-only members: {failures}"
+
+
+def test_required_activate_dependencies_are_not_interactive_only(
+    provider: SkillsDirectoryProvider,
+) -> None:
+    required = {
+        dependency
+        for dependencies in SKILL_ACTIVATE_DEPS_REQUIRED.values()
+        for dependency in dependencies
+    }
+    interactive = sorted(
+        name
+        for name in required
+        if (skill := provider.resolver.resolve(name)) is not None and skill.interactive_only
+    )
+    assert not interactive, f"required activate_deps are interactive-only: {interactive}"
 
 
 def test_all_activate_deps_resolve() -> None:

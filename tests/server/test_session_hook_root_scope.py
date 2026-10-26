@@ -9,6 +9,7 @@ underlying lease no later than the owning resource's cleanup.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -450,6 +451,30 @@ def _install_direct_dispatch_session_manager(tool_ctx: Any, tmp_path: Path) -> N
         ephemeral_root=tmp_path / "ephemeral-sessions",
         persistent_roots={"codex": tmp_path / "persistent-sessions"},
     )
+
+
+def test_direct_dispatch_returns_crashed_result_for_interactive_only_skill(
+    tool_ctx: Any,
+    tmp_path: Path,
+) -> None:
+    _install_direct_dispatch_skill(tool_ctx, name="direct-skill")
+    _install_direct_dispatch_session_manager(tool_ctx, tmp_path)
+    tool_ctx.skill_resolver.resolve_invocation.side_effect = SkillContractError(
+        "interactive-only skill 'direct-skill' cannot run in a headless invocation"
+    )
+
+    dispatch, error = _prepare_direct_skill_dispatch(
+        "/direct-skill",
+        tool_ctx.project_dir,
+        tool_ctx,
+    )
+
+    assert dispatch is None
+    assert error is not None
+    parsed = json.loads(error)
+    assert parsed["subtype"] == "crashed"
+    assert "SkillContractError" in parsed["result"]
+    assert "interactive-only" in parsed["result"]
 
 
 def test_direct_dispatch_holds_session_hook_root_until_cleanup(

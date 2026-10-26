@@ -43,6 +43,19 @@ def test_effective_catalog_is_path_free(tmp_path: Path) -> None:
         )
 
 
+def test_interactive_cook_catalog_retains_kitchen_skills(tmp_path: Path) -> None:
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    catalog = DefaultSkillResolver().list_effective(
+        tmp_path,
+        SkillExecutionRole.SESSION,
+        cook_session=True,
+    )
+
+    names = {skill.name for skill in catalog.skills}
+    assert {"open-kitchen", "close-kitchen"} <= names
+
+
 def _resolver_with_visibility_skills(tmp_path: Path):
     from autoskillit.workspace.skills import DefaultSkillResolver
 
@@ -621,6 +634,7 @@ def test_projection_strips_all_machine_authority_and_preserves_private_deps(
             "activate_deps",
             "execution_role",
             "exploration_vectors",
+            "interactive_only",
             "requires_resources",
             "semantic_requirements",
             "semantic_version",
@@ -664,6 +678,35 @@ def test_projection_strips_all_machine_authority_and_preserves_private_deps(
     assert document.content.endswith("public body\n")
     assert info.activate_deps == ("dependency",)
     assert entry.activate_deps == ("dependency",)
+
+
+def test_projection_strips_interactive_only_from_open_kitchen(tmp_path: Path) -> None:
+    from autoskillit.workspace import (
+        EffectiveSkillCatalog,
+        SkillCatalogEntry,
+        SkillProjectionContext,
+        parse_frontmatter_content,
+        project_agent_skill_document,
+    )
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    info = DefaultSkillResolver().resolve("open-kitchen")
+    assert info is not None
+    assert info.interactive_only
+    entry = SkillCatalogEntry.from_skill_info(info)
+    catalog = EffectiveSkillCatalog(
+        skills=(entry,),
+        execution_role=SkillExecutionRole.SESSION,
+    )
+
+    document = project_agent_skill_document(
+        entry,
+        SkillProjectionContext(cwd=tmp_path, catalog=catalog),
+    )
+    projected = parse_frontmatter_content(document.content)
+
+    assert projected.is_valid and projected.data is not None
+    assert "interactive_only" not in projected.data
 
 
 @pytest.mark.parametrize(

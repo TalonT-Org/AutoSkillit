@@ -74,15 +74,3 @@ class FailureStore:
 def default_store_path(project_dir: Path, temp_dir: Path | None = None) -> Path:
     base = temp_dir if temp_dir is not None else resolve_temp_dir(project_dir, None)
     return base / "migrations" / "failures.json"
-
-
-def record_from_skill(
-    name: str,
-    file_path: str,
-    file_type: str,
-    error: str,
-    retries_attempted: int,
-) -> None:
-    """Entry point for migrate-recipes SKILL.md via run_python when retries exhausted."""
-    store_path = default_store_path(Path.cwd())
-    FailureStore(store_path).record(name, Path(file_path), file_type, error, retries_attempted)

@@ -49,6 +49,7 @@ MACHINE_ONLY_SKILL_FRONTMATTER_KEYS = frozenset(
         "activate_deps",
         "execution_role",
         "exploration_vectors",
+        "interactive_only",
         "requires_resources",
         "semantic_version",
         "semantic_requirements",

@@ -54,6 +54,9 @@ gaps, currently out-of-scope for this plan):
 - `uses_capabilities:` — declared MCP capabilities (`run_skill`,
   `test_check`, `open_kitchen`, `github_api_write`, etc.). Drives
   capability-gated dispatch and audit trails.
+- `interactive_only:` — boolean; true forbids every headless invocation of
+  this skill and of any closure containing it (same concept as the
+  `interactive_only` hook/tool session scope).
 
 ## Multi-concern files
 

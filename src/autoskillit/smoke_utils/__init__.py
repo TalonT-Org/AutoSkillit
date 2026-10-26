@@ -24,7 +24,7 @@ from autoskillit.smoke_utils._git import (
     detect_zero_changes,
     fetch_merge_queue_data,
 )
-from autoskillit.smoke_utils._helpers import probe_audit_substitutions, try_load_json
+from autoskillit.smoke_utils._helpers import try_load_json
 from autoskillit.smoke_utils._investigation import extract_investigation
 from autoskillit.smoke_utils._merge_gate_diagnosis import diagnose_merge_gate
 from autoskillit.smoke_utils._review import (
@@ -133,7 +133,6 @@ __all__ = [
     "plan_review_audit_slots",
     "pre_iteration_cleanup",
     "prepare_experimental_review_publication",
-    "probe_audit_substitutions",
     "publish_experimental_review_artifacts",
     "render_review_finding_body",
     "render_unpostable_review_section",

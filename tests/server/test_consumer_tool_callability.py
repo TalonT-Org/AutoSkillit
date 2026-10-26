@@ -85,16 +85,6 @@ EXEMPTIONS: dict[ExemptionKey, str] = {
         CatalogContext.HEADLESS_SKILL_AUTO_GATE,
     ): "resolve-failures/SKILL.md:165 says not via Bash or run_cmd",
     (
-        "skill:audit-impl",
-        "run_python",
-        CatalogContext.HEADLESS_SKILL,
-    ): "#5177: move the Step 3.4 probe to the parent-side floor check",
-    (
-        "skill:audit-impl",
-        "run_python",
-        CatalogContext.HEADLESS_SKILL_AUTO_GATE,
-    ): "#5177: move the Step 3.4 probe to the parent-side floor check",
-    (
         "skill:process-issues",
         "batch_cleanup_clones",
         CatalogContext.INTERACTIVE_ORCHESTRATOR,

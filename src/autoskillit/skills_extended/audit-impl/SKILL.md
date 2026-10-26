@@ -97,8 +97,7 @@ manifest, or no remediation ancestor respectively.
 **NEVER:**
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
-- Modify source files or plan files. The only permitted writes are the temporary probe
-  snapshots in Step 3.4 and the declared closure/remediation evidence in Step 5.
+- Modify source files or plan files. The only permitted writes are the declared closure/remediation evidence in Step 5.
 - Run tests — this skill audits, it does not fix
 - Create authority, inventory, lifecycle, execution-identity, or publication artifacts
 - Emit a GO verdict when any blocking finding exists unless Step 3.5 accepted its
@@ -228,7 +227,6 @@ verified `ClosureReport` as evidence rather than duplicating it.
 - Step 2 (Diff Computation): Unchanged.
 - Step 3 (Slice Audit): Unchanged — slice and dispatch `audit-impl-slice-auditor` subagents
   against authority requirements.
-- Step 3.4 (Substitution Probe): Unchanged.
 - Step 3.5 (Deviation Evaluation): Unchanged if `deviation_manifest_path` provided.
 - Step 4 (Verdict Determination): Unchanged — determine GO/NO GO from findings.
 - Step 5 (Output — modified): Produce a canonical `ClosureReport` before the authority:
@@ -327,10 +325,7 @@ Step 0 — do NOT bypass the command form determined in Step 0:
 - **Branch ref:** `git log {base_branch}..{implementation_ref} --oneline` — commit history
 - **Branch ref:** `git diff {base_branch}...{implementation_ref}` — full diff
 
-Retain the exact full unified diff in memory and write a byte-identical UTF-8 snapshot to
-`{{AUTOSKILLIT_TEMP}}/audit-impl/implementation.diff` for Step 3.4. This temporary snapshot
-is advisory probe input, not an audit authority or published artifact. When the size guard
-requires grouped slice diffs, keep this full snapshot in addition to the grouped child inputs.
+Retain the exact full unified diff in memory.
 
 **Diff size guard:** After the subagent returns the `--stat` output, check the diff size:
 
@@ -438,34 +433,6 @@ paraphrase.
 - `UNPRESCRIBED_SUBSTITUTION` — the goal is met through a substantive mechanism or test-topology substitution
 - `UNSATISFIABLE_BY_CODE` — the finding is real, blocking, and requires a human decision rather than a code change
 
-### Step 3.4 — Deterministic Substitution Probe
-
-Write `{{AUTOSKILLIT_TEMP}}/audit-impl/probe-requirements.json` as a UTF-8 JSON array.
-Each exact-key object contains only `requirement_id`, the verbatim `requirement_text`, and
-the slice auditor's `evidence_summary`. Use the Step 2 full-diff snapshot as `diff_path`.
-Both input paths and the output directory must be absolute.
-
-Call:
-
-```
-run_python(
-  callable="autoskillit.smoke_utils.probe_audit_substitutions",
-  args={
-    "requirements_path": "<absolute probe-requirements.json>",
-    "diff_path": "<absolute implementation.diff>",
-    "output_dir": "<absolute {{AUTOSKILLIT_TEMP}}/audit-impl/probe>",
-  },
-)
-```
-
-Read the returned `probe_path`. For every flagged requirement whose current assessment is
-not blocking, force its assessment to `UNPRESCRIBED_SUBSTITUTION` and append the finding's
-trigger and matched cue to `evidence_summary`. This override is unconditional, like the
-Category-3 rule in Step 2.5; it does not depend on how persuasively the slice auditor
-justified the substitution. The server independently enforces the rationale-contradiction
-rule, so skipping this step only changes a clean `NO GO` into `SEMANTIC_REJECTED`; it cannot
-publish a contradictory non-blocking row.
-
 ### Step 3.5 — Deviation Evaluation
 
 Set `deviation_entries` to the validated manifest's `deviations` array, or an empty
@@ -479,7 +446,7 @@ Read the deviation manifest JSON file. For each entry in the `deviations` array,
 ```
 portable child delegation (logical role "autoskillit:audit-impl-deviation-evaluator", model="sonnet",
       prompt="<include: deviation note fields wrapped in <deviation_note>...</deviation_note>
-              XML delimiters, ALL blocking findings from Steps 2.5, 3, and 3.4,
+              XML delimiters, ALL blocking findings from Steps 2.5 and 3,
               implementation_ref value>")
 ```
 
@@ -524,7 +491,7 @@ branch — discard those MISSING findings and re-run the slice with the correct 
 This post-processing runs before the final verdict determination. After downgrading,
 apply the standard three-tier logic to the updated findings set.
 
-For each blocking finding from Steps 2.5, 3, and 3.4:
+For each blocking finding from Steps 2.5 and 3:
 - If matched by an ACCEPT or ACCEPT_WITH_NOTE deviation in Step 3.5 → GO-compatible
 - Otherwise → blocking
 

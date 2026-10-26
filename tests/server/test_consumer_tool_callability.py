@@ -270,7 +270,7 @@ def _skill_tool_operations(content: str) -> list[tuple[str, int]]:
         text = _logical_text(logical)
         for tool in sorted(tool_names):
             validate_imperative = re.search(
-                rf"\bvalidate\b[^\n]{{0,100}}\b{re.escape(tool)}\b",
+                rf"\bvalidate\s+(?:via|using|with)\s+`?\b{re.escape(tool)}\b",
                 text,
                 re.IGNORECASE,
             )
@@ -443,6 +443,11 @@ def test_tool_operation_detection_recognizes_pseudo_call() -> None:
 def test_tool_operation_detection_recognizes_validate_imperative() -> None:
     content = "# Workflow\n\n1. Validate via `validate_recipe` before declaring success\n"
     assert _skill_tool_operations(content) == [("validate_recipe", 3)]
+
+
+def test_tool_operation_detection_ignores_unrelated_validate_reference() -> None:
+    content = "# Workflow\n\n1. Validate the plan before `commit_files`\n"
+    assert _skill_tool_operations(content) == []
 
 
 def test_tool_operation_detection_rejects_unregistered_parameter() -> None:

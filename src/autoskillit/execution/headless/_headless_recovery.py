@@ -19,14 +19,13 @@ from autoskillit.core import (
     SkillResult,
     TokenMeasure,
     TurnTokenEntry,
-    destination_location,
     get_logger,
     is_parent_assistant_record,
 )
 from autoskillit.execution.backends._codex_parse import extract_codex_turn_usage
+from autoskillit.execution.headless._headless_evidence import _tool_write_path_warnings
 from autoskillit.execution.headless._headless_path_tokens import (
     _RECOVERABLE_PATH_TOKENS,
-    _is_path_outside_cwd,
 )
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import (
@@ -41,7 +40,6 @@ from autoskillit.execution.session.turn_usage import (
     merge_turn_usage,
     valid_token_count,
 )
-from autoskillit.hooks import UNRESOLVED_WRITE_TARGET_REMEDIATION, scan_write_targets
 
 if TYPE_CHECKING:
     from autoskillit.core import ResultParser
@@ -86,46 +84,6 @@ def _is_path_capture_pattern(pattern: str) -> str | None:
     if "=" not in pattern[m.end() :]:
         return None
     return token_name
-
-
-def _tool_write_path_warnings(
-    tool_name: Any,
-    inputs: dict[str, Any],
-    cwd: str,
-    write_tool_names: frozenset[str],
-    bash_tool_name: str,
-) -> list[str]:
-    warnings: list[str] = []
-    if tool_name == bash_tool_name:
-        command = inputs.get("command", "")
-        if isinstance(command, str):
-            scan = scan_write_targets(command, cwd)
-            unresolved = scan.unresolved or not scan.parseable
-            paths = [(path, cwd) for path in scan.targets]
-            for path in scan.entry_targets:
-                try:
-                    location = str(destination_location(Path(path)))
-                    physical_cwd = str(Path(cwd).resolve()) if os.path.isabs(cwd) else cwd
-                    paths.append((location, physical_cwd))
-                except (OSError, RuntimeError, ValueError):
-                    unresolved = True
-            if unresolved:
-                warnings.append(
-                    "Bash command contained a write target that could not be statically resolved. "
-                    + UNRESOLVED_WRITE_TARGET_REMEDIATION
-                )
-            for path, comparison_cwd in paths:
-                if _is_path_outside_cwd(path, comparison_cwd):
-                    normalized = os.path.normpath(path)
-                    warnings.append(
-                        f"Bash command contained write target '{normalized}'"
-                        f" outside session cwd '{cwd}'"
-                    )
-    elif tool_name in write_tool_names:
-        file_path = inputs.get("file_path", "")
-        if isinstance(file_path, str) and _is_path_outside_cwd(file_path, cwd):
-            warnings.append(f"{tool_name} tool targeted '{file_path}' outside session cwd '{cwd}'")
-    return warnings
 
 
 def _scan_jsonl_write_paths(

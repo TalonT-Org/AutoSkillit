@@ -314,16 +314,20 @@ def _write_prefix_policy(data: dict[str, object], headless: bool) -> _WritePolic
     return _WritePolicy("active", tuple(norm_prefixes), ", ".join(raw_prefixes), "")
 
 
+def _write_boundary_message(display_prefix: str) -> str:
+    return (
+        f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
+        f"Only writes to {display_prefix} are permitted."
+    )
+
+
 def _paths_validation_error(
     paths: list[str], norm_prefixes: list[str], display_prefix: str
 ) -> str | None:
     for path in paths:
         resolved = os.path.realpath(path)
         if not any(resolved.startswith(np) or resolved == np.rstrip("/") for np in norm_prefixes):
-            return (
-                f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
-                f"Only writes to {display_prefix} are permitted."
-            )
+            return _write_boundary_message(display_prefix)
     return None
 
 
@@ -334,15 +338,9 @@ def _entry_paths_validation_error(
         try:
             allowed = any(destination_within(path, prefix) for prefix in norm_prefixes)
         except (OSError, RuntimeError, ValueError):
-            return (
-                f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
-                f"Only writes to {display_prefix} are permitted."
-            )
+            return _write_boundary_message(display_prefix)
         if not allowed:
-            return (
-                f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
-                f"Only writes to {display_prefix} are permitted."
-            )
+            return _write_boundary_message(display_prefix)
     return None
 
 

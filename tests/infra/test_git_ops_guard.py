@@ -975,7 +975,10 @@ class TestCheckedOutRefMutations:
             tmpdir=linked,
         )
 
-        assert _is_denied(out)
+        threatened = _checked_out_ref_result(out)["threatened_refs"]
+        assert isinstance(threatened, list)
+        expected_ref = "HEAD" if source_name == "HEAD" else f"refs/heads/{source_name}"
+        assert {row["target_ref"] for row in threatened} == {expected_ref}
 
     def test_denies_npm_prefix_targeting_checked_out_ref(
         self, linked_repo: dict[str, Path | str]
@@ -990,7 +993,9 @@ class TestCheckedOutRefMutations:
             tmpdir=linked,
         )
 
-        assert _is_denied(out)
+        threatened = _checked_out_ref_result(out)["threatened_refs"]
+        assert isinstance(threatened, list)
+        assert {row["target_ref"] for row in threatened} == {"refs/heads/develop"}
 
     @pytest.mark.parametrize("target_first", [True, False], ids=["target-first", "target-last"])
     def test_denies_install_target_directory_checked_out_ref_child(
@@ -1013,7 +1018,9 @@ class TestCheckedOutRefMutations:
 
         out = _run_guard(f"install {operands}", kitchen_open=True, tmpdir=linked)
 
-        assert _is_denied(out)
+        threatened = _checked_out_ref_result(out)["threatened_refs"]
+        assert isinstance(threatened, list)
+        assert {row["target_ref"] for row in threatened} == {"refs/heads/develop"}
 
     @pytest.mark.parametrize("target_first", [True, False], ids=["target-first", "target-last"])
     def test_allows_install_from_protected_source_to_unprotected_directory(

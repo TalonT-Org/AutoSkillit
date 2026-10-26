@@ -314,8 +314,8 @@ def transition_reason(
     projected = _projected(records, candidate)
     encoded = sizer.total_bytes(projected, compaction_epoch, spec)
     recovery_state = transition_compaction_bound(candidate, spec) == spec.hard_ledger_bytes
-    previous = records.get(candidate.capture_id)
-    state_changes = previous is None or previous.state is not candidate.state
+    previous = records[candidate.capture_id]
+    state_changes = previous.state is not candidate.state
     if encoded > transition_compaction_bound(candidate, spec):
         return CaptureCapacityReason.HARD_LEDGER_CAPACITY
     if state_changes and not recovery_state and encoded > spec.compaction_low_bytes:

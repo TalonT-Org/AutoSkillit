@@ -46,6 +46,7 @@ def test_headless_tools_contains_expected_names() -> None:
         "delegate_evidence_reader",
         "fetch_github_issue",
         "get_issue_title",
+        "inspect_session_logs",
     }
 
 

@@ -104,4 +104,5 @@ The canonical tool sets are in `core/types/constants/_type_constants_registries.
   sentence that must exist in the skill text); known defects go in
   `DEFERRED_VIOLATIONS` as `TrackedDeferral`s (issue, dated 180-day time bomb,
   regression test). Every SESSION skill is checked in both headless contexts unless
-  it declares `interactive_only: true`.
+  it declares `interactive_only: true`; MCP tools declared by non-explorer agents must
+  be in `HEADLESS_TOOLS` (`tests/contracts/test_agent_tool_surface_alignment.py`).

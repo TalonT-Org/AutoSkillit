@@ -176,6 +176,7 @@ class DefaultPlanSetMaterializer:
     def lookup_binding(
         self, execution_generation: str, authority_path: str
     ) -> tuple[Path, str] | None:
+        """Return successful recipe-bind provenance; standalone binds have no record."""
         return self._bindings.get((execution_generation, os.path.abspath(authority_path)))
 
     async def bind(self, request: PlanSetBindRequest) -> PlanSetBindResult:

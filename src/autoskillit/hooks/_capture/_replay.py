@@ -254,7 +254,7 @@ def degraded_delivery_return(shell_returncode: int | None) -> int:
     return shell_returncode
 
 
-def _emit_degraded(failure: CaptureFailureV3) -> None:
+def emit_degraded(failure: CaptureFailureV3) -> None:
     """Emit a degraded-delivery diagnostic marker to stderr."""
     _write_and_flush_hook_stderr(render_capture_degraded_v3(failure) + b"\n")
 

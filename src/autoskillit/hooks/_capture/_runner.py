@@ -257,7 +257,7 @@ def _run_bounded_uncaptured(
             replace(failure, shell_returncode=outcome.shell_returncode)
         )
     try:
-        _capture_replay._emit_degraded(replace(failure, shell_returncode=outcome.shell_returncode))
+        _capture_replay.emit_degraded(replace(failure, shell_returncode=outcome.shell_returncode))
     except _CAPTURE_RUNTIME_ERRORS:
         pass
     return _capture_replay.degraded_delivery_return(outcome.shell_returncode)
@@ -461,7 +461,7 @@ def run_capture(
                     settlement=None,
                 )
                 try:
-                    _capture_replay._emit_degraded(degraded_failure)
+                    _capture_replay.emit_degraded(degraded_failure)
                 except _CAPTURE_RUNTIME_ERRORS:
                     pass  # output already delivered; lost diagnostic
                 return _capture_replay.degraded_delivery_return(command_returncode)

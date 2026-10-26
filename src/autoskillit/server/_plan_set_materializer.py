@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -21,6 +22,7 @@ from autoskillit.core import (
     IssueSnapshotRef,
     PlanPartRef,
     PlanSetAuthority,
+    PlanSetBindingMode,
     PlanSetBindRequest,
     PlanSetBindResult,
     PlanSetRejectReason,
@@ -169,6 +171,12 @@ class DefaultPlanSetMaterializer:
 
     def __init__(self, github_client: GitHubFetcher | None) -> None:
         self._github_client = github_client
+        self._bindings: dict[tuple[str, str], tuple[Path, str]] = {}
+
+    def lookup_binding(
+        self, execution_generation: str, authority_path: str
+    ) -> tuple[Path, str] | None:
+        return self._bindings.get((execution_generation, os.path.abspath(authority_path)))
 
     async def bind(self, request: PlanSetBindRequest) -> PlanSetBindResult:
         predecessor: PlanSetAuthority | None = None
@@ -224,7 +232,7 @@ class DefaultPlanSetMaterializer:
                 parent_path = str(Path(request.parent_authority_path).resolve())
                 if predecessor is parent:
                     predecessor_path = parent_path
-            return await self._bind(
+            result = await self._bind(
                 request,
                 root,
                 parent,
@@ -233,6 +241,13 @@ class DefaultPlanSetMaterializer:
                 predecessor_path,
                 predecessor_digest,
             )
+            if result.success and request.binding_mode is PlanSetBindingMode.RECIPE:
+                key = (
+                    request.execution_generation,
+                    os.path.abspath(result.plan_set_authority_path),
+                )
+                self._bindings[key] = (root, result.plan_set_authority_digest)
+            return result
         except Exception as exc:
             logger.error("plan-set binding failed", exc_info=True)
             return _failure(

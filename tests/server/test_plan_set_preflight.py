@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -136,6 +137,38 @@ async def test_absent_authority_omits_evidence_and_kitchen_error_is_namespaced(
             allowed_root=tmp_path,
         )
     assert exc_info.value.code == "input_preflight_plan_set_kitchen_mismatch"
+
+
+@pytest.mark.parametrize("kind", ("symlink", "hardlink"))
+async def test_recorded_authority_still_rejects_file_links(tmp_path: Path, kind: str) -> None:
+    authority_path, part, materializer = await _authority(tmp_path)
+    path = Path(authority_path)
+    original = path.rename(path.with_suffix(".original"))
+    if kind == "symlink":
+        path.symlink_to(original)
+    else:
+        os.link(original, path)
+    with pytest.raises(RecipeExecutionAdmissionError) as exc_info:
+        resolve_attested_input_preflight(
+            SimpleNamespace(
+                kitchen_id="kitchen",
+                plan_set_materializer=materializer,
+                skill_contract_resolver=lambda _: SimpleNamespace(
+                    input_preflight=("plan_set_coverage",)
+                ),
+            ),
+            SimpleNamespace(
+                plan_set_preflight_resolver=DefaultPlanSetPreflightResolver(
+                    RecipeExecutionId("generation"), "kitchen"
+                )
+            ),
+            skill_command="/autoskillit:dry-walkthrough",
+            execution_id="generation",
+            step_name="verify",
+            template=SimpleNamespace(invocation=SimpleNamespace(skill_name="dry-walkthrough")),
+            bound_inputs=(("plan_path", str(part)), ("plan_set_authority_path", authority_path)),
+        )
+    assert exc_info.value.code == f"input_preflight_plan_set_{kind}"
 
 
 def test_plan_only_preflight_uses_issued_root_without_invocation_root(tmp_path: Path) -> None:

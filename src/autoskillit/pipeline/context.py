@@ -229,7 +229,8 @@ class ToolContext:
                           into server-owned canonical audit authority artifacts.
     plan_set_materializer:
                           PlanSetMaterializer — binds ordered plan parts to server-owned
-                          plan-set authority artifacts.
+                          plan-set authority artifacts and retains successful recipe-bind
+                          roots and digests for server-held provenance lookup.
     committed_disposition_resolver:
                           CommittedDispositionResolver — resolves only disposition paths
                           backed by the durable audit-admission ledger.

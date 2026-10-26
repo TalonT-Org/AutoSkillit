@@ -13,6 +13,7 @@ from autoskillit.core import (
     PlanSetBindingMode,
     PlanSetPreflightEvidence,
     PlanSetPreflightRequest,
+    PlanSetRejectReason,
     PlanSetVerification,
     PreflightKind,
     RecipeExecutionId,
@@ -38,7 +39,6 @@ def _resolve_plan_set_preflight(
     execution_id: str,
     step_name: str,
     template: InvocationTemplate,
-    allowed_root: Path | None,
     kind: PreflightKind,
 ) -> PlanSetPreflightEvidence | None:
     authority_path = bound_input_map.get("plan_set_authority_path")
@@ -51,15 +51,19 @@ def _resolve_plan_set_preflight(
             "recipe_execution_preflight_input",
             "plan-set preflight requires bound string plan_path and authority path",
         )
-    if allowed_root is None:
-        raise RecipeExecutionAdmissionError(
-            "recipe_execution_preflight_input", "plan-set preflight requires an allowed root"
-        )
-    if installed.plan_set_preflight_resolver is None:
+    materializer = tool_ctx.plan_set_materializer
+    if materializer is None or installed.plan_set_preflight_resolver is None:
         raise RecipeExecutionAdmissionError(
             "recipe_execution_preflight_unavailable",
-            "plan-set preflight resolver is unavailable",
+            "plan-set materializer or preflight resolver is unavailable",
         )
+    binding = materializer.lookup_binding(execution_id, authority_path)
+    if binding is None:
+        raise RecipeExecutionAdmissionError(
+            f"input_preflight_plan_set_{PlanSetRejectReason.AUTHORITY_INVALID.value}",
+            "authority was not bound by this server for the current recipe execution",
+        )
+    bind_root, issued_digest = binding
     verification = installed.plan_set_preflight_resolver.resolve(
         PlanSetPreflightRequest(
             execution_generation=execution_id,
@@ -70,7 +74,7 @@ def _resolve_plan_set_preflight(
             plan_set_authority_path=authority_path,
             allow_part_drift=stage_scope,
         ),
-        allowed_root=allowed_root,
+        allowed_root=bind_root,
     )
     if not verification.accepted:
         reason = verification.reason.value if verification.reason else "rejected"
@@ -78,7 +82,18 @@ def _resolve_plan_set_preflight(
             f"input_preflight_plan_set_{reason}",
             "; ".join(verification.detail),
         )
-    return verification.evidence
+    evidence = verification.evidence
+    if evidence is None:
+        raise RecipeExecutionAdmissionError(
+            "recipe_execution_preflight_unavailable",
+            "accepted plan-set verification did not provide evidence",
+        )
+    if evidence.plan_set_authority_digest != issued_digest:
+        raise RecipeExecutionAdmissionError(
+            "input_preflight_plan_set_authority_digest",
+            "verified authority digest differs from its server-issued binding",
+        )
+    return evidence
 
 
 class DefaultPlanSetPreflightResolver:

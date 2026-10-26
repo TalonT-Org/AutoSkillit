@@ -622,7 +622,6 @@ def resolve_attested_input_preflight(
                 execution_id,
                 step_name,
                 template,
-                allowed_root,
                 PreflightKind(preflight_name),
             )
         else:

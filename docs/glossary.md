@@ -11,8 +11,22 @@ inventory to ordered hashed plan parts, their allocation rows, and aggregate
 coverage. `bind_plan_set` records hashed content evidence rather than command
 lines; aggregate coverage is decided only by the server-side
 `plan_set_coverage` preflight. Consumers receive verified preflight evidence,
-never the artifact itself, and the sealed state is authenticated inside the
-canonical authority digest.
+never the artifact itself. The canonical authority digest is an unkeyed integrity
+hash covering the sealed state; it does not establish server issuance.
+
+For recipe admission, the context-owned materializer retains each successful
+bind's root and issued digest for that execution and authority path. Admission
+verifies the original path beneath its recorded bind root and compares the
+verified digest with that issuance record. Audit inputs retain their invocation
+cwd root; standalone binding retains cwd containment and creates no recipe record.
+
+Records live in the server process, survive same-context execution reinstalls,
+and are retained for its lifetime, including obsolete executions. Fresh contexts,
+including fleet-side contexts, require their own successful recipe bind.
+This boundary trusts the server process, its records, and the supplied root and
+its ancestors. The recorded root is a path, without a retained directory handle
+or bind-time inode identity; replacing it or an ancestor can change later path
+resolution. A sibling worktree does not provide OS-level isolation.
 
 ### arch-lens
 

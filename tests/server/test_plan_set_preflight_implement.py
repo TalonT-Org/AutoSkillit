@@ -72,6 +72,14 @@ async def _bind(
     return bound, parts, materializer
 
 
+def _implementation_parts(clone: Path, tool_ctx, monkeypatch: pytest.MonkeyPatch):
+    root, *parts = write_plan_set_parts(clone, tool_ctx, monkeypatch)
+    plan_root = root / "make-plan"
+    plan_root.mkdir()
+    moved = tuple(part.rename(plan_root / part.name) for part in parts)
+    return plan_root, *moved
+
+
 def _consumer_args(
     step: dict[str, Any],
     credential: dict[str, Any],
@@ -233,7 +241,13 @@ async def test_resumed_execution_consumes_original_authority_without_rebinding(
     original_execution = state.installed_execution
     original_id = original_execution.snapshot.execution_id
     kitchen = ready.tool_ctx.kitchen_id
-    bound, parts, _ = await _bind(tmp_path, kitchen=kitchen, generation=original_id)
+    materializer = ready.tool_ctx.plan_set_materializer
+    assert isinstance(materializer, DefaultPlanSetMaterializer)
+    bound, parts, _ = await _bind(
+        tmp_path, kitchen=kitchen, generation=original_id, materializer=materializer
+    )
+    pin = (tmp_path.resolve(), bound.plan_set_authority_digest)
+    assert materializer.lookup_binding(original_id, bound.plan_set_authority_path) == pin
 
     async def unexpected_bind(_request: object) -> None:
         raise AssertionError("resume must not re-bind an existing authority")
@@ -244,6 +258,8 @@ async def test_resumed_execution_consumes_original_authority_without_rebinding(
     assert isinstance(resumed_state, ReadyRecipe)
     resumed_execution = resumed_state.installed_execution
     assert resumed_execution.snapshot.execution_id == original_id
+    assert materializer.lookup_binding(original_id, bound.plan_set_authority_path) == pin
+    assert materializer.lookup_binding("other-execution", bound.plan_set_authority_path) is None
     assert resumed_execution.plan_set_preflight_resolver is not None
     admitted = resumed_execution.plan_set_preflight_resolver.resolve(
         PlanSetPreflightRequest(
@@ -279,7 +295,7 @@ async def test_clone_authority_admits_implement_and_retry_from_fresh_sibling_wor
 
     ready = tool_ctx_ready_recipe
     tool_ctx = ready.tool_ctx
-    _, part_a, part_b = write_plan_set_parts(git_checkout, tool_ctx, monkeypatch)
+    _, part_a, part_b = _implementation_parts(git_checkout, tool_ctx, monkeypatch)
     plan_parts = f"{part_a}\n{part_b}"
     initial = json.loads(
         await bind_plan_set(
@@ -350,7 +366,7 @@ async def test_clone_authority_admits_implement_and_retry_from_fresh_sibling_wor
                 )
             )
         )
-        assert response["success"] is True, response
+        assert response["success"] is True, json.dumps(response)
         assert len(executor.calls) == before + 1
         call = executor.calls[-1]
         assert Path(call.cwd) == worktree
@@ -397,7 +413,7 @@ async def test_attested_implementation_rejects_untrusted_authority_provenance(
 
     ready = tool_ctx_ready_recipe
     tool_ctx = ready.tool_ctx
-    root, part_a, part_b = write_plan_set_parts(git_checkout, tool_ctx, monkeypatch)
+    root, part_a, part_b = _implementation_parts(git_checkout, tool_ctx, monkeypatch)
     part_a.write_text("Dry-walkthrough verified = TRUE\n" + part_a.read_text())
     execution_id = ready.receipt["recipe_execution"]["execution_id"]
     materializer = tool_ctx.plan_set_materializer

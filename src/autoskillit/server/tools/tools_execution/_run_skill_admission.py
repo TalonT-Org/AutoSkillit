@@ -226,7 +226,7 @@ def _prepare_audit_reservation(
 ) -> None:
     """Prepare and reserve the audit slot for an attested publication."""
     assert state._audit_publication is not None
-    assert state._clone_allowed_root is not None
+    assert state._invocation_temp_root is not None
     assert state._installed_execution is not None
     state._slot_intent_digest = compute_audit_slot_intent_digest(
         execution_id=state.recipe_execution_id,
@@ -245,14 +245,14 @@ def _prepare_audit_reservation(
     if isinstance(prior_path, str) and prior_path:
         prior_authority = load_current_prior_authority(
             prior_path,
-            allowed_root=state._clone_allowed_root,
+            allowed_root=state._invocation_temp_root,
             ledger=state.tool_ctx.audit_admission_ledger,
             recipe_execution_id=state._recipe_execution_key,
         )
         state._audited_plan_refs = (
             normalize_audited_plan_refs(
                 str(state._bound_input_map.get("all_plan_paths") or ""),
-                allowed_root=state._clone_allowed_root,
+                allowed_root=state._invocation_temp_root,
             )
             if state._bound_input_map.get("all_plan_paths")
             else prior_authority.audited_plan_refs
@@ -264,7 +264,7 @@ def _prepare_audit_reservation(
     else:
         state._audited_plan_refs = normalize_audited_plan_refs(
             str(state._bound_input_map.get("all_plan_paths") or ""),
-            allowed_root=state._clone_allowed_root,
+            allowed_root=state._invocation_temp_root,
         )
         state._cycle_id, state._scope_id, state._part_id = derive_initial_lifecycle_ids(
             recipe_execution_id=state._recipe_execution_key,
@@ -294,7 +294,7 @@ def _prepare_audit_reservation(
                 cycle_id=state._cycle_id,
                 scope_id=state._scope_id,
                 part_id=state._part_id,
-                allowed_root=state._clone_allowed_root,
+                allowed_root=state._invocation_temp_root,
                 parent_authority_digest=state._parent_digest,
                 retry_after_audit_attempt_id=(
                     AuditAttemptId(state.retry_after_audit_attempt_id)
@@ -328,7 +328,7 @@ def _handle_audit_reservation_decision(state: _RunSkillDispatchState) -> str | N
     """Construct the dispatch prompt or return an audit reservation terminal result."""
     assert state._reservation_outcome is not None
     assert state._audited_plan_refs is not None
-    assert state._clone_allowed_root is not None
+    assert state._invocation_temp_root is not None
     match state._reservation_outcome.decision:
         case ReservationDecision.DISPATCH_NEW | ReservationDecision.REDISPATCH_OPEN:
             assert state._reservation_outcome.reservation is not None
@@ -402,7 +402,7 @@ def _handle_audit_reservation_decision(state: _RunSkillDispatchState) -> str | N
             )
         case ReservationDecision.PUBLISHED_PENDING_FINALIZATION:
             assert state._reservation_outcome.reservation is not None
-            state._authority = AuditCycleVerifier(state._clone_allowed_root).load_authority(
+            state._authority = AuditCycleVerifier(state._invocation_temp_root).load_authority(
                 state._reservation_outcome.reservation.authority_path
             )
             state._published = AuditMaterializationResult(
@@ -479,7 +479,7 @@ def _admit_recipe_execution(state: _RunSkillDispatchState) -> str | None:
         if state._target_contract is None:
             raise SkillContractError("audit output contract is unavailable")
         select_audit_output_contract(state._target_contract, state._audit_output_mode)
-    # Resolve the clone-local containment anchor before every publication branch (#4387).
+    # Resolve the invocation-cwd temp root for audit inputs and publication (#4387).
     # Only active recipe executions consume it, so only they require a non-empty cwd.
     if state._installed_execution is not None and not state.cwd:
         return json.dumps(
@@ -489,7 +489,7 @@ def _admit_recipe_execution(state: _RunSkillDispatchState) -> str | None:
                 retriable=False,
             )
         )
-    state._clone_allowed_root = resolve_temp_dir(
+    state._invocation_temp_root = resolve_temp_dir(
         Path(state.cwd), state.tool_ctx.config.workspace.temp_dir
     )
     if state._dynamic_recipe_call:
@@ -598,7 +598,7 @@ def _admit_attested_recipe_invocation(state: _RunSkillDispatchState) -> str | No
             step_name=state.step_name,
             template=state._invocation_template,
             bound_inputs=state._bound_recipe_inputs,
-            allowed_root=state._clone_allowed_root,
+            allowed_root=state._invocation_temp_root,
         )
         state._preflight_result = resolved_preflights.audit
         state._plan_set_preflight = resolved_preflights.plan_set

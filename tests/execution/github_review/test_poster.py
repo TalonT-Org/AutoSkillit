@@ -117,7 +117,8 @@ async def test_incomplete_historical_anchor_stays_pending(
     remote = capture()
     if value is True:
         remote["original_line"] = 1
-        remote["original_start_line"] = 1
+        if remote["original_start_line"] is not None:
+            remote["original_start_line"] = 1
     request = _request(
         tmp_path,
         head_sha=remote["original_commit_id"],
@@ -140,6 +141,7 @@ async def test_incomplete_historical_anchor_stays_pending(
     )
     poster = _poster(tmp_path / "ledger.sqlite3", gateway, clock)
     first = await poster.post(request)
+    assert first.state is ReviewOperationState.COMMITTED_PENDING_VERIFICATION
     # Synthetic negatives make current coordinates coincide with the submission.
     remote.update(
         body=gateway.create_calls[0]["comments"][0]["body"],

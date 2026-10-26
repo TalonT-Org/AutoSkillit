@@ -169,13 +169,11 @@ def test_real_frame_shapes_fit_the_planning_allowance(
     sizes = tuple(_encoded_size(record) for record in profiled_records)
     measured_max = max(sizes)
     violations = capture_types.capacity_envelope_violations(capture_types.CaptureCapacitySpec())
-    diagnostic = (
-        f"measured_max={measured_max}, planned={capture_types.PLANNED_RECORD_FRAME_BYTES}, "
-        f"default_low={capture_types.CaptureCapacitySpec().compaction_low_bytes}, "
-        f"default_violations={violations}"
-    )
-    assert measured_max <= capture_types.PLANNED_RECORD_FRAME_BYTES <= measured_max + 64, (
-        diagnostic
+    assert violations == ()
+    assert measured_max <= capture_types.PLANNED_RECORD_FRAME_BYTES < measured_max + 8, (
+        f"measured_max={measured_max}, "
+        f"planned={capture_types.PLANNED_RECORD_FRAME_BYTES}, "
+        f"default_low={capture_types.CaptureCapacitySpec().compaction_low_bytes}"
     )
 
 

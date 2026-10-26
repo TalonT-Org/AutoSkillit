@@ -166,6 +166,29 @@ def _run_direct_command(bash_path: str, command: str) -> int:
                 pass
 
 
+def _handle_setup_failure(
+    exc: BaseException,
+    failure_stage: str,
+) -> _capture_replay.CaptureFailureV3:
+    reason = _capture_failure_policy.runtime_failure_reason(exc)
+    detail = (
+        exc.public_detail
+        if isinstance(exc, CaptureSetupError) and exc.public_detail
+        else f"{failure_stage} failed"
+    )
+    return _capture_replay.failure_transport(
+        reason=reason,
+        stage=(
+            "capture setup"
+            if reason in _capture_failure_policy.CAPACITY_FAILURE_REASONS
+            else failure_stage
+        ),
+        detail=detail,
+        shell_returncode=None,
+        settlement=None,
+    )
+
+
 def run_capture(
     command: str,
     cwd: str,
@@ -246,23 +269,7 @@ def run_capture(
             failure_stage = "capture writer duplication"
             artifact_writer_fd = _duplicate_artifact_writer(artifact)
         except BaseException as exc:
-            reason = _capture_failure_policy.runtime_failure_reason(exc)
-            detail = (
-                exc.public_detail
-                if isinstance(exc, CaptureSetupError) and exc.public_detail
-                else f"{failure_stage} failed"
-            )
-            failure = _capture_replay.failure_transport(
-                reason=reason,
-                stage=(
-                    "capture setup"
-                    if reason in _capture_failure_policy.CAPACITY_FAILURE_REASONS
-                    else failure_stage
-                ),
-                detail=detail,
-                shell_returncode=None,
-                settlement=None,
-            )
+            failure = _handle_setup_failure(exc, failure_stage)
             if not isinstance(exc, _CAPTURE_RUNTIME_ERRORS):
                 _capture_replay.capture_failure_return(failure)
                 raise

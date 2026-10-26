@@ -156,8 +156,8 @@ class TestRecipeMigrationAdapter:
         call_kwargs = mock_headless.call_args.kwargs
         assert "skill_command" in call_kwargs
         skill_cmd: str = call_kwargs["skill_command"]
-        assert "script_path=" in skill_cmd
-        assert "script_content=" in skill_cmd
+        assert f"recipe_path={recipe_path}" in skill_cmd
+        assert "recipe_content=" in skill_cmd
         assert "migration_notes=" in skill_cmd
         assert "target_version=" in skill_cmd
 

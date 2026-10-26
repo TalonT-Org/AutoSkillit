@@ -113,8 +113,8 @@ class RecipeMigrationAdapter(HeadlessMigrationAdapter):
         content = file.path.read_text()
         skill_command = (
             f"/autoskillit:migrate-recipes"
-            f" script_path={file.path}"
-            f" script_content={json.dumps(content)}"
+            f" recipe_path={file.path}"
+            f" recipe_content={json.dumps(content)}"
             f" migration_notes={json.dumps(notes_yaml)}"
             f" target_version={target_version}"
         )

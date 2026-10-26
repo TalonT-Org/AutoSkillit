@@ -31,7 +31,7 @@ def test_claude_log_mining_uses_native_project_log_resolution(
     skill_name: str, start_marker: str, end_marker: str
 ) -> None:
     section = _section(skill_name, start_marker, end_marker)
-    cwd_index = section.find("actual_absolute_cwd=")
+    cwd_index = section.find("actual_absolute_cwd=$(pwd -P)")
     command_index = section.find(_LOG_DIR_COMMAND)
     discovery_index = section.find('"$LOG_DIR"', command_index)
 

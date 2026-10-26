@@ -53,6 +53,7 @@ from autoskillit.core import (
     SkillContractError,
     SkillSemanticAdaptationResult,
     SkillSemanticPlan,
+    SubprocessResult,
     WriteBehaviorSpec,
     agent_definition_digest,
     load_agent_definitions,
@@ -3809,7 +3810,7 @@ def test_claude_transcript_path_matches_native_cli(
         assert spec.env["CLAUDE_CONFIG_DIR"] == str(claude_home)
         assert spec.env["HOME"] == str(isolated_home)
 
-        async def run_probe():
+        async def run_probe() -> SubprocessResult:
             return await run_managed_async(
                 list(spec.cmd),
                 cwd=cwd,

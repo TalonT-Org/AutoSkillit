@@ -10,7 +10,17 @@ Stdlib-only; runs as a bare sibling module under ``hooks/_runtime/``.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING or __package__:
+    from autoskillit._destination_paths import destination_location
+else:
+    _PACKAGE_DIR = str(Path(__file__).resolve().parents[2])
+    if _PACKAGE_DIR not in sys.path:
+        sys.path.insert(0, _PACKAGE_DIR)
+    from _destination_paths import destination_location
 
 
 class PathIdentityError(ValueError):
@@ -35,14 +45,6 @@ def hooks_relative_key(script_identity: str | os.PathLike[str], hooks_dir: Path)
         raise PathIdentityError(
             f"script {str(script)!r} is outside the hooks tree {str(root)!r}"
         ) from exc
-
-
-def destination_location(destination: str | os.PathLike[str]) -> Path:
-    """Resolve a destination's parent without following its final component."""
-    path = Path(destination)
-    if not path.name or path.name == "..":
-        return path.resolve()
-    return path.parent.resolve() / path.name
 
 
 def destination_within(candidate: str | os.PathLike[str], root: str | os.PathLike[str]) -> bool:

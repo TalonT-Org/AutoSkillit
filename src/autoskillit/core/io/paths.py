@@ -23,6 +23,8 @@ from enum import Enum
 from pathlib import Path
 from typing import NamedTuple
 
+from autoskillit._destination_paths import destination_location as destination_location
+
 from .._install_binding import resolve_install_binding
 from ..fs_observation import safe_mtime
 
@@ -77,25 +79,6 @@ def pkg_root() -> Path:
     later replaced at the same path.
     """
     return resolve_install_binding().root
-
-
-def destination_location(destination: Path) -> Path:
-    """Resolve a write destination's location without following a final-component symlink.
-
-    ``Path.resolve()`` follows the final component, so a destination that is
-    *currently* a symlink resolves to its target. For a write destination that
-    is the wrong question: the destination is about to be replaced, so what
-    matters is where it lives, not what it happens to point at right now.
-    Every containment check over a write destination must use this helper.
-
-    ``core/path_containment.py`` is the read-side counterpart and deliberately
-    does the opposite (``strict=True``, symlinks rejected) — it validates
-    existing artifacts rather than future write targets.
-    """
-    destination = Path(destination)
-    if not destination.name or destination.name == "..":
-        return destination.resolve()
-    return destination.parent.resolve() / destination.name
 
 
 def resolve_project_dir() -> Path:

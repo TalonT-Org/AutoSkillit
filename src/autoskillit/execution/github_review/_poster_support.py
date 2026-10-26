@@ -134,16 +134,41 @@ def remote_comment_matches(
     remote: Mapping[str, Any],
     expected: Mapping[str, Any],
     finding_digest: str,
+    *,
+    reviewed_head_sha: str,
 ) -> bool:
     if remote.get("body") != expected.get("body"):
         return False
     if finding_marker_digest(str(remote.get("body", ""))) != finding_digest:
         return False
-    for key in ("path", "line", "side", "start_line", "start_side"):
-        expected_value = expected.get(key)
-        if expected_value is not None and remote.get(key) != expected_value:
-            return False
-    return True
+    if (
+        remote.get("path") != expected["path"]
+        or remote.get("original_commit_id") != reviewed_head_sha
+        or positive_int(remote.get("original_line")) != expected["line"]
+        or "original_start_line" not in remote
+        or remote.get("side") != expected["side"]
+        or remote.get("start_side") != expected.get("start_side")
+    ):
+        return False
+    if expected.get("start_line") is None:
+        return remote["original_start_line"] is None
+    return positive_int(remote["original_start_line"]) == expected["start_line"]
+
+
+def comments_for_review_ids(
+    comments: list[Any], review_ids: set[int]
+) -> list[Mapping[str, Any]] | None:
+    selected: list[Mapping[str, Any]] = []
+    prefix = FINDING_MARKER.split("{digest}", 1)[0]
+    for comment in comments:
+        if not isinstance(comment, Mapping):
+            continue
+        review_id = positive_int(comment.get("pull_request_review_id"))
+        if review_id in review_ids:
+            selected.append(comment)
+        elif review_id is None and prefix in str(comment.get("body", "")):
+            return None
+    return selected
 
 
 def finding_marker_digest(body: str) -> str | None:

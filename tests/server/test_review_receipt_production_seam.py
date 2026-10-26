@@ -8,18 +8,27 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, Mock
 
+import httpx
 import pytest
 
 import autoskillit.server.tools.tools_pr_ops as tools_pr_ops
-from autoskillit.core import github_review_receipt_filename
+from autoskillit.core import DiffAnchorAuthority, github_review_receipt_filename
+from autoskillit.execution import (
+    DefaultGitHubReviewPoster,
+    GitHubReviewLedger,
+    GitHubReviewMutationCoordinator,
+)
+from autoskillit.execution.github_review.gateway import DefaultGitHubReviewGateway
 from autoskillit.server.tools.tools_pr_ops import post_pr_review, verify_review_receipt
 from autoskillit.smoke_utils import github_review_handoff_error
 from tests.execution.github_review.fakes import (
+    AdvancingSleeper,
     CreateOutcome,
     ManualClock,
     StatefulReviewGateway,
     _poster,
 )
+from tests.fixtures.github_rest import pulls_comments_relocated_left
 from tests.smoke_utils._review_publication_fixtures import _publish
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
@@ -53,6 +62,8 @@ async def _post_review(
     receipt_path: Path,
     *,
     logical_iteration: str = _LOGICAL_ITERATION,
+    head_sha: str = _HEAD_SHA,
+    comments: list[dict[str, object]] | None = None,
 ) -> dict[str, Any]:
     anchor_authority_path = tmp_path / ".autoskillit" / "temp" / "anchor_authority_42.json"
     return json.loads(
@@ -62,11 +73,11 @@ async def _post_review(
             anchor_authority_path=str(anchor_authority_path),
             repository="octo/example",
             pr_number=42,
-            head_sha=_HEAD_SHA,
+            head_sha=head_sha,
             logical_iteration=logical_iteration,
             event="COMMENT",
             body="Review body.",
-            comments=[],
+            comments=comments or [],
             dry_run=False,
             ctx=Mock(),
         )
@@ -95,6 +106,223 @@ async def _verify_review(
 
 def _handoff_error(output_dir: Path) -> str | None:
     return github_review_handoff_error(output_dir=str(output_dir), pr_number="42")
+
+
+@pytest.mark.parametrize(
+    "first_read,initial_comment_reads", [("missing_originals", 1), ("bad_link", 0)]
+)
+async def test_real_gateway_recovers_pending_relocated_left_multiline_review(
+    first_read: str,
+    initial_comment_reads: int,
+    tool_ctx_kitchen_open: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    observed = pulls_comments_relocated_left()
+    comment_id = observed["id"]
+    review_id = observed["pull_request_review_id"]
+    path = observed["path"]
+    old_head = observed["original_commit_id"]
+    later_head = observed["commit_id"]
+    original_line = observed["original_line"]
+    original_start_line = observed["original_start_line"]
+    assert observed["side"] == observed["start_side"] == "LEFT"
+    assert observed["line"] != original_line
+    assert observed["start_line"] != original_start_line
+    assert later_head != old_head
+
+    authority = DiffAnchorAuthority.authoritative(
+        repository="octo/example",
+        pr_number=42,
+        head_sha=old_head,
+        generation_id="synthetic-production-seam",
+        right_side_lines={},
+        left_side_lines={path: range(original_start_line, original_line + 1)},
+    )
+    authority_path = tmp_path / ".autoskillit" / "temp" / "anchor_authority_42.json"
+    authority_path.parent.mkdir(parents=True)
+    authority_path.write_text(
+        json.dumps(authority.to_wire(), sort_keys=True, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    comments = [
+        {
+            "path": path,
+            "line": original_line,
+            "body": "Captured comment coordinates must survive reconciliation.",
+            "side": "LEFT",
+            "start_line": original_start_line,
+            "start_side": "LEFT",
+        }
+    ]
+
+    calls: list[tuple[str, str]] = []
+    unexpected_calls: list[tuple[str, str]] = []
+    posted_payload: dict[str, Any] | None = None
+    review_reads = 0
+    comment_reads = 0
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        nonlocal posted_payload, review_reads, comment_reads
+        calls.append((request.method, str(request.url)))
+        route = request.url.path
+        if request.method == "GET" and route == "/user":
+            return httpx.Response(200, json={"login": "synthetic-review-author"})
+        if request.method == "GET" and route == "/repos/octo/example/pulls/42":
+            return httpx.Response(
+                200,
+                json={
+                    "head": {"sha": old_head},
+                    "user": {"login": "synthetic-pr-author"},
+                },
+            )
+        if request.method == "POST" and route == "/repos/octo/example/pulls/42/reviews":
+            posted_payload = json.loads(request.content)
+            return httpx.Response(201, json={"id": review_id})
+        if request.method == "GET" and route == "/repos/octo/example/pulls/42/reviews":
+            review_reads += 1
+            assert posted_payload is not None
+            headers = {}
+            if first_read == "bad_link" and review_reads == 1:
+                headers["link"] = (
+                    "<https://api.github.com/repos/octo/example/pulls/42/reviews?page=2; "
+                    'rel="next"'
+                )
+            return httpx.Response(
+                200,
+                headers=headers,
+                json=[
+                    {
+                        "id": review_id,
+                        # Synthetic identity/body substitutions bind the captured comment to
+                        # this hermetic seam; all captured coordinate and commit fields below
+                        # remain untouched.
+                        "body": posted_payload["body"],
+                        "commit_id": old_head,
+                        "state": "COMMENTED",
+                        "user": {"login": "synthetic-review-author"},
+                    }
+                ],
+            )
+        if request.method == "GET" and route == "/repos/octo/example/pulls/42/comments":
+            comment_reads += 1
+            assert posted_payload is not None
+            remote_comment = {
+                **observed,
+                # GitHub supplies the finding marker from the submitted body, not the
+                # public capture used for the coordinate evidence.
+                "body": posted_payload["comments"][0]["body"],
+            }
+            if first_read == "missing_originals" and comment_reads == 1:
+                remote_comment.pop("original_line")
+                remote_comment.pop("original_start_line")
+            return httpx.Response(200, json=[remote_comment])
+        unexpected_calls.append((request.method, str(request.url)))
+        raise AssertionError(f"unexpected GitHub request: {request.method} {request.url}")
+
+    transport = httpx.MockTransport(handle)
+    clock = ManualClock()
+    database_path = tmp_path / "real-gateway-ledger.sqlite3"
+
+    def fresh_poster() -> DefaultGitHubReviewPoster:
+        gateway = DefaultGitHubReviewGateway(
+            token_factory=lambda: "synthetic-token",
+            api_log=None,
+            client_factory=lambda **kwargs: httpx.AsyncClient(transport=transport, **kwargs),
+        )
+        ledger = GitHubReviewLedger(database_path)
+        return DefaultGitHubReviewPoster(
+            ledger=ledger,
+            coordinator=GitHubReviewMutationCoordinator(
+                ledger=ledger,
+                clock=clock,
+                sleeper=AdvancingSleeper(clock),
+                minimum_interval_seconds=1.0,
+                lease_ttl_seconds=60.0,
+            ),
+            gateway=gateway,
+            wall_clock=clock,
+        )
+
+    monkeypatch.setattr(tools_pr_ops, "_get_ctx", lambda: tool_ctx_kitchen_open)
+    monkeypatch.setattr(tools_pr_ops, "_notify", AsyncMock())
+    _, receipt_path = _review_paths(tmp_path)
+    monkeypatch.setattr(tool_ctx_kitchen_open, "github_review_poster", fresh_poster())
+
+    pending = await _post_review(
+        tmp_path,
+        receipt_path,
+        head_sha=old_head,
+        comments=comments,
+    )
+
+    reviews_url = "https://api.github.com/repos/octo/example/pulls/42/reviews?per_page=100"
+    comments_url = "https://api.github.com/repos/octo/example/pulls/42/comments?per_page=100"
+    expected_calls = [
+        ("GET", "https://api.github.com/user"),
+        ("GET", "https://api.github.com/repos/octo/example/pulls/42"),
+        ("POST", "https://api.github.com/repos/octo/example/pulls/42/reviews"),
+        ("GET", reviews_url),
+    ]
+    expected_calls.extend([("GET", comments_url)] * initial_comment_reads)
+    assert calls == expected_calls
+    assert unexpected_calls == []
+    assert pending["state"] == "COMMITTED_PENDING_VERIFICATION"
+    assert pending["operation_key"]
+    assert pending["receipt"] is None
+    assert not receipt_path.exists()
+
+    recovery_poster = fresh_poster()
+    monkeypatch.setattr(tool_ctx_kitchen_open, "github_review_poster", recovery_poster)
+    recovered = await _post_review(
+        tmp_path,
+        receipt_path,
+        head_sha=old_head,
+        comments=comments,
+    )
+
+    expected_calls.extend(
+        [
+            ("GET", "https://api.github.com/user"),
+            ("GET", reviews_url),
+            ("GET", comments_url),
+        ]
+    )
+    assert calls == expected_calls
+    assert unexpected_calls == []
+    assert recovered["state"] == "SUCCEEDED"
+    assert recovered["operation_key"] == pending["operation_key"]
+    assert recovered["head_sha"] == old_head
+    assert recovered["review_id"] == review_id
+    assert recovered["comment_ids"] == [comment_id]
+    assert recovered["executed_mutation_count"] == 0
+    assert recovered["receipt"]["head_sha"] == old_head
+    assert recovered["receipt"]["review_id"] == review_id
+    assert recovered["receipt"]["comment_ids"] == [comment_id]
+    assert recovered["receipt"]["finding_dispositions"] == [
+        {
+            "original_index": 0,
+            "canonical_index": 0,
+            "kind": "POSTED",
+            "reason": None,
+            "remote_comment_id": comment_id,
+        }
+    ]
+
+    verifier_poster = fresh_poster()
+    monkeypatch.setattr(tool_ctx_kitchen_open, "github_review_poster", verifier_poster)
+    canonical_receipt = verifier_poster.verify_receipt(pending["operation_key"])
+    assert canonical_receipt is not None
+    assert json.loads(receipt_path.read_text(encoding="utf-8")) == canonical_receipt.to_dict()
+    assert await _verify_review(
+        tmp_path,
+        receipt_path,
+        head_sha=old_head,
+        post_state="SUCCEEDED",
+    ) == {"reviews_posted": "true"}
+
+    assert sum(method == "POST" for method, _ in calls) == 1
+    assert sum(url.endswith("/pulls/42") for _, url in calls) == 1
 
 
 @pytest.mark.parametrize(

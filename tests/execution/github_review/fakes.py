@@ -171,11 +171,10 @@ class StatefulReviewGateway:
             )
         return _success(list(self.reviews))
 
-    async def list_review_comments(
+    async def list_pull_review_comments(
         self,
         repository: str,
         pr_number: int,
-        review_id: int,
     ) -> GatewayResult:
         del repository, pr_number
         self.comment_read_calls += 1
@@ -187,7 +186,9 @@ class StatefulReviewGateway:
                 response_class=ReviewResponseClass.TRANSPORT_ERROR,
                 error="injected comment read failure",
             )
-        return _success(list(self.comments_by_review.get(review_id, [])))
+        return _success(
+            [comment for comments in self.comments_by_review.values() for comment in comments]
+        )
 
     async def create_review_comment(
         self,
@@ -224,6 +225,11 @@ class StatefulReviewGateway:
                 {
                     **comment,
                     "id": self._next_comment_id,
+                    "pull_request_review_id": review_id,
+                    "commit_id": payload["commit_id"],
+                    "original_commit_id": payload["commit_id"],
+                    "original_line": comment["line"],
+                    "original_start_line": comment.get("start_line"),
                 }
             )
             self._next_comment_id += 1

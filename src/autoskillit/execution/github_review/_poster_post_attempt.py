@@ -95,15 +95,20 @@ async def _reconcile_remote_comment_set(
     payload: Mapping[str, Any],
     findings: tuple[AdmittedFinding, ...],
 ) -> _poster_support.Reconciliation:
-    comments = await gateway.list_review_comments(
+    comments = await gateway.list_pull_review_comments(
         request.repository,
         request.pr_number,
-        review_id,
     )
     if not comments.succeeded or not isinstance(comments.data, list):
         return _poster_support.Reconciliation(
             ReviewReconciliationResult.UNCERTAIN,
             error=comments.error or "could not read review comments",
+        )
+    selected = _poster_support.comments_for_review_ids(comments.data, {review_id})
+    if selected is None:
+        return _poster_support.Reconciliation(
+            ReviewReconciliationResult.UNCERTAIN,
+            error="review comment marker association could not be verified",
         )
     expected_comments = payload.get("comments")
     if not isinstance(expected_comments, list) or len(expected_comments) != len(findings):
@@ -121,9 +126,10 @@ async def _reconcile_remote_comment_set(
             )
         candidates = [
             item
-            for item in comments.data
-            if isinstance(item, Mapping)
-            and _poster_support.remote_comment_matches(item, expected, finding.digest)
+            for item in selected
+            if _poster_support.remote_comment_matches(
+                item, expected, finding.digest, reviewed_head_sha=request.head_sha
+            )
         ]
         if len(candidates) != 1:
             return _poster_support.Reconciliation(
@@ -139,9 +145,8 @@ async def _reconcile_remote_comment_set(
         used_remote_ids.add(comment_id)
         matched_ids.append((finding.canonical_index, comment_id))
     marker_count = sum(
-        isinstance(item, Mapping)
-        and _poster_support.FINDING_MARKER.split("{digest}", 1)[0] in str(item.get("body", ""))
-        for item in comments.data
+        _poster_support.FINDING_MARKER.split("{digest}", 1)[0] in str(item.get("body", ""))
+        for item in selected
     )
     if marker_count != len(findings):
         return _poster_support.Reconciliation(

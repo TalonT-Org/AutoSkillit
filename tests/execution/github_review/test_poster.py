@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -16,6 +18,11 @@ from autoskillit.core import (
     ReviewOperationState,
 )
 from autoskillit.execution import GitHubReviewLedger
+from tests.fixtures.github_rest import (
+    pulls_comments_outdated_right,
+    pulls_comments_relocated_left,
+    pulls_comments_relocated_right,
+)
 
 from .fakes import (
     CreateOutcome,
@@ -26,6 +33,170 @@ from .fakes import (
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "capture",
+    [pulls_comments_relocated_right, pulls_comments_outdated_right, pulls_comments_relocated_left],
+)
+async def test_recovery_uses_observed_original_anchor(
+    tmp_path: Path, capture: Callable[[], dict[str, Any]]
+) -> None:
+    remote = capture()
+    request = _request(
+        tmp_path,
+        head_sha=remote["original_commit_id"],
+        comments=(
+            GitHubReviewComment(
+                path=remote["path"],
+                line=remote["original_line"],
+                side=remote["side"],
+                start_line=remote["original_start_line"],
+                start_side=remote["start_side"],
+                body="Finding",
+            ),
+        ),
+    )
+    clock = ManualClock()
+    gateway = StatefulReviewGateway(
+        clock=clock,
+        head_sha=request.head_sha,
+        outcomes=[CreateOutcome(200, commit=True, fail_reads_after=True)],
+    )
+    gateway._next_review_id = int(remote["pull_request_review_id"])
+    gateway._next_comment_id = int(remote["id"])
+    poster = _poster(tmp_path / "ledger.sqlite3", gateway, clock)
+    first = await poster.post(request)
+    assert first.state is ReviewOperationState.COMMITTED_PENDING_VERIFICATION
+    assert first.receipt is None
+    # Only the finding body is synthetic; captured coordinates remain intact.
+    remote["body"] = gateway.create_calls[0]["comments"][0]["body"]
+    gateway.comments_by_review[int(remote["pull_request_review_id"])] = [remote]
+    gateway.head_sha = str(remote["commit_id"])
+    gateway.fail_reads = False
+    pull_calls = gateway.pull_calls
+
+    recovered = await poster.post(request)
+
+    assert recovered.state is ReviewOperationState.SUCCEEDED
+    assert recovered.operation_key == first.operation_key
+    assert recovered.comment_ids == (remote["id"],)
+    assert recovered.receipt is not None
+    assert recovered.receipt.head_sha == request.head_sha
+    assert recovered.executed_mutation_count == 0
+    assert len(gateway.create_calls) == 1
+    assert gateway.pull_calls == pull_calls
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "capture,field,value",
+    [
+        (pulls_comments_relocated_right, "original_commit_id", "b" * 40),
+        (pulls_comments_relocated_right, "original_line", None),
+        (pulls_comments_relocated_right, "original_line", True),
+        (pulls_comments_relocated_right, "original_start_line", None),
+        (pulls_comments_relocated_right, "original_start_line", 123),
+        (pulls_comments_relocated_right, "side", None),
+        (pulls_comments_relocated_right, "side", "LEFT"),
+        (pulls_comments_relocated_right, "start_side", "RIGHT"),
+        (pulls_comments_relocated_left, "original_start_line", None),
+        (pulls_comments_relocated_left, "original_start_line", 12),
+        (pulls_comments_relocated_left, "original_start_line", False),
+        (pulls_comments_relocated_left, "start_side", None),
+        (pulls_comments_relocated_left, "start_side", "RIGHT"),
+    ],
+)
+async def test_incomplete_historical_anchor_stays_pending(
+    tmp_path: Path,
+    capture: Callable[[], dict[str, Any]],
+    field: str,
+    value: object,
+) -> None:
+    remote = capture()
+    request = _request(
+        tmp_path,
+        head_sha=remote["original_commit_id"],
+        comments=(
+            GitHubReviewComment(
+                path=remote["path"],
+                line=remote["original_line"],
+                side=remote["side"],
+                start_line=remote["original_start_line"],
+                start_side=remote["start_side"],
+                body="Finding",
+            ),
+        ),
+    )
+    clock = ManualClock()
+    gateway = StatefulReviewGateway(
+        clock=clock,
+        head_sha=request.head_sha,
+        outcomes=[CreateOutcome(200, commit=True, fail_reads_after=True)],
+    )
+    poster = _poster(tmp_path / "ledger.sqlite3", gateway, clock)
+    first = await poster.post(request)
+    # Synthetic negatives make current coordinates coincide with the submission.
+    remote.update(
+        body=gateway.create_calls[0]["comments"][0]["body"],
+        pull_request_review_id=700,
+        line=remote["original_line"],
+        start_line=remote["original_start_line"],
+    )
+    if value is None:
+        del remote[field]
+    else:
+        remote[field] = value
+    gateway.comments_by_review[700] = [remote]
+    gateway.fail_reads = False
+
+    recovered = await poster.post(request)
+
+    assert recovered.state is ReviewOperationState.COMMITTED_PENDING_VERIFICATION
+    assert recovered.operation_key == first.operation_key
+    assert recovered.receipt is None
+    assert recovered.executed_mutation_count == 0
+    assert len(gateway.create_calls) == 1
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("unscopable_marker", [False, True])
+async def test_exact_readback_scopes_review_before_marker_accounting(
+    tmp_path: Path, unscopable_marker: bool
+) -> None:
+    clock = ManualClock()
+    gateway = StatefulReviewGateway(
+        clock=clock, outcomes=[CreateOutcome(200, commit=True, fail_reads_after=True)]
+    )
+    poster = _poster(tmp_path / "ledger.sqlite3", gateway, clock)
+    request = _request(tmp_path)
+    first = await poster.post(request)
+    remote = gateway.comments_by_review[700][0]
+    remote["pull_request_review_id"] = 700
+    # Synthetic associations isolate scoping from otherwise identical anchors.
+    gateway.comments_by_review[700].extend(
+        [
+            {**remote, "id": 901, "pull_request_review_id": 701},
+            {"id": 902, "pull_request_review_id": None, "body": "Unrelated"},
+        ]
+    )
+    if unscopable_marker:
+        gateway.comments_by_review[700].append(
+            {"id": 903, "pull_request_review_id": None, "body": remote["body"]}
+        )
+    gateway.fail_reads = False
+
+    recovered = await poster.post(request)
+
+    assert recovered.operation_key == first.operation_key
+    assert len(gateway.create_calls) == 1
+    if unscopable_marker:
+        assert recovered.state is ReviewOperationState.COMMITTED_PENDING_VERIFICATION
+        assert recovered.receipt is None
+    else:
+        assert recovered.state is ReviewOperationState.SUCCEEDED
+        assert recovered.comment_ids == (900,)
 
 
 @pytest.mark.anyio

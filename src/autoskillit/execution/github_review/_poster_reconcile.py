@@ -11,7 +11,6 @@ read remote state and hand a decision back to the poster.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 from autoskillit.core import (
@@ -210,38 +209,40 @@ async def scan_remote_findings(
             reviews.error or "could not list reviews for remote deduplication",
         )
     found: dict[str, int] = {}
-    for review in reviews.data:
-        if (
-            not isinstance(review, Mapping)
-            or _poster_support.nested_string(review, "user", "login") != authenticated_login
-        ):
-            continue
-        review_id = _poster_support.positive_int(review.get("id"))
-        if review_id is None:
-            return _poster_support.RemoteFindingScan(False, found, "review id was invalid")
-        comments = await poster.gateway.list_review_comments(
-            request.repository,
-            request.pr_number,
-            review_id,
+    authored = [
+        review
+        for review in reviews.data
+        if _poster_support.nested_string(review, "user", "login") == authenticated_login
+    ]
+    if any(_poster_support.positive_int(review.get("id")) is None for review in authored):
+        return _poster_support.RemoteFindingScan(False, found, "review id was invalid")
+    review_ids = {review["id"] for review in authored}
+    if not review_ids:
+        return _poster_support.RemoteFindingScan(True, found)
+    comments = await poster.gateway.list_pull_review_comments(
+        request.repository, request.pr_number
+    )
+    if not comments.succeeded or not isinstance(comments.data, list):
+        return _poster_support.RemoteFindingScan(
+            False,
+            found,
+            comments.error or "could not list comments for remote deduplication",
         )
-        if not comments.succeeded or not isinstance(comments.data, list):
+    selected = _poster_support.comments_for_review_ids(comments.data, review_ids)
+    if selected is None:
+        return _poster_support.RemoteFindingScan(
+            False, found, "review comment marker association could not be verified"
+        )
+    for comment in selected:
+        digest = _poster_support.finding_marker_digest(str(comment.get("body", "")))
+        comment_id = _poster_support.positive_int(comment.get("id"))
+        if digest is None or comment_id is None:
+            continue
+        previous = found.setdefault(digest, comment_id)
+        if previous != comment_id:
             return _poster_support.RemoteFindingScan(
                 False,
                 found,
-                comments.error or "could not list comments for remote deduplication",
+                "duplicate remote finding markers made deduplication ambiguous",
             )
-        for comment in comments.data:
-            if not isinstance(comment, Mapping):
-                continue
-            digest = _poster_support.finding_marker_digest(str(comment.get("body", "")))
-            comment_id = _poster_support.positive_int(comment.get("id"))
-            if digest is None or comment_id is None:
-                continue
-            previous = found.setdefault(digest, comment_id)
-            if previous != comment_id:
-                return _poster_support.RemoteFindingScan(
-                    False,
-                    found,
-                    "duplicate remote finding markers made deduplication ambiguous",
-                )
     return _poster_support.RemoteFindingScan(True, found)

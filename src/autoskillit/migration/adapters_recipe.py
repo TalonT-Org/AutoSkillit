@@ -200,20 +200,9 @@ class RecipeMigrationAdapter(HeadlessMigrationAdapter):
         *,
         contract_source_path: Path | None = None,
     ) -> dict[str, str]:
-        from autoskillit.recipe import load_recipe, validate_from_path, validate_recipe_structure
+        from autoskillit.recipe import validate_from_path
 
         errors: dict[str, str] = {}
-        try:
-            recipe = load_recipe(path)
-            errors.update(
-                (f"structural:{message}", message) for message in validate_recipe_structure(recipe)
-            )
-        except Exception as exc:
-            logger.warning(
-                "Recipe file validation failed", path=str(path), error=str(exc), exc_info=True
-            )
-            errors["exception"] = f"{type(exc).__name__}: {exc}"
-
         try:
             result = validate_from_path(
                 path,

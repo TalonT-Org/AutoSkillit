@@ -186,6 +186,10 @@ stdlib hook bridge as `output_budget_policy.disabled` (the inverse of
 that internal bridge shape after verified policy loading. No rendered-marker ceiling
 is implemented.
 
+The temporary output-budget overlay workaround is removed on every
+`close_kitchen`. To disable the guard durably, set
+`output_budget: {guard_enabled: false}` in `.autoskillit/config.yaml`.
+
 #### Capture Artifact Lifecycle
 
 | Phase | Behavior |
@@ -401,10 +405,6 @@ questions. An existing physical ledger above `MAX_LEDGER_BYTES` fails store
 load as `CaptureLedgerError`; a projected compacted-capacity refusal is a
 `CaptureCapacityError` with the capacity handling described in
 [ADR-0006](../decisions/0006-output-containment.md).
-
-The temporary output-budget overlay workaround is removed on every
-`close_kitchen`. To disable the guard durably, set
-`output_budget: {guard_enabled: false}` in `.autoskillit/config.yaml`.
 
 `autoskillit capture-store --reclaim` loops `reconcile_capture_store` with a
 generous one-time `RECLAIM_BUDGET` until a clean pass — no due records, no

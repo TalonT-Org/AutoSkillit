@@ -357,6 +357,7 @@ class TestCacheGate:
             "pyproject.toml",
             "uv.lock",
             ".github/workflows/conformance-probes.yml",
+            "!**/__pycache__/**",
         } <= set(cache_inputs)
         assert probe["if"] == "steps.restore-cache.outputs.cache-hit != 'true'"
         assert save["if"] == "success() && steps.restore-cache.outputs.cache-hit != 'true'"
@@ -371,7 +372,8 @@ class TestCacheGate:
             if step.get("id") == "resolve-cache-key"
         )
         for pathspec in _probe_cache_inputs(key_step["env"]["PROBE_CACHE_KEY"]):
-            assert git_ls_files(_REPO_ROOT, pathspec), pathspec
+            if not pathspec.startswith("!"):
+                assert git_ls_files(_REPO_ROOT, pathspec), pathspec
 
 
 class TestOutputBudgetE2E:

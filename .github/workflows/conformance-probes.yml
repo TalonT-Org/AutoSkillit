@@ -141,7 +141,7 @@ jobs:
       - name: Resolve probe cache key
         id: resolve-cache-key
         env:
-          PROBE_CACHE_KEY: probe-codex-${{ steps.resolve-version.outputs.cli_version }}-${{ steps.resolve-policy.outputs.policy_identity }}-${{ runner.os }}-${{ hashFiles('src/autoskillit/**', 'tests/**', '.autoskillit/recipes/**', 'pyproject.toml', 'uv.lock', '.github/workflows/conformance-probes.yml') }}
+          PROBE_CACHE_KEY: probe-codex-${{ steps.resolve-version.outputs.cli_version }}-${{ steps.resolve-policy.outputs.policy_identity }}-${{ runner.os }}-${{ hashFiles('src/autoskillit/**', 'tests/**', '.autoskillit/recipes/**', 'pyproject.toml', 'uv.lock', '.github/workflows/conformance-probes.yml', '!**/__pycache__/**') }}
         run: echo "key=$PROBE_CACHE_KEY" >> "$GITHUB_OUTPUT"
 
       - name: Restore probe cache
@@ -278,7 +278,7 @@ jobs:
       - name: Resolve probe cache key
         id: resolve-cache-key
         env:
-          PROBE_CACHE_KEY: probe-claude-${{ steps.resolve-version.outputs.cli_version }}-${{ steps.resolve-policy.outputs.policy_identity }}-${{ runner.os }}-${{ hashFiles('src/autoskillit/**', 'tests/**', '.autoskillit/recipes/**', 'pyproject.toml', 'uv.lock', '.github/workflows/conformance-probes.yml') }}
+          PROBE_CACHE_KEY: probe-claude-${{ steps.resolve-version.outputs.cli_version }}-${{ steps.resolve-policy.outputs.policy_identity }}-${{ runner.os }}-${{ hashFiles('src/autoskillit/**', 'tests/**', '.autoskillit/recipes/**', 'pyproject.toml', 'uv.lock', '.github/workflows/conformance-probes.yml', '!**/__pycache__/**') }}
         run: echo "key=$PROBE_CACHE_KEY" >> "$GITHUB_OUTPUT"
 
       - name: Restore probe cache

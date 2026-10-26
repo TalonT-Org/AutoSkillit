@@ -25,6 +25,7 @@ from .gateway import GatewayResult
 OPERATION_MARKER = "<!-- autoskillit-review-operation:{key} -->"
 FINDING_MARKER = "<!-- autoskillit-review-finding:{digest} -->"
 FINDING_MARKER_PREFIX = FINDING_MARKER.split("{digest}", 1)[0]
+UNSCOPABLE_MARKER_ERROR = "review comment marker association could not be verified"
 
 
 @dataclass(frozen=True, slots=True)

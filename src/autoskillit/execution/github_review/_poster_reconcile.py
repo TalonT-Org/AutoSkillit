@@ -231,7 +231,7 @@ async def scan_remote_findings(
     selected = _poster_support.comments_for_review_ids(comments.data, review_ids)
     if selected is None:
         return _poster_support.RemoteFindingScan(
-            False, found, "review comment marker association could not be verified"
+            False, found, _poster_support.UNSCOPABLE_MARKER_ERROR
         )
     for comment in selected:
         digest = _poster_support.finding_marker_digest(str(comment.get("body", "")))

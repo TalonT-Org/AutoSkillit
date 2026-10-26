@@ -108,7 +108,7 @@ async def _reconcile_remote_comment_set(
     if selected is None:
         return _poster_support.Reconciliation(
             ReviewReconciliationResult.UNCERTAIN,
-            error="review comment marker association could not be verified",
+            error=_poster_support.UNSCOPABLE_MARKER_ERROR,
         )
     expected_comments = payload.get("comments")
     if not isinstance(expected_comments, list) or len(expected_comments) != len(findings):

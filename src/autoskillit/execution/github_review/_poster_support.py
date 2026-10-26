@@ -24,6 +24,7 @@ from .gateway import GatewayResult
 
 OPERATION_MARKER = "<!-- autoskillit-review-operation:{key} -->"
 FINDING_MARKER = "<!-- autoskillit-review-finding:{digest} -->"
+FINDING_MARKER_PREFIX = FINDING_MARKER.split("{digest}", 1)[0]
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,14 +160,13 @@ def comments_for_review_ids(
     comments: list[Any], review_ids: set[int]
 ) -> list[Mapping[str, Any]] | None:
     selected: list[Mapping[str, Any]] = []
-    prefix = FINDING_MARKER.split("{digest}", 1)[0]
     for comment in comments:
         if not isinstance(comment, Mapping):
             continue
         review_id = positive_int(comment.get("pull_request_review_id"))
         if review_id in review_ids:
             selected.append(comment)
-        elif review_id is None and prefix in str(comment.get("body", "")):
+        elif review_id is None and FINDING_MARKER_PREFIX in str(comment.get("body", "")):
             return None
     return selected
 

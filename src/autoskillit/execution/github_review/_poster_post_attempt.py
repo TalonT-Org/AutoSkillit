@@ -145,8 +145,7 @@ async def _reconcile_remote_comment_set(
         used_remote_ids.add(comment_id)
         matched_ids.append((finding.canonical_index, comment_id))
     marker_count = sum(
-        _poster_support.FINDING_MARKER.split("{digest}", 1)[0] in str(item.get("body", ""))
-        for item in selected
+        _poster_support.FINDING_MARKER_PREFIX in str(item.get("body", "")) for item in selected
     )
     if marker_count != len(findings):
         return _poster_support.Reconciliation(

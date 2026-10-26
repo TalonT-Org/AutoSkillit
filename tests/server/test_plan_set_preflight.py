@@ -216,7 +216,6 @@ def test_accepted_plan_set_verification_without_evidence_fails_closed(tmp_path: 
                 ("plan_path", "plan.md"),
                 ("plan_set_authority_path", "authority.json"),
             ),
-            allowed_root=None,
         )
 
     assert exc_info.value.code == "recipe_execution_preflight_unavailable"

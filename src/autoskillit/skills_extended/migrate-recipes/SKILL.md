@@ -3,8 +3,8 @@ name: migrate-recipes
 write_paths:
 - '{{AUTOSKILLIT_TEMP}}/migrations/'
 uses_capabilities: []
-description: Apply versioned migration notes when the migration service launches this skill headlessly with the recipe path,
-  content, notes, and target version.
+description: Apply versioned migration notes when the migration service launches this skill headlessly with script_path,
+  script_content, migration_notes and target_version.
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -20,7 +20,7 @@ Apply versioned migration notes to an AutoSkillit recipe.
 
 ## When to Use
 
-- Launched headlessly by the migration service when `migrate_recipe` migrates a stale recipe
+- Launched headlessly by the migration service when the `migrate_recipe` tool migrates a stale recipe
 
 ## Arguments
 
@@ -40,8 +40,7 @@ The orchestrator provides all context in the prompt:
 
 **ALWAYS:**
 - Save migrated scripts to {{AUTOSKILLIT_TEMP}}/migrations/{script_name}.yaml for review
-- Set `autoskillit_version` to `target_version`
-- Treat migration-note text that says to run a validator as satisfied by host-side validation
+- Always set `autoskillit_version` to `target_version`. The host validates the saved file against the original recipe and rejects errors your changes introduce; migration-note text that says to run a validator is satisfied by the host.
 - Preserve all existing script fields not targeted by migration changes
 - Output a human-readable diff summary of changes applied
 
@@ -59,5 +58,4 @@ The orchestrator provides all context in the prompt:
 
 ## Error Handling
 
-- If no patterns are detected, stamp the version and save the recipe
-- If a change cannot be applied, save nothing and report why
+- If no patterns are detected, stamp the version and save. If a change cannot be applied, save nothing and report why.

@@ -334,23 +334,59 @@ class TestRecipeMigrationValidation:
         assert result.success
 
     @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        ("baseline_error", "introduced_error", "expected"),
+        [
+            ("structural", "semantic", "unknown skill 'new-project-local'"),
+            (
+                "semantic",
+                "binding",
+                "tool 'no_such_tool' is not present in the canonical registry",
+            ),
+        ],
+        ids=["structural-then-semantic", "semantic-then-binding"],
+    )
     async def test_migrate_rejects_new_errors_alongside_baseline_errors(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        baseline_error: str,
+        introduced_error: str,
+        expected: str,
     ) -> None:
         _enable_migration(monkeypatch)
-        baseline = MINIMAL_VALID_RECIPE_YAML.replace(
-            "kitchen_rules:\n  - Use the included stop step sentinel protocol.",
-            "kitchen_rules: []",
-        )
-        candidate = baseline.replace(
-            "  done:\n",
+        baseline = MINIMAL_VALID_RECIPE_YAML
+        if baseline_error == "structural":
+            baseline = baseline.replace(
+                "kitchen_rules:\n  - Use the included stop step sentinel protocol.",
+                "kitchen_rules: []",
+            )
+        else:
+            baseline = baseline.replace(
+                "  done:\n",
+                "  local:\n"
+                "    tool: run_skill\n"
+                "    with:\n"
+                "      skill_command: /autoskillit:project-local\n"
+                "      cwd: .\n"
+                "    on_success: done\n"
+                "  done:\n",
+            )
+        introduced_step = (
             "  bad:\n"
+            "    tool: run_skill\n"
+            "    with:\n"
+            "      skill_command: /autoskillit:new-project-local\n"
+            "      cwd: .\n"
+            "    on_success: done\n"
+            if introduced_error == "semantic"
+            else "  bad:\n"
             "    tool: no_such_tool\n"
             "    with:\n"
             "      bogus: value\n"
             "    on_success: done\n"
-            "  done:\n",
         )
+        candidate = baseline.replace("  done:\n", introduced_step + "  done:\n")
         adapter = RecipeMigrationAdapter()
         file = _migration_file(tmp_path, _stamped(baseline, "0.0.1"))
         temp_dir = tmp_path / "temp"
@@ -359,7 +395,7 @@ class TestRecipeMigrationValidation:
         result = await adapter.migrate(file, run_headless=runner, temp_dir=temp_dir)
 
         assert not result.success
-        assert "no_such_tool" in (result.error or "")
+        assert expected in (result.error or "")
 
     @pytest.mark.anyio
     async def test_migrate_keeps_distinct_findings_from_same_rule_and_step(

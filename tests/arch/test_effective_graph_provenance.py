@@ -60,6 +60,11 @@ _ALLOWED_RAW_RECIPE_READS: frozenset[tuple[str, str, str]] = frozenset(
             "_load_campaign_recipe",
             "load_recipe(match.path)",
         ),  # Validate the selected campaign before dispatching its fleet.
+        (
+            "migration/adapters_recipe.py",
+            "_validation_errors",
+            "load_recipe(path)",
+        ),  # Validate original and candidate recipe structure before migration write-back.
     }
 )
 

@@ -250,7 +250,12 @@ class TestRecipeMigrationValidation:
         ("candidate", "expected"),
         [
             (
-                _stamped(MINIMAL_VALID_RECIPE_YAML.replace("kitchen_rules:", "rules:")),
+                _stamped(
+                    MINIMAL_VALID_RECIPE_YAML.replace(
+                        "kitchen_rules:\n  - Use the included stop step sentinel protocol.",
+                        "kitchen_rules: []",
+                    )
+                ),
                 "kitchen_rules",
             ),
             (
@@ -333,7 +338,10 @@ class TestRecipeMigrationValidation:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         _enable_migration(monkeypatch)
-        baseline = MINIMAL_VALID_RECIPE_YAML.replace("kitchen_rules:", "rules:")
+        baseline = MINIMAL_VALID_RECIPE_YAML.replace(
+            "kitchen_rules:\n  - Use the included stop step sentinel protocol.",
+            "kitchen_rules: []",
+        )
         candidate = baseline.replace(
             "  done:\n",
             "  bad:\n"

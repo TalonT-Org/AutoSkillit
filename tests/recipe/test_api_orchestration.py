@@ -110,7 +110,7 @@ steps:
             "code": "unknown_tool",
             "step_name": "bad",
             "name": "no_such_tool",
-            "message": "Step 'bad' references unknown tool 'no_such_tool'",
+            "message": "tool 'no_such_tool' is not present in the canonical registry",
         }
     ]
 

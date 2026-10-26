@@ -173,15 +173,6 @@ EXEMPTIONS: dict[ExemptionKey, ConsumerExemption] = {
         rationale="the document-wide mode rule skips kitchen tools in headless sessions",
         anchor=_WRITE_RECIPE_HEADLESS_GUARD,
     ),
-    (
-        "skill:write-recipe",
-        "validate_recipe",
-        CatalogContext.HEADLESS_SKILL,
-    ): ConsumerExemption(
-        "guard",
-        rationale="the document-wide mode rule skips kitchen tools in headless sessions",
-        anchor=_WRITE_RECIPE_HEADLESS_GUARD,
-    ),
 }
 
 DEFERRED_VIOLATIONS: dict[ExemptionKey, TrackedDeferral] = {

@@ -179,6 +179,11 @@ def test_plan_only_preflight_uses_issued_root_without_invocation_root(tmp_path: 
     issued_root = tmp_path / "producer"
     issued_digest = "sha256:issued"
     seen_roots: list[Path] = []
+    seen_lookups: list[tuple[str, str]] = []
+
+    def lookup_binding(execution_id, authority_path):
+        seen_lookups.append((execution_id, authority_path))
+        return issued_root, issued_digest
 
     def resolve(_request, *, allowed_root):
         seen_roots.append(allowed_root)
@@ -188,15 +193,14 @@ def test_plan_only_preflight_uses_issued_root_without_invocation_root(tmp_path: 
         )
 
     resolved = _plan_preflight(
-        SimpleNamespace(
-            lookup_binding=lambda execution_id, authority_path: (issued_root, issued_digest)
-        ),
+        SimpleNamespace(lookup_binding=lookup_binding),
         SimpleNamespace(resolve=resolve),
         bound_inputs=(("plan_path", "plan.md"), ("plan_set_authority_path", "authority.json")),
     )
 
     assert resolved.plan_set is not None
     assert seen_roots == [issued_root]
+    assert seen_lookups == [("generation", "authority.json")]
 
 
 def test_accepted_plan_set_verification_without_evidence_fails_closed(tmp_path: Path) -> None:

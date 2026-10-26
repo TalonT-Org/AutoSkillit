@@ -17,7 +17,12 @@ import autoskillit.hooks._capture._snapshot as capture_snapshot
 import autoskillit.hooks._capture._types as capture_types
 import autoskillit.hooks._capture_lifecycle as capture_lifecycle
 from autoskillit.hooks._capture_artifacts import create_capture_artifact
-from tests.hooks.test_capture_lifecycle import _Clock, _open_store, _verified_snapshot
+from tests.hooks.test_capture_lifecycle import (
+    _Clock,
+    _close_artifact,
+    _open_store,
+    _verified_snapshot,
+)
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 
@@ -94,13 +99,6 @@ def test_override_rejected_when_it_breaks_the_envelope() -> None:
     assert capture_artifact_setup._policy_capacity({"max_tombstones": 2000}) is None
     assert capture_artifact_setup._policy_capacity({"compaction_low_bytes": 1_000_000}) is None
     assert capture_artifact_setup._policy_capacity({"max_tombstones": 128}) is not None
-
-
-def _close_artifact(artifact) -> None:
-    try:
-        artifact.close_artifact_fd()
-    finally:
-        artifact.release_lease()
 
 
 def _finalize_template(store, root, clock: _Clock, capture_id: str, *, delivered: bool):

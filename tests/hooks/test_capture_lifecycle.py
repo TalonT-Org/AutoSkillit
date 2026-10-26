@@ -926,6 +926,13 @@ def _open_store(
     return anchor, root, store
 
 
+def _close_artifact(artifact) -> None:
+    try:
+        artifact.close_artifact_fd()
+    finally:
+        artifact.release_lease()
+
+
 def _capture_dir(project: Path) -> Path:
     return project.joinpath(*CAPTURE_PATH_COMPONENTS)
 

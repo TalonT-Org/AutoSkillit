@@ -15,7 +15,12 @@ import autoskillit.hooks._capture._snapshot as capture_snapshot
 import autoskillit.hooks._capture._types as capture_types
 import autoskillit.hooks._capture_lifecycle as capture_lifecycle
 from autoskillit.hooks._capture_artifacts import create_capture_artifact
-from tests.hooks.test_capture_lifecycle import _Clock, _open_store, _verified_snapshot
+from tests.hooks.test_capture_lifecycle import (
+    _Clock,
+    _close_artifact,
+    _open_store,
+    _verified_snapshot,
+)
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
@@ -23,13 +28,6 @@ _MAX_NUMERIC = 2**63 - 1
 _COMPACTION_EPOCH = _MAX_NUMERIC
 _REFERENCE_CAPTURE_ID = "0000000000000001"
 _FAILURE_CAPTURE_ID = "0000000000000002"
-
-
-def _close_artifact(artifact) -> None:
-    try:
-        artifact.close_artifact_fd()
-    finally:
-        artifact.release_lease()
 
 
 def _profile_record(

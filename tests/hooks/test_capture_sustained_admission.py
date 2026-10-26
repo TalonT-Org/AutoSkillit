@@ -17,67 +17,15 @@ from autoskillit.hooks._capture._snapshot import (
     CommandOutcome,
     verify_capture_snapshot,
 )
-from autoskillit.hooks._capture._types import (
-    HOT_PATH_LOCK_WAIT,
-    CaptureCapacitySpec,
-)
-from autoskillit.hooks._capture_artifacts import (
-    create_capture_artifact,
-    open_capture_root,
-    open_project_anchor,
+from autoskillit.hooks._capture._types import CaptureCapacitySpec
+from autoskillit.hooks._capture_artifacts import create_capture_artifact
+from tests.hooks.test_capture_lifecycle import (
+    _Clock,
+    _close_artifact,
+    _open_store,
 )
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
-
-
-class _Clock:
-    def __init__(self, value: float = 1_000_000.0) -> None:
-        self.value = value
-
-    def wall(self) -> float:
-        return self.value
-
-    def monotonic(self) -> float:
-        return self.value
-
-    def advance(self, seconds: float) -> None:
-        self.value += seconds
-
-
-def _open_store(
-    project: Path,
-    clock: _Clock,
-    *,
-    capacity: CaptureCapacitySpec | None = None,
-):
-    project.mkdir()
-    anchor = open_project_anchor(str(project))
-    try:
-        root = open_capture_root(anchor, create=True)
-    except BaseException:
-        anchor.close()
-        raise
-    try:
-        store = capture_lifecycle.CaptureLifecycleStore.from_open_authorities(
-            anchor,
-            root,
-            wall_clock=clock.wall,
-            monotonic=clock.monotonic,
-            lock_wait=HOT_PATH_LOCK_WAIT,
-            capacity=capacity,
-        )
-    except BaseException:
-        root.close()
-        anchor.close()
-        raise
-    return anchor, root, store
-
-
-def _close_artifact(artifact) -> None:
-    try:
-        artifact.close_artifact_fd()
-    finally:
-        artifact.release_lease()
 
 
 def _begin_capture(

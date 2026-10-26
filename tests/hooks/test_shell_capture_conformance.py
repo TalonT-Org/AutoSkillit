@@ -370,6 +370,7 @@ def _runner_argv(
     project: Path,
     *,
     mode: str,
+    capture_id: str | None = None,
 ) -> list[str]:
     lineage_ref = _direct_lineage_reference(project) if mode == "direct" else None
     request = CaptureRequest(
@@ -379,7 +380,7 @@ def _runner_argv(
         attempt_id=_DIRECT_ATTEMPT_ID if lineage_ref is not None else None,
         lineage_ref=lineage_ref,
         cwd=str(project),
-        capture_id=uuid4().hex[:16],
+        capture_id=capture_id if capture_id is not None else uuid4().hex[:16],
         command=command,
     )
     return [
@@ -396,13 +397,14 @@ def _run_runner(
     *,
     mode: str,
     execution_dir: Path | None = None,
+    capture_id: str | None = None,
 ) -> subprocess.CompletedProcess[bytes]:
     if execution_dir is None:
         execution_dir = project
     else:
         assert not execution_dir.samefile(project)
     return subprocess.run(
-        _runner_argv(command, project, mode=mode),
+        _runner_argv(command, project, mode=mode, capture_id=capture_id),
         env=production_interpreter_env(),
         capture_output=True,
         cwd=execution_dir,
@@ -590,11 +592,13 @@ def test_runner_keeps_project_and_execution_authorities_distinct(
         config.parent.mkdir(parents=True)
         config.write_text(json.dumps({"output_budget_policy": {"disabled": disabled}}))
 
+    capture_id = "d" * 16
     completed = _run_runner(
         "printf 'pwd=%s\\n' \"$PWD\"; printf ran > execution-sentinel",
         project,
         mode=requested_mode,
         execution_dir=execution_dir,
+        capture_id=capture_id,
     )
 
     assert completed.returncode == 0
@@ -606,6 +610,14 @@ def test_runner_keeps_project_and_execution_authorities_distinct(
     assert not _artifact_files(project)
     if expect_capture:
         assert (_capture_dir(project) / ".capture-lifecycle.ledger").is_file()
+        with open_capture_lifecycle(
+            str(project),
+            create=False,
+            lock_wait=HOT_PATH_LOCK_WAIT,
+        ) as lifecycle:
+            record = lifecycle.get_record(capture_id)
+        assert record is not None
+        assert record.state is CaptureState.DELETED
         assert not _capture_dir(execution_dir).exists()
     else:
         assert not _capture_dir(project).exists()

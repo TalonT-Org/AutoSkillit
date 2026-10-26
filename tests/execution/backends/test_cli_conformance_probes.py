@@ -103,6 +103,7 @@ from autoskillit.execution.backends.claude import ClaudeCodeBackend, ClaudeStrea
 from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.execution.process import (
     EventCursor,
+    SessionMonitorResult,
     TetherSpec,
     _jsonl_contains_marker,
     _process_race,
@@ -110,7 +111,6 @@ from autoskillit.execution.process import (
     run_managed_async,
     spawn_owned_process,
 )
-from autoskillit.execution.process._process_monitor import SessionMonitorResult
 from autoskillit.hook_registry import generate_hooks_json
 from autoskillit.hooks import (
     OUTCOME_CANCELLED,

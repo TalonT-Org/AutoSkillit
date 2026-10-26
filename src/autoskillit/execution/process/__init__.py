@@ -82,6 +82,7 @@ from autoskillit.execution.process._process_kill import (
     kill_process_tree,
 )
 from autoskillit.execution.process._process_monitor import (
+    SessionMonitorResult,
     _active_liveness_signals,
     _has_active_child_processes,
     _heartbeat,
@@ -162,6 +163,7 @@ __all__ = [
     "OwnerScope",
     "OwnerScopeSealedError",
     "OwnerScopeSettlement",
+    "SessionMonitorResult",
     "TetherRecord",
     "TetherSpec",
     "TetherSweepOutcome",

@@ -176,21 +176,21 @@ def _admission_decision(
 
 
 @pytest.mark.parametrize(
-    ("reason", "limit_field", "existing_count"),
+    ("reason", "limits", "existing_count"),
     [
         (
             capture_lifecycle.CaptureCapacityReason.ACTIVE_CAPACITY,
-            "max_operational_records",
+            {"max_operational_records": 3, "max_retained_records": 3},
             3,
         ),
         (
             capture_lifecycle.CaptureCapacityReason.RETENTION_CAPACITY,
-            "max_retained_records",
+            {"max_retained_records": 1},
             1,
         ),
         (
             capture_lifecycle.CaptureCapacityReason.EVIDENCE_CAPACITY,
-            "max_evidence_records",
+            {"max_evidence_records": 2},
             2,
         ),
     ],
@@ -199,7 +199,7 @@ def _admission_decision(
 def test_admission_reason_reports_record_count_and_limit(
     tmp_path: Path,
     reason: capture_lifecycle.CaptureCapacityReason,
-    limit_field: str,
+    limits: dict[str, int],
     existing_count: int,
 ) -> None:
     spec = _capacity_spec(
@@ -227,7 +227,7 @@ def test_admission_reason_reports_record_count_and_limit(
         decision = _admission_decision(
             records,
             candidate,
-            replace(spec, **{limit_field: existing_count}),
+            replace(spec, **limits),
             clock,
         )
     finally:

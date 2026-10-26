@@ -8,6 +8,8 @@ import logging
 import os
 import subprocess
 import sys
+from collections.abc import Callable
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -123,14 +125,20 @@ def _drain_capture(
     process: subprocess.Popen[bytes] | OwnedProcessGroup,
     artifact_writer_fd: int,
     inline_bytes: int,
+    *,
+    write_all: Callable[[int, bytes], None] | None = None,
 ) -> PipeEofEvidence:
     return _drain_owned_capture(
         process,
         artifact_writer_fd,
         inline_bytes,
         digest_factory=hashlib.sha256,
-        write_all=_write_all,
+        write_all=_write_all if write_all is None else write_all,
     )
+
+
+def _discard_write(_fd: int, _data: bytes) -> None:
+    pass
 
 
 def _resolve_bash() -> str:
@@ -164,6 +172,95 @@ def _run_direct_command(bash_path: str, command: str) -> int:
                 process.stdout.close()
             except _CAPTURE_RUNTIME_ERRORS:
                 pass
+
+
+def _handle_setup_failure(
+    exc: BaseException,
+    failure_stage: str,
+    *,
+    bash_path: str,
+    command: str,
+    policy: CapturePolicy,
+) -> int:
+    reason = _capture_failure_policy.runtime_failure_reason(exc)
+    detail = (
+        exc.public_detail
+        if isinstance(exc, CaptureSetupError) and exc.public_detail
+        else f"{failure_stage} failed"
+    )
+    failure = _capture_replay.failure_transport(
+        reason=reason,
+        stage=(
+            "capture setup"
+            if reason in _capture_failure_policy.CAPACITY_FAILURE_REASONS
+            else failure_stage
+        ),
+        detail=detail,
+        shell_returncode=None,
+        settlement=None,
+    )
+    if isinstance(exc, _CAPTURE_RUNTIME_ERRORS) and (
+        reason in _capture_failure_policy.CAPACITY_FAILURE_REASONS
+    ):
+        return _run_bounded_uncaptured(
+            bash_path,
+            command,
+            policy.inline_bytes,
+            replace(failure, stage="capture_setup"),
+        )
+    return _capture_replay.capture_failure_return(failure)
+
+
+def _run_bounded_uncaptured(
+    bash_path: str,
+    command: str,
+    inline_bytes: int,
+    failure: _capture_replay.CaptureFailureV3,
+) -> int:
+    process: subprocess.Popen[bytes] | OwnedProcessGroup | None = None
+    try:
+        process = _spawn_bash(bash_path, command, capture_output=True)
+        drained = _drain_capture(
+            process,
+            -1,
+            inline_bytes,
+            write_all=_discard_write,
+        )
+        outcome = CommandOutcome.from_wait_result(process.wait())
+    except BaseException as exc:
+        settlement = _settle_failed_capture(process) if process is not None else None
+        result = _capture_replay.capture_failure_return(
+            _capture_replay.failure_transport(
+                reason=_capture_failure_policy.runtime_failure_reason(exc),
+                stage="capture_setup",
+                detail="uncaptured command execution failed",
+                shell_returncode=None,
+                settlement=settlement,
+            )
+        )
+        if not isinstance(exc, _CAPTURE_RUNTIME_ERRORS):
+            raise
+        return result
+    finally:
+        if process is not None and process.stdout is not None:
+            try:
+                process.stdout.close()
+            except _CAPTURE_RUNTIME_ERRORS:
+                pass
+
+    try:
+        _capture_replay.write_and_flush_hook_stdout(
+            _capture_replay.render_uncaptured_bounded(drained.measurement)
+        )
+    except OSError:
+        return _capture_replay.capture_failure_return(
+            replace(failure, shell_returncode=outcome.shell_returncode)
+        )
+    try:
+        _capture_replay.emit_degraded(replace(failure, shell_returncode=outcome.shell_returncode))
+    except _CAPTURE_RUNTIME_ERRORS:
+        pass
+    return _capture_replay.degraded_delivery_return(outcome.shell_returncode)
 
 
 def run_capture(
@@ -246,22 +343,16 @@ def run_capture(
             failure_stage = "capture writer duplication"
             artifact_writer_fd = _duplicate_artifact_writer(artifact)
         except BaseException as exc:
-            reason = _capture_failure_policy.runtime_failure_reason(exc)
-            failure = _capture_replay.failure_transport(
-                reason=reason,
-                stage=(
-                    "capture setup"
-                    if reason in _capture_failure_policy.CAPACITY_FAILURE_REASONS
-                    else failure_stage
-                ),
-                detail=f"{failure_stage} failed",
-                shell_returncode=None,
-                settlement=None,
+            result = _handle_setup_failure(
+                exc,
+                failure_stage,
+                bash_path=bash_path,
+                command=command,
+                policy=policy,
             )
             if not isinstance(exc, _CAPTURE_RUNTIME_ERRORS):
-                _capture_replay.capture_failure_return(failure)
                 raise
-            return _capture_replay.capture_failure_return(failure)
+            return result
         command_outcome: CommandOutcome | None = None
         command_returncode: int | None = None
         settlement: _capture_replay.RunnerSettlementEvidence | None = None
@@ -370,7 +461,7 @@ def run_capture(
                     settlement=None,
                 )
                 try:
-                    _capture_replay._emit_degraded(degraded_failure)
+                    _capture_replay.emit_degraded(degraded_failure)
                 except _CAPTURE_RUNTIME_ERRORS:
                     pass  # output already delivered; lost diagnostic
                 return _capture_replay.degraded_delivery_return(command_returncode)
@@ -570,7 +661,7 @@ def _emit_runner_tail_crash_diagnostic() -> None:
     )
 
 
-def _sweep_after_runner(requested_cwd: str) -> None:
+def _sweep_after_runner(requested_cwd: str, capture_id: str) -> None:
     global _BYTE_PRESSURE_OBSERVED
     byte_pressure_observed = _BYTE_PRESSURE_OBSERVED
     _BYTE_PRESSURE_OBSERVED = False
@@ -580,7 +671,9 @@ def _sweep_after_runner(requested_cwd: str) -> None:
             if byte_pressure_observed
             else _capture_reconcile.RUNNER_TAIL_BUDGET
         )
-        outcome = _capture_reconcile.reconcile_capture_store(requested_cwd, budget)
+        outcome = _capture_reconcile.reconcile_capture_store(
+            requested_cwd, budget, priority_capture_id=capture_id
+        )
         _capture_reconcile.emit_owner_diagnostic(
             outcome, owner=_RUNNER_TAIL_OWNER, write=sys.stderr.write
         )
@@ -620,5 +713,5 @@ def _main(argv: list[str] | None = None) -> int:
                 )
             )
     finally:
-        _sweep_after_runner(request.cwd)
+        _sweep_after_runner(request.cwd, request.capture_id)
     return user_result

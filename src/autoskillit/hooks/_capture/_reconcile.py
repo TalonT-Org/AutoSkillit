@@ -15,6 +15,7 @@ from ._lifecycle_policy import CaptureRetentionPhase, CaptureState
 from ._module_identity import register_module_aliases
 from ._syntax import PUBLIC_NAME_RE
 from ._types import (
+    CaptureCapacitySpec,
     CaptureCleanupOutcome,
     CleanupBlocker,
     CleanupProgress,
@@ -49,6 +50,9 @@ SESSION_START_BUDGET = SweepBudgetSpec(
 # Single shared byte bound for every capture-cleanup diagnostic, regardless of
 # owner.
 DIAGNOSTIC_MAX_BYTES = 400
+# Warn as compacted bytes approach the default soft limit; runtime capacity
+# overrides remain runner-local.
+_CAPACITY_WARNING_RATIO = 0.80
 _HOOK_VERSION = 1
 _POLICY_EVENT_NAME = "capture_cleanup"
 
@@ -102,6 +106,8 @@ def _failure_blocker(reason: CaptureFailureReason) -> CleanupBlocker:
 def reconcile_capture_store(
     project_cwd: str,
     budget: SweepBudgetSpec,
+    *,
+    priority_capture_id: str | None = None,
 ) -> CaptureCleanupOutcome:
     if not isinstance(project_cwd, str) or not project_cwd or type(budget) is not SweepBudgetSpec:
         return _failure_outcome(CleanupBlocker.FILESYSTEM_AUTHORITY)
@@ -110,7 +116,7 @@ def reconcile_capture_store(
         with _authority.open_capture_lifecycle(
             project_cwd, create=False, lock_wait=lock_wait_for_budget(budget)
         ) as lifecycle:
-            return lifecycle.sweep(budget)
+            return lifecycle.sweep(budget, priority_capture_id=priority_capture_id)
     except _authority.CaptureStoreAbsentError:
         return CaptureCleanupOutcome(blocker=CleanupBlocker.STORE_ABSENT)
     except LockContended:
@@ -162,6 +168,39 @@ class CaptureStoreStats:
     directory_files: int = 0
     unledgered_aged_files: int = 0
     unledgered_aged_bytes: int = 0
+    projected_compacted_bytes: int = 0
+    compaction_low_bytes: int = CaptureCapacitySpec().compaction_low_bytes
+
+    @property
+    def capacity_warning(self) -> bool:
+        """Whether the compacted projection reaches the soft-limit warning."""
+        return (
+            self.compaction_low_bytes > 0
+            and self.projected_compacted_bytes
+            >= _CAPACITY_WARNING_RATIO * self.compaction_low_bytes
+        )
+
+    @property
+    def capacity_line(self) -> str:
+        """Shared operator-facing capacity line for doctor and CLI."""
+        utilization_pct = (
+            f"{self.projected_compacted_bytes / self.compaction_low_bytes:.1%}"
+            if self.compaction_low_bytes > 0
+            else "n/a"
+        )
+        return (
+            f"capacity: projected_compacted_bytes={self.projected_compacted_bytes} "
+            f"low_bytes={self.compaction_low_bytes} utilization_pct={utilization_pct} "
+            "(default capacity limits; runtime overrides are runner-local)"
+        )
+
+    @property
+    def capacity_warning_message(self) -> str:
+        """Operator-facing warning using the configured soft-limit ratio."""
+        return (
+            "WARNING: compacted capture-store bytes have reached "
+            f"{_CAPACITY_WARNING_RATIO:.0%} of the soft limit"
+        )
 
 
 def capture_store_stats(project_cwd: str) -> CaptureStoreStats:
@@ -183,8 +222,12 @@ def capture_store_stats(project_cwd: str) -> CaptureStoreStats:
             create=False,
             lock_wait=lock_wait_for_budget(RUNNER_TAIL_BUDGET),
         ) as store:
-            with store._locked():
-                records, _compaction_epoch, ledger_bytes = store._load_locked()
+            (
+                records,
+                ledger_bytes,
+                projected_compacted_bytes,
+                compaction_low_bytes,
+            ) = store.read_stats()
             tracked = frozenset(
                 record.public_name
                 for record in records.values()
@@ -233,6 +276,8 @@ def capture_store_stats(project_cwd: str) -> CaptureStoreStats:
                 directory_files=directory_files,
                 unledgered_aged_files=unledgered_aged_files,
                 unledgered_aged_bytes=unledgered_aged_bytes,
+                projected_compacted_bytes=projected_compacted_bytes,
+                compaction_low_bytes=compaction_low_bytes,
             )
     except _authority.CaptureStoreAbsentError:
         return CaptureStoreStats(CleanupBlocker.STORE_ABSENT)

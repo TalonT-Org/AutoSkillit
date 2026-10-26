@@ -52,8 +52,15 @@ class CaptureCapacityError(CaptureLedgerError):
         self,
         reason: CaptureCapacityReason,
         assist_transition_limit: int | None = None,
+        decision: _capture_capacity.AdmissionDecision | None = None,
     ) -> None:
         self.reason = reason
         self.assist_transition_limit = assist_transition_limit
+        self.decision = decision
         self.failure_reason = _capture_capacity.failure_reason(reason)
-        super().__init__(_capture_capacity.reason_detail(reason))
+        detail = (
+            _capture_capacity.measurement_detail(decision)
+            if decision is not None
+            else _capture_capacity.reason_detail(reason)
+        )
+        super().__init__(detail)

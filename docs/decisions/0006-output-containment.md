@@ -99,10 +99,24 @@ process-lifetime contract is defined against that host model in ADR-0008.
 The lifecycle store records `RESERVED`, `STAGED`, `PUBLISHED_WRITING`,
 `FINALIZED`, `FAILED`, `ABANDONED`, `DELETING`, `DELETED`, and `TAMPERED`.
 The immutable FINAL, reference, delivery, and reader semantics belong to
-ADR-0008. A finalized or failed artifact becomes eligible one hour after its
-terminal transition; an abandoned producer becomes eligible one hour after its
-durable creation time. Eligibility is reclaimed only on the next enabled,
-trusted trigger, not by a wall-clock scheduler.
+ADR-0008. Retention follows readability: after delivery completes, captures
+with no outstanding bearer become eligible immediately; a delivered capture
+with a published reference remains readable until expiry; unsettled deliveries
+and failed artifacts keep the one-hour hold.
+
+| FINALIZED record | Eligibility time | Why |
+|---|---|---|
+| Delivered with no outstanding bearer (`not_requested`, `unavailable`, `expired`, `revoked`) | Immediately after the delivered transition commits; its due timestamp is `manifest.finalized_at` | Inline bytes have already been delivered and no bearer can open the artifact |
+| Delivered with a `published` reference | `manifest.reference_expiry` | The bearer remains readable until expiry |
+| Any other FINALIZED state (undelivered, delivery `failed`/`unknown`, or reference `unknown`) | `manifest.retention_deadline` | Preserve the one-hour forensic hold |
+
+`FAILED` artifacts, including pre-FINAL failures, remain eligible one hour after
+their terminal transition; abandoned producers remain eligible one hour after
+durable creation time. A FINALIZED record with no outstanding bearer is not due
+until delivery completes, even though its due timestamp is `manifest.finalized_at`.
+
+Eligibility is reclaimed only on the next enabled, trusted trigger, not by a
+wall-clock scheduler.
 
 Admission participates in that trigger-owned model. When store-wide due debt
 reaches the assist threshold, the admitting runner performs one debt-scaled
@@ -121,6 +135,19 @@ Trigger-only ownership remains adequate while assist work stays bounded and
 at least one installed reclamation owner retains a positive directory-scan
 budget. Removing either condition requires a new ownership decision; the
 read-only doctor must not become a scheduler implicitly.
+
+The producer's own runner tail tries its just-delivered inline capture first,
+before the cursor-rotated backlog, within the existing `RUNNER_TAIL_BUDGET`;
+this moves the same required deletion work earlier without increasing total
+deletion work or adding an owner or scheduler.
+
+Eligibility is distinct from access and deletion. Inline output has already
+been delivered as in-memory bytes and grants no later artifact-opening
+authority; `open_verified_capture()` requires a published bearer. A holder of a
+delivered published reference may open it until expiry. Expiry prevents new
+authorized opens but does not erase previously delivered bytes. An already-open
+verified reader's shared lease prevents reclamation until it closes, after which
+identity checks still have to pass before deletion.
 
 Deletion is confined to the shared store's identity-revalidated quarantine
 transaction. Only lifecycle-recorded `shell_[0-9a-f]{16}.log` artifacts are
@@ -158,6 +185,9 @@ hook can be retired in favor of that mechanism.
    rejected. Physical path strings are display hints, not filesystem authority.
 5. General retrieval, publication/privacy policy, quota accounting, and upstream
    live visibility remain downstream work identified by ADR-0008.
+6. Undelivered and otherwise unsettled-delivery anomalies retain the one-hour
+   hold and sit outside the declared load; their encoded frames still count
+   against actual capacity.
 
 ## Resolved
 
@@ -196,13 +226,59 @@ bookkeeping failure discards or misreports a verified primary result outside
 of what the import-time assertion alone can catch (e.g. a `PRESERVE_OUTPUT`
 classification applied to a reason that should be `DISCARD_OUTPUT`).
 
+Containment remains in force under setup-stage capacity degradation because
+agent-visible output stays bounded by `shell_max_inline_bytes`.
+
 The same enforcement surface bounds admission by measured reclamation debt:
 assist and stall are admission-only capacity reasons, and import-time totality
 requires their gate, failure, disposition, detail, and blocker classifications.
-The production compaction floor is derived from the code-owned sustained
-admission envelope, the canonical one-hour sweep grace, and the incident's
-measured bytes per record. Runtime policy overrides below that derived floor
-are rejected in favor of the safe production default.
+
+The capacity model derives the production byte floor and the operational,
+retained, and evidence record caps from one required record count.
+`capacity_envelope_violations(spec)` supplies both the import-time check for the
+production default and runtime override validation. The import-time assertion
+checks only the static default; live admission and transition gates use actual
+projected bytes. The success-path hold uses `REFERENCE_LIFETIME_SECONDS`: at the
+declared peak of 0.5333 admissions per
+second and a 1,800-second reference lifetime, `ceil(0.5333… * 1,800) + 16`
+producers yields 976 held records. The floor adds the due debt that can accrue
+before reclamation assist engages, `reclamation_debt_assist_records - 1`; this
+produces 1,231 required records at the default 256-record assist threshold.
+The same count is required by each record cap.
+
+`PLANNED_RECORD_FRAME_BYTES` is 2,608 bytes: the largest measured encoding of
+real `FINALIZED`, `DELETED`, and `FAILED` record shapes under the declared
+numeric profile, rounded up to a multiple of eight. The measurement sets
+non-schema counters and identities to `2**63 - 1`, uses the same compaction
+epoch, valid finite timestamps, and bounded command outcomes. Adding the
+default 256 tombstones gives `(1,231 + 256) * 2,608 = 3,878,096` bytes, below
+the default `compaction_low_bytes` of 3,932,160. The declared allowance models
+that load and profile; `CompactedFrameSizer` counts every encoded byte in the
+retained projection, including opaque frames, for both admission and compaction.
+A remeasured allowance above 2,644 bytes makes the default
+import-time check fail and requires re-deriving the floor. Overrides that break
+the byte or shared record-count envelope are rejected by the same function.
+
+`compaction_low_bytes` is a soft limit for state-advancing work. Admission is
+gated separately; transitions that advance a record through stage, publish,
+and finalize may be refused above it. Same-state bookkeeping, including
+delivery and reference updates, open-time normalization, and sweep expiry,
+remains subject to the hard bound. Recovery transitions retain their reserved
+headroom. `_with_capacity_rescue` first attempts the operation; for its existing
+rescuable refusal reasons, it performs one bounded sweep and retries from a
+fresh locked load before final refusal.
+
+The retained-record envelope is a compacted projection of latest record
+frames, allowed tombstones, and opaque bytes. Superseded transition frames
+remain in the physical ledger until compaction, so they are temporary physical
+amplification and are not multiplied into the retained-record floor.
+`_append_locked` checks prospective physical size and compacts instead of
+appending when the append trigger would be crossed. Compaction output may itself
+exceed that trigger while remaining within the hard `MAX_LEDGER_BYTES` bound;
+the trigger is not a universal ceiling. A projected-capacity refusal is a
+`CaptureCapacityError`; an existing physical file above `MAX_LEDGER_BYTES` is
+rejected on load as `CaptureLedgerError` and does not enter the capacity-only
+degraded path.
 
 ## Consequences
 
@@ -215,5 +291,6 @@ are rejected in favor of the safe production default.
 - Complete Codex shell output is captured to a descriptor-anchored carrier.
   Oversized replay reports an opaque V2 reference or an unavailable status,
   never an authoritative pathname.
-- One-hour lifecycle reclamation is owned by the installed runner tail and the
-  cleanup-only `SessionStart` hook, with bounded retry and quarantine recovery.
+- Readability-derived lifecycle reclamation is owned by the installed runner
+  tail and the cleanup-only `SessionStart` hook, with bounded retry and
+  quarantine recovery; unsettled artifacts retain the one-hour hold.

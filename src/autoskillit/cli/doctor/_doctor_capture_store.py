@@ -45,8 +45,10 @@ def _check_capture_store_stats(project_dir: Path | None = None) -> DoctorResult:
         f"unledgered_aged={stats.unledgered_aged_files} "
         f"unledgered_aged_bytes={stats.unledgered_aged_bytes}"
     )
+    message = f"{message}; {stats.capacity_line}"
     if (
-        stats.unledgered_aged_files >= _UNLEDGERED_WARNING_THRESHOLD
+        stats.capacity_warning
+        or stats.unledgered_aged_files >= _UNLEDGERED_WARNING_THRESHOLD
         or stats.due_records >= _RECLAMATION_DEBT_WARNING_THRESHOLD
     ):
         return DoctorResult(

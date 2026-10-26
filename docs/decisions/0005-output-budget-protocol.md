@@ -80,15 +80,19 @@ exact pull closure. It does not masquerade as the tool's normal operational fail
 | `MAX_MCP_OUTPUT_TOKENS = 50_000` | Keep Claude's independently defined setting separate. It has no shared source of truth with Codex result or history limits and does not control Claude Code's observed disk-persistence gate. Claude's native Bash spill behavior covers shell output on that backend. |
 
 The shell capture hook uses `shell_max_inline_bytes = 12_000` as the inline threshold:
-commands whose combined output fits within that budget are inlined in full (artifact
-retained for one hour after durable finalization); larger outputs are captured losslessly
-to the same descriptor-owned artifact with a bounded head/tail slice and provenance
-marker inlined. A per-artifact writer lease protects quiet live producers. Every valid
-installed runner performs one bounded tail sweep after producer resources release, and
-the cleanup-only `capture_lifecycle_hook.py` performs the same sweep at `SessionStart`
-for interactive and headless sessions. Eligible artifacts are reclaimed on the next
-enabled trusted trigger through identity-revalidated quarantine deletion. Cleanup
-failure is fail-open and cannot replace the command's stdout, stderr, or exit status.
+commands whose combined output fits within that budget are inlined in full; larger
+outputs are captured losslessly to the descriptor-owned artifact with a bounded
+head/tail slice and provenance marker inlined. Retention follows readability: after
+delivery completes, captures with no outstanding bearer become eligible
+immediately; a delivered capture with a
+published reference remains readable until expiry; unsettled deliveries and failed
+artifacts keep the one-hour hold. A per-artifact writer lease protects quiet live
+producers. Every valid installed runner performs one bounded tail sweep after producer
+resources release, and the cleanup-only `capture_lifecycle_hook.py` performs the same
+sweep at `SessionStart` for interactive and headless sessions. Eligible artifacts are
+reclaimed on the next enabled trusted trigger through identity-revalidated quarantine
+deletion. Cleanup failure is fail-open and cannot replace the command's stdout,
+stderr, or exit status.
 `small_file_max_bytes` was removed — it existed solely for the classifier's
 literal-small-JSONL exception, which is no longer needed.
 

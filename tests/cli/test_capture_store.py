@@ -22,6 +22,8 @@ import pytest
 
 import autoskillit.cli.doctor._doctor_capture_store as doctor_capture_store
 import autoskillit.cli.ops._capture_store as capture_store_command
+import autoskillit.hooks._capture._capacity as capture_capacity
+import autoskillit.hooks._capture_lifecycle as capture_lifecycle
 from autoskillit.cli.doctor._doctor_capture_store import _check_capture_store_stats
 from autoskillit.cli.ops import run_capture_store
 from autoskillit.core import Severity
@@ -35,9 +37,17 @@ from autoskillit.hooks._capture._snapshot import (
     CommandOutcome,
     verify_capture_snapshot,
 )
-from autoskillit.hooks._capture._types import HOT_PATH_LOCK_WAIT, CleanupBlocker
+from autoskillit.hooks._capture._types import (
+    HOT_PATH_LOCK_WAIT,
+    CaptureCapacitySpec,
+    CleanupBlocker,
+)
 from autoskillit.hooks._capture_artifacts import CaptureArtifact, create_capture_artifact
-from autoskillit.hooks._capture_lifecycle import LOCK_NAME, CaptureLifecycleStore
+from autoskillit.hooks._capture_lifecycle import (
+    LOCK_NAME,
+    CaptureDeliveryStatus,
+    CaptureLifecycleStore,
+)
 from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
@@ -142,7 +152,17 @@ def test_capture_store_stats_reports_due_finalized_record_to_operators(
             finalized_at=finalized_at,
             retention_deadline=finalized_at + SWEEP_GRACE_SECONDS,
         )
-        lifecycle.commit_verified_snapshot(verified, issue_reference=False)
+        finalized = lifecycle.commit_verified_snapshot(verified, issue_reference=False)
+        lifecycle.transition_delivery(
+            finalized,
+            expected=CaptureDeliveryStatus.NOT_ATTEMPTED,
+            target=CaptureDeliveryStatus.ATTEMPTING,
+        )
+        lifecycle.transition_delivery(
+            finalized,
+            expected=CaptureDeliveryStatus.ATTEMPTING,
+            target=CaptureDeliveryStatus.FAILED,
+        )
     finally:
         if artifact is not None:
             artifact.close_artifact_fd()
@@ -152,12 +172,52 @@ def test_capture_store_stats_reports_due_finalized_record_to_operators(
 
     stats = capture_store_stats(str(project))
 
+    projection_anchor = open_project_anchor(str(project))
+    projection_root = open_capture_root(projection_anchor, create=False)
+    try:
+        projection_store = CaptureLifecycleStore.from_open_authorities(
+            projection_anchor,
+            projection_root,
+            lock_wait=HOT_PATH_LOCK_WAIT,
+        )
+        with projection_store._locked():
+            records, epoch, _physical_size = projection_store._load_locked()
+        expected_projection = sum(
+            len(
+                capture_lifecycle._capture_ledger.encode_frame(
+                    capture_lifecycle._capture_lifecycle_record.record_to_dict(record),
+                    compaction_epoch=epoch,
+                )
+            )
+            for record in capture_capacity.compacted_records(records, CaptureCapacitySpec())
+        )
+    finally:
+        projection_root.close()
+        projection_anchor.close()
+
     assert stats.due_records == 1
     assert stats.eligible_records == 0
+    assert stats.projected_compacted_bytes == expected_projection
+    assert stats.compaction_low_bytes == CaptureCapacitySpec().compaction_low_bytes
+    assert stats.ledger_bytes > stats.projected_compacted_bytes
     assert "due_records=1" in _check_capture_store_stats(project).message
     monkeypatch.chdir(project)
     run_capture_store(reclaim=False)
-    assert "due_records=1" in capsys.readouterr().out
+    command_output = capsys.readouterr().out
+    assert "due_records=1" in command_output
+    assert "projected_compacted_bytes=" in command_output
+    assert "low_bytes=" in command_output
+    assert "physical_ledger_bytes=" in command_output
+    assert "default capacity limits" in command_output
+    assert "runtime overrides are runner-local" in command_output
+
+
+def test_blocker_only_stats_keep_safe_defaults() -> None:
+    stats = CaptureStoreStats(CleanupBlocker.STORE_ABSENT)
+
+    assert stats.projected_compacted_bytes == 0
+    assert stats.compaction_low_bytes == CaptureCapacitySpec().compaction_low_bytes
+    assert not stats.capacity_warning
 
 
 def test_doctor_capture_store_reports_absent_store(
@@ -240,6 +300,57 @@ def test_doctor_capture_store_warning_threshold(
     assert "eligible_abandoned=2" in result.message
     assert "deleting=1" in result.message
     assert ("--reclaim" in result.message) is expects_remediation
+
+
+@pytest.mark.parametrize(
+    ("projection_fraction", "expected_severity"),
+    [(0.81, Severity.WARNING), (0.79, Severity.OK)],
+)
+def test_doctor_warns_when_projection_approaches_the_soft_limit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    projection_fraction: float,
+    expected_severity: Severity,
+) -> None:
+    low_bytes = CaptureCapacitySpec().compaction_low_bytes
+    projected_bytes = int(low_bytes * projection_fraction)
+    ledger_bytes = int(low_bytes * 0.85)
+    stats = CaptureStoreStats(
+        blocker=CleanupBlocker.NONE,
+        ledger_bytes=ledger_bytes,
+        projected_compacted_bytes=projected_bytes,
+        compaction_low_bytes=low_bytes,
+    )
+    monkeypatch.setattr(doctor_capture_store, "capture_store_stats", lambda _project: stats)
+
+    result = doctor_capture_store._check_capture_store_stats(tmp_path)
+
+    assert result.severity is expected_severity
+    assert "projected_compacted_bytes=" in result.message
+    assert "low_bytes=" in result.message
+    assert str(round(projection_fraction * 100)) in result.message
+    assert "%" in result.message
+    if projection_fraction == 0.79:
+        assert ledger_bytes > int(low_bytes * 0.80)
+
+
+def test_doctor_ok_for_existing_blocker_free_stub(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        doctor_capture_store,
+        "capture_store_stats",
+        lambda _project: CaptureStoreStats(
+            blocker=CleanupBlocker.NONE,
+            due_records=99,
+        ),
+    )
+
+    result = doctor_capture_store._check_capture_store_stats(tmp_path)
+
+    assert result.severity is Severity.OK
+    assert "due_records=99" in result.message
 
 
 def test_capture_store_command_without_reclaim_does_not_mutate(
@@ -401,3 +512,46 @@ def test_capture_store_stats_surfaces_entry_authority_errors(
         stats = capture_reconcile.capture_store_stats(str(project))
 
     assert stats.blocker is CleanupBlocker.PERMISSION_DENIED
+
+
+@pytest.mark.parametrize(
+    ("projection_fraction", "expects_capacity_warning"),
+    [(0.81, True), (0.79, False)],
+)
+def test_capture_store_command_reports_projected_capacity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    projection_fraction: float,
+    expects_capacity_warning: bool,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    low_bytes = CaptureCapacitySpec().compaction_low_bytes
+    projected_bytes = int(low_bytes * projection_fraction)
+    ledger_bytes = int(low_bytes * 0.85)
+    monkeypatch.setattr(
+        capture_store_command,
+        "capture_store_stats",
+        lambda _project: CaptureStoreStats(
+            blocker=CleanupBlocker.NONE,
+            ledger_bytes=ledger_bytes,
+            projected_compacted_bytes=projected_bytes,
+            compaction_low_bytes=low_bytes,
+        ),
+    )
+    monkeypatch.chdir(project)
+
+    run_capture_store(reclaim=False)
+
+    command_output = capsys.readouterr().out
+    assert f"projected_compacted_bytes={projected_bytes}" in command_output
+    assert f"low_bytes={low_bytes}" in command_output
+    assert f"physical_ledger_bytes={ledger_bytes}" in command_output
+    assert "default capacity limits" in command_output
+    assert "runtime overrides are runner-local" in command_output
+    assert str(round(projection_fraction * 100)) in command_output
+    assert "%" in command_output
+    assert ("WARNING" in command_output) is expects_capacity_warning
+    if projection_fraction == 0.79:
+        assert ledger_bytes > int(low_bytes * 0.80)

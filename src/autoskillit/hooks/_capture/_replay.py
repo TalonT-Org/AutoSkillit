@@ -15,6 +15,7 @@ from ._module_identity import register_module_aliases
 
 if TYPE_CHECKING:
     from autoskillit.hooks._capture._snapshot import (
+        CaptureMeasurement,
         FinalizedCapture,
         PublishedCaptureReference,
         UnavailableCaptureReference,
@@ -29,6 +30,7 @@ if TYPE_CHECKING:
     )
 else:
     from ._snapshot import (
+        CaptureMeasurement,
         FinalizedCapture,
         PublishedCaptureReference,
         UnavailableCaptureReference,
@@ -189,6 +191,17 @@ def render_inline_capture(finalized: FinalizedCapture) -> bytes:
     return snapshot.measurement.inline
 
 
+def render_uncaptured_bounded(measurement: CaptureMeasurement) -> bytes:
+    if measurement.total_bytes <= measurement.inline_bytes:
+        return measurement.inline
+    omitted = measurement.total_bytes - len(measurement.head) - len(measurement.tail)
+    elision = (
+        b"[AutoSkillit shell capture elided: %d of %d bytes omitted; no capture artifact]"
+        % (omitted, measurement.total_bytes)
+    )
+    return measurement.head + b"\n" + elision + b"\n" + measurement.tail
+
+
 def render_oversized_capture(
     value: PublishedCaptureReference | UnavailableCaptureReference,
 ) -> bytes:
@@ -241,7 +254,7 @@ def degraded_delivery_return(shell_returncode: int | None) -> int:
     return shell_returncode
 
 
-def _emit_degraded(failure: CaptureFailureV3) -> None:
+def emit_degraded(failure: CaptureFailureV3) -> None:
     """Emit a degraded-delivery diagnostic marker to stderr."""
     _write_and_flush_hook_stderr(render_capture_degraded_v3(failure) + b"\n")
 

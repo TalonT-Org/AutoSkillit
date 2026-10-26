@@ -6,7 +6,7 @@ import errno
 import json
 import math
 import os
-from collections.abc import Collection, Iterable
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
@@ -265,16 +265,28 @@ def bounded_due_keys(
     return due, complete, inspected, rebuild_key
 
 
+def _priority_records(
+    records: Mapping[str, SweepRecord], priority_capture_id: str | None
+) -> Iterable[SweepRecord]:
+    if priority_capture_id is not None and priority_capture_id in records:
+        yield records[priority_capture_id]
+    yield from (
+        record for capture_id, record in records.items() if capture_id != priority_capture_id
+    )
+
+
 def select_due_keys(
     store: _store_port.SweepStorePort,
     now: float,
     max_records: int,
     terminal_states: Collection[object],
+    *,
+    priority_capture_id: str | None = None,
 ) -> tuple[list[DueKey], bool, bool]:
     with store._locked():
         records, compaction_epoch, _size = store._load_locked()
         due, complete, inspected, rebuild_key = bounded_due_keys(
-            records.values(),
+            _priority_records(records, priority_capture_id),
             now,
             terminal_states,
             max_records,
@@ -307,8 +319,10 @@ def select_due_keys(
             if repaired:
                 store._sweep_cursor_writes += 1
     store._sweep_records_inspected += inspected
+    ordered = rotate_after(due, cursor.due_key)
+    ordered.sort(key=lambda key: key.capture_id != priority_capture_id)
     return (
-        rotate_after(due, cursor.due_key),
+        ordered,
         complete,
         repaired or (repair_needed and bool(due)),
     )

@@ -168,6 +168,7 @@ def create_capture_artifact(
         raise CaptureSetupError(
             exc.failure_reason,
             "capture capacity is exhausted",
+            public_detail=str(exc) if exc.decision is not None else None,
         ) from exc
     except (CaptureLifecycleError, CaptureTransitionCommittedError) as exc:
         raise CaptureSetupError(
@@ -254,9 +255,8 @@ def _policy_capacity(value: object) -> CaptureCapacitySpec | None:
         candidate = replace(CaptureCapacitySpec(), **validated)
     except (TypeError, ValueError):
         return None
-    if (
-        candidate.compaction_low_bytes < _types.REQUIRED_RETENTION_BYTES
-        or candidate.hard_ledger_bytes > _capture_lifecycle.MAX_LEDGER_BYTES
+    if _types.capacity_envelope_violations(candidate) or (
+        candidate.hard_ledger_bytes > _capture_lifecycle.MAX_LEDGER_BYTES
     ):
         return None
     return candidate

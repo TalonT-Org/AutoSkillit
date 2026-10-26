@@ -79,11 +79,20 @@ _READ_FLAGS = (
 class CaptureSetupError(RuntimeError):
     """Raised when the descriptor-anchored capture authority cannot be established."""
 
-    def __init__(self, reason: CaptureFailureReason, detail: str) -> None:
+    def __init__(
+        self,
+        reason: CaptureFailureReason,
+        detail: str,
+        *,
+        public_detail: str | None = None,
+    ) -> None:
         if type(reason) is not CaptureFailureReason:
             raise TypeError("capture setup reason must be closed")
         self.reason = reason
         self.detail = normalize_failure_detail(detail)
+        self.public_detail = (
+            normalize_failure_detail(public_detail) if public_detail is not None else None
+        )
         super().__init__(self.detail)
 
     @classmethod

@@ -222,12 +222,25 @@ def _directory_children(
     return targets, unresolved
 
 
+def _target_directory_children(
+    target_directory: tuple[str, str | None],
+    source_indices: list[int],
+    argv: list[str],
+    cwd: str,
+    argv_tokens: Sequence[ArgvToken] | None,
+) -> tuple[list[str], bool]:
+    value, source = target_directory
+    directory = _classification_module().resolve_write_target(value, cwd, shell_source=source)
+    if directory is None:
+        return [], True
+    return _directory_children(directory, source_indices, argv, cwd, argv_tokens)
+
+
 def _install_targets(
     argv: list[str],
     cwd: str,
     argv_tokens: Sequence[ArgvToken] | None,
 ) -> tuple[list[str], bool]:
-    _classification = _classification_module()
     options = _destination_operands("install", argv, argv_tokens)
     operands = options.operands
     target_directory = options.target_directory
@@ -241,11 +254,7 @@ def _install_targets(
             target is None for target in targets
         )
     if target_directory is not None:
-        value, source = target_directory
-        directory = _classification.resolve_write_target(value, cwd, shell_source=source)
-        if directory is None:
-            return [], True
-        return _directory_children(directory, operands, argv, cwd, argv_tokens)
+        return _target_directory_children(target_directory, operands, argv, cwd, argv_tokens)
     if len(operands) < 2:
         return [], True
 
@@ -265,18 +274,13 @@ def _ln_entry_targets(
     cwd: str,
     argv_tokens: Sequence[ArgvToken] | None,
 ) -> tuple[list[str], bool]:
-    _classification = _classification_module()
     options = _destination_operands("ln", argv, argv_tokens)
     operands = options.operands
     target_directory = options.target_directory
     if options.invalid or not operands:
         return [], True
     if target_directory is not None:
-        value, source = target_directory
-        directory = _classification.resolve_write_target(value, cwd, shell_source=source)
-        if directory is None:
-            return [], True
-        return _directory_children(directory, operands, argv, cwd, argv_tokens)
+        return _target_directory_children(target_directory, operands, argv, cwd, argv_tokens)
     if len(operands) == 1:
         basename = _source_basename(argv, operands[0], cwd, argv_tokens)
         return ([os.path.join(cwd, basename)], False) if cwd and basename else ([], True)

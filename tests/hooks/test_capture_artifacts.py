@@ -259,11 +259,11 @@ def _install_reserve_capacity_refusal(
 def _install_fake_capture_process(
     monkeypatch: pytest.MonkeyPatch,
     process: _FakeCaptureProcess,
-) -> list[dict[str, object]]:
-    spawn_calls: list[dict[str, object]] = []
+) -> list[tuple[tuple[object, ...], dict[str, object]]]:
+    spawn_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
 
-    def spawn(*_args, **kwargs):
-        spawn_calls.append(kwargs)
+    def spawn(*args, **kwargs):
+        spawn_calls.append((args, kwargs))
         return process
 
     monkeypatch.setattr(capture_runner, "_spawn_bash", spawn)
@@ -1333,7 +1333,7 @@ def test_reserve_capacity_refusal_detail_carries_measurement(
         degraded.detail,
     )
     assert len(degraded.detail.encode("utf-8")) <= 240
-    assert spawn_calls == [{"capture_output": True}]
+    assert [kwargs for _, kwargs in spawn_calls] == [{"capture_output": True}]
     assert process.wait_calls == 1
 
 
@@ -1381,17 +1381,21 @@ def test_capacity_setup_refusal_runs_command_bounded_uncaptured(
 ) -> None:
     project = tmp_path / "project"
     project.mkdir()
+    command = "printf 'uncaptured child output'"
     expected = b"uncaptured child output"
     _install_reserve_capacity_refusal(monkeypatch, reason)
     process = _FakeCaptureProcess(expected, returncode=child_returncode)
     spawn_calls = _install_fake_capture_process(monkeypatch, process)
 
-    assert capture_runner._main(_runner_args(cwd=str(project))) == child_returncode
+    assert (
+        capture_runner._main(_runner_args(command=command, cwd=str(project))) == child_returncode
+    )
 
     captured = capfd.readouterr()
     degraded = _single_degraded_marker(captured.err)
     assert captured.out == expected.decode("utf-8")
-    assert spawn_calls == [{"capture_output": True}]
+    assert [kwargs for _, kwargs in spawn_calls] == [{"capture_output": True}]
+    assert spawn_calls[0][0][1] == command
     assert process.wait_calls == 1
     assert degraded.stage == "capture_setup"
     assert degraded.reason is capture_capacity.failure_reason(reason)

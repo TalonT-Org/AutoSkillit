@@ -38,3 +38,13 @@ def test_claude_log_mining_uses_native_project_log_resolution(
     assert 0 <= cwd_index < command_index < discovery_index
     assert "//\\//-" not in section
     assert 'LOG_DIR="${LOG_DIR//--/-}"' not in section
+
+
+@pytest.mark.parametrize(
+    ("skill_name", "start_marker", "end_marker"),
+    [entry for entry in _SKILL_SECTIONS if entry[0] in ("audit-bugs", "setup-project")],
+)
+def test_session_discovery_excludes_orphaned_transcripts(
+    skill_name: str, start_marker: str, end_marker: str
+) -> None:
+    assert "! -name '*.orphaned-*.jsonl'" in _section(skill_name, start_marker, end_marker)

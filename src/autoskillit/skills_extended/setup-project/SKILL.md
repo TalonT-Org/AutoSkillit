@@ -158,7 +158,7 @@ LOG_DIR=$(autoskillit claude-project-log-dir "$actual_absolute_cwd")
 ```
 
 1. Verify `LOG_DIR` exists and contains `.jsonl` files; report missing or empty history before stopping
-2. List `.jsonl` files with `find "$LOG_DIR" -name '*.jsonl'`, including subagent files in `{session-uuid}/subagents/agent-*.jsonl`
+2. List session files with `find "$LOG_DIR" -name '*.jsonl' ! -name '*.orphaned-*.jsonl'`, including subagent files in `{session-uuid}/subagents/agent-*.jsonl` and excluding orphaned copies
 3. Sort by modification time (newest first)
 4. Divide into batches of ~20-30 files per subagent — launch multiple parallel subagents if needed
 

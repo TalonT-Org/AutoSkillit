@@ -455,12 +455,7 @@ An npm prefix does not describe all npm writes. The independently configured
 [lifecycle scripts](https://docs.npmjs.com/cli/v11/using-npm/scripts/) can cause
 additional writes; the scanner models neither cache writes nor script side
 effects. Installed dependencies' scripts are distinct from hooks in the prefix
-project. In [npm 12.2.1's install implementation](https://github.com/npm/cli/blob/v12.2.1/lib/commands/install.js),
-the ordinary root install lifecycle sequence requires a local install, no
-effective package arguments, and scripts enabled. That sequence does not apply
-to `npm install --prefix DIR pkg`; this does not imply that every other project
-hook is disabled. These behaviors depend on npm version and configuration, and
-an install need not write an external cache.
+project.
 
 Canonical containment is a point-in-time check: an ancestor or symlink can change
 between scanning and execution. Separately, `ln` chooses directory versus entry

@@ -198,6 +198,23 @@ def test_npm_install_explicit_prefix(
 
 
 @pytest.mark.parametrize(
+    ("command", "targets", "entry_targets"),
+    [
+        ("/usr/bin/npm install --prefix /opt/app pkg", ("/opt/app",), ()),
+        ("/usr/bin/install source /opt/app", ("/opt/app",), ()),
+        ("/bin/ln -s source /opt/link", (), ("/opt/link",)),
+    ],
+)
+def test_path_qualified_destination_verbs(
+    command: str, targets: tuple[str, ...], entry_targets: tuple[str, ...]
+) -> None:
+    result = scan_write_targets(command, _WORKSPACE)
+    assert result.targets == targets
+    assert result.entry_targets == entry_targets
+    assert result.has_write and not result.unresolved
+
+
+@pytest.mark.parametrize(
     ("command", "entry_targets"),
     [
         ("ln source link", ("/workspace/link",)),

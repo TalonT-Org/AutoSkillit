@@ -561,13 +561,14 @@ def _scan_executable(
     verb_cwd = _classification._wrapped_verb_cwd(executable, start, state.cwd, argv_tokens)
     invoked = _invoked_child_state(verb, verb_cwd, state, path)
     verb_tokens = None if argv_tokens is None else argv_tokens[start:]
-    if verb == "npm":
+    verb_name = os.path.basename(verb)
+    if verb_name == "npm":
         targets, unresolved, has_write = _npm_install_targets(argv, verb_cwd, verb_tokens)
         return targets, [], unresolved, has_write, invoked
-    if verb == "ln":
+    if verb_name == "ln":
         targets, unresolved = _ln_entry_targets(argv, verb_cwd, verb_tokens)
         return [], targets, unresolved, True, invoked
-    if verb == "install":
+    if verb_name == "install":
         targets, unresolved = _install_targets(argv, verb_cwd, verb_tokens)
         return targets, [], unresolved, True, invoked
     if verb in WRITE_VERBS:

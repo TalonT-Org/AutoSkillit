@@ -96,7 +96,6 @@ _hr.HOOK_REGISTRY_HASH = _hr.compute_registry_hash(
 del _HOOK_REGISTRY_LIST
 
 __all__ = [
-    "destination_within",
     "BRANCH_PROTECTION_DENY_TRIGGER",
     "CODEX_AUTO_COMPACTION_DENIED_REASON",
     "DENY_REASON_BY_GUARD",
@@ -140,6 +139,7 @@ __all__ = [
     "capture_store_stats",
     "command_has_blocked_protected_path_read",
     "consume_exploration_request_record",
+    "destination_within",
     "generate_hooks_json",
     "is_terminal_outcome",
     "mark_assignment_running",

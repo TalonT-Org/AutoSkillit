@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import stat
@@ -155,8 +156,8 @@ def _is_protected_entry_target(path: str) -> bool:
             return True
     try:
         entry = os.lstat(path)
-    except OSError:
-        return False
+    except OSError as exc:
+        return exc.errno not in {errno.ENOENT, errno.ENOTDIR}
     if stat.S_ISLNK(entry.st_mode):
         return False
     return _matches_protected_inode(str(location))

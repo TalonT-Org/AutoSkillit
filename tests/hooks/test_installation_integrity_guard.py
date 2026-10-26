@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import subprocess
@@ -288,6 +289,30 @@ def test_blocks_interpreter_write_into_install_tree(tmp_path: Path) -> None:
 
     assert code == 0
     assert _decision(stdout) == "deny"
+
+
+@pytest.mark.parametrize(
+    "error", [errno.ENOENT, errno.ENOTDIR, errno.EACCES, errno.ELOOP, errno.EIO]
+)
+def test_entry_stat_errors_only_allow_absent_entries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error: int
+) -> None:
+    from autoskillit.hooks.guards import installation_integrity_guard as guard
+
+    target = tmp_path / "entry"
+    original_lstat = os.lstat
+
+    def lstat(path, *args, **kwargs):
+        if os.fspath(path) == str(target):
+            raise OSError(error, "injected stat failure")
+        return original_lstat(path, *args, **kwargs)
+
+    monkeypatch.setattr(guard, "_known_roots", lambda: ())
+    monkeypatch.setattr(guard.os, "lstat", lstat)
+
+    assert guard._is_protected_entry_target(str(target)) is (
+        error not in {errno.ENOENT, errno.ENOTDIR}
+    )
 
 
 def test_blocks_hardlink_alias_of_uv_tool_file(tmp_path: Path) -> None:

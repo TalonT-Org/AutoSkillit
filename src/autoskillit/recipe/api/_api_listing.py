@@ -94,6 +94,7 @@ def validate_from_path(
     path: Path,
     temp_dir_relpath: str = ".autoskillit/temp",
     *,
+    contract_source_path: Path | None = None,
     lister: SkillLister | None = None,
     backend_name: str | None = None,
     ingredient_overrides: dict[str, str] | None = None,
@@ -108,11 +109,13 @@ def validate_from_path(
         temp_dir_relpath: Relative path to the temp directory used for
             ``{{AUTOSKILLIT_TEMP}}`` substitution. Defaults to
             ``.autoskillit/temp``.
+        contract_source_path: Optional original recipe path whose neighboring
+            contract card should validate the candidate at ``path``.
 
     Returns:
         Completed validation returns ``valid``, ``errors``, ``quality``,
-        ``findings``, and ``contracts``. File and parse errors return only
-        ``valid`` and ``findings``.
+        ``findings``, ``contracts``, and ``binding_projection_failures``. File
+        and parse errors return only ``valid`` and ``findings``.
     """
     if not path.is_file():
         return _invalid_validation_result(f"File not found: {path}")
@@ -188,8 +191,9 @@ def validate_from_path(
     semantic = findings_to_dicts(semantic_findings)
 
     contract_findings: list[dict[str, Any]] = []
-    recipes_dir = path.parent
-    recipe_name = path.stem
+    contract_path = contract_source_path if contract_source_path is not None else path
+    recipes_dir = contract_path.parent
+    recipe_name = contract_path.stem
     contract = load_recipe_card(recipe_name, recipes_dir)
     if contract:
         contract_findings = validate_recipe_cards(recipe, contract)
@@ -204,4 +208,13 @@ def validate_from_path(
         "quality": quality,
         "findings": semantic,
         "contracts": contract_findings,
+        "binding_projection_failures": [
+            {
+                "code": failure.code.value,
+                "step_name": failure.step_name,
+                "name": failure.name,
+                "message": failure.message,
+            }
+            for failure in ctx.binding_projection.failures
+        ],
     }

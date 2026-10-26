@@ -13,9 +13,29 @@ from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
 from autoskillit.pipeline.gate import GATED_TOOLS, UNGATED_TOOLS, DefaultGateState
 from autoskillit.server.tools.tools_recipe import migrate_recipe
+from tests._helpers import MINIMAL_VALID_RECIPE_YAML
 from tests.server._helpers import _MINIMAL_SCRIPT_YAML
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+
+
+def _successful_headless_writing(path, content: str) -> AsyncMock:
+    async def write_output(*_args, **_kwargs):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+        return SkillResult(
+            success=True,
+            result="ok",
+            session_id="",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+
+    return AsyncMock(side_effect=write_output)
 
 
 class TestMigrateRecipe:
@@ -65,7 +85,7 @@ class TestMigrateRecipe:
         temp_mig_dir = tmp_path / ".autoskillit" / "temp" / "migrations"
         temp_mig_dir.mkdir(parents=True)
 
-        migrated_content = _MINIMAL_SCRIPT_YAML + f"autoskillit_version: '{installed_ver}'\n"
+        migrated_content = f"autoskillit_version: '{installed_ver}'\n" + MINIMAL_VALID_RECIPE_YAML
         return {
             "recipe_path": recipe_path,
             "temp_mig_dir": temp_mig_dir,
@@ -116,20 +136,8 @@ class TestMigrateRecipe:
     async def test_auto_migrates_outdated_recipe(self, tmp_path, monkeypatch, tool_ctx):
         """LR1: When recipe version < installed, _run_headless_core is called once."""
         ctx = self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
-        (ctx["temp_mig_dir"] / "test-script.yaml").write_text(ctx["migrated_content"])
-
-        mock_headless = AsyncMock(
-            return_value=SkillResult(
-                success=True,
-                result="ok",
-                session_id="",
-                subtype="success",
-                is_error=False,
-                exit_code=0,
-                needs_retry=False,
-                retry_reason=RetryReason.NONE,
-                stderr="",
-            )
+        mock_headless = _successful_headless_writing(
+            ctx["temp_mig_dir"] / "test-script.yaml", ctx["migrated_content"]
         )
         with (
             patch.object(_patch_execution_headless, "run_headless_core", mock_headless),
@@ -154,7 +162,6 @@ class TestMigrateRecipe:
         recipe_contracts = importlib.import_module("autoskillit.recipe.contracts")
 
         ctx = self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
-        (ctx["temp_mig_dir"] / "test-script.yaml").write_text(ctx["migrated_content"])
 
         store = FailureStore(default_store_path(tmp_path))
         store.record(
@@ -166,18 +173,8 @@ class TestMigrateRecipe:
         )
         assert store.has_failure("test-script")
 
-        mock_headless = AsyncMock(
-            return_value=SkillResult(
-                success=True,
-                result="ok",
-                session_id="",
-                subtype="success",
-                is_error=False,
-                exit_code=0,
-                needs_retry=False,
-                retry_reason=RetryReason.NONE,
-                stderr="",
-            )
+        mock_headless = _successful_headless_writing(
+            ctx["temp_mig_dir"] / "test-script.yaml", ctx["migrated_content"]
         )
         with (
             patch.object(_patch_execution_headless, "run_headless_core", mock_headless),
@@ -307,20 +304,8 @@ class TestMigrateRecipe:
     ):
         """migrate_recipe with version migration also regenerates stale contracts."""
         ctx = self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
-        (ctx["temp_mig_dir"] / "test-script.yaml").write_text(ctx["migrated_content"])
-
-        mock_headless = AsyncMock(
-            return_value=SkillResult(
-                success=True,
-                result="ok",
-                session_id="",
-                subtype="success",
-                is_error=False,
-                exit_code=0,
-                needs_retry=False,
-                retry_reason=RetryReason.NONE,
-                stderr="",
-            )
+        mock_headless = _successful_headless_writing(
+            ctx["temp_mig_dir"] / "test-script.yaml", ctx["migrated_content"]
         )
         with (
             patch.object(_patch_execution_headless, "run_headless_core", mock_headless),

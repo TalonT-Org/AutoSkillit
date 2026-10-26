@@ -269,7 +269,12 @@ def _skill_tool_operations(content: str) -> list[tuple[str, int]]:
     for index, logical in enumerate(logicals):
         text = _logical_text(logical)
         for tool in sorted(tool_names):
-            if _has_tool_operation(text, tool):
+            validate_imperative = re.search(
+                rf"\bvalidate\b[^\n]{{0,100}}\b{re.escape(tool)}\b",
+                text,
+                re.IGNORECASE,
+            )
+            if _has_tool_operation(text, tool) or validate_imperative:
                 evidence = _evidence(tool, logical)
                 if evidence.is_genuine:
                     operations.append((tool, evidence.source_span[0]))
@@ -433,6 +438,11 @@ def test_tool_operation_detection_recognizes_pseudo_call() -> None:
         "# Workflow\n\n1. Persist the failure:\n\n  run_python:\n    callable: module.record\n"
     )
     assert _skill_tool_operations(content) == [("run_python", 5)]
+
+
+def test_tool_operation_detection_recognizes_validate_imperative() -> None:
+    content = "# Workflow\n\n1. Validate via `validate_recipe` before declaring success\n"
+    assert _skill_tool_operations(content) == [("validate_recipe", 3)]
 
 
 def test_tool_operation_detection_rejects_unregistered_parameter() -> None:

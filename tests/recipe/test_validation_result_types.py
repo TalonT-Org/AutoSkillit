@@ -44,6 +44,14 @@ def _completed_report(valid: bool = True) -> dict[str, object]:
         "quality": {"reachable": 1},
         "findings": [{"rule": "example", "message": "finding"}],
         "contracts": [{"step": 42}],
+        "binding_projection_failures": [
+            {
+                "code": "unknown_tool",
+                "step_name": "example-step",
+                "name": "example-tool",
+                "message": "unknown tool",
+            }
+        ],
     }
 
 
@@ -64,7 +72,14 @@ def test_recipe_path_validation_typed_dicts_have_exact_required_keys_and_annotat
     }
 
     assert RecipePathValidationReport.__required_keys__ == frozenset(
-        {"valid", "errors", "quality", "findings", "contracts"}
+        {
+            "valid",
+            "errors",
+            "quality",
+            "findings",
+            "contracts",
+            "binding_projection_failures",
+        }
     )
     assert get_type_hints(RecipePathValidationReport) == {
         "valid": bool,
@@ -72,6 +87,7 @@ def test_recipe_path_validation_typed_dicts_have_exact_required_keys_and_annotat
         "quality": dict[str, object],
         "findings": list[dict[str, str]],
         "contracts": list[dict[str, Any]],
+        "binding_projection_failures": list[dict[str, str]],
     }
 
 
@@ -162,11 +178,14 @@ def test_recipe_path_validation_report_guard_rejects_wrong_top_level_shape(
         ("quality", {42: "not a string key"}),
         ("findings", "not a list"),
         ("contracts", "not a list"),
+        ("binding_projection_failures", "not a list"),
         ("findings", [{"rule": 42}]),
         ("contracts", [{42: "not a string key"}]),
+        ("binding_projection_failures", [{"code": 42}]),
         ("quality", _MappingOnly({"reachable": 1})),
         ("findings", [_MappingOnly({"rule": "example"})]),
         ("contracts", [_MappingOnly({"step": 42})]),
+        ("binding_projection_failures", [_MappingOnly({"code": "unknown_tool"})]),
     ],
 )
 def test_recipe_path_validation_report_guard_rejects_malformed_fields(
@@ -252,6 +271,7 @@ def examine(
         assert_type(result["quality"], dict[str, object])
         assert_type(result["findings"], list[dict[str, str]])
         assert_type(result["contracts"], list[dict[str, Any]])
+        assert_type(result["binding_projection_failures"], list[dict[str, str]])
     assert_type(early_error["valid"], Literal[False])
 """
     snippet_path = tmp_path / "recipe_path_validation_result_narrowing.py"

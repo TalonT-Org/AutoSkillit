@@ -573,6 +573,8 @@ def make_context(
         return result
 
     ctx.migrations = DefaultMigrationService(
-        default_migration_engine(), run_headless=_run_migration_headless
+        default_migration_engine(temp_dir_override=config.workspace.temp_dir),
+        run_headless=_run_migration_headless,
+        temp_dir=temp_dir,
     )
     return ctx

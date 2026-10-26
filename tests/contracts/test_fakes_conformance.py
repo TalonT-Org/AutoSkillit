@@ -508,6 +508,7 @@ def test_recipe_repository_validate_from_path_returns_configured_report():
         "quality": {},
         "findings": [],
         "contracts": [],
+        "binding_projection_failures": [],
     }
     repo.set_path_validated(str(script_path), report)
 

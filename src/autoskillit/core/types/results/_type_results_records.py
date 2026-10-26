@@ -274,9 +274,27 @@ class RecipePathValidationReport(TypedDict):
     quality: dict[str, object]
     findings: list[dict[str, str]]
     contracts: list[dict[str, Any]]
+    binding_projection_failures: list[dict[str, str]]
 
 
 RecipePathValidationResult = RecipePathValidationInputError | RecipePathValidationReport
+
+
+def _is_string_dict_list(value: object) -> bool:
+    return isinstance(value, list) and all(
+        isinstance(item, dict)
+        and all(
+            isinstance(key, str) and isinstance(item_value, str)
+            for key, item_value in item.items()
+        )
+        for item in value
+    )
+
+
+def _is_string_key_dict_list(value: object) -> bool:
+    return isinstance(value, list) and all(
+        isinstance(item, dict) and all(isinstance(key, str) for key in item) for item in value
+    )
 
 
 def is_recipe_path_validation_report(
@@ -288,6 +306,7 @@ def is_recipe_path_validation_report(
         "quality",
         "findings",
         "contracts",
+        "binding_projection_failures",
     }:
         return False
 
@@ -296,25 +315,16 @@ def is_recipe_path_validation_report(
     quality = result["quality"]
     findings = result["findings"]
     contracts = result["contracts"]
+    binding_projection_failures = result["binding_projection_failures"]
     return (
         isinstance(valid, bool)
         and isinstance(errors, list)
         and all(isinstance(error, str) for error in errors)
         and isinstance(quality, dict)
         and all(isinstance(key, str) for key in quality)
-        and isinstance(findings, list)
-        and all(
-            isinstance(finding, dict)
-            and all(
-                isinstance(key, str) and isinstance(value, str) for key, value in finding.items()
-            )
-            for finding in findings
-        )
-        and isinstance(contracts, list)
-        and all(
-            isinstance(contract, dict) and all(isinstance(key, str) for key in contract)
-            for contract in contracts
-        )
+        and _is_string_dict_list(findings)
+        and _is_string_key_dict_list(contracts)
+        and _is_string_dict_list(binding_projection_failures)
     )
 
 

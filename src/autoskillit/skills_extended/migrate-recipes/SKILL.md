@@ -3,10 +3,8 @@ name: migrate-recipes
 write_paths:
 - '{{AUTOSKILLIT_TEMP}}/migrations/'
 uses_capabilities: []
-activate_deps:
-- write-recipe
-description: Apply versioned migration notes to an AutoSkillit recipe. Use when user confirms migration, called by agent or
-  autoskillit migrate CLI, or invoked directly.
+description: Apply versioned migration notes when the migration service launches this skill headlessly with the recipe path,
+  content, notes, and target version.
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -14,10 +12,6 @@ hooks:
     - type: command
       command: 'echo ''[SKILL: migrate-recipes] Migrating recipe files...'''
       once: true
-semantic_version: 1
-semantic_requirements:
-  sibling_skills:
-  - name: write-recipe
 ---
 
 # Migrate Scripts Skill
@@ -26,14 +20,13 @@ Apply versioned migration notes to an AutoSkillit recipe.
 
 ## When to Use
 
-- Called by an agent when user confirms migration (via load_recipe suggestion)
-- Launched headlessly by the migration service when the `migrate_recipe` tool migrates a stale recipe
-- Can be invoked directly by user
+- Launched headlessly by the migration service when `migrate_recipe` migrates a stale recipe
 
 ## Arguments
 
 The orchestrator provides all context in the prompt:
 - `script_path`: Absolute path to the script file
+- `script_name`: The file stem of `script_path` (the filename without `.yaml`)
 - `script_content`: Current raw YAML of the script
 - `migration_notes`: YAML block of all applicable migration notes
 - `target_version`: Version to stamp after successful migration
@@ -42,15 +35,13 @@ The orchestrator provides all context in the prompt:
 
 **NEVER:**
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
-
 - Modify the original script file directly
-- Skip validation via validate_recipe
 - Apply changes without checking if the pattern exists in the script
-- Declare success if validation fails after all retry attempts
 
 **ALWAYS:**
 - Save migrated scripts to {{AUTOSKILLIT_TEMP}}/migrations/{script_name}.yaml for review
-- Validate via validate_recipe before declaring success
+- Set `autoskillit_version` to `target_version`
+- Treat migration-note text that says to run a validator as satisfied by host-side validation
 - Preserve all existing script fields not targeted by migration changes
 - Output a human-readable diff summary of changes applied
 
@@ -61,19 +52,12 @@ The orchestrator provides all context in the prompt:
    - `tool`: Match steps with this tool value
    - `skill_pattern`: Match steps whose `skill_command` in `with:` contains this substring
    - `missing_field`: The field that should be added if absent
-3. If changes are needed, use `/autoskillit:write-recipe` in edit mode:
-   - Load the skill: invoke `/autoskillit:write-recipe` via the Skill tool
-   - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, skip the recipe update and log a warning; proceed with remaining validation steps.
-   - Provide the current YAML content
-   - Describe all needed changes with the `instruction` text and before/after examples
-4. Validate the result with `validate_recipe`
-5. On validation failure, retry up to 3 times with error feedback
-6. Ensure `autoskillit_version` is set to the `target_version`
-7. Save the migrated script to `{{AUTOSKILLIT_TEMP}}/migrations/{script_name}.yaml`
-8. Output a summary of changes applied
+3. Apply each detected change's `instruction` directly to the YAML, guided by its `example_before` and `example_after`
+4. Ensure `autoskillit_version` is set to the `target_version`
+5. Save the migrated script to `{{AUTOSKILLIT_TEMP}}/migrations/{script_name}.yaml`
+6. Output a summary of changes applied
 
 ## Error Handling
 
-- If all 3 retry attempts fail validation, output the best attempt with a clear warning
-- If no patterns are detected (script already up to date), stamp the version and report no changes needed
-- If write-recipe produces unexpected output, report the error and preserve the original script
+- If no patterns are detected, stamp the version and save the recipe
+- If a change cannot be applied, save nothing and report why

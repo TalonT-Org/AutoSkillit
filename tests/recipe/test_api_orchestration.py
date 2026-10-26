@@ -25,30 +25,15 @@ from autoskillit.recipe.api_orchestration._api_orchestration import (
     _ValidationResult,
 )
 from autoskillit.recipe.schema import RecipeInfo, RecipeSource
+from tests._helpers import MINIMAL_VALID_RECIPE_YAML
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 # ---- Test fixture data ----
 
-MINIMAL_VALID_YAML = """\
-name: minimal-recipe
-description: minimal test recipe
-kitchen_rules:
-  - Use the included stop step sentinel protocol.
-ingredients:
-  task:
-    description: A task ingredient
-    required: true
-    default: my-default-task-value
-steps:
-  done:
-    action: stop
-    message: Task completed successfully with full sentinel L3 block emitted for completion.
-"""
 
-
-def _setup_recipe(tmp_path: Path, name: str, content: str = MINIMAL_VALID_YAML) -> Path:
+def _setup_recipe(tmp_path: Path, name: str, content: str = MINIMAL_VALID_RECIPE_YAML) -> Path:
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True, exist_ok=True)
     recipe_path = recipes_dir / f"{name}.yaml"
@@ -90,6 +75,84 @@ def _make_inputs(name: str = "minimal-recipe", tmp_path: Path | None = None) -> 
         backend_origin_map=None,
         include_finalized_projection=False,
     )
+
+
+def test_validate_from_path_reports_binding_failures_with_other_findings(
+    tmp_path: Path,
+) -> None:
+    from autoskillit.core import is_recipe_path_validation_report
+    from autoskillit.recipe import validate_from_path
+
+    recipe_path = tmp_path / "binding-errors.yaml"
+    recipe_path.write_text(
+        """\
+name: binding-errors
+description: Binding projection fixture.
+steps:
+  bad:
+    tool: no_such_tool
+    with:
+      bogus: value
+    on_success: done
+  done:
+    action: stop
+    message: Done.
+"""
+    )
+
+    result = validate_from_path(recipe_path)
+
+    assert is_recipe_path_validation_report(result)
+    assert result["errors"]
+    assert result["findings"]
+    assert result["binding_projection_failures"] == [
+        {
+            "code": "unknown_tool",
+            "step_name": "bad",
+            "name": "no_such_tool",
+            "message": "Step 'bad' references unknown tool 'no_such_tool'",
+        }
+    ]
+
+
+def test_validate_from_path_uses_original_path_for_contract_only(tmp_path: Path) -> None:
+    from autoskillit.core import is_recipe_path_validation_report
+    from autoskillit.recipe import validate_from_path
+
+    original_dir = tmp_path / "project" / ".autoskillit" / "recipes"
+    candidate_dir = tmp_path / "migration-output"
+    (original_dir / "contracts").mkdir(parents=True)
+    (candidate_dir / "contracts").mkdir(parents=True)
+    original_path = original_dir / "source.yaml"
+    candidate_path = candidate_dir / "candidate.yaml"
+    original_path.write_text(MINIMAL_VALID_RECIPE_YAML)
+    candidate_path.write_text(
+        MINIMAL_VALID_RECIPE_YAML.replace(
+            "  done:\n    action: stop",
+            "  bad:\n"
+            "    tool: no_such_tool\n"
+            "    with:\n"
+            "      bogus: value\n"
+            "    on_success: done\n"
+            "  done:\n"
+            "    action: stop",
+        )
+    )
+    (original_dir / "contracts" / "source.yaml").write_text(
+        "dataflow:\n  - step: original-card\n    available: []\n    required: [source_only]\n"
+    )
+    (candidate_dir / "contracts" / "candidate.yaml").write_text(
+        "dataflow:\n  - step: candidate-card\n    available: []\n    required: [temp_only]\n"
+    )
+
+    result = validate_from_path(candidate_path, contract_source_path=original_path)
+    default_result = validate_from_path(candidate_path)
+
+    assert is_recipe_path_validation_report(result)
+    assert is_recipe_path_validation_report(default_result)
+    assert any(finding.get("rule") == "unknown-tool" for finding in result["findings"])
+    assert [finding["step"] for finding in result["contracts"]] == ["original-card"]
+    assert [finding["step"] for finding in default_result["contracts"]] == ["candidate-card"]
 
 
 # ---- Bundle field-list tests (catches silent regression if a field is dropped) ----
@@ -246,7 +309,7 @@ def test_resolve_recipe_match_returns_recipes_dir_for_both_sources(tmp_path: Pat
         version=None,
         recipe_version=None,
         content_hash="",
-        content=MINIMAL_VALID_YAML,
+        content=MINIMAL_VALID_RECIPE_YAML,
         source=RecipeSource.BUILTIN,
         path=Path("/nonexistent/builtin.yaml"),
     )

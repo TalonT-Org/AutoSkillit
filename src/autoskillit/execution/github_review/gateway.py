@@ -81,15 +81,12 @@ class DefaultGitHubReviewGateway:
     async def list_reviews(self, repository: str, pr_number: int) -> GatewayResult:
         return await self._paginate(f"/repos/{repository}/pulls/{pr_number}/reviews?per_page=100")
 
-    async def list_review_comments(
+    async def list_pull_review_comments(
         self,
         repository: str,
         pr_number: int,
-        review_id: int,
     ) -> GatewayResult:
-        return await self._paginate(
-            f"/repos/{repository}/pulls/{pr_number}/reviews/{review_id}/comments?per_page=100"
-        )
+        return await self._paginate(f"/repos/{repository}/pulls/{pr_number}/comments?per_page=100")
 
     async def _paginate(self, path: str) -> GatewayResult:
         items: list[Any] = []
@@ -109,7 +106,16 @@ class DefaultGitHubReviewGateway:
                     error="GitHub pagination response was not a list",
                 )
             items.extend(response.data)
-            next_path = self._next_page_path(response.headers.get("link"))
+            try:
+                next_path = self._next_page_path(response.headers.get("link"))
+            except ValueError as exc:
+                return GatewayResult(
+                    status_code=response.status_code,
+                    data=None,
+                    headers=response.headers,
+                    response_class=ReviewResponseClass.CLIENT_ERROR,
+                    error=str(exc),
+                )
         return GatewayResult(
             status_code=200,
             data=items,

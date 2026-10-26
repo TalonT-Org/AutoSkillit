@@ -18,7 +18,7 @@ from autoskillit.core import (
     ReviewResponseClass,
 )
 from autoskillit.execution import GitHubReviewLedger, compute_review_operation_key
-from autoskillit.execution.github_review import _poster_support
+from autoskillit.execution.github_review import _poster_reconcile, _poster_support
 from autoskillit.execution.github_review.canonical import admit_findings, canonical_findings
 from autoskillit.execution.github_review.gateway import GatewayResult
 from tests.fixtures.github_rest import (
@@ -635,6 +635,90 @@ async def test_crash_after_reduced_batch_reconciles_persisted_subset_without_rep
         dispositions[0],
         dispositions[1],
     )
+
+
+@pytest.mark.anyio
+async def test_remote_finding_scan_collects_multiple_authored_reviews_once(
+    tmp_path: Path,
+) -> None:
+    clock = ManualClock()
+    gateway = StatefulReviewGateway(clock=clock)
+    # PR #4427 associations are observed; marker bodies and the foreign author are synthetic.
+    gateway.reviews.extend(
+        [
+            {"id": 4824396371, "user": {"login": "Trecek"}},
+            {"id": 4824397786, "user": {"login": "Trecek"}},
+            {"id": 4824432714, "user": {"login": "other-reviewer"}},
+        ]
+    )
+    first_digest = "1" * 64
+    second_digest = "2" * 64
+    foreign_digest = "3" * 64
+    gateway.comments_by_review.update(
+        {
+            4824396371: [
+                {
+                    "id": 3687217371,
+                    "pull_request_review_id": 4824396371,
+                    "body": _poster_support.FINDING_MARKER.format(digest=first_digest),
+                }
+            ],
+            4824397786: [
+                {
+                    "id": 3687218450,
+                    "pull_request_review_id": 4824397786,
+                    "body": _poster_support.FINDING_MARKER.format(digest=second_digest),
+                }
+            ],
+            4824432714: [
+                {
+                    "id": 3687243187,
+                    "pull_request_review_id": 4824432714,
+                    "body": _poster_support.FINDING_MARKER.format(digest=foreign_digest),
+                }
+            ],
+        }
+    )
+    poster = _poster(tmp_path / "ledger.sqlite3", gateway, clock)
+
+    scan = await _poster_reconcile.scan_remote_findings(
+        poster,
+        request=_request(tmp_path),
+        authenticated_login="Trecek",
+    )
+
+    assert scan.certain
+    assert scan.ids_by_digest == {first_digest: 3687217371, second_digest: 3687218450}
+    assert gateway.review_read_calls == 1
+    assert gateway.comment_read_calls == 1
+
+
+@pytest.mark.anyio
+async def test_remote_finding_scan_rejects_unscopable_marker_prefix(
+    tmp_path: Path,
+) -> None:
+    clock = ManualClock()
+    gateway = StatefulReviewGateway(clock=clock)
+    gateway.reviews.append({"id": 700, "user": {"login": "autoskillit-bot"}})
+    gateway.comments_by_review[700] = [
+        {
+            "id": 900,
+            "body": "<!-- autoskillit-review-finding:not-a-complete-marker",
+        }
+    ]
+    poster = _poster(tmp_path / "ledger.sqlite3", gateway, clock)
+
+    scan = await _poster_reconcile.scan_remote_findings(
+        poster,
+        request=_request(tmp_path),
+        authenticated_login="autoskillit-bot",
+    )
+
+    assert not scan.certain
+    assert scan.ids_by_digest == {}
+    assert scan.error
+    assert gateway.review_read_calls == 1
+    assert gateway.comment_read_calls == 1
 
 
 @pytest.mark.anyio

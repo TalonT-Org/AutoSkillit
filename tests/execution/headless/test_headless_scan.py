@@ -74,11 +74,22 @@ class TestScanJsonlWriteWarnings:
                 "Bash command contained write target '/outside/y' outside session cwd '{cwd}'",
                 id="outside-cwd-target",
             ),
+            pytest.param(
+                "ln -sf /opt/tools/jq /outside/jq",
+                "Bash command contained write target '/outside/jq' outside session cwd '{cwd}'",
+                id="outside-cwd-link-entry",
+            ),
+            pytest.param(
+                'ln -sf /opt/tools/jq "$LINK_NAME"',
+                GENERIC_UNRESOLVED_WARNING,
+                id="unresolved-link-entry",
+            ),
             pytest.param("printf '> q' > inside.txt", None, id="quoted-redirect-operator"),
         ],
     )
     def test_bash_jsonl_write_warnings(self, tmp_path, monkeypatch, command, expected_warning):
         monkeypatch.delenv("F", raising=False)
+        monkeypatch.delenv("LINK_NAME", raising=False)
         cwd = str(tmp_path)
         line = _make_tool_use_line("Bash", {"command": command})
 

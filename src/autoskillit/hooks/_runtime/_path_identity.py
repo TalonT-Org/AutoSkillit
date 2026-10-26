@@ -37,6 +37,14 @@ def hooks_relative_key(script_identity: str | os.PathLike[str], hooks_dir: Path)
         ) from exc
 
 
+def destination_location(destination: str | os.PathLike[str]) -> Path:
+    """Resolve a destination's parent without following its final component."""
+    path = Path(destination)
+    if not path.name:
+        return path.resolve()
+    return path.parent.resolve() / path.name
+
+
 def realpath_within(candidate: str | os.PathLike[str], root: str | os.PathLike[str]) -> bool:
     """Return whether *candidate* lies at or under *root* after resolving both."""
     try:

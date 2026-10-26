@@ -308,6 +308,97 @@ def test_blocks_hardlink_alias_of_uv_tool_file(tmp_path: Path) -> None:
     assert _decision(stdout) == "deny"
 
 
+def test_blocks_ln_replacement_of_hardlink_alias_of_uv_tool_file(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    original = home / ".local/share/uv/tools/autoskillit/lib/site-packages/autoskillit/core.py"
+    original.parent.mkdir(parents=True)
+    original.write_text("source", encoding="utf-8")
+    alias = tmp_path / "ordinary-project" / "linked.py"
+    alias.parent.mkdir()
+    os.link(original, alias)
+
+    code, stdout = _run(
+        _bash(f"ln -f {tmp_path / 'replacement.py'} {alias}"),
+        env={"HOME": str(home)},
+    )
+
+    assert code == 0
+    assert _decision(stdout) == "deny"
+
+
+@pytest.mark.parametrize(
+    "command_template",
+    [
+        "npm install --prefix {target} package",
+        "ln -sf /tmp/source {target}",
+    ],
+    ids=["npm-prefix", "ln-entry"],
+)
+def test_blocks_explicit_install_tree_destinations(tmp_path: Path, command_template: str) -> None:
+    target = tmp_path / "lib/python3.13/site-packages/autoskillit/destination"
+
+    code, stdout = _run(_bash(command_template.format(target=target)))
+
+    assert code == 0
+    assert _decision(stdout) == "deny"
+    assert (
+        "code=protected-installation-target"
+        in json.loads(stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        'npm install --prefix "$DESTINATION" package',
+        'ln -sf /tmp/source "$DESTINATION"',
+    ],
+    ids=["npm-prefix", "ln-entry"],
+)
+def test_blocks_unresolved_explicit_destinations(
+    command: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("DESTINATION", raising=False)
+    code, stdout = _run(_bash(command))
+
+    assert code == 0
+    assert _decision(stdout) == "deny"
+    assert (
+        "code=unresolved-write-target"
+        in json.loads(stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+    )
+
+
+def test_ln_entry_location_does_not_follow_outside_symlink_into_install_tree(
+    tmp_path: Path,
+) -> None:
+    protected = tmp_path / "lib/python3.13/site-packages/autoskillit/core.py"
+    protected.parent.mkdir(parents=True)
+    protected.write_text("protected", encoding="utf-8")
+    outside_link = tmp_path / "ordinary-project/core.py"
+    outside_link.parent.mkdir()
+    outside_link.symlink_to(protected)
+
+    code, stdout = _run(_bash(f"ln -sf {tmp_path / 'replacement.py'} {outside_link}"))
+
+    assert code == 0
+    assert stdout == ""
+
+
+def test_ln_entry_location_protects_symlink_inside_install_tree(tmp_path: Path) -> None:
+    protected_link = tmp_path / "lib/python3.13/site-packages/autoskillit/core.py"
+    protected_link.parent.mkdir(parents=True)
+    outside = tmp_path / "ordinary-project/core.py"
+    outside.parent.mkdir()
+    outside.write_text("outside", encoding="utf-8")
+    protected_link.symlink_to(outside)
+
+    code, stdout = _run(_bash(f"ln -sf {tmp_path / 'replacement.py'} {protected_link}"))
+
+    assert code == 0
+    assert _decision(stdout) == "deny"
+
+
 def test_blocks_shell_local_variable_target(tmp_path: Path) -> None:
     target = tmp_path / "lib/python3.13/site-packages/autoskillit/__init__.py"
     code, stdout = _run(_bash(f"FOO={target.parent}; cat > $FOO/__init__.py <<'EOF'\nEOF"))

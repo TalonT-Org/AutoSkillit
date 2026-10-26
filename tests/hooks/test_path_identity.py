@@ -8,6 +8,7 @@ import pytest
 
 from autoskillit.hooks._runtime._path_identity import (
     PathIdentityError,
+    destination_location,
     hooks_relative_key,
     realpath_within,
 )
@@ -73,3 +74,23 @@ def test_realpath_within_matches_commonpath_containment(tmp_path: Path) -> None:
     )
     for candidate, container, expected in cases:
         assert realpath_within(candidate, container) is expected, candidate
+
+
+def test_destination_location_resolves_parent_but_not_final_component(tmp_path: Path) -> None:
+    real_parent = tmp_path / "real-parent"
+    real_parent.mkdir()
+    linked_parent = tmp_path / "linked-parent"
+    linked_parent.symlink_to(real_parent, target_is_directory=True)
+
+    assert destination_location(linked_parent / "entry") == real_parent / "entry"
+
+
+def test_destination_location_preserves_dangling_final_symlink(tmp_path: Path) -> None:
+    dangling = tmp_path / "dangling"
+    dangling.symlink_to(tmp_path / "missing")
+
+    assert destination_location(dangling) == dangling
+
+
+def test_destination_location_handles_root_destination() -> None:
+    assert destination_location(Path("/")) == Path("/")

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from autoskillit.hooks import scan_write_targets
@@ -140,3 +142,222 @@ def test_scan_write_target_expectations(
 
     assert result.targets == expected_targets, f"targets for {command!r}"
     assert result.unresolved is expected_unresolved, f"unresolved status for {command!r}"
+
+
+@pytest.mark.parametrize(
+    ("command", "targets", "unresolved", "has_write"),
+    [
+        ("npm install --prefix /opt/app pkg", ("/opt/app",), False, True),
+        ("npm install --prefix=/opt/app pkg", ("/opt/app",), False, True),
+        ("npm --prefix /opt/app install pkg", ("/opt/app",), False, True),
+        ("npm install --prefix 'relative app' pkg", ("/workspace/relative app",), False, True),
+        ('npm install --prefix="$NPM_PREFIX" pkg', ("/resolved/npm",), False, True),
+        ("npm install --prefix='$NPM_UNKNOWN' pkg", ("/workspace/$NPM_UNKNOWN",), False, True),
+        ('npm install --prefix="$NPM_UNKNOWN" pkg', (), True, True),
+        ("npm install --prefix", (), True, True),
+        ("npm install -- --prefix /opt/app", (), False, False),
+    ],
+    ids=(
+        "detached-after-install",
+        "equals-after-install",
+        "detached-before-install",
+        "quoted-relative",
+        "attached-known-variable",
+        "attached-single-quoted-variable",
+        "attached-unknown-variable",
+        "missing-prefix-value",
+        "option-terminator",
+    ),
+)
+def test_npm_install_explicit_prefix(
+    command: str,
+    targets: tuple[str, ...],
+    unresolved: bool,
+    has_write: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("NPM_PREFIX", "/resolved/npm")
+    monkeypatch.delenv("NPM_UNKNOWN", raising=False)
+
+    result = scan_write_targets(command, _WORKSPACE)
+
+    assert result.targets == targets
+    assert result.entry_targets == ()
+    assert result.unresolved is unresolved
+    assert result.has_write is has_write
+
+
+@pytest.mark.parametrize(
+    ("command", "entry_targets"),
+    [
+        ("ln source link", ("/workspace/link",)),
+        ("ln -s source link", ("/workspace/link",)),
+        ("ln -f source link", ("/workspace/link",)),
+        ("ln -sf source link", ("/workspace/link",)),
+        ("ln source", ("/workspace/source",)),
+        ("ln -t /links path/to/source", ("/links/source",)),
+        ("ln --target-directory /links source", ("/links/source",)),
+        ("ln --target-directory=/links source", ("/links/source",)),
+        ("ln -t/links source", ("/links/source",)),
+        ("ln -t /links one/a two/b", ("/links/a", "/links/b")),
+    ],
+)
+def test_ln_literal_entry_destinations(command: str, entry_targets: tuple[str, ...]) -> None:
+    result = scan_write_targets(command, _WORKSPACE)
+
+    assert result.targets == ()
+    assert result.entry_targets == entry_targets
+    assert result.unresolved is False
+    assert result.has_write is True
+
+
+def test_ln_directory_and_final_symlink_semantics(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    directory = tmp_path / "directory"
+    directory.mkdir()
+    directory_link = tmp_path / "directory-link"
+    directory_link.symlink_to(directory, target_is_directory=True)
+    monkeypatch.delenv("LN_SOURCE", raising=False)
+    cases = (
+        (f"ln source {directory}", (str(directory / "source"),), False),
+        (f"ln source {directory_link}", (str(directory_link / "source"),), False),
+        (f'ln -T "$LN_SOURCE" {directory_link}', (str(directory_link),), False),
+        (f'ln -n "$LN_SOURCE" {directory_link}', (str(directory_link),), False),
+        (f"ln -n source {directory}", (str(directory / "source"),), False),
+        (f'ln "$LN_SOURCE" {directory}', (), True),
+    )
+
+    for command, entries, unresolved in cases:
+        result = scan_write_targets(command, str(tmp_path))
+        assert result.entry_targets == entries, command
+        assert result.unresolved is unresolved, command
+        assert result.has_write is True, command
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "ln --unknown value source link",
+        "ln -t /links -T source",
+        "ln --target-directory /links",
+        "ln source --target-directory",
+        "install -t /dest -T source",
+        "install source --target-directory",
+        "install --target-directory /dest",
+    ],
+)
+def test_unsupported_or_incomplete_destination_grammar_is_unresolved(command: str) -> None:
+    result = scan_write_targets(command, _WORKSPACE)
+
+    assert result.targets == ()
+    assert result.entry_targets == ()
+    assert result.unresolved is True
+    assert result.has_write is True
+
+
+@pytest.mark.parametrize(
+    ("command", "targets"),
+    [
+        ("install -t /dest path/to/source", ("/dest/source",)),
+        ("install path/to/source -t /dest", ("/dest/source",)),
+        ("install -t/dest path/to/source", ("/dest/source",)),
+        ("install --target-directory=/dest path/to/source", ("/dest/source",)),
+        ("install --target-directory /dest one/a two/b", ("/dest/a", "/dest/b")),
+    ],
+)
+def test_install_target_directory_emits_child_content_destinations(
+    command: str, targets: tuple[str, ...]
+) -> None:
+    result = scan_write_targets(command, _WORKSPACE)
+
+    assert result.targets == targets
+    assert result.entry_targets == ()
+    assert result.unresolved is False
+    assert result.has_write is True
+
+
+@pytest.mark.parametrize(
+    ("command", "targets", "entry_targets"),
+    [
+        (
+            'ln --target-directory="$TARGET_DIRECTORY" source',
+            (),
+            ("/resolved/target/source",),
+        ),
+        (
+            "ln --target-directory='$UNKNOWN_DIRECTORY' source",
+            (),
+            ("/workspace/$UNKNOWN_DIRECTORY/source",),
+        ),
+        (
+            'install --target-directory="$TARGET_DIRECTORY" path/to/source',
+            ("/resolved/target/source",),
+            (),
+        ),
+    ],
+)
+def test_attached_target_directory_preserves_value_provenance(
+    command: str,
+    targets: tuple[str, ...],
+    entry_targets: tuple[str, ...],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TARGET_DIRECTORY", "/resolved/target")
+    monkeypatch.delenv("UNKNOWN_DIRECTORY", raising=False)
+
+    result = scan_write_targets(command, _WORKSPACE)
+
+    assert result.targets == targets
+    assert result.entry_targets == entry_targets
+    assert result.unresolved is False
+    assert result.has_write is True
+
+
+def test_install_derived_child_preserves_spelling_and_requires_source_basename(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    destination = tmp_path / "dest"
+    destination.mkdir()
+    child = destination / "source"
+    child.symlink_to(tmp_path / "outside")
+    monkeypatch.delenv("INSTALL_SOURCE", raising=False)
+
+    literal = scan_write_targets(f"install -t {destination} path/to/source", str(tmp_path))
+    unresolved = scan_write_targets(f'install -t {destination} "$INSTALL_SOURCE"', str(tmp_path))
+
+    assert literal.targets == (str(child),)
+    assert unresolved.targets == ()
+    assert unresolved.unresolved is True
+    assert unresolved.has_write is True
+
+
+@pytest.mark.parametrize(
+    ("command", "targets", "entry_targets"),
+    [
+        (
+            "cd /tmp && npm install --prefix /tmp/jqinst node-jq 2>&1 | tail -10; "
+            "ls /tmp/jqinst/node_modules/node-jq/bin 2>/dev/null",
+            ("/tmp/jqinst",),
+            (),
+        ),
+        (
+            "ln -sf /tmp/jqinst/node_modules/node-jq/bin/jq /usr/local/bin/jq 2>&1; "
+            "jq --version 2>&1",
+            (),
+            ("/usr/local/bin/jq",),
+        ),
+        ("echo x > /tmp/same; ln source /tmp/same", ("/tmp/same",), ("/tmp/same",)),
+        ("echo x > /dev/null; ln -f source /dev/null", (), ("/dev/null",)),
+    ],
+    ids=("npm-incident", "ln-incident", "same-spelling-dual-role", "entry-pseudo-device"),
+)
+def test_content_and_entry_aggregation(
+    command: str, targets: tuple[str, ...], entry_targets: tuple[str, ...]
+) -> None:
+    result = scan_write_targets(command, _WORKSPACE)
+
+    assert result.targets == targets
+    assert result.entry_targets == entry_targets
+    assert result.unresolved is False
+    assert result.has_write is True

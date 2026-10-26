@@ -2,7 +2,7 @@
 
 import pytest
 
-from autoskillit.hooks import UNRESOLVED_WRITE_TARGET_REMEDIATION
+from autoskillit.hooks import UNRESOLVED_WRITE_TARGET_REMEDIATION, WriteTargetScan
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -77,6 +77,144 @@ def test_check_write_target_boundary_cases(
         assert expected_message in result
     else:
         assert result is None
+
+
+@pytest.mark.parametrize(
+    ("command_template", "destination", "expected_message"),
+    [
+        pytest.param(
+            "npm install --prefix {destination} node-jq",
+            "allowed",
+            None,
+            id="npm-prefix-equals-allowed-root",
+        ),
+        pytest.param(
+            "npm --prefix={destination} install node-jq",
+            "outside",
+            "outside allowed write prefixes",
+            id="npm-outside-prefix",
+        ),
+        pytest.param(
+            'npm install --prefix "$NPM_PREFIX" node-jq',
+            "unresolved",
+            UNRESOLVED_WRITE_TARGET_REMEDIATION,
+            id="npm-unresolved-prefix",
+        ),
+        pytest.param(
+            "ln -sfT /opt/tools/jq {destination}",
+            "allowed",
+            None,
+            id="ln-entry-equals-allowed-root",
+        ),
+        pytest.param(
+            "ln -sf /opt/tools/jq {destination}/jq",
+            "outside",
+            "outside allowed write prefixes",
+            id="ln-outside-entry",
+        ),
+        pytest.param(
+            'ln -sf /opt/tools/jq "$LINK_NAME"',
+            "unresolved",
+            UNRESOLVED_WRITE_TARGET_REMEDIATION,
+            id="ln-unresolved-entry",
+        ),
+    ],
+)
+def test_run_cmd_boundary_covers_npm_and_ln_destinations(
+    tmp_path, monkeypatch, command_template, destination, expected_message
+) -> None:
+    from autoskillit.server.lifecycle._guards import _check_write_target_boundary
+
+    monkeypatch.delenv("NPM_PREFIX", raising=False)
+    monkeypatch.delenv("LINK_NAME", raising=False)
+    allowed = tmp_path / "allowed"
+    outside = tmp_path / "outside"
+    allowed.mkdir()
+    outside.mkdir()
+    selected = allowed if destination == "allowed" else outside
+    command = command_template.format(destination=selected)
+
+    result = _check_write_target_boundary(command, str(tmp_path), (str(allowed),))
+
+    if expected_message is None:
+        assert result is None
+    else:
+        assert result is not None
+        assert expected_message in result
+
+
+def test_run_cmd_boundary_does_not_early_allow_location_only_scan(tmp_path, monkeypatch) -> None:
+    from autoskillit.server.lifecycle import _guards
+
+    allowed = tmp_path / "allowed"
+    outside = tmp_path / "outside"
+    allowed.mkdir()
+    outside.mkdir()
+    monkeypatch.setattr(
+        _guards,
+        "scan_write_targets",
+        lambda _cmd, _cwd: WriteTargetScan(
+            targets=(),
+            unresolved=False,
+            parseable=True,
+            has_write=True,
+            entry_targets=(str(outside / "link"),),
+        ),
+    )
+
+    result = _guards._check_write_target_boundary("ln", str(tmp_path), (str(allowed),))
+
+    assert result is not None
+    assert str(outside / "link") in result
+
+
+def test_run_cmd_entry_check_uses_link_location_not_referent(tmp_path) -> None:
+    from autoskillit.server.lifecycle._guards import _check_write_target_boundary
+
+    allowed = tmp_path / "allowed"
+    outside = tmp_path / "outside"
+    allowed.mkdir()
+    outside.mkdir()
+    inside = allowed / "inside"
+    inside.write_text("inside", encoding="utf-8")
+    outside_link = outside / "link"
+    outside_link.symlink_to(inside)
+
+    result = _check_write_target_boundary(
+        f"ln -sfT /opt/tools/jq {outside_link}", str(tmp_path), (str(allowed),)
+    )
+
+    assert result is not None
+    assert str(outside_link) in result
+
+
+def test_run_cmd_empty_prefixes_still_disable_new_destination_checks(tmp_path) -> None:
+    from autoskillit.server.lifecycle._guards import _check_write_target_boundary
+
+    assert (
+        _check_write_target_boundary('ln -sf /opt/tools/jq "$LINK_NAME"', str(tmp_path), ())
+        is None
+    )
+
+
+def test_run_cmd_content_target_still_follows_final_symlink(tmp_path) -> None:
+    from autoskillit.server.lifecycle._guards import _check_write_target_boundary
+
+    allowed = tmp_path / "allowed"
+    outside = tmp_path / "outside"
+    allowed.mkdir()
+    outside.mkdir()
+    outside_file = outside / "file"
+    outside_file.write_text("outside", encoding="utf-8")
+    content_link = allowed / "content-link"
+    content_link.symlink_to(outside_file)
+
+    result = _check_write_target_boundary(
+        f"echo changed > {content_link}", str(tmp_path), (str(allowed),)
+    )
+
+    assert result is not None
+    assert str(content_link) in result
 
 
 def test_check_recipe_read_prohibition_importable():

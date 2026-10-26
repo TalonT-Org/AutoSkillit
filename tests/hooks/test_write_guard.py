@@ -590,6 +590,237 @@ class TestWriteGuardBashBypass:
         _assert_installation_floor_denies(tmp_path)
 
 
+def _assert_bash_scope_decision(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    command: str,
+    cwd,
+    allowed,
+    permitted: bool,
+    unresolved: bool = False,
+) -> None:
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "claude-code")
+    monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", str(allowed))
+    monkeypatch.setenv("AUTOSKILLIT_CWD", str(cwd))
+
+    result = _run_hook(_build_bash_event(command))
+
+    if permitted:
+        assert result == ""
+        return
+    output = json.loads(result)["hookSpecificOutput"]
+    assert output["permissionDecision"] == "deny"
+    if unresolved:
+        assert UNRESOLVED_WRITE_TARGET_REMEDIATION in output["permissionDecisionReason"]
+
+
+@pytest.mark.parametrize(
+    ("command_template", "destination", "permitted", "unresolved"),
+    [
+        pytest.param(
+            "npm install --prefix {destination} node-jq",
+            "allowed",
+            True,
+            False,
+            id="npm-allowed-prefix",
+        ),
+        pytest.param(
+            "npm --prefix={destination} install node-jq",
+            "outside",
+            False,
+            False,
+            id="npm-outside-prefix",
+        ),
+        pytest.param(
+            'npm install --prefix "$NPM_PREFIX" node-jq',
+            "unresolved",
+            False,
+            True,
+            id="npm-unresolved-prefix",
+        ),
+        pytest.param(
+            "ln -sf /opt/tools/jq {destination}/jq",
+            "allowed",
+            True,
+            False,
+            id="ln-external-source-allowed-entry",
+        ),
+        pytest.param(
+            "ln -sf /opt/tools/jq {destination}/jq",
+            "outside",
+            False,
+            False,
+            id="ln-outside-entry",
+        ),
+        pytest.param(
+            'ln -sf /opt/tools/jq "$LINK_NAME"',
+            "unresolved",
+            False,
+            True,
+            id="ln-unresolved-entry",
+        ),
+    ],
+)
+def test_npm_and_ln_destinations_reach_bash_scope_policy(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    command_template: str,
+    destination: str,
+    permitted: bool,
+    unresolved: bool,
+) -> None:
+    monkeypatch.delenv("NPM_PREFIX", raising=False)
+    monkeypatch.delenv("LINK_NAME", raising=False)
+    allowed = tmp_path / "project" / ".autoskillit" / "temp" / "review-pr"
+    outside = tmp_path / "outside"
+    allowed.mkdir(parents=True)
+    outside.mkdir()
+    selected = allowed if destination == "allowed" else outside
+    command = command_template.format(destination=selected)
+
+    _assert_bash_scope_decision(
+        monkeypatch,
+        command=command,
+        cwd=tmp_path / "project",
+        allowed=allowed,
+        permitted=permitted,
+        unresolved=unresolved,
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "cd /tmp && npm install --prefix /tmp/jqinst node-jq",
+        "ln -sf /tmp/jqinst/node_modules/node-jq/bin/jq /usr/local/bin/jq",
+    ],
+    ids=["observed-npm-install", "observed-ln-install"],
+)
+def test_incident_commands_are_denied_by_project_temp_scope(
+    monkeypatch: pytest.MonkeyPatch, tmp_path, command: str
+) -> None:
+    project = tmp_path / "project"
+    allowed = project / ".autoskillit" / "temp" / "review-pr"
+    allowed.mkdir(parents=True)
+
+    _assert_bash_scope_decision(
+        monkeypatch,
+        command=command,
+        cwd=project,
+        allowed=allowed,
+        permitted=False,
+    )
+
+
+def test_ln_entry_location_does_not_follow_final_symlink(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    allowed = tmp_path / "allowed"
+    outside = tmp_path / "outside"
+    allowed.mkdir()
+    outside.mkdir()
+    inside_file = allowed / "inside"
+    outside_file = outside / "outside"
+    inside_file.write_text("inside", encoding="utf-8")
+    outside_file.write_text("outside", encoding="utf-8")
+    outside_link = outside / "link"
+    inside_link = allowed / "link"
+    outside_link.symlink_to(inside_file)
+    inside_link.symlink_to(outside_file)
+
+    _assert_bash_scope_decision(
+        monkeypatch,
+        command=f"ln -sf /opt/tools/jq {outside_link}",
+        cwd=tmp_path,
+        allowed=allowed,
+        permitted=False,
+    )
+    _assert_bash_scope_decision(
+        monkeypatch,
+        command=f"ln -sf /opt/tools/jq {inside_link}",
+        cwd=tmp_path,
+        allowed=allowed,
+        permitted=True,
+    )
+
+    result = _run_hook(_build_event("Write", str(inside_link)))
+    assert json.loads(result)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+@pytest.mark.parametrize("entry_flag", ["-sfT", "-sfn"])
+def test_ln_no_directory_dereference_replaces_allowed_symlink_entry(
+    monkeypatch: pytest.MonkeyPatch, tmp_path, entry_flag: str
+) -> None:
+    allowed = tmp_path / "allowed"
+    outside_dir = tmp_path / "outside-dir"
+    allowed.mkdir()
+    outside_dir.mkdir()
+    directory_link = allowed / "directory-link"
+    directory_link.symlink_to(outside_dir, target_is_directory=True)
+
+    _assert_bash_scope_decision(
+        monkeypatch,
+        command=f"ln {entry_flag} /opt/tools/jq {directory_link}",
+        cwd=tmp_path,
+        allowed=allowed,
+        permitted=True,
+    )
+
+
+def test_ln_ordinary_directory_semantics_follow_final_directory_symlink(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    allowed = tmp_path / "allowed"
+    outside_dir = tmp_path / "outside-dir"
+    allowed.mkdir()
+    outside_dir.mkdir()
+    directory_link = allowed / "directory-link"
+    directory_link.symlink_to(outside_dir, target_is_directory=True)
+
+    _assert_bash_scope_decision(
+        monkeypatch,
+        command=f"ln -s /opt/tools/jq {directory_link}",
+        cwd=tmp_path,
+        allowed=allowed,
+        permitted=False,
+    )
+
+
+def test_ln_directory_child_entry_does_not_follow_existing_child_symlink(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    allowed = tmp_path / "allowed"
+    outside = tmp_path / "outside"
+    allowed.mkdir()
+    outside.mkdir()
+    (allowed / "jq").symlink_to(outside / "referent")
+
+    _assert_bash_scope_decision(
+        monkeypatch,
+        command=f"ln -sf /opt/tools/jq {allowed}",
+        cwd=tmp_path,
+        allowed=allowed,
+        permitted=True,
+    )
+
+
+def test_ln_entry_resolves_symlinked_parent(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    allowed = tmp_path / "allowed"
+    outside = tmp_path / "outside"
+    allowed.mkdir()
+    outside.mkdir()
+    (allowed / "escaped-parent").symlink_to(outside, target_is_directory=True)
+
+    _assert_bash_scope_decision(
+        monkeypatch,
+        command=f"ln -sf /opt/tools/jq {allowed / 'escaped-parent' / 'jq'}",
+        cwd=tmp_path,
+        allowed=allowed,
+        permitted=False,
+    )
+
+
 @pytest.mark.parametrize("command", ['echo x > "$F"', 'cp a "$F"'])
 def test_denies_unresolved_bash_write_target(
     monkeypatch: pytest.MonkeyPatch, tmp_path, command: str

@@ -13,9 +13,7 @@ if TYPE_CHECKING:
     from autoskillit.hooks._classification._tokenizer import ArgvToken
 
 
-WRITE_VERBS: frozenset[str] = frozenset(
-    {"sed", "tee", "mv", "cp", "patch", "install", "rm", "unlink"}
-)
+WRITE_VERBS: frozenset[str] = frozenset({"sed", "tee", "mv", "cp", "patch", "rm", "unlink"})
 _PSEUDO_DEVICE_PATHS: frozenset[str] = frozenset(
     {"/dev/null", "/dev/zero", "/dev/stdout", "/dev/stderr", "/dev/stdin"}
 )
@@ -32,12 +30,13 @@ class WriteTargetScan:
     unresolved: bool
     parseable: bool
     has_write: bool
+    entry_targets: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        if not self.parseable and self.targets:
-            raise ValueError("WriteTargetScan.targets must be empty when parseable is False")
-        if not self.has_write and self.targets:
-            raise ValueError("WriteTargetScan.targets must be empty when has_write is False")
+        if not self.parseable and (self.targets or self.entry_targets):
+            raise ValueError("WriteTargetScan targets must be empty when parseable is False")
+        if not self.has_write and (self.targets or self.entry_targets):
+            raise ValueError("WriteTargetScan targets must be empty when has_write is False")
 
 
 @dataclass(slots=True)
@@ -54,6 +53,264 @@ def _classification_module() -> ModuleType:
     import _command_classification as standalone_classification
 
     return standalone_classification
+
+
+def _destination_operands(
+    verb: str,
+    argv: list[str],
+    argv_tokens: Sequence[ArgvToken] | None,
+) -> tuple[list[int], tuple[str, str | None] | None, bool, bool, bool, bool]:
+    """Parse the supported ln/install options and positional operands."""
+    _classification = _classification_module()
+    value = _classification._FlagArity.VALUE
+    if verb == "ln":
+        value_spec = {
+            "-t": value,
+            "--target-directory": value,
+            "-S": value,
+            "--suffix": value,
+        }
+        boolean_long = {
+            "--symbolic",
+            "--force",
+            "--no-dereference",
+            "--no-target-directory",
+            "--verbose",
+        }
+        boolean_short = frozenset("sfnTv")
+    else:
+        value_spec = {
+            "-t": value,
+            "--target-directory": value,
+            "-m": value,
+            "--mode": value,
+            "-o": value,
+            "--owner": value,
+            "-g": value,
+            "--group": value,
+            "-S": value,
+            "--suffix": value,
+        }
+        boolean_long = {
+            "--compare",
+            "--directory",
+            "--preserve-timestamps",
+            "--strip",
+            "--no-target-directory",
+            "--verbose",
+        }
+        boolean_short = frozenset("cCDdpsTvbZ")
+
+    operands: list[int] = []
+    target_directory: tuple[str, str | None] | None = None
+    no_target_directory = False
+    no_dereference = False
+    directory_mode = False
+    invalid = False
+    options = True
+    index = 1
+    while index < len(argv):
+        token = argv[index]
+        if options and token == "--":
+            options = False
+            index += 1
+            continue
+        if options and token.startswith("-") and token != "-":
+            option_value, source, next_index, recognized = (
+                _classification._consume_destination_option(argv, argv_tokens, index, value_spec)
+            )
+            if recognized:
+                option = _classification._spec_key_for_token(token, value_spec)
+                if option_value is None or option_value == "--":
+                    invalid = True
+                elif option in {"-t", "--target-directory"}:
+                    target_directory = (option_value, source)
+                index = next_index
+                continue
+            if token in boolean_long or (
+                not token.startswith("--") and all(char in boolean_short for char in token[1:])
+            ):
+                no_target_directory |= token in {"-T", "--no-target-directory"} or (
+                    not token.startswith("--") and "T" in token[1:]
+                )
+                no_dereference |= token in {"-n", "--no-dereference"} or (
+                    not token.startswith("--") and "n" in token[1:]
+                )
+                directory_mode |= token in {"-d", "--directory"} or (
+                    verb == "install" and not token.startswith("--") and "d" in token[1:]
+                )
+                index += 1
+                continue
+            invalid = True
+            index += 1
+            continue
+        operands.append(index)
+        index += 1
+    invalid |= target_directory is not None and no_target_directory
+    return (
+        operands,
+        target_directory,
+        no_target_directory,
+        no_dereference,
+        directory_mode,
+        invalid,
+    )
+
+
+def _resolved_operand(
+    argv: list[str],
+    index: int,
+    cwd: str,
+    argv_tokens: Sequence[ArgvToken] | None,
+) -> str | None:
+    _classification = _classification_module()
+    return _classification.resolve_write_target(
+        argv[index],
+        cwd,
+        shell_source=_classification._shell_source(argv_tokens, index),
+    )
+
+
+def _source_basename(
+    argv: list[str],
+    index: int,
+    cwd: str,
+    argv_tokens: Sequence[ArgvToken] | None,
+) -> str | None:
+    source = _resolved_operand(argv, index, cwd, argv_tokens)
+    if source is None:
+        return None
+    return os.path.basename(source.rstrip(os.sep)) or None
+
+
+def _directory_children(
+    directory: str,
+    source_indices: list[int],
+    argv: list[str],
+    cwd: str,
+    argv_tokens: Sequence[ArgvToken] | None,
+) -> tuple[list[str], bool]:
+    targets: list[str] = []
+    unresolved = False
+    for index in source_indices:
+        basename = _source_basename(argv, index, cwd, argv_tokens)
+        if basename is None:
+            unresolved = True
+        else:
+            targets.append(os.path.join(directory, basename))
+    return targets, unresolved
+
+
+def _install_targets(
+    argv: list[str],
+    cwd: str,
+    argv_tokens: Sequence[ArgvToken] | None,
+) -> tuple[list[str], bool]:
+    _classification = _classification_module()
+    operands, target_directory, no_target, _no_deref, directory_mode, invalid = (
+        _destination_operands("install", argv, argv_tokens)
+    )
+    if invalid or not operands:
+        return [], True
+    if directory_mode:
+        if target_directory is not None:
+            return [], True
+        targets = [_resolved_operand(argv, index, cwd, argv_tokens) for index in operands]
+        return [target for target in targets if target is not None], any(
+            target is None for target in targets
+        )
+    if target_directory is not None:
+        value, source = target_directory
+        directory = _classification.resolve_write_target(value, cwd, shell_source=source)
+        if directory is None:
+            return [], True
+        return _directory_children(directory, operands, argv, cwd, argv_tokens)
+    if len(operands) < 2:
+        return [], True
+
+    destination = _resolved_operand(argv, operands[-1], cwd, argv_tokens)
+    if destination is None:
+        return [], True
+    sources = operands[:-1]
+    if no_target:
+        return ([destination], False) if len(sources) == 1 else ([], True)
+    if len(sources) > 1 or os.path.isdir(destination):
+        return _directory_children(destination, sources, argv, cwd, argv_tokens)
+    return [destination], False
+
+
+def _ln_entry_targets(
+    argv: list[str],
+    cwd: str,
+    argv_tokens: Sequence[ArgvToken] | None,
+) -> tuple[list[str], bool]:
+    _classification = _classification_module()
+    operands, target_directory, no_target, no_deref, _directory_mode, invalid = (
+        _destination_operands("ln", argv, argv_tokens)
+    )
+    if invalid or not operands:
+        return [], True
+    if target_directory is not None:
+        value, source = target_directory
+        directory = _classification.resolve_write_target(value, cwd, shell_source=source)
+        if directory is None:
+            return [], True
+        return _directory_children(directory, operands, argv, cwd, argv_tokens)
+    if len(operands) == 1:
+        basename = _source_basename(argv, operands[0], cwd, argv_tokens)
+        return ([os.path.join(cwd, basename)], False) if cwd and basename else ([], True)
+
+    destination = _resolved_operand(argv, operands[-1], cwd, argv_tokens)
+    if destination is None:
+        return [], True
+    sources = operands[:-1]
+    if no_target and len(sources) > 1:
+        return [], True
+    follows_directory = not no_target and os.path.isdir(destination)
+    if no_deref and os.path.islink(destination):
+        follows_directory = False
+    if follows_directory or len(sources) > 1:
+        return _directory_children(destination, sources, argv, cwd, argv_tokens)
+    return [destination], False
+
+
+def _npm_install_targets(
+    argv: list[str],
+    cwd: str,
+    argv_tokens: Sequence[ArgvToken] | None,
+) -> tuple[list[str], bool, bool]:
+    _classification = _classification_module()
+    prefix_spec = {"--prefix": _classification._FlagArity.VALUE}
+    separator = argv.index("--") if "--" in argv[1:] else len(argv)
+    prefix: tuple[str, str | None] | None = None
+    missing_prefix = False
+    command_index: int | None = None
+    index = 1
+    while index < separator:
+        token = argv[index]
+        if token.startswith("--prefix"):
+            value, source, next_index, recognized = _classification._consume_destination_option(
+                argv, argv_tokens, index, prefix_spec
+            )
+            if not recognized:
+                return [], True, True
+            if value is None or value == "--":
+                missing_prefix = True
+            else:
+                prefix = (value, source)
+            index = next_index
+            continue
+        if command_index is None and token == "install":
+            command_index = index
+        elif command_index is None and not token.startswith("-"):
+            return [], False, False
+        index += 1
+    if command_index is None or (prefix is None and not missing_prefix):
+        return [], False, False
+    if missing_prefix or prefix is None:
+        return [], True, True
+    target = _classification.resolve_write_target(prefix[0], cwd, shell_source=prefix[1])
+    return ([target], False, True) if target is not None else ([], True, True)
 
 
 def _ensure_scope_state(
@@ -283,7 +540,7 @@ def _scan_executable(
     argv_tokens: Sequence[ArgvToken] | None,
     state: _ShellDirectoryState,
     path: tuple[int, ...] | None,
-) -> tuple[list[str], bool, bool, _ShellDirectoryState | None]:
+) -> tuple[list[str], list[str], bool, bool, _ShellDirectoryState | None]:
     _classification = _classification_module()
 
     start = _classification._verb_start_index(executable)
@@ -292,30 +549,37 @@ def _scan_executable(
     if setting is not None:
         state.cdpath_unknown = setting[0]
     if start is None:
-        return [], False, False, None
+        return [], [], False, False, None
     handled = _apply_shell_builtin(executable, start, argv_tokens, state)
     if setting is not None and setting[1]:
         state.cdpath_unknown = previous_cdpath
-    if handled:
-        return [], False, False, None
-    if _classification.is_gh_command(executable):
-        return [], False, False, None
+    if handled or _classification.is_gh_command(executable):
+        return [], [], False, False, None
     argv = executable[start:]
     verb = argv[0]
     verb_cwd = _classification._wrapped_verb_cwd(executable, start, state.cwd, argv_tokens)
     invoked = _invoked_child_state(verb, verb_cwd, state, path)
     verb_tokens = None if argv_tokens is None else argv_tokens[start:]
+    if verb == "npm":
+        targets, unresolved, has_write = _npm_install_targets(argv, verb_cwd, verb_tokens)
+        return targets, [], unresolved, has_write, invoked
+    if verb == "ln":
+        targets, unresolved = _ln_entry_targets(argv, verb_cwd, verb_tokens)
+        return [], targets, unresolved, True, invoked
+    if verb == "install":
+        targets, unresolved = _install_targets(argv, verb_cwd, verb_tokens)
+        return targets, [], unresolved, True, invoked
     if verb in WRITE_VERBS:
         targets, unresolved = _classification.extract_write_verb_targets(
             verb, argv, verb_cwd, argv_tokens=verb_tokens
         )
-        return targets, unresolved, True, invoked
+        return targets, [], unresolved, True, invoked
     if verb == "git" or verb.endswith("/git"):
         targets, unresolved, has_write = _classification._git_write_targets(
             argv, verb_cwd, executable[:start], verb_tokens
         )
-        return targets, unresolved, has_write, invoked
-    return [], False, False, invoked
+        return targets, [], unresolved, has_write, invoked
+    return [], [], False, False, invoked
 
 
 def scan_write_targets(command: str, cwd: str) -> WriteTargetScan:
@@ -329,6 +593,7 @@ def scan_write_targets(command: str, cwd: str) -> WriteTargetScan:
         return WriteTargetScan((), False, False, False)
 
     targets: list[str] = []
+    entry_targets: list[str] = []
     unresolved = False
     has_write = False
     scopes: dict[tuple[int, ...], _ShellDirectoryState] = {
@@ -356,10 +621,11 @@ def scan_write_targets(command: str, cwd: str) -> WriteTargetScan:
             if record.argv_tokens is None
             else [record.argv_tokens[index] for index in partition.segments]
         )
-        verb_targets, verb_unresolved, verb_has_write, invoked = _scan_executable(
+        verb_targets, verb_entries, verb_unresolved, verb_has_write, invoked = _scan_executable(
             executable, executable_tokens, state, record.subshell_path
         )
         targets.extend(verb_targets)
+        entry_targets.extend(verb_entries)
         targets.extend(partition.targets)
         unresolved |= verb_unresolved
         has_write |= verb_has_write
@@ -370,6 +636,7 @@ def scan_write_targets(command: str, cwd: str) -> WriteTargetScan:
         unresolved,
         True,
         has_write,
+        tuple(dict.fromkeys(entry_targets)),
     )
 
 

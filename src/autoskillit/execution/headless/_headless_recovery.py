@@ -104,7 +104,7 @@ def _tool_write_path_warnings(
                     "Bash command contained a write target that could not be statically resolved. "
                     + UNRESOLVED_WRITE_TARGET_REMEDIATION
                 )
-            for path in scan.targets:
+            for path in (*scan.targets, *scan.entry_targets):
                 if _is_path_outside_cwd(path, cwd):
                     normalized = os.path.normpath(path)
                     warnings.append(

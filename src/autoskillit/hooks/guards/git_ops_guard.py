@@ -72,6 +72,7 @@ from _hook_settings import (  # noqa: E402
     hook_session_shape,
     read_merged_hook_config,
 )
+from _path_identity import destination_location  # noqa: E402
 
 GIT_OPS_DENY_TRIGGER: str = DENY_TRIGGER_BY_GUARD["git_ops_guard"]
 CHECKED_OUT_REF_DENY_PREFIX: str = "Checked-out ref mutation blocked: "
@@ -83,9 +84,7 @@ _EXEMPT_SKILLS: frozenset[str] = EXEMPT_SKILLS_BY_GUARD["git_ops_guard"]
 # only the destructive headless operation phase below.
 _DESTRUCTIVE_OP_EXEMPT_TIERS: frozenset[str] = frozenset({"orchestrator"})
 
-_RAW_WRITE_VERBS = frozenset(
-    {"cp", "mv", "install", "tee", "truncate", "rm", "unlink", "sed", "dd"}
-)
+_RAW_WRITE_VERBS = frozenset({"cp", "mv", "tee", "truncate", "rm", "unlink", "sed", "dd"})
 
 # Git subcommands that can mutate checked-out refs (the same set
 # _classify_git_segment recognises). Used by _deny_outer_git_mutations
@@ -204,9 +203,10 @@ def _raw_write_targets(
     additional_segments: list[list[str]],
     additional_owners: list[int | None],
     interpreter_cwd: str,
-) -> tuple[list[tuple[str, str]], bool]:
+) -> tuple[list[tuple[str, str]], list[tuple[str, str]], bool]:
     scan = scan_write_targets(text, initial_cwd)
     targets = [(target, initial_cwd) for target in scan.targets]
+    entry_targets = [(target, initial_cwd) for target in scan.entry_targets]
     ambiguous = scan.unresolved
     outer_cwds = _compute_outer_cwds(outer_segments, initial_cwd)
     segments_with_cwds = list(zip(outer_segments, outer_cwds))
@@ -238,7 +238,7 @@ def _raw_write_targets(
         ambiguous = True
     elif interpreter_paths:
         targets.extend((path, interpreter_cwd) for path in interpreter_paths)
-    return (targets, ambiguous)
+    return (targets, entry_targets, ambiguous)
 
 
 def _raw_target_mutations(
@@ -251,7 +251,7 @@ def _raw_target_mutations(
     interpreter_cwd: str,
     context: dict[str, object] | None,
 ) -> list[tuple[str, str, bool]]:
-    targets, ambiguous = _raw_write_targets(
+    targets, entry_targets, ambiguous = _raw_write_targets(
         text,
         initial_cwd,
         outer_segments,
@@ -262,13 +262,14 @@ def _raw_target_mutations(
     if ambiguous:
         return [("", "<unresolved>", True)]
     resolved_targets: list[Path] = []
-    for raw_target, target_cwd in targets:
-        target = Path(raw_target)
-        if not target.is_absolute():
-            if not target_cwd:
-                return [("", "<unresolved>", True)]
-            target = Path(target_cwd) / target
-        resolved_targets.append(target.resolve())
+    for raw_targets, is_entry in ((targets, False), (entry_targets, True)):
+        for raw_target, target_cwd in raw_targets:
+            target = Path(raw_target)
+            if not target.is_absolute():
+                if not target_cwd:
+                    return [("", "<unresolved>", True)]
+                target = Path(target_cwd) / target
+            resolved_targets.append(destination_location(target) if is_entry else target.resolve())
     if context is None:
         return []
     common = Path(str(context["common_git_dir"])).resolve()
@@ -381,6 +382,7 @@ def _is_structural_mutation(
             r"reset\b|fetch\b|push\b|symbolic-ref\s+HEAD)\b",
             live_text,
         )
+        or scan_write_targets(live_text, "").has_write
         or any(
             os.path.basename(command_verb_and_args(segment)[0]) in _RAW_WRITE_VERBS
             for segment in [*outer, *additional]

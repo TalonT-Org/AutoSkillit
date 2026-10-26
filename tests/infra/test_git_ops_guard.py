@@ -933,6 +933,93 @@ class TestCheckedOutRefMutations:
         after = ref_path.read_bytes() if ref_path.exists() else None
         assert after == before
 
+    @pytest.mark.parametrize(
+        ("source_name", "destination_relative"),
+        [("HEAD", "."), ("develop", "refs/heads")],
+        ids=["head", "checked-out-branch"],
+    )
+    def test_denies_ln_directory_entry_for_checked_out_ref(
+        self,
+        linked_repo: dict[str, Path | str],
+        tmp_path: Path,
+        source_name: str,
+        destination_relative: str,
+    ) -> None:
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        source = tmp_path / "sources" / source_name
+        source.parent.mkdir()
+        source.write_text("replacement", encoding="utf-8")
+        destination = Path(str(linked_repo["common_git_dir"])) / destination_relative
+
+        out = _run_guard(
+            f"ln -sf {shlex.quote(str(source))} {shlex.quote(str(destination))}",
+            kitchen_open=True,
+            tmpdir=linked,
+        )
+
+        assert _is_denied(out)
+
+    def test_denies_npm_prefix_targeting_checked_out_ref(
+        self, linked_repo: dict[str, Path | str]
+    ) -> None:
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        target = Path(str(linked_repo["common_git_dir"])) / "refs/heads/develop"
+
+        out = _run_guard(
+            f"npm install --prefix {shlex.quote(str(target))} package",
+            kitchen_open=True,
+            tmpdir=linked,
+        )
+
+        assert _is_denied(out)
+
+    @pytest.mark.parametrize("target_first", [True, False], ids=["target-first", "target-last"])
+    def test_denies_install_target_directory_checked_out_ref_child(
+        self,
+        linked_repo: dict[str, Path | str],
+        tmp_path: Path,
+        target_first: bool,
+    ) -> None:
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        destination = Path(str(linked_repo["common_git_dir"])) / "refs/heads"
+        source = tmp_path / "sources/develop"
+        source.parent.mkdir()
+        source.write_text("replacement", encoding="utf-8")
+        operands = (
+            f"-t {shlex.quote(str(destination))} {shlex.quote(str(source))}"
+            if target_first
+            else f"{shlex.quote(str(source))} -t {shlex.quote(str(destination))}"
+        )
+
+        out = _run_guard(f"install {operands}", kitchen_open=True, tmpdir=linked)
+
+        assert _is_denied(out)
+
+    @pytest.mark.parametrize("target_first", [True, False], ids=["target-first", "target-last"])
+    def test_allows_install_from_protected_source_to_unprotected_directory(
+        self,
+        linked_repo: dict[str, Path | str],
+        tmp_path: Path,
+        target_first: bool,
+    ) -> None:
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        source = Path(str(linked_repo["common_git_dir"])) / "refs/heads/develop"
+        destination = tmp_path / "allowed"
+        destination.mkdir()
+        operands = (
+            f"-t {shlex.quote(str(destination))} {shlex.quote(str(source))}"
+            if target_first
+            else f"{shlex.quote(str(source))} -t {shlex.quote(str(destination))}"
+        )
+
+        out = _run_guard(f"install {operands}", kitchen_open=True, tmpdir=linked)
+
+        assert out.strip() == ""
+
 
 class TestCheckedOutRefAmbiguity:
     @pytest.mark.parametrize(
@@ -1035,6 +1122,56 @@ class TestCheckedOutRefAmbiguity:
             include_execution_cwd=False,
         )
         assert _is_denied(out)
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            'npm install --prefix "$DESTINATION" package',
+            'ln -sf /tmp/source "$DESTINATION"',
+        ],
+        ids=["npm-prefix", "ln-entry"],
+    )
+    def test_unresolved_explicit_write_destination_fails_closed(
+        self,
+        linked_repo: dict[str, Path | str],
+        monkeypatch: pytest.MonkeyPatch,
+        command: str,
+    ) -> None:
+        monkeypatch.delenv("DESTINATION", raising=False)
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+
+        out = _run_guard(command, kitchen_open=True, tmpdir=linked)
+
+        assert _is_denied(out)
+        assert _checked_out_ref_result(out)["attempted_value"] == "<unresolved>"
+
+    @pytest.mark.parametrize(
+        "command_builder",
+        [
+            lambda root: f"npm install --prefix {shlex.quote(str(root / 'npm-root'))} package",
+            lambda root: f"ln -sf /tmp/source {shlex.quote(str(root / 'link'))}",
+            lambda root: f"install -t {shlex.quote(str(root / 'install-root'))} /tmp/source",
+        ],
+        ids=["npm-prefix", "ln-entry", "install-target-directory"],
+    )
+    def test_structural_write_without_execution_cwd_fails_closed(
+        self,
+        linked_repo: dict[str, Path | str],
+        command_builder,
+    ) -> None:
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+
+        out = _run_guard(
+            command_builder(linked),
+            kitchen_open=True,
+            tmpdir=linked,
+            include_execution_cwd=False,
+        )
+
+        assert _is_denied(out)
+        assert _checked_out_ref_result(out)["attempted_value"] == "<unresolved>"
 
 
 class TestCheckedOutRefWriteTargets:

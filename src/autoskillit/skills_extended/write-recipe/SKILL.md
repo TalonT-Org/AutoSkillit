@@ -538,7 +538,9 @@ When called directly as `/autoskillit:write-recipe`:
 5. Generate the script in the YAML format above
 6. Before saving, call `kitchen_status` to get `package_version` and stamp `autoskillit_version: "{package_version}"` as the second top-level field (after `name`). This is required for the migration system to track script age.
 7. Save to `.autoskillit/recipes/{name}.yaml` (create the directory if needed)
-8. Call `validate_recipe` with the saved file path. If errors are returned, fix them and re-validate until clean. Review the `quality.warnings` in the response:
+8. In an interactive session, call `validate_recipe` with the saved file path. If errors are returned, fix them and re-validate until clean.
+   In a headless session, return the saved YAML for host validation.
+   For interactive validation responses, review `quality.warnings`:
    - `DEAD_OUTPUT`: A `capture:` key is never referenced by any reachable downstream step via `${{ context.X }}`. Either add a `${{ context.X }}` reference in the downstream step's `with:` block, or remove the unused capture.
    - `IMPLICIT_HANDOFF`: A `run_skill` step has no `capture:` block. Add a `capture:` block to explicitly wire outputs to downstream steps via `${{ context.X }}`, or confirm the skill's output is intentionally unused.
    - Present the quality summary to the user and fix any warnings that indicate broken wiring.
@@ -593,9 +595,9 @@ When the agent is given an existing script's YAML content and a requested change
    - Save changes to the original file
    - Save as a new script (prompt for name)
    - Use temporarily without saving
-5. Call `validate_recipe` on the saved path
-6. If errors, fix and re-validate until clean
-7. Review quality warnings and fix data-flow issues before reporting changes
+5. In an interactive session, call `validate_recipe` on the saved path. In a headless session, return the saved YAML for host validation.
+6. For interactive validation errors, fix and re-validate until clean
+7. For interactive validation responses, review quality warnings and fix data-flow issues before reporting changes
 8. The pipeline contract card is generated automatically the next time the recipe is loaded; do not generate it manually.
 9. Report the changes made
 

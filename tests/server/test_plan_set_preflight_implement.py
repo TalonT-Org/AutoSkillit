@@ -37,6 +37,12 @@ from tests.server.test_plan_set_materializer import _FIXTURES, _GitHub
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
+_IMPLEMENTATION_READY_CASE = (
+    "implementation",
+    "implement",
+    {"issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/4261", "task": "test"},
+)
+
 
 async def _bind(
     root: Path,
@@ -280,13 +286,7 @@ async def test_resumed_execution_consumes_original_authority_without_rebinding(
 
 @pytest.mark.parametrize(
     "tool_ctx_ready_recipe",
-    [
-        (
-            "implementation",
-            "implement",
-            {"issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/4261", "task": "test"},
-        )
-    ],
+    [_IMPLEMENTATION_READY_CASE],
     indirect=True,
 )
 async def test_clone_authority_admits_implement_and_retry_from_fresh_sibling_worktree(
@@ -408,13 +408,7 @@ async def test_clone_authority_admits_implement_and_retry_from_fresh_sibling_wor
 @pytest.mark.parametrize("case", ["unissued", "rewritten", "other_execution"])
 @pytest.mark.parametrize(
     "tool_ctx_ready_recipe",
-    [
-        (
-            "implementation",
-            "implement",
-            {"issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/4261", "task": "test"},
-        )
-    ],
+    [_IMPLEMENTATION_READY_CASE],
     indirect=True,
 )
 async def test_attested_implementation_rejects_untrusted_authority_provenance(

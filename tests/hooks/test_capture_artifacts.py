@@ -7,6 +7,7 @@ import concurrent.futures
 import errno
 import json
 import os
+import re
 import select
 import shlex
 import stat
@@ -21,6 +22,7 @@ import pytest
 
 import autoskillit.hooks._capture._artifact_setup as capture_setup
 import autoskillit.hooks._capture._authority as capture_authority
+import autoskillit.hooks._capture._capacity as capture_capacity
 import autoskillit.hooks._capture._failure_policy as capture_failure_policy
 import autoskillit.hooks._capture._publication as capture_publication
 import autoskillit.hooks._capture._reconcile as capture_reconcile
@@ -1241,6 +1243,39 @@ def test_setup_failure_reason_survives_runner_transport_without_sensitive_detail
     assert str(project) not in captured.err
     assert _CAPTURE_ID not in captured.err
     assert not sentinel.exists()
+
+
+def test_reserve_capacity_refusal_detail_carries_measurement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    reason = CaptureCapacityReason.PROJECTED_COMPACTED_BYTES
+    decision = capture_capacity.AdmissionDecision(
+        reason,
+        projected_bytes=18_422,
+        limit_bytes=18_421,
+        due_records=7,
+    )
+
+    def refuse_capacity(_store: CaptureLifecycleStore, _capture_id: str) -> CaptureLifecycleRecord:
+        raise CaptureCapacityError(reason, decision=decision)
+
+    monkeypatch.setattr(CaptureLifecycleStore, "reserve_capture", refuse_capacity)
+
+    assert capture_runner._main(_runner_args(cwd=str(project))) == 1
+
+    failure = _single_failure_marker(capfd.readouterr().err)
+    expected_detail = "compacted lifecycle capacity reached: projected=18422 limit=18421 due=7"
+    assert failure.reason is CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED
+    assert failure.detail == expected_detail
+    assert re.fullmatch(
+        r"^compacted lifecycle capacity reached: projected=\d+ limit=\d+ due=\d+$",
+        failure.detail,
+    )
+    assert len(failure.detail.encode("utf-8")) <= 240
 
 
 def test_recovery_contention_is_classified_at_the_runner_boundary(

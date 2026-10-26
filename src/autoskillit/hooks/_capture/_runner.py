@@ -247,6 +247,11 @@ def run_capture(
             artifact_writer_fd = _duplicate_artifact_writer(artifact)
         except BaseException as exc:
             reason = _capture_failure_policy.runtime_failure_reason(exc)
+            detail = (
+                exc.public_detail
+                if isinstance(exc, CaptureSetupError) and exc.public_detail
+                else f"{failure_stage} failed"
+            )
             failure = _capture_replay.failure_transport(
                 reason=reason,
                 stage=(
@@ -254,7 +259,7 @@ def run_capture(
                     if reason in _capture_failure_policy.CAPACITY_FAILURE_REASONS
                     else failure_stage
                 ),
-                detail=f"{failure_stage} failed",
+                detail=detail,
                 shell_returncode=None,
                 settlement=None,
             )

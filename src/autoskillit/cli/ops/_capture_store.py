@@ -56,13 +56,26 @@ def _print_stats(stats: CaptureStoreStats) -> None:
         "capture-store ledger: "
         f"live={stats.live_records} due_records={stats.due_records} "
         f"eligible_abandoned={stats.eligible_records} "
-        f"deleting={stats.deleting_records} ledger_bytes={stats.ledger_bytes}"
+        f"deleting={stats.deleting_records} physical_ledger_bytes={stats.ledger_bytes}"
     )
     print(
         "capture-store directory: "
         f"files={stats.directory_files} unledgered_aged={stats.unledgered_aged_files} "
         f"unledgered_aged_bytes={stats.unledgered_aged_bytes}"
     )
+    utilization_pct = (
+        f"{stats.projected_compacted_bytes / stats.compaction_low_bytes:.1%}"
+        if stats.compaction_low_bytes > 0
+        else "n/a"
+    )
+    print(
+        "capture-store capacity: "
+        f"projected_compacted_bytes={stats.projected_compacted_bytes} "
+        f"low_bytes={stats.compaction_low_bytes} utilization_pct={utilization_pct} "
+        "(default capacity limits; runtime overrides are runner-local)"
+    )
+    if stats.capacity_warning:
+        print("WARNING: compacted capture-store bytes have reached 80% of the soft limit")
 
 
 def run_capture_store(*, reclaim: bool = False) -> None:

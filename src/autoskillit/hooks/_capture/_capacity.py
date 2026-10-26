@@ -7,7 +7,11 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from . import _ledger, _sweep_cursor
-from ._failure_policy import CAPACITY_FAILURE_REASONS, CaptureFailureReason
+from ._failure_policy import (
+    CAPACITY_FAILURE_REASONS,
+    CaptureFailureReason,
+    normalize_failure_detail,
+)
 from ._module_identity import register_module_aliases
 from ._types import DEBT_ASSIST_MAX_TRANSITIONS, CaptureCapacityReason, CaptureCapacitySpec
 
@@ -61,6 +65,9 @@ class AdmissionDecision:
 
     reason: CaptureCapacityReason | None
     assist_transition_limit: int | None = None
+    projected_bytes: int | None = None
+    limit_bytes: int | None = None
+    due_records: int | None = None
 
 
 class CompactedFrameSizer:
@@ -156,6 +163,26 @@ def reason_detail(reason: CaptureCapacityReason) -> str:
     return _REASON_DETAILS[reason]
 
 
+def measurement_detail(decision: AdmissionDecision) -> str:
+    if decision.reason is None:
+        raise ValueError("capacity measurement requires a refusal decision")
+    measurements = " ".join(
+        value
+        for value in (
+            f"projected={decision.projected_bytes}"
+            if decision.projected_bytes is not None
+            else None,
+            f"limit={decision.limit_bytes}" if decision.limit_bytes is not None else None,
+            f"due={decision.due_records}" if decision.due_records is not None else None,
+        )
+        if value is not None
+    )
+    detail = reason_detail(decision.reason)
+    if measurements:
+        detail = f"{detail}: {measurements}"
+    return normalize_failure_detail(detail)
+
+
 def failure_reason(reason: CaptureCapacityReason) -> CaptureFailureReason:
     return _FAILURE_REASONS[reason]
 
@@ -221,18 +248,28 @@ def admission_reason(
         forensic += is_forensic
         due += _sweep_cursor.is_due_record(record, now, terminal_states)
     if operational > active_limit:
-        return AdmissionDecision(CaptureCapacityReason.ACTIVE_CAPACITY)
+        return AdmissionDecision(CaptureCapacityReason.ACTIVE_CAPACITY, due_records=due)
     if retained > spec.max_retained_records:
-        return AdmissionDecision(CaptureCapacityReason.RETENTION_CAPACITY)
+        return AdmissionDecision(CaptureCapacityReason.RETENTION_CAPACITY, due_records=due)
     if operational + forensic > spec.max_evidence_records:
-        return AdmissionDecision(CaptureCapacityReason.EVIDENCE_CAPACITY)
+        return AdmissionDecision(CaptureCapacityReason.EVIDENCE_CAPACITY, due_records=due)
     encoded = sizer.total_bytes(projected, compaction_epoch, spec)
     if encoded + spec.recovery_headroom_bytes > spec.hard_ledger_bytes:
-        return AdmissionDecision(CaptureCapacityReason.HARD_LEDGER_CAPACITY)
+        return AdmissionDecision(
+            CaptureCapacityReason.HARD_LEDGER_CAPACITY,
+            projected_bytes=encoded,
+            limit_bytes=spec.hard_ledger_bytes - spec.recovery_headroom_bytes,
+            due_records=due,
+        )
     if encoded > spec.compaction_low_bytes:
-        return AdmissionDecision(CaptureCapacityReason.PROJECTED_COMPACTED_BYTES)
+        return AdmissionDecision(
+            CaptureCapacityReason.PROJECTED_COMPACTED_BYTES,
+            projected_bytes=encoded,
+            limit_bytes=spec.compaction_low_bytes,
+            due_records=due,
+        )
     if due >= spec.reclamation_debt_stall_records:
-        return AdmissionDecision(CaptureCapacityReason.RECLAMATION_DEBT_STALL)
+        return AdmissionDecision(CaptureCapacityReason.RECLAMATION_DEBT_STALL, due_records=due)
     if due >= spec.reclamation_debt_assist_records and not sweep_active:
         return AdmissionDecision(
             CaptureCapacityReason.RECLAMATION_DEBT_ASSIST,
@@ -240,6 +277,7 @@ def admission_reason(
                 DEBT_ASSIST_MAX_TRANSITIONS,
                 due - spec.reclamation_debt_assist_records + 1,
             ),
+            due_records=due,
         )
     return AdmissionDecision(None)
 

@@ -15,6 +15,7 @@ from ._lifecycle_policy import CaptureRetentionPhase, CaptureState
 from ._module_identity import register_module_aliases
 from ._syntax import PUBLIC_NAME_RE
 from ._types import (
+    CaptureCapacitySpec,
     CaptureCleanupOutcome,
     CleanupBlocker,
     CleanupProgress,
@@ -49,6 +50,9 @@ SESSION_START_BUDGET = SweepBudgetSpec(
 # Single shared byte bound for every capture-cleanup diagnostic, regardless of
 # owner.
 DIAGNOSTIC_MAX_BYTES = 400
+# Warn as compacted bytes approach the default soft limit; runtime capacity
+# overrides remain runner-local.
+_CAPACITY_WARNING_RATIO = 0.80
 _HOOK_VERSION = 1
 _POLICY_EVENT_NAME = "capture_cleanup"
 
@@ -164,6 +168,17 @@ class CaptureStoreStats:
     directory_files: int = 0
     unledgered_aged_files: int = 0
     unledgered_aged_bytes: int = 0
+    projected_compacted_bytes: int = 0
+    compaction_low_bytes: int = CaptureCapacitySpec().compaction_low_bytes
+
+    @property
+    def capacity_warning(self) -> bool:
+        """Whether the compacted projection reaches the soft-limit warning."""
+        return (
+            self.compaction_low_bytes > 0
+            and self.projected_compacted_bytes
+            >= _CAPACITY_WARNING_RATIO * self.compaction_low_bytes
+        )
 
 
 def capture_store_stats(project_cwd: str) -> CaptureStoreStats:
@@ -186,7 +201,11 @@ def capture_store_stats(project_cwd: str) -> CaptureStoreStats:
             lock_wait=lock_wait_for_budget(RUNNER_TAIL_BUDGET),
         ) as store:
             with store._locked():
-                records, _compaction_epoch, ledger_bytes = store._load_locked()
+                records, compaction_epoch, ledger_bytes = store._load_locked()
+                projected_compacted_bytes = store._ledger_view.sizer.total_bytes(
+                    records, compaction_epoch, store._capacity
+                )
+                compaction_low_bytes = store._capacity.compaction_low_bytes
             tracked = frozenset(
                 record.public_name
                 for record in records.values()
@@ -235,6 +254,8 @@ def capture_store_stats(project_cwd: str) -> CaptureStoreStats:
                 directory_files=directory_files,
                 unledgered_aged_files=unledgered_aged_files,
                 unledgered_aged_bytes=unledgered_aged_bytes,
+                projected_compacted_bytes=projected_compacted_bytes,
+                compaction_low_bytes=compaction_low_bytes,
             )
     except _authority.CaptureStoreAbsentError:
         return CaptureStoreStats(CleanupBlocker.STORE_ABSENT)

@@ -382,11 +382,30 @@ the kernel to block indefinitely.
 `hooks._capture._reconcile.capture_store_stats()` is the single read-only
 adapter both the doctor battery's capture-store check and `autoskillit
 capture-store` (without `--reclaim`) call, so neither surface can drift from
-what a real reconciliation pass would find. `autoskillit capture-store
---reclaim` loops `reconcile_capture_store` with a generous one-time
-`RECLAIM_BUDGET` until a clean pass — no due records, no adoptable orphans —
-or a hard iteration cap. It exists for bulk pre-existing backlog; the
-SessionStart scan phase above keeps new debris from ever accumulating again.
+what a real reconciliation pass would find. Its capacity line appends
+`projected_compacted_bytes=… low_bytes=… utilization_pct=…` and the label
+`(default capacity limits; runtime overrides are runner-local)`. Doctor and the
+CLI emit a WARNING when the soft limit is positive and projected compacted
+bytes reach 80% of it: `projected_compacted_bytes / compaction_low_bytes >= 0.80`.
+
+`ledger_bytes` is the physical ledger size and includes superseded transition
+frames until compaction. `projected_compacted_bytes` is the admission quantity
+and the numerator for the warning; it measures the compacted projection of
+latest records, tombstones, and opaque frames. These values answer different
+questions. An existing physical ledger above `MAX_LEDGER_BYTES` fails store
+load as `CaptureLedgerError`; a projected compacted-capacity refusal is a
+`CaptureCapacityError` with the capacity handling described in
+[ADR-0006](../decisions/0006-output-containment.md).
+
+The temporary output-budget overlay workaround is removed on every
+`close_kitchen`. To disable the guard durably, set
+`output_budget: {guard_enabled: false}` in `.autoskillit/config.yaml`.
+
+`autoskillit capture-store --reclaim` loops `reconcile_capture_store` with a
+generous one-time `RECLAIM_BUDGET` until a clean pass — no due records, no
+adoptable orphans — or a hard iteration cap. It exists for bulk pre-existing
+backlog; the SessionStart scan phase above keeps new debris from ever
+accumulating again.
 
 ### `generated_file_write_guard.py`
 **Guarded tools:** `Write`, `Edit`

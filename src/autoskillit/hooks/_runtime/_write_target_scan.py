@@ -34,9 +34,13 @@ class WriteTargetScan:
 
     def __post_init__(self) -> None:
         if not self.parseable and (self.targets or self.entry_targets):
-            raise ValueError("WriteTargetScan targets must be empty when parseable is False")
+            raise ValueError(
+                "WriteTargetScan targets and entry_targets must be empty when parseable is False"
+            )
         if not self.has_write and (self.targets or self.entry_targets):
-            raise ValueError("WriteTargetScan targets must be empty when has_write is False")
+            raise ValueError(
+                "WriteTargetScan targets and entry_targets must be empty when has_write is False"
+            )
 
 
 @dataclass(slots=True)

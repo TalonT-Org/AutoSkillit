@@ -1552,7 +1552,7 @@ class TestScanWriteTargets:
         ids=("unparseable", "not-a-write"),
     )
     def test_entry_targets_obey_scan_invariants(self, parseable: bool, has_write: bool) -> None:
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="targets and entry_targets"):
             command_classification.WriteTargetScan(
                 targets=(),
                 unresolved=False,

@@ -613,6 +613,10 @@ def _assert_bash_scope_decision(
     assert output["permissionDecision"] == "deny"
     if unresolved:
         assert UNRESOLVED_WRITE_TARGET_REMEDIATION in output["permissionDecisionReason"]
+    else:
+        reason = output["permissionDecisionReason"]
+        assert write_guard.WRITE_GUARD_DENY_TRIGGER in reason
+        assert f"Only writes to {allowed} are permitted." in reason
 
 
 @pytest.mark.parametrize(

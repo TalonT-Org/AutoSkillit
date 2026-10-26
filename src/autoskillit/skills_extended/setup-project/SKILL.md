@@ -150,10 +150,15 @@ Launch parallel child delegations against `project_dir`. If the user opted into 
 
 **Subagent F+ — Conversation History Mining (only if user opted in):**
 
-Claude Code stores conversation history at `~/.claude/projects/<encoded-path>/` as JSONL files (one per session). The path encoding replaces `/` and `_` with `-` (e.g., `/home/user/my_project` -> `-home-user-my-project`).
+Claude Code stores conversation history under `~/.claude/projects/` as JSONL files (one per session). Resolve the requested project's directory through the installed CLI:
 
-1. Compute the encoded directory name from `project_dir`
-2. List all `.jsonl` files in `~/.claude/projects/<encoded-name>/`, including subagent files in `<session-uuid>/subagents/agent-*.jsonl`
+```bash
+actual_absolute_cwd=$(cd "{project_dir}" && pwd -P)
+LOG_DIR=$(autoskillit claude-project-log-dir "$actual_absolute_cwd")
+```
+
+1. Verify `LOG_DIR` exists and contains `.jsonl` files; report missing or empty history before stopping
+2. List `.jsonl` files with `find "$LOG_DIR" -name '*.jsonl'`, including subagent files in `{session-uuid}/subagents/agent-*.jsonl`
 3. Sort by modification time (newest first)
 4. Divide into batches of ~20-30 files per subagent — launch multiple parallel subagents if needed
 

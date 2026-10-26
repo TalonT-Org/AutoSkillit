@@ -126,10 +126,10 @@ def resolve_project_dir() -> Path:
 def claude_code_project_dir(cwd: str) -> Path:
     """Derive the Claude Code project log directory from a working directory path.
 
-    Encodes the cwd by replacing '/' and '_' with '-', matching Claude Code's
-    internal convention for ~/.claude/projects/<encoded-path>/.
+    For the supported Claude Code baseline, replace slashes, underscores, and
+    dots with hyphens under ~/.claude/projects/.
     """
-    project_hash = cwd.replace("/", "-").replace("_", "-")
+    project_hash = cwd.replace("/", "-").replace("_", "-").replace(".", "-")
     return Path.home() / ".claude" / "projects" / project_hash
 
 
@@ -163,7 +163,7 @@ def find_latest_session_id(cwd: str | None = None) -> str | None:
         return None
 
     jsonl_files = sorted(
-        (f for f in project_dir.glob("*.jsonl")),
+        (f for f in project_dir.glob("*.jsonl") if ".orphaned-" not in f.name),
         key=lambda f: safe_mtime(f) or 0.0,
         reverse=True,
     )

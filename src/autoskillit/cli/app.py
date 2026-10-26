@@ -35,6 +35,7 @@ from autoskillit.core import (
     AuditAdmissionStoreAuthority,
     RecipeSource,
     atomic_write,
+    claude_code_project_dir,
     get_logger,
 )
 
@@ -342,6 +343,12 @@ def update() -> None:
     from autoskillit.cli.update._update import run_update_command
 
     run_update_command()
+
+
+@app.command
+def claude_project_log_dir(cwd: str) -> None:
+    """Write the Claude project log directory for an explicit working directory."""
+    sys.stdout.write(str(claude_code_project_dir(cwd)) + "\n")
 
 
 @app.command

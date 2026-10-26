@@ -271,7 +271,9 @@ async def _discover_session_log(
             candidates = [
                 entry
                 for entry in scan_observed(session_log_dir)
-                if entry.path.suffix == ".jsonl" and entry.status.st_ctime > spawn_time
+                if entry.path.suffix == ".jsonl"
+                and ".orphaned-" not in entry.path.name
+                and entry.status.st_ctime > spawn_time
             ]
             session_file, session_entry = _select_session_log_file(
                 session_log_dir, candidates, expected_session_id, resume_cursor

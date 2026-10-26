@@ -139,12 +139,11 @@ For each match batch, use the bounded `-A 10 -B 10` command above to confirm it 
 
 ### Step 1: Locate Project Logs
 
-Derive the log directory from the current working directory:
+Resolve the current project's JSONL directory under `~/.claude/projects/` through the installed CLI:
 
 ```bash
-PROJECT_PATH=$(pwd)
-LOG_DIR="$HOME/.claude/projects/-${PROJECT_PATH//\//-}"
-LOG_DIR="${LOG_DIR//--/-}"
+actual_absolute_cwd=$(pwd -P)
+LOG_DIR=$(autoskillit claude-project-log-dir "$actual_absolute_cwd")
 ```
 
 Verify the directory exists and contains `.jsonl` files. If the directory is missing or empty, report this to the user before stopping.

@@ -143,6 +143,31 @@ def test_run_cmd_boundary_covers_npm_and_ln_destinations(
         assert expected_message in result
 
 
+@pytest.mark.parametrize(
+    "command_template",
+    ["echo changed > {destination}", "ln -sfT /opt/tools/jq {destination}"],
+    ids=["content-target", "entry-target"],
+)
+def test_run_cmd_boundary_denies_sibling_path_sharing_root_prefix(
+    tmp_path, command_template: str
+) -> None:
+    from autoskillit.server.lifecycle._guards import _check_write_target_boundary
+
+    allowed = tmp_path / "allowed"
+    sibling = tmp_path / "allowed_extra"
+    allowed.mkdir()
+    sibling.mkdir()
+    destination = sibling / "target"
+
+    result = _check_write_target_boundary(
+        command_template.format(destination=destination), str(tmp_path), (str(allowed),)
+    )
+
+    assert result is not None
+    assert "outside allowed write prefixes" in result
+    assert str(destination) in result
+
+
 def test_run_cmd_boundary_does_not_early_allow_location_only_scan(tmp_path, monkeypatch) -> None:
     from autoskillit.server.lifecycle import _guards
 

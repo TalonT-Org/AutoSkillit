@@ -692,8 +692,9 @@ def test_npm_and_ln_destinations_reach_bash_scope_policy(
 @pytest.mark.parametrize(
     "command",
     [
-        "cd /tmp && npm install --prefix /tmp/jqinst node-jq",
-        "ln -sf /tmp/jqinst/node_modules/node-jq/bin/jq /usr/local/bin/jq",
+        "cd /tmp && npm install --prefix /tmp/jqinst node-jq 2>&1 | tail -10; "
+        "ls /tmp/jqinst/node_modules/node-jq/bin 2>/dev/null",
+        "ln -sf /tmp/jqinst/node_modules/node-jq/bin/jq /usr/local/bin/jq 2>&1; jq --version 2>&1",
     ],
     ids=["observed-npm-install", "observed-ln-install"],
 )

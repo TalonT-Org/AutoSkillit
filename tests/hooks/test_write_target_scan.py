@@ -240,9 +240,11 @@ def test_ln_directory_and_final_symlink_semantics(
     [
         "ln --unknown value source link",
         "ln -t /links -T source",
+        "ln --target-directory /links --no-target-directory source",
         "ln --target-directory /links",
         "ln source --target-directory",
         "install -t /dest -T source",
+        "install --target-directory /dest --no-target-directory source",
         "install source --target-directory",
         "install --target-directory /dest",
     ],

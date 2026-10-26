@@ -55,6 +55,9 @@ def test_investigate_historical_step_mines_jsonl_logs(step_35_section: str) -> N
     assert ".jsonl" in step_35_section or "JSONL" in step_35_section, (
         "Step 3.5 must reference '.jsonl' or 'JSONL' as the log file format to scan"
     )
+    assert 'LOG_DIR=$(autoskillit claude-project-log-dir "$actual_absolute_cwd")' in (
+        step_35_section
+    ), "Step 3.5 must resolve the Claude project log directory through the native CLI"
 
 
 def test_investigate_historical_step_searches_prior_invocations(step_35_section: str) -> None:

@@ -45,13 +45,23 @@ class TestWorktreeDetection:
 
 
 class TestClaudeCodeLogPath:
-    def test_claude_code_log_path_with_real_session_id(self) -> None:
+    def test_claude_code_log_path_with_real_session_id(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
         from autoskillit.core.paths import claude_code_log_path
 
-        result = claude_code_log_path(cwd="/home/user/my_project", session_id="abc-123")
+        result = claude_code_log_path(
+            cwd="/workspace/repro/.autoskillit/temp/sandbox",
+            session_id="native-session",
+        )
         assert (
             result
-            == Path.home() / ".claude" / "projects" / "-home-user-my-project" / "abc-123.jsonl"
+            == tmp_path
+            / ".claude"
+            / "projects"
+            / "-workspace-repro--autoskillit-temp-sandbox"
+            / "native-session.jsonl"
         )
 
     def test_claude_code_log_path_with_fallback_session_id(self) -> None:
@@ -76,11 +86,29 @@ class TestClaudeCodeLogPath:
         result = claude_code_log_path(cwd="/home/user/project", session_id="")
         assert result is None
 
-    def test_claude_code_project_dir_encoding(self) -> None:
+    @pytest.mark.parametrize(
+        ("cwd", "encoded"),
+        [
+            ("/home/user/projects/my_project", "-home-user-projects-my-project"),
+            (
+                "/workspace/repro/.autoskillit/temp/sandbox",
+                "-workspace-repro--autoskillit-temp-sandbox",
+            ),
+            ("/workspace/project.with.dot", "-workspace-project-with-dot"),
+        ],
+    )
+    def test_claude_code_project_dir_encoding(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        cwd: str,
+        encoded: str,
+    ) -> None:
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
         from autoskillit.core.paths import claude_code_project_dir
 
-        result = claude_code_project_dir("/home/user/my_project")
-        assert result == Path.home() / ".claude" / "projects" / "-home-user-my-project"
+        result = claude_code_project_dir(cwd)
+        assert result == tmp_path / ".claude" / "projects" / encoded
 
 
 class TestFindLatestSessionId:
@@ -140,6 +168,43 @@ class TestFindLatestSessionId:
         ):
             result = find_latest_session_id()  # cwd=None → uses Path.cwd()
         assert result == "ccc333"
+
+    def test_ignores_newer_orphaned_transcript(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import os
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        from autoskillit.core.paths import claude_code_project_dir, find_latest_session_id
+
+        cwd = "/workspace/repro/.autoskillit/temp/sandbox"
+        project_dir = claude_code_project_dir(cwd)
+        project_dir.mkdir(parents=True)
+        native = project_dir / "native-session.jsonl"
+        orphaned = project_dir / "native-session.orphaned-2000-deadbeef.jsonl"
+        native.write_text("{}")
+        orphaned.write_text("{}")
+        os.utime(native, (1_000.0, 1_000.0))
+        os.utime(orphaned, (2_000.0, 2_000.0))
+
+        assert find_latest_session_id(cwd) == "native-session"
+
+    def test_returns_none_when_only_orphaned_transcripts_exist(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import os
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        from autoskillit.core.paths import claude_code_project_dir, find_latest_session_id
+
+        cwd = "/workspace/project.with.dot"
+        project_dir = claude_code_project_dir(cwd)
+        project_dir.mkdir(parents=True)
+        orphaned = project_dir / "session.orphaned-3000-deadbeef.jsonl"
+        orphaned.write_text("{}")
+        os.utime(orphaned, (3_000.0, 3_000.0))
+
+        assert find_latest_session_id(cwd) is None
 
 
 class TestPkgRoot:

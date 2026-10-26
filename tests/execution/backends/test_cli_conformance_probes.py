@@ -22,6 +22,7 @@ import sys
 import threading
 import time
 import tomllib
+import uuid
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from dataclasses import replace
@@ -45,6 +46,7 @@ from autoskillit.core import (
     MANAGED_JOIN_PARENT_ID_ENV_VAR,
     OUTPUT_DISCIPLINE_DIGEST,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+    ChannelBStatus,
     DefaultManagedWorkerCapacity,
     OutputFormat,
     SemanticAdaptationContext,
@@ -100,11 +102,15 @@ from autoskillit.execution.backends._probe_cache import (
 from autoskillit.execution.backends.claude import ClaudeCodeBackend, ClaudeStreamParser
 from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.execution.process import (
+    EventCursor,
     TetherSpec,
+    _jsonl_contains_marker,
+    _process_race,
     kill_process_tree,
     run_managed_async,
     spawn_owned_process,
 )
+from autoskillit.execution.process._process_monitor import SessionMonitorResult
 from autoskillit.hook_registry import generate_hooks_json
 from autoskillit.hooks import (
     OUTCOME_CANCELLED,
@@ -155,6 +161,7 @@ from autoskillit.server.tools.tools_execution._managed_leaf import (
 )
 from autoskillit.workspace import AgentSkillDocument, DefaultSkillResolver
 from tests._codex_feature_policy import RETIRED_CODEX_FEATURES
+from tests._realistic_project import PINNED_CLAUDE_SHIM_VERSION_OUTPUT
 from tests.execution._process_group_helpers import _cleanup_owned_process_group
 from tests.execution.backends._codex_fixtures import installed_catalog
 from tests.execution.backends._conformance_assertions import (
@@ -3628,6 +3635,231 @@ def test_claude_startup_readiness_addressability_trace(
             int(first_attempt["monotonic_ns"])
             < int(successful_attempt["monotonic_ns"])
             < int(success["monotonic_ns"])
+        )
+
+
+def _provision_claude_transcript_home(source_home: Path, isolated_home: Path, cwd: Path) -> Path:
+    claude_home = isolated_home / ".claude"
+    claude_home.mkdir(parents=True)
+
+    source_state = source_home / ".claude.json"
+    claude_state: dict[str, object] = {}
+    if source_state.is_file():
+        claude_state = json.loads(source_state.read_text(encoding="utf-8"))
+    claude_state.update(
+        {
+            "autoUpdates": False,
+            "hasCompletedOnboarding": True,
+            "lastOnboardingVersion": CLAUDE_CODE_CAPABILITIES.min_version,
+            "theme": "dark",
+        }
+    )
+    projects = claude_state.setdefault("projects", {})
+    assert isinstance(projects, dict)
+    projects[str(cwd)] = {"hasTrustDialogAccepted": True}
+    (isolated_home / ".claude.json").write_text(
+        json.dumps(claude_state, sort_keys=True), encoding="utf-8"
+    )
+    (claude_home / "settings.json").write_text(
+        json.dumps(
+            {
+                "env": {"DISABLE_AUTOUPDATER": "1"},
+                "skipDangerousModePermissionPrompt": True,
+                "theme": "dark",
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    source_credentials = source_home / ".claude" / ".credentials.json"
+    if source_credentials.is_file():
+        shutil.copy2(source_credentials, claude_home / ".credentials.json")
+
+    return claude_home
+
+
+@_skip_unless_claude_startup_smoke
+@pytest.mark.timeout(180)
+@pytest.mark.parametrize(
+    "cwd_suffix",
+    [
+        pytest.param(Path("project/.autoskillit/temp/probe"), id="dotted-autoskillit"),
+        pytest.param(Path("project/control"), id="dot-free-control"),
+    ],
+)
+def test_claude_transcript_path_matches_native_cli(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cwd_suffix: Path,
+) -> None:
+    import anyio
+
+    source_home = Path.home()
+    configured_executable = os.environ.get("CLAUDE_CODE_EXECPATH")
+    executable = Path(configured_executable or shutil.which("claude") or "").resolve(strict=True)
+    isolated_home = tmp_path / "home"
+    cwd = (tmp_path / cwd_suffix).resolve()
+    cwd.mkdir(parents=True)
+
+    claude_home = _provision_claude_transcript_home(source_home, isolated_home, cwd)
+
+    monkeypatch.setenv("HOME", str(isolated_home))
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(claude_home))
+    monkeypatch.setenv("CLAUDE_CODE_EXECPATH", str(executable))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(isolated_home / ".config"))
+    monkeypatch.setenv("XDG_DATA_HOME", str(isolated_home / ".local" / "share"))
+
+    backend = ClaudeCodeBackend()
+    locator = backend.session_locator()
+    session_log_dir = locator.project_log_dir(str(cwd))
+    assert session_log_dir.parent == claude_home / "projects"
+    session_log_dir.mkdir(parents=True)
+    synchronization_dir = cwd / ".autoskillit" / "temp"
+    synchronization_dir.mkdir(parents=True, exist_ok=True)
+    ready_path = synchronization_dir / "selection-ready"
+    acknowledgement_path = synchronization_dir / "completion-acknowledged"
+    marker = f"AUTOSKILLIT_CLAUDE_TRANSCRIPT_{uuid.uuid4().hex}"
+    wait_for_ready = (
+        f"for attempt in $(seq 1 400); do test -f {shlex.quote(str(ready_path))} "
+        "&& exit 0; sleep 0.05; done; exit 1"
+    )
+    wait_for_acknowledgement = (
+        "for attempt in $(seq 1 400); do test -f "
+        f"{shlex.quote(str(acknowledgement_path))} && exit 0; "
+        "sleep 0.05; done; exit 1"
+    )
+    prompt = (
+        "Call Bash exactly once with this command and wait for it to finish:\n"
+        f"{wait_for_ready}\n"
+        "After it succeeds, emit an assistant text block containing exactly this standalone "
+        f"line:\n{marker}\n"
+        "Then immediately call Bash exactly once with this command and wait for it to finish:\n"
+        f"{wait_for_acknowledgement}\n"
+        "After it succeeds, return a short success result without repeating the marker."
+    )
+
+    original_monitor = _process_race._session_log_monitor
+    selected_paths: list[Path] = []
+    completed_monitors: list[SessionMonitorResult] = []
+    evidence = {
+        "schema_version": 1,
+        "binary": str(executable),
+        "cli_version": "unverified",
+        "cwd": str(cwd),
+        "native_session_id": None,
+        "native_path": None,
+        "selected_path": None,
+        "completion_captured": False,
+        "status": "failed",
+    }
+
+    async def monitored_session_log(*args, **kwargs) -> SessionMonitorResult:
+        on_session_file_selected = kwargs.get("on_session_file_selected")
+        on_poll = kwargs.get("_on_poll")
+
+        def selected(path: Path, cursor: EventCursor) -> None:
+            if on_session_file_selected is not None:
+                on_session_file_selected(path, cursor)
+            selected_paths.append(path)
+            evidence["selected_path"] = str(path)
+
+        def after_poll() -> None:
+            if on_poll is not None:
+                on_poll()
+            if selected_paths and not ready_path.exists():
+                ready_path.touch()
+
+        kwargs["_on_poll"] = after_poll
+        kwargs["on_session_file_selected"] = selected
+        monitor_result = await original_monitor(*args, **kwargs)
+        if monitor_result.status is ChannelBStatus.COMPLETION:
+            completed_monitors.append(monitor_result)
+            evidence["completion_captured"] = True
+            acknowledgement_path.touch()
+        return monitor_result
+
+    monkeypatch.setattr(_process_race, "_session_log_monitor", monitored_session_log)
+
+    evidence_dir = (
+        Path(__file__).resolve().parents[3] / ".autoskillit" / "temp" / "claude-startup-readiness"
+    )
+    evidence_path = evidence_dir / f"transcript-path-{time.time_ns()}-{uuid.uuid4().hex}.json"
+    try:
+        version_result = subprocess.run(
+            [str(executable), "--version"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=dict(os.environ),
+        )
+        cli_version = version_result.stdout.strip()
+        evidence["cli_version"] = cli_version
+        assert cli_version == PINNED_CLAUDE_SHIM_VERSION_OUTPUT
+
+        spec = backend.build_skill_session_cmd(
+            prompt,
+            cwd=str(cwd),
+            completion_marker=marker,
+            output_format=OutputFormat.STREAM_JSON,
+        )
+        spec = replace(spec, cmd=(str(executable), *spec.cmd[1:]))
+        assert spec.cmd[0] == str(executable)
+        assert spec.env["CLAUDE_CODE_EXECPATH"] == str(executable)
+        assert spec.env["CLAUDE_CONFIG_DIR"] == str(claude_home)
+        assert spec.env["HOME"] == str(isolated_home)
+
+        async def run_probe():
+            return await run_managed_async(
+                list(spec.cmd),
+                cwd=cwd,
+                timeout=150,
+                env=spec.env,
+                pass_fds=spec.inherited_fds,
+                completion_marker=marker,
+                completion_record_types=backend.capabilities.completion_record_types,
+                session_log_dir=session_log_dir,
+                session_record_types=backend.capabilities.session_record_types,
+                stream_parser=backend.stream_parser(marker),
+                lifecycle_observation_enabled=True,
+                _phase1_poll=0.05,
+                _phase2_poll=0.05,
+                _heartbeat_poll=0.05,
+            )
+
+        result = anyio.run(run_probe)
+        evidence["native_session_id"] = result.session_id
+        evidence["channel_confirmation"] = str(result.channel_confirmation)
+        assert result.returncode == 0, result.stderr[-2_000:]
+        assert len(completed_monitors) == 1
+        assert completed_monitors[0].status is ChannelBStatus.COMPLETION
+        assert completed_monitors[0].session_id == result.channel_b_session_id
+        assert result.channel_b_session_id == result.session_id
+        uuid.UUID(result.session_id)
+        native_files = sorted((claude_home / "projects").glob(f"*/{result.session_id}.jsonl"))
+        assert len(native_files) == 1
+        native_path = native_files[0].resolve()
+        evidence["native_path"] = str(native_path)
+        native_session_id = native_path.stem
+        assert len(selected_paths) == 1
+        selected_path = selected_paths[0].resolve()
+        assert selected_path == native_path
+        assert result.session_id == native_session_id
+        assert locator.session_log_path(str(cwd), native_session_id) == native_path
+        assert locator.locate_session(native_session_id) == native_path
+
+        transcript_records = _read_ndjson(native_path)
+        assert any(record.get("cwd") == str(cwd) for record in transcript_records)
+        transcript = native_path.read_text(encoding="utf-8")
+        assert _jsonl_contains_marker(transcript, marker, frozenset({"assistant"}))
+        assert ready_path.is_file()
+        assert acknowledgement_path.is_file()
+        evidence["status"] = "passed"
+    finally:
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+        evidence_path.write_text(
+            json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
         )
 
 

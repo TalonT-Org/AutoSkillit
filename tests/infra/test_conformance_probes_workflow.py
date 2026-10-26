@@ -8,11 +8,24 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.io import load_yaml
+from tests._git_inventory import git_ls_files
 
-pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
 _WORKFLOW_PATH = (
     Path(__file__).resolve().parents[2] / ".github" / "workflows" / "conformance-probes.yml"
+)
+_REPO_ROOT = _WORKFLOW_PATH.parents[2]
+_PROBE_CACHE_INPUTS = (
+    "src/autoskillit/**/*.py",
+    "tests/execution/backends/test_cli_conformance_probes.py",
+    "tests/execution/test_smoke_codex.py",
+    "tests/execution/backends/test_codex_recipe_delivery_conformance.py",
+    "tests/server/test_output_budget_e2e.py",
+    ".github/workflows/conformance-probes.yml",
+)
+_PROBE_CACHE_HASH = (
+    "${{ hashFiles(" + ", ".join(f"'{path}'" for path in _PROBE_CACHE_INPUTS) + ") }}"
 )
 
 
@@ -285,52 +298,53 @@ class TestCacheGate:
         assert "policy_identity=${POLICY_IDENTITY}" in run
         assert "GITHUB_OUTPUT" in run
 
-    @pytest.mark.parametrize("job_name", ["codex-probe", "claude-probe"])
-    def test_cache_restore_step(self, workflow: dict, job_name: str) -> None:
-        steps = workflow["jobs"][job_name]["steps"]
-        restore_steps = [s for s in steps if "cache/restore" in (s.get("uses") or "")]
-        assert len(restore_steps) >= 1, f"No cache restore step in {job_name}"
-
-    @pytest.mark.parametrize("job_name", ["codex-probe", "claude-probe"])
-    def test_cache_save_step(self, workflow: dict, job_name: str) -> None:
-        steps = workflow["jobs"][job_name]["steps"]
-        save_steps = [s for s in steps if "cache/save" in (s.get("uses") or "")]
-        assert len(save_steps) >= 1, f"No cache save step in {job_name}"
-
-    @pytest.mark.parametrize("job_name", ["codex-probe", "claude-probe"])
-    def test_probe_gated_on_cache_miss(self, workflow: dict, job_name: str) -> None:
-        steps = workflow["jobs"][job_name]["steps"]
-        gated_steps = [s for s in steps if "cache-hit" in (s.get("if") or "")]
-        assert len(gated_steps) >= 1, f"No cache-gated probe step in {job_name}"
-
     @pytest.mark.parametrize(
-        ("job_name", "expected_backend"),
-        [("codex-probe", "codex"), ("claude-probe", "claude")],
+        ("job_name", "backend", "probe_step_name"),
+        [
+            ("codex-probe", "codex", "Run Codex conformance probes"),
+            ("claude-probe", "claude", "Run Claude Code conformance probes"),
+        ],
     )
-    def test_cache_key_contains_backend(
-        self, workflow: dict, job_name: str, expected_backend: str
+    def test_cache_is_exact_and_invalidated_by_all_probe_inputs(
+        self, workflow: dict, job_name: str, backend: str, probe_step_name: str
     ) -> None:
         steps = workflow["jobs"][job_name]["steps"]
-        restore_steps = [s for s in steps if "cache/restore" in (s.get("uses") or "")]
-        assert restore_steps, f"No cache/restore step found in {job_name}"
-        for step in restore_steps:
-            key = step.get("with", {}).get("key", "")
-            assert f"probe-{expected_backend}" in key
-
-    @pytest.mark.parametrize("job_name", ["codex-probe", "claude-probe"])
-    def test_restore_and_save_keys_include_policy_identity(
-        self, workflow: dict, job_name: str
-    ) -> None:
-        steps = workflow["jobs"][job_name]["steps"]
-        cache_steps = [
-            s
-            for s in steps
-            if "cache/restore" in (s.get("uses") or "") or "cache/save" in (s.get("uses") or "")
+        checkout_index = next(
+            index
+            for index, step in enumerate(steps)
+            if (step.get("uses") or "").startswith("actions/checkout@")
+        )
+        restore_steps = [
+            (index, step)
+            for index, step in enumerate(steps)
+            if "cache/restore" in (step.get("uses") or "")
         ]
-        assert len(cache_steps) == 2
-        for step in cache_steps:
-            key = step.get("with", {}).get("key", "")
-            assert "steps.resolve-policy.outputs.policy_identity" in key
+        save_steps = [step for step in steps if "cache/save" in (step.get("uses") or "")]
+        assert len(restore_steps) == 1
+        assert len(save_steps) == 1
+        restore_index, restore = restore_steps[0]
+        save = save_steps[0]
+        probe = next(step for step in steps if step.get("name") == probe_step_name)
+
+        expected_key = (
+            f"probe-{backend}-${{{{ steps.resolve-version.outputs.cli_version }}}}-"
+            "${{ steps.resolve-policy.outputs.policy_identity }}-${{ runner.os }}-"
+            f"{_PROBE_CACHE_HASH}"
+        )
+        expected_cache_inputs = {
+            "path": f".autoskillit/temp/probe-cache/{backend}",
+            "key": expected_key,
+        }
+
+        assert checkout_index < restore_index
+        assert restore["with"] == expected_cache_inputs
+        assert save["with"] == expected_cache_inputs
+        assert probe["if"] == "steps.restore-cache.outputs.cache-hit != 'true'"
+        assert save["if"] == "success() && steps.restore-cache.outputs.cache-hit != 'true'"
+
+    @pytest.mark.parametrize("pathspec", _PROBE_CACHE_INPUTS)
+    def test_cache_hash_input_matches_tracked_repository_file(self, pathspec: str) -> None:
+        assert git_ls_files(_REPO_ROOT, pathspec)
 
 
 class TestOutputBudgetE2E:

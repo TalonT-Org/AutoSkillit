@@ -150,9 +150,11 @@ async def test_incomplete_historical_anchor_stays_pending(
         remote[field] = value
     gateway.comments_by_review[700] = [remote]
     gateway.fail_reads = False
+    comment_reads = gateway.comment_read_calls
 
     recovered = await poster.post(request)
 
+    assert gateway.comment_read_calls > comment_reads
     assert recovered.state is ReviewOperationState.COMMITTED_PENDING_VERIFICATION
     assert recovered.operation_key == first.operation_key
     assert recovered.receipt is None

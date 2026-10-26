@@ -150,10 +150,10 @@ Launch parallel child delegations against `project_dir`. If the user opted into 
 
 **Subagent F+ — Conversation History Mining (only if user opted in):**
 
-Claude Code stores conversation history under `~/.claude/projects/` as JSONL files (one per session). Resolve the requested project's directory through the installed CLI:
+Claude Code stores conversation history under `~/.claude/projects/` as JSONL files (one per session). Run this subagent with its tool cwd set to `project_dir`, then resolve that physical directory through the installed CLI:
 
 ```bash
-actual_absolute_cwd=$(cd "{project_dir}" && pwd -P)
+actual_absolute_cwd=$(pwd -P)
 LOG_DIR=$(autoskillit claude-project-log-dir "$actual_absolute_cwd")
 ```
 

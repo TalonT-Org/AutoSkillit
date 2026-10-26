@@ -446,7 +446,7 @@ def test_tool_operation_detection_recognizes_validate_imperative() -> None:
 
 
 def test_tool_operation_detection_rejects_unregistered_parameter() -> None:
-    content = "1. Write config:\n\n```config.yaml\ntest_check:\n  command: task test\n```\n"
+    content = "# Workflow\n\n1. Run the check:\n\n  test_check:\n    command: task test\n"
     assert _skill_tool_operations(content) == []
 
 

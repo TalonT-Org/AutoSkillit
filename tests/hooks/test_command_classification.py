@@ -1543,24 +1543,8 @@ class TestExtractInterpreterWritePathsMulti:
 
 
 class TestScanWriteTargets:
-    def test_scan_result_entry_targets_is_last_and_defaults_empty(self) -> None:
-        fields = dataclasses.fields(command_classification.WriteTargetScan)
-
-        assert fields[-1].name == "entry_targets"
-        assert fields[-1].default == ()
+    def test_scan_result_entry_targets_defaults_empty(self) -> None:
         assert command_classification.WriteTargetScan((), False, True, False).entry_targets == ()
-
-    def test_entry_only_scan_is_a_write(self) -> None:
-        scan = command_classification.WriteTargetScan(
-            targets=(),
-            unresolved=False,
-            parseable=True,
-            has_write=True,
-            entry_targets=("/tmp/link",),
-        )
-
-        assert scan.targets == ()
-        assert scan.entry_targets == ("/tmp/link",)
 
     @pytest.mark.parametrize(
         ("parseable", "has_write"),

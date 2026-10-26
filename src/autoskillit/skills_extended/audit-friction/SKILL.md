@@ -139,7 +139,7 @@ For each match batch, use the bounded `-A 10 -B 10` command above to confirm it 
 
 ### Step 1: Locate Project Logs
 
-Resolve the current project's JSONL directory under `~/.claude/projects/` through the installed CLI:
+Resolve the JSONL directory for the current working directory under `~/.claude/projects/` through the installed CLI:
 
 ```bash
 actual_absolute_cwd=$(pwd -P)

@@ -157,7 +157,6 @@ async def test_real_gateway_recovers_pending_relocated_left_multiline_review(
     ]
 
     calls: list[tuple[str, str]] = []
-    unexpected_calls: list[tuple[str, str]] = []
     posted_payload: dict[str, Any] | None = None
     review_reads = 0
     comment_reads = 0
@@ -217,7 +216,6 @@ async def test_real_gateway_recovers_pending_relocated_left_multiline_review(
                 remote_comment.pop("original_line")
                 remote_comment.pop("original_start_line")
             return httpx.Response(200, json=[remote_comment])
-        unexpected_calls.append((request.method, str(request.url)))
         raise AssertionError(f"unexpected GitHub request: {request.method} {request.url}")
 
     transport = httpx.MockTransport(handle)
@@ -261,7 +259,6 @@ async def test_real_gateway_recovers_pending_relocated_left_multiline_review(
     ]
     expected_calls.extend([("GET", comments_url)] * initial_comment_reads)
     assert calls == expected_calls
-    assert unexpected_calls == []
     assert pending["state"] == "COMMITTED_PENDING_VERIFICATION"
     assert pending["operation_key"]
     assert pending["receipt"] is None
@@ -284,7 +281,6 @@ async def test_real_gateway_recovers_pending_relocated_left_multiline_review(
         ]
     )
     assert calls == expected_calls
-    assert unexpected_calls == []
     assert recovered["state"] == "SUCCEEDED"
     assert recovered["operation_key"] == pending["operation_key"]
     assert recovered["head_sha"] == old_head

@@ -3805,7 +3805,6 @@ def test_claude_transcript_path_matches_native_cli(
             output_format=OutputFormat.STREAM_JSON,
         )
         spec = replace(spec, cmd=(str(executable), *spec.cmd[1:]))
-        assert spec.cmd[0] == str(executable)
         assert spec.env["CLAUDE_CODE_EXECPATH"] == str(executable)
         assert spec.env["CLAUDE_CONFIG_DIR"] == str(claude_home)
         assert spec.env["HOME"] == str(isolated_home)

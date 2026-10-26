@@ -417,8 +417,12 @@ def capacity_envelope_violations(spec: CaptureCapacitySpec) -> tuple[str, ...]:
     return tuple(field for field, required, actual in requirements if actual < required)
 
 
-if capacity_envelope_violations(CaptureCapacitySpec()):
-    raise AssertionError("production capture capacity must cover the declared retention envelope")
+_envelope_violations = capacity_envelope_violations(CaptureCapacitySpec())
+if _envelope_violations:
+    raise AssertionError(
+        "production capture capacity must cover the declared retention envelope: "
+        + ", ".join(_envelope_violations)
+    )
 
 DEBT_ASSIST_MAX_TRANSITIONS = 16
 DEBT_ASSIST_BUDGET = SweepBudgetSpec(

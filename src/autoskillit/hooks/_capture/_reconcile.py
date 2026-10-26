@@ -180,6 +180,28 @@ class CaptureStoreStats:
             >= _CAPACITY_WARNING_RATIO * self.compaction_low_bytes
         )
 
+    @property
+    def capacity_line(self) -> str:
+        """Shared operator-facing capacity line for doctor and CLI."""
+        utilization_pct = (
+            f"{self.projected_compacted_bytes / self.compaction_low_bytes:.1%}"
+            if self.compaction_low_bytes > 0
+            else "n/a"
+        )
+        return (
+            f"capacity: projected_compacted_bytes={self.projected_compacted_bytes} "
+            f"low_bytes={self.compaction_low_bytes} utilization_pct={utilization_pct} "
+            "(default capacity limits; runtime overrides are runner-local)"
+        )
+
+    @property
+    def capacity_warning_message(self) -> str:
+        """Operator-facing warning using the configured soft-limit ratio."""
+        return (
+            "WARNING: compacted capture-store bytes have reached "
+            f"{_CAPACITY_WARNING_RATIO:.0%} of the soft limit"
+        )
+
 
 def capture_store_stats(project_cwd: str) -> CaptureStoreStats:
     """Report capture-store ledger and directory statistics without mutating.

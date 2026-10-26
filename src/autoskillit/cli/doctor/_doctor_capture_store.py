@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from autoskillit.core import Severity
-from autoskillit.hooks import CaptureStoreStats, CleanupBlocker, capture_store_stats
+from autoskillit.hooks import CleanupBlocker, capture_store_stats
 
 from ._doctor_types import DoctorResult
 
@@ -17,19 +17,6 @@ _UNLEDGERED_WARNING_THRESHOLD = 100
 # Production warns at the default assist tier, before the higher stall tier
 # begins refusing new captures. Runtime capacity overrides remain runner-local.
 _RECLAMATION_DEBT_WARNING_THRESHOLD = 256
-
-
-def _capacity_line(stats: CaptureStoreStats) -> tuple[bool, str]:
-    utilization_pct = (
-        f"{stats.projected_compacted_bytes / stats.compaction_low_bytes:.1%}"
-        if stats.compaction_low_bytes > 0
-        else "n/a"
-    )
-    return stats.capacity_warning, (
-        f"capacity: projected_compacted_bytes={stats.projected_compacted_bytes} "
-        f"low_bytes={stats.compaction_low_bytes} utilization_pct={utilization_pct} "
-        "(default capacity limits; runtime overrides are runner-local)"
-    )
 
 
 def _check_capture_store_stats(project_dir: Path | None = None) -> DoctorResult:
@@ -58,10 +45,9 @@ def _check_capture_store_stats(project_dir: Path | None = None) -> DoctorResult:
         f"unledgered_aged={stats.unledgered_aged_files} "
         f"unledgered_aged_bytes={stats.unledgered_aged_bytes}"
     )
-    capacity_warning, capacity_message = _capacity_line(stats)
-    message = f"{message}; {capacity_message}"
+    message = f"{message}; {stats.capacity_line}"
     if (
-        capacity_warning
+        stats.capacity_warning
         or stats.unledgered_aged_files >= _UNLEDGERED_WARNING_THRESHOLD
         or stats.due_records >= _RECLAMATION_DEBT_WARNING_THRESHOLD
     ):

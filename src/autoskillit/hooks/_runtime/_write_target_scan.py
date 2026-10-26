@@ -55,11 +55,21 @@ def _classification_module() -> ModuleType:
     return standalone_classification
 
 
+@dataclass(frozen=True, slots=True)
+class _DestinationOperands:
+    operands: list[int]
+    target_directory: tuple[str, str | None] | None
+    no_target_directory: bool
+    no_dereference: bool
+    create_directories: bool
+    invalid: bool
+
+
 def _destination_operands(
     verb: str,
     argv: list[str],
     argv_tokens: Sequence[ArgvToken] | None,
-) -> tuple[list[int], tuple[str, str | None] | None, bool, bool, bool, bool]:
+) -> _DestinationOperands:
     """Parse the supported ln/install options and positional operands."""
     _classification = _classification_module()
     value = _classification._FlagArity.VALUE
@@ -146,8 +156,9 @@ def _destination_operands(
                 no_dereference |= token in {"-n", "--no-dereference"} or (
                     not token.startswith("--") and "n" in token[1:]
                 )
-                directory_mode |= token in {"-d", "--directory"} or (
-                    verb == "install" and not token.startswith("--") and "d" in token[1:]
+                directory_mode |= verb == "install" and (
+                    token in {"-d", "--directory"}
+                    or (not token.startswith("--") and "d" in token[1:])
                 )
                 index += 1
                 continue
@@ -157,13 +168,13 @@ def _destination_operands(
         operands.append(index)
         index += 1
     invalid |= target_directory is not None and no_target_directory
-    return (
-        operands,
-        target_directory,
-        no_target_directory,
-        no_dereference,
-        directory_mode,
-        invalid,
+    return _DestinationOperands(
+        operands=operands,
+        target_directory=target_directory,
+        no_target_directory=no_target_directory,
+        no_dereference=no_dereference,
+        create_directories=directory_mode,
+        invalid=invalid,
     )
 
 
@@ -217,12 +228,12 @@ def _install_targets(
     argv_tokens: Sequence[ArgvToken] | None,
 ) -> tuple[list[str], bool]:
     _classification = _classification_module()
-    operands, target_directory, no_target, _no_deref, directory_mode, invalid = (
-        _destination_operands("install", argv, argv_tokens)
-    )
-    if invalid or not operands:
+    options = _destination_operands("install", argv, argv_tokens)
+    operands = options.operands
+    target_directory = options.target_directory
+    if options.invalid or not operands:
         return [], True
-    if directory_mode:
+    if options.create_directories:
         if target_directory is not None:
             return [], True
         targets = [_resolved_operand(argv, index, cwd, argv_tokens) for index in operands]
@@ -242,7 +253,7 @@ def _install_targets(
     if destination is None:
         return [], True
     sources = operands[:-1]
-    if no_target:
+    if options.no_target_directory:
         return ([destination], False) if len(sources) == 1 else ([], True)
     if len(sources) > 1 or os.path.isdir(destination):
         return _directory_children(destination, sources, argv, cwd, argv_tokens)
@@ -255,10 +266,10 @@ def _ln_entry_targets(
     argv_tokens: Sequence[ArgvToken] | None,
 ) -> tuple[list[str], bool]:
     _classification = _classification_module()
-    operands, target_directory, no_target, no_deref, _directory_mode, invalid = (
-        _destination_operands("ln", argv, argv_tokens)
-    )
-    if invalid or not operands:
+    options = _destination_operands("ln", argv, argv_tokens)
+    operands = options.operands
+    target_directory = options.target_directory
+    if options.invalid or not operands:
         return [], True
     if target_directory is not None:
         value, source = target_directory
@@ -274,10 +285,10 @@ def _ln_entry_targets(
     if destination is None:
         return [], True
     sources = operands[:-1]
-    if no_target and len(sources) > 1:
+    if options.no_target_directory and len(sources) > 1:
         return [], True
-    follows_directory = not no_target and os.path.isdir(destination)
-    if no_deref and os.path.islink(destination):
+    follows_directory = not options.no_target_directory and os.path.isdir(destination)
+    if options.no_dereference and os.path.islink(destination):
         follows_directory = False
     if follows_directory or len(sources) > 1:
         return _directory_children(destination, sources, argv, cwd, argv_tokens)

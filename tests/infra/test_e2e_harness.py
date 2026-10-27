@@ -3065,6 +3065,11 @@ class TestPipelineRecipeFlow:
             (trace, envelope, log_root, _IMPLEMENTATION_ISSUE, SANDBOX, "in-progress")
         ]
         assert observed["summaries"] == [(trace, envelope, log_root)]
+        capacity = json.loads((out / "catalog-capacity.json").read_text(encoding="utf-8"))
+        assert capacity == {
+            "peak_sessions": test.peak_sessions,
+            "peak_sessions_evidence": test.peak_sessions_evidence,
+        }
         settings = json.loads((home / ".claude" / "settings.json").read_text(encoding="utf-8"))
         assert settings["env"] == _EXPECTED_SETTINGS_ENV
         assert all(

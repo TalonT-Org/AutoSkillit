@@ -1650,6 +1650,15 @@ def finish_pipeline(
     failures: list[str] = []
     trace = out / _SESSION_TRACE_FILENAME
     log_root = e2e_sessions.default_log_root(home)
+    capacity: dict[str, Any] = {"peak_sessions": test.peak_sessions}
+    if test.peak_sessions_evidence is not None:
+        capacity["peak_sessions_evidence"] = test.peak_sessions_evidence
+    try:
+        (out / "catalog-capacity.json").write_text(
+            json.dumps(capacity, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+    except Exception as exc:
+        failures.append(f"session capacity evidence: {exc}")
     try:
         summary = e2e_sessions.summarize(trace, envelope, log_root)
         if not summary["coverage"]["complete"]:

@@ -1250,6 +1250,10 @@ def owned_pull_requests(
     return owned
 
 
+class PipelineValidationError(ValueError):
+    """A pipeline scenario validation failed without a harness defect."""
+
+
 def validate_sandbox_ci(
     repository: str,
     number: int,
@@ -1268,7 +1272,7 @@ def validate_sandbox_ci(
         if workflow.get("name") == "CI" and workflow.get("state") == "active"
     ]
     if len(candidates) != 1:
-        raise ValueError("sandbox CI: expected one active CI workflow")
+        raise PipelineValidationError("sandbox CI: expected one active CI workflow")
     deadline = time.monotonic() + _CI_POLL_TIMEOUT_SEC
     matching_run_seen = False
     while True:
@@ -1314,15 +1318,19 @@ def validate_sandbox_ci(
                         for job in tests
                     )
                 ):
-                    raise ValueError("sandbox CI: CI run and test job must succeed")
+                    raise PipelineValidationError("sandbox CI: CI run and test job must succeed")
                 return
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             break
         time.sleep(min(_CI_POLL_INTERVAL_SEC, remaining))
     if matching_run_seen:
-        raise ValueError("sandbox CI: matching run did not complete before the deadline")
-    raise ValueError("sandbox CI: no run associated with the exact PR head before the deadline")
+        raise PipelineValidationError(
+            "sandbox CI: matching run did not complete before the deadline"
+        )
+    raise PipelineValidationError(
+        "sandbox CI: no run associated with the exact PR head before the deadline"
+    )
 
 
 def validate_implementation_pr(
@@ -1756,6 +1764,8 @@ def launch_recipe(
                 failures += validate_implementation_pr(
                     test, owned, seed, repository, out, env, runner
                 )
+    except PipelineValidationError as exc:
+        failures.append(str(exc))
     except Exception as exc:
         failures.append(f"harness error: {type(exc).__name__}: {exc}\n{traceback.format_exc()}")
     finally:

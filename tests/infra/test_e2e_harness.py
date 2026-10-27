@@ -3267,6 +3267,9 @@ class TestPipelineRecipeFlow:
 
         assert result["outcome"] == "failed"
         assert any(expected in failure for failure in failures)
+        if problem in {"ci", "ci-job"}:
+            assert not any(failure.startswith("harness error:") for failure in failures)
+            assert any(call.argv[:3] == ["gh", "issue", "edit"] for call in runner.calls)
 
     def test_listed_pr_head_must_match_rest_head_before_validation(
         self, tmp_path: Path, monkeypatch

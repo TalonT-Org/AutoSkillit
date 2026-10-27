@@ -915,19 +915,23 @@ def _pipeline_ci_api_response(argv: list[str], endpoint: str, state: dict[str, A
         workflows = [{"id": 1, "name": "CI", "state": "active"}]
         return _completed(argv, json.dumps([{"workflows": workflows}]))
     if "/actions/workflows/1/runs?" in endpoint:
-        run = {
-            "id": 2,
-            "status": "completed",
-            "conclusion": state["workflow_conclusion"],
-            "pull_requests": [
+        runs = []
+        if state["workflow_present"]:
+            runs.append(
                 {
-                    "number": 8,
-                    "head": {"sha": _PIPELINE_HEAD, "repo": {"full_name": SANDBOX}},
-                    "base": {"repo": {"full_name": SANDBOX}},
+                    "id": 2,
+                    "status": state["workflow_status"],
+                    "conclusion": state["workflow_conclusion"],
+                    "pull_requests": [
+                        {
+                            "number": 8,
+                            "head": {"sha": _PIPELINE_HEAD, "repo": {"full_name": SANDBOX}},
+                            "base": {"repo": {"full_name": SANDBOX}},
+                        }
+                    ],
                 }
-            ],
-        }
-        return _completed(argv, json.dumps([{"workflow_runs": [run]}]))
+            )
+        return _completed(argv, json.dumps([{"workflow_runs": runs}]))
     if endpoint.endswith("/actions/runs/2/jobs?per_page=100"):
         job = {"name": "test", "status": "completed", "conclusion": state["job_conclusion"]}
         return _completed(argv, json.dumps([{"jobs": [job]}]))
@@ -1057,6 +1061,8 @@ def _pipeline_runner() -> tuple[FakeRunner, dict[str, Any]]:
         "test_check_count": 0,
         "pr_test_returncode": 0,
         "workflow_conclusion": "success",
+        "workflow_present": True,
+        "workflow_status": "completed",
         "job_conclusion": "success",
         "fleet_envelope": {
             "success": True,
@@ -4028,3 +4034,40 @@ def test_delete_owned_branch_does_not_treat_ref_name_404_as_http_status() -> Non
 
     assert len(runner.calls) == 1
     assert runner.calls[0].argv[:2] == ["gh", "api"]
+
+
+@pytest.mark.parametrize(
+    ("workflow_present", "workflow_status", "expected"),
+    [
+        (
+            True,
+            "in_progress",
+            "sandbox CI: matching run did not complete before the deadline",
+        ),
+        (
+            False,
+            "completed",
+            "sandbox CI: no run associated with the exact PR head before the deadline",
+        ),
+    ],
+)
+def test_sandbox_ci_deadline_distinguishes_pending_and_missing_runs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    workflow_present: bool,
+    workflow_status: str,
+    expected: str,
+) -> None:
+    runner, state = _pipeline_runner()
+    state["workflow_present"] = workflow_present
+    state["workflow_status"] = workflow_status
+    out = tmp_path / "ci"
+    out.mkdir()
+    monkeypatch.setattr(harness, "_CI_POLL_TIMEOUT_SEC", 0)
+    monkeypatch.setattr(harness.time, "sleep", lambda _seconds: pytest.fail("unexpected sleep"))
+
+    with pytest.raises(ValueError) as error:
+        harness.validate_sandbox_ci(SANDBOX, 8, _PIPELINE_HEAD, out, _env(), runner)
+
+    assert str(error.value) == expected
+    assert len(_recorded_calls(runner.calls, contains="/actions/workflows/1/runs?")) == 1

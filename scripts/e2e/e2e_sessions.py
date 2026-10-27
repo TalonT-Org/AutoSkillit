@@ -722,7 +722,7 @@ def _result_object(value: Any) -> dict[str, Any] | None:
         nested = value.get("structuredContent", value.get("result", value.get("content")))
         if isinstance(nested, list):
             return _result_text_blocks(nested)
-        elif isinstance(nested, str):
+        elif isinstance(nested, (dict, str)):
             return _result_object(nested)
     if isinstance(value, list):
         return _result_text_blocks(value)

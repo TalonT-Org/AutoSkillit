@@ -430,9 +430,10 @@ with guidance to put a literal path in the command.
 The shared scanner supplies Bash destinations to the write-prefix, installation,
 Git-ref, and `run_cmd` guards. Supported explicit forms include
 `npm install --prefix DIR pkg`, `npm install --prefix=DIR pkg`, and
-`npm --prefix DIR install pkg`. The prefix is a content destination. Literal read
-commands retain their existing policy; an unresolved supported destination is
-distinct from a command with no detected write.
+`npm --prefix DIR install pkg`. The prefix is a content destination. Without
+`--prefix`, npm commands are unresolved writes except for recognized usage,
+help/version, metadata, and `config get`/`config list` queries. An unresolved
+destination is distinct from a command with no detected write.
 
 For `ln TARGET LINK`, including separate or combined `-s`/`-f`, the destination is
 the link entry, not the source. `-t DIR`, `-tDIR`, and detached/equals

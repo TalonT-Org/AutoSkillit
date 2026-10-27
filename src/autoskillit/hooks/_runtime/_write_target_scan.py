@@ -311,6 +311,15 @@ def _ln_entry_targets(
     return [destination], False
 
 
+def _npm_read_only_command(argv: list[str]) -> bool:
+    return (
+        len(argv) == 1
+        or argv[1:] in (["--help"], ["--version"], ["-h"], ["-v"])
+        or argv[1] in {"help", "info", "list", "ls", "prefix", "root", "show", "view"}
+        or argv[1:3] in (["config", "get"], ["config", "ls"], ["config", "list"])
+    )
+
+
 def _npm_install_targets(
     argv: list[str],
     cwd: str,
@@ -344,7 +353,8 @@ def _npm_install_targets(
             uncertain_command = True
         index += 1
     if prefix is None and not missing_prefix:
-        return [], False, False
+        unresolved = not _npm_read_only_command(argv)
+        return [], unresolved, unresolved
     if command_index is None or uncertain_command or missing_prefix or prefix is None:
         return [], True, True
     target = _classification.resolve_write_target(prefix[0], cwd, shell_source=prefix[1])

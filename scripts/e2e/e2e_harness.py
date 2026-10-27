@@ -1630,7 +1630,7 @@ def run_recipe(
     if not test.pipeline:
         return launch_regular_recipe(test, repository, baseline, ingredients, out, env, runner)
     return launch_recipe(
-        test, repository, baseline, head_refs, seed, ingredients, label, out, home, env, runner
+        test, repository, baseline, head_refs, seed, ingredients, label, out, env, runner
     )
 
 
@@ -1684,7 +1684,6 @@ def finish_pipeline(
     seed: Mapping[str, Any],
     label: str,
     out: Path,
-    home: Path,
     env: Mapping[str, str],
     runner: Runner,
     envelope: dict[str, Any] | None,
@@ -1732,7 +1731,6 @@ def launch_recipe(
     ingredients: Mapping[str, str],
     label: str,
     out: Path,
-    home: Path,
     env: Mapping[str, str],
     runner: Runner,
 ) -> tuple[list[str], list[dict[str, str]]]:
@@ -1777,7 +1775,6 @@ def launch_recipe(
             seed,
             label,
             out,
-            home,
             env,
             runner,
             envelope,

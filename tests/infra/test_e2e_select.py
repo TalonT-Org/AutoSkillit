@@ -289,7 +289,7 @@ class TestPickTests:
             _entry("ordinary", ("src/*",)),
         )
         picked = select.pick_tests(catalog, ["src/changed.py"], self._SEED, large_change=True)
-        assert len(picked) == select.MAX_TESTS
+        assert len(picked) == min(select.MAX_TESTS, 2)
         assert sum(catalog.get(name).pipeline for name in picked) == 1
 
 

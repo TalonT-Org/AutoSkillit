@@ -100,8 +100,9 @@ def _assert_truncated_prose(value: Any, *, preserve_input: bool = False) -> None
             )
 
 
-def test_captured_fixture_is_sanitized_and_keeps_the_real_wire_shape() -> None:
+def test_capture_payload_files_have_no_raw_home_paths_and_keep_wire_shape() -> None:
     provenance = load_provenance(FIXTURE_NAME)
+    # PROVENANCE records the source prefix; payload files must not retain it.
     for path in FIXTURE_DIR.rglob("*"):
         if path.is_file() and path.name != "PROVENANCE.json":
             assert b"/home/" not in path.read_bytes(), path.relative_to(FIXTURE_DIR)

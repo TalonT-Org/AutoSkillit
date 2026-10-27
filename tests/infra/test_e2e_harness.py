@@ -3348,7 +3348,11 @@ class TestPipelineRecipeFlow:
         )
 
         assert result["outcome"] == "failed"
-        assert any("harness error: fleet launch crashed" in failure for failure in failures)
+        assert any(
+            "harness error: RuntimeError: fleet launch crashed" in failure
+            and "Traceback (most recent call last)" in failure
+            for failure in failures
+        )
         assert any("cleanup branch: branch delete failed" in failure for failure in failures)
         assert any(call.argv[:3] == ["gh", "issue", "edit"] for call in runner.calls)
 

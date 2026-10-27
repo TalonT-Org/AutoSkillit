@@ -1713,7 +1713,7 @@ def launch_recipe(
                     test, owned, seed, repository, out, env, runner
                 )
     except Exception as exc:
-        failures.append(f"harness error: {exc}")
+        failures.append(f"harness error: {type(exc).__name__}: {exc}\n{traceback.format_exc()}")
     finally:
         failures += finish_pipeline(
             test,

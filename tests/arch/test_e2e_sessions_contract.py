@@ -1,12 +1,19 @@
 """Pin the standalone collector's identities, tools and hook policy to the product."""
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
 
 from autoskillit.core import DIRECT_PREFIX, PLUGIN_PREFIX, ClaudeFlags, pkg_root
-from autoskillit.core.types import GATED_TOOLS, UNGATED_TOOLS
+from autoskillit.core.types import (
+    GATED_TOOLS,
+    UNGATED_TOOLS,
+    ChildTaskTranscript,
+    SessionLocator,
+    SessionSummary,
+)
 from autoskillit.execution.backends import claude_resolvable_agent_names
 from tests._hook_protocol_oracle import claude_matcher_admits
 from tests._script_loader import load_check_script
@@ -18,6 +25,30 @@ sessions = load_check_script(
     "_autoskillit_e2e_sessions_contract",
     Path(__file__).resolve().parents[2] / "scripts" / "e2e" / "e2e_sessions.py",
 )
+
+
+class _TestSessionLocator(SessionLocator):
+    def __init__(self, transcript: Path, session_id: str) -> None:
+        self._transcript = transcript
+        self._session_id = session_id
+
+    def list_sessions(self, cwd: str) -> Sequence[SessionSummary]:
+        return ()
+
+    def locate_session(self, session_id: str) -> Path | None:
+        return self._transcript if session_id == self._session_id else None
+
+    def project_log_dir(self, cwd: str) -> Path:
+        return self._transcript.parent
+
+    def session_log_path(self, cwd: str, session_id: str) -> Path | None:
+        return self._transcript if session_id == self._session_id else None
+
+    def session_context_was_compacted(self, cwd: str, session_id: str) -> bool:
+        return False
+
+    def read_child_task(self, child_id: str) -> ChildTaskTranscript | None:
+        return None
 
 
 def test_server_identities_match_canonical_prefixes() -> None:
@@ -56,8 +87,6 @@ def test_session_hooks_stay_unfiltered() -> None:
 
 
 def test_collector_consumes_production_session_provenance(tmp_path: Path) -> None:
-    from types import SimpleNamespace
-
     from autoskillit.core.types.foundation._type_execution_identity import ExecutionIdentity
     from autoskillit.fleet import DispatchCompleted, DispatchEffectProvenance, DispatchStatus
 
@@ -71,7 +100,7 @@ def test_collector_consumes_production_session_provenance(tmp_path: Path) -> Non
         transcript = tmp_path / "transcripts" / f"{session_id}.jsonl"
         transcript.parent.mkdir(parents=True, exist_ok=True)
         transcript.write_text("", encoding="utf-8")
-        locator = SimpleNamespace(session_log_path=lambda _cwd, _session_id: transcript)
+        locator: SessionLocator = _TestSessionLocator(transcript, session_id)
         _flush(
             log_root,
             session_id=session_id,

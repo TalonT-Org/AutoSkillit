@@ -97,6 +97,9 @@ class TestFlagRegistryAudit:
         )
         for spec in (skill, root, resume):
             assert not _extract_flags(spec.cmd) - KNOWN_CLAUDE_FLAGS
+            assert ClaudeFlags.OUTPUT_FORMAT in spec.cmd
+            output_format_index = spec.cmd.index(ClaudeFlags.OUTPUT_FORMAT)
+            assert spec.cmd[output_format_index + 1 : output_format_index + 2] == (fmt.value,)
 
     def test_interactive_cmd_flags_are_all_registered(self):
         result = ClaudeCodeBackend().build_interactive_cmd(model="claude-sonnet-4-6")

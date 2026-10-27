@@ -42,6 +42,7 @@ def test_agent_hooks_admit_every_resolvable_agent_and_reject_an_unnamed_one() ->
 
 def test_session_hooks_stay_unfiltered() -> None:
     matchers = sessions.LIFECYCLE_HOOK_MATCHERS
+    assert sessions._SESSION_EVENTS == frozenset({"SessionStart", "SessionEnd"})
     assert set(matchers) == sessions._LIFECYCLE_EVENTS
     assert all(matchers[event] is None for event in sessions._SESSION_EVENTS)
 

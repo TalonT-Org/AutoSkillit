@@ -1388,7 +1388,7 @@ def validate_implementation_pr(
             for row in files
         ):
             return [f"implementation PR: missing non-removed changes under {prefix}"]
-    failures = test_pr_head(test, number, oid, out, env, runner)
+    failures = validate_pr_head(test, number, oid, out, env, runner)
     if failures:
         return failures
     validate_sandbox_ci(repository, number, oid, out, env, runner)
@@ -1405,7 +1405,7 @@ def validate_implementation_pr(
     return []
 
 
-def test_pr_head(
+def validate_pr_head(
     test: e2e_catalog.CatalogTest,
     number: int,
     oid: str,

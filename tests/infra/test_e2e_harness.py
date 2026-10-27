@@ -881,9 +881,8 @@ def _pipeline_setup_response(argv: list[str], state: dict[str, Any]):
     if argv[:3] == ["autoskillit", "config", "show"]:
         return _completed(argv, json.dumps(state["config"]))
     if argv[:3] == ["gh", "issue", "view"]:
-        payload = (
-            state["seed"] if "number,url,state,title,body,labels" in argv else state["final_issue"]
-        )
+        fields = argv[argv.index("--json") + 1].split(",")
+        payload = state["seed"] if "url" in fields else state["final_issue"]
         return _completed(argv, json.dumps(payload))
     if argv[:3] == ["gh", "repo", "view"]:
         payload = {"defaultBranchRef": {"name": state["default_branch"]}}
@@ -4136,3 +4135,20 @@ def test_branch_lookup_failure_still_releases_claim(tmp_path: Path, monkeypatch)
     assert any("cleanup branch: branch lookup failed" in failure for failure in failures)
     assert any(call.argv[:3] == ["gh", "issue", "edit"] for call in runner.calls)
     assert not any("--method" in call.argv and "DELETE" in call.argv for call in runner.calls)
+
+
+def test_pipeline_setup_response_routes_seed_with_extra_json_fields() -> None:
+    _runner, state = _pipeline_runner()
+    argv = [
+        "gh",
+        "issue",
+        "view",
+        _IMPLEMENTATION_ISSUE,
+        "--json",
+        "number,url,state,title,body,labels,assignees",
+    ]
+
+    response = _pipeline_setup_response(argv, state)
+
+    assert response is not None
+    assert json.loads(response.stdout) == state["seed"]

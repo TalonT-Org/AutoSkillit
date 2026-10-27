@@ -500,8 +500,6 @@ def run_fleet(
             timeout=test.timeout_sec + e2e_catalog.HARNESS_GRACE_SEC,
         )
         stdout = (out / "fleet-run.stdout.txt").read_text(encoding="utf-8", errors="replace")
-        shutil.copyfile(out / "fleet-run.stdout.txt", out / "fleet-run.stdout.log")
-        shutil.copyfile(out / "fleet-run.stderr.txt", out / "fleet-run.stderr.log")
         line = last_line(stdout)
         (out / "envelope.json").write_text(line + "\n", encoding="utf-8")
         if not test.pipeline:

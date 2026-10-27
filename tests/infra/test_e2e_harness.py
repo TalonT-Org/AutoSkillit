@@ -2739,10 +2739,10 @@ class TestRecipeFlow:
     def test_outputs_keep_full_stdout_and_only_the_envelope_line(self, tmp_path: Path) -> None:
         _run_recipe(tmp_path, FakeRunner(_recipe_handler(log_dir=_log_dir(tmp_path))))
         out = tmp_path / "out"
-        stdout = (out / "fleet-run.stdout.log").read_text(encoding="utf-8")
+        stdout = (out / "fleet-run.stdout.txt").read_text(encoding="utf-8")
         assert stdout == f'{_SKILL_NOTICE}\n{{"success": true}}\n'
         assert (out / "envelope.json").read_text(encoding="utf-8") == '{"success": true}\n'
-        assert (out / "fleet-run.stderr.log").exists()
+        assert (out / "fleet-run.stderr.txt").exists()
 
     def test_harness_writes_provider_settings_and_user_config(self, tmp_path: Path) -> None:
         _run_recipe(tmp_path, FakeRunner(_recipe_handler(log_dir=_log_dir(tmp_path))))
@@ -2793,8 +2793,8 @@ class TestRecipeFlow:
             f"session windows: timed-out: observed [200000] != required "
             f"{_EXPECTED_REQUIRED_CONTEXT_WINDOW_TOKENS}"
         ) in failures
-        assert (tmp_path / "out" / "fleet-run.stdout.log").read_text() == "partial stdout"
-        assert (tmp_path / "out" / "fleet-run.stderr.log").read_text() == "partial stderr"
+        assert (tmp_path / "out" / "fleet-run.stdout.txt").read_text() == "partial stdout"
+        assert (tmp_path / "out" / "fleet-run.stderr.txt").read_text() == "partial stderr"
         assert runner.calls[-1].argv[:4] == ["gh", "pr", "close", "8"]
 
     def test_unexpected_fleet_error_records_failure_and_still_cleans_up(

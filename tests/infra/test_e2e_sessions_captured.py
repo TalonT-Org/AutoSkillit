@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import pytest
 
@@ -39,6 +39,14 @@ _INPUTS_TO_PRESERVE = {
     PLUGIN_PREFIX + "create_and_publish_branch",
 }
 _TRUNCATION = re.compile(r"\.\.\.\[fixture-truncated (\d+) chars\]$")
+
+
+class _MaterializedRun(NamedTuple):
+    provenance: dict[str, Any]
+    trace: Path
+    log_root: Path
+    projects: Path
+    envelope: dict[str, Any]
 
 
 def _rows(path: Path) -> list[dict[str, Any]]:
@@ -100,6 +108,21 @@ def _assert_truncated_prose(value: Any, *, preserve_input: bool = False) -> None
             )
 
 
+@pytest.fixture
+def materialized_run(tmp_path: Path) -> _MaterializedRun:
+    provenance = load_provenance(FIXTURE_NAME)
+    trace = tmp_path / "trace" / "nested" / "session-events.jsonl"
+    log_root = tmp_path / "log-root"
+    projects = tmp_path / "projects"
+    envelope = materialize_run(
+        FIXTURE_NAME,
+        trace=trace,
+        log_root=log_root,
+        projects=projects,
+    )
+    return _MaterializedRun(provenance, trace, log_root, projects, envelope)
+
+
 def test_capture_payload_files_have_no_raw_home_paths_and_keep_wire_shape() -> None:
     provenance = load_provenance(FIXTURE_NAME)
     # PROVENANCE records the source prefix; payload files must not retain it.
@@ -146,17 +169,13 @@ def test_capture_payload_files_have_no_raw_home_paths_and_keep_wire_shape() -> N
     _assert_truncated_prose(rows)
 
 
-def test_captured_run_proves_claim_and_published_branch(tmp_path: Path) -> None:
-    provenance = load_provenance(FIXTURE_NAME)
-    trace = tmp_path / "trace" / "nested" / "session-events.jsonl"
-    log_root = tmp_path / "log-root"
-    projects = tmp_path / "projects"
-    envelope = materialize_run(
-        FIXTURE_NAME,
-        trace=trace,
-        log_root=log_root,
-        projects=projects,
-    )
+def test_captured_run_proves_claim_and_published_branch(
+    materialized_run: _MaterializedRun,
+) -> None:
+    provenance = materialized_run.provenance
+    trace = materialized_run.trace
+    log_root = materialized_run.log_root
+    envelope = materialized_run.envelope
 
     proof = sessions.collect_ownership(
         trace,
@@ -173,17 +192,12 @@ def test_captured_run_proves_claim_and_published_branch(tmp_path: Path) -> None:
 
 
 def test_captured_run_accounts_for_successful_and_failed_workers(
-    tmp_path: Path,
+    materialized_run: _MaterializedRun,
 ) -> None:
-    provenance = load_provenance(FIXTURE_NAME)
-    trace = tmp_path / "trace" / "session-events.jsonl"
-    log_root = tmp_path / "log-root"
-    envelope = materialize_run(
-        FIXTURE_NAME,
-        trace=trace,
-        log_root=log_root,
-        projects=tmp_path / "projects",
-    )
+    provenance = materialized_run.provenance
+    trace = materialized_run.trace
+    log_root = materialized_run.log_root
+    envelope = materialized_run.envelope
 
     summary = sessions.summarize(trace, envelope, log_root)
     coverage = summary["coverage"]
@@ -218,16 +232,11 @@ def test_captured_run_accounts_for_successful_and_failed_workers(
 
 
 def test_captured_run_is_complete_under_the_declared_capture_policy(
-    tmp_path: Path,
+    materialized_run: _MaterializedRun,
 ) -> None:
-    trace = tmp_path / "trace" / "session-events.jsonl"
-    log_root = tmp_path / "log-root"
-    envelope = materialize_run(
-        FIXTURE_NAME,
-        trace=trace,
-        log_root=log_root,
-        projects=tmp_path / "projects",
-    )
+    trace = materialized_run.trace
+    log_root = materialized_run.log_root
+    envelope = materialized_run.envelope
     events = _rows(trace)
     admitted = []
     excluded: list[tuple[str, str, str]] = []

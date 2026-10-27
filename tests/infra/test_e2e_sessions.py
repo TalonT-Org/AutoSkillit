@@ -538,16 +538,9 @@ def test_enumerated_native_transcript_without_agent_hooks_is_incomplete(
     assert f"native:{ROOT_ID}:agent-a:lifecycle_incomplete" in summary["violations"]
 
 
-def test_native_transcript_symlink_loop_is_reported_missing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_native_transcript_symlink_loop_is_reported_missing(tmp_path: Path) -> None:
     transcript = tmp_path / "agent-agent-a.jsonl"
     transcript.symlink_to(transcript.name)
-
-    def resolve_loop(_path: Path) -> Path:
-        raise RuntimeError("Symlink loop")
-
-    monkeypatch.setattr(Path, "resolve", resolve_loop)
     violations: list[str] = []
     proof = sessions._verify_native_transcript(
         ROOT_ID,

@@ -640,6 +640,7 @@ class TestPipelineCatalog:
     ) -> None:
         test = e2e_catalog.load_catalog().get("implementation")
         assert test.required_changed_paths == ("sandbox/", "tests/")
+        assert test.trigger_paths == tuple(f"{root}*" for root in _IMPLEMENTATION_PATHS)
         assert test.peak_sessions == 8
         assert test.peak_sessions_evidence is None
         assert test.timeout_sec == 7200

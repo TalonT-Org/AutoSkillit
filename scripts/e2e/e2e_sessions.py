@@ -115,14 +115,8 @@ def _iter_jsonl(
             yield line_number, item
 
 
-def _read_jsonl(
-    path: Path, label: str, violations: list[str], *, collect: bool = True
-) -> list[dict[str, Any]]:
-    records: list[dict[str, Any]] = []
-    for _, item in _iter_jsonl(path, label, violations):
-        if collect:
-            records.append(item)
-    return records
+def _read_jsonl(path: Path, label: str, violations: list[str]) -> list[dict[str, Any]]:
+    return [item for _, item in _iter_jsonl(path, label, violations)]
 
 
 def _load_trace(trace_path: Path, violations: list[str]) -> list[dict[str, Any]]:
@@ -620,7 +614,8 @@ def _verify_native_transcript(
         violations.append(f"{label}:transcript_path_missing")
     elif paths != {expected_path}:
         violations.append(f"{label}:transcript_mismatch")
-    _read_jsonl(transcript, f"transcript:{session_id}:{agent_id}", violations, collect=False)
+    for _ in _iter_jsonl(transcript, f"transcript:{session_id}:{agent_id}", violations):
+        pass
     return {"session_id": session_id, "agent_id": agent_id, "transcript_path": expected_path}
 
 

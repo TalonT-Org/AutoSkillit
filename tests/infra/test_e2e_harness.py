@@ -1108,7 +1108,7 @@ def _run_pipeline(
     def handle(argv: list[str]):
         if argv[:3] == ["autoskillit", "fleet", "run"]:
             _seed_sessions(
-                _log_dir(tmp_path),
+                harness.e2e_sessions.default_log_root(tmp_path / "home"),
                 state.get(
                     "sessions", {"pipeline-session": [_EXPECTED_REQUIRED_CONTEXT_WINDOW_TOKENS]}
                 ),

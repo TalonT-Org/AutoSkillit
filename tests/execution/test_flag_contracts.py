@@ -74,7 +74,7 @@ def _extract_flags(cmd: tuple[str, ...] | list[str]) -> set[str]:
 
 class TestFlagRegistryAudit:
     @pytest.mark.parametrize("fmt", list(OutputFormat))
-    def test_fleet_cmd_flags_are_all_registered(self, fmt: OutputFormat) -> None:
+    def test_skill_food_truck_resume_cmd_flags_are_all_registered(self, fmt: OutputFormat) -> None:
         backend = ClaudeCodeBackend()
         skill = backend.build_skill_session_cmd(
             "/investigate foo",

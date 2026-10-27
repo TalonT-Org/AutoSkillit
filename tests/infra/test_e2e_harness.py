@@ -959,12 +959,33 @@ def _pipeline_refs_response(argv: list[str], endpoint: str, state: dict[str, Any
     return _completed(argv, json.dumps(response))
 
 
+def _pipeline_api_request(argv: list[str]) -> tuple[str, str]:
+    if argv[:2] != ["gh", "api"]:
+        raise AssertionError(f"unsupported gh api argv: {argv!r}")
+    method = "GET"
+    endpoint = None
+    arguments = iter(argv[2:])
+    for argument in arguments:
+        if argument == "--method":
+            method = next(arguments, "").upper()
+        elif argument in {"--include", "--paginate", "--slurp"}:
+            continue
+        elif not argument.startswith("-") and endpoint is None:
+            endpoint = argument
+        else:
+            raise AssertionError(f"unsupported gh api argv: {argv!r}")
+    if method not in {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"} or endpoint is None:
+        raise AssertionError(f"unsupported gh api argv: {argv!r}")
+    return method, endpoint
+
+
 def _pipeline_cleanup_api_response(argv: list[str], endpoint: str, state: dict[str, Any]):
-    if argv[2] == "--method":
+    method, endpoint = _pipeline_api_request(argv)
+    if method != "GET":
         error = state["cleanup_errors"].get("branch_delete")
         if error is not None:
             raise error
-        if argv[3] == "DELETE" and "/git/refs/heads/" in endpoint:
+        if method == "DELETE" and "/git/refs/heads/" in endpoint:
             ref_name = endpoint.split("/git/refs/heads/", 1)[1]
             state["head_refs"] = [
                 name for name in state["head_refs"] if quote(name, safe="") != ref_name
@@ -981,7 +1002,7 @@ def _pipeline_cleanup_api_response(argv: list[str], endpoint: str, state: dict[s
 def _pipeline_api_response(argv: list[str], state: dict[str, Any]):
     if argv[:2] != ["gh", "api"]:
         return None
-    endpoint = argv[4] if argv[2] == "--method" else argv[2]
+    _method, endpoint = _pipeline_api_request(argv)
     for route in (
         _pipeline_ci_api_response,
         _pipeline_pull_request_api_response,
@@ -992,6 +1013,24 @@ def _pipeline_api_response(argv: list[str], state: dict[str, Any]):
         if response is not None:
             return response
     return None
+
+
+def test_pipeline_api_request_parses_supported_flags_and_rejects_unknown_shapes() -> None:
+    assert _pipeline_api_request(
+        ["gh", "api", "--method", "DELETE", "repos/owner/repo/git/refs/heads/example"]
+    ) == ("DELETE", "repos/owner/repo/git/refs/heads/example")
+    assert _pipeline_api_request(
+        ["gh", "api", "repos/owner/repo/pulls", "--paginate", "--slurp"]
+    ) == ("GET", "repos/owner/repo/pulls")
+
+    assert _pipeline_api_request(
+        ["gh", "api", "--include", "--method", "PATCH", "repos/owner/repo/issues/1"]
+    ) == ("PATCH", "repos/owner/repo/issues/1")
+
+    malformed = ["gh", "api", "--unknown", "repos/owner/repo"]
+    with pytest.raises(AssertionError, match="unsupported gh api argv") as error:
+        _pipeline_api_request(malformed)
+    assert repr(malformed) in str(error.value)
 
 
 def _pipeline_cleanup_response(argv: list[str], state: dict[str, Any]):

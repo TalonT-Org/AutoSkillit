@@ -50,7 +50,7 @@ from autoskillit.execution.headless._headless_path_tokens import (
     _select_output_path_tokens,
     _validate_output_paths,
 )
-from autoskillit.execution.headless._headless_recovery import _scan_jsonl_write_paths
+from autoskillit.execution.headless._headless_write_paths import _scan_jsonl_write_paths
 from autoskillit.execution.session._session_content import _check_expected_patterns
 from autoskillit.execution.session._session_model import (
     ClaudeSessionResult,

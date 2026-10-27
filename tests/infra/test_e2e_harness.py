@@ -1025,19 +1025,7 @@ def _pipeline_runner() -> tuple[FakeRunner, dict[str, Any]]:
         "body": "Implement the requested behavior.",
         "labels": [],
     }
-    listed = {
-        "number": 8,
-        "state": "OPEN",
-        "additions": 5,
-        "deletions": 2,
-        "body": f"Implements {_IMPLEMENTATION_ISSUE}",
-        "headRefOid": _PIPELINE_HEAD,
-        "headRefName": _PIPELINE_BRANCH,
-        "headRepository": {"nameWithOwner": SANDBOX},
-        "baseRefName": "main",
-        "autoMergeRequest": None,
-        "mergedAt": None,
-    }
+    listed = {"number": 8, "headRefOid": _PIPELINE_HEAD}
     state: dict[str, Any] = {
         "seed": seed,
         "default_branch": "main",
@@ -2962,7 +2950,7 @@ class TestPipelineRecipeFlow:
         self, tmp_path: Path, monkeypatch
     ) -> None:
         runner, state = _pipeline_runner()
-        unrelated = {**state["listed_prs"][0], "number": 9, "headRefName": "other/branch"}
+        unrelated = {**state["listed_prs"][0], "number": 9}
         state["listed_prs"].append(unrelated)
         state["pr_details"][9] = _pipeline_pr(9, branch="other/branch")
         failures, result, out, home, catalog, observed = _run_pipeline(
@@ -3009,6 +2997,10 @@ class TestPipelineRecipeFlow:
         assert len(checks) == 2 and checks[1].cwd == harness.SANDBOX_CLONE
 
         listed_calls = _recorded_pr_list_calls(calls, baseline=False)
+        assert all(
+            call.argv[call.argv.index("--json") + 1] == "number,headRefOid"
+            for call in listed_calls
+        )
         file_call = _recorded_calls(calls, contains="/files?per_page=100")[0]
         fetch_call = _recorded_calls(calls, prefix=["git", "fetch"])[0]
         oid_call = _recorded_calls(calls, prefix=["git", "rev-parse"])[0]

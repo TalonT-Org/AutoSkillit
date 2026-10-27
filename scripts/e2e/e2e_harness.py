@@ -318,11 +318,7 @@ def new_pull_requests(
     pipeline: bool = False,
 ) -> tuple[list[dict[str, Any]] | None, str | None]:
     limit = 20
-    fields = "number,state,additions,deletions"
-    if pipeline:
-        fields += (
-            ",body,headRefOid,headRefName,headRepository,baseRefName,autoMergeRequest,mergedAt"
-        )
+    fields = "number,headRefOid" if pipeline else "number,state,additions,deletions"
     while True:
         rows, failure = _list_pull_requests(repository, limit, fields, env, runner)
         if rows is None:

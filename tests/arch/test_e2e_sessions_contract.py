@@ -32,6 +32,7 @@ def test_tracked_tools_are_registered_product_tools() -> None:
 
 def test_agent_hooks_admit_every_resolvable_agent_and_reject_an_unnamed_one() -> None:
     names = claude_resolvable_agent_names()
+    assert names
     for event in sessions._AGENT_EVENTS:
         matcher = sessions.LIFECYCLE_HOOK_MATCHERS[event]
         assert matcher is not None

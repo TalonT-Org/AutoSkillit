@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any
+from typing import IO, Any
 
 import pytest
 
@@ -1547,7 +1547,7 @@ def test_owned_session_transcript_is_validated_and_paired_in_one_read(
     opened: list[Path] = []
     original_open = Path.open
 
-    def count_transcript_open(path: Path, *args: Any, **kwargs: Any):
+    def count_transcript_open(path: Path, *args: Any, **kwargs: Any) -> IO[Any]:
         if path == transcript:
             opened.append(path)
         return original_open(path, *args, **kwargs)

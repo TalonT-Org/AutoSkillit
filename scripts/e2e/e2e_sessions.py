@@ -569,10 +569,10 @@ def _verify_native_transcript(
         for event in events
         if isinstance(event.get("agent_transcript_path"), str)
     }
-    if paths != {expected_path}:
-        violations.append(f"{label}:transcript_mismatch")
     if not paths:
         violations.append(f"{label}:transcript_path_missing")
+    elif paths != {expected_path}:
+        violations.append(f"{label}:transcript_mismatch")
     _read_jsonl(transcript, f"transcript:{session_id}:{agent_id}", violations, collect=False)
     return {"session_id": session_id, "agent_id": agent_id, "transcript_path": expected_path}
 

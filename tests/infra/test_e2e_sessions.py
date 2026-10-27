@@ -1379,3 +1379,22 @@ def test_missing_native_transcript_is_reported_once(tmp_path: Path) -> None:
     missing = f"native:{ROOT_ID}:agent-a:transcript_missing"
     assert native_agents == []
     assert violations.count(missing) == 1
+
+
+def test_native_transcript_without_observed_path_reports_one_diagnostic(
+    tmp_path: Path,
+) -> None:
+    transcript = tmp_path / "agent-agent-a.jsonl"
+    transcript.write_text("{}\n", encoding="utf-8")
+    violations: list[str] = []
+
+    proof = sessions._verify_native_transcript(
+        ROOT_ID,
+        "agent-a",
+        transcript,
+        [{"event": "SubagentStart"}, {"event": "SubagentStop"}],
+        violations,
+    )
+
+    assert proof is not None
+    assert violations == [f"native:{ROOT_ID}:agent-a:transcript_path_missing"]

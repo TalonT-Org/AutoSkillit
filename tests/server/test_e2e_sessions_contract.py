@@ -34,6 +34,7 @@ async def test_ownership_parser_accepts_actual_product_tool_envelopes(
 
     import autoskillit.server as server
     import autoskillit.server._misc as server_misc
+    from autoskillit.core import GitHubFetcher
     from autoskillit.server.tools import tools_git, tools_issue_composite
 
     async def resolve_remote(_work_dir: str) -> str:
@@ -113,7 +114,7 @@ async def test_ownership_parser_accepts_actual_product_tool_envelopes(
 
     issue_url = "https://github.com/owner/repo/issues/42"
     claim_label = tool_ctx_kitchen_open.config.github.in_progress_label
-    github_client = AsyncMock()
+    github_client = AsyncMock(spec_set=GitHubFetcher)
     github_client.fetch_title = AsyncMock(
         return_value={"success": True, "number": 42, "title": "Contract", "slug": "contract"}
     )

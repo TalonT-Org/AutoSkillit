@@ -4009,3 +4009,22 @@ class TestRedaction:
         assert (tmp_path / "upload" / "out" / "log.txt").read_text(encoding="utf-8") == (
             "key [REDACTED]"
         )
+
+
+def test_delete_owned_branch_does_not_treat_ref_name_404_as_http_status() -> None:
+    runner = FakeRunner(
+        lambda argv: _completed(
+            argv,
+            returncode=1,
+            stderr=(
+                "gh: HTTP 500: Internal Server Error "
+                "(https://api.github.com/repos/owner/repo/git/refs/heads/release%2F404-fix)"
+            ),
+        )
+    )
+
+    with pytest.raises(ValueError, match="HTTP 500"):
+        harness.delete_owned_branch(SANDBOX, "release/404-fix", _env(), runner)
+
+    assert len(runner.calls) == 1
+    assert runner.calls[0].argv[:2] == ["gh", "api"]

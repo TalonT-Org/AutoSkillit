@@ -1432,7 +1432,7 @@ def delete_owned_branch(
         raise ValueError("refusing to delete an unsafe/default branch")
     endpoint = f"repos/{repository}/git/refs/heads/{quote(branch, safe='')}"
     result, failure = _setup_call(runner, ["gh", "api", endpoint], env)
-    if failure and result is not None and "404" in result.stderr:
+    if failure and result is not None and re.search(r"(?m)^gh: HTTP 404:", result.stderr or ""):
         return
     if failure:
         raise ValueError(failure)

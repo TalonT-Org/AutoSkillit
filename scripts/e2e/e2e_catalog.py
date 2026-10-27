@@ -224,8 +224,9 @@ def _parse_required_changed_paths(value: object, where: str) -> tuple[str, ...]:
     if not isinstance(value, list) or not value:
         raise CatalogError(f"{where} must be a non-empty list")
     changed_paths: list[str] = []
-    for item in value:
-        prefix = _require_nonblank_str(item, f"{where}[]")
+    for index, item in enumerate(value):
+        location = f"{where}[{index}]"
+        prefix = _require_nonblank_str(item, location)
         posix_path = PurePosixPath(prefix)
         windows_path = PureWindowsPath(prefix)
         invalid_path = any(
@@ -238,7 +239,7 @@ def _parse_required_changed_paths(value: object, where: str) -> tuple[str, ...]:
             )
         )
         if invalid_path:
-            raise CatalogError(f"{where}[] must be a relative path prefix without '..'")
+            raise CatalogError(f"{location} must be a relative path prefix without '..'")
         changed_paths.append(prefix)
     return tuple(changed_paths)
 
@@ -246,7 +247,9 @@ def _parse_required_changed_paths(value: object, where: str) -> tuple[str, ...]:
 def _parse_test_command(command: object, where: str) -> tuple[str, ...]:
     if not isinstance(command, list) or not command:
         raise CatalogError(f"{where} must be a non-empty argv list")
-    return tuple(_require_nonblank_str(item, f"{where}[]") for item in command)
+    return tuple(
+        _require_nonblank_str(item, f"{where}[{index}]") for index, item in enumerate(command)
+    )
 
 
 def _validate_test_keys(raw: Mapping[str, object], kind: str, where: str) -> bool:

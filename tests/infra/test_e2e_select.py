@@ -732,10 +732,18 @@ class TestPipelineCatalog:
         with pytest.raises(e2e_catalog.CatalogError):
             _catalog(_pipeline_entry(required_changed_paths=[prefix]))
 
+    def test_required_changed_paths_error_identifies_invalid_list_index(self) -> None:
+        with pytest.raises(e2e_catalog.CatalogError, match=r"required_changed_paths\[1\]"):
+            _catalog(_pipeline_entry(required_changed_paths=["sandbox/", "../parent"]))
+
     @pytest.mark.parametrize("command", [[], [""], [1]])
     def test_pipeline_test_command_must_be_nonempty_argv(self, command: object) -> None:
         with pytest.raises(e2e_catalog.CatalogError, match="test_command"):
             _catalog(_pipeline_entry(test_command=command))
+
+    def test_pipeline_test_command_error_identifies_invalid_list_index(self) -> None:
+        with pytest.raises(e2e_catalog.CatalogError, match=r"test_command\[1\]"):
+            _catalog(_pipeline_entry(test_command=["task", ""]))
 
     @pytest.mark.parametrize("evidence", ["", " ", 123])
     def test_pipeline_peak_sessions_evidence_must_be_nonempty(self, evidence: object) -> None:

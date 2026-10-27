@@ -12,7 +12,8 @@ from datetime import UTC, datetime, timedelta
 import anyio
 import pytest
 
-from tests.execution.conftest import _ALLOCATE_60MB_SCRIPT, _flush
+from tests._session_log_helpers import _flush
+from tests.execution.conftest import _ALLOCATE_60MB_SCRIPT
 
 pytestmark = [
     pytest.mark.layer("execution"),

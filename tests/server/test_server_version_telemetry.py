@@ -160,7 +160,7 @@ class TestInitializeClearMarker:
         from datetime import UTC, datetime, timedelta
 
         from autoskillit.server.lifecycle import _state
-        from tests.execution.conftest import _flush
+        from tests._session_log_helpers import _flush
 
         log_dir = tmp_path / "logs"
         log_dir.mkdir()

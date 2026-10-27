@@ -26,8 +26,8 @@ from autoskillit.execution.backends.codex import (
 )
 from autoskillit.execution.process import run_managed_async
 from autoskillit.recipe._api import load_and_validate
+from tests._session_log_helpers import _flush
 from tests.execution.backends._plugin_binding import plugin_binding
-from tests.execution.conftest import _flush
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.large]
 

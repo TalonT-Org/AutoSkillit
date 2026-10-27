@@ -10,6 +10,7 @@ from autoskillit.core.types import GATED_TOOLS, UNGATED_TOOLS
 from autoskillit.execution.backends import claude_resolvable_agent_names
 from tests._hook_protocol_oracle import claude_matcher_admits
 from tests._script_loader import load_check_script
+from tests._session_log_helpers import _flush
 
 pytestmark = pytest.mark.medium
 
@@ -59,7 +60,6 @@ def test_collector_consumes_production_session_provenance(tmp_path: Path) -> Non
 
     from autoskillit.core.types.foundation._type_execution_identity import ExecutionIdentity
     from autoskillit.fleet import DispatchCompleted, DispatchEffectProvenance, DispatchStatus
-    from tests.execution.conftest import _flush
 
     log_root = tmp_path / "logs"
     dispatch_id = "dispatch-contract"

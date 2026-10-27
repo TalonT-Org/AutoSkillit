@@ -122,7 +122,7 @@ class TestBackendAuthorityInSessionsJsonl:
     def test_typed_backend_authority_in_summary(self, tmp_path):
         import json
 
-        from tests.execution.conftest import _flush
+        from tests._session_log_helpers import _flush
 
         _flush(
             tmp_path,
@@ -138,7 +138,7 @@ class TestBackendAuthorityInSessionsJsonl:
     def test_typed_backend_authority_in_sessions_jsonl(self, tmp_path):
         import json
 
-        from tests.execution.conftest import _flush
+        from tests._session_log_helpers import _flush
 
         _flush(
             tmp_path,
@@ -153,7 +153,7 @@ class TestBackendAuthorityInSessionsJsonl:
     def test_launch_evidence_empty_when_unavailable_round_trip(self, tmp_path):
         import json
 
-        from tests.execution.conftest import _flush
+        from tests._session_log_helpers import _flush
 
         _flush(tmp_path)
         summary = json.loads(
@@ -194,7 +194,7 @@ class TestChildOutcomesProjection:
     def test_child_outcomes_round_trip(self, tmp_path):
         import json
 
-        from tests.execution.conftest import _flush
+        from tests._session_log_helpers import _flush
 
         _flush(tmp_path, child_outcomes=[self._ROW_UNKNOWN])
         summary = json.loads(
@@ -213,7 +213,7 @@ class TestChildOutcomesProjection:
         rewrites unconditionally) reflects it too."""
         import json
 
-        from tests.execution.conftest import _flush
+        from tests._session_log_helpers import _flush
 
         _flush(tmp_path, child_outcomes=[self._ROW_UNKNOWN])
         refined_row = {**self._ROW_UNKNOWN, "terminal_reason": "completed"}
@@ -233,7 +233,7 @@ class TestChildOutcomesProjection:
         the already-committed summary (e.g. an unrelated field stays as first-flushed)."""
         import json
 
-        from tests.execution.conftest import _flush
+        from tests._session_log_helpers import _flush
 
         _flush(tmp_path, child_outcomes=[self._ROW_UNKNOWN], skill_command="/first:command")
         refined_row = {**self._ROW_UNKNOWN, "terminal_reason": "completed"}

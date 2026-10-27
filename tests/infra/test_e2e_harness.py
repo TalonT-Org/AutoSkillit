@@ -1133,6 +1133,16 @@ def _configure_failed_pipeline_state(state: dict[str, Any]) -> None:
     state["proof"] = {"branches": [], "claimed": False, "violations": []}
 
 
+def _retry_exhausted_envelope() -> dict[str, Any]:
+    return {
+        "success": False,
+        "dispatch_status": "retry_exhausted",
+        "dispatch_id": "dispatch-5233",
+        "dispatched_session_id": "session-5233",
+        "reason": "known orchestration failure",
+    }
+
+
 def _patch_pipeline_measurement(
     monkeypatch: pytest.MonkeyPatch, state: dict[str, Any]
 ) -> dict[str, list[tuple[Any, ...]]]:
@@ -3237,13 +3247,7 @@ class TestPipelineRecipeFlow:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         runner, state = _pipeline_runner()
-        state["fleet_envelope"] = {
-            "success": False,
-            "dispatch_status": "retry_exhausted",
-            "dispatch_id": "dispatch-5233",
-            "dispatched_session_id": "session-5233",
-            "reason": "known orchestration failure",
-        }
+        state["fleet_envelope"] = _retry_exhausted_envelope()
         _configure_failed_pipeline_state(state)
         expected = {
             "check": "fleet_envelope",
@@ -3480,13 +3484,7 @@ class TestPipelineRecipeFlow:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         runner, state = _pipeline_runner()
-        state["fleet_envelope"] = {
-            "success": False,
-            "dispatch_status": "retry_exhausted",
-            "dispatch_id": "dispatch-5233",
-            "dispatched_session_id": "session-5233",
-            "reason": "known orchestration failure",
-        }
+        state["fleet_envelope"] = _retry_exhausted_envelope()
         _configure_failed_pipeline_state(state)
         state["published_refs"] = ["impl/leaked"]
 
@@ -3541,13 +3539,7 @@ class TestPipelineRecipeFlow:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         runner, state = _pipeline_runner()
-        state["fleet_envelope"] = {
-            "success": False,
-            "dispatch_status": "retry_exhausted",
-            "dispatch_id": "dispatch-5233",
-            "dispatched_session_id": "session-5233",
-            "reason": "known orchestration failure",
-        }
+        state["fleet_envelope"] = _retry_exhausted_envelope()
         _configure_failed_pipeline_state(state)
         state["head_refs"] = ["main", "impl/old-leftover"]
 

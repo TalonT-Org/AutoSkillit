@@ -744,16 +744,16 @@ def _result_text_blocks(blocks: list[Any]) -> dict[str, Any] | None:
 
 def _transcript_tool_pairs(
     transcript: Path,
-    violation_prefix: str,
+    session_id: str,
     violations: list[str],
 ) -> list[tuple[str, dict[str, Any], dict[str, Any] | None, bool]]:
     """Return paired target calls as name, input, result, and result-error flag."""
     pending: dict[str, tuple[str, dict[str, Any]]] = {}
     paired: list[tuple[str, dict[str, Any], dict[str, Any] | None, bool]] = []
-    for line_number, row in _iter_jsonl(transcript, f"transcript:{violation_prefix}", violations):
-        _pair_record(row, line_number, violation_prefix, pending, paired, violations)
+    for line_number, row in _iter_jsonl(transcript, f"transcript:{session_id}", violations):
+        _pair_record(row, line_number, session_id, pending, paired, violations)
     for tool_id, (name, tool_input) in pending.items():
-        violations.append(f"transcript:{violation_prefix}:unpaired_tool_use:{tool_id}")
+        violations.append(f"transcript:{session_id}:unpaired_tool_use:{tool_id}")
         paired.append((name, tool_input, None, False))
     return paired
 
@@ -778,7 +778,7 @@ def _receipt(
 def _pair_record(
     row: dict[str, Any],
     line_number: int,
-    violation_prefix: str,
+    session_id: str,
     pending: dict[str, tuple[str, dict[str, Any]]],
     paired: list[tuple[str, dict[str, Any], dict[str, Any] | None, bool]],
     violations: list[str],
@@ -794,7 +794,7 @@ def _pair_record(
         if not isinstance(block, dict):
             continue
         if role == "assistant" and block.get("type") == "tool_use":
-            _remember_tool_use(block, line_number, violation_prefix, pending, violations)
+            _remember_tool_use(block, line_number, session_id, pending, violations)
         elif role == "user" and block.get("type") == "tool_result":
             tool_id = block.get("tool_use_id")
             if isinstance(tool_id, str) and tool_id in pending:
@@ -806,7 +806,7 @@ def _pair_record(
 def _remember_tool_use(
     block: dict[str, Any],
     line_number: int,
-    prefix: str,
+    session_id: str,
     pending: dict[str, tuple[str, dict[str, Any]]],
     violations: list[str],
 ) -> None:
@@ -818,14 +818,14 @@ def _remember_tool_use(
     if tool not in _TRACKED_TOOLS:
         return
     if len(parts) != 3 or parts[:2] not in _AUTOSKILLIT_SERVERS:
-        violations.append(f"transcript:{prefix}:unrecognised_tool_namespace:{line_number}")
+        violations.append(f"transcript:{session_id}:unrecognised_tool_namespace:{line_number}")
         return
     tool_id, tool_input = block.get("id"), block.get("input")
     if not isinstance(tool_id, str) or not tool_id or not isinstance(tool_input, dict):
-        violations.append(f"transcript:{prefix}:malformed_tool_use:{line_number}")
+        violations.append(f"transcript:{session_id}:malformed_tool_use:{line_number}")
         return
     if tool_id in pending:
-        violations.append(f"transcript:{prefix}:duplicate_tool_use:{line_number}")
+        violations.append(f"transcript:{session_id}:duplicate_tool_use:{line_number}")
     pending[tool_id] = (tool, tool_input)
 
 

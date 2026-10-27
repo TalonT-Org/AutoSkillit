@@ -664,20 +664,18 @@ class TestPipelineCatalog:
         with pytest.raises(TypeError):
             cast(MutableMapping[str, str], test.expected_failures[0])["check"] = "changed"
 
-    def test_recipe_options_are_independently_optional(self) -> None:
+    @pytest.mark.parametrize("field", ["required_changed_paths", "test_command"])
+    def test_pipeline_requires_changed_paths_and_test_command(self, field: str) -> None:
         entry = _pipeline_entry()
-        for key in (
-            "issue_url_env",
-            "required_changed_paths",
-            "test_command",
-            "peak_sessions_evidence",
-        ):
-            entry.pop(key)
+        entry.pop(field)
+        with pytest.raises(e2e_catalog.CatalogError, match="missing pipeline keys"):
+            _catalog(entry)
+
+    def test_pipeline_commissioning_provenance_is_optional(self) -> None:
+        entry = _pipeline_entry()
+        entry.pop("peak_sessions_evidence")
         test = _catalog(entry).get("implementation")
         assert test.pipeline is True
-        assert test.issue_url_env is None
-        assert test.required_changed_paths == ()
-        assert test.test_command == ()
         assert test.peak_sessions_evidence is None
 
     def test_pipeline_rejects_unknown_keys(self) -> None:

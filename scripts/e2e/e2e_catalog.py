@@ -264,6 +264,10 @@ def _validate_test_keys(raw: Mapping[str, object], kind: str, where: str) -> boo
     pipeline = raw.get("pipeline", False)
     if not isinstance(pipeline, bool):
         raise CatalogError(f"{where}.pipeline must be a boolean")
+    if pipeline:
+        missing_pipeline = sorted({"required_changed_paths", "test_command"} - raw.keys())
+        if missing_pipeline:
+            raise CatalogError(f"{where}: missing pipeline keys {missing_pipeline}")
     return pipeline
 
 

@@ -223,8 +223,10 @@ The `run` job uses one repository-wide concurrency group (`group: e2e`, `queue: 
 `cancel-in-progress: false`) and `max-parallel: 1`, so every selected test of every run
 waits its turn and never cancels another. `select` and `e2e-gate` are not queued. A
 catalog entry's `peak_sessions` is capped at `MAX_PEAK_SESSIONS` (8). For an uncommissioned
-pipeline this declares capacity, not a measured fan-out. The child limit stays six.
-`clean-install` requires exactly zero `peak_sessions`.
+pipeline this declares capacity, not a measured fan-out. A step can fan out to up to six
+subagents alongside its orchestrator and step session. With runs serialized, CI stays at or
+below eight of roughly twelve concurrent MiniMax sessions. `clean-install` requires exactly
+zero `peak_sessions`.
 
 The implementation pipeline installs synchronous command hooks for `SessionStart`,
 `SessionEnd`, `SubagentStart` and `SubagentStop`, preserving existing hooks and MiniMax

@@ -1126,6 +1126,13 @@ def _pipeline_runner() -> tuple[FakeRunner, dict[str, Any]]:
     return FakeRunner(lambda argv: _pipeline_response(argv, state)), state
 
 
+def _configure_failed_pipeline_state(state: dict[str, Any]) -> None:
+    state["listed_prs"] = []
+    state["pr_details"] = {}
+    state["final_issue"] = {"state": "OPEN", "labels": []}
+    state["proof"] = {"branches": [], "claimed": False, "violations": []}
+
+
 def _patch_pipeline_measurement(
     monkeypatch: pytest.MonkeyPatch, state: dict[str, Any]
 ) -> dict[str, list[tuple[Any, ...]]]:
@@ -3237,10 +3244,7 @@ class TestPipelineRecipeFlow:
             "dispatched_session_id": "session-5233",
             "reason": "known orchestration failure",
         }
-        state["listed_prs"] = []
-        state["pr_details"] = {}
-        state["final_issue"] = {"state": "OPEN", "labels": []}
-        state["proof"] = {"branches": [], "claimed": False, "violations": []}
+        _configure_failed_pipeline_state(state)
         expected = {
             "check": "fleet_envelope",
             "message": "retry_exhausted: known orchestration failure",
@@ -3272,10 +3276,7 @@ class TestPipelineRecipeFlow:
             "message": "retry_exhausted: known orchestration failure",
             "issue": _UPSTREAM_EXPECTED_IMPLEMENTATION_ISSUE,
         }
-        state["listed_prs"] = []
-        state["pr_details"] = {}
-        state["final_issue"] = {"state": "OPEN", "labels": []}
-        state["proof"] = {"branches": [], "claimed": False, "violations": []}
+        _configure_failed_pipeline_state(state)
         if envelope_kind == "fatal":
             state["fleet_envelope"] = {
                 "success": False,
@@ -3486,10 +3487,7 @@ class TestPipelineRecipeFlow:
             "dispatched_session_id": "session-5233",
             "reason": "known orchestration failure",
         }
-        state["listed_prs"] = []
-        state["pr_details"] = {}
-        state["final_issue"] = {"state": "OPEN", "labels": []}
-        state["proof"] = {"branches": [], "claimed": False, "violations": []}
+        _configure_failed_pipeline_state(state)
         state["published_refs"] = ["impl/leaked"]
 
         failures, _result, _out, _home, _catalog, _observed = _run_pipeline(
@@ -3550,11 +3548,8 @@ class TestPipelineRecipeFlow:
             "dispatched_session_id": "session-5233",
             "reason": "known orchestration failure",
         }
-        state["listed_prs"] = []
-        state["pr_details"] = {}
-        state["final_issue"] = {"state": "OPEN", "labels": []}
+        _configure_failed_pipeline_state(state)
         state["head_refs"] = ["main", "impl/old-leftover"]
-        state["proof"] = {"branches": [], "claimed": False, "violations": []}
 
         failures, _result, _out, _home, _catalog, _observed = _run_pipeline(
             tmp_path, runner, state, monkeypatch

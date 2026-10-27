@@ -3281,7 +3281,7 @@ class TestPipelineRecipeFlow:
         )
 
         assert result["outcome"] == "failed"
-        assert any("head" in failure.lower() or "oid" in failure.lower() for failure in failures)
+        assert "implementation PR: REST head differs from captured headRefOid" in failures
         assert not any("/files?" in " ".join(call.argv) for call in runner.calls)
         assert not any("actions/workflows" in " ".join(call.argv) for call in runner.calls)
 

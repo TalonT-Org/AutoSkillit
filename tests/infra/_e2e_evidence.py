@@ -10,13 +10,13 @@ from typing import Any
 _PROJECTS_TOKEN = "@CLAUDE_PROJECTS@"
 
 
-def _fixture_dir(name: str) -> Path:
+def fixture_dir(name: str) -> Path:
     return Path(__file__).with_name("fixtures") / "e2e_sessions" / name
 
 
 def load_provenance(name: str) -> dict[str, Any]:
     """Read the provenance record for a captured E2E run."""
-    return json.loads((_fixture_dir(name) / "PROVENANCE.json").read_text(encoding="utf-8"))
+    return json.loads((fixture_dir(name) / "PROVENANCE.json").read_text(encoding="utf-8"))
 
 
 def _replace_projects_token(path: Path, projects: Path) -> None:
@@ -33,7 +33,7 @@ def materialize_run(
     projects: Path,
 ) -> dict[str, Any]:
     """Copy a captured run to the given locations and return its envelope."""
-    fixture = _fixture_dir(name)
+    fixture = fixture_dir(name)
     trace.parent.mkdir(parents=True, exist_ok=True)
     log_root.mkdir(parents=True, exist_ok=True)
     projects.mkdir(parents=True, exist_ok=True)

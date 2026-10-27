@@ -87,7 +87,7 @@ def test_session_hooks_stay_unfiltered() -> None:
 
 
 def test_collector_consumes_production_session_provenance(tmp_path: Path) -> None:
-    from autoskillit.core.types.foundation._type_execution_identity import ExecutionIdentity
+    from autoskillit.core.types import ExecutionIdentity
     from autoskillit.fleet import DispatchCompleted, DispatchEffectProvenance, DispatchStatus
 
     log_root = tmp_path / "logs"

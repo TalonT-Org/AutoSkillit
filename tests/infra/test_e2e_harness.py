@@ -3174,9 +3174,9 @@ class TestPipelineRecipeFlow:
     @pytest.mark.parametrize(
         ("problem", "expected"),
         [
-            ("malformed", "seed: expected the configured OPEN sandbox issue"),
-            ("closed", "seed: expected the configured OPEN sandbox issue"),
-            ("claimed", "seed: issue is already claimed"),
+            ("malformed", "preflight: seed: expected the configured OPEN sandbox issue"),
+            ("closed", "preflight: seed: expected the configured OPEN sandbox issue"),
+            ("claimed", "preflight: seed: issue is already claimed"),
         ],
     )
     def test_invalid_seed_stops_before_baseline_or_fleet(
@@ -3198,7 +3198,7 @@ class TestPipelineRecipeFlow:
             tmp_path, runner, state, monkeypatch
         )
 
-        assert any(expected in failure for failure in failures)
+        assert failures == [expected]
         assert result["outcome"] == "failed"
         assert not any(call.argv[:2] == ["task", "install-worktree"] for call in runner.calls)
         assert not any(call.argv[:2] == ["autoskillit", "fleet"] for call in runner.calls)

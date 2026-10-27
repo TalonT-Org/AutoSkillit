@@ -190,7 +190,9 @@ def test_captured_run_accounts_for_successful_and_failed_workers(
     assert coverage["managed_session_ids"] == sorted(WORKER_SESSION_IDS)
     assert coverage["owned_session_ids"] == sorted((ROOT_SESSION_ID, *WORKER_SESSION_IDS))
     assert summary["peak_sessions"] == 5
-    assert {agent["agent_id"] for agent in coverage["native_agents"]} == NATIVE_AGENT_IDS
+    assert sorted(agent["agent_id"] for agent in coverage["native_agents"]) == sorted(
+        NATIVE_AGENT_IDS
+    )
     assert coverage["complete"] is False
     assert summary["violations"] == sorted(
         [
@@ -249,6 +251,6 @@ def test_captured_run_is_complete_under_the_declared_capture_policy(
     assert summary["coverage"]["complete"] is True
     assert summary["violations"] == []
     assert summary["peak_sessions"] == 5
-    assert {
-        agent["agent_id"] for agent in summary["coverage"]["native_agents"]
-    } == NATIVE_AGENT_IDS
+    assert sorted(agent["agent_id"] for agent in summary["coverage"]["native_agents"]) == sorted(
+        NATIVE_AGENT_IDS
+    )

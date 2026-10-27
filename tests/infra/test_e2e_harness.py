@@ -3232,7 +3232,7 @@ class TestPipelineRecipeFlow:
     @pytest.mark.parametrize(
         ("problem", "expected"),
         [
-            ("pr", "implementation PR: expected an open, unmerged sandbox PR"),
+            ("pr", "implementation PR: base branch must be main"),
             ("body", "implementation PR: body does not reference the canonical seed URL"),
             ("paths", "implementation PR: missing non-removed changes under tests/"),
             ("ci", "sandbox CI: CI run and test job must succeed"),
@@ -3270,6 +3270,42 @@ class TestPipelineRecipeFlow:
         if problem in {"ci", "ci-job"}:
             assert not any(failure.startswith("harness error:") for failure in failures)
             assert any(call.argv[:3] == ["gh", "issue", "edit"] for call in runner.calls)
+
+    def test_implementation_pr_reports_each_failed_precondition(self, tmp_path: Path) -> None:
+        test = _pipeline_catalog().get("implementation")
+        pr = _pipeline_pr()
+        pr.update(
+            state="closed",
+            merged=True,
+            merged_at="2026-10-01T00:00:00Z",
+            auto_merge={"enabled": True},
+        )
+        pr["base"]["ref"] = "develop"
+        pr["base"]["repo"] = {"full_name": "other/repo"}
+        pr["head"]["sha"] = ""
+        pr["head"]["repo"] = {"full_name": "other/repo"}
+        pr["_listed_head"] = _PIPELINE_HEAD
+
+        failures = harness.validate_implementation_pr(
+            test,
+            [pr],
+            {"url": _IMPLEMENTATION_ISSUE},
+            SANDBOX,
+            tmp_path,
+            _env(),
+            FakeRunner(lambda argv: None),
+        )
+
+        assert failures == [
+            "implementation PR: state must be open",
+            "implementation PR: merged must be false",
+            "implementation PR: merged_at must be empty",
+            "implementation PR: auto-merge must be disabled",
+            "implementation PR: base branch must be main",
+            "implementation PR: head SHA must be a non-empty string",
+            "implementation PR: base repository must match the sandbox",
+            "implementation PR: head repository must match the sandbox",
+        ]
 
     def test_listed_pr_head_must_match_rest_head_before_validation(
         self, tmp_path: Path, monkeypatch

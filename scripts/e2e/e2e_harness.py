@@ -1333,6 +1333,24 @@ def validate_sandbox_ci(
     )
 
 
+def _implementation_pr_preconditions(pr: Mapping[str, Any], repository: str) -> list[str]:
+    head = pr.get("head", {})
+    base = pr.get("base", {})
+    oid = head.get("sha")
+    checks = (
+        (pr.get("state") == "open", "state must be open"),
+        (pr.get("merged") is False, "merged must be false"),
+        (not pr.get("merged_at"), "merged_at must be empty"),
+        (pr.get("auto_merge") is None, "auto-merge must be disabled"),
+        (base.get("ref") == "main", "base branch must be main"),
+        (head.get("ref") != "main", "head branch must not be main"),
+        (isinstance(oid, str) and bool(oid), "head SHA must be a non-empty string"),
+        (_repo_matches(base.get("repo"), repository), "base repository must match the sandbox"),
+        (_repo_matches(head.get("repo"), repository), "head repository must match the sandbox"),
+    )
+    return [f"implementation PR: {message}" for valid, message in checks if not valid]
+
+
 def validate_implementation_pr(
     test: e2e_catalog.CatalogTest,
     prs: Sequence[Mapping[str, Any]],
@@ -1347,24 +1365,10 @@ def validate_implementation_pr(
     pr = prs[0]
     number = pr["number"]
     head = pr.get("head", {})
-    base = pr.get("base", {})
     oid = head.get("sha")
-    if (
-        pr.get("state") != "open"
-        or pr.get("merged") is not False
-        or pr.get("merged_at")
-        or pr.get("auto_merge") is not None
-        or base.get("ref") != "main"
-        or head.get("ref") == "main"
-        or not isinstance(oid, str)
-        or not oid
-        or not _repo_matches(base.get("repo"), repository)
-        or not _repo_matches(head.get("repo"), repository)
-    ):
-        return [
-            "implementation PR: expected an open, unmerged sandbox PR targeting main "
-            "without auto-merge"
-        ]
+    precondition_failures = _implementation_pr_preconditions(pr, repository)
+    if precondition_failures:
+        return precondition_failures
     if oid != pr.get("_listed_head"):
         return ["implementation PR: REST head differs from captured headRefOid"]
     if not re.search(re.escape(seed["url"]) + r"(?![A-Za-z0-9_/#?=-])", str(pr.get("body", ""))):

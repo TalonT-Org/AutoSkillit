@@ -4122,3 +4122,17 @@ def test_session_hook_install_rejects_malformed_settings_without_rewriting(
 
     assert expected in str(error.value)
     assert settings_path.read_bytes() == original
+
+
+def test_branch_lookup_failure_still_releases_claim(tmp_path: Path, monkeypatch) -> None:
+    runner, state = _pipeline_runner()
+    state["cleanup_errors"] = {"branch_get": RuntimeError("branch lookup failed")}
+
+    failures, result, _out, _home, _catalog, _observed = _run_pipeline(
+        tmp_path, runner, state, monkeypatch
+    )
+
+    assert result["outcome"] == "failed"
+    assert any("cleanup branch: branch lookup failed" in failure for failure in failures)
+    assert any(call.argv[:3] == ["gh", "issue", "edit"] for call in runner.calls)
+    assert not any("--method" in call.argv and "DELETE" in call.argv for call in runner.calls)

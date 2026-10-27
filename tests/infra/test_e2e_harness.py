@@ -675,8 +675,8 @@ _SMOKE_FAILURE = {
     "message": "model reported failure",
     "issue": "https://github.com/TalonT-Org/AutoSkillit/issues/5232",
 }
-_IMPLEMENTATION_ISSUE = "https://github.com/owner/sandbox/issues/5233"
-_IMPLEMENTATION_EXPECTED_ISSUE = "https://github.com/TalonT-Org/AutoSkillit/issues/5233"
+_SANDBOX_IMPLEMENTATION_ISSUE = "https://github.com/owner/sandbox/issues/5233"
+_UPSTREAM_EXPECTED_IMPLEMENTATION_ISSUE = "https://github.com/TalonT-Org/AutoSkillit/issues/5233"
 _PIPELINE_HEAD = "0123456789abcdef"
 _PIPELINE_BRANCH = "codex/issue-5233"
 
@@ -865,7 +865,7 @@ def _pipeline_pr(number: int = 8, *, branch: str = _PIPELINE_BRANCH) -> dict[str
         "merged": False,
         "merged_at": None,
         "auto_merge": None,
-        "body": f"Implements {_IMPLEMENTATION_ISSUE}",
+        "body": f"Implements {_SANDBOX_IMPLEMENTATION_ISSUE}",
         "additions": 5,
         "deletions": 2,
         "head": {
@@ -1072,7 +1072,7 @@ def _pipeline_response(argv: list[str], state: dict[str, Any]):
 def _pipeline_runner() -> tuple[FakeRunner, dict[str, Any]]:
     seed = {
         "number": 5233,
-        "url": _IMPLEMENTATION_ISSUE,
+        "url": _SANDBOX_IMPLEMENTATION_ISSUE,
         "state": "OPEN",
         "title": "Add a greeting",
         "body": "Implement the requested behavior.",
@@ -1191,7 +1191,9 @@ def _run_pipeline(
         catalog,
         out=out,
         home=home,
-        env=env if env is not None else _env(E2E_IMPLEMENTATION_ISSUE_URL=_IMPLEMENTATION_ISSUE),
+        env=env
+        if env is not None
+        else _env(E2E_IMPLEMENTATION_ISSUE_URL=_SANDBOX_IMPLEMENTATION_ISSUE),
         runner=runner,
     )
     return (
@@ -3039,7 +3041,7 @@ class TestPipelineRecipeFlow:
         config_call = _recorded_calls(calls, prefix=["autoskillit", "config", "show"])[0]
         assert config_call.cwd == harness.SANDBOX_CLONE
         assert config_call.env == {
-            **harness.child_env(_env(E2E_IMPLEMENTATION_ISSUE_URL=_IMPLEMENTATION_ISSUE)),
+            **harness.child_env(_env(E2E_IMPLEMENTATION_ISSUE_URL=_SANDBOX_IMPLEMENTATION_ISSUE)),
             "AUTOSKILLIT_LOG_DIR": str(_log_dir(tmp_path)),
         }
         seed_call = _recorded_calls(calls, prefix=["gh", "issue", "view"])[0]
@@ -3108,7 +3110,7 @@ class TestPipelineRecipeFlow:
             for index, arg in enumerate(fleet_call.argv[:-1])
             if arg == "-i"
         ]
-        assert ingredient_args.count(f"issue_url={_IMPLEMENTATION_ISSUE}") == 1
+        assert ingredient_args.count(f"issue_url={_SANDBOX_IMPLEMENTATION_ISSUE}") == 1
         assert (
             ingredient_args.count("task=Add a greeting\n\nImplement the requested behavior.") == 1
         )
@@ -3124,7 +3126,7 @@ class TestPipelineRecipeFlow:
         log_root = home / ".local" / "share" / "autoskillit" / "logs"
         envelope = json.loads((out / "envelope.json").read_text(encoding="utf-8"))
         assert observed["ownership"] == [
-            (trace, envelope, log_root, _IMPLEMENTATION_ISSUE, SANDBOX, "in-progress")
+            (trace, envelope, log_root, _SANDBOX_IMPLEMENTATION_ISSUE, SANDBOX, "in-progress")
         ]
         assert observed["summaries"] == [(trace, envelope, log_root)]
         capacity = json.loads((out / "catalog-capacity.json").read_text(encoding="utf-8"))
@@ -3242,7 +3244,7 @@ class TestPipelineRecipeFlow:
         expected = {
             "check": "fleet_envelope",
             "message": "retry_exhausted: known orchestration failure",
-            "issue": _IMPLEMENTATION_EXPECTED_ISSUE,
+            "issue": _UPSTREAM_EXPECTED_IMPLEMENTATION_ISSUE,
         }
 
         failures, result, _out, _home, _catalog, _observed = _run_pipeline(
@@ -3268,7 +3270,7 @@ class TestPipelineRecipeFlow:
         expected = {
             "check": "fleet_envelope",
             "message": "retry_exhausted: known orchestration failure",
-            "issue": _IMPLEMENTATION_EXPECTED_ISSUE,
+            "issue": _UPSTREAM_EXPECTED_IMPLEMENTATION_ISSUE,
         }
         state["listed_prs"] = []
         state["pr_details"] = {}
@@ -3362,7 +3364,7 @@ class TestPipelineRecipeFlow:
         failures = harness.validate_implementation_pr(
             test,
             [pr],
-            {"url": _IMPLEMENTATION_ISSUE},
+            {"url": _SANDBOX_IMPLEMENTATION_ISSUE},
             SANDBOX,
             tmp_path,
             _env(),
@@ -4278,7 +4280,7 @@ def test_pipeline_setup_response_routes_seed_with_extra_json_fields() -> None:
         "gh",
         "issue",
         "view",
-        _IMPLEMENTATION_ISSUE,
+        _SANDBOX_IMPLEMENTATION_ISSUE,
         "--json",
         "number,url,state,title,body,labels,assignees",
     ]

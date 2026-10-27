@@ -9,7 +9,7 @@ import os
 import re
 import sys
 import time
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Any, TypeGuard
 from urllib.parse import urlsplit
@@ -90,16 +90,15 @@ def _hook_record(payload: Mapping[str, Any]) -> dict[str, Any] | None:
     return record
 
 
-def _read_jsonl(
-    path: Path, label: str, violations: list[str], *, collect: bool = True
-) -> list[dict[str, Any]]:
+def _iter_jsonl(
+    path: Path, label: str, violations: list[str]
+) -> Iterator[tuple[int, dict[str, Any]]]:
     try:
         handle = path.open(encoding="utf-8", errors="replace")
     except OSError:
         violations.append(f"{label}:unavailable")
-        return []
+        return
 
-    records: list[dict[str, Any]] = []
     with handle:
         for line_number, line in enumerate(handle, 1):
             if not line.strip():
@@ -113,8 +112,16 @@ def _read_jsonl(
             if not isinstance(item, dict):
                 violations.append(f"{label}:invalid_record:{line_number}")
                 continue
-            if collect:
-                records.append(item)
+            yield line_number, item
+
+
+def _read_jsonl(
+    path: Path, label: str, violations: list[str], *, collect: bool = True
+) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for _, item in _iter_jsonl(path, label, violations):
+        if collect:
+            records.append(item)
     return records
 
 
@@ -419,7 +426,6 @@ def _add_owned_session(
     if transcript is None or not transcript.is_file():
         violations.append(f"transcript:{session_id}:missing")
     else:
-        _read_jsonl(transcript, f"transcript:{session_id}", violations, collect=False)
         calls = _transcript_tool_pairs(transcript, session_id, violations)
     owned[session_id] = {
         "row": dict(row),
@@ -742,22 +748,10 @@ def _transcript_tool_pairs(
     violations: list[str],
 ) -> list[tuple[str, dict[str, Any], dict[str, Any] | None, bool]]:
     """Return paired target calls as name, input, result, and result-error flag."""
-    try:
-        handle = transcript.open(encoding="utf-8", errors="replace")
-    except OSError:
-        violations.append(f"transcript:{violation_prefix}:unavailable")
-        return []
     pending: dict[str, tuple[str, dict[str, Any]]] = {}
     paired: list[tuple[str, dict[str, Any], dict[str, Any] | None, bool]] = []
-    with handle:
-        for line_number, line in enumerate(handle, 1):
-            try:
-                row = json.loads(line)
-            except (json.JSONDecodeError, UnicodeDecodeError):
-                violations.append(f"transcript:{violation_prefix}:invalid_json:{line_number}")
-                continue
-            if isinstance(row, dict):
-                _pair_record(row, line_number, violation_prefix, pending, paired, violations)
+    for line_number, row in _iter_jsonl(transcript, f"transcript:{violation_prefix}", violations):
+        _pair_record(row, line_number, violation_prefix, pending, paired, violations)
     for tool_id, (name, tool_input) in pending.items():
         violations.append(f"transcript:{violation_prefix}:unpaired_tool_use:{tool_id}")
         paired.append((name, tool_input, None, False))

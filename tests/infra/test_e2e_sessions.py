@@ -1451,3 +1451,52 @@ def test_native_transcript_enumeration_rejects_file_symlink_escape(
 
     assert enumerated[ROOT_ID] == {}
     assert f"native:{ROOT_ID}:agent-a:transcript_outside_root" in violations
+
+
+def test_owned_session_transcript_is_validated_and_paired_in_one_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    transcript = tmp_path / "session-root.jsonl"
+    records = _launch(
+        "launch",
+        {"success": True, "receipt_id": "r1", "session_id": "session-worker"},
+        tool="run_skill",
+    )
+    transcript.write_bytes(
+        b"\nnot-json\nnull\n"
+        + "".join(json.dumps(record) + "\n" for record in records).encode("utf-8")
+    )
+    opened: list[Path] = []
+    original_open = Path.open
+
+    def count_transcript_open(path: Path, *args: Any, **kwargs: Any):
+        if path == transcript:
+            opened.append(path)
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", count_transcript_open)
+    violations: list[str] = []
+    owned: dict[str, dict[str, Any]] = {}
+    summary = {
+        "session_id": ROOT_ID,
+        "dispatch_id": DISPATCH_ID,
+        "execution_identity": {"parent_session_id": ""},
+    }
+
+    sessions._add_owned_session(
+        tmp_path,
+        _entry(ROOT_ID, transcript),
+        ROOT_ID,
+        violations,
+        owned,
+        summary=summary,
+    )
+
+    assert opened == [transcript]
+    assert violations == [
+        f"transcript:{ROOT_ID}:empty_line:1",
+        f"transcript:{ROOT_ID}:invalid_json:2",
+        f"transcript:{ROOT_ID}:invalid_record:3",
+    ]
+    assert len(owned[ROOT_ID]["calls"]) == 1
+    assert owned[ROOT_ID]["calls"][0][0] == "run_skill"

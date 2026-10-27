@@ -642,12 +642,11 @@ def test_unresolvable_session_transcript_is_reported_without_aborting_summary(
 
 def test_indexed_owned_child_without_hooks_is_incomplete(tmp_path: Path) -> None:
     log_root, trace, _, root_transcript = _base_sessions(tmp_path, child_id="missing-hooks")
-    transcript = root_transcript
     _trace(
         trace,
         [
-            _event("SessionStart", ROOT_ID, 1, transcript=transcript),
-            _event("SessionEnd", ROOT_ID, 5, transcript=transcript),
+            _event("SessionStart", ROOT_ID, 1, transcript=root_transcript),
+            _event("SessionEnd", ROOT_ID, 5, transcript=root_transcript),
         ],
     )
     summary = sessions.summarize(trace, _envelope(), log_root)
@@ -657,13 +656,12 @@ def test_indexed_owned_child_without_hooks_is_incomplete(tmp_path: Path) -> None
 
 def test_resumed_identity_requires_a_final_end(tmp_path: Path) -> None:
     log_root, trace, _, root_transcript = _base_sessions(tmp_path)
-    transcript = root_transcript
     _trace(
         trace,
         [
-            _event("SessionStart", ROOT_ID, 1, transcript=transcript),
-            _event("SessionEnd", ROOT_ID, 2, transcript=transcript),
-            _event("SessionStart", ROOT_ID, 3, transcript=transcript),
+            _event("SessionStart", ROOT_ID, 1, transcript=root_transcript),
+            _event("SessionEnd", ROOT_ID, 2, transcript=root_transcript),
+            _event("SessionStart", ROOT_ID, 3, transcript=root_transcript),
         ],
     )
     summary = sessions.summarize(trace, _envelope(), log_root)
@@ -707,9 +705,8 @@ def test_issue_reference_must_match_repository(
 
 def test_missing_root_hooks_do_not_discard_available_branch_proof(tmp_path: Path) -> None:
     log_root, trace, _, root_transcript = _base_sessions(tmp_path)
-    transcript = root_transcript
     _jsonl(
-        transcript,
+        root_transcript,
         [
             _tool_use(
                 "branch",

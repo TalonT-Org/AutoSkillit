@@ -94,18 +94,18 @@ def _iter_jsonl(
     path: Path, label: str, violations: list[str]
 ) -> Iterator[tuple[int, dict[str, Any]]]:
     try:
-        handle = path.open(encoding="utf-8", errors="replace")
+        handle = path.open("rb")
     except OSError:
         violations.append(f"{label}:unavailable")
         return
 
     with handle:
-        for line_number, line in enumerate(handle, 1):
-            if not line.strip():
+        for line_number, raw_line in enumerate(handle, 1):
+            if not raw_line.strip():
                 violations.append(f"{label}:empty_line:{line_number}")
                 continue
             try:
-                item = json.loads(line)
+                item = json.loads(raw_line.decode("utf-8"))
             except (json.JSONDecodeError, UnicodeDecodeError):
                 violations.append(f"{label}:invalid_json:{line_number}")
                 continue

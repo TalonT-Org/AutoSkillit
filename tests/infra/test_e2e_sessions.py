@@ -1463,7 +1463,7 @@ def test_owned_session_transcript_is_validated_and_paired_in_one_read(
         tool="run_skill",
     )
     transcript.write_bytes(
-        b"\nnot-json\nnull\n"
+        b'\nnot-json\nnull\n{"invalid":"bad\xff"}\n'
         + "".join(json.dumps(record) + "\n" for record in records).encode("utf-8")
     )
     opened: list[Path] = []
@@ -1497,6 +1497,7 @@ def test_owned_session_transcript_is_validated_and_paired_in_one_read(
         f"transcript:{ROOT_ID}:empty_line:1",
         f"transcript:{ROOT_ID}:invalid_json:2",
         f"transcript:{ROOT_ID}:invalid_record:3",
+        f"transcript:{ROOT_ID}:invalid_json:4",
     ]
     assert len(owned[ROOT_ID]["calls"]) == 1
     assert owned[ROOT_ID]["calls"][0][0] == "run_skill"

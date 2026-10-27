@@ -399,7 +399,7 @@ def _pipeline_entry(name: str = "implementation", **overrides) -> dict:
         expected_pull_request_state="open",
         pipeline=True,
         issue_url_env="E2E_IMPLEMENTATION_ISSUE_URL",
-        required_changed_paths=list(_IMPLEMENTATION_PATHS),
+        required_changed_paths=["sandbox/", "tests/"],
         test_command=["task", "test-check"],
         peak_sessions_evidence=(
             "configured capacity limit of eight concurrent sessions; no measured peak supplied"
@@ -655,7 +655,7 @@ class TestPipelineCatalog:
 
         assert test.pipeline is True
         assert test.issue_url_env == "E2E_IMPLEMENTATION_ISSUE_URL"
-        assert test.required_changed_paths == _IMPLEMENTATION_PATHS
+        assert test.required_changed_paths == ("sandbox/", "tests/")
         assert test.test_command == ("task", "test-check")
         assert test.peak_sessions_evidence == (
             "configured capacity limit of eight concurrent sessions; no measured peak supplied"

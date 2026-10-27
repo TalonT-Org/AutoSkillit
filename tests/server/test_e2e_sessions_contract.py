@@ -164,6 +164,7 @@ async def test_ownership_parser_accepts_actual_product_tool_envelopes(
     assert not sessions._claim_succeeded(
         [(reentry_args, reentry_result, False)], "42", claim_label, claim_violations
     )
+    assert claim_violations == ["ownership:claim_result_failed"]
 
 
 @pytest.mark.anyio

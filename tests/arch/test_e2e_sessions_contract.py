@@ -199,6 +199,69 @@ async def test_ownership_parser_accepts_actual_product_tool_envelopes(
     )
 
 
+def test_collector_consumes_production_session_provenance(tmp_path: Path) -> None:
+    from types import SimpleNamespace
+
+    from autoskillit.core.types.foundation._type_execution_identity import ExecutionIdentity
+    from autoskillit.fleet import DispatchCompleted, DispatchEffectProvenance, DispatchStatus
+    from tests.execution.conftest import _flush
+
+    log_root = tmp_path / "logs"
+    dispatch_id = "dispatch-contract"
+    root_id = "root-contract-session"
+    child_id = "child-contract-session"
+    child_identity = ExecutionIdentity(parent_session_id=root_id)
+
+    def write_session(session_id: str, parent_session_id: str, caller_session_id: str) -> None:
+        transcript = tmp_path / "transcripts" / f"{session_id}.jsonl"
+        transcript.parent.mkdir(parents=True, exist_ok=True)
+        transcript.write_text("", encoding="utf-8")
+        locator = SimpleNamespace(session_log_path=lambda _cwd, _session_id: transcript)
+        _flush(
+            log_root,
+            session_id=session_id,
+            dispatch_id=dispatch_id,
+            caller_session_id=caller_session_id,
+            execution_identity=ExecutionIdentity(parent_session_id=parent_session_id),
+            session_locator=locator,
+        )
+
+    write_session(root_id, "", "")
+    write_session(child_id, root_id, root_id)
+
+    payload = {"result": "completed"}
+    envelope = json.loads(
+        DispatchCompleted(
+            dispatch_status=DispatchStatus.SUCCESS,
+            dispatch_id=dispatch_id,
+            dispatched_session_id=root_id,
+            reason="",
+            effect_provenance=DispatchEffectProvenance(operation_id=dispatch_id),
+            l3_payload=payload,
+        ).to_envelope()
+    )
+    assert envelope["l3_payload"] == payload
+
+    trace_path = tmp_path / "trace.jsonl"
+    trace_path.write_text(
+        "".join(
+            json.dumps({"event": "SessionStart", "timestamp": index, "session_id": session_id})
+            + "\n"
+            for index, session_id in enumerate((root_id, child_id), start=1)
+        ),
+        encoding="utf-8",
+    )
+    discovered = sessions._discover_owned(trace_path, envelope, log_root)
+
+    assert discovered["root_id"] == root_id
+    assert discovered["dispatch_id"] == dispatch_id
+    assert set(discovered["owned"]) == {root_id, child_id}
+    assert (
+        discovered["owned"][child_id]["summary"]["execution_identity"] == child_identity.to_dict()
+    )
+    assert not discovered["violations"]
+
+
 def test_product_selects_no_main_agent() -> None:
     # Internal-agent callbacks are unnamed only while no main agent is set.
     assert {"--agent", "--settings"}.isdisjoint(flag.value for flag in ClaudeFlags)

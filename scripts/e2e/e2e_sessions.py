@@ -468,6 +468,34 @@ def _group_lifecycle_events(
     return grouped
 
 
+def _resolve_transcript_path(path: Path, label: str, violations: list[str]) -> Path | None:
+    try:
+        return path.resolve()
+    except (OSError, RuntimeError):
+        violations.append(f"{label}:transcript_resolution_failed")
+        return None
+
+
+def _event_transcript_paths(
+    events: list[dict[str, Any]],
+    path_field: str,
+    label: str,
+    violations: list[str],
+) -> tuple[set[str], bool]:
+    """Return resolved event paths and whether any path was supplied."""
+    paths: set[str] = set()
+    has_path_value = False
+    for event in events:
+        path_value = event.get(path_field)
+        if not isinstance(path_value, str) or not path_value:
+            continue
+        has_path_value = True
+        resolved_path = _resolve_transcript_path(Path(path_value), label, violations)
+        if resolved_path is not None:
+            paths.add(str(resolved_path))
+    return paths, has_path_value
+
+
 def _make_interval(
     identity: tuple[str, ...],
     endpoints: Mapping[str, list[dict[str, Any]]],
@@ -495,11 +523,9 @@ def _make_interval(
         path_field = "agent_transcript_path"
     else:
         path_field = "transcript_path"
-    paths = {
-        str(Path(event[path_field]).resolve())
-        for event in starts + stops
-        if isinstance(event.get(path_field), str) and event[path_field]
-    }
+    paths, _ = _event_transcript_paths(
+        starts + stops, path_field, f"lifecycle:{label}", violations
+    )
     if len(paths) > 1:
         violations.append(f"lifecycle:{label}:transcript_mismatch")
     if paths:
@@ -524,7 +550,13 @@ def _check_transcript_coverage(
         if session_id not in session_ids:
             continue
         if event["event"] in _SESSION_EVENTS and event.get("transcript_path"):
-            session_paths[session_id].add(str(Path(event["transcript_path"]).resolve()))
+            resolved_paths, _ = _event_transcript_paths(
+                [event],
+                "transcript_path",
+                f"lifecycle:{session_id}",
+                violations,
+            )
+            session_paths[session_id].update(resolved_paths)
         elif event["event"] in _AGENT_EVENTS:
             key = (session_id, event["agent_id"])
             observed.setdefault(key, []).append(event)
@@ -563,8 +595,12 @@ def _enumerate_native_transcripts(
         paths = session_paths.get(session_id, set())
         if not paths:
             violations.append(f"lifecycle:{session_id}:transcript_path_missing")
-        elif paths != {str(transcript.resolve())}:
-            violations.append(f"lifecycle:{session_id}:transcript_path_mismatch")
+        else:
+            resolved_transcript = _resolve_transcript_path(
+                transcript, f"lifecycle:{session_id}", violations
+            )
+            if resolved_transcript is not None and paths != {str(resolved_transcript)}:
+                violations.append(f"lifecycle:{session_id}:transcript_path_mismatch")
         subagents_dir = _safe_subagents_dir(transcript, session_id, violations)
         files: dict[str, Path] = {}
         if subagents_dir is not None:
@@ -572,12 +608,10 @@ def _enumerate_native_transcripts(
                 agent_id = path.name.removeprefix("agent-").removesuffix(".jsonl")
                 if not agent_id:
                     continue
-                try:
-                    resolved_path = path.resolve()
-                except (OSError, RuntimeError):
-                    violations.append(
-                        f"native:{session_id}:{agent_id}:transcript_resolution_failed"
-                    )
+                resolved_path = _resolve_transcript_path(
+                    path, f"native:{session_id}:{agent_id}", violations
+                )
+                if resolved_path is None:
                     continue
                 if not resolved_path.is_relative_to(subagents_dir):
                     violations.append(f"native:{session_id}:{agent_id}:transcript_outside_root")
@@ -604,15 +638,16 @@ def _verify_native_transcript(
     if not transcript.is_file():
         violations.append(f"{label}:transcript_missing")
         return None
-    expected_path = str(transcript.resolve())
-    paths = {
-        str(Path(event["agent_transcript_path"]).resolve())
-        for event in events
-        if isinstance(event.get("agent_transcript_path"), str)
-    }
-    if not paths:
+    resolved_transcript = _resolve_transcript_path(transcript, label, violations)
+    if resolved_transcript is None:
+        return None
+    expected_path = str(resolved_transcript)
+    paths, has_path_value = _event_transcript_paths(
+        events, "agent_transcript_path", label, violations
+    )
+    if not paths and not has_path_value:
         violations.append(f"{label}:transcript_path_missing")
-    elif paths != {expected_path}:
+    elif paths and paths != {expected_path}:
         violations.append(f"{label}:transcript_mismatch")
     for _ in _iter_jsonl(transcript, f"transcript:{session_id}:{agent_id}", violations):
         pass

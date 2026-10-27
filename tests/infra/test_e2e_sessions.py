@@ -547,6 +547,27 @@ def test_native_transcript_symlink_loop_is_reported_missing(tmp_path: Path) -> N
     assert violations == [f"native:{ROOT_ID}:agent-a:transcript_missing"]
 
 
+def test_unresolvable_session_transcript_is_reported_without_aborting_summary(
+    tmp_path: Path,
+) -> None:
+    log_root, trace, _, _root_transcript = _base_sessions(tmp_path)
+    transcript_loop = tmp_path / "transcript-loop.jsonl"
+    transcript_loop.symlink_to(transcript_loop.name)
+    _trace(
+        trace,
+        [
+            _event("SessionStart", ROOT_ID, 1, transcript=transcript_loop),
+            _event("SessionEnd", ROOT_ID, 2, transcript=transcript_loop),
+        ],
+    )
+
+    summary = sessions.summarize(trace, _envelope(), log_root)
+
+    assert summary["coverage"]["root_session_seen"] is True
+    assert summary["coverage"]["complete"] is False
+    assert f"lifecycle:session:{ROOT_ID}:transcript_resolution_failed" in summary["violations"]
+
+
 def test_indexed_owned_child_without_hooks_is_incomplete(tmp_path: Path) -> None:
     log_root, trace, _, root_transcript = _base_sessions(tmp_path, child_id="missing-hooks")
     transcript = root_transcript

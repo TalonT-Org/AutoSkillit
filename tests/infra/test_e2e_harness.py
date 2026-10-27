@@ -3171,8 +3171,14 @@ class TestPipelineRecipeFlow:
     @pytest.mark.parametrize(
         ("problem", "expected"),
         [
-            ("malformed", "preflight: seed: expected the configured OPEN sandbox issue"),
-            ("closed", "preflight: seed: expected the configured OPEN sandbox issue"),
+            (
+                "malformed",
+                "preflight: seed: expected the configured OPEN sandbox issue with valid metadata",
+            ),
+            (
+                "closed",
+                "preflight: seed: expected the configured OPEN sandbox issue with valid metadata",
+            ),
             ("claimed", "preflight: seed: issue is already claimed"),
         ],
     )

@@ -1566,10 +1566,7 @@ def run_recipe(
         return [failure], []
     if test.recipe_fixture is not None:
         return run_smoke_recipe(test, repository, out, env, runner)
-    seed: dict[str, Any] = {}
-    head_refs: frozenset[str] = frozenset()
     ingredients = dict(test.ingredients)
-    label = ""
     trace = out / _SESSION_TRACE_FILENAME
     if test.pipeline or test.issue_url_env:
         try:

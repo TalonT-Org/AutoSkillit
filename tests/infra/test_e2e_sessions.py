@@ -259,6 +259,25 @@ def _root_ownership_proof(
     return sessions.collect_ownership(trace, _envelope(), log_root, ISSUE_URL, REPOSITORY)
 
 
+def test_hook_capture_uses_event_alias_when_hook_event_name_is_null(
+    tmp_path: Path,
+) -> None:
+    trace = tmp_path / "events.jsonl"
+
+    captured = sessions.capture_hook_event(
+        trace,
+        {
+            "hook_event_name": None,
+            "event": "SessionStart",
+            "session_id": ROOT_ID,
+        },
+    )
+
+    assert captured is True
+    [record] = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+    assert record["event"] == "SessionStart"
+
+
 def test_hook_capture_appends_concurrent_allow_listed_records(tmp_path: Path) -> None:
     trace = tmp_path / "events.jsonl"
     with ThreadPoolExecutor(max_workers=8) as pool:

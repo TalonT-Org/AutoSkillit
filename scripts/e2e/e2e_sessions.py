@@ -73,7 +73,7 @@ def capture_hook_event(trace_path: Path, payload: Mapping[str, Any]) -> bool:
 
 
 def _hook_record(payload: Mapping[str, Any]) -> dict[str, Any] | None:
-    event = payload.get("hook_event_name", payload.get("event"))
+    event = payload.get("hook_event_name") or payload.get("event")
     if event is None:
         return None
     if not isinstance(event, str):

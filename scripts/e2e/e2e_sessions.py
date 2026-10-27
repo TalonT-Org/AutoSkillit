@@ -11,7 +11,7 @@ import sys
 import time
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeGuard
 from urllib.parse import urlsplit
 
 _SESSION_EVENTS = frozenset({"SessionStart", "SessionEnd"})
@@ -184,11 +184,41 @@ def _load_index(log_root: Path, violations: list[str]) -> list[dict[str, Any]]:
     return records
 
 
+def _safe_path_component(value: Any) -> TypeGuard[str]:
+    return (
+        isinstance(value, str)
+        and bool(value)
+        and value not in {".", ".."}
+        and "/" not in value
+        and "\\" not in value
+        and "\x00" not in value
+        and Path(value).name == value
+    )
+
+
 def _safe_session_dir(log_root: Path, row: Mapping[str, Any]) -> Path | None:
     name = row.get("dir_name")
-    if not isinstance(name, str) or not name or name in {".", ".."} or Path(name).name != name:
+    if not _safe_path_component(name):
         return None
     return log_root / "sessions" / name
+
+
+def _safe_subagents_dir(transcript: Path, session_id: str, violations: list[str]) -> Path | None:
+    label = f"native:{session_id}"
+    if not _safe_path_component(session_id):
+        violations.append(f"{label}:unsafe_subagent_root")
+        return None
+    transcript_root = transcript.parent
+    try:
+        resolved_root = transcript_root.resolve()
+        resolved_subagents = (transcript_root / session_id / "subagents").resolve()
+    except (OSError, RuntimeError):
+        violations.append(f"{label}:unsafe_subagent_root")
+        return None
+    if not resolved_subagents.is_relative_to(resolved_root):
+        violations.append(f"{label}:unsafe_subagent_root")
+        return None
+    return resolved_subagents
 
 
 def _read_summary(session_dir: Path, expected_session_id: str) -> dict[str, Any] | None:
@@ -535,13 +565,24 @@ def _enumerate_native_transcripts(
             violations.append(f"lifecycle:{session_id}:transcript_path_missing")
         elif paths != {str(transcript.resolve())}:
             violations.append(f"lifecycle:{session_id}:transcript_path_mismatch")
-        subagents_dir = transcript.parent / session_id / "subagents"
+        subagents_dir = _safe_subagents_dir(transcript, session_id, violations)
         files: dict[str, Path] = {}
-        for path in sorted(subagents_dir.glob("agent-*.jsonl")):
-            agent_id = path.name.removeprefix("agent-").removesuffix(".jsonl")
-            if not agent_id:
-                continue
-            files[agent_id] = path
+        if subagents_dir is not None:
+            for path in sorted(subagents_dir.glob("agent-*.jsonl")):
+                agent_id = path.name.removeprefix("agent-").removesuffix(".jsonl")
+                if not agent_id:
+                    continue
+                try:
+                    resolved_path = path.resolve()
+                except (OSError, RuntimeError):
+                    violations.append(
+                        f"native:{session_id}:{agent_id}:transcript_resolution_failed"
+                    )
+                    continue
+                if not resolved_path.is_relative_to(subagents_dir):
+                    violations.append(f"native:{session_id}:{agent_id}:transcript_outside_root")
+                    continue
+                files[agent_id] = resolved_path
         enumerated[session_id] = files
     return enumerated
 

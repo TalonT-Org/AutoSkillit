@@ -1350,7 +1350,7 @@ def test_missing_native_transcript_is_reported_once(tmp_path: Path) -> None:
     subagents_dir = root_transcript.parent / ROOT_ID / "subagents"
     subagents_dir.mkdir(parents=True)
     missing_transcript = subagents_dir / "agent-agent-a.jsonl"
-    missing_transcript.symlink_to(tmp_path / "missing-agent.jsonl")
+    missing_transcript.symlink_to(subagents_dir / "missing-agent.jsonl")
     events = [
         _event(
             "SubagentStart",
@@ -1398,3 +1398,56 @@ def test_native_transcript_without_observed_path_reports_one_diagnostic(
 
     assert proof is not None
     assert violations == [f"native:{ROOT_ID}:agent-a:transcript_path_missing"]
+
+
+@pytest.mark.parametrize(
+    ("session_id", "symlink_root"),
+    [("../outside", False), (ROOT_ID, True)],
+)
+def test_native_transcript_enumeration_rejects_escaping_subagent_roots(
+    tmp_path: Path, session_id: str, symlink_root: bool
+) -> None:
+    transcript_root = tmp_path / "transcripts"
+    transcript_root.mkdir()
+    transcript = transcript_root / "root.jsonl"
+    transcript.write_text("{}\n", encoding="utf-8")
+    outside = tmp_path / "outside"
+    outside_subagents = outside / "subagents"
+    outside_subagents.mkdir(parents=True)
+    (outside_subagents / "agent-agent-a.jsonl").write_text("{}\n", encoding="utf-8")
+    if symlink_root:
+        (transcript_root / session_id).symlink_to(outside, target_is_directory=True)
+    violations: list[str] = []
+
+    enumerated = sessions._enumerate_native_transcripts(
+        {session_id: {"transcript": transcript}},
+        {session_id: {str(transcript.resolve())}},
+        violations,
+    )
+
+    assert enumerated[session_id] == {}
+    assert f"native:{session_id}:unsafe_subagent_root" in violations
+
+
+def test_native_transcript_enumeration_rejects_file_symlink_escape(
+    tmp_path: Path,
+) -> None:
+    transcript_root = tmp_path / "transcripts"
+    transcript_root.mkdir()
+    transcript = transcript_root / f"{ROOT_ID}.jsonl"
+    transcript.write_text("{}\n", encoding="utf-8")
+    subagents_dir = transcript_root / ROOT_ID / "subagents"
+    subagents_dir.mkdir(parents=True)
+    outside = tmp_path / "outside-agent.jsonl"
+    outside.write_text("{}\n", encoding="utf-8")
+    (subagents_dir / "agent-agent-a.jsonl").symlink_to(outside)
+    violations: list[str] = []
+
+    enumerated = sessions._enumerate_native_transcripts(
+        {ROOT_ID: {"transcript": transcript}},
+        {ROOT_ID: {str(transcript.resolve())}},
+        violations,
+    )
+
+    assert enumerated[ROOT_ID] == {}
+    assert f"native:{ROOT_ID}:agent-a:transcript_outside_root" in violations

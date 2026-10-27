@@ -351,9 +351,12 @@ class TestGitOpsGuardAllowed:
         out = _run_guard("git commit --amend", kitchen_open=False, tmpdir=tmp_path)
         assert out.strip() == ""
 
-    def test_allows_unrelated_command(self, tmp_path):
-        out = _run_guard("npm run build", kitchen_open=True, tmpdir=tmp_path)
+    def test_npm_read_only_and_script_policy(self, tmp_path):
+        out = _run_guard("npm --version", kitchen_open=True, tmpdir=tmp_path)
         assert out.strip() == ""
+
+        out = _run_guard("npm run build", kitchen_open=True, tmpdir=tmp_path)
+        assert _checked_out_ref_result(out)["attempted_value"] == "<unresolved>"
 
 
 # ---------------------------------------------------------------------------

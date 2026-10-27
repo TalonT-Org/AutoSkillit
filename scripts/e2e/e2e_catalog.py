@@ -296,12 +296,10 @@ def _parse_test(raw: object, index: int) -> CatalogTest:
     required_changed_paths: tuple[str, ...] = ()
     test_command: tuple[str, ...] = ()
     peak_sessions_evidence: str | None = None
-    if kind == "recipe":
+    if kind in ("recipe", "clean-install"):
         expected_failures = _parse_expected_failures(
             raw.get("expected_failures", []), where, pipeline=pipeline
         )
-    elif kind == "clean-install":
-        expected_failures = _parse_expected_failures(raw.get("expected_failures", []), where)
     else:
         expected_failures = ()
     if (

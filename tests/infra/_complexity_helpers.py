@@ -2,55 +2,16 @@
 
 Used by tests/infra/test_check_complexity.py, tests/infra/test_check_complexity_git_e2e.py,
 tests/infra/test_check_complexity_ruff_parity.py, and tests/arch/test_complexity_limits.py.
-Each caller keeps its own _CHECK_MODULE_NAME / module-loading call site (per-file
-sys.modules isolation stays a parameter, not shared state) -- only the byte-identical
-bodies live here, matching the tests/infra/_pretty_output_helpers.py convention of a
-dedicated underscore-prefixed helper module for one feature's split test files.
-
-tests/infra/test_e2e_select.py and tests/infra/test_e2e_harness.py also load
-scripts/e2e/e2e_select.py and scripts/e2e/e2e_harness.py through load_check_script, so
-their sibling ``import e2e_catalog`` resolves.
+Generic script loading is shared through tests._script_loader.
 """
 
 from __future__ import annotations
 
-import importlib.util
 import subprocess
-import sys
 import textwrap
 from pathlib import Path
 
 _CHECK_COMPLEXITY_GIT_TIMEOUT_SECONDS = 30
-
-
-def load_check_script(name: str, path: Path):
-    """Load one gate script fresh via importlib, registering it in sys.modules under *name*.
-
-    Each caller passes its own unique *name* so dataclasses defined in the loaded script
-    resolve string annotations through sys.modules[cls.__module__] without colliding with a
-    sibling test file's copy of the same script (see
-    tests/arch/test_acceptance_policy_relaxation_gate.py).
-    """
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None
-    assert spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    previous_path = list(sys.path)
-    missing = object()
-    previous_module = sys.modules.get(name, missing)
-    sys.modules[name] = mod
-    sys.path.insert(0, str(path.parent))
-    try:
-        spec.loader.exec_module(mod)
-    except BaseException:
-        if previous_module is missing:
-            sys.modules.pop(name, None)
-        else:
-            sys.modules[name] = previous_module
-        raise
-    finally:
-        sys.path[:] = previous_path
-    return mod
 
 
 def _git(repo: Path, *args: str) -> None:

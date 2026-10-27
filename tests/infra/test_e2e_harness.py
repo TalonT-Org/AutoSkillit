@@ -19,7 +19,7 @@ from urllib.parse import quote
 import pytest
 
 from tests._hook_protocol_oracle import claude_matcher_admits
-from tests.infra._complexity_helpers import load_check_script
+from tests._script_loader import load_check_script
 from tests.infra._e2e_evidence import load_provenance, materialize_run
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]

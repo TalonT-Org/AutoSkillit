@@ -15,8 +15,9 @@ from pathlib import Path
 
 import pytest
 
+from tests._script_loader import load_check_script
 from tests.conftest import production_interpreter_env
-from tests.infra._complexity_helpers import _CONSTRUCT_CASES, load_check_script
+from tests.infra._complexity_helpers import _CONSTRUCT_CASES
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 

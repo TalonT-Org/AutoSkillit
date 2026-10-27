@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from tests._script_loader import load_check_script
 from tests.arch._acceptance_policy_surfaces import POLICY_SURFACES
-from tests.infra._complexity_helpers import load_check_script
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 

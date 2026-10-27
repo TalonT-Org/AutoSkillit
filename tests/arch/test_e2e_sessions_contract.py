@@ -10,7 +10,7 @@ from autoskillit.core import DIRECT_PREFIX, PLUGIN_PREFIX, ClaudeFlags, pkg_root
 from autoskillit.core.types import GATED_TOOLS, UNGATED_TOOLS
 from autoskillit.execution.backends import claude_resolvable_agent_names
 from tests._hook_protocol_oracle import claude_matcher_admits
-from tests.infra._complexity_helpers import load_check_script
+from tests._script_loader import load_check_script
 
 pytestmark = pytest.mark.medium
 

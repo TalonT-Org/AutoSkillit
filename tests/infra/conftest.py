@@ -220,5 +220,5 @@ def _get_formatter_coverage_registry() -> dict[str, FormatterCoverageDef]:
     return _FORMATTER_COVERAGE_REGISTRY
 
 
-# check_complexity's shared test infra (load_check_script, _git, _CONSTRUCT_CASES, etc.)
+# check_complexity's shared test infra (_git, _CONSTRUCT_CASES, etc.)
 # lives in tests/infra/_complexity_helpers.py, not here -- see that module's docstring.

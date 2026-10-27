@@ -15,12 +15,12 @@ from types import ModuleType
 
 import pytest
 
+from tests._script_loader import load_check_script
 from tests.infra._complexity_helpers import (
     _CONSTRUCT_CASES,
     _MINIMAL_LIMITS,
     _git,
     _source_with_function,
-    load_check_script,
 )
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]

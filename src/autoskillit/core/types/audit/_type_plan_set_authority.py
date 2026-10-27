@@ -499,11 +499,16 @@ class PlanSetAuthority:
             }
             if set(self.coverage.parts_without_obligations) != empty_parts:
                 raise ValueError(
-                    "coverage.parts_without_obligations must match actual empty parts"
+                    "coverage.parts_without_obligations must match actual empty parts "
+                    f"(inventory_mode={self.inventory_mode.value!r}, "
+                    f"declared_parts={tuple(sorted(self.coverage.parts_without_obligations))!r}, "
+                    f"actual_empty_parts={tuple(sorted(empty_parts))!r})"
                 )
         elif self.coverage.parts_without_obligations:
             raise ValueError(
-                "coverage.parts_without_obligations is invalid for enumerated inventory"
+                "coverage.parts_without_obligations is invalid for enumerated inventory "
+                f"(inventory_mode={self.inventory_mode.value!r}, "
+                f"declared_parts={tuple(sorted(self.coverage.parts_without_obligations))!r})"
             )
 
     @classmethod

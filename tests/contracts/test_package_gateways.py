@@ -408,6 +408,7 @@ def test_root_module_allowlist() -> None:
         {
             "__init__.py",
             "__main__.py",
+            "_destination_paths.py",
             "_llm_triage.py",
             "_measure_aggregation.py",
             "_parent_assistant_turns.py",

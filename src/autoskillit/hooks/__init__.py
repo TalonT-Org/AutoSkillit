@@ -78,6 +78,7 @@ from autoskillit.hooks._runtime._hook_settings import (
     enforce_session_scope,
     hook_session_shape,
 )
+from autoskillit.hooks._runtime._path_identity import destination_within
 from autoskillit.hooks._session_binding import LoadedSkillEntry
 from autoskillit.hooks.formatters._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 from autoskillit.hooks.guards.branch_protection_guard import BRANCH_PROTECTION_DENY_TRIGGER
@@ -138,6 +139,7 @@ __all__ = [
     "capture_store_stats",
     "command_has_blocked_protected_path_read",
     "consume_exploration_request_record",
+    "destination_within",
     "generate_hooks_json",
     "is_terminal_outcome",
     "mark_assignment_running",

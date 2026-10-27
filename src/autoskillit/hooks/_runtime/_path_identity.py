@@ -10,7 +10,17 @@ Stdlib-only; runs as a bare sibling module under ``hooks/_runtime/``.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from autoskillit._destination_paths import destination_location
+else:
+    _PACKAGE_DIR = str(Path(__file__).resolve().parents[2])
+    if _PACKAGE_DIR not in sys.path:
+        sys.path.insert(0, _PACKAGE_DIR)
+    from _destination_paths import destination_location
 
 
 class PathIdentityError(ValueError):
@@ -35,6 +45,11 @@ def hooks_relative_key(script_identity: str | os.PathLike[str], hooks_dir: Path)
         raise PathIdentityError(
             f"script {str(script)!r} is outside the hooks tree {str(root)!r}"
         ) from exc
+
+
+def destination_within(candidate: str | os.PathLike[str], root: str | os.PathLike[str]) -> bool:
+    """Compare an entry's physical location with a resolved directory boundary."""
+    return destination_location(candidate).is_relative_to(Path(root).resolve())
 
 
 def realpath_within(candidate: str | os.PathLike[str], root: str | os.PathLike[str]) -> bool:

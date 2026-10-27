@@ -83,6 +83,7 @@ def make_runtime(tmp_path: Path, entries: Mapping[str, Mapping[str, object]]) ->
     (project / ".autoskillit" / "temp").mkdir(parents=True)
     plugin = tmp_path / "plugin"
     shutil.copytree(HOOKS_DIR, plugin / "hooks")
+    shutil.copy2(HOOKS_DIR.parent / "_destination_paths.py", plugin)
     manifest_path = tmp_path / ".plugin.autoskillit-projection.json"
     manifest_path.write_text(
         json.dumps(

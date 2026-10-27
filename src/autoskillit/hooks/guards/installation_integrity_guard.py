@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import os
+import stat
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
@@ -32,7 +34,7 @@ from _hook_payload import (  # noqa: E402
     normalize_payload_cwd,
     parse_hook_command,
 )
-from _path_identity import realpath_within  # noqa: E402
+from _path_identity import destination_location, destination_within, realpath_within  # noqa: E402
 from _policy_event import (  # noqa: E402
     PolicyEvent,
     render_provenance_prefix,
@@ -139,9 +141,26 @@ def _is_protected_target(path: str) -> bool:
     return _matches_protected_inode(normalized)
 
 
-def _bash_targets(command: str, cwd: str) -> tuple[list[str], bool]:
+def _is_protected_entry_target(path: str) -> bool:
+    location = destination_location(Path(path))
+    if _has_install_layout(str(location)):
+        return True
+    for root in _known_roots():
+        if location == destination_location(root) or destination_within(path, root):
+            return True
+    try:
+        entry = os.lstat(path)
+    except OSError as exc:
+        return exc.errno not in {errno.ENOENT, errno.ENOTDIR}
+    if stat.S_ISLNK(entry.st_mode):
+        return False
+    return _matches_protected_inode(str(location))
+
+
+def _bash_targets(command: str, cwd: str) -> tuple[list[str], list[str], bool]:
     scan = scan_write_targets(command, cwd)
     targets = list(scan.targets)
+    entry_targets = list(scan.entry_targets)
     unresolved_target = scan.unresolved or not scan.parseable
     interpreter_paths = extract_interpreter_write_paths(command)
     # ``extract_interpreter_write_paths``: None=non-write, []=interpreter write
@@ -156,10 +175,10 @@ def _bash_targets(command: str, cwd: str) -> tuple[list[str], bool]:
                 unresolved_target = True
             else:
                 targets.append(resolved)
-    return targets, unresolved_target
+    return targets, entry_targets, unresolved_target
 
 
-def _resolve_targets(paths: list[str], cwd: str) -> tuple[list[str], bool]:
+def _resolve_targets(paths: list[str], cwd: str) -> tuple[list[str], list[str], bool]:
     targets: list[str] = []
     unresolved_target = False
     for path in paths:
@@ -168,13 +187,13 @@ def _resolve_targets(paths: list[str], cwd: str) -> tuple[list[str], bool]:
             unresolved_target = True
         else:
             targets.append(resolved)
-    return targets, unresolved_target
+    return targets, [], unresolved_target
 
 
-def _collect_write_targets(data: dict[str, object]) -> tuple[list[str], bool]:
+def _collect_write_targets(data: dict[str, object]) -> tuple[list[str], list[str], bool]:
     tool_name = data.get("tool_name")
     if not isinstance(tool_name, str):
-        return [], False
+        return [], [], False
     payload_cwd = normalize_payload_cwd(data.get("cwd"))
     edit_paths = edit_target_paths(data)
     if edit_paths:
@@ -182,7 +201,7 @@ def _collect_write_targets(data: dict[str, object]) -> tuple[list[str], bool]:
     parsed = parse_hook_command(data)
     if parsed.tool_kind in {"bash", "run_cmd"}:
         return _bash_targets(parsed.command or "", parsed.execution_cwd)
-    return [], False
+    return [], [], False
 
 
 def main() -> None:
@@ -193,14 +212,22 @@ def main() -> None:
     if not isinstance(data, dict):
         sys.exit(0)
 
-    targets, unresolved_target = _collect_write_targets(data)
+    targets, entry_targets, unresolved_target = _collect_write_targets(data)
 
     if unresolved_target:
         _deny(
             "unresolved-write-target",
             "Write target could not be resolved safely. " + UNRESOLVED_WRITE_TARGET_REMEDIATION,
         )
-    if any(_is_protected_target(path) for path in targets):
+    try:
+        protected_entry = any(_is_protected_entry_target(path) for path in entry_targets)
+    except (OSError, RuntimeError, ValueError):
+        _deny(
+            "unresolved-write-target",
+            "Link entry destination could not be resolved safely. "
+            "Check its path components and symlinks.",
+        )
+    if any(_is_protected_target(path) for path in targets) or protected_entry:
         _deny(
             "protected-installation-target",
             f"Writing a {INSTALLATION_INTEGRITY_DENY_TRIGGER} is prohibited.",

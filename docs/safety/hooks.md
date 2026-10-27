@@ -425,6 +425,47 @@ plugin generations, uv tool installs, and uv cache archives. This protection
 applies in every session class and backend. An unresolved write target is denied
 with guidance to put a literal path in the command.
 
+### Bounded Bash destinations
+
+The shared scanner supplies Bash destinations to the write-prefix, installation,
+Git-ref, and `run_cmd` guards. Supported explicit forms include
+`npm install --prefix DIR pkg`, `npm install --prefix=DIR pkg`, and
+`npm --prefix DIR install pkg`. The prefix is a content destination. Without
+`--prefix`, npm commands are unresolved writes except for recognized usage,
+help/version, metadata, and `config get`/`config list` queries. An unresolved
+destination is distinct from a command with no detected write.
+
+For `ln TARGET LINK`, including separate or combined `-s`/`-f`, the destination is
+the link entry, not the source. `-t DIR`, `-tDIR`, and detached/equals
+`--target-directory` forms derive `DIR/basename(TARGET)` for each source. A lone
+source derives an entry in cwd. An existing final directory, including a symlink
+to a directory, normally receives a derived child; `-T` selects the final operand
+itself, and `-n` prevents following a final symlink to a directory while retaining
+ordinary-directory handling. GNU `install` target-directory forms similarly
+produce each actual child content destination. Missing required values, unknown
+destination-affecting options, and contradictory `-t`/`-T` are unresolved writes.
+
+Content writes follow final symlinks. Entry replacement resolves the parent and
+retains the final basename: replacing an allowed link that points outside is
+separate from later writing through that link. A symlinked parent still affects
+the entry's physical location. Entry targets such as `/dev/null` remain visible
+even where content writes to pseudo-devices are suppressed.
+
+An npm prefix does not describe all npm writes. The independently configured
+[cache](https://docs.npmjs.com/cli/v11/using-npm/config/#cache) and dependency
+[lifecycle scripts](https://docs.npmjs.com/cli/v11/using-npm/scripts/) can cause
+additional writes; the scanner models neither cache writes nor script side
+effects. Installed dependencies' scripts are distinct from hooks in the prefix
+project.
+
+Canonical containment is a point-in-time check: an ancestor or symlink can change
+between scanning and execution. Separately, `ln` chooses directory versus entry
+semantics from filesystem state; changing the final operand into a directory or
+a symlink to one before execution can change the child entry it creates. These
+time-of-check-to-time-of-use weaknesses mean the checks provide neither race
+immunity nor OS-level confinement. Creating a link entry and accessing its
+referent require separate validation.
+
 ### `recipe_write_advisor.py`
 **Matched tools:** `Write`, `Edit`
 Non-blocking advisory: suggests `/autoskillit:write-recipe` or

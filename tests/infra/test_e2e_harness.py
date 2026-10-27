@@ -836,8 +836,8 @@ def _env(**overrides: str) -> dict[str, str]:
 
 
 def _pipeline_catalog(
-    expected_failures: list[dict[str, str]] | None = None, *, repository=SANDBOX
-):
+    expected_failures: list[dict[str, str]] | None = None, *, repository: str = SANDBOX
+) -> e2e_catalog.Catalog:
     entry = {
         "name": "implementation",
         "kind": "recipe",
@@ -1072,8 +1072,10 @@ def _pipeline_runner() -> tuple[FakeRunner, dict[str, Any]]:
     return FakeRunner(lambda argv: _pipeline_response(argv, state)), state
 
 
-def _patch_pipeline_measurement(monkeypatch, state: dict[str, Any]):
-    observed: dict[str, list[tuple]] = {"ownership": [], "summaries": []}
+def _patch_pipeline_measurement(
+    monkeypatch: pytest.MonkeyPatch, state: dict[str, Any]
+) -> dict[str, list[tuple[Any, ...]]]:
+    observed: dict[str, list[tuple[Any, ...]]] = {"ownership": [], "summaries": []}
 
     def collect(trace_path, envelope, log_root, issue_url, repository, *, claim_label=None):
         observed["ownership"].append(
@@ -1095,13 +1097,20 @@ def _run_pipeline(
     tmp_path: Path,
     runner: FakeRunner,
     state: dict[str, Any],
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
     *,
-    env=None,
-    expected_failures=None,
-    real_measurement=False,
-    repository=SANDBOX,
-):
+    env: dict[str, str] | None = None,
+    expected_failures: list[dict[str, str]] | None = None,
+    real_measurement: bool = False,
+    repository: str = SANDBOX,
+) -> tuple[
+    list[str],
+    dict[str, Any],
+    Path,
+    Path,
+    e2e_catalog.Catalog,
+    dict[str, list[tuple[Any, ...]]] | None,
+]:
     catalog = _pipeline_catalog(expected_failures, repository=repository)
     original_handler = runner.handler
 
@@ -2843,7 +2852,7 @@ class TestRecipeFlow:
 
 class TestPipelineRecipeFlow:
     def test_pipeline_rejects_small_context_window_and_still_cleans_up(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         runner, state = _pipeline_runner()
         state["sessions"] = {"pipeline-session": [200000]}
@@ -2931,7 +2940,9 @@ class TestPipelineRecipeFlow:
 
         assert settings_path.read_bytes() == original
 
-    def test_custom_main_agent_setting_fails_preflight(self, tmp_path: Path, monkeypatch) -> None:
+    def test_custom_main_agent_setting_fails_preflight(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         settings_path = tmp_path / "home" / ".claude" / "settings.json"
         settings_path.parent.mkdir(parents=True, exist_ok=True)
         settings_path.write_text('{"agent":"custom-main"}', encoding="utf-8")
@@ -2946,7 +2957,7 @@ class TestPipelineRecipeFlow:
         assert not any(call.argv[:3] == ["autoskillit", "fleet", "run"] for call in runner.calls)
 
     def test_pipeline_uses_the_seed_issue_and_cleans_only_its_owned_pr(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         runner, state = _pipeline_runner()
         unrelated = {**state["listed_prs"][0], "number": 9}
@@ -3096,7 +3107,11 @@ class TestPipelineRecipeFlow:
         ],
     )
     def test_invalid_seed_stops_before_baseline_or_fleet(
-        self, tmp_path: Path, monkeypatch, problem: str, expected: str
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        problem: str,
+        expected: str,
     ) -> None:
         runner, state = _pipeline_runner()
         if problem == "malformed":
@@ -3118,7 +3133,7 @@ class TestPipelineRecipeFlow:
         assert observed["ownership"] == observed["summaries"] == []
 
     def test_missing_seed_url_stops_before_github_issue_lookup(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         runner, state = _pipeline_runner()
         failures, result, _out, _home, _catalog, _observed = _run_pipeline(
@@ -3136,7 +3151,7 @@ class TestPipelineRecipeFlow:
 
     @pytest.mark.parametrize("wrong_base", ["sandbox", "effective-config"])
     def test_seed_requires_the_main_branch_in_repository_and_config(
-        self, tmp_path: Path, monkeypatch, wrong_base: str
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, wrong_base: str
     ) -> None:
         runner, state = _pipeline_runner()
         if wrong_base == "sandbox":
@@ -3156,7 +3171,7 @@ class TestPipelineRecipeFlow:
         assert not any(call.argv[:3] == ["autoskillit", "fleet", "run"] for call in runner.calls)
 
     def test_linked_stable_finding_is_recorded_and_skips_pr_assertions(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         runner, state = _pipeline_runner()
         state["fleet_envelope"] = {
@@ -3193,7 +3208,7 @@ class TestPipelineRecipeFlow:
 
     @pytest.mark.parametrize("envelope_kind", ["stale", "fatal"])
     def test_stale_or_fatal_pipeline_failure_cannot_be_allowlisted(
-        self, tmp_path: Path, monkeypatch, envelope_kind: str
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, envelope_kind: str
     ) -> None:
         runner, state = _pipeline_runner()
         expected = {
@@ -3242,7 +3257,11 @@ class TestPipelineRecipeFlow:
         ],
     )
     def test_pipeline_rejects_unverified_pr_or_validation_failure(
-        self, tmp_path: Path, monkeypatch, problem: str, expected: str
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        problem: str,
+        expected: str,
     ) -> None:
         runner, state = _pipeline_runner()
         pr = state["pr_details"][8]
@@ -3308,7 +3327,7 @@ class TestPipelineRecipeFlow:
         ]
 
     def test_listed_pr_head_must_match_rest_head_before_validation(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         runner, state = _pipeline_runner()
         state["listed_prs"][0]["headRefOid"] = "stale-listed-head"
@@ -3330,7 +3349,11 @@ class TestPipelineRecipeFlow:
         ],
     )
     def test_session_evidence_must_be_complete_and_within_catalog_capacity(
-        self, tmp_path: Path, monkeypatch, problem: str, expected: str
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        problem: str,
+        expected: str,
     ) -> None:
         runner, state = _pipeline_runner()
         if problem == "coverage":
@@ -3346,7 +3369,7 @@ class TestPipelineRecipeFlow:
         assert any(expected in failure for failure in failures)
 
     def test_ownership_violations_fail_the_pipeline_result(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         runner, state = _pipeline_runner()
         state["proof"]["violations"] = ["transcript evidence is incomplete"]
@@ -3359,7 +3382,7 @@ class TestPipelineRecipeFlow:
         assert "ownership: transcript evidence is incomplete" in failures
 
     def test_cleanup_errors_do_not_prevent_remaining_owned_cleanup(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         runner, state = _pipeline_runner()
         state["cleanup_errors"] = {
@@ -3377,7 +3400,7 @@ class TestPipelineRecipeFlow:
         assert any(call.argv[:3] == ["gh", "issue", "edit"] for call in runner.calls)
 
     def test_fleet_exception_and_cleanup_exception_are_both_preserved(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         runner, state = _pipeline_runner()
         state["fleet_exception"] = RuntimeError("fleet launch crashed")
@@ -3397,7 +3420,7 @@ class TestPipelineRecipeFlow:
         assert any(call.argv[:3] == ["gh", "issue", "edit"] for call in runner.calls)
 
     def test_branch_created_without_ownership_proof_fails_cleanup_and_is_preserved(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         runner, state = _pipeline_runner()
         state["fleet_envelope"] = {
@@ -3427,7 +3450,7 @@ class TestPipelineRecipeFlow:
         assert "impl/leaked" in state["head_refs"]
 
     def test_proven_branch_is_deleted_and_leaves_nothing_unexplained(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         runner, state = _pipeline_runner()
         state["published_refs"] = [_PIPELINE_BRANCH]
@@ -3460,7 +3483,9 @@ class TestPipelineRecipeFlow:
                 (out / f"head-refs-{stage}.stdout.txt").read_text(encoding="utf-8")
             ) == [[{"ref": "refs/heads/main"}]]
 
-    def test_branch_present_before_the_run_is_never_reported(self, tmp_path, monkeypatch) -> None:
+    def test_branch_present_before_the_run_is_never_reported(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         runner, state = _pipeline_runner()
         state["fleet_envelope"] = {
             "success": False,
@@ -3488,7 +3513,11 @@ class TestPipelineRecipeFlow:
         ("call_number", "expected_prefix"), [(1, "preflight:"), (2, "cleanup refs:")]
     )
     def test_ref_listing_failure_is_reported(
-        self, tmp_path: Path, monkeypatch, call_number: int, expected_prefix: str
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        call_number: int,
+        expected_prefix: str,
     ) -> None:
         runner, state = _pipeline_runner()
         state["published_refs"] = [_PIPELINE_BRANCH]
@@ -3525,7 +3554,7 @@ class TestPipelineRecipeFlow:
         [[], [[{}]], [[{"ref": "refs/tags/v1"}]]],
     )
     def test_malformed_ref_listing_fails_preflight(
-        self, tmp_path: Path, monkeypatch, response
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, response: Any
     ) -> None:
         runner, state = _pipeline_runner()
         state["refs_list_response"] = response
@@ -3539,7 +3568,7 @@ class TestPipelineRecipeFlow:
         assert not any(call.argv[:3] == ["autoskillit", "fleet", "run"] for call in runner.calls)
 
     def test_proven_branch_whose_delete_fails_is_not_reported_as_unexplained(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         runner, state = _pipeline_runner()
         state["published_refs"] = [_PIPELINE_BRANCH]
@@ -3553,7 +3582,7 @@ class TestPipelineRecipeFlow:
         assert not any("without ownership proof" in failure for failure in failures)
 
     def test_failed_run_teardown_deletes_the_branch_proven_by_captured_evidence(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         provenance = load_provenance("run_38170521660_attempt_1")
         repository = provenance["repository"]

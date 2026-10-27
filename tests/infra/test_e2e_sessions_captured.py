@@ -65,7 +65,11 @@ def _tool_reply(rows: list[dict[str, Any]], suffix: str) -> tuple[dict[str, Any]
     ]
     assert len(matches) == 1
     use_row, use_block = matches[0]
-    reply = next(row for row in rows if row.get("sourceToolAssistantUUID") == use_row["uuid"])
+    reply = next(
+        (row for row in rows if row.get("sourceToolAssistantUUID") == use_row["uuid"]),
+        None,
+    )
+    assert reply is not None, f"missing tool reply for {suffix}"
     result = next(
         block
         for block in reply.get("message", {}).get("content", [])

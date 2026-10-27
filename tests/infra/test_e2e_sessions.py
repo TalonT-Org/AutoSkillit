@@ -1474,7 +1474,7 @@ def test_owned_session_transcript_is_validated_and_paired_in_one_read(
 
     monkeypatch.setattr(Path, "open", count_transcript_open)
     violations: list[str] = []
-    owned: dict[str, dict[str, Any]] = {}
+    owned: dict[str, sessions._OwnedSession] = {}
     summary = {
         "session_id": ROOT_ID,
         "dispatch_id": DISPATCH_ID,

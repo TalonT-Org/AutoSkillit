@@ -11,8 +11,26 @@ import sys
 import time
 from collections.abc import Iterator, Mapping
 from pathlib import Path
-from typing import Any, TypeGuard
+from typing import Any, TypedDict, TypeGuard
 from urllib.parse import urlsplit
+
+_ToolCall = tuple[str, dict[str, Any], dict[str, Any] | None, bool]
+
+
+class _OwnedSession(TypedDict):
+    row: dict[str, Any]
+    summary: dict[str, Any] | None
+    session_dir: Path
+    transcript: Path | None
+    calls: list[_ToolCall]
+
+
+class OwnershipProof(TypedDict):
+    branches: list[str]
+    claimed: bool
+    transcripts: list[dict[str, str]]
+    violations: list[str]
+
 
 _SESSION_EVENTS = frozenset({"SessionStart", "SessionEnd"})
 _AGENT_EVENTS = frozenset({"SubagentStart", "SubagentStop"})
@@ -258,7 +276,7 @@ def _discover_owned(
         session_id = row.get("session_id")
         if isinstance(session_id, str) and session_id:
             rows_by_id.setdefault(session_id, []).append(row)
-    owned: dict[str, dict[str, Any]] = {}
+    owned: dict[str, _OwnedSession] = {}
     root_rows = rows_by_id.get(root_id, [])
     if not root_id or len(root_rows) != 1:
         violations.append("sessions_index:root_missing_or_ambiguous")
@@ -313,7 +331,7 @@ def _fresh_candidates(
     return candidates
 
 
-def _launched_session_ids(owned: Mapping[str, Mapping[str, Any]]) -> set[str]:
+def _launched_session_ids(owned: Mapping[str, _OwnedSession]) -> set[str]:
     """Return the session ids named by receipted launch replies in owned transcripts."""
     launched: set[str] = set()
     for item in owned.values():
@@ -342,7 +360,7 @@ def _add_linked_descendants(
     log_root: Path,
     dispatch_id: str,
     candidates: dict[str, tuple[dict[str, Any], dict[str, Any] | None]],
-    owned: dict[str, dict[str, Any]],
+    owned: dict[str, _OwnedSession],
     violations: list[str],
 ) -> None:
     remaining = dict(candidates)
@@ -384,7 +402,7 @@ def _add_owned_session(
     row: Mapping[str, Any],
     session_id: str,
     violations: list[str],
-    owned: dict[str, dict[str, Any]],
+    owned: dict[str, _OwnedSession],
     *,
     summary: dict[str, Any] | None = None,
 ) -> None:
@@ -416,7 +434,7 @@ def _add_owned_session(
             transcript = log_root / transcript
     else:
         violations.append(f"sessions_index:{session_id}:missing_transcript")
-    calls = []
+    calls: list[_ToolCall] = []
     if transcript is None or not transcript.is_file():
         violations.append(f"transcript:{session_id}:missing")
     else:
@@ -539,7 +557,7 @@ def _make_interval(
 
 def _check_transcript_coverage(
     events: list[dict[str, Any]],
-    owned: Mapping[str, Mapping[str, Any]],
+    owned: Mapping[str, _OwnedSession],
     violations: list[str],
 ) -> list[dict[str, str]]:
     session_ids = set(owned)
@@ -583,7 +601,7 @@ def _check_transcript_coverage(
 
 
 def _enumerate_native_transcripts(
-    owned: Mapping[str, Mapping[str, Any]],
+    owned: Mapping[str, _OwnedSession],
     session_paths: Mapping[str, set[str]],
     violations: list[str],
 ) -> dict[str, dict[str, Path]]:
@@ -676,7 +694,7 @@ def summarize(
     """Write a bounded concurrency summary beside the raw lifecycle trace."""
     context = _discover_owned(trace_path, envelope, log_root)
     violations = list(context["violations"])
-    owned: dict[str, dict[str, Any]] = context["owned"]
+    owned: dict[str, _OwnedSession] = context["owned"]
     owned_ids = set(owned)
     intervals, seen_sessions = _lifecycle_intervals(context["events"], owned_ids, violations)
     for session_id in sorted(owned_ids - seen_sessions):
@@ -781,10 +799,10 @@ def _transcript_tool_pairs(
     transcript: Path,
     session_id: str,
     violations: list[str],
-) -> list[tuple[str, dict[str, Any], dict[str, Any] | None, bool]]:
+) -> list[_ToolCall]:
     """Return paired target calls as name, input, result, and result-error flag."""
     pending: dict[str, tuple[str, dict[str, Any]]] = {}
-    paired: list[tuple[str, dict[str, Any], dict[str, Any] | None, bool]] = []
+    paired: list[_ToolCall] = []
     for line_number, row in _iter_jsonl(transcript, f"transcript:{session_id}", violations):
         _pair_record(row, line_number, session_id, pending, paired, violations)
     for tool_id, (name, tool_input) in pending.items():
@@ -815,7 +833,7 @@ def _pair_record(
     line_number: int,
     session_id: str,
     pending: dict[str, tuple[str, dict[str, Any]]],
-    paired: list[tuple[str, dict[str, Any], dict[str, Any] | None, bool]],
+    paired: list[_ToolCall],
     violations: list[str],
 ) -> None:
     message = row.get("message")
@@ -902,7 +920,7 @@ def collect_ownership(
 
 
 def _owned_tool_proofs(
-    owned: Mapping[str, Mapping[str, Any]],
+    owned: Mapping[str, _OwnedSession],
     root_id: str,
     valid_issue_reference: bool,
     expected_number: str,

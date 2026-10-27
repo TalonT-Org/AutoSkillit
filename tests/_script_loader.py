@@ -8,8 +8,8 @@ from pathlib import Path
 from types import ModuleType
 
 
-def load_check_script(name: str, path: Path) -> ModuleType:
-    """Load one gate script fresh via importlib, registering it in sys.modules under *name*.
+def load_script(name: str, path: Path) -> ModuleType:
+    """Load one standalone script fresh via importlib, registering it in sys.modules under *name*.
 
     Each caller passes its own unique *name* so dataclasses defined in the loaded script
     resolve string annotations through sys.modules[cls.__module__] without colliding with a

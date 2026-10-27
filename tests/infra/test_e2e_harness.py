@@ -19,7 +19,7 @@ from urllib.parse import quote
 import pytest
 
 from tests._hook_protocol_oracle import claude_matcher_admits
-from tests._script_loader import load_check_script
+from tests._script_loader import load_script
 from tests.infra._e2e_evidence import load_provenance, materialize_run
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
@@ -27,7 +27,7 @@ pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _HARNESS_SCRIPT = REPO_ROOT / "scripts" / "e2e" / "e2e_harness.py"
 
-harness = load_check_script("_autoskillit_e2e_harness", _HARNESS_SCRIPT)
+harness = load_script("_autoskillit_e2e_harness", _HARNESS_SCRIPT)
 e2e_catalog = harness.e2e_catalog
 
 _AUDIT_SLOT = f"sha256:{'a' * 64}"

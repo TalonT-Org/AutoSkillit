@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from tests._script_loader import load_check_script
+from tests._script_loader import load_script
 from tests.infra._complexity_helpers import _MINIMAL_LIMITS, _git, _source_with_function
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
@@ -22,7 +22,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 _CHECK_SCRIPT = REPO_ROOT / "scripts" / "check_complexity.py"
 _CHECK_MODULE_NAME = "_autoskillit_check_complexity_git_e2e"
 
-check = load_check_script(_CHECK_MODULE_NAME, _CHECK_SCRIPT)
+check = load_script(_CHECK_MODULE_NAME, _CHECK_SCRIPT)
 
 
 # --- disposable repo fixture: seeding differs from test_check_complexity.py (branch

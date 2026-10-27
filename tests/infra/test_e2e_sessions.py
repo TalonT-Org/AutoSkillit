@@ -10,13 +10,13 @@ from typing import IO, Any
 import pytest
 
 from autoskillit.core import DIRECT_PREFIX, PLUGIN_PREFIX
-from tests._script_loader import load_check_script
+from tests._script_loader import load_script
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = REPO_ROOT / "scripts" / "e2e" / "e2e_sessions.py"
-sessions = load_check_script("_autoskillit_e2e_sessions", _SCRIPT)
+sessions = load_script("_autoskillit_e2e_sessions", _SCRIPT)
 
 DISPATCH_ID = "dispatch-5233"
 ROOT_ID = "session-root"

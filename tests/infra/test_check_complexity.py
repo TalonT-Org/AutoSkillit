@@ -15,7 +15,7 @@ from types import ModuleType
 
 import pytest
 
-from tests._script_loader import load_check_script
+from tests._script_loader import load_script
 from tests.infra._complexity_helpers import (
     _CONSTRUCT_CASES,
     _MINIMAL_LIMITS,
@@ -29,7 +29,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 _CHECK_SCRIPT = REPO_ROOT / "scripts" / "check_complexity.py"
 _CHECK_MODULE_NAME = "_autoskillit_check_complexity"
 
-check = load_check_script(_CHECK_MODULE_NAME, _CHECK_SCRIPT)
+check = load_script(_CHECK_MODULE_NAME, _CHECK_SCRIPT)
 git_plumbing = sys.modules["_git_plumbing"]
 
 
@@ -657,7 +657,7 @@ def test_undecodable_working_tree_source_exits_2(
     assert "encoding" in capsys.readouterr().err
 
 
-def test_load_check_script_restores_sys_path_and_keeps_success_registration(
+def test_load_script_restores_sys_path_and_keeps_success_registration(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -667,7 +667,7 @@ def test_load_check_script_restores_sys_path_and_keeps_success_registration(
     monkeypatch.delitem(sys.modules, name, raising=False)
     previous_path = list(sys.path)
 
-    loaded = load_check_script(name, script)
+    loaded = load_script(name, script)
 
     assert sys.path == previous_path
     assert sys.modules[name] is loaded
@@ -675,7 +675,7 @@ def test_load_check_script_restores_sys_path_and_keeps_success_registration(
 
 
 @pytest.mark.parametrize("has_previous", [False, True])
-def test_load_check_script_restores_registration_after_failure(
+def test_load_script_restores_registration_after_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     has_previous: bool,
@@ -693,7 +693,7 @@ def test_load_check_script_restores_registration_after_failure(
     previous_path = list(sys.path)
 
     with pytest.raises(RuntimeError, match="load failed"):
-        load_check_script(name, script)
+        load_script(name, script)
 
     assert sys.path == previous_path
     if has_previous:

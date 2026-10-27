@@ -16,12 +16,12 @@ from autoskillit.core.types import (
 )
 from autoskillit.execution.backends import claude_resolvable_agent_names
 from tests._hook_protocol_oracle import claude_matcher_admits
-from tests._script_loader import load_check_script
+from tests._script_loader import load_script
 from tests._session_log_helpers import _flush
 
 pytestmark = pytest.mark.medium
 
-sessions = load_check_script(
+sessions = load_script(
     "_autoskillit_e2e_sessions_contract",
     Path(__file__).resolve().parents[2] / "scripts" / "e2e" / "e2e_sessions.py",
 )

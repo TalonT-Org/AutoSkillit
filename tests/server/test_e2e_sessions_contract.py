@@ -6,11 +6,11 @@ from typing import Any
 import pytest
 from mcp.types import CallToolResult
 
-from tests._script_loader import load_check_script
+from tests._script_loader import load_script
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
-sessions = load_check_script(
+sessions = load_script(
     "_autoskillit_e2e_sessions_mcp_contract",
     Path(__file__).resolve().parents[2] / "scripts" / "e2e" / "e2e_sessions.py",
 )

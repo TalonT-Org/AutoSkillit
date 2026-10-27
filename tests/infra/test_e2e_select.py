@@ -10,14 +10,14 @@ from typing import cast
 
 import pytest
 
-from tests._script_loader import load_check_script
+from tests._script_loader import load_script
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _SELECT_SCRIPT = REPO_ROOT / "scripts" / "e2e" / "e2e_select.py"
 
-select = load_check_script("_autoskillit_e2e_select", _SELECT_SCRIPT)
+select = load_script("_autoskillit_e2e_select", _SELECT_SCRIPT)
 e2e_catalog = select.e2e_catalog
 
 REPOSITORY = "TalonT-Org/AutoSkillit"

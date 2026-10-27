@@ -11,7 +11,7 @@ import pytest
 
 from autoskillit.core import PLUGIN_PREFIX
 from tests._hook_protocol_oracle import claude_matcher_admits
-from tests._script_loader import load_check_script
+from tests._script_loader import load_script
 from tests.infra._e2e_evidence import fixture_dir, load_provenance, materialize_run
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
@@ -20,7 +20,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_NAME = "run_38170521660_attempt_1"
 FIXTURE_DIR = fixture_dir(FIXTURE_NAME)
 _SCRIPT = REPO_ROOT / "scripts" / "e2e" / "e2e_sessions.py"
-sessions = load_check_script("_autoskillit_e2e_sessions_captured", _SCRIPT)
+sessions = load_script("_autoskillit_e2e_sessions_captured", _SCRIPT)
 ROOT_SESSION_ID = "2292658a-34cf-44a0-a0b1-f7a20218874b"
 WORKER_SESSION_IDS = (
     "8ef8f993-8caa-47dd-83b0-26f9e5b51139",

@@ -445,8 +445,6 @@ def codex_verdict(
     )
 
 
-# These keys and event exceptions come from Claude's JSON output and
-# per-event decision-control tables in hooks.md.
 _EXACT_MATCHER = re.compile(r"[A-Za-z0-9_\- ,|]*")
 
 
@@ -465,6 +463,8 @@ def claude_matcher_admits(matcher: str | None, value: str) -> bool:
     return re.search(matcher, value) is not None
 
 
+# These keys and event exceptions come from Claude's JSON output and
+# per-event decision-control tables in hooks.md.
 CLAUDE_HOOK_SPECIFIC_OUTPUT_FIELDS: Mapping[str, frozenset[str]] = {
     "PreToolUse": frozenset(
         {

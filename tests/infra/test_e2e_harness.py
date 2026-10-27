@@ -3075,7 +3075,6 @@ class TestPipelineRecipeFlow:
             for event in harness.e2e_sessions.LIFECYCLE_HOOK_MATCHERS
         )
 
-        close = next(call for call in calls if call.argv[:3] == ["gh", "pr", "close"])
         assert close.argv == ["gh", "pr", "close", "8", "--repo", SANDBOX]
         assert not any(call.argv[:4] == ["gh", "pr", "close", "9"] for call in calls)
         assert any(

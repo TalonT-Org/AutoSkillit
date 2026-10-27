@@ -108,8 +108,8 @@ def _trace(path: Path, events: list[dict[str, Any]]) -> None:
     _jsonl(path, events)
 
 
-def _envelope(session_id: str = ROOT_ID) -> dict[str, str]:
-    return {"dispatched_session_id": session_id, "dispatch_id": DISPATCH_ID}
+def _envelope() -> dict[str, str]:
+    return {"dispatched_session_id": ROOT_ID, "dispatch_id": DISPATCH_ID}
 
 
 def _base_sessions(

@@ -27,6 +27,13 @@ def test_server_identities_match_canonical_prefixes() -> None:
 
 def test_tracked_tools_are_registered_product_tools() -> None:
     assert sessions._TRACKED_TOOLS
+    assert {
+        "claim_and_resolve_issue",
+        "create_and_publish_branch",
+        "run_skill",
+        "complete_run_skill_result",
+        "recover_run_skill_result",
+    } <= sessions._TRACKED_TOOLS
     assert sessions._TRACKED_TOOLS <= GATED_TOOLS | UNGATED_TOOLS
 
 

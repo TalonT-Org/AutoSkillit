@@ -124,7 +124,7 @@ def _assert_allowed(command: str, tool: str, checkout: Path, monkeypatch: pytest
     denials = _guard_denials(event, monkeypatch)
     scan = scan_write_targets(command, str(checkout))
     assert not denials, (
-        f"targets={scan.targets}; {'; '.join(denials)}; "
+        f"targets={scan.targets}; entry_targets={scan.entry_targets}; {'; '.join(denials)}; "
         "see skills_extended/AGENTS.md § Literal write targets"
     )
 

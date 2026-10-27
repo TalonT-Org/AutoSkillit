@@ -31,8 +31,9 @@ SiteKey = tuple[str, str]
 
 _ALLOWLISTED_SITES: dict[SiteKey, str] = {
     ("guards/git_ops_guard.py", "_relative_to"): (
-        "target, common and worktree_git are each .resolve()d by _raw_target_mutations "
-        "before _classify_raw_write_target receives them, so both operands are canonical."
+        "_raw_target_mutations canonicalizes content targets with .resolve(), entry "
+        "targets with destination_location (resolved parent plus literal basename), "
+        "and common/worktree_git roots with .resolve() before classification."
     ),
     ("formatters/_fmt_response_spill.py", "_response_spill_artifact_is_trusted"): (
         "resolved comes from artifact.resolve(strict=True) inline and project_temp from "

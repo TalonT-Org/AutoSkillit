@@ -13,7 +13,6 @@ from autoskillit.migration.store import (
     FailureStore,
     MigrationFailure,
     default_store_path,
-    record_from_skill,
 )
 
 pytestmark = [pytest.mark.layer("migration"), pytest.mark.small]
@@ -127,28 +126,6 @@ def test_has_failure_false(tmp_path: Path) -> None:
     store_path = tmp_path / "failures.json"
     store = FailureStore(store_path)
     assert store.has_failure("absent") is False
-
-
-# ---------------------------------------------------------------------------
-# FS10: record_from_skill() records to cwd/.autoskillit/temp/migrations/failures.json
-# ---------------------------------------------------------------------------
-def test_record_from_skill_helper(tmp_path: Path) -> None:
-    with patch("autoskillit.migration.store.Path.cwd", return_value=tmp_path):
-        record_from_skill(
-            name="my-pipeline",
-            file_path="/abs/path/my-pipeline.yaml",
-            file_type="recipe",
-            error="validation failed",
-            retries_attempted=3,
-        )
-    expected_path = tmp_path / ".autoskillit" / "temp" / "migrations" / "failures.json"
-    assert expected_path.exists()
-    store = FailureStore(expected_path)
-    failures = store.load()
-    assert "my-pipeline" in failures
-    f = failures["my-pipeline"]
-    assert f.file_path == "/abs/path/my-pipeline.yaml"
-    assert f.retries_attempted == 3
 
 
 # ---------------------------------------------------------------------------

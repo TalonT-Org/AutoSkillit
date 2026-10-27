@@ -23,16 +23,33 @@ async def _inspect(**kwargs: Any) -> dict[str, Any]:
 
 
 @pytest.mark.asyncio
-async def test_inspection_requires_an_open_kitchen(tool_ctx) -> None:
-    result = json.loads(await session_logs.inspect_session_logs(operation="index"))
+async def test_inspection_does_not_require_an_open_kitchen(tool_ctx, retained_logs) -> None:
+    result = await _inspect(operation="index", session_ids=["session-one"])
 
-    assert result["success"] is False
-    assert result["subtype"] == "gate_error"
-    assert "open_kitchen" in result["result"]
+    assert tool_ctx.gate.enabled is False
+    assert result["status"] == "answered"
+    assert result["sessions"] == [
+        {
+            "session_id": "session-one",
+            "dir_name": "session-one",
+            "backend": "claude-code",
+            "kitchen_id": "kitchen-one",
+            "step_name": "implement",
+            "handles": ["summary", "anomalies", "audit", "turn_usage", "transcript"],
+            "retry": {
+                "success": False,
+                "subtype": "missing_completion_marker",
+                "needs_retry": True,
+                "retry_reason": "early_stop",
+            },
+        }
+    ]
 
 
 @pytest.fixture
 def retained_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
+    home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", lambda: home)
     log_root = tmp_path / "logs"
     session_dir = log_root / "sessions" / "session-one"
     session_dir.mkdir(parents=True)
@@ -40,8 +57,19 @@ def retained_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, 
     anomalies = session_dir / "anomalies.jsonl"
     audit = session_dir / "audit_log.json"
     turn_usage = session_dir / "turn_usage.jsonl"
-    transcript = tmp_path / "transcripts" / "session-one.jsonl"
-    transcript.parent.mkdir()
+    cwd_prefix = tmp_path / "workspace" / "repro"
+    cwd = cwd_prefix / ".autoskillit" / "temp" / "sandbox"
+    cwd.mkdir(parents=True)
+    assert "." not in str(cwd_prefix)
+    encoded_prefix = str(cwd_prefix).replace("/", "-").replace("_", "-")
+    transcript = (
+        home
+        / ".claude"
+        / "projects"
+        / f"{encoded_prefix}--autoskillit-temp-sandbox"
+        / "session-one.jsonl"
+    )
+    transcript.parent.mkdir(parents=True)
     summary.write_text('{"needs_retry":true,"retry_reason":"early_stop"}\n')
     anomalies.write_text('{"kind":"retry"}\n{"kind":"error"}\n')
     audit.write_text('{"subtype":"missing_completion_marker"}\n')
@@ -55,7 +83,7 @@ def retained_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, 
     row = {
         "session_id": "session-one",
         "dir_name": "session-one",
-        "cwd": str(tmp_path / "project"),
+        "cwd": str(cwd),
         "backend": "claude-code",
         "claude_code_log": str(transcript),
         "codex_log": None,
@@ -73,7 +101,6 @@ def retained_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, 
         backend=None,
     )
     monkeypatch.setattr(session_logs, "_get_ctx", lambda: ctx)
-    monkeypatch.setattr(session_logs, "_require_enabled", lambda: None)
     monkeypatch.setattr(session_logs, "claude_code_log_path", lambda cwd, session_id: transcript)
     monkeypatch.setattr(session_logs, "_CONTINUATION_KEY", b"k" * 32)
     monkeypatch.setattr(session_logs, "_CONTINUATION_CLOCK", lambda: 1_000.0)
@@ -85,6 +112,8 @@ def retained_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, 
         "audit": audit,
         "turn_usage": turn_usage,
         "transcript": transcript,
+        "cwd": cwd,
+        "home": home,
     }
 
 
@@ -182,6 +211,46 @@ async def test_codex_transcript_resolves_through_backend_locator(
 
     assert result["status"] == "answered"
     assert result["content"] == '{"event":"turn.failed"}\n'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("stored_path_kind", "expected_status"),
+    [("canonical", "answered"), ("pre-repair", "transcript_identity_mismatch")],
+)
+async def test_claude_transcript_stored_path_must_match_real_dotted_cwd_helper(
+    retained_logs,
+    monkeypatch: pytest.MonkeyPatch,
+    stored_path_kind: str,
+    expected_status: str,
+) -> None:
+    from autoskillit.core.paths import claude_code_log_path
+
+    monkeypatch.setattr(session_logs, "claude_code_log_path", claude_code_log_path)
+    canonical = claude_code_log_path(str(retained_logs["cwd"]), "session-one")
+    assert canonical == retained_logs["transcript"]
+    if stored_path_kind == "canonical":
+        stored_path = canonical
+    else:
+        pre_repair_name = str(retained_logs["cwd"]).replace("/", "-").replace("_", "-")
+        stored_path = (
+            retained_logs["home"] / ".claude" / "projects" / pre_repair_name / "session-one.jsonl"
+        )
+    _update_index(retained_logs, claude_code_log=str(stored_path))
+
+    result = json.loads(
+        await session_logs.inspect_session_logs(
+            operation="read",
+            session_id="session-one",
+            artifact="transcript",
+        )
+    )
+
+    if expected_status == "answered":
+        assert result["status"] == "answered"
+        assert result["content"] == '{"event":"turn.failed"}\n'
+    else:
+        assert result["reason"] == expected_status
 
 
 @pytest.mark.asyncio

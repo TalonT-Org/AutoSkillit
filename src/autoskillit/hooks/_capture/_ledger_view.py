@@ -163,6 +163,7 @@ class LedgerView:
         self.records = records
         self.opaque_frames = opaque_frames
         self.opaque_capture_ids = opaque_capture_ids
+        self._sizer.set_opaque_frames(opaque_frames)
         self.incarnation = LedgerIncarnation(
             value.st_dev,
             value.st_ino,
@@ -246,6 +247,7 @@ class LedgerView:
         if decoded.saw_legacy:
             self.opaque_frames = decoded.opaque_frames
             self.opaque_capture_ids = decoded.opaque_capture_ids
+            self._sizer.set_opaque_frames(self.opaque_frames)
             compact_legacy(
                 decoded.records,
                 decoded.compaction_epoch + 1,

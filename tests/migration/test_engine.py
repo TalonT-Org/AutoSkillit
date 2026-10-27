@@ -1,4 +1,4 @@
-"""Tests for the MigrationEngine default registration and MIGRATE_RECIPES_MAX_RETRIES."""
+"""Tests for the MigrationEngine default adapter registration."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from autoskillit.migration.engine import (
     MigrationResult,
 )
 from autoskillit.migration.service import default_migration_engine
+from tests._helpers import MINIMAL_VALID_RECIPE_YAML
 
 from .conftest import make_migration_note, make_skill_result
 
@@ -68,18 +69,22 @@ class TestMigrationEngine:
         original_content = "name: mypipe\n"
         recipe_path.write_text(original_content)
 
-        new_content = "name: mypipe\n# migrated\nautoskillit_version: '1.0.0'\n"
+        new_content = "autoskillit_version: '1.0.0'\n" + MINIMAL_VALID_RECIPE_YAML
         temp_dir = tmp_path / ".autoskillit" / "temp"
         temp_out = temp_dir / "migrations" / "mypipe.yaml"
-        temp_out.parent.mkdir(parents=True)
-        temp_out.write_text(new_content)
 
         monkeypatch.setattr(
             _patch_migration_adapters_recipe,
             "applicable_migrations",
             lambda *a, **kw: [make_migration_note()],
         )
-        mock_headless = AsyncMock(return_value=make_skill_result(True))
+
+        async def write_output(**_kwargs: object):
+            temp_out.parent.mkdir(parents=True, exist_ok=True)
+            temp_out.write_text(new_content)
+            return make_skill_result(True)
+
+        mock_headless = AsyncMock(side_effect=write_output)
 
         file = MigrationFile(
             name="mypipe", path=recipe_path, file_type="recipe", current_version="0.0.1"

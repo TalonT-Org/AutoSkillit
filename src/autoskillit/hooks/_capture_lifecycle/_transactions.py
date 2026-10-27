@@ -385,6 +385,7 @@ def reserve_capture(
                 raise CaptureCapacityError(
                     decision.reason,
                     decision.assist_transition_limit,
+                    decision=decision,
                 )
             store._append_locked(record, records, compaction_epoch, size)
         return record

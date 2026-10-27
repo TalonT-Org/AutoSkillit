@@ -36,6 +36,7 @@ from _command_classification import (  # noqa: E402
 from _guard_decision_diagnostics import (  # noqa: E402
     record_guard_decision,
 )
+from _path_identity import destination_within  # noqa: E402
 
 if TYPE_CHECKING:
     from .._runtime._hook_output import deny_tool_use
@@ -131,9 +132,12 @@ def _bash_validation_error(
             f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} "
             "(unresolved write target). " + UNRESOLVED_WRITE_TARGET_REMEDIATION
         )
-    if not scan.targets:
+    if not scan.targets and not scan.entry_targets:
         return None
-    return _paths_validation_error(list(scan.targets), norm_prefixes, display_prefix)
+    content_error = _paths_validation_error(list(scan.targets), norm_prefixes, display_prefix)
+    if content_error is not None:
+        return content_error
+    return _entry_paths_validation_error(list(scan.entry_targets), norm_prefixes, display_prefix)
 
 
 def _record(data: object, *, activation: str, scope: str, decision: str, reason: str) -> None:
@@ -310,16 +314,36 @@ def _write_prefix_policy(data: dict[str, object], headless: bool) -> _WritePolic
     return _WritePolicy("active", tuple(norm_prefixes), ", ".join(raw_prefixes), "")
 
 
+def _write_boundary_message(display_prefix: str) -> str:
+    return (
+        f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
+        f"Only writes to {display_prefix} are permitted."
+    )
+
+
 def _paths_validation_error(
     paths: list[str], norm_prefixes: list[str], display_prefix: str
 ) -> str | None:
     for path in paths:
         resolved = os.path.realpath(path)
         if not any(resolved.startswith(np) or resolved == np.rstrip("/") for np in norm_prefixes):
+            return _write_boundary_message(display_prefix)
+    return None
+
+
+def _entry_paths_validation_error(
+    paths: list[str], norm_prefixes: list[str], display_prefix: str
+) -> str | None:
+    for path in paths:
+        try:
+            allowed = any(destination_within(path, prefix) for prefix in norm_prefixes)
+        except (OSError, RuntimeError, ValueError):
             return (
-                f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
-                f"Only writes to {display_prefix} are permitted."
+                f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} "
+                f"(unresolved write target {path!r}). Check its path components and symlinks."
             )
+        if not allowed:
+            return _write_boundary_message(display_prefix)
     return None
 
 

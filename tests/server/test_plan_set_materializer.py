@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -25,6 +26,12 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 _FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "plan_set"
 _PUBLICATION_FIXTURE = _FIXTURES / "publication_pr"
 _GitHub = PlanSetGitHub
+
+
+class _FrozenDatetime:
+    @staticmethod
+    def now(_zone: object) -> datetime:
+        return datetime(2026, 10, 25, tzinfo=UTC)
 
 
 def _plan_part(
@@ -103,6 +110,53 @@ async def test_sealed_binding_writes_content_addressed_authority(tmp_path: Path)
     assert result.success is True
     assert result.coverage_status == "pass"
     assert Path(result.plan_set_authority_path).is_file()
+
+
+@pytest.mark.parametrize("case", ("new", "existing", "unchanged_parent"))
+@pytest.mark.asyncio
+async def test_successful_recipe_bind_records_lookup_binding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: str
+) -> None:
+    monkeypatch.setattr(materializer_module, "datetime", _FrozenDatetime)
+    fixture = _FIXTURES / "split_r1_r2"
+    parts = tuple(tmp_path / name for name in ("part_a.md", "part_b.md"))
+    for part in parts:
+        part.write_text((fixture / part.name).read_text(), encoding="utf-8")
+    request = PlanSetBindRequest(
+        plan_parts_raw="\n".join(str(part) for part in parts),
+        allowed_root=tmp_path,
+        issue_url="owner/repo#1",
+        parent_authority_path="",
+        seal=True,
+        step_name="bind",
+        execution_generation="raw-execution-id",
+        kitchen_id="kitchen",
+        dispatch_id="",
+        binding_mode=PlanSetBindingMode.RECIPE,
+    )
+    initial = None
+    if case != "new":
+        initial = await DefaultPlanSetMaterializer(_GitHub()).bind(request)
+        assert initial.success
+        if case == "unchanged_parent":
+            request = replace(request, parent_authority_path=initial.plan_set_authority_path)
+
+    materializer = DefaultPlanSetMaterializer(_GitHub())
+    lookup_path = initial.plan_set_authority_path if initial is not None else "missing.json"
+    assert materializer.lookup_binding("raw-execution-id", lookup_path) is None
+
+    result = await materializer.bind(request)
+
+    assert result.success
+    if case == "unchanged_parent":
+        assert initial is not None
+        assert result.plan_set_authority_path == initial.plan_set_authority_path
+        assert result.plan_set_authority_digest == initial.plan_set_authority_digest
+    authority = Path(result.plan_set_authority_path)
+    dotted_path = f"{authority.parent}/./{authority.name}"
+    expected = (tmp_path.resolve(), result.plan_set_authority_digest)
+    assert materializer.lookup_binding("raw-execution-id", dotted_path) == expected
+    assert materializer.lookup_binding("other-execution-id", dotted_path) is None
 
 
 def _coverage_failure_case(
@@ -271,6 +325,10 @@ async def test_failed_seal_preserves_open_parent_for_gap_replan(tmp_path: Path) 
     materializer = DefaultPlanSetMaterializer(_GitHub())
     parent = await materializer.bind(request)
     assert parent.success
+    parent_binding = materializer.lookup_binding(
+        request.execution_generation, parent.plan_set_authority_path
+    )
+    assert parent_binding == (tmp_path.resolve(), parent.plan_set_authority_digest)
     before = set((tmp_path / "plan-set-authority").rglob("*.json"))
 
     failed = await materializer.bind(
@@ -291,6 +349,10 @@ async def test_failed_seal_preserves_open_parent_for_gap_replan(tmp_path: Path) 
     assert "R2 [unassigned]" in failed.coverage_gaps
     assert failed.plan_set_authority_path == parent.plan_set_authority_path
     assert failed.plan_set_authority_digest == parent.plan_set_authority_digest
+    assert (
+        materializer.lookup_binding(request.execution_generation, parent.plan_set_authority_path)
+        == parent_binding
+    )
     assert set((tmp_path / "plan-set-authority").rglob("*.json")) == before
 
 
@@ -606,6 +668,10 @@ async def test_renewal_rebinds_walkthrough_edits_before_implementation(tmp_path:
     materializer = DefaultPlanSetMaterializer(_GitHub())
     initial = await materializer.bind(request)
     assert initial.success
+    assert materializer.lookup_binding("generation", initial.plan_set_authority_path) == (
+        tmp_path.resolve(),
+        initial.plan_set_authority_digest,
+    )
     parts[0].write_text(
         parts[0]
         .read_text()
@@ -645,6 +711,14 @@ async def test_renewal_rebinds_walkthrough_edits_before_implementation(tmp_path:
     )
     assert renewed.success
     assert renewed.plan_set_authority_digest != initial.plan_set_authority_digest
+    assert materializer.lookup_binding("generation", initial.plan_set_authority_path) == (
+        tmp_path.resolve(),
+        initial.plan_set_authority_digest,
+    )
+    assert materializer.lookup_binding("generation", renewed.plan_set_authority_path) == (
+        tmp_path.resolve(),
+        renewed.plan_set_authority_digest,
+    )
     admitted = verify(renewed.plan_set_authority_path)
     assert admitted.accepted
     assert admitted.authority is not None and admitted.authority.revision == 2
@@ -685,8 +759,13 @@ async def test_verifier_rejects_foreign_kitchen_and_standalone_binding(tmp_path:
         dispatch_id="",
         binding_mode=PlanSetBindingMode.STANDALONE,
     )
-    bound = await DefaultPlanSetMaterializer(_GitHub()).bind(request)
+    materializer = DefaultPlanSetMaterializer(_GitHub())
+    bound = await materializer.bind(request)
     assert bound.success
+    assert (
+        materializer.lookup_binding(request.execution_generation, bound.plan_set_authority_path)
+        is None
+    )
     foreign = verify_plan_set_authority(
         bound.plan_set_authority_path,
         allowed_root=tmp_path,

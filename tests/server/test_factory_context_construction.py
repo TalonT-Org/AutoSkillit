@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.config import AutomationConfig
-from autoskillit.core import AuditAdmissionStoreAuthority
+from autoskillit.config import AutomationConfig, WorkspaceConfig
+from autoskillit.core import AuditAdmissionStoreAuthority, resolve_temp_dir, temp_dir_display_str
 from autoskillit.core.types import SkillResult
 from autoskillit.execution.headless import DefaultHeadlessExecutor
 from autoskillit.execution.runtime.db import DefaultDatabaseReader
@@ -223,6 +223,20 @@ def test_make_context_service_fields_are_typed_instances(tmp_path):
     assert isinstance(ctx.context_admission_ledger, DefaultContextAdmissionLedger)
     assert ctx.github_review_poster is not None
     assert type(ctx.github_review_poster).__name__ == "DefaultGitHubReviewPoster"
+
+
+def test_make_context_wires_configured_migration_temp_root(tmp_path: Path) -> None:
+    config = AutomationConfig(workspace=WorkspaceConfig(temp_dir="custom-temp"))
+
+    ctx = make_context(config, runner=_runner(), project_dir=tmp_path)
+
+    assert isinstance(ctx.migrations, DefaultMigrationService)
+    assert ctx.migrations._temp_dir_override == resolve_temp_dir(
+        tmp_path, config.workspace.temp_dir
+    )
+    adapter = ctx.migrations._engine.get_adapter("recipe")
+    assert adapter is not None
+    assert adapter._temp_dir_display == temp_dir_display_str(config.workspace.temp_dir)
 
 
 def test_make_context_creates_isolated_context_admission_ledgers(tmp_path) -> None:

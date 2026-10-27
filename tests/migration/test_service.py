@@ -7,12 +7,14 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+import autoskillit.migration.adapters_recipe as _patch_migration_adapters_recipe
 import autoskillit.migration.service as _patch_migration_service
 from autoskillit.migration.engine import (
     AdvisoryResult,
     MigrationResult,
 )
 from autoskillit.migration.service import DefaultMigrationService, default_migration_engine
+from tests._helpers import MINIMAL_VALID_RECIPE_YAML
 
 from .conftest import make_migration_note, make_skill_result
 
@@ -75,6 +77,11 @@ class TestDefaultMigrationServiceBehaviour:
             "_applicable",
             lambda *a, **kw: [make_migration_note()],
         )
+        monkeypatch.setattr(
+            _patch_migration_adapters_recipe,
+            "applicable_migrations",
+            lambda *a, **kw: [make_migration_note()],
+        )
 
         service = DefaultMigrationService(default_migration_engine())
         result = await service.migrate(recipe_path)
@@ -89,11 +96,9 @@ class TestDefaultMigrationServiceBehaviour:
     ) -> None:
         recipe_path = _seed_recipe(tmp_path)
 
-        # Pre-create temp output so RecipeMigrationAdapter finds migrated content
         temp_dir = tmp_path / ".autoskillit" / "temp"
         temp_out = temp_dir / "migrations" / "myrecipe.yaml"
-        temp_out.parent.mkdir(parents=True)
-        temp_out.write_text("name: myrecipe\n# migrated\nautoskillit_version: '1.0.0'\n")
+        migrated_content = "autoskillit_version: '1.0.0'\n" + MINIMAL_VALID_RECIPE_YAML
 
         # Patch the module-level ``_applicable`` alias so the service
         # sees a single migration note. With the headless runner wired in,
@@ -104,8 +109,18 @@ class TestDefaultMigrationServiceBehaviour:
             "_applicable",
             lambda *a, **kw: [make_migration_note()],
         )
+        monkeypatch.setattr(
+            _patch_migration_adapters_recipe,
+            "applicable_migrations",
+            lambda *a, **kw: [make_migration_note()],
+        )
 
-        mock_headless = AsyncMock(return_value=make_skill_result(True))
+        async def write_output(**_kwargs: object):
+            temp_out.parent.mkdir(parents=True, exist_ok=True)
+            temp_out.write_text(migrated_content)
+            return make_skill_result(True)
+
+        mock_headless = AsyncMock(side_effect=write_output)
         service = DefaultMigrationService(
             default_migration_engine(), run_headless=mock_headless, temp_dir=temp_dir
         )
@@ -157,6 +172,43 @@ class TestDefaultMigrationServiceBehaviour:
         assert failure_store.has_failure("myrecipe")
         entry = failure_store.load()["myrecipe"]
         assert entry.error == "boom"
+
+    @pytest.mark.anyio
+    async def test_malformed_migrated_metadata_records_failure_without_writeback(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        recipe_path = _seed_recipe(tmp_path)
+        original = recipe_path.read_bytes()
+        note = make_migration_note()
+        monkeypatch.setattr(_patch_migration_service, "_applicable", lambda *a, **kw: [note])
+        monkeypatch.setattr(
+            _patch_migration_adapters_recipe,
+            "applicable_migrations",
+            lambda *a, **kw: [note],
+        )
+        temp_dir = tmp_path / "temp"
+        temp_out = temp_dir / "migrations" / "myrecipe.yaml"
+
+        async def write_malformed(**_kwargs: object):
+            temp_out.parent.mkdir(parents=True, exist_ok=True)
+            temp_out.write_text("[")
+            return make_skill_result(True)
+
+        service = DefaultMigrationService(
+            default_migration_engine(),
+            run_headless=AsyncMock(side_effect=write_malformed),
+            temp_dir=temp_dir,
+        )
+
+        result = await service.migrate(recipe_path)
+
+        assert "error" in result
+        assert recipe_path.read_bytes() == original
+        assert not recipe_path.with_suffix(".yaml.bak").exists()
+        from autoskillit.migration.store import FailureStore, default_store_path
+
+        failure_store = FailureStore(default_store_path(tmp_path, temp_dir=temp_dir))
+        assert failure_store.has_failure("myrecipe")
 
     @pytest.mark.anyio
     async def test_contract_regeneration_appends_to_contracts_regenerated(

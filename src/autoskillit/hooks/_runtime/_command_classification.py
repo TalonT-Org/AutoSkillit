@@ -232,6 +232,21 @@ def _non_option_indices(argv: list[str], argv_tokens: Sequence[ArgvToken] | None
     ]
 
 
+def _consume_destination_option(
+    argv: list[str],
+    argv_tokens: Sequence[ArgvToken] | None,
+    index: int,
+    spec: dict[str, _FlagArity],
+) -> tuple[str | None, str | None, int, bool]:
+    if argv_tokens is None:
+        value, next_index, recognized = _consume_str_flag(argv, index, spec)
+        return value, None, next_index, recognized
+    value_token, next_index, recognized = _consume_argv_flag(argv_tokens, index, spec)
+    if value_token is None:
+        return None, None, next_index, recognized
+    return value_token.text, value_token.raw_span.strip(), next_index, recognized
+
+
 def _write_verb_operand_indices(
     verb: str, argv: list[str], argv_tokens: Sequence[ArgvToken] | None
 ) -> list[int]:
@@ -243,14 +258,6 @@ def _write_verb_operand_indices(
         return operands[-1:]
     if verb in {"mv", "cp"}:
         return operands[-1:] if len(operands) >= 2 else []
-    if verb == "install":
-        # GNU install's -t/--target-directory form takes its destination
-        # from a flag; otherwise the last operand is the destination.
-        if "-t" in argv[1:] or "--target-directory" in argv[1:]:
-            return operands[:1]
-        if len(operands) < 2:
-            return []
-        return operands[-1:]
     if verb == "patch":
         return operands[:1]
     return operands

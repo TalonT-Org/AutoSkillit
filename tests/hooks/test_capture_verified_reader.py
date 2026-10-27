@@ -12,13 +12,17 @@ import sys
 import threading
 import time
 from contextlib import ExitStack
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 import autoskillit.hooks._capture._cleanup as capture_cleanup
 import autoskillit.hooks._capture._descriptor as capture_descriptor
+import autoskillit.hooks._capture._lifecycle_policy as capture_lifecycle_policy
+import autoskillit.hooks._capture._lifecycle_record as capture_lifecycle_record
 import autoskillit.hooks._capture._reader as capture_reader
+import autoskillit.hooks._capture._reconcile as capture_reconcile
 import autoskillit.hooks._capture._runner as capture_runner
 import autoskillit.hooks._capture_lifecycle as capture_lifecycle
 from autoskillit.hooks._capture._reader import (
@@ -45,12 +49,34 @@ from autoskillit.hooks._capture_lifecycle import (
     CaptureLifecycleError,
     CaptureLifecycleStore,
     CaptureReferenceStatus,
+    CaptureState,
 )
 from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 _CAPTURE_ID = "0123456789abcdef"
+_READABLE_BEARER_CELLS = tuple(
+    (reference_status, delivery_status)
+    for reference_status in (
+        CaptureReferenceStatus.ISSUED,
+        CaptureReferenceStatus.PUBLISHED,
+        CaptureReferenceStatus.UNKNOWN,
+    )
+    for delivery_status in CaptureDeliveryStatus
+    if reference_status is not CaptureReferenceStatus.ISSUED
+    or delivery_status is CaptureDeliveryStatus.NOT_ATTEMPTED
+)
+_UNSETTLED_DELIVERY_CELLS = tuple(
+    (reference_status, delivery_status)
+    for reference_status in CaptureReferenceStatus
+    for delivery_status in CaptureDeliveryStatus
+    if delivery_status is not CaptureDeliveryStatus.DELIVERED
+    and not (
+        reference_status is CaptureReferenceStatus.ISSUED
+        and delivery_status is not CaptureDeliveryStatus.NOT_ATTEMPTED
+    )
+) + ((CaptureReferenceStatus.UNKNOWN, CaptureDeliveryStatus.DELIVERED),)
 
 
 class _Clock:
@@ -91,12 +117,13 @@ def _finalize(
     data: bytes,
     *,
     issue_reference: bool = True,
+    capture_id: str = _CAPTURE_ID,
 ):
     with ExitStack() as cleanup:
         anchor, root, store = _open_store(project, clock)
         cleanup.callback(anchor.close)
         cleanup.callback(root.close)
-        artifact = create_capture_artifact(root, _CAPTURE_ID, store)
+        artifact = create_capture_artifact(root, capture_id, store)
         cleanup.callback(artifact.release_lease)
         cleanup.callback(artifact.close_artifact_fd)
         os.write(artifact.fd, data)
@@ -140,6 +167,47 @@ def _publish(project: Path, clock: _Clock, data: bytes):
 def _close_artifact(artifact) -> None:
     artifact.close_artifact_fd()
     artifact.release_lease()
+
+
+def _deliver(store, value):
+    store.transition_delivery(
+        value,
+        expected=CaptureDeliveryStatus.NOT_ATTEMPTED,
+        target=CaptureDeliveryStatus.ATTEMPTING,
+    )
+    return store.transition_delivery(
+        value,
+        expected=CaptureDeliveryStatus.ATTEMPTING,
+        target=CaptureDeliveryStatus.DELIVERED,
+    )
+
+
+def _record_for_readability_cell(
+    project: Path,
+    clock: _Clock,
+    reference_status: CaptureReferenceStatus,
+    delivery_status: CaptureDeliveryStatus,
+):
+    anchor, root, store, artifact, _finalized = _finalize(
+        project,
+        clock,
+        b"captured",
+        issue_reference=reference_status is not CaptureReferenceStatus.NOT_REQUESTED,
+    )
+    try:
+        record = store.get_record(_CAPTURE_ID)
+        assert record is not None
+        candidate = replace(
+            record,
+            reference_status=reference_status,
+            delivery_status=delivery_status,
+        )
+        capture_lifecycle_record.validate_record(candidate)
+        return candidate
+    finally:
+        _close_artifact(artifact)
+        root.close()
+        anchor.close()
 
 
 def test_published_reference_returns_self_contained_bounded_reader(
@@ -927,3 +995,263 @@ def test_unavailable_reference_cannot_be_resolved(tmp_path: Path) -> None:
     finally:
         root.close()
         anchor.close()
+
+
+@pytest.mark.parametrize(
+    ("reference_status", "delivery_status"),
+    _READABLE_BEARER_CELLS,
+)
+def test_readable_until_never_precedes_an_outstanding_bearer(
+    tmp_path: Path,
+    reference_status: CaptureReferenceStatus,
+    delivery_status: CaptureDeliveryStatus,
+) -> None:
+    record = _record_for_readability_cell(
+        tmp_path / "project",
+        _Clock(),
+        reference_status,
+        delivery_status,
+    )
+
+    assert record.manifest is not None
+    assert record.manifest.reference_expiry is not None
+    readable_until = capture_lifecycle_record.readable_until(record)
+    assert readable_until >= record.manifest.reference_expiry
+    assert readable_until <= record.manifest.retention_deadline
+
+
+@pytest.mark.parametrize(
+    "reference_status",
+    (
+        CaptureReferenceStatus.NOT_REQUESTED,
+        CaptureReferenceStatus.UNAVAILABLE,
+        CaptureReferenceStatus.EXPIRED,
+        CaptureReferenceStatus.REVOKED,
+    ),
+)
+def test_readable_until_releases_delivered_capture_without_bearer(
+    tmp_path: Path,
+    reference_status: CaptureReferenceStatus,
+) -> None:
+    record = _record_for_readability_cell(
+        tmp_path / "project",
+        _Clock(),
+        reference_status,
+        CaptureDeliveryStatus.DELIVERED,
+    )
+
+    assert record.manifest is not None
+    readable_until = capture_lifecycle_record.readable_until(record)
+    assert readable_until == record.manifest.finalized_at
+    assert readable_until <= record.manifest.retention_deadline
+
+
+@pytest.mark.parametrize(
+    ("reference_status", "delivery_status"),
+    _UNSETTLED_DELIVERY_CELLS,
+)
+def test_readable_until_holds_unsettled_delivery(
+    tmp_path: Path,
+    reference_status: CaptureReferenceStatus,
+    delivery_status: CaptureDeliveryStatus,
+) -> None:
+    record = _record_for_readability_cell(
+        tmp_path / "project",
+        _Clock(),
+        reference_status,
+        delivery_status,
+    )
+
+    assert record.manifest is not None
+    readable_until = capture_lifecycle_record.readable_until(record)
+    assert readable_until == record.manifest.retention_deadline
+    assert readable_until <= record.manifest.retention_deadline
+
+
+def test_success_path_hold_is_bounded_by_reference_lifetime(tmp_path: Path) -> None:
+    clock = _Clock()
+    anchor, root, store, artifact, _finalized, published = _publish(
+        tmp_path / "project",
+        clock,
+        b"published",
+    )
+    try:
+        _deliver(store, published)
+        record = store.get_record(_CAPTURE_ID)
+        assert record is not None
+        assert record.manifest is not None
+        assert (
+            capture_lifecycle_record.readable_until(record) - record.manifest.finalized_at
+            <= capture_lifecycle_policy.REFERENCE_LIFETIME_SECONDS
+        )
+    finally:
+        _close_artifact(artifact)
+        root.close()
+        anchor.close()
+
+
+def test_delivered_inline_capture_is_due_immediately(tmp_path: Path) -> None:
+    clock = _Clock()
+    anchor, root, store, artifact, finalized = _finalize(
+        tmp_path / "project",
+        clock,
+        b"inline",
+        issue_reference=False,
+    )
+    artifact_open = True
+    try:
+        _deliver(store, finalized)
+        record = store.get_record(_CAPTURE_ID)
+        assert record is not None
+        assert record.next_attempt_at <= clock.wall()
+        _close_artifact(artifact)
+        artifact_open = False
+        outcome = store.sweep(capture_reconcile.RUNNER_TAIL_BUDGET)
+        assert outcome.deleted == 1
+        deleted = store.get_record(_CAPTURE_ID)
+        assert deleted is not None
+        assert deleted.state is CaptureState.DELETED
+    finally:
+        if artifact_open:
+            _close_artifact(artifact)
+        root.close()
+        anchor.close()
+
+
+def test_delivered_reference_capture_reclaims_at_reference_expiry(
+    tmp_path: Path,
+) -> None:
+    clock = _Clock()
+    anchor, root, store, artifact, finalized = _finalize(
+        tmp_path / "project",
+        clock,
+        b"referenced",
+    )
+    reader = None
+    artifact_open = True
+    try:
+        published = store.publish_reference(finalized)
+        _deliver(store, published)
+        record = store.get_record(_CAPTURE_ID)
+        assert record is not None
+        assert record.manifest is not None
+        assert record.manifest.reference_expiry is not None
+        expiry = record.manifest.reference_expiry
+        _close_artifact(artifact)
+        artifact_open = False
+        reader = store.open_verified_capture(published.token)
+
+        clock.advance(expiry - clock.wall() - 1)
+        before_expiry = store.sweep(capture_reconcile.RUNNER_TAIL_BUDGET)
+        assert before_expiry.deleted == 0
+        retained = store.get_record(_CAPTURE_ID)
+        assert retained is not None
+        assert retained.state is CaptureState.FINALIZED
+
+        clock.advance(2)
+        at_expiry = store.sweep(capture_reconcile.RUNNER_TAIL_BUDGET)
+        assert at_expiry.carrier_lease_live == 1
+        retained = store.get_record(_CAPTURE_ID)
+        assert retained is not None
+        assert retained.state is CaptureState.FINALIZED
+        reader.close()
+        reader = None
+
+        after_reader = store.sweep(capture_reconcile.RUNNER_TAIL_BUDGET)
+        assert after_reader.deleted == 1
+        deleted = store.get_record(_CAPTURE_ID)
+        assert deleted is not None
+        assert deleted.state is CaptureState.DELETED
+    finally:
+        if reader is not None:
+            reader.close()
+        if artifact_open:
+            _close_artifact(artifact)
+        root.close()
+        anchor.close()
+
+
+def test_interrupted_delivery_keeps_full_hold(tmp_path: Path) -> None:
+    clock = _Clock()
+    project = tmp_path / "project"
+    anchor, root, store, artifact, finalized = _finalize(
+        project,
+        clock,
+        b"interrupted",
+        issue_reference=False,
+    )
+    try:
+        store.transition_delivery(
+            finalized,
+            expected=CaptureDeliveryStatus.NOT_ATTEMPTED,
+            target=CaptureDeliveryStatus.ATTEMPTING,
+        )
+    finally:
+        _close_artifact(artifact)
+        root.close()
+        anchor.close()
+
+    anchor, root, store = _open_store(project, clock)
+    try:
+        record = store.get_record(_CAPTURE_ID)
+        assert record is not None
+        assert record.delivery_status is CaptureDeliveryStatus.UNKNOWN
+        clock.advance(3599)
+        assert store.sweep(capture_reconcile.RUNNER_TAIL_BUDGET).deleted == 0
+        clock.advance(2)
+        assert store.sweep(capture_reconcile.RUNNER_TAIL_BUDGET).deleted == 1
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_priority_capture_outside_ordinary_inspection_window_is_attempted_first(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = _Clock()
+    resources = []
+    capture_ids = (
+        "0000000000000001",
+        "0000000000000002",
+        "0000000000000003",
+    )
+    priority_capture_id = capture_ids[-1]
+    try:
+        for capture_id in capture_ids:
+            anchor, root, store, artifact, finalized = _finalize(
+                tmp_path / "project",
+                clock,
+                b"inline",
+                issue_reference=False,
+                capture_id=capture_id,
+            )
+            resources.append((root, anchor))
+            try:
+                _deliver(store, finalized)
+            finally:
+                _close_artifact(artifact)
+
+        attempted = []
+        real_sweep_one = store._sweep_one
+
+        def observe_attempt(capture_id: str):
+            attempted.append(capture_id)
+            return real_sweep_one(capture_id)
+
+        monkeypatch.setattr(store, "_sweep_one", observe_attempt)
+        budget = capture_lifecycle.SweepBudgetSpec(
+            max_records_inspected=2,
+            max_attempts=1,
+            max_duration_seconds=1.0,
+        )
+        outcome = store.sweep(budget, priority_capture_id=priority_capture_id)
+
+        assert attempted[0] == priority_capture_id
+        assert outcome.examined == 1
+        assert outcome.records_inspected <= budget.max_records_inspected
+        assert outcome.deleted == 1
+    finally:
+        for root, anchor in resources:
+            root.close()
+            anchor.close()

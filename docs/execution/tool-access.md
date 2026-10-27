@@ -196,6 +196,7 @@ tag abbreviations are defined in the glossary above.
 | `finalize_review_audit` | AS, K, HL, KC | `server/tools/tools_review_audit/_handlers.py` |
 | `post_pr_review` | AS, HL, GH | `server/tools/tools_pr_ops.py` |
 | `delegate_evidence_reader` | AS, K, HL, KC | `server/tools/tools_evidence_reader.py` |
+| `inspect_session_logs` | AS, K, HL, KC | `server/tools/tools_session_logs.py` |
 
 ### AUTHENTICATED EVIDENCE READER
 
@@ -284,7 +285,6 @@ batch, assignment, source artifact, and digest.
 | `write_telemetry_files` | AS, K, KC, TL | `server/tools/tools_status.py` |
 | `read_db` | AS, K, KC | `server/tools/tools_status.py` |
 | `analyze_tool_sequences` | AS, K, KC, TL | `server/tools/tools_status.py` |
-| `inspect_session_logs` | AS, K, KC | `server/tools/tools_session_logs.py` |
 
 ### KITCHEN — Recipes
 

@@ -7,6 +7,7 @@ import concurrent.futures
 import errno
 import json
 import os
+import re
 import select
 import shlex
 import stat
@@ -21,6 +22,7 @@ import pytest
 
 import autoskillit.hooks._capture._artifact_setup as capture_setup
 import autoskillit.hooks._capture._authority as capture_authority
+import autoskillit.hooks._capture._capacity as capture_capacity
 import autoskillit.hooks._capture._failure_policy as capture_failure_policy
 import autoskillit.hooks._capture._publication as capture_publication
 import autoskillit.hooks._capture._reconcile as capture_reconcile
@@ -213,6 +215,61 @@ def _runner_args(**changes: object) -> list[str]:
     return [encode_capture_request(_runner_request(**changes))]  # type: ignore[arg-type]
 
 
+def _install_reserve_capacity_refusal(
+    monkeypatch: pytest.MonkeyPatch,
+    reason: CaptureCapacityReason,
+) -> capture_capacity.AdmissionDecision:
+    if reason in (
+        CaptureCapacityReason.ACTIVE_CAPACITY,
+        CaptureCapacityReason.RETENTION_CAPACITY,
+        CaptureCapacityReason.EVIDENCE_CAPACITY,
+    ):
+        decision = capture_capacity.AdmissionDecision(
+            reason,
+            record_count=3,
+            record_limit=2,
+            due_records=7,
+        )
+    elif reason in (
+        CaptureCapacityReason.HARD_LEDGER_CAPACITY,
+        CaptureCapacityReason.PROJECTED_COMPACTED_BYTES,
+    ):
+        decision = capture_capacity.AdmissionDecision(
+            reason,
+            projected_bytes=18_422,
+            limit_bytes=18_421,
+            due_records=7,
+        )
+    elif reason is CaptureCapacityReason.RECLAMATION_DEBT_ASSIST:
+        decision = capture_capacity.AdmissionDecision(
+            reason,
+            assist_transition_limit=1,
+            due_records=7,
+        )
+    else:
+        decision = capture_capacity.AdmissionDecision(reason, due_records=7)
+
+    def refuse(_store: CaptureLifecycleStore, _capture_id: str) -> CaptureLifecycleRecord:
+        raise CaptureCapacityError(reason, decision=decision)
+
+    monkeypatch.setattr(CaptureLifecycleStore, "reserve_capture", refuse)
+    return decision
+
+
+def _install_fake_capture_process(
+    monkeypatch: pytest.MonkeyPatch,
+    process: _FakeCaptureProcess,
+) -> list[tuple[tuple[object, ...], dict[str, object]]]:
+    spawn_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def spawn(*args, **kwargs):
+        spawn_calls.append((args, kwargs))
+        return process
+
+    monkeypatch.setattr(capture_runner, "_spawn_bash", spawn)
+    return spawn_calls
+
+
 def _open_authority(project: Path):
     anchor = open_project_anchor(str(project))
     try:
@@ -232,7 +289,14 @@ def _create_artifact(anchor, root, capture_id: str = _CAPTURE_ID):
     return create_capture_artifact(root, capture_id, lifecycle)
 
 
-def _finalize_artifact(anchor, root, artifact, data: bytes = b"captured"):
+def _finalize_artifact(
+    anchor,
+    root,
+    artifact,
+    data: bytes = b"captured",
+    *,
+    issue_reference: bool = True,
+):
     lifecycle = CaptureLifecycleStore.from_open_authorities(
         anchor,
         root,
@@ -253,7 +317,16 @@ def _finalize_artifact(anchor, root, artifact, data: bytes = b"captured"):
         finalized_at=1_000_000.0,
         retention_deadline=1_003_600.0,
     )
-    return lifecycle.commit_verified_snapshot(verified, issue_reference=True)
+    return lifecycle.commit_verified_snapshot(verified, issue_reference=issue_reference)
+
+
+def _seed_due_inline_capture(anchor, root, capture_id: str) -> None:
+    artifact = _create_artifact(anchor, root, capture_id)
+    try:
+        _finalize_artifact(anchor, root, artifact, data=b"due", issue_reference=False)
+    finally:
+        artifact.close_artifact_fd()
+        artifact.release_lease()
 
 
 def _issue_artifact(anchor, root, artifact, data: bytes = b"captured"):
@@ -327,8 +400,9 @@ class _ReadableStream:
 
 
 class _FakeCaptureProcess:
-    def __init__(self, value: bytes) -> None:
+    def __init__(self, value: bytes, returncode: int = 0) -> None:
         self.stdout = _ReadableStream(value)
+        self.returncode = returncode
         self.terminated = False
         self.killed = False
         self.wait_calls = 0
@@ -345,7 +419,7 @@ class _FakeCaptureProcess:
     def wait(self, timeout: float | None = None) -> int:
         del timeout
         self.wait_calls += 1
-        return 0
+        return self.returncode
 
 
 def _record_artifact_fds(monkeypatch: pytest.MonkeyPatch) -> list[int]:
@@ -1004,7 +1078,7 @@ def test_setup_failure_prevents_user_command_and_emits_failure_marker(
     assert not (project / "command_ran").exists()
 
 
-def test_reclamation_debt_stall_emits_structured_failure_without_starting_command(
+def test_reclamation_debt_stall_runs_command_bounded_uncaptured(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capfd: pytest.CaptureFixture[str],
@@ -1066,16 +1140,14 @@ def test_reclamation_debt_stall_emits_structured_failure_without_starting_comman
         capture_runner._main(
             _runner_args(command=f"printf ran > {shlex.quote(str(sentinel))}", cwd=str(project))
         )
-        == 1
+        == 0
     )
 
-    failure = _single_failure_marker(capfd.readouterr().err)
-    assert failure.reason is CaptureFailureReason.RECLAMATION_DEBT_STALL
-    assert (
-        capture_failure_policy.FAILURE_DISPOSITIONS[failure.reason].disposition
-        is capture_failure_policy.CaptureFailureDisposition.PRESERVE_OUTPUT
-    )
-    assert not sentinel.exists()
+    degraded = _single_degraded_marker(capfd.readouterr().err)
+    assert degraded.reason is CaptureFailureReason.RECLAMATION_DEBT_STALL
+    assert degraded.stage == "capture_setup"
+    assert degraded.shell_returncode == 0
+    assert sentinel.exists()
 
 
 @pytest.mark.parametrize("root_shape", ["blocking_file", "symlink"])
@@ -1197,7 +1269,14 @@ def test_direct_control_flow_exception_settles_and_reraises(
     assert process.stdout.closed
 
 
-@pytest.mark.parametrize("reason", tuple(CaptureFailureReason))
+@pytest.mark.parametrize(
+    "reason",
+    tuple(
+        reason
+        for reason in CaptureFailureReason
+        if reason not in capture_failure_policy.CAPACITY_FAILURE_REASONS
+    ),
+)
 def test_setup_failure_reason_survives_runner_transport_without_sensitive_detail(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1225,6 +1304,311 @@ def test_setup_failure_reason_survives_runner_transport_without_sensitive_detail
     assert str(project) not in captured.err
     assert _CAPTURE_ID not in captured.err
     assert not sentinel.exists()
+
+
+def test_reserve_capacity_refusal_detail_carries_measurement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    reason = CaptureCapacityReason.PROJECTED_COMPACTED_BYTES
+    _install_reserve_capacity_refusal(monkeypatch, reason)
+    process = _FakeCaptureProcess(b"measured-refusal-output")
+    spawn_calls = _install_fake_capture_process(monkeypatch, process)
+
+    assert capture_runner._main(_runner_args(cwd=str(project))) == 0
+
+    captured = capfd.readouterr()
+    degraded = _single_degraded_marker(captured.err)
+    expected_detail = "compacted lifecycle capacity reached: projected=18422 limit=18421 due=7"
+    assert captured.out == "measured-refusal-output"
+    assert degraded.reason is CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED
+    assert degraded.stage == "capture_setup"
+    assert degraded.shell_returncode == 0
+    assert degraded.detail == expected_detail
+    assert re.fullmatch(
+        r"^compacted lifecycle capacity reached: projected=\d+ limit=\d+ due=\d+$",
+        degraded.detail,
+    )
+    assert len(degraded.detail.encode("utf-8")) <= 240
+    assert [kwargs for _, kwargs in spawn_calls] == [{"capture_output": True}]
+    assert process.wait_calls == 1
+
+
+@pytest.mark.parametrize(
+    ("reason", "expected_detail"),
+    [
+        (
+            CaptureCapacityReason.ACTIVE_CAPACITY,
+            "active lifecycle record bound reached: records=3 limit_records=2 due=7",
+        ),
+        (
+            CaptureCapacityReason.RETENTION_CAPACITY,
+            "retention capacity reached: records=3 limit_records=2 due=7",
+        ),
+        (
+            CaptureCapacityReason.EVIDENCE_CAPACITY,
+            "evidence record capacity reached: records=3 limit_records=2 due=7",
+        ),
+        (
+            CaptureCapacityReason.PROJECTED_COMPACTED_BYTES,
+            "compacted lifecycle capacity reached: projected=18422 limit=18421 due=7",
+        ),
+        (
+            CaptureCapacityReason.HARD_LEDGER_CAPACITY,
+            "hard lifecycle ledger capacity reached: projected=18422 limit=18421 due=7",
+        ),
+        (
+            CaptureCapacityReason.RECLAMATION_DEBT_ASSIST,
+            "reclamation debt requires bounded assist: due=7",
+        ),
+        (
+            CaptureCapacityReason.RECLAMATION_DEBT_STALL,
+            "reclamation debt admission ceiling reached: due=7",
+        ),
+    ],
+)
+@pytest.mark.parametrize("child_returncode", [0, 7], ids=("zero", "nonzero"))
+def test_capacity_setup_refusal_runs_command_bounded_uncaptured(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+    reason: CaptureCapacityReason,
+    expected_detail: str,
+    child_returncode: int,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    command = "printf 'uncaptured child output'"
+    expected = b"uncaptured child output"
+    _install_reserve_capacity_refusal(monkeypatch, reason)
+    process = _FakeCaptureProcess(expected, returncode=child_returncode)
+    spawn_calls = _install_fake_capture_process(monkeypatch, process)
+
+    assert (
+        capture_runner._main(_runner_args(command=command, cwd=str(project))) == child_returncode
+    )
+
+    captured = capfd.readouterr()
+    degraded = _single_degraded_marker(captured.err)
+    assert captured.out == expected.decode("utf-8")
+    assert [kwargs for _, kwargs in spawn_calls] == [{"capture_output": True}]
+    assert spawn_calls[0][0][1] == command
+    assert process.wait_calls == 1
+    assert degraded.stage == "capture_setup"
+    assert degraded.reason is capture_capacity.failure_reason(reason)
+    assert degraded.detail == expected_detail
+    assert degraded.shell_returncode == child_returncode
+    assert "shell capture failure v3:" not in captured.err
+    assert not list(_capture_dir(project).glob("shell_*.log"))
+    with open_capture_lifecycle(
+        str(project),
+        create=False,
+        lock_wait=capture_types.HOT_PATH_LOCK_WAIT,
+    ) as lifecycle:
+        assert lifecycle.get_record(_CAPTURE_ID) is None
+
+
+def test_capacity_setup_refusal_bounds_large_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    inline_bytes = 12
+    expected = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    assert len(expected) == 3 * inline_bytes
+    _install_reserve_capacity_refusal(
+        monkeypatch,
+        CaptureCapacityReason.PROJECTED_COMPACTED_BYTES,
+    )
+    process = _FakeCaptureProcess(expected)
+    _install_fake_capture_process(monkeypatch, process)
+    monkeypatch.setattr(
+        capture_runner,
+        "read_capture_policy",
+        lambda _anchor: CapturePolicy(inline_bytes=inline_bytes),
+    )
+
+    assert capture_runner._main(_runner_args(cwd=str(project))) == 0
+
+    captured = capfd.readouterr()
+    measurement = CaptureMeasurement.from_bytes(expected, inline_bytes=inline_bytes)
+    omitted = len(expected) - len(measurement.head) - len(measurement.tail)
+    elision = (
+        b"[AutoSkillit shell capture elided: %d of %d bytes omitted; no capture artifact]"
+        % (omitted, len(expected))
+    )
+    expected_output = measurement.head + b"\n" + elision + b"\n" + measurement.tail
+    assert captured.out.encode("utf-8") == expected_output
+    assert len(measurement.head) + len(measurement.tail) == inline_bytes
+    assert b"shell capture v2:" not in expected_output
+    degraded = _single_degraded_marker(captured.err)
+    assert degraded.detail == (
+        "compacted lifecycle capacity reached: projected=18422 limit=18421 due=7"
+    )
+
+
+@pytest.mark.parametrize("child_returncode", [0, 7], ids=("zero", "nonzero"))
+def test_degraded_stdout_failure_emits_single_failure_envelope(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+    child_returncode: int,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    _install_reserve_capacity_refusal(
+        monkeypatch,
+        CaptureCapacityReason.PROJECTED_COMPACTED_BYTES,
+    )
+    process = _FakeCaptureProcess(b"uncaptured child output", returncode=child_returncode)
+    _install_fake_capture_process(monkeypatch, process)
+    stdout_attempts: list[bool] = []
+
+    def fail_stdout(_payload: bytes) -> None:
+        stdout_attempts.append(True)
+        raise OSError("fault injection")
+
+    monkeypatch.setattr(capture_replay, "write_and_flush_hook_stdout", fail_stdout)
+
+    assert capture_runner._main(_runner_args(cwd=str(project))) == (child_returncode or 1)
+
+    captured = capfd.readouterr()
+    failure = _single_failure_marker(captured.err)
+    assert captured.out == ""
+    assert stdout_attempts == [True]
+    assert failure.shell_returncode == child_returncode
+    assert "shell capture degraded v3:" not in captured.err
+
+
+def test_degraded_interrupt_settles_and_reraises(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    _install_reserve_capacity_refusal(
+        monkeypatch,
+        CaptureCapacityReason.PROJECTED_COMPACTED_BYTES,
+    )
+    process = _FakeCaptureProcess(b"output discarded after interruption")
+    _install_fake_capture_process(monkeypatch, process)
+
+    def interrupt_drain(*_args, **_kwargs):
+        raise KeyboardInterrupt("fault injection")
+
+    monkeypatch.setattr(capture_runner, "_drain_capture", interrupt_drain)
+
+    with pytest.raises(KeyboardInterrupt, match="fault injection"):
+        capture_runner._main(_runner_args(cwd=str(project)))
+
+    captured = capfd.readouterr()
+    _single_failure_marker(captured.err)
+    assert captured.out == ""
+    assert process.terminated
+    assert process.wait_calls > 0
+    assert process.stdout.closed
+    assert "shell capture degraded v3:" not in captured.err
+
+
+def test_degraded_spawn_failure_emits_single_failure_envelope(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    _install_reserve_capacity_refusal(
+        monkeypatch,
+        CaptureCapacityReason.PROJECTED_COMPACTED_BYTES,
+    )
+    spawn_calls: list[bool] = []
+    settlement_attempts: list[object] = []
+
+    def fail_spawn(*_args, **_kwargs):
+        spawn_calls.append(True)
+        raise OSError("spawn fault injection")
+
+    def observe_settlement(process: object):
+        settlement_attempts.append(process)
+
+    monkeypatch.setattr(capture_runner, "_spawn_bash", fail_spawn)
+    monkeypatch.setattr(capture_runner, "_settle_failed_capture", observe_settlement)
+
+    assert capture_runner._main(_runner_args(cwd=str(project))) == 1
+
+    captured = capfd.readouterr()
+    _single_failure_marker(captured.err)
+    assert captured.out == ""
+    assert spawn_calls == [True]
+    assert settlement_attempts == []
+    assert "shell capture degraded v3:" not in captured.err
+
+
+def test_degraded_stdout_close_error_preserves_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    _install_reserve_capacity_refusal(
+        monkeypatch,
+        CaptureCapacityReason.PROJECTED_COMPACTED_BYTES,
+    )
+    process = _FakeCaptureProcess(b"uncaptured child output", returncode=7)
+    _install_fake_capture_process(monkeypatch, process)
+    close_attempts: list[bool] = []
+
+    def fail_close() -> None:
+        close_attempts.append(True)
+        raise OSError("stdout close fault injection")
+
+    monkeypatch.setattr(process.stdout, "close", fail_close)
+
+    assert capture_runner._main(_runner_args(cwd=str(project))) == 7
+
+    captured = capfd.readouterr()
+    degraded = _single_degraded_marker(captured.err)
+    assert captured.out == "uncaptured child output"
+    assert close_attempts == [True]
+    assert degraded.shell_returncode == 7
+    assert "shell capture failure v3:" not in captured.err
+
+
+def test_degraded_settlement_failure_discards_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    _install_reserve_capacity_refusal(
+        monkeypatch,
+        CaptureCapacityReason.PROJECTED_COMPACTED_BYTES,
+    )
+    process = _FakeCaptureProcess(b"output discarded after settlement failure")
+    _install_fake_capture_process(monkeypatch, process)
+
+    def fail_drain(*_args, **_kwargs):
+        raise CaptureSetupError(CaptureFailureReason.RUNNER_SETTLEMENT, "settlement failed")
+
+    monkeypatch.setattr(capture_runner, "_drain_capture", fail_drain)
+
+    assert capture_runner._main(_runner_args(cwd=str(project))) == 1
+
+    captured = capfd.readouterr()
+    failure = _single_failure_marker(captured.err)
+    assert captured.out == ""
+    assert failure.reason is CaptureFailureReason.RUNNER_SETTLEMENT
+    assert process.terminated
+    assert process.wait_calls > 0
+    assert "shell capture degraded v3:" not in captured.err
 
 
 def test_recovery_contention_is_classified_at_the_runner_boundary(
@@ -1368,9 +1752,10 @@ def test_valid_reject_runs_one_runner_tail_sweep(
 ) -> None:
     events: list[str] = []
 
-    def reconcile(requested_cwd, budget):
+    def reconcile(requested_cwd, budget, *, priority_capture_id=None):
         assert requested_cwd == "/abs/project"
         assert budget is capture_reconcile.RUNNER_TAIL_BUDGET
+        assert priority_capture_id == _CAPTURE_ID
         events.append("reconcile")
         return CaptureCleanupOutcome()
 
@@ -1388,10 +1773,10 @@ def test_valid_reject_runs_one_runner_tail_sweep(
 def test_runner_tail_consumes_byte_pressure_budget(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    budgets = []
+    reconciliations = []
 
-    def reconcile(_requested_cwd, budget):
-        budgets.append(budget)
+    def reconcile(_requested_cwd, budget, *, priority_capture_id=None):
+        reconciliations.append((budget, priority_capture_id))
         return CaptureCleanupOutcome()
 
     monkeypatch.setattr(capture_runner, "_BYTE_PRESSURE_OBSERVED", True)
@@ -1401,13 +1786,95 @@ def test_runner_tail_consumes_byte_pressure_budget(
         reconcile,
     )
 
-    capture_runner._sweep_after_runner("/abs/project")
-    capture_runner._sweep_after_runner("/abs/project")
+    capture_runner._sweep_after_runner("/abs/project", _CAPTURE_ID)
+    capture_runner._sweep_after_runner("/abs/project", _CAPTURE_ID)
 
-    assert budgets == [
-        capture_types.TRANSITION_RESCUE_BUDGET,
-        capture_reconcile.RUNNER_TAIL_BUDGET,
+    assert reconciliations == [
+        (capture_types.TRANSITION_RESCUE_BUDGET, _CAPTURE_ID),
+        (capture_reconcile.RUNNER_TAIL_BUDGET, _CAPTURE_ID),
     ]
+
+
+def test_runner_tail_reclaims_its_own_inline_capture(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    process = _FakeCaptureProcess(b"inline")
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
+
+    assert capture_runner._main(_runner_args(cwd=str(project))) == 0
+
+    captured = capfd.readouterr()
+    record = _capture_record(project)
+    assert captured.out == "inline"
+    assert record.state is CaptureState.DELETED
+    assert not (_capture_dir(project) / f"shell_{_CAPTURE_ID}.log").exists()
+
+
+def test_runner_tail_reclaims_own_capture_before_backlog(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    anchor, root = _open_authority(project)
+    backlog_ids = [
+        f"{index:016x}" for index in range(capture_reconcile.RUNNER_TAIL_BUDGET.max_attempts + 1)
+    ]
+    try:
+        for capture_id in backlog_ids:
+            _seed_due_inline_capture(anchor, root, capture_id)
+    finally:
+        root.close()
+        anchor.close()
+
+    process = _FakeCaptureProcess(b"inline")
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
+
+    assert capture_runner._main(_runner_args(cwd=str(project))) == 0
+
+    record = _capture_record(project)
+    assert record.state is CaptureState.DELETED
+    assert not (_capture_dir(project) / f"shell_{_CAPTURE_ID}.log").exists()
+
+
+def test_runner_tail_retains_referenced_capture(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    expected = b"published-output"
+    process = _FakeCaptureProcess(expected)
+    monkeypatch.setattr(capture_runner, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(
+        capture_runner,
+        "read_capture_policy",
+        lambda _anchor: CapturePolicy(inline_bytes=8),
+    )
+
+    assert capture_runner._main(_runner_args(cwd=str(project))) == 0
+
+    marker = _single_v2_marker(capfd.readouterr().out)
+    record = _capture_record(project)
+    artifact_path = _capture_dir(project) / f"shell_{_CAPTURE_ID}.log"
+    assert marker.reference_status == "published"
+    assert marker.reference is not None
+    assert record.state is CaptureState.FINALIZED
+    assert record.reference_status is CaptureReferenceStatus.PUBLISHED
+    assert record.delivery_status is CaptureDeliveryStatus.DELIVERED
+    assert artifact_path.is_file()
+    with open_capture_lifecycle(
+        str(project),
+        create=False,
+        lock_wait=capture_types.HOT_PATH_LOCK_WAIT,
+    ) as lifecycle:
+        with lifecycle.open_verified_capture(marker.reference) as reader:
+            assert reader.read(0, len(expected)) == expected
 
 
 def test_runner_tail_preserves_dispatch_result_and_order(
@@ -1419,7 +1886,8 @@ def test_runner_tail_preserves_dispatch_result_and_order(
         events.append("dispatch")
         return 37
 
-    def reconcile(_requested_cwd, _budget):
+    def reconcile(_requested_cwd, _budget, *, priority_capture_id=None):
+        assert priority_capture_id == _CAPTURE_ID
         events.append("reconcile")
         return CaptureCleanupOutcome()
 
@@ -1440,7 +1908,7 @@ def test_runner_tail_cleanup_failure_does_not_replace_user_result(
 ) -> None:
     monkeypatch.setattr(capture_runner, "_dispatch_runner", lambda *_args: 23)
 
-    def fail_reconcile(_requested_cwd, _budget):
+    def fail_reconcile(_requested_cwd, _budget, **_kwargs):
         raise RuntimeError("🔥" * 512)
 
     monkeypatch.setattr(
@@ -1465,7 +1933,7 @@ def test_runner_tail_reports_sweep_outcome_errors(
     monkeypatch.setattr(
         capture_reconcile,
         "reconcile_capture_store",
-        lambda requested_cwd, budget: CaptureCleanupOutcome(
+        lambda _requested_cwd, _budget, **_kwargs: CaptureCleanupOutcome(
             errors=2,
             remaining_due=1,
             blocker=CleanupBlocker.LEDGER_INTEGRITY,
@@ -1489,7 +1957,7 @@ def test_runner_tail_deferred_outcome_emits_nothing_per_command(
     monkeypatch.setattr(
         capture_reconcile,
         "reconcile_capture_store",
-        lambda requested_cwd, budget: CaptureCleanupOutcome(
+        lambda _requested_cwd, _budget, **_kwargs: CaptureCleanupOutcome(
             examined=2,
             deleted=2,
             remaining_due=3,
@@ -1514,7 +1982,7 @@ def test_runner_tail_still_sweeps_after_unexpected_dispatch_exception(
     def fail_dispatch(*_args):
         raise RuntimeError("fault injection")
 
-    def reconcile(_requested_cwd, _budget):
+    def reconcile(_requested_cwd, _budget, **_kwargs):
         swept.append(True)
         return CaptureCleanupOutcome()
 
@@ -1535,7 +2003,7 @@ def test_malformed_runner_invocation_reconciles_only_with_absolute_cwd(
 ) -> None:
     reconciled: list[str] = []
 
-    def reconcile(requested_cwd, _budget):
+    def reconcile(requested_cwd, _budget, **_kwargs):
         reconciled.append(requested_cwd)
         return CaptureCleanupOutcome()
 

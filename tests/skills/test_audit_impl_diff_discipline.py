@@ -198,3 +198,18 @@ def test_step2_does_not_prohibit_head_unconditionally(
         "{implementation_ref}..HEAD legitimately. Replace the blanket 'do NOT hardcode HEAD' "
         "with 'do NOT bypass the command form determined in Step 0'."
     )
+
+
+def test_audit_impl_names_no_unreachable_substitution_probe(skill_content: str) -> None:
+    forbidden = {
+        "probe_audit_substitutions",
+        "Step 3.4",
+        "probe-requirements.json",
+        "implementation.diff",
+        "run_python",
+    }
+
+    present = sorted(value for value in forbidden if value in skill_content)
+    assert not present, (
+        f"audit-impl must not prescribe the unreachable child-side substitution probe: {present}"
+    )

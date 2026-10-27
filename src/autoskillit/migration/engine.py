@@ -21,10 +21,6 @@ from autoskillit.core import (
 
 logger = get_logger(__name__)
 
-MIGRATE_RECIPES_MAX_RETRIES: int = 3
-"""Max validation-retry attempts for LLM-driven recipe migration (matches SKILL.md)."""
-
-
 # Shared shape for any callable that drives a headless skill execution and
 # returns a SkillResult. Centralized here (engine) so the abstract contract,
 # the concrete engine, and every adapter share one canonical name.
@@ -183,7 +179,6 @@ __all__ = [
     "AdvisoryResult",
     "DeterministicMigrationAdapter",
     "HeadlessMigrationAdapter",
-    "MIGRATE_RECIPES_MAX_RETRIES",
     "MigrationAdapter",
     "MigrationEngine",
     "MigrationFile",

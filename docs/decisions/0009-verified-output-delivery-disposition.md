@@ -67,11 +67,18 @@ delivery — the guard falls through to the ordinary fail-closed handler in
 that case, matching the pre-existing behavior for every failure that occurs
 before verification completes.
 
-The reclamation-debt stall occurs before the child starts. Its
-`PRESERVE_OUTPUT` classification therefore supplies no output or delivery
-authority: the runner emits the ordinary structured setup failure and never
-enters degraded delivery because neither a verified snapshot nor a completed
-child exists.
+When a capacity refusal occurs before the child starts, it supplies no
+captured-output authority. Capacity is retention bookkeeping, not an output
+integrity fault, so the runner executes the command uncaptured through the
+existing spawn and drain path. Output remains bounded by `shell_max_inline_bytes`:
+small output is inline, and oversized output is reduced to bounded head and tail
+slices with a fixed elision line. No artifact or reference is issued. A
+`capture_degraded` marker at stage `capture_setup` carries the capacity reason
+and admission measurement. Other setup failures still fail closed.
+
+The marker signals command-level degradation; lineage observations continue to
+describe the launch's capture/direct routing. The marker is not an aggregate
+degradation rate or alarm.
 
 ### 3. Exit-code parity under degraded delivery
 
@@ -129,10 +136,12 @@ reclaimability and gate-reachability trustworthy.
 2. This ADR governs only the AutoSkillit Codex native-shell capture runner
    established by ADR-0008. It does not extend disposition semantics to
    Claude Code native shell, MCP `run_cmd`, or any other artifact contract.
-3. Degraded delivery inherits ADR-0008's bounded-transport limits
+3. Verified-snapshot degraded delivery inherits ADR-0008's bounded-transport limits
    (`render_degraded_capture()` reuses the same inline-byte cap and V2
    reference framing as the success path) — it does not add a new output
    size allowance.
+4. Setup-capacity degradation loses output beyond the inline budget and creates
+   no full-output artifact.
 
 ## Consequences
 

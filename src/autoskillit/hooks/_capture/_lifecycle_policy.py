@@ -16,6 +16,7 @@ __all__ = [
     "CaptureSnapshotStatus",
     "CaptureState",
     "CaptureStatus",
+    "REFERENCE_LIFETIME_SECONDS",
     "ReclaimKind",
     "STATE_RECLAIMABILITY",
     "StateReclaimabilityDef",
@@ -264,10 +265,11 @@ def is_retention_successor(
 # Reclaimability declarations
 # ---------------------------------------------------------------------------
 
-# The canonical sweep-grace constant.  Formerly ``_RETENTION_SECONDS`` in
-# ``_capture_lifecycle.py``; moved here so that the declaration and the
-# enforcement share one value.
+# Shared by the reclaimability declaration and lifecycle-store enforcement.
 SWEEP_GRACE_SECONDS: float = 3600.0
+REFERENCE_LIFETIME_SECONDS = 1800.0
+if SWEEP_GRACE_SECONDS < REFERENCE_LIFETIME_SECONDS:
+    raise AssertionError("capture retention must cover the replay-reference lifetime")
 
 
 class ReclaimKind(StrEnum):
@@ -310,11 +312,9 @@ STATE_RECLAIMABILITY: dict[CaptureState, StateReclaimabilityDef] = {
         state=CaptureState.FINALIZED,
         kind=ReclaimKind.SWEEP_AFTER_GRACE,
         duration_seconds=SWEEP_GRACE_SECONDS,
-        # Coupling invariant: FINALIZED's sweep grace must never be set below
-        # the replay-reference window (_REFERENCE_LIFETIME_SECONDS = 1800s in
-        # _capture_lifecycle.py), or sweeps would delete artifacts whose issued
-        # references are still valid.
-        rationale="completed capture — reclaimable after retention window",
+        # Delivery sets the due time from _lifecycle_record.readable_until;
+        # undelivered and unsettled captures retain the forensic grace.
+        rationale="completed capture — reclaimable when delivered bytes are no longer readable",
     ),
     CaptureState.FAILED: StateReclaimabilityDef(
         state=CaptureState.FAILED,

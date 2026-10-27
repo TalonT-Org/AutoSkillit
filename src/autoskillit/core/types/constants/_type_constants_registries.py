@@ -180,7 +180,6 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "submit_exploration_query",
         "get_exploration_page",
         "resume_exploration_context",
-        "inspect_session_logs",
         "read_authorized_artifact",
         "get_authorized_artifact_page",
     }
@@ -191,6 +190,7 @@ HEADLESS_TOOLS: frozenset[str] = frozenset(
         "delegate_evidence_reader",
         "fetch_github_issue",
         "get_issue_title",
+        "inspect_session_logs",
         "test_check",
         "unlock_agent_pack",
         "commit_files",

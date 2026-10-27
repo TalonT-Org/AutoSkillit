@@ -1129,6 +1129,20 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
 # ---------------------------------------------------------------------------
 
 LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
+    "_destination_paths": frozenset(
+        {
+            "arch",
+            "cli",
+            "contracts",
+            "core",
+            "execution",
+            "hooks",
+            "infra",
+            "server",
+            "skills",
+            "workspace",
+        }
+    ),
     "quota_constraints": frozenset({"core", "execution", "hooks", "server"}),
     # L0 — imported by everything
     "core": frozenset(
@@ -1352,6 +1366,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "hooks/test_recipe_contract_freshness.py",
             "migration",
             # Server file-level entries importing autoskillit.recipe:
+            "server/test_plan_set_preflight_implement.py",
             "server/test_stage_obligation_pipeline.py",
             "server/test_tools_plan_set.py",
             "server/test_run_skill_delegated_output_write.py",
@@ -1743,6 +1758,20 @@ _IMPORT_GUARD_TRANSITIVE_OVERRIDES: dict[str, frozenset[str]] = {
 }
 
 LAYER_CASCADE_AGGRESSIVE: dict[str, frozenset[str]] = {
+    "_destination_paths": frozenset(
+        {
+            "arch",
+            "cli",
+            "contracts",
+            "core",
+            "execution",
+            "hooks",
+            "infra",
+            "server",
+            "skills",
+            "workspace",
+        }
+    ),
     "quota_constraints": frozenset({"core", "execution", "hooks", "server"}),
     "core": frozenset({"core"}),
     "config": frozenset({"config"}),

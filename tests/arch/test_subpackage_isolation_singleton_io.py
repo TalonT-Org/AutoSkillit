@@ -108,8 +108,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "methodology_venue_appendix",  # recipe/methodology_venue_appendix.py: _ML_SUB_AREA_CACHE
         "rules_blocks",  # recipe/rules/rules_blocks.py: _BUDGETS_CACHE = YamlFileCache()
         "rules_phoropter_adjacency",  # recipe/rules/rules_phoropter_adjacency.py: _PREFIXES_CACHE
-        # _RETENTION_SECONDS resolved once at import time from the single-source-of-truth
-        # STATE_RECLAIMABILITY sweep grace (_lifecycle_policy.SWEEP_GRACE_SECONDS).
+        # Lifecycle constants resolved once at import time from _lifecycle_policy.
         "_capture_lifecycle",
         # join ledger alphabet/filename constants resolved once at import time.
         "_join_ledger",  # hooks/_join_ledger.py: _BATCH_ID_ALPHABET, LEDGER_FILENAME
@@ -162,7 +161,6 @@ _SINGLETON_SAFE_ASSIGNMENTS: frozenset[tuple[str, str]] = frozenset(
         ("src/autoskillit/core/types/foundation/_type_dimensions.py", "ASCII_YAML_POLICY"),
         ("src/autoskillit/hooks/_capture/_types.py", "DEBT_ASSIST_BUDGET"),
         ("src/autoskillit/hooks/_capture/_types.py", "HOT_PATH_LOCK_WAIT"),
-        ("src/autoskillit/hooks/_capture/_types.py", "REQUIRED_RETENTION_BYTES"),
         ("src/autoskillit/hooks/_capture/_types.py", "TRANSITION_RESCUE_BUDGET"),
         ("src/autoskillit/pipeline/_context_admission_ledger/_codec.py", "_EVENT_TYPES"),
         ("src/autoskillit/pipeline/_context_admission_ledger/_codec.py", "_EFFECT_TYPES"),
@@ -318,7 +316,6 @@ def test_capture_types_singleton_is_path_and_assignment_scoped(tmp_path: Path) -
     } == {
         "DEBT_ASSIST_BUDGET",
         "HOT_PATH_LOCK_WAIT",
-        "REQUIRED_RETENTION_BYTES",
         "TRANSITION_RESCUE_BUDGET",
     }
     unrelated = tmp_path / "_types.py"

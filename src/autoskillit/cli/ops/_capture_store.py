@@ -56,13 +56,16 @@ def _print_stats(stats: CaptureStoreStats) -> None:
         "capture-store ledger: "
         f"live={stats.live_records} due_records={stats.due_records} "
         f"eligible_abandoned={stats.eligible_records} "
-        f"deleting={stats.deleting_records} ledger_bytes={stats.ledger_bytes}"
+        f"deleting={stats.deleting_records} physical_ledger_bytes={stats.ledger_bytes}"
     )
     print(
         "capture-store directory: "
         f"files={stats.directory_files} unledgered_aged={stats.unledgered_aged_files} "
         f"unledgered_aged_bytes={stats.unledgered_aged_bytes}"
     )
+    print(f"capture-store {stats.capacity_line}")
+    if stats.capacity_warning:
+        print(stats.capacity_warning_message)
 
 
 def run_capture_store(*, reclaim: bool = False) -> None:

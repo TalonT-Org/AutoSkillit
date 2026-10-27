@@ -11,6 +11,7 @@ from autoskillit.core import (
     CODEX_MODEL_ALIASES,
     DIRECT_PREFIX,
     EXPLORATION_TOOLS,
+    HEADLESS_TOOLS,
     PLUGIN_PREFIX,
     SkillExecutionRole,
     SkillSource,
@@ -42,7 +43,14 @@ def test_authored_agent_mcp_tools_derive_from_core_authority() -> None:
                 is ToolInitializationOperation.INSPECTION
             )
             if definition.name in BUNDLED_EXPLORER_ROLES:
+                # Claude-headless explorer reachability is tracked separately in #5322.
                 assert short in EXPLORATION_TOOLS
+            else:
+                assert short in HEADLESS_TOOLS, (
+                    f"Agent {definition.name!r} declares {short!r}, which is not a "
+                    "headless tool; spawned agents share the spawning headless skill "
+                    "session's catalog"
+                )
 
 
 def test_projected_artifact_agent_tools_carry_plugin_namespace(tmp_path: Path) -> None:

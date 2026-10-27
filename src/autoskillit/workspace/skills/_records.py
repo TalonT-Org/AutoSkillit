@@ -162,6 +162,15 @@ class SkillInfo:
         return self.canonical_content.encode("utf-8")
 
     @property
+    def interactive_only(self) -> bool:
+        frontmatter = self.frontmatter
+        return (
+            frontmatter is not None
+            and frontmatter.data is not None
+            and frontmatter.data.get("interactive_only") is True
+        )
+
+    @property
     def source_identity(self) -> SkillSourceIdentity:
         """Return the validated effective source identity."""
         assert self.source_ref is not None
@@ -318,6 +327,10 @@ class EffectiveSkillInvocation:
                 )
                 raise SkillContractError(
                     f"invalid effective invocation contract for {member.name!r}: {reason}"
+                )
+            if member.interactive_only:
+                raise SkillContractError(
+                    f"interactive-only skill {member.name!r} cannot run in a headless invocation"
                 )
             if member.execution_role is not self.execution_role:
                 actual = (

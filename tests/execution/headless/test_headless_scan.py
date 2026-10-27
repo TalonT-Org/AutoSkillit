@@ -11,6 +11,29 @@ from tests.execution.conftest import _make_tool_use_line
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
+@pytest.mark.parametrize("symlinked_parent", [False, True])
+def test_entry_advisory_resolves_parent_but_not_final_symlink(tmp_path, symlinked_parent):
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    if symlinked_parent:
+        (cwd / "parent").symlink_to(outside, target_is_directory=True)
+        destination = cwd / "parent" / "entry"
+    else:
+        destination = cwd / "entry"
+        destination.symlink_to(outside / "target")
+    line = _make_tool_use_line("Bash", {"command": f"ln -sT source {destination}"})
+
+    warnings = _scan_jsonl_write_paths(line, str(cwd))
+
+    if symlinked_parent:
+        assert len(warnings) == 1
+        assert str(outside / "entry") in warnings[0]
+    else:
+        assert warnings == []
+
+
 class TestScanJsonlCustomToolNames:
     CWD = "/clone/worktree"
 
@@ -74,11 +97,22 @@ class TestScanJsonlWriteWarnings:
                 "Bash command contained write target '/outside/y' outside session cwd '{cwd}'",
                 id="outside-cwd-target",
             ),
+            pytest.param(
+                "ln -sf /opt/tools/jq /outside/jq",
+                "Bash command contained write target '/outside/jq' outside session cwd '{cwd}'",
+                id="outside-cwd-link-entry",
+            ),
+            pytest.param(
+                'ln -sf /opt/tools/jq "$LINK_NAME"',
+                GENERIC_UNRESOLVED_WARNING,
+                id="unresolved-link-entry",
+            ),
             pytest.param("printf '> q' > inside.txt", None, id="quoted-redirect-operator"),
         ],
     )
     def test_bash_jsonl_write_warnings(self, tmp_path, monkeypatch, command, expected_warning):
         monkeypatch.delenv("F", raising=False)
+        monkeypatch.delenv("LINK_NAME", raising=False)
         cwd = str(tmp_path)
         line = _make_tool_use_line("Bash", {"command": command})
 

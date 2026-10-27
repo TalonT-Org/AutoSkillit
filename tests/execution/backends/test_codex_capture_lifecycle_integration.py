@@ -20,6 +20,7 @@ from autoskillit.core import (
 from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.execution.session import DefaultManagedHeadlessSessionLineageStore
 from autoskillit.hooks._capture import _ledger as capture_ledger
+from autoskillit.hooks._capture._artifact_setup import CapturePolicy
 from autoskillit.hooks._capture._reconcile import (
     RUNNER_TAIL_BUDGET,
     reconcile_capture_store,
@@ -45,9 +46,11 @@ from autoskillit.hooks._capture_contract import (
     NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
     PROTECTED_CAPTURE_ENV_VARS,
     CaptureFailureReason,
+    CaptureFailureV3,
     CaptureLineageRef,
     canonical_json_bytes,
     decode_capture_request,
+    parse_capture_degraded_v3,
     parse_capture_failure_v3,
 )
 from autoskillit.hooks._capture_lifecycle import (
@@ -395,6 +398,22 @@ def _rewritten_runner(
     return json.loads(rewritten.stdout)["hookSpecificOutput"]["updatedInput"]["command"]
 
 
+def _degraded_markers(stderr: str) -> list[CaptureFailureV3]:
+    return [
+        parse_capture_degraded_v3(line.encode())
+        for line in stderr.splitlines()
+        if line.startswith("[AutoSkillit shell capture degraded v3:")
+    ]
+
+
+def _failure_markers(stderr: str) -> list[CaptureFailureV3]:
+    return [
+        parse_capture_failure_v3(line.encode())
+        for line in stderr.splitlines()
+        if line.startswith("[AutoSkillit shell capture failure v3:")
+    ]
+
+
 @pytest.mark.parametrize("headless", [False, True])
 def test_snapshotted_session_start_owner_reclaims_from_payload_project(
     tmp_path: Path,
@@ -454,7 +473,7 @@ def test_saturated_installed_store_recovers_across_both_cleanup_owners(
             project=project,
             decoy_cwd=decoy_cwd,
             turn_id="saturated-process-a",
-            user_command=(f"printf should-not-run > {shlex.quote(str(process_a_sentinel))}"),
+            user_command=(f"printf process-a > {shlex.quote(str(process_a_sentinel))}"),
         )
         completed_a = subprocess.run(
             ["bash", "-c", runner_a],
@@ -464,16 +483,16 @@ def test_saturated_installed_store_recovers_across_both_cleanup_owners(
             timeout=_TIMEOUT_SECONDS,
             check=False,
         )
-        failures = [
-            parse_capture_failure_v3(line.encode())
-            for line in completed_a.stderr.splitlines()
-            if line.startswith("[AutoSkillit shell capture failure v3:")
-        ]
+        degraded_markers = _degraded_markers(completed_a.stderr)
+        failure_markers = _failure_markers(completed_a.stderr)
 
-        assert completed_a.returncode == 1
-        assert len(failures) == 1
-        assert failures[0].reason is CaptureFailureReason.ACTIVE_CAPACITY_EXHAUSTED
-        assert not process_a_sentinel.exists()
+        assert completed_a.returncode == 0
+        assert process_a_sentinel.read_text() == "process-a"
+        assert len(degraded_markers) == 1
+        assert not failure_markers
+        assert degraded_markers[0].reason is CaptureFailureReason.ACTIVE_CAPACITY_EXHAUSTED
+        assert degraded_markers[0].stage == "capture_setup"
+        assert degraded_markers[0].shell_returncode == 0
         assert not first_due.exists()
         assert session_due.exists()
         validation_anchor = open_project_anchor(str(project))
@@ -593,12 +612,20 @@ def test_installed_hook_reports_projected_compacted_capacity_at_capture_setup(
     _seed_projected_compacted_store(project)
     pre_tool_command = _installed_command(config, "PreToolUse", "shell_capture_hook")
     sentinel = project / "projected-compacted-command-ran"
+    inline_bytes = CapturePolicy().inline_bytes
+    output_bytes = bytes(65 + index % 26 for index in range(inline_bytes * 3 + 17))
+    python_command = (
+        f"import os; os.write(1, bytes(65 + index % 26 for index in range({len(output_bytes)})))"
+    )
     runner = _rewritten_runner(
         pre_tool_command,
         project=project,
         decoy_cwd=decoy_cwd,
         turn_id="projected-compacted-capacity",
-        user_command=f"printf should-not-run > {shlex.quote(str(sentinel))}",
+        user_command=(
+            f"printf projected > {shlex.quote(str(sentinel))}; "
+            f"python3 -c {shlex.quote(python_command)}; exit 7"
+        ),
     )
 
     completed = subprocess.run(
@@ -609,17 +636,45 @@ def test_installed_hook_reports_projected_compacted_capacity_at_capture_setup(
         timeout=_TIMEOUT_SECONDS,
         check=False,
     )
-    failures = [
-        parse_capture_failure_v3(line.encode())
-        for line in completed.stderr.splitlines()
-        if line.startswith("[AutoSkillit shell capture failure v3:")
-    ]
+    degraded_markers = _degraded_markers(completed.stderr)
+    failure_markers = _failure_markers(completed.stderr)
 
-    assert completed.returncode == 1
-    assert len(failures) == 1
-    assert failures[0].reason is CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED
-    assert failures[0].stage == "capture_setup"
-    assert not sentinel.exists()
+    assert completed.returncode == 7
+    assert sentinel.read_text() == "projected"
+    assert len(degraded_markers) == 1
+    assert not failure_markers
+    assert degraded_markers[0].reason is CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED
+    assert degraded_markers[0].stage == "capture_setup"
+    assert degraded_markers[0].shell_returncode == 7
+
+    measurement = CaptureMeasurement.from_bytes(output_bytes, inline_bytes=inline_bytes)
+    omitted = measurement.total_bytes - len(measurement.head) - len(measurement.tail)
+    elision = (
+        b"[AutoSkillit shell capture elided: %d of %d bytes omitted; no capture artifact]"
+        % (omitted, measurement.total_bytes)
+    )
+    expected_stdout = measurement.head + b"\n" + elision + b"\n" + measurement.tail
+    assert completed.stdout.encode() == expected_stdout
+    assert len(measurement.head) + len(measurement.tail) == inline_bytes
+    assert omitted == len(output_bytes) - inline_bytes
+
+    request = decode_capture_request(shlex.split(runner.splitlines()[-1])[-1])
+    capture_dir = project.joinpath(*CAPTURE_PATH_COMPONENTS)
+    assert list(capture_dir.glob("shell_*.log")) == []
+    validation_anchor = open_project_anchor(str(project))
+    try:
+        validation_root = open_capture_root(validation_anchor, create=False)
+        try:
+            validation_store = CaptureLifecycleStore.from_open_authorities(
+                validation_anchor,
+                validation_root,
+                lock_wait=HOT_PATH_LOCK_WAIT,
+            )
+            assert validation_store.get_record(request.capture_id) is None
+        finally:
+            validation_root.close()
+    finally:
+        validation_anchor.close()
 
 
 @pytest.mark.parametrize("headless", [False, True])

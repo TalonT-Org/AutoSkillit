@@ -150,6 +150,7 @@ def test_validate_from_path_delegates_to_api(tmp_path: Path) -> None:
         "quality": {},
         "findings": [],
         "contracts": [],
+        "binding_projection_failures": [],
     }
     mock_api = MagicMock(return_value=expected)
 

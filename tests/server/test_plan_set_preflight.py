@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -17,9 +18,9 @@ from autoskillit.core import (
     RecipeExecutionId,
 )
 from autoskillit.server._plan_set_materializer import DefaultPlanSetMaterializer
+from autoskillit.server._recipe_admission import RecipeExecutionAdmissionError
 from autoskillit.server.recipe._plan_set_preflight import DefaultPlanSetPreflightResolver
 from autoskillit.server.recipe._recipe_execution import (
-    RecipeExecutionAdmissionError,
     build_bound_child_prompt,
     resolve_attested_input_preflight,
 )
@@ -28,12 +29,15 @@ from tests.server.test_plan_set_materializer import _FIXTURES, _GitHub
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
 
-async def _authority(tmp_path: Path, *, sealed: bool = True) -> tuple[str, Path]:
+async def _authority(
+    tmp_path: Path, *, sealed: bool = True
+) -> tuple[str, Path, DefaultPlanSetMaterializer]:
     fixture = _FIXTURES / "split_r1_r2"
     parts = (tmp_path / "part_a.md", tmp_path / "part_b.md")
     for part in parts:
         part.write_text((fixture / part.name).read_text(), encoding="utf-8")
-    bound = await DefaultPlanSetMaterializer(_GitHub()).bind(
+    materializer = DefaultPlanSetMaterializer(_GitHub())
+    bound = await materializer.bind(
         PlanSetBindRequest(
             plan_parts_raw="\n".join(str(part) for part in parts),
             allowed_root=tmp_path,
@@ -48,12 +52,12 @@ async def _authority(tmp_path: Path, *, sealed: bool = True) -> tuple[str, Path]
         )
     )
     assert bound.success
-    return bound.plan_set_authority_path, parts[0]
+    return bound.plan_set_authority_path, parts[0], materializer
 
 
 async def test_sealed_resolver_and_prompt_emit_assigned_subset(tmp_path: Path) -> None:
     assert PreflightKind("plan_set_coverage") is PreflightKind.PLAN_SET_COVERAGE
-    path, part = await _authority(tmp_path)
+    path, part, _ = await _authority(tmp_path)
     resolver = DefaultPlanSetPreflightResolver(RecipeExecutionId("generation"), "kitchen")
     verified = resolver.resolve(
         PlanSetPreflightRequest(
@@ -80,7 +84,7 @@ async def test_sealed_resolver_and_prompt_emit_assigned_subset(tmp_path: Path) -
 
 
 async def test_unsealed_authority_is_rejected(tmp_path: Path) -> None:
-    path, part = await _authority(tmp_path, sealed=False)
+    path, part, _ = await _authority(tmp_path, sealed=False)
     result = DefaultPlanSetPreflightResolver(RecipeExecutionId("generation"), "kitchen").resolve(
         PlanSetPreflightRequest(
             execution_generation="generation",
@@ -98,10 +102,11 @@ async def test_unsealed_authority_is_rejected(tmp_path: Path) -> None:
 async def test_absent_authority_omits_evidence_and_kitchen_error_is_namespaced(
     tmp_path: Path,
 ) -> None:
-    path, part = await _authority(tmp_path)
+    path, part, materializer = await _authority(tmp_path)
     resolver = DefaultPlanSetPreflightResolver(RecipeExecutionId("generation"), "kitchen")
     tool_ctx = SimpleNamespace(
         kitchen_id="other-kitchen",
+        plan_set_materializer=materializer,
         skill_contract_resolver=lambda _command: SimpleNamespace(
             input_preflight=("plan_set_coverage",)
         ),
@@ -134,13 +139,120 @@ async def test_absent_authority_omits_evidence_and_kitchen_error_is_namespaced(
     assert exc_info.value.code == "input_preflight_plan_set_kitchen_mismatch"
 
 
+def _plan_preflight(materializer, resolver, bound_inputs):
+    return resolve_attested_input_preflight(
+        SimpleNamespace(
+            kitchen_id="kitchen",
+            plan_set_materializer=materializer,
+            skill_contract_resolver=lambda _: SimpleNamespace(
+                input_preflight=("plan_set_coverage",)
+            ),
+        ),
+        SimpleNamespace(plan_set_preflight_resolver=resolver),
+        skill_command="/autoskillit:dry-walkthrough",
+        execution_id="generation",
+        step_name="verify",
+        template=SimpleNamespace(invocation=SimpleNamespace(skill_name="dry-walkthrough")),
+        bound_inputs=bound_inputs,
+    )
+
+
+@pytest.mark.parametrize("kind", ("symlink", "hardlink"))
+async def test_recorded_authority_still_rejects_file_links(tmp_path: Path, kind: str) -> None:
+    authority_path, part, materializer = await _authority(tmp_path)
+    path = Path(authority_path)
+    original = path.rename(path.with_suffix(".original"))
+    if kind == "symlink":
+        path.symlink_to(original)
+    else:
+        os.link(original, path)
+    with pytest.raises(RecipeExecutionAdmissionError) as exc_info:
+        _plan_preflight(
+            materializer,
+            DefaultPlanSetPreflightResolver(RecipeExecutionId("generation"), "kitchen"),
+            bound_inputs=(("plan_path", str(part)), ("plan_set_authority_path", authority_path)),
+        )
+    assert exc_info.value.code == f"input_preflight_plan_set_{kind}"
+
+
+def test_plan_only_preflight_uses_issued_root_without_invocation_root(tmp_path: Path) -> None:
+    issued_root = tmp_path / "producer"
+    issued_digest = "sha256:issued"
+    seen_roots: list[Path] = []
+    seen_lookups: list[tuple[str, str]] = []
+
+    def lookup_binding(execution_id, authority_path):
+        seen_lookups.append((execution_id, authority_path))
+        return issued_root, issued_digest
+
+    def resolve(_request, *, allowed_root):
+        seen_roots.append(allowed_root)
+        return SimpleNamespace(
+            accepted=True,
+            evidence=SimpleNamespace(plan_set_authority_digest=issued_digest),
+        )
+
+    resolved = _plan_preflight(
+        SimpleNamespace(lookup_binding=lookup_binding),
+        SimpleNamespace(resolve=resolve),
+        bound_inputs=(("plan_path", "plan.md"), ("plan_set_authority_path", "authority.json")),
+    )
+
+    assert resolved.plan_set is not None
+    assert seen_roots == [issued_root]
+    assert seen_lookups == [("generation", "authority.json")]
+
+
+def test_accepted_plan_set_verification_without_evidence_fails_closed(tmp_path: Path) -> None:
+    digest = "sha256:issued"
+    with pytest.raises(RecipeExecutionAdmissionError) as exc_info:
+        _plan_preflight(
+            SimpleNamespace(
+                lookup_binding=lambda execution_id, authority_path: (tmp_path, digest)
+            ),
+            SimpleNamespace(
+                resolve=lambda request, *, allowed_root: SimpleNamespace(
+                    accepted=True,
+                    evidence=None,
+                )
+            ),
+            bound_inputs=(
+                ("plan_path", "plan.md"),
+                ("plan_set_authority_path", "authority.json"),
+            ),
+        )
+
+    assert exc_info.value.code == "recipe_execution_preflight_unavailable"
+
+
+def test_accepted_plan_set_digest_must_match_issued_digest(tmp_path: Path) -> None:
+    with pytest.raises(RecipeExecutionAdmissionError) as exc_info:
+        _plan_preflight(
+            SimpleNamespace(
+                lookup_binding=lambda execution_id, authority_path: (tmp_path, "sha256:issued")
+            ),
+            SimpleNamespace(
+                resolve=lambda request, *, allowed_root: SimpleNamespace(
+                    accepted=True,
+                    evidence=SimpleNamespace(plan_set_authority_digest="sha256:different"),
+                )
+            ),
+            bound_inputs=(
+                ("plan_path", "plan.md"),
+                ("plan_set_authority_path", "authority.json"),
+            ),
+        )
+    assert exc_info.value.code == "input_preflight_plan_set_authority_digest"
+
+
 async def _publication_authority(tmp_path: Path, *, sealed: bool = True):
     from tests.server._plan_set_test_helpers import PlanSetGitHub
 
     fixture = _FIXTURES / "publication_pr"
     part = tmp_path / "part.md"
     part.write_text((fixture / "part_a.md").read_text())
-    bound = await DefaultPlanSetMaterializer(PlanSetGitHub(fixture_dir=fixture)).bind(
+    materializer = DefaultPlanSetMaterializer(PlanSetGitHub(fixture_dir=fixture))
+    bound = await materializer.bind(
         PlanSetBindRequest(
             plan_parts_raw=str(part),
             allowed_root=tmp_path,
@@ -157,13 +269,21 @@ async def _publication_authority(tmp_path: Path, *, sealed: bool = True):
         )
     )
     assert bound.success, bound
-    return bound, part
+    return bound, part, materializer
 
 
-def _audit_preflight(tmp_path, path, *, kitchen="kitchen", generation="generation"):
+def _audit_preflight(
+    tmp_path,
+    path,
+    materializer,
+    *,
+    kitchen="kitchen",
+    generation="generation",
+):
     return resolve_attested_input_preflight(
         SimpleNamespace(
             kitchen_id=kitchen,
+            plan_set_materializer=materializer,
             skill_contract_resolver=lambda _: SimpleNamespace(
                 input_preflight=("plan_set_stage_obligations",)
             ),
@@ -183,8 +303,8 @@ def _audit_preflight(tmp_path, path, *, kitchen="kitchen", generation="generatio
 
 
 async def test_audit_scope_has_stage_outcomes_while_implementer_scope_has_only_code(tmp_path):
-    bound, part = await _publication_authority(tmp_path)
-    evidence = _audit_preflight(tmp_path, bound.plan_set_authority_path).plan_set
+    bound, part, materializer = await _publication_authority(tmp_path)
+    evidence = _audit_preflight(tmp_path, bound.plan_set_authority_path, materializer).plan_set
     assert evidence is not None
     assert evidence.part_key is None
     assert evidence.assigned_requirements == ()
@@ -212,11 +332,20 @@ async def test_audit_scope_has_stage_outcomes_while_implementer_scope_has_only_c
     ]
     assert "stage_obligations" not in implementation.evidence.to_dict()
     part.write_text(part.read_text() + "\nImplementation changed this part.\n")
-    assert _audit_preflight(tmp_path, bound.plan_set_authority_path).plan_set == evidence
+    assert (
+        _audit_preflight(tmp_path, bound.plan_set_authority_path, materializer).plan_set
+        == evidence
+    )
 
 
 def test_audit_without_authority_preserves_existing_scope(tmp_path):
-    assert _audit_preflight(tmp_path, "").plan_set is None
+    assert _audit_preflight(tmp_path, "", None).plan_set is None
+
+
+def test_audit_with_authority_requires_materializer(tmp_path):
+    with pytest.raises(RecipeExecutionAdmissionError) as exc_info:
+        _audit_preflight(tmp_path, "authority.json", None)
+    assert exc_info.value.code == "recipe_execution_preflight_unavailable"
 
 
 @pytest.mark.parametrize(
@@ -230,12 +359,21 @@ def test_audit_without_authority_preserves_existing_scope(tmp_path):
 async def test_audit_rejects_foreign_or_unsealed_authority(
     tmp_path, sealed, kitchen, generation, reason
 ):
-    bound, _ = await _publication_authority(tmp_path, sealed=sealed)
+    bound, _, materializer = await _publication_authority(tmp_path, sealed=sealed)
     with pytest.raises(RecipeExecutionAdmissionError) as exc_info:
         _audit_preflight(
-            tmp_path, bound.plan_set_authority_path, kitchen=kitchen, generation=generation
+            tmp_path,
+            bound.plan_set_authority_path,
+            materializer,
+            kitchen=kitchen,
+            generation=generation,
         )
-    assert exc_info.value.code == f"input_preflight_plan_set_{reason}"
+    expected = (
+        "input_preflight_plan_set_authority_invalid"
+        if generation != "generation"
+        else f"input_preflight_plan_set_{reason}"
+    )
+    assert exc_info.value.code == expected
 
 
 def test_audit_contract_declares_authenticated_stage_scope():

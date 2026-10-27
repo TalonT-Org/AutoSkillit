@@ -336,12 +336,10 @@ RUN_PYTHON_PATH_LIKE_ARGS: frozenset[str] = frozenset(
         "output_dir",
         "workspace",
         "diagnostics_log_dir",
-        "diff_path",
         "investigation_path",
         "raw_output_artifact_path",
         "current_authority_path",
         "prior_authority_path",
-        "requirements_path",
     }
 )
 RUN_PYTHON_SENTINEL_KEYS: frozenset[str] = frozenset(

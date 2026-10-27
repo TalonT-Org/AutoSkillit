@@ -99,5 +99,10 @@ The canonical tool sets are in `core/types/constants/_type_constants_registries.
   INSPECTION members may also carry `kitchen`
 - `ALL_VISIBILITY_TAGS` — the source-of-truth set of conditional visibility tags disabled at startup
 - Tool tag and tier changes are checked against bundled skill and recipe consumers by
-  `tests/server/test_consumer_tool_callability.py`; each `EXEMPTIONS` entry needs a
-  cited PR, issue, or `path:line`
+  `tests/server/test_consumer_tool_callability.py`; safe-by-design entries are typed
+  `ConsumerExemption`s (`decision` cites the deciding issue; `guard` quotes an anchor
+  sentence that must exist in the skill text); known defects go in
+  `DEFERRED_VIOLATIONS` as `TrackedDeferral`s (issue, dated 180-day time bomb,
+  regression test). Every SESSION skill is checked in both headless contexts unless
+  it declares `interactive_only: true`; MCP tools declared by non-explorer agents must
+  be in `HEADLESS_TOOLS` (`tests/contracts/test_agent_tool_surface_alignment.py`).

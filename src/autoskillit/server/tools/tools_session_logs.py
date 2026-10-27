@@ -23,7 +23,6 @@ from autoskillit.core import (
 )
 from autoskillit.execution import read_session_index_rows, resolve_log_dir
 from autoskillit.server import _get_ctx, mcp
-from autoskillit.server.lifecycle._guards import _require_enabled
 from autoskillit.server.lifecycle._session_scope import SCOPE_ANY, session_scoped
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
@@ -544,11 +543,14 @@ def _validate_arguments(
 
 
 @mcp.tool(
-    tags={"autoskillit", "kitchen", "kitchen-core"},
+    tags={"autoskillit", "kitchen", "kitchen-core", "headless"},
     annotations={"readOnlyHint": True},
 )
 @session_scoped(SCOPE_ANY)
 @_cancellation_shield()
+# No _require_enabled() — headless skill sessions need inspect_session_logs without
+# opening the kitchen (session-log-reader). The kitchen/headless tags govern visibility;
+# the bounded read-only surface is narrower than the native Read/Bash already available.
 async def inspect_session_logs(
     operation: str,
     session_ids: list[str] | None = None,
@@ -563,8 +565,6 @@ async def inspect_session_logs(
     Never raises.
     """
     try:
-        if (gate := _require_enabled()) is not None:
-            return gate
         _validate_arguments(
             operation,
             session_ids,

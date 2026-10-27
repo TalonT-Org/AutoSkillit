@@ -1544,6 +1544,21 @@ class TestExtractInterpreterWritePathsMulti:
 
 class TestScanWriteTargets:
     @pytest.mark.parametrize(
+        ("parseable", "has_write"),
+        [(False, True), (True, False)],
+        ids=("unparseable", "not-a-write"),
+    )
+    def test_entry_targets_obey_scan_invariants(self, parseable: bool, has_write: bool) -> None:
+        with pytest.raises(ValueError, match="targets and entry_targets"):
+            command_classification.WriteTargetScan(
+                targets=(),
+                unresolved=False,
+                parseable=parseable,
+                has_write=has_write,
+                entry_targets=("/tmp/link",),
+            )
+
+    @pytest.mark.parametrize(
         ("command", "targets", "unresolved", "parseable", "has_write"),
         [
             ("echo hi", (), False, True, False),

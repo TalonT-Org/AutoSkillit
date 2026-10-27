@@ -190,7 +190,8 @@ class _RunSkillDispatchState:
     _claims_recipe_execution: bool = False
     _dynamic_recipe_call: bool = False
     _audit_output_mode: AuditOutputMode | None = None
-    _clone_allowed_root: Path | None = None
+    # Invocation-cwd temp root used as the audit containment boundary.
+    _invocation_temp_root: Path | None = None
     _slot_intent_digest: str | None = None
     _bound_input_map: dict[str, BoundScalar] | None = None
     _prior_input_field: str | None = None

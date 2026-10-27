@@ -33,6 +33,10 @@ the categories/visibility conventions applied to user-invocable skills.
 model-initiated invocation of `open-kitchen` and `close-kitchen`. Do not
 remove this flag without an explicit architectural decision.
 
+`interactive_only:` is a boolean; true forbids every headless invocation of
+the skill and of any closure containing it (same concept as the
+`interactive_only` hook/tool session scope).
+
 ## Multi-concern files
 
 Files with no registration support their folder; files with several

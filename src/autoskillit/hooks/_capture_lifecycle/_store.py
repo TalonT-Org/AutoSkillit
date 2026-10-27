@@ -100,9 +100,7 @@ LOCK_NAME = ".capture-lifecycle.lock"
 MAX_LEDGER_BYTES = _capture_ledger.MAX_LEDGER_BYTES
 # Single source of truth: the reclaimability declaration owns the sweep grace.
 _RETENTION_SECONDS = float(_capture_lifecycle_policy.SWEEP_GRACE_SECONDS)
-_REFERENCE_LIFETIME_SECONDS = 1800.0
-if _RETENTION_SECONDS < _REFERENCE_LIFETIME_SECONDS:
-    raise AssertionError("capture retention must cover the replay-reference lifetime")
+_REFERENCE_LIFETIME_SECONDS = _capture_lifecycle_policy.REFERENCE_LIFETIME_SECONDS
 _MAX_RETRY_SECONDS = 3600.0
 _COMPACTION_THRESHOLD_BYTES = 31 * 1024 * 1024 // 8
 _MAX_COMPACTION_BYTES = 4 * 1024 * 1024
@@ -280,6 +278,26 @@ class CaptureLifecycleStore:
                 raise error from exc
         finally:
             os.close(fd)
+
+    def read_stats(self) -> tuple[dict[str, CaptureLifecycleRecord], int, int, int]:
+        """Read records and byte statistics for a capture-store report.
+
+        The tuple contains records, physical ledger bytes, projected compacted
+        bytes, and the compaction low-water limit.
+        """
+        with self._locked():
+            records, compaction_epoch, ledger_bytes = self._load_locked()
+            projected_compacted_bytes = self._ledger_view.sizer.total_bytes(
+                records,
+                compaction_epoch,
+                self._capacity,
+            )
+            return (
+                records,
+                ledger_bytes,
+                projected_compacted_bytes,
+                self._capacity.compaction_low_bytes,
+            )
 
     def _append_locked(
         self,
@@ -683,12 +701,15 @@ class CaptureLifecycleStore:
         self,
         now: float,
         max_records: int,
+        *,
+        priority_capture_id: str | None = None,
     ) -> tuple[list[DueKey], bool, bool]:
         return _capture_sweep_cursor.select_due_keys(
             self,
             now,
             max_records,
             TERMINAL_STATES,
+            priority_capture_id=priority_capture_id,
         )
 
     def _advance_sweep_cursor(self, due_key: DueKey) -> None:
@@ -731,6 +752,8 @@ class CaptureLifecycleStore:
     def sweep(
         self,
         budget: SweepBudgetSpec,
+        *,
+        priority_capture_id: str | None = None,
     ) -> CaptureCleanupOutcome:
         if type(budget) is not SweepBudgetSpec:
             raise CaptureLifecycleError("cleanup requires one SweepBudgetSpec")
@@ -738,12 +761,16 @@ class CaptureLifecycleStore:
         self._sweep_started_monotonic = self._monotonic()
         self._sweep_records_inspected = self._sweep_replay_bytes = 0
         self._sweep_transitions = self._sweep_cursor_writes = 0
+
+        def due_keys(now: float, max_records: int) -> tuple[list[DueKey], bool, bool]:
+            return self._due_keys(now, max_records, priority_capture_id=priority_capture_id)
+
         try:
             return _capture_sweep.run_bounded_sweep(
                 budget=budget,
                 monotonic=self._monotonic,
                 wall_clock=self._wall_clock,
-                due_keys=self._due_keys,
+                due_keys=due_keys,
                 before_attempt=self._advance_sweep_cursor,
                 sweep_one=self._sweep_one,
                 work_counters=lambda: _capture_orphan_scan.sweep_work_counters(self),

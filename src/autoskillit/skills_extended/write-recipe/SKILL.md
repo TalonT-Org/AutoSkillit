@@ -29,6 +29,8 @@ Format a workflow into a YAML recipe following the workflow schema.
 
 No positional arguments. The skill prompts interactively for workflow details.
 
+In a headless session, skip every step that asks the user or calls an MCP kitchen tool; apply the format rules in this document, save the YAML, and return — the recipe is validated when it is next loaded.
+
 ## Critical Constraints
 
 **NEVER:**
@@ -41,7 +43,7 @@ No positional arguments. The skill prompts interactively for workflow details.
 
 **ALWAYS:**
 - Save the script to `.autoskillit/recipes/{name}.yaml` as the ONLY output
-- Call `validate_recipe` after saving and fix any errors
+- In an interactive session, ensure the saved recipe validates cleanly (Standalone Invocation Flow step 8 / Edit Mode step 5). In a headless session, follow the document-wide mode rule and return the saved YAML for host validation.
 - Use "recipe" terminology (not "skill script")
 
 ## Output Path Isolation (Required)
@@ -536,11 +538,13 @@ When called directly as `/autoskillit:write-recipe`:
 5. Generate the script in the YAML format above
 6. Before saving, call `kitchen_status` to get `package_version` and stamp `autoskillit_version: "{package_version}"` as the second top-level field (after `name`). This is required for the migration system to track script age.
 7. Save to `.autoskillit/recipes/{name}.yaml` (create the directory if needed)
-8. Call `validate_recipe` with the saved file path. If errors are returned, fix them and re-validate until clean. Review the `quality.warnings` in the response:
+8. In an interactive session, call `validate_recipe` with the saved file path. If errors are returned, fix them and re-validate until clean.
+   In a headless session, return the saved YAML for host validation.
+   For interactive validation responses, review `quality.warnings`:
    - `DEAD_OUTPUT`: A `capture:` key is never referenced by any reachable downstream step via `${{ context.X }}`. Either add a `${{ context.X }}` reference in the downstream step's `with:` block, or remove the unused capture.
    - `IMPLICIT_HANDOFF`: A `run_skill` step has no `capture:` block. Add a `capture:` block to explicitly wire outputs to downstream steps via `${{ context.X }}`, or confirm the skill's output is intentionally unused.
    - Present the quality summary to the user and fix any warnings that indicate broken wiring.
-9. After validation passes, generate the pipeline contract file by calling `generate_recipe_card` on the saved script. This creates `.autoskillit/recipes/contracts/{name}.yaml` alongside the recipe. Use `run_python` with `autoskillit.recipe.contracts.generate_recipe_card` passing the script path and scripts directory, or rely on `load_recipe` which auto-generates contracts on first load.
+9. The pipeline contract card is generated automatically the next time the recipe is loaded; do not generate it manually.
 10. Tell the user: "Saved to `.autoskillit/recipes/{name}.yaml`. Load it with `load_recipe("{name}")` via the MCP tool."
 
 After telling the user, emit the structured output token as the very last line of your
@@ -591,10 +595,10 @@ When the agent is given an existing script's YAML content and a requested change
    - Save changes to the original file
    - Save as a new script (prompt for name)
    - Use temporarily without saving
-5. Call `validate_recipe` on the saved path
-6. If errors, fix and re-validate until clean
-7. Review quality warnings and fix data-flow issues before reporting changes
-8. After validation passes, regenerate the pipeline contract file to reflect the changes. Use `run_python` with `autoskillit.recipe.contracts.generate_recipe_card` or rely on `load_recipe` auto-generation on next load.
+5. In an interactive session, call `validate_recipe` on the saved path. In a headless session, return the saved YAML for host validation.
+6. For interactive validation errors, fix and re-validate until clean
+7. For interactive validation responses, review quality warnings and fix data-flow issues before reporting changes
+8. The pipeline contract card is generated automatically the next time the recipe is loaded; do not generate it manually.
 9. Report the changes made
 
 This edit mode is invoked when `load_recipe` routes the user's modification request through this skill. The skill receives the existing YAML as context.

@@ -14,6 +14,7 @@ from autoskillit.core import (
     VANISHED_ERRORS,
     ChannelBStatus,
     get_logger,
+    is_claude_session_log,
     read_active_operation_leases,
     scan_observed,
 )
@@ -271,7 +272,7 @@ async def _discover_session_log(
             candidates = [
                 entry
                 for entry in scan_observed(session_log_dir)
-                if entry.path.suffix == ".jsonl" and entry.status.st_ctime > spawn_time
+                if is_claude_session_log(entry.path) and entry.status.st_ctime > spawn_time
             ]
             session_file, session_entry = _select_session_log_file(
                 session_log_dir, candidates, expected_session_id, resume_cursor

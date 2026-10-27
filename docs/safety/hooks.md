@@ -186,6 +186,10 @@ stdlib hook bridge as `output_budget_policy.disabled` (the inverse of
 that internal bridge shape after verified policy loading. No rendered-marker ceiling
 is implemented.
 
+The temporary output-budget overlay workaround is removed on every
+`close_kitchen`. To disable the guard durably, set
+`output_budget: {guard_enabled: false}` in `.autoskillit/config.yaml`.
+
 #### Capture Artifact Lifecycle
 
 | Phase | Behavior |
@@ -195,13 +199,18 @@ is implemented.
 | Publication | Oversized FINAL issues one bearer token and stores only its bound hash; publication verifies that tuple and can return published or unavailable but cannot mint another token |
 | Delivery | Checked write-all rejects invalid/no-progress writes and flushes hook stdout before `delivered`; this boundary does not prove host, UI, history, or model visibility |
 | Reader | `open_verified_capture()` authenticates the token, takes a shared lease, revalidates the descriptor, and exposes exact bounded reads without a path, descriptor, or write API |
-| Retention | References expire no later than the one-hour retention deadline; active producer-exclusive and reader-shared leases block cleanup |
+| Retention | After delivery completes, captures with no outstanding bearer become eligible immediately; a delivered capture with a published reference remains readable until expiry; unsettled deliveries and failed artifacts keep the one-hour hold; active producer-exclusive and reader-shared leases block cleanup |
 | Ownership | The producer transfers the retained carrier while preserving exclusive ownership through initial publication and delivery |
-| Cleanup — installed runner | Every valid run/reject invocation performs one bounded sweep after producer resources release |
+| Cleanup — installed runner | Every valid run/reject invocation performs one bounded sweep after producer resources release and prioritizes its just-delivered inline capture before the cursor-rotated backlog within the existing `RUNNER_TAIL_BUDGET` |
 | Cleanup — session lifecycle | `capture_lifecycle_hook.py` performs the same bounded sweep at `SessionStart` in both interactive and headless sessions |
+| Setup capacity fallback | A capacity refusal runs the command uncaptured within the `shell_max_inline_bytes` head/tail bound; oversized output gets a fixed elision line, with no artifact or reference. The `capture_degraded` marker at `capture_setup` carries the capacity reason and measurement. Other setup failures remain fail closed |
 | Naming contract | `shell_[0-9a-f]{16}.log` — files not matching this pattern are never deleted |
 | Safety | Capture components reject symlinks; artifacts reject collisions, hardlinks, unsafe modes, and identity changes; a hostile same-UID process that ignores advisory locks is excluded |
 | Failure mode | Pre-FINAL failure has no manifest/reference/success marker; post-FINAL failure preserves FINAL and changes only reference or delivery state; cleanup remains bounded and fail open |
+
+The `capture_degraded` marker signals degradation for that command; lineage
+observations continue to describe the launch's capture/direct routing. It is
+not an aggregate degradation rate or alarm.
 
 The durable lifecycle is `RESERVED` → `STAGED` → `PUBLISHED_WRITING` →
 `FINALIZED` or `FAILED`. An unlocked active record becomes `ABANDONED`.
@@ -212,9 +221,10 @@ it with capped backoff. FINAL also carries independent reference
 `revoked`) and
 delivery (`not_attempted`, `attempting`, `delivered`, `failed`, `unknown`) states.
 Lost pre-delivery tokens become unavailable; an interrupted attempting delivery
-becomes unknown and is never re-emitted. Finalized and failed records use their
-terminal transition as the retention clock; abandoned records use their durable
-creation time.
+becomes unknown and is never re-emitted. FINALIZED records derive eligibility
+from readability as described in the Retention row above; `FAILED` records keep
+their one-hour hold from terminal transition and abandoned records keep their
+one-hour hold from durable creation time.
 
 Eligibility is not a wall-clock scheduler. Deletion occurs on the next enabled,
 trusted installed runner-tail or cleanup-only `SessionStart` trigger. If hooks
@@ -381,11 +391,26 @@ the kernel to block indefinitely.
 `hooks._capture._reconcile.capture_store_stats()` is the single read-only
 adapter both the doctor battery's capture-store check and `autoskillit
 capture-store` (without `--reclaim`) call, so neither surface can drift from
-what a real reconciliation pass would find. `autoskillit capture-store
---reclaim` loops `reconcile_capture_store` with a generous one-time
-`RECLAIM_BUDGET` until a clean pass — no due records, no adoptable orphans —
-or a hard iteration cap. It exists for bulk pre-existing backlog; the
-SessionStart scan phase above keeps new debris from ever accumulating again.
+what a real reconciliation pass would find. Its capacity line appends
+`projected_compacted_bytes=… low_bytes=… utilization_pct=…` and the label
+`(default capacity limits; runtime overrides are runner-local)`. Doctor and the
+CLI emit a WARNING when the soft limit is positive and projected compacted
+bytes reach 80% of it: `projected_compacted_bytes / compaction_low_bytes >= 0.80`.
+
+`ledger_bytes` is the physical ledger size and includes superseded transition
+frames until compaction. `projected_compacted_bytes` is the admission quantity
+and the numerator for the warning; it measures the compacted projection of
+latest records, tombstones, and opaque frames. These values answer different
+questions. An existing physical ledger above `MAX_LEDGER_BYTES` fails store
+load as `CaptureLedgerError`; a projected compacted-capacity refusal is a
+`CaptureCapacityError` with the capacity handling described in
+[ADR-0006](../decisions/0006-output-containment.md).
+
+`autoskillit capture-store --reclaim` loops `reconcile_capture_store` with a
+generous one-time `RECLAIM_BUDGET` until a clean pass — no due records, no
+adoptable orphans — or a hard iteration cap. It exists for bulk pre-existing
+backlog; the SessionStart scan phase above keeps new debris from ever
+accumulating again.
 
 ### `generated_file_write_guard.py`
 **Guarded tools:** `Write`, `Edit`
@@ -399,6 +424,47 @@ Denies writes into AutoSkillit installation trees, including `site-packages`,
 plugin generations, uv tool installs, and uv cache archives. This protection
 applies in every session class and backend. An unresolved write target is denied
 with guidance to put a literal path in the command.
+
+### Bounded Bash destinations
+
+The shared scanner supplies Bash destinations to the write-prefix, installation,
+Git-ref, and `run_cmd` guards. Supported explicit forms include
+`npm install --prefix DIR pkg`, `npm install --prefix=DIR pkg`, and
+`npm --prefix DIR install pkg`. The prefix is a content destination. Without
+`--prefix`, npm commands are unresolved writes except for recognized usage,
+help/version, metadata, and `config get`/`config list` queries. An unresolved
+destination is distinct from a command with no detected write.
+
+For `ln TARGET LINK`, including separate or combined `-s`/`-f`, the destination is
+the link entry, not the source. `-t DIR`, `-tDIR`, and detached/equals
+`--target-directory` forms derive `DIR/basename(TARGET)` for each source. A lone
+source derives an entry in cwd. An existing final directory, including a symlink
+to a directory, normally receives a derived child; `-T` selects the final operand
+itself, and `-n` prevents following a final symlink to a directory while retaining
+ordinary-directory handling. GNU `install` target-directory forms similarly
+produce each actual child content destination. Missing required values, unknown
+destination-affecting options, and contradictory `-t`/`-T` are unresolved writes.
+
+Content writes follow final symlinks. Entry replacement resolves the parent and
+retains the final basename: replacing an allowed link that points outside is
+separate from later writing through that link. A symlinked parent still affects
+the entry's physical location. Entry targets such as `/dev/null` remain visible
+even where content writes to pseudo-devices are suppressed.
+
+An npm prefix does not describe all npm writes. The independently configured
+[cache](https://docs.npmjs.com/cli/v11/using-npm/config/#cache) and dependency
+[lifecycle scripts](https://docs.npmjs.com/cli/v11/using-npm/scripts/) can cause
+additional writes; the scanner models neither cache writes nor script side
+effects. Installed dependencies' scripts are distinct from hooks in the prefix
+project.
+
+Canonical containment is a point-in-time check: an ancestor or symlink can change
+between scanning and execution. Separately, `ln` chooses directory versus entry
+semantics from filesystem state; changing the final operand into a directory or
+a symlink to one before execution can change the child entry it creates. These
+time-of-check-to-time-of-use weaknesses mean the checks provide neither race
+immunity nor OS-level confinement. Creating a link entry and accessing its
+referent require separate validation.
 
 ### `recipe_write_advisor.py`
 **Matched tools:** `Write`, `Edit`

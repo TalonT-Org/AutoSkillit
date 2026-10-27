@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import errno
+import io
 import json
 import os
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -290,6 +293,52 @@ def test_blocks_interpreter_write_into_install_tree(tmp_path: Path) -> None:
     assert _decision(stdout) == "deny"
 
 
+@pytest.mark.parametrize(
+    "error", [errno.ENOENT, errno.ENOTDIR, errno.EACCES, errno.ELOOP, errno.EIO]
+)
+def test_entry_stat_errors_only_allow_absent_entries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error: int
+) -> None:
+    from autoskillit.hooks.guards import installation_integrity_guard as guard
+
+    target = tmp_path / "entry"
+    original_lstat = os.lstat
+
+    def lstat(path, *args, **kwargs):
+        if os.fspath(path) == str(target):
+            raise OSError(error, "injected stat failure")
+        return original_lstat(path, *args, **kwargs)
+
+    monkeypatch.setattr(guard, "_known_roots", lambda: ())
+    monkeypatch.setattr(guard, "os", SimpleNamespace(**(vars(os) | {"lstat": lstat})))
+
+    assert guard._is_protected_entry_target(str(target)) is (
+        error not in {errno.ENOENT, errno.ENOTDIR}
+    )
+
+
+@pytest.mark.parametrize("failure_site", ["destination_location", "destination_within"])
+def test_entry_resolution_failure_has_unresolved_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys, failure_site: str
+) -> None:
+    from autoskillit.hooks.guards import installation_integrity_guard as guard
+
+    def fail_resolution(*args):
+        raise RuntimeError("injected resolution failure")
+
+    event = _bash(f"ln -s source {tmp_path / 'entry'}")
+    event["cwd"] = str(tmp_path)
+    monkeypatch.setattr(guard, "_known_roots", lambda: (tmp_path / "protected",))
+    monkeypatch.setattr(guard, failure_site, fail_resolution)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    with pytest.raises(SystemExit) as result:
+        guard.main()
+    assert result.value.code == 0
+    output = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+    assert output["permissionDecision"] == "deny"
+    assert "code=unresolved-write-target" in output["permissionDecisionReason"]
+
+
 def test_blocks_hardlink_alias_of_uv_tool_file(tmp_path: Path) -> None:
     home = tmp_path / "home"
     original = home / ".local/share/uv/tools/autoskillit/lib/site-packages/autoskillit/core.py"
@@ -303,6 +352,97 @@ def test_blocks_hardlink_alias_of_uv_tool_file(tmp_path: Path) -> None:
         {"tool_name": "Write", "tool_input": {"file_path": str(alias)}},
         env={"HOME": str(home)},
     )
+
+    assert code == 0
+    assert _decision(stdout) == "deny"
+
+
+def test_blocks_ln_replacement_of_hardlink_alias_of_uv_tool_file(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    original = home / ".local/share/uv/tools/autoskillit/lib/site-packages/autoskillit/core.py"
+    original.parent.mkdir(parents=True)
+    original.write_text("source", encoding="utf-8")
+    alias = tmp_path / "ordinary-project" / "linked.py"
+    alias.parent.mkdir()
+    os.link(original, alias)
+
+    code, stdout = _run(
+        _bash(f"ln -f {tmp_path / 'replacement.py'} {alias}"),
+        env={"HOME": str(home)},
+    )
+
+    assert code == 0
+    assert _decision(stdout) == "deny"
+
+
+@pytest.mark.parametrize(
+    "command_template",
+    [
+        "npm install --prefix {target} package",
+        "ln -sf /tmp/source {target}",
+    ],
+    ids=["npm-prefix", "ln-entry"],
+)
+def test_blocks_explicit_install_tree_destinations(tmp_path: Path, command_template: str) -> None:
+    target = tmp_path / "lib/python3.13/site-packages/autoskillit/destination"
+
+    code, stdout = _run(_bash(command_template.format(target=target)))
+
+    assert code == 0
+    assert _decision(stdout) == "deny"
+    assert (
+        "code=protected-installation-target"
+        in json.loads(stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        'npm install --prefix "$DESTINATION" package',
+        'ln -sf /tmp/source "$DESTINATION"',
+    ],
+    ids=["npm-prefix", "ln-entry"],
+)
+def test_blocks_unresolved_explicit_destinations(
+    command: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("DESTINATION", raising=False)
+    code, stdout = _run(_bash(command))
+
+    assert code == 0
+    assert _decision(stdout) == "deny"
+    assert (
+        "code=unresolved-write-target"
+        in json.loads(stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+    )
+
+
+def test_ln_entry_location_does_not_follow_outside_symlink_into_install_tree(
+    tmp_path: Path,
+) -> None:
+    protected = tmp_path / "lib/python3.13/site-packages/autoskillit/core.py"
+    protected.parent.mkdir(parents=True)
+    protected.write_text("protected", encoding="utf-8")
+    outside_link = tmp_path / "ordinary-project/core.py"
+    outside_link.parent.mkdir()
+    outside_link.symlink_to(protected)
+
+    code, stdout = _run(_bash(f"ln -sf {tmp_path / 'replacement.py'} {outside_link}"))
+
+    assert code == 0
+    assert stdout == ""
+
+
+def test_ln_entry_location_protects_symlink_inside_install_tree(tmp_path: Path) -> None:
+    protected_link = tmp_path / "lib/python3.13/site-packages/autoskillit/core.py"
+    protected_link.parent.mkdir(parents=True)
+    outside = tmp_path / "ordinary-project/core.py"
+    outside.parent.mkdir()
+    outside.write_text("outside", encoding="utf-8")
+    protected_link.symlink_to(outside)
+
+    code, stdout = _run(_bash(f"ln -sf {tmp_path / 'replacement.py'} {protected_link}"))
 
     assert code == 0
     assert _decision(stdout) == "deny"

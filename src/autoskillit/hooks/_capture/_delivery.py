@@ -306,11 +306,12 @@ def _delivery_transition(
         raise lifecycle_error("capture delivery transition predecessor changed")
     if not _ledger.is_delivery_successor(expected, target, allow_same=False):
         raise lifecycle_error("capture delivery transition is not allowed")
-    return replace(
+    candidate = replace(
         record,
         delivery_status=target,
         revision=record.revision + 1,
     )
+    return replace(candidate, next_attempt_at=_ledger.readable_until(candidate))
 
 
 def transition_delivery(

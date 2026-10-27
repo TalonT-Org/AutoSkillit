@@ -121,8 +121,8 @@ validated before session initialization or filesystem writes.
 
 The selected canonical documents are then projected into an exact, content-keyed
 plugin artifact. Machine-only authority (`uses_capabilities`, `execution_role`,
-`activate_deps`, and retired `backend_requirements`) stays in AutoSkillit's private
-contract and is omitted from every model-facing `SKILL.md`. Claude Code receives the
+`activate_deps`, `interactive_only`, and retired `backend_requirements`) stays in
+AutoSkillit's private contract and is omitted from every model-facing `SKILL.md`. Claude Code receives the
 sanitized projection through the same launch binding whose shared descriptor reaches
 the child, rather than a raw `skills_extended/` directory. Exact
 ORCHESTRATOR-role entries such as `process-issues` remain excluded from the L1 catalog,

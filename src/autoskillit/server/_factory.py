@@ -9,9 +9,11 @@ construction scattered across callers.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import subprocess
-from collections.abc import Callable
+import time
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
@@ -119,6 +121,25 @@ from autoskillit.workspace import (
 )
 
 logger = get_logger(__name__)
+
+
+def _make_github_review_poster(
+    *,
+    ledger: GitHubReviewLedger,
+    gateway: DefaultGitHubReviewGateway,
+    review_comment_cap: int = 50,
+    clock: Callable[[], float] = time.monotonic,
+    sleeper: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    wall_clock: Callable[[], float] = time.time,
+) -> DefaultGitHubReviewPoster:
+    """Compose review publication with one ledger for receipts and mutation pacing."""
+    return DefaultGitHubReviewPoster(
+        ledger=ledger,
+        coordinator=GitHubReviewMutationCoordinator(ledger=ledger, clock=clock, sleeper=sleeper),
+        gateway=gateway,
+        review_comment_cap=review_comment_cap,
+        wall_clock=wall_clock,
+    )
 
 
 def make_recipe_execution(
@@ -437,9 +458,8 @@ def make_context(
         token_factory=token_factory,
         api_log=github_api_log,
     )
-    github_review_poster = DefaultGitHubReviewPoster(
+    github_review_poster = _make_github_review_poster(
         ledger=github_review_ledger,
-        coordinator=GitHubReviewMutationCoordinator(ledger=github_review_ledger),
         gateway=github_review_gateway,
         review_comment_cap=config.github.review_comment_cap,
     )
@@ -573,6 +593,8 @@ def make_context(
         return result
 
     ctx.migrations = DefaultMigrationService(
-        default_migration_engine(), run_headless=_run_migration_headless
+        default_migration_engine(temp_dir_override=config.workspace.temp_dir),
+        run_headless=_run_migration_headless,
+        temp_dir=temp_dir,
     )
     return ctx

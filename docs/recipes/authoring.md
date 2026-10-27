@@ -125,16 +125,18 @@ contract card. The Haiku verdict is one of `FRESH`, `STALE`, or `UNCERTAIN`;
 
 When a recipe declares an `autoskillit_version` older than the running
 package, the migration engine in `migration/engine.py` walks the migration
-notes under `src/autoskillit/migrations/` and applies them in order. Each
-note is a 7-step sequence:
+notes under `src/autoskillit/migrations/` and applies them in order:
 
-1. Read current YAML.
-2. Validate it parses.
-3. Apply the note's transformer.
-4. Validate the transformed YAML.
-5. Diff old vs new.
-6. Write the new YAML atomically.
-7. Record the new `autoskillit_version`.
+1. The service selects the applicable migration notes.
+2. It launches the `migrate-recipes` headless skill once.
+3. The host requires the expected output file and the target `autoskillit_version` stamp.
+4. The host validates the candidate with the same `validate_from_path` entry and configured
+   temp placeholder as the `validate_recipe` tool. Candidate structure, semantics, contracts,
+   and binding projection are compared by full finding identity against the original recipe,
+   while contract lookup remains anchored beside the original. Validator and metadata
+   exceptions fail normally; if original validation raised, the candidate must be fully valid.
+5. The engine writes the accepted candidate atomically and retains a `.yaml.bak` backup.
+6. The service clears a prior failure on success or records the rejected migration.
 
 Failures are recorded in `migration/store.py:FailureStore` (atomic JSON
 writes) so the next `autoskillit migrate` run can resume.

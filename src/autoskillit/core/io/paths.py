@@ -23,6 +23,8 @@ from enum import Enum
 from pathlib import Path
 from typing import NamedTuple
 
+from autoskillit._destination_paths import destination_location as destination_location
+
 from .._install_binding import resolve_install_binding
 from ..fs_observation import safe_mtime
 
@@ -79,25 +81,6 @@ def pkg_root() -> Path:
     return resolve_install_binding().root
 
 
-def destination_location(destination: Path) -> Path:
-    """Resolve a write destination's location without following a final-component symlink.
-
-    ``Path.resolve()`` follows the final component, so a destination that is
-    *currently* a symlink resolves to its target. For a write destination that
-    is the wrong question: the destination is about to be replaced, so what
-    matters is where it lives, not what it happens to point at right now.
-    Every containment check over a write destination must use this helper.
-
-    ``core/path_containment.py`` is the read-side counterpart and deliberately
-    does the opposite (``strict=True``, symlinks rejected) — it validates
-    existing artifacts rather than future write targets.
-    """
-    destination = Path(destination)
-    if not destination.name:
-        return destination.resolve()
-    return destination.parent.resolve() / destination.name
-
-
 def resolve_project_dir() -> Path:
     """Resolve the project root: git toplevel, falling back to cwd.
 
@@ -126,10 +109,13 @@ def resolve_project_dir() -> Path:
 def claude_code_project_dir(cwd: str) -> Path:
     """Derive the Claude Code project log directory from a working directory path.
 
-    Encodes the cwd by replacing '/' and '_' with '-', matching Claude Code's
-    internal convention for ~/.claude/projects/<encoded-path>/.
+    Replace every UTF-16 unit outside ASCII letters and digits with a hyphen
+    under ~/.claude/projects/, matching the native JavaScript slug rule.
     """
-    project_hash = cwd.replace("/", "-").replace("_", "-")
+    project_hash = "".join(
+        char if char.isascii() and char.isalnum() else "-" * (2 if ord(char) > 0xFFFF else 1)
+        for char in cwd
+    )
     return Path.home() / ".claude" / "projects" / project_hash
 
 
@@ -143,6 +129,11 @@ def claude_code_log_path(cwd: str, session_id: str) -> Path | None:
     if not session_id or session_id.startswith("no_session_") or session_id.startswith("crashed_"):
         return None
     return claude_code_project_dir(cwd) / f"{session_id}.jsonl"
+
+
+def is_claude_session_log(path: Path) -> bool:
+    """Return whether a path names a session transcript rather than an orphaned copy."""
+    return path.suffix == ".jsonl" and ".orphaned-" not in path.name
 
 
 def find_latest_session_id(cwd: str | None = None) -> str | None:
@@ -163,7 +154,7 @@ def find_latest_session_id(cwd: str | None = None) -> str | None:
         return None
 
     jsonl_files = sorted(
-        (f for f in project_dir.glob("*.jsonl")),
+        (f for f in project_dir.glob("*.jsonl") if is_claude_session_log(f)),
         key=lambda f: safe_mtime(f) or 0.0,
         reverse=True,
     )

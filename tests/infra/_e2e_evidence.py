@@ -21,7 +21,8 @@ def load_provenance(name: str) -> dict[str, Any]:
 
 def _replace_projects_token(path: Path, projects: Path) -> None:
     text = path.read_text(encoding="utf-8")
-    path.write_text(text.replace(_PROJECTS_TOKEN, str(projects)), encoding="utf-8")
+    replacement = json.dumps(str(projects))[1:-1]
+    path.write_text(text.replace(_PROJECTS_TOKEN, replacement), encoding="utf-8")
 
 
 def materialize_run(

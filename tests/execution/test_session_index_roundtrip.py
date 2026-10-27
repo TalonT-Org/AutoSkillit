@@ -8,7 +8,7 @@ from datetime import datetime
 import pytest
 
 from autoskillit.execution.session_log.session_index import iter_tolerant_session_index_lines
-from tests.execution.conftest import _flush
+from tests._session_log_helpers import _flush
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 

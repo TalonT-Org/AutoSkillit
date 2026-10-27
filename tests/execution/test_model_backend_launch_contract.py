@@ -17,7 +17,7 @@ import autoskillit.execution.headless as _patch_execution_headless
 from autoskillit.core import LaunchValueSourceKind
 from autoskillit.core.types import LaunchContractError, RetryReason, SkillResult
 
-from .conftest import _backend_authority, _launch_inputs, _mock_backend
+from .conftest import _backend_authority, _launch_inputs, _mock_backend, _unmarked_rollout_snapshot
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small, pytest.mark.model_contract]
 
@@ -180,7 +180,7 @@ async def test_rejected_admission_does_not_capture_rollout_or_invoke_runner(tmp_
     from autoskillit.execution.headless._headless_launch import _run_headless_attempt
 
     kwargs, runner = _build_codex_attempt_kwargs("gpt-6-sol", tmp_path)
-    capture = Mock(return_value=(None, "2000-01-01T00:00:00+00:00"))
+    capture = Mock(side_effect=_unmarked_rollout_snapshot)
     kwargs["capture_rollout_on_launch"] = capture
 
     async def reject(contract):
@@ -226,7 +226,7 @@ def _build_codex_attempt_kwargs(
             "launch_resolver": resolver,
             "launch_preparation": preparation,
             "expected_launch_contract": None,
-            "capture_rollout_on_launch": lambda: (None, "2000-01-01T00:00:00+00:00"),
+            "capture_rollout_on_launch": _unmarked_rollout_snapshot,
             "plugin_authority": None,
             "plugin_load_mode": PluginLoadMode.NONE,
             "provider_extras": None,

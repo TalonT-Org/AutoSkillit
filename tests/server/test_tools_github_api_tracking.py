@@ -105,7 +105,7 @@ async def test_flush_session_log_writes_github_api_usage(tmp_path):
     import json
 
     from autoskillit.pipeline.github_api_log import DefaultGitHubApiLog
-    from tests.execution.conftest import _flush
+    from tests._session_log_helpers import _flush
 
     log = DefaultGitHubApiLog()
     await log.record_httpx(

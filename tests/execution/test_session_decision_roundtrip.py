@@ -13,7 +13,7 @@ from autoskillit.core import (
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.headless._headless_result import _build_skill_result
-from tests.execution.conftest import _flush
+from tests._session_log_helpers import _flush
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 

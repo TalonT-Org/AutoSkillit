@@ -19,7 +19,7 @@ import structlog
 
 from autoskillit.core import CODEX_MODEL_ALIASES
 from autoskillit.execution.evidence.otlp_sink import _SIGNALS as _OTLP_SIGNALS
-from tests.execution.conftest import _flush
+from tests._session_log_helpers import _flush
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.large]
 

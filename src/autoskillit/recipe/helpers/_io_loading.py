@@ -58,7 +58,7 @@ _RECIPE_NOTE_TABLE: dict[str, str] = {
 
 
 def _substitute_recipe_note_placeholders(value: Any) -> Any:
-    """Substitute recipe note placeholders. Only strings reach this layer."""
+    """Expand note placeholders in strings, leaving non-string values unchanged."""
     if isinstance(value, str):
         for placeholder, note in _RECIPE_NOTE_TABLE.items():
             value = value.replace(placeholder, note)

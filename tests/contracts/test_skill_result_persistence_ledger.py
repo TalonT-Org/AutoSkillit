@@ -16,7 +16,7 @@ from typing import get_args, get_origin, get_type_hints
 import pytest
 
 from autoskillit.core import ExecutionIdentity, FaultDomain, InfraOutcome, SkillResult
-from tests.execution.conftest import _flush
+from tests._session_log_helpers import _flush
 
 pytestmark = pytest.mark.medium
 

@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import find_qualified_autoskillit_tool_names, paths
+from tests.arch._helpers import SRC_ROOT
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -41,18 +42,27 @@ def _string_literals_in_module(path: Path) -> list[tuple[int, str]]:
 def test_mcp_prefix_literals_confined_to_canonical_module() -> None:
     """The string literals for both MCP prefix forms appear only in _plugin_ids.py."""
     src_root = paths.pkg_root()
+    scan_roots = (
+        (src_root, "src/autoskillit"),
+        (SRC_ROOT.parents[1] / "scripts", "scripts"),
+    )
     violations: list[str] = []
-    for py_file in sorted(src_root.rglob("*.py")):
-        rel = py_file.relative_to(src_root).as_posix()
-        if rel == _CANONICAL_MODULE:
-            continue
-        for lineno, value in _string_literals_in_module(py_file):
-            for literal in _CONFINED_LITERALS:
-                if literal in value:
-                    violations.append(f"{rel}:{lineno}: contains {literal!r} in {value!r}")
+    for root, root_label in scan_roots:
+        files = sorted(path for path in root.rglob("*.py") if "__pycache__" not in path.parts)
+        assert files, f"{root} scan universe must not be empty"
+        for py_file in files:
+            rel = py_file.relative_to(root).as_posix()
+            if root == src_root and rel == _CANONICAL_MODULE:
+                continue
+            for lineno, value in _string_literals_in_module(py_file):
+                for literal in _CONFINED_LITERALS:
+                    if literal in value:
+                        violations.append(
+                            f"{root_label}/{rel}:{lineno}: contains {literal!r} in {value!r}"
+                        )
     assert not violations, (
-        "MCP prefix literals must appear only in "
-        f"{_CANONICAL_MODULE}. Violations:\n" + "\n".join(violations)
+        f"MCP prefix literals must be confined to {_CANONICAL_MODULE} while scanning "
+        "src/autoskillit/ and scripts/. Violations:\n" + "\n".join(violations)
     )
 
 

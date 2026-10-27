@@ -22,12 +22,11 @@ from autoskillit.core import (
 )
 from autoskillit.core.types.results._type_results import ModelIdentity
 from tests._helpers import make_rollout_marker
+from tests._session_log_helpers import _flush, _snap
 from tests.execution.conftest import (
-    _flush,
     _make_cc_jsonl_record,
     _make_thinking_block,
     _make_tool_block,
-    _snap,
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]

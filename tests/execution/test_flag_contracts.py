@@ -7,10 +7,14 @@ If the claude CLI renames a flag, update the constant value here — one change,
 one place, and all tests catch the ripple.
 """
 
+from pathlib import Path
+
 import pytest
 
 from autoskillit.core import ClaudeFlags
+from autoskillit.core.types import OutputFormat
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
+from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -69,6 +73,37 @@ def _extract_flags(cmd: tuple[str, ...] | list[str]) -> set[str]:
 
 
 class TestFlagRegistryAudit:
+    @pytest.mark.parametrize("fmt", list(OutputFormat))
+    def test_skill_food_truck_resume_cmd_flags_are_all_registered(self, fmt: OutputFormat) -> None:
+        backend = ClaudeCodeBackend()
+        skill = backend.build_skill_session_cmd(
+            "/investigate foo",
+            cwd="/tmp",
+            completion_marker="%%DONE%%",
+            model=None,
+            plugin_binding=None,
+            output_format=fmt,
+        )
+        with plugin_binding(Path("/p")) as binding:
+            root = backend.build_food_truck_cmd(
+                orchestrator_prompt="Orchestrator",
+                plugin_binding=binding,
+                cwd="/tmp",
+                completion_marker="%%DONE%%",
+                output_format=fmt,
+            )
+        resume = backend.build_resume_cmd(
+            resume_session_id="abc", prompt="Emit", output_format=fmt
+        )
+        for name, spec in (("skill", skill), ("food_truck", root), ("resume", resume)):
+            unknown = _extract_flags(spec.cmd) - KNOWN_CLAUDE_FLAGS
+            assert not unknown, f"{name}: {unknown}"
+            assert ClaudeFlags.OUTPUT_FORMAT in spec.cmd, f"{name}: missing output-format flag"
+            output_format_index = spec.cmd.index(ClaudeFlags.OUTPUT_FORMAT)
+            assert spec.cmd[output_format_index + 1 : output_format_index + 2] == (fmt.value,), (
+                f"{name}: expected output format {fmt.value!r}"
+            )
+
     def test_interactive_cmd_flags_are_all_registered(self):
         result = ClaudeCodeBackend().build_interactive_cmd(model="claude-sonnet-4-6")
         unknown = _extract_flags(result.cmd) - KNOWN_CLAUDE_FLAGS

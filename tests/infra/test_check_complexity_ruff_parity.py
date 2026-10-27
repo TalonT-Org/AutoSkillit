@@ -15,8 +15,9 @@ from pathlib import Path
 
 import pytest
 
+from tests._script_loader import load_script
 from tests.conftest import production_interpreter_env
-from tests.infra._complexity_helpers import _CONSTRUCT_CASES, load_check_script
+from tests.infra._complexity_helpers import _CONSTRUCT_CASES
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
@@ -25,7 +26,7 @@ _CHECK_SCRIPT = REPO_ROOT / "scripts" / "check_complexity.py"
 _CHECK_MODULE_NAME = "_autoskillit_check_complexity_ruff_parity"
 _RUFF_TIMEOUT_SECONDS = 30
 
-check = load_check_script(_CHECK_MODULE_NAME, _CHECK_SCRIPT)
+check = load_script(_CHECK_MODULE_NAME, _CHECK_SCRIPT)
 
 
 # --- ruff invocation: a required dependency, never skipped --------------------------------

@@ -32,7 +32,7 @@ from tests._retention_surface import (
     RECLAIMER_CONVERGENCE_CASES,
     assert_second_pass_is_quiet,
 )
-from tests.execution.conftest import _flush, _snap
+from tests._session_log_helpers import _flush, _snap
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 

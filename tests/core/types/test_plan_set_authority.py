@@ -85,19 +85,35 @@ def test_create_digest_and_canonical_round_trip(tmp_path: Path) -> None:
             },
             "unknown part key",
         ),
+        (
+            {
+                "inventory_mode": InventoryMode.ENUMERATED,
+                "coverage": CoverageResultDef(
+                    CoverageStatus.PASS, parts_without_obligations=("P1",)
+                ),
+            },
+            "invalid for enumerated inventory",
+        ),
     ],
 )
 def test_invalid_authority_states_fail_closed(
     tmp_path: Path, overrides: dict[str, object], message: str
 ) -> None:
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises(ValueError, match=message) as exc_info:
         _authority(tmp_path, **overrides)
+    if overrides.get("inventory_mode") is InventoryMode.ENUMERATED:
+        assert "inventory_mode='enumerated'" in str(exc_info.value)
+        assert "declared_parts=('P1',)" in str(exc_info.value)
 
 
 @pytest.mark.parametrize("mode", (InventoryMode.NO_ISSUE, InventoryMode.UNENUMERATED))
 def test_authority_rejects_omitted_empty_parts(tmp_path: Path, mode: InventoryMode) -> None:
-    with pytest.raises(ValueError, match="must match actual empty parts"):
+    with pytest.raises(ValueError, match="must match actual empty parts") as exc_info:
         _authority(tmp_path, inventory_mode=mode, allocations=())
+    message = str(exc_info.value)
+    assert f"inventory_mode={mode.value!r}" in message
+    assert "declared_parts=()" in message
+    assert "actual_empty_parts=('P1',)" in message
 
 
 def test_part_ordinals_and_resolved_locators_are_unique(tmp_path: Path) -> None:

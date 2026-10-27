@@ -14,7 +14,7 @@ from autoskillit.execution.evidence.anomaly_detection import (
     detect_model_drift,
     normalize_model_id,
 )
-from tests.execution.conftest import _snap as _snap_full
+from tests._session_log_helpers import _snap as _snap_full
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 

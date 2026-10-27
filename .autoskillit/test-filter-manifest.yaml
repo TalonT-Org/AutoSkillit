@@ -246,6 +246,9 @@ tests/execution/fixtures/*.json:
 tests/execution/fixtures/*.jsonl:
   - execution/
 
+tests/infra/fixtures/e2e_sessions/**:
+  - infra/
+
 tests/config/golden_configs/*.yaml:
   - config/
 

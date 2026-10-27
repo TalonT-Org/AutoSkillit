@@ -7,7 +7,7 @@ import json
 
 import pytest
 
-from tests.execution.conftest import _flush
+from tests._session_log_helpers import _flush
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 

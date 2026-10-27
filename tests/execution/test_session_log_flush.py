@@ -28,7 +28,8 @@ from autoskillit.execution.session_log.session_log import resolve_log_dir
 from tests._helpers import INVALID_PATH_INPUTS
 from tests._helpers import UNKNOWN_MEASURE as _UNKNOWN
 from tests._helpers import observed_measure as _observed
-from tests.execution.conftest import _flush, _make_cc_jsonl_record, _snap
+from tests._session_log_helpers import _flush, _snap
+from tests.execution.conftest import _make_cc_jsonl_record
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 

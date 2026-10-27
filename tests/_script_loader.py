@@ -15,6 +15,9 @@ def load_check_script(name: str, path: Path) -> ModuleType:
     resolve string annotations through sys.modules[cls.__module__] without colliding with a
     sibling test file's copy of the same script (see
     tests/arch/test_acceptance_policy_relaxation_gate.py).
+
+    The script's parent directory is temporarily added to sys.path so sibling imports
+    resolve during execution. The caller's sys.path is restored afterward.
     """
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None

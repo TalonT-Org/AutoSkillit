@@ -4102,3 +4102,32 @@ def test_malformed_final_issue_labels_report_cleanup_shape(tmp_path: Path, monke
         for failure in failures
     )
     assert not any(call.argv[:3] == ["gh", "issue", "edit"] for call in runner.calls)
+
+
+@pytest.mark.parametrize(
+    ("document", "expected"),
+    [
+        ("[]", "settings.json must be an object"),
+        ('"agent-shaped string"', "settings.json must be an object"),
+        ('{"hooks": []}', "settings.json hooks must be an object"),
+        (
+            '{"hooks": {"SessionStart": "invalid"}}',
+            "settings.json hooks.SessionStart must be an array",
+        ),
+    ],
+)
+def test_session_hook_install_rejects_malformed_settings_without_rewriting(
+    tmp_path: Path,
+    document: str,
+    expected: str,
+) -> None:
+    settings_path = tmp_path / "home" / ".claude" / "settings.json"
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    settings_path.write_text(document, encoding="utf-8")
+    original = settings_path.read_bytes()
+
+    with pytest.raises(ValueError) as error:
+        harness.install_session_hooks(tmp_path / "home", tmp_path / "events.jsonl")
+
+    assert expected in str(error.value)
+    assert settings_path.read_bytes() == original

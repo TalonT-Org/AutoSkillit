@@ -1050,16 +1050,28 @@ def close_open_pull_requests(
 def install_session_hooks(home: Path, trace: Path) -> None:
     path = home / ".claude" / "settings.json"
     settings = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(settings, dict):
+        raise ValueError("session hooks: settings.json must be an object")
     if "agent" in settings:
         # Internal-agent callbacks carry the main agent's name, which the matcher admits.
         raise ValueError("session hooks: settings.json sets a main agent")
+    if "hooks" not in settings:
+        hooks: dict[str, Any] = {}
+    else:
+        hooks = settings["hooks"]
+        if not isinstance(hooks, dict):
+            raise ValueError("session hooks: settings.json hooks must be an object")
     command = f"python3 /opt/e2e/e2e_sessions.py {shlex.quote(str(trace))}"
-    hooks = settings.setdefault("hooks", {})
     for event, matcher in e2e_sessions.LIFECYCLE_HOOK_MATCHERS.items():
         entry: dict[str, Any] = {"hooks": [{"type": "command", "command": command, "timeout": 10}]}
         if matcher is not None:
             entry["matcher"] = matcher
-        hooks.setdefault(event, []).append(entry)
+        if event not in hooks:
+            hooks[event] = []
+        elif not isinstance(hooks[event], list):
+            raise ValueError(f"session hooks: settings.json hooks.{event} must be an array")
+        hooks[event].append(entry)
+    settings["hooks"] = hooks
     path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
 
 

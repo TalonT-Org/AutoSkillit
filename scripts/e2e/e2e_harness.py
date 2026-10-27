@@ -19,7 +19,7 @@ import traceback
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict, cast
 from urllib.parse import quote
 
 import e2e_catalog
@@ -88,6 +88,18 @@ CLEAN_INSTALL_ALLOWED_WARNINGS: dict[tuple[str, str], str] = {
 
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 CallResult = tuple[subprocess.CompletedProcess[str] | None, str | None]
+
+
+class PullRequestListRow(TypedDict):
+    number: int
+    state: str
+    additions: int
+    deletions: int
+
+
+class PipelinePullRequestListRow(TypedDict):
+    number: int
+    headRefOid: str | None
 
 
 def run_command(
@@ -314,17 +326,35 @@ def new_pull_requests(
     baseline: int,
     env: Mapping[str, str],
     runner: Runner,
-    *,
-    pipeline: bool = False,
-) -> tuple[list[dict[str, Any]] | None, str | None]:
+) -> tuple[list[PullRequestListRow] | None, str | None]:
+    rows, failure = _list_pull_requests(
+        repository, 20, "number,state,additions,deletions", env, runner
+    )
+    if rows is None:
+        return None, failure
+    return cast(list[PullRequestListRow], [row for row in rows if row["number"] > baseline]), None
+
+
+def new_pipeline_pull_requests(
+    repository: str,
+    baseline: int,
+    env: Mapping[str, str],
+    runner: Runner,
+) -> tuple[list[PipelinePullRequestListRow] | None, str | None]:
     limit = 20
-    fields = "number,headRefOid" if pipeline else "number,state,additions,deletions"
+    fields = "number,headRefOid"
     while True:
         rows, failure = _list_pull_requests(repository, limit, fields, env, runner)
         if rows is None:
             return None, failure
-        if not pipeline or len(rows) < limit or any(row["number"] <= baseline for row in rows):
-            return [row for row in rows if row["number"] > baseline], None
+        if len(rows) < limit or any(row["number"] <= baseline for row in rows):
+            return (
+                cast(
+                    list[PipelinePullRequestListRow],
+                    [row for row in rows if row["number"] > baseline],
+                ),
+                None,
+            )
         limit *= 2
 
 
@@ -1228,7 +1258,7 @@ def _repo_matches(value: Any, repository: str) -> bool:
 
 
 def owned_pull_requests(
-    rows: Sequence[Mapping[str, Any]],
+    rows: Sequence[PipelinePullRequestListRow],
     proof: e2e_sessions.OwnershipProof,
     repository: str,
     out: Path,
@@ -1251,7 +1281,7 @@ def owned_pull_requests(
             and head.get("ref") in proof["branches"]
             and _repo_matches(head.get("repo"), repository)
         ):
-            pr["_listed_head"] = row.get("headRefOid")
+            pr["_listed_head"] = row["headRefOid"]
             owned.append(pr)
     return owned
 
@@ -1459,7 +1489,7 @@ def discover_cleanup_prs(
     owned: list[dict[str, Any]] = []
     for attempt in range(2):
         try:
-            rows, failure = new_pull_requests(repository, baseline, env, runner, pipeline=True)
+            rows, failure = new_pipeline_pull_requests(repository, baseline, env, runner)
             if rows is None:
                 raise ValueError(failure)
             owned = owned_pull_requests(rows, proof, repository, out, env, runner)
@@ -1660,7 +1690,7 @@ def launch_regular_recipe(
 ) -> tuple[list[str], list[dict[str, str]]]:
     failures: list[str] = []
     matched: list[dict[str, str]] = []
-    listed: list[dict[str, Any]] | None = None
+    listed: list[PullRequestListRow] | None = None
     try:
         envelope, failures, _ = run_fleet(test, out, env, runner, ingredients=ingredients)
         failures, matched = match_recipe_failure(test, failures, envelope)
@@ -1774,7 +1804,7 @@ def launch_recipe(
             label,
         )
         failures += [f"ownership: {value}" for value in proof["violations"]]
-        listed, failure = new_pull_requests(repository, baseline, env, runner, pipeline=True)
+        listed, failure = new_pipeline_pull_requests(repository, baseline, env, runner)
         if listed is None:
             failures.append(str(failure))
         else:

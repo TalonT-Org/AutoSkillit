@@ -4233,3 +4233,21 @@ def test_match_recipe_findings_preserves_the_input_failures_list() -> None:
     assert failures == ["existing failure"]
     assert result == ["existing failure", "new_check: unexpected finding"]
     assert matched == []
+
+
+def test_json_call_reports_parse_location_and_preserves_output_evidence(tmp_path: Path) -> None:
+    runner = FakeRunner(
+        lambda argv: _completed(argv, stdout="not-json", stderr="diagnostic warning")
+    )
+    evidence = tmp_path / "invalid-response"
+
+    with pytest.raises(ValueError) as error:
+        harness._json_call(["gh", "api", "repos/owner/repo"], _env(), runner, evidence=evidence)
+
+    assert (
+        str(error.value)
+        == "gh api repos/owner/repo: invalid JSON at line 1 column 1: Expecting value"
+    )
+    assert isinstance(error.value.__cause__, json.JSONDecodeError)
+    assert evidence.with_suffix(".stdout.txt").read_text(encoding="utf-8") == "not-json"
+    assert evidence.with_suffix(".stderr.txt").read_text(encoding="utf-8") == "diagnostic warning"

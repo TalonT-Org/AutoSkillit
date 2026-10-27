@@ -1085,7 +1085,10 @@ def _json_call(
     try:
         return json.loads(result.stdout)
     except json.JSONDecodeError as exc:
-        raise ValueError(f"{' '.join(argv[:3])}: invalid JSON") from exc
+        raise ValueError(
+            f"{' '.join(argv[:3])}: invalid JSON at line {exc.lineno} "
+            f"column {exc.colno}: {exc.msg}"
+        ) from exc
 
 
 def _api_pages(endpoint: str, env: Mapping[str, str], runner: Runner, evidence: Path) -> list[Any]:
@@ -1185,7 +1188,10 @@ def prepare_seed(
     if label in {row["name"] for row in seed["labels"]}:
         raise ValueError("seed: issue is already claimed")
     repo = _json_call(
-        ["gh", "repo", "view", repository, "--json", "defaultBranchRef"], env, runner
+        ["gh", "repo", "view", repository, "--json", "defaultBranchRef"],
+        env,
+        runner,
+        evidence=out / "repository",
     )
     default_branch = repo.get("defaultBranchRef") if isinstance(repo, dict) else None
     if (

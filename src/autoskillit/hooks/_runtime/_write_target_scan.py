@@ -620,9 +620,9 @@ def _scan_executable(
         return WriteTargetScan(tuple(targets), unresolved, True, has_write), invoked
     if verb_name in {"ln", "install"}:
         return _scan_destination_command(verb_name, argv, verb_cwd, verb_tokens), invoked
-    if verb in WRITE_VERBS:
+    if verb_name in WRITE_VERBS:
         targets, unresolved = _classification.extract_write_verb_targets(
-            verb, argv, verb_cwd, argv_tokens=verb_tokens
+            verb_name, argv, verb_cwd, argv_tokens=verb_tokens
         )
         return WriteTargetScan(tuple(targets), unresolved, True, True), invoked
     if verb == "git" or verb.endswith("/git"):

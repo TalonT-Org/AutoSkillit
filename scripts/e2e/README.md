@@ -488,8 +488,9 @@ derived job timeout within 360 minutes.
 
 Recipe expectations match exact stable `(check, message)` product findings linked to real
 bug issues. Setup, discovery, malformed evidence and cleanup failures cannot be admitted.
-Unknown findings and absent expected findings fail. Every recipe records `outcome`:
-`passed`, `expected_failure` (with `passed=false`), or `failed`. A linked known defect may
+Unknown findings and absent expected findings fail. Each recipe run records `outcome` in
+`result.json` as `passed`, `expected_failure` (with `passed=false`), or `failed`. A linked
+known defect may
 use the accepted CLI exit convention, but only `passed` with no expected findings counts
 as successful commissioning. File or deduplicate observed product bugs separately; do not
 predeclare a provider defect or replace the MiniMax settings-file route.

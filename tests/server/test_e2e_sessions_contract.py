@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from mcp.types import CallToolResult
 
 from tests._script_loader import load_check_script
 
@@ -15,6 +16,13 @@ sessions = load_check_script(
 )
 
 
+def _parsed_response(response: Any) -> dict[str, Any] | None:
+    wire_result = CallToolResult(
+        content=response.content, structuredContent=response.structured_content
+    ).model_dump(mode="json", by_alias=True, exclude_none=True)
+    return sessions._result_object(wire_result)
+
+
 @pytest.mark.anyio
 async def test_ownership_parser_accepts_actual_product_tool_envelopes(
     tool_ctx_kitchen_open: Any,
@@ -24,17 +32,9 @@ async def test_ownership_parser_accepts_actual_product_tool_envelopes(
 ) -> None:
     from unittest.mock import AsyncMock
 
-    from mcp.types import CallToolResult
-
     import autoskillit.server as server
     import autoskillit.server._misc as server_misc
     from autoskillit.server.tools import tools_git, tools_issue_composite
-
-    def parsed_response(response: Any) -> dict[str, Any] | None:
-        wire_result = CallToolResult(
-            content=response.content, structuredContent=response.structured_content
-        ).model_dump(mode="json", by_alias=True, exclude_none=True)
-        return sessions._result_object(wire_result)
 
     async def resolve_remote(_work_dir: str) -> str:
         return "origin"
@@ -63,7 +63,7 @@ async def test_ownership_parser_accepts_actual_product_tool_envelopes(
     branch_response = await server.mcp.call_tool(
         "create_and_publish_branch", branch_args, run_middleware=False
     )
-    branch_result = parsed_response(branch_response)
+    branch_result = _parsed_response(branch_response)
     assert branch_result is not None
     branch_violations: list[str] = []
     assert (
@@ -91,7 +91,7 @@ async def test_ownership_parser_accepts_actual_product_tool_envelopes(
     failed_branch_response = await server.mcp.call_tool(
         "create_and_publish_branch", branch_args, run_middleware=False
     )
-    failed_branch_result = parsed_response(failed_branch_response)
+    failed_branch_result = _parsed_response(failed_branch_response)
     assert failed_branch_result is not None
     branch_violations = []
     assert (
@@ -141,7 +141,7 @@ async def test_ownership_parser_accepts_actual_product_tool_envelopes(
     claim_response = await server.mcp.call_tool(
         "claim_and_resolve_issue", claim_args, run_middleware=False
     )
-    claim_result = parsed_response(claim_response)
+    claim_result = _parsed_response(claim_response)
     assert claim_result is not None
     claim_violations: list[str] = []
     assert sessions._claim_succeeded(
@@ -157,10 +157,63 @@ async def test_ownership_parser_accepts_actual_product_tool_envelopes(
     reentry_response = await server.mcp.call_tool(
         "claim_and_resolve_issue", reentry_args, run_middleware=False
     )
-    reentry_result = parsed_response(reentry_response)
+    reentry_result = _parsed_response(reentry_response)
     assert reentry_result is not None
     assert reentry_result.get("reentry") is True
     claim_violations = []
     assert not sessions._claim_succeeded(
         [(reentry_args, reentry_result, False)], "42", claim_label, claim_violations
     )
+
+
+@pytest.mark.anyio
+async def test_completion_receipt_envelope_matches_collector_launch_contract(
+    tool_ctx_kitchen_open: Any,
+    kitchen_enabled: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import autoskillit.server as server
+    from autoskillit.server.tools.tools_pipeline_tracker import _handlers
+
+    authority = tool_ctx_kitchen_open.run_skill_completion
+    assert authority is not None
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "0")
+    request_session_id = "contract-request-session"
+    monkeypatch.setattr(
+        _handlers,
+        "_request_session_identity",
+        lambda _context: request_session_id,
+    )
+    invocation_id = authority.begin(
+        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        request_session_id=request_session_id,
+        tracker_order_id="",
+        tracker_path="",
+        tracker_kitchen_id="",
+        tracker_incarnation_id="",
+        step_name="contract",
+    )
+    receipt = authority.draft(
+        invocation_id,
+        classification="success",
+        success=True,
+        result_digest="contract-result",
+        child_session_id="child-contract-session",
+    )
+    authority.publish(receipt.receipt_id)
+
+    response = await server.mcp.call_tool(
+        "complete_run_skill_result",
+        {"receipt_id": receipt.receipt_id},
+        run_middleware=False,
+    )
+    reply = _parsed_response(response)
+
+    assert reply is not None
+    assert reply["success"] is True
+    assert reply["receipt_id"] == receipt.receipt_id
+    assert reply["session_id"] == "child-contract-session"
+    assert sessions._launched_session_ids(
+        {"root-session": {"calls": [("complete_run_skill_result", {}, reply, False)]}}
+    ) == {"child-contract-session"}

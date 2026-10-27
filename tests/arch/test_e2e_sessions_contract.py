@@ -254,7 +254,7 @@ def test_collector_consumes_production_session_provenance(tmp_path: Path) -> Non
     discovered = sessions._discover_owned(trace_path, envelope, log_root)
 
     assert discovered["root_id"] == root_id
-    assert discovered["dispatch_id"] == dispatch_id
+    assert discovered["owned"][root_id]["row"]["dispatch_id"] == dispatch_id
     assert set(discovered["owned"]) == {root_id, child_id}
     assert (
         discovered["owned"][child_id]["summary"]["execution_identity"] == child_identity.to_dict()

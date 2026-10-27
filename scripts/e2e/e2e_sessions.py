@@ -248,12 +248,9 @@ def _discover_owned(
 
     return {
         "root_id": root_id,
-        "dispatch_id": dispatch_id,
-        "log_root": root,
         "events": events,
         "owned": owned,
         "violations": violations,
-        "trace_session_ids": trace_session_ids,
     }
 
 

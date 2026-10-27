@@ -819,7 +819,7 @@ def _seed_sessions(log_dir: Path, sessions: dict[str, list[int | None] | None]) 
 
 
 def _log_dir(tmp_path: Path) -> Path:
-    return tmp_path / "home" / ".local" / "share" / "autoskillit" / "logs"
+    return harness.e2e_sessions.default_log_root(tmp_path / "home")
 
 
 def _env(**overrides: str) -> dict[str, str]:
@@ -3140,7 +3140,7 @@ class TestPipelineRecipeFlow:
         assert all(call.env == config_call.env for call in calls)
 
         trace = out / "session-events.jsonl"
-        log_root = home / ".local" / "share" / "autoskillit" / "logs"
+        log_root = harness.e2e_sessions.default_log_root(home)
         envelope = json.loads((out / "envelope.json").read_text(encoding="utf-8"))
         assert observed["ownership"] == [
             (trace, envelope, log_root, _SANDBOX_IMPLEMENTATION_ISSUE, SANDBOX, "in-progress")
@@ -3652,7 +3652,7 @@ class TestPipelineRecipeFlow:
                 state["fleet_envelope"] = materialize_run(
                     "run_38170521660_attempt_1",
                     trace=out / "session-events.jsonl",
-                    log_root=home / ".local" / "share" / "autoskillit" / "logs",
+                    log_root=harness.e2e_sessions.default_log_root(home),
                     projects=home / ".claude" / "projects",
                 )
             return original_handler(argv)

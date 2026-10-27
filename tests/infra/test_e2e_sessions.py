@@ -681,6 +681,13 @@ def test_summary_rejects_dot_session_directories(tmp_path: Path, dir_name: str) 
     assert f"sessions_index:{ROOT_ID}:invalid_dir_name" in summary["violations"]
 
 
+def test_summary_reader_reports_missing_summary_reason(tmp_path: Path) -> None:
+    violations: list[str] = []
+
+    assert sessions._read_summary(tmp_path, "missing-session", violations) is None
+    assert violations == ["summary:missing-session:missing"]
+
+
 def test_summary_rejects_malformed_owned_index_summary_and_transcript(
     tmp_path: Path,
 ) -> None:
@@ -704,6 +711,7 @@ def test_summary_rejects_malformed_owned_index_summary_and_transcript(
     assert summary["coverage"]["complete"] is False
     assert "sessions_index:invalid_json:2" in summary["violations"]
     assert f"summary:{ROOT_ID}:missing_or_malformed" in summary["violations"]
+    assert f"summary:{ROOT_ID}:invalid_json:1:2" in summary["violations"]
     assert f"transcript:{ROOT_ID}:invalid_json:1" in summary["violations"]
 
 

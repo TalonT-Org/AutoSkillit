@@ -240,15 +240,35 @@ def _safe_subagents_dir(transcript: Path, session_id: str, violations: list[str]
     return resolved_subagents
 
 
-def _read_summary(session_dir: Path, expected_session_id: str) -> dict[str, Any] | None:
+def _read_summary(
+    session_dir: Path, expected_session_id: str, violations: list[str]
+) -> dict[str, Any] | None:
+    summary_path = session_dir / "summary.json"
     try:
-        summary = json.loads((session_dir / "summary.json").read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        raw_summary = summary_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        violations.append(f"summary:{expected_session_id}:missing")
         return None
-    if not isinstance(summary, dict) or summary.get("session_id") != expected_session_id:
+    except OSError as exc:
+        violations.append(f"summary:{expected_session_id}:unavailable:{type(exc).__name__}")
+        return None
+    except UnicodeDecodeError as exc:
+        violations.append(f"summary:{expected_session_id}:invalid_utf8:{exc.start}")
+        return None
+    try:
+        summary = json.loads(raw_summary)
+    except json.JSONDecodeError as exc:
+        violations.append(f"summary:{expected_session_id}:invalid_json:{exc.lineno}:{exc.colno}")
+        return None
+    if not isinstance(summary, dict):
+        violations.append(f"summary:{expected_session_id}:invalid_record")
+        return None
+    if summary.get("session_id") != expected_session_id:
+        violations.append(f"summary:{expected_session_id}:session_id_mismatch")
         return None
     identity = summary.get("execution_identity")
     if not isinstance(identity, dict) or not isinstance(identity.get("parent_session_id"), str):
+        violations.append(f"summary:{expected_session_id}:invalid_execution_identity")
         return None
     return summary
 
@@ -326,7 +346,7 @@ def _fresh_candidates(
             continue
         row = matching_rows[0]
         session_dir = _safe_session_dir(log_root, row)
-        summary = _read_summary(session_dir, session_id) if session_dir else None
+        summary = _read_summary(session_dir, session_id, violations) if session_dir else None
         candidates[session_id] = row, summary
     return candidates
 
@@ -421,7 +441,7 @@ def _add_owned_session(
     if any(key not in row for key in required_index_fields):
         violations.append(f"sessions_index:{session_id}:missing_fields")
     if summary is None:
-        summary = _read_summary(session_dir, session_id)
+        summary = _read_summary(session_dir, session_id, violations)
     if summary is None:
         violations.append(f"summary:{session_id}:missing_or_malformed")
     elif summary.get("dispatch_id", "") != row.get("dispatch_id", ""):

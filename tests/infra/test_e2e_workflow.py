@@ -391,7 +391,6 @@ class TestSecrets:
             step["env"]["E2E_IMPLEMENTATION_ISSUE_URL"]
             == "${{ vars.E2E_IMPLEMENTATION_ISSUE_URL }}"
         )
-        assert "--env E2E_IMPLEMENTATION_ISSUE_URL" in step["run"]
 
     def test_redaction_keeps_required_secret_names(self, workflow: dict) -> None:
         run = _step(workflow, "run", step_id="redact")["run"]

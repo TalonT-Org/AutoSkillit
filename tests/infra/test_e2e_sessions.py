@@ -587,20 +587,29 @@ def test_empty_half_open_interval_does_not_reduce_concurrent_peak() -> None:
     )
 
 
-def test_no_attempted_resource_calls_leave_cleanup_proof_empty(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("issue_url", "expected_violations"),
+    [
+        (ISSUE_URL, []),
+        ("owner/repo#5233", []),
+        ("other/repo#5233", ["ownership:invalid_issue_reference"]),
+    ],
+)
+def test_issue_reference_must_match_repository(
+    tmp_path: Path, issue_url: str, expected_violations: list[str]
+) -> None:
     log_root, trace, _, root_transcript = _base_sessions(tmp_path)
-    transcript = root_transcript
     _trace(
         trace,
         [
-            _event("SessionStart", ROOT_ID, 1, transcript=transcript),
-            _event("SessionEnd", ROOT_ID, 2, transcript=transcript),
+            _event("SessionStart", ROOT_ID, 1, transcript=root_transcript),
+            _event("SessionEnd", ROOT_ID, 2, transcript=root_transcript),
         ],
     )
-    proof = sessions.collect_ownership(trace, _envelope(), log_root, ISSUE_URL, REPOSITORY)
+    proof = sessions.collect_ownership(trace, _envelope(), log_root, issue_url, REPOSITORY)
     assert proof["branches"] == []
     assert proof["claimed"] is False
-    assert proof["violations"] == []
+    assert proof["violations"] == expected_violations
 
 
 def test_missing_root_hooks_do_not_discard_available_branch_proof(tmp_path: Path) -> None:

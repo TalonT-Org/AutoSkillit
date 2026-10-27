@@ -691,6 +691,11 @@ def _issue_number(issue_url: str) -> str:
 
 
 def _issue_matches_repository(issue_url: str, repository: str) -> bool:
+    shorthand = re.fullmatch(r"([^/]+)/([^#]+)#\d+", issue_url)
+    if shorthand:
+        issue_repository = f"{shorthand.group(1)}/{shorthand.group(2)}"
+        return issue_repository.lower() == repository.lower()
+
     parsed = urlsplit(issue_url)
     return (
         parsed.scheme == "https"

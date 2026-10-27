@@ -845,6 +845,8 @@ def test_ownership_pairs_root_branch_with_managed_claim_and_keeps_compact_proof(
         trace, _envelope(), log_root, ISSUE_URL, REPOSITORY, claim_label="in-progress"
     )
 
+    assert set(proof) == {"branches", "claimed", "transcripts", "violations"}
+    assert all(set(item) == {"session_id", "path"} for item in proof["transcripts"])
     assert proof["branches"] == ["impl/5233-fix"]
     assert proof["claimed"] is expected_claimed
     if expected_claimed:

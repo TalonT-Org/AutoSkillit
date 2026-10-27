@@ -949,7 +949,7 @@ def main(argv: list[str] | None = None) -> int:
         if not isinstance(payload, dict):
             raise ValueError("lifecycle hook input must be an object")
         capture_hook_event(Path(args[0]), payload)
-    except (OSError, ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+    except (OSError, ValueError) as exc:
         print(f"e2e lifecycle capture failed: {exc}", file=sys.stderr)
         return 1
     return 0

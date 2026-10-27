@@ -4030,6 +4030,19 @@ def test_delete_owned_branch_does_not_treat_ref_name_404_as_http_status() -> Non
 
 
 @pytest.mark.parametrize(
+    "stderr",
+    ["gh: HTTP 404: Not Found", "gh: Not Found (HTTP 404)"],
+)
+def test_delete_owned_branch_treats_gh_404_formats_as_missing_ref(stderr: str) -> None:
+    runner = FakeRunner(lambda argv: _completed(argv, returncode=1, stderr=stderr))
+
+    harness.delete_owned_branch(SANDBOX, "feature/already-deleted", _env(), runner)
+
+    assert len(runner.calls) == 1
+    assert runner.calls[0].argv[:2] == ["gh", "api"]
+
+
+@pytest.mark.parametrize(
     ("workflow_present", "workflow_status", "expected"),
     [
         (

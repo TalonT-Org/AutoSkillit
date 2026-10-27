@@ -1341,3 +1341,41 @@ def test_receipt_adopted_worker_without_lifecycle_endpoints_is_incomplete(tmp_pa
     assert summary["coverage"]["managed_session_ids"] == [worker_id]
     assert summary["coverage"]["complete"] is False
     assert f"lifecycle:{worker_id}:missing_endpoints" in summary["violations"]
+
+
+def test_missing_native_transcript_is_reported_once(tmp_path: Path) -> None:
+    root_transcript = tmp_path / "transcripts" / f"{ROOT_ID}.jsonl"
+    root_transcript.parent.mkdir(parents=True)
+    root_transcript.write_text("{}\n", encoding="utf-8")
+    subagents_dir = root_transcript.parent / ROOT_ID / "subagents"
+    subagents_dir.mkdir(parents=True)
+    missing_transcript = subagents_dir / "agent-agent-a.jsonl"
+    missing_transcript.symlink_to(tmp_path / "missing-agent.jsonl")
+    events = [
+        _event(
+            "SubagentStart",
+            ROOT_ID,
+            1,
+            agent_id="agent-a",
+            agent_type="general-purpose",
+        ),
+        _event(
+            "SubagentStop",
+            ROOT_ID,
+            2,
+            agent_id="agent-a",
+            agent_type="general-purpose",
+            agent_transcript=missing_transcript,
+        ),
+    ]
+    violations: list[str] = []
+
+    native_agents = sessions._check_transcript_coverage(
+        events,
+        {ROOT_ID: {"transcript": root_transcript}},
+        violations,
+    )
+
+    missing = f"native:{ROOT_ID}:agent-a:transcript_missing"
+    assert native_agents == []
+    assert violations.count(missing) == 1

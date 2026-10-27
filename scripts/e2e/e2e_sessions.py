@@ -542,8 +542,6 @@ def _enumerate_native_transcripts(
             if not agent_id:
                 continue
             files[agent_id] = path
-            if not path.is_file():
-                violations.append(f"native:{session_id}:{agent_id}:transcript_missing")
         enumerated[session_id] = files
     return enumerated
 

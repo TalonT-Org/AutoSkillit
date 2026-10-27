@@ -505,7 +505,7 @@ def test_unretained_lists_recorded_files_that_were_not_kept(
         {"cwd": str(clone_a), "outcome_fields": {"remediation_path": missing}},
     )
     home = tmp_path / "home"
-    index = harness.autoskillit_log_dir(home) / "sessions.jsonl"
+    index = harness.e2e_sessions.default_log_root(home) / "sessions.jsonl"
     index.parent.mkdir(parents=True, exist_ok=True)
     index.write_text(
         "".join(json.dumps(row) + "\n" for row in rows) + "{malformed line\n",
@@ -529,7 +529,7 @@ def test_index_read_error_preserves_collected_evidence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, evidence_sources, error
 ) -> None:
     kept, excluded = evidence_sources
-    index = harness.autoskillit_log_dir(tmp_path / "home") / "sessions.jsonl"
+    index = harness.e2e_sessions.default_log_root(tmp_path / "home") / "sessions.jsonl"
     original = Path.read_text
 
     def unreadable(path, *args, **kwargs):
@@ -4152,3 +4152,18 @@ def test_pipeline_setup_response_routes_seed_with_extra_json_fields() -> None:
 
     assert response is not None
     assert json.loads(response.stdout) == state["seed"]
+
+
+def test_fleet_and_collectors_share_the_exported_log_root(tmp_path: Path, monkeypatch) -> None:
+    runner, state = _pipeline_runner()
+    custom_root = tmp_path / "custom-session-logs"
+    monkeypatch.setattr(harness.e2e_sessions, "default_log_root", lambda _home: custom_root)
+    failures, result, _out, _home, _catalog, observed = _run_pipeline(
+        tmp_path, runner, state, monkeypatch
+    )
+    assert failures == []
+    assert result["outcome"] == "passed"
+    fleet = next(call for call in runner.calls if call.argv[:3] == ["autoskillit", "fleet", "run"])
+    assert fleet.env["AUTOSKILLIT_LOG_DIR"] == str(custom_root)
+    assert observed["summaries"][0][2] == custom_root
+    assert all(call[2] == custom_root for call in observed["ownership"])

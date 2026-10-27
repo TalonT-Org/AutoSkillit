@@ -1684,7 +1684,7 @@ def finish_pipeline(
 ) -> list[str]:
     failures: list[str] = []
     trace = out / _SESSION_TRACE_FILENAME
-    log_root = e2e_sessions.default_log_root(home)
+    log_root = Path(env["AUTOSKILLIT_LOG_DIR"])
     capacity: dict[str, Any] = {"peak_sessions": test.peak_sessions}
     if test.peak_sessions_evidence is not None:
         capacity["peak_sessions_evidence"] = test.peak_sessions_evidence
@@ -1740,7 +1740,7 @@ def launch_recipe(
         proof = save_ownership(
             out / _SESSION_TRACE_FILENAME,
             envelope,
-            e2e_sessions.default_log_root(home),
+            Path(env["AUTOSKILLIT_LOG_DIR"]),
             seed,
             repository,
             out,
@@ -1889,13 +1889,9 @@ def _run_test(
     token = env["E2E_SANDBOX_TOKEN"]
     recipe_env = {
         **scrubbed,
-        "AUTOSKILLIT_LOG_DIR": str(autoskillit_log_dir(home)),
+        "AUTOSKILLIT_LOG_DIR": str(e2e_sessions.default_log_root(home)),
     }
     return run_recipe(test, catalog.sandbox_repository, token, out, recipe_env, runner, home=home)
-
-
-def autoskillit_log_dir(home: Path) -> Path:
-    return home / ".local" / "share" / "autoskillit" / "logs"
 
 
 def _copy_evidence_files(
@@ -2023,7 +2019,9 @@ def collect_run_evidence(out: Path, home: Path) -> dict[str, Any]:
         projects, out / "transcripts", home, ("*.jsonl", "*.txt"), errors
     )
     unretained = _unretained_references(
-        autoskillit_log_dir(home) / "sessions.jsonl", {os.path.realpath(p) for p in copied}, errors
+        e2e_sessions.default_log_root(home) / "sessions.jsonl",
+        {os.path.realpath(p) for p in copied},
+        errors,
     )
     return {
         "pipeline_files": len(copied),

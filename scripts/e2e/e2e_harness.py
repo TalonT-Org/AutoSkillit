@@ -1577,6 +1577,7 @@ def match_recipe_findings(
     findings: Sequence[Mapping[str, str]],
     expected: Sequence[Mapping[str, str]],
 ) -> tuple[list[str], list[dict[str, str]]]:
+    unmatched_failures = list(failures)
     annotations = {(row["check"], row["message"]): row for row in expected}
     matched: dict[tuple[str, str], dict[str, str]] = {}
     for row in findings:
@@ -1584,14 +1585,14 @@ def match_recipe_findings(
         if identity in annotations:
             matched[identity] = dict(annotations[identity])
         else:
-            failures.append(f"{row['check']}: {row['message']}")
+            unmatched_failures.append(f"{row['check']}: {row['message']}")
     for identity, annotation in annotations.items():
         if identity not in matched:
-            failures.append(
+            unmatched_failures.append(
                 f"expected recipe finding absent {identity}; remove stale expected failure "
                 f"for {annotation['issue']}"
             )
-    return failures, list(matched.values())
+    return unmatched_failures, list(matched.values())
 
 
 def run_recipe(

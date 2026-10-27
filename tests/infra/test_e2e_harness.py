@@ -4170,3 +4170,17 @@ def test_fleet_and_collectors_share_the_exported_log_root(tmp_path: Path, monkey
     assert fleet.env["AUTOSKILLIT_LOG_DIR"] == str(custom_root)
     assert observed["summaries"][0][2] == custom_root
     assert all(call[2] == custom_root for call in observed["ownership"])
+
+
+def test_match_recipe_findings_preserves_the_input_failures_list() -> None:
+    failures = ["existing failure"]
+
+    result, matched = harness.match_recipe_findings(
+        failures,
+        [{"check": "new_check", "message": "unexpected finding"}],
+        [],
+    )
+
+    assert failures == ["existing failure"]
+    assert result == ["existing failure", "new_check: unexpected finding"]
+    assert matched == []

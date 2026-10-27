@@ -981,17 +981,16 @@ def _pipeline_api_request(argv: list[str]) -> tuple[str, str]:
 
 def _pipeline_cleanup_api_response(argv: list[str], endpoint: str, state: dict[str, Any]):
     method, endpoint = _pipeline_api_request(argv)
-    if method != "GET":
+    if method == "DELETE" and "/git/refs/heads/" in endpoint:
         error = state["cleanup_errors"].get("branch_delete")
         if error is not None:
             raise error
-        if method == "DELETE" and "/git/refs/heads/" in endpoint:
-            ref_name = endpoint.split("/git/refs/heads/", 1)[1]
-            state["head_refs"] = [
-                name for name in state["head_refs"] if quote(name, safe="") != ref_name
-            ]
+        ref_name = endpoint.split("/git/refs/heads/", 1)[1]
+        state["head_refs"] = [
+            name for name in state["head_refs"] if quote(name, safe="") != ref_name
+        ]
         return None
-    if "/git/refs/heads/" in endpoint:
+    if method == "GET" and "/git/refs/heads/" in endpoint:
         error = state["cleanup_errors"].get("branch_get")
         if error is not None:
             raise error
@@ -1031,6 +1030,22 @@ def test_pipeline_api_request_parses_supported_flags_and_rejects_unknown_shapes(
     with pytest.raises(AssertionError, match="unsupported gh api argv") as error:
         _pipeline_api_request(malformed)
     assert repr(malformed) in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["gh", "api", "--method", "PATCH", "repos/owner/repo/git/refs/heads/example"],
+        ["gh", "api", "--method", "DELETE", "repos/owner/repo/pulls/8"],
+    ],
+)
+def test_pipeline_branch_delete_fault_only_applies_to_branch_delete_requests(
+    argv: list[str],
+) -> None:
+    state = {"cleanup_errors": {"branch_delete": RuntimeError("delete failed")}}
+    endpoint = _pipeline_api_request(argv)[1]
+
+    assert _pipeline_cleanup_api_response(argv, endpoint, state) is None
 
 
 def _pipeline_cleanup_response(argv: list[str], state: dict[str, Any]):

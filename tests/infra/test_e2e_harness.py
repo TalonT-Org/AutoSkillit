@@ -3160,11 +3160,8 @@ class TestPipelineRecipeFlow:
 
         assert close.argv == ["gh", "pr", "close", "8", "--repo", SANDBOX]
         assert not any(call.argv[:4] == ["gh", "pr", "close", "9"] for call in calls)
-        assert any(
-            call.argv[:4] == ["gh", "api", "--method", "DELETE"]
-            and call.argv[4].endswith("codex%2Fissue-5233")
-            for call in calls
-        )
+        assert branch_delete.argv[:4] == ["gh", "api", "--method", "DELETE"]
+        assert branch_delete.argv[4].endswith("codex%2Fissue-5233")
         assert any(
             call.argv[:3] == ["gh", "issue", "edit"]
             and call.argv[-2:] == ["--remove-label", "in-progress"]

@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING or __package__:
+if TYPE_CHECKING:
     from autoskillit._destination_paths import destination_location
 else:
     _PACKAGE_DIR = str(Path(__file__).resolve().parents[2])

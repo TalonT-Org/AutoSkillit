@@ -100,7 +100,6 @@ def test_destination_location_handles_root_destination() -> None:
 
 @pytest.mark.parametrize("name", ["entry", "final-link", "..", "."])
 def test_destination_location_core_and_hook_conformance(tmp_path: Path, name: str) -> None:
-    assert destination_location is core_destination_location
     real_parent = tmp_path / "real"
     real_parent.mkdir()
     linked_parent = tmp_path / "linked"

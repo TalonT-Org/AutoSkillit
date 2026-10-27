@@ -61,6 +61,7 @@ def _run_copied_guard(
     else:
         copied_hooks = tmp_path / "hooks"
         shutil.copytree(HOOKS_DIR, copied_hooks, ignore=ignore)
+    shutil.copy2(HOOKS_DIR.parent / "_destination_paths.py", copied_hooks.parent)
     table_path = copied_hooks / "_runtime" / "_hook_scope_table.py"
     if table_content is None:
         table_path.unlink()

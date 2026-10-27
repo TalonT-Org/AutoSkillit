@@ -1129,6 +1129,20 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
 # ---------------------------------------------------------------------------
 
 LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
+    "_destination_paths": frozenset(
+        {
+            "arch",
+            "cli",
+            "contracts",
+            "core",
+            "execution",
+            "hooks",
+            "infra",
+            "server",
+            "skills",
+            "workspace",
+        }
+    ),
     "quota_constraints": frozenset({"core", "execution", "hooks", "server"}),
     # L0 — imported by everything
     "core": frozenset(
@@ -1743,6 +1757,20 @@ _IMPORT_GUARD_TRANSITIVE_OVERRIDES: dict[str, frozenset[str]] = {
 }
 
 LAYER_CASCADE_AGGRESSIVE: dict[str, frozenset[str]] = {
+    "_destination_paths": frozenset(
+        {
+            "arch",
+            "cli",
+            "contracts",
+            "core",
+            "execution",
+            "hooks",
+            "infra",
+            "server",
+            "skills",
+            "workspace",
+        }
+    ),
     "quota_constraints": frozenset({"core", "execution", "hooks", "server"}),
     "core": frozenset({"core"}),
     "config": frozenset({"config"}),

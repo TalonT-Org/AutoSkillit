@@ -688,9 +688,31 @@ class TestPipelineCatalog:
         with pytest.raises(e2e_catalog.CatalogError, match="cannot contain issue_url or task"):
             _catalog(_pipeline_entry(ingredients=ingredients))
 
-    def test_recipe_options_do_not_require_pipeline_true(self) -> None:
+    def test_issue_url_env_is_allowed_without_pipeline_true(self) -> None:
         entry = _pipeline_entry(pipeline=False)
-        assert _catalog(entry).get("implementation").pipeline is False
+        for field in ("required_changed_paths", "test_command", "peak_sessions_evidence"):
+            entry.pop(field)
+        test = _catalog(entry).get("implementation")
+        assert test.pipeline is False
+        assert test.issue_url_env == "E2E_IMPLEMENTATION_ISSUE_URL"
+        assert test.required_changed_paths == ()
+        assert test.test_command == ()
+        assert test.peak_sessions_evidence is None
+
+    @pytest.mark.parametrize(
+        "field", ["required_changed_paths", "test_command", "peak_sessions_evidence"]
+    )
+    def test_pipeline_only_fields_require_pipeline_true(self, field: str) -> None:
+        entry = _pipeline_entry(pipeline=False)
+        for other_field in (
+            "required_changed_paths",
+            "test_command",
+            "peak_sessions_evidence",
+        ):
+            if other_field != field:
+                entry.pop(other_field)
+        with pytest.raises(e2e_catalog.CatalogError, match="pipeline-only keys"):
+            _catalog(entry)
 
     @pytest.mark.parametrize("value", [None, "true", 1])
     def test_pipeline_flag_must_be_boolean(self, value: object) -> None:

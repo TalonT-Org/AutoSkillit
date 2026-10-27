@@ -264,10 +264,17 @@ def _validate_test_keys(raw: Mapping[str, object], kind: str, where: str) -> boo
     pipeline = raw.get("pipeline", False)
     if not isinstance(pipeline, bool):
         raise CatalogError(f"{where}.pipeline must be a boolean")
+    pipeline_only = {"required_changed_paths", "test_command", "peak_sessions_evidence"}
     if pipeline:
         missing_pipeline = sorted({"required_changed_paths", "test_command"} - raw.keys())
         if missing_pipeline:
             raise CatalogError(f"{where}: missing pipeline keys {missing_pipeline}")
+    else:
+        unexpected_pipeline = sorted(pipeline_only & raw.keys())
+        if unexpected_pipeline:
+            raise CatalogError(
+                f"{where}: pipeline-only keys {unexpected_pipeline} require pipeline=true"
+            )
     return pipeline
 
 

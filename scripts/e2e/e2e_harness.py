@@ -1223,7 +1223,7 @@ def _repo_matches(value: Any, repository: str) -> bool:
 
 def owned_pull_requests(
     rows: Sequence[Mapping[str, Any]],
-    proof: Mapping[str, Any],
+    proof: e2e_sessions.OwnershipProof,
     repository: str,
     out: Path,
     env: Mapping[str, str],
@@ -1444,7 +1444,7 @@ def validate_pr_head(
 def discover_cleanup_prs(
     repository: str,
     baseline: int,
-    proof: Mapping[str, Any],
+    proof: e2e_sessions.OwnershipProof,
     out: Path,
     env: Mapping[str, str],
     runner: Runner,
@@ -1491,7 +1491,7 @@ def delete_owned_branch(
 
 
 def release_owned_claim(
-    proof: Mapping[str, Any],
+    proof: e2e_sessions.OwnershipProof,
     seed: Mapping[str, Any],
     label: str,
     out: Path,
@@ -1528,7 +1528,7 @@ def release_owned_claim(
 def unexplained_branch_failures(
     repository: str,
     head_refs: frozenset[str],
-    proof: Mapping[str, Any],
+    proof: e2e_sessions.OwnershipProof,
     out: Path,
     env: Mapping[str, str],
     runner: Runner,
@@ -1548,7 +1548,7 @@ def cleanup_implementation(
     repository: str,
     baseline: int,
     head_refs: frozenset[str],
-    proof: Mapping[str, Any],
+    proof: e2e_sessions.OwnershipProof,
     seed: Mapping[str, Any],
     label: str,
     out: Path,
@@ -1677,7 +1677,7 @@ def save_ownership(
     repository: str,
     out: Path,
     label: str,
-) -> dict[str, Any]:
+) -> e2e_sessions.OwnershipProof:
     proof = e2e_sessions.collect_ownership(
         trace, envelope, log_root, seed["url"], repository, claim_label=label
     )
@@ -1696,7 +1696,7 @@ def finish_pipeline(
     env: Mapping[str, str],
     runner: Runner,
     envelope: dict[str, Any] | None,
-    proof: dict[str, Any] | None,
+    proof: e2e_sessions.OwnershipProof | None,
 ) -> list[str]:
     failures: list[str] = []
     trace = out / _SESSION_TRACE_FILENAME
@@ -1724,7 +1724,13 @@ def finish_pipeline(
             failures += [f"ownership: {value}" for value in proof["violations"]]
         except Exception as exc:
             failures.append(f"cleanup ownership: {exc}")
-    proof = proof or {"branches": [], "claimed": False}
+    if proof is None:
+        proof = {
+            "branches": [],
+            "claimed": False,
+            "transcripts": [],
+            "violations": [],
+        }
     failures += cleanup_implementation(
         repository, baseline, head_refs, proof, seed, label, out, env, runner
     )
@@ -1746,7 +1752,7 @@ def launch_recipe(
     failures: list[str] = []
     findings: list[dict[str, str]] = []
     envelope: dict[str, Any] | None = None
-    proof: dict[str, Any] | None = None
+    proof: e2e_sessions.OwnershipProof | None = None
     try:
         envelope, fleet_failures, findings = run_fleet(
             test, out, env, runner, ingredients=ingredients

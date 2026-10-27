@@ -943,7 +943,7 @@ def collect_ownership(
     issue_url: str = "",
     repository: str = "",
     claim_label: str | None = None,
-) -> dict[str, Any]:
+) -> OwnershipProof:
     """Collect compact branch and claim proofs from the owned transcript lineage."""
     context = _discover_owned(trace_path, envelope, log_root)
     violations = list(context["violations"])

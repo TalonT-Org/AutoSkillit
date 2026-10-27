@@ -60,6 +60,11 @@ def _index(log_root: Path, entries: list[dict[str, Any]]) -> None:
     _jsonl(log_root / "sessions.jsonl", entries)
 
 
+def _index_rows(log_root: Path) -> list[dict[str, Any]]:
+    index_path = log_root / "sessions.jsonl"
+    return [json.loads(line) for line in index_path.read_text(encoding="utf-8").splitlines()]
+
+
 def _entry(
     session_id: str,
     transcript: Path,
@@ -116,7 +121,7 @@ def _base_sessions(
     *,
     child_id: str | None = None,
     child_records: list[dict[str, Any]] | None = None,
-) -> tuple[Path, Path, Path | None]:
+) -> tuple[Path, Path, Path | None, Path]:
     log_root = tmp_path / "logs"
     root_transcript = _session(log_root, ROOT_ID)
     entries = [_entry(ROOT_ID, root_transcript)]
@@ -138,13 +143,12 @@ def _base_sessions(
         )
     _index(log_root, entries)
     trace = tmp_path / "run" / "session-lifecycle.jsonl"
-    return log_root, trace, child_transcript
+    return log_root, trace, child_transcript, root_transcript
 
 
 def _worker(log_root: Path, session_id: str) -> Path:
     transcript = _session(log_root, session_id)
-    index_path = log_root / "sessions.jsonl"
-    entries = [json.loads(line) for line in index_path.read_text(encoding="utf-8").splitlines()]
+    entries = _index_rows(log_root)
     entries.append(_entry(session_id, transcript))
     _index(log_root, entries)
     return transcript
@@ -243,8 +247,7 @@ def _root_ownership_proof(
     tmp_path: Path,
     records: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    log_root, trace, _ = _base_sessions(tmp_path)
-    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    log_root, trace, _, root_transcript = _base_sessions(tmp_path)
     _jsonl(root_transcript, records)
     _trace(
         trace,
@@ -329,11 +332,12 @@ def test_hook_capture_preserves_agent_type_and_strips_stop_message(
 def test_summary_collapses_repeated_events_excludes_unrelated_and_sweeps_half_open(
     tmp_path: Path,
 ) -> None:
-    log_root, trace, child_transcript = _base_sessions(tmp_path, child_id="session-child")
+    log_root, trace, child_transcript, root_transcript = _base_sessions(
+        tmp_path, child_id="session-child"
+    )
     assert child_transcript is not None
     unrelated = _session(log_root, "session-unrelated", parent_session_id="other-parent")
-    index_path = log_root / "sessions.jsonl"
-    rows = [json.loads(line) for line in index_path.read_text(encoding="utf-8").splitlines()]
+    rows = _index_rows(log_root)
     by_session_id = {row["session_id"]: row for row in rows}
     entries = [by_session_id[ROOT_ID], by_session_id["session-child"]]
     entries.append(
@@ -352,22 +356,18 @@ def test_summary_collapses_repeated_events_excludes_unrelated_and_sweeps_half_op
                 "SessionStart",
                 ROOT_ID,
                 1,
-                transcript=log_root / "transcripts" / f"{ROOT_ID}.jsonl",
+                transcript=root_transcript,
             ),
             _event(
                 "SessionStart",
                 ROOT_ID,
                 1.5,
-                transcript=log_root / "transcripts" / f"{ROOT_ID}.jsonl",
+                transcript=root_transcript,
             ),
             _event("SessionStart", "session-child", 3, transcript=child_transcript),
             _event("SessionStart", "session-unrelated", 1, transcript=unrelated),
-            _event(
-                "SessionEnd", ROOT_ID, 2, transcript=log_root / "transcripts" / f"{ROOT_ID}.jsonl"
-            ),
-            _event(
-                "SessionEnd", ROOT_ID, 3, transcript=log_root / "transcripts" / f"{ROOT_ID}.jsonl"
-            ),
+            _event("SessionEnd", ROOT_ID, 2, transcript=root_transcript),
+            _event("SessionEnd", ROOT_ID, 3, transcript=root_transcript),
             _event("SessionEnd", "session-child", 4, transcript=child_transcript),
             _event("SessionEnd", "session-unrelated", 5, transcript=unrelated),
         ],
@@ -395,7 +395,9 @@ def test_summary_collapses_repeated_events_excludes_unrelated_and_sweeps_half_op
 def test_summary_does_not_infer_child_end(
     tmp_path: Path, child_event: str, expected_violation: str
 ) -> None:
-    log_root, trace, child_transcript = _base_sessions(tmp_path, child_id="session-child")
+    log_root, trace, child_transcript, root_transcript = _base_sessions(
+        tmp_path, child_id="session-child"
+    )
     assert child_transcript is not None
     _trace(
         trace,
@@ -404,12 +406,10 @@ def test_summary_does_not_infer_child_end(
                 "SessionStart",
                 ROOT_ID,
                 1,
-                transcript=log_root / "transcripts" / f"{ROOT_ID}.jsonl",
+                transcript=root_transcript,
             ),
             _event(child_event, "session-child", 2, transcript=child_transcript),
-            _event(
-                "SessionEnd", ROOT_ID, 5, transcript=log_root / "transcripts" / f"{ROOT_ID}.jsonl"
-            ),
+            _event("SessionEnd", ROOT_ID, 5, transcript=root_transcript),
         ],
     )
 
@@ -423,8 +423,7 @@ def test_summary_does_not_infer_child_end(
 def test_summary_enumerates_native_agent_transcripts_and_requires_endpoints(
     tmp_path: Path,
 ) -> None:
-    log_root, trace, _child = _base_sessions(tmp_path)
-    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    log_root, trace, _child, root_transcript = _base_sessions(tmp_path)
     agent_transcript = log_root / "transcripts" / ROOT_ID / "subagents" / "agent-agent-a.jsonl"
     agent_transcript.parent.mkdir(parents=True)
     agent_transcript.write_text("{}\n", encoding="utf-8")
@@ -477,8 +476,7 @@ def test_orphan_agent_stop_is_reported_even_without_an_admitted_type(
     agent_type: str | None,
     extra_violation: str | None,
 ) -> None:
-    log_root, trace, _ = _base_sessions(tmp_path)
-    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    log_root, trace, _, root_transcript = _base_sessions(tmp_path)
     missing_agent_transcript = (
         log_root / "transcripts" / ROOT_ID / "subagents" / "agent-agent-x.jsonl"
     )
@@ -515,8 +513,7 @@ def test_orphan_agent_stop_is_reported_even_without_an_admitted_type(
 def test_enumerated_native_transcript_without_agent_hooks_is_incomplete(
     tmp_path: Path,
 ) -> None:
-    log_root, trace, _ = _base_sessions(tmp_path)
-    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    log_root, trace, _, root_transcript = _base_sessions(tmp_path)
     agent_transcript = log_root / "transcripts" / ROOT_ID / "subagents" / "agent-agent-a.jsonl"
     agent_transcript.parent.mkdir(parents=True)
     agent_transcript.write_text("{}\n", encoding="utf-8")
@@ -551,8 +548,8 @@ def test_native_transcript_symlink_loop_is_reported_missing(tmp_path: Path) -> N
 
 
 def test_indexed_owned_child_without_hooks_is_incomplete(tmp_path: Path) -> None:
-    log_root, trace, _ = _base_sessions(tmp_path, child_id="missing-hooks")
-    transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    log_root, trace, _, root_transcript = _base_sessions(tmp_path, child_id="missing-hooks")
+    transcript = root_transcript
     _trace(
         trace,
         [
@@ -566,8 +563,8 @@ def test_indexed_owned_child_without_hooks_is_incomplete(tmp_path: Path) -> None
 
 
 def test_resumed_identity_requires_a_final_end(tmp_path: Path) -> None:
-    log_root, trace, _ = _base_sessions(tmp_path)
-    transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    log_root, trace, _, root_transcript = _base_sessions(tmp_path)
+    transcript = root_transcript
     _trace(
         trace,
         [
@@ -591,8 +588,8 @@ def test_empty_half_open_interval_does_not_reduce_concurrent_peak() -> None:
 
 
 def test_no_attempted_resource_calls_leave_cleanup_proof_empty(tmp_path: Path) -> None:
-    log_root, trace, _ = _base_sessions(tmp_path)
-    transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    log_root, trace, _, root_transcript = _base_sessions(tmp_path)
+    transcript = root_transcript
     _trace(
         trace,
         [
@@ -607,8 +604,8 @@ def test_no_attempted_resource_calls_leave_cleanup_proof_empty(tmp_path: Path) -
 
 
 def test_missing_root_hooks_do_not_discard_available_branch_proof(tmp_path: Path) -> None:
-    log_root, trace, _ = _base_sessions(tmp_path)
-    transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    log_root, trace, _, root_transcript = _base_sessions(tmp_path)
+    transcript = root_transcript
     _jsonl(
         transcript,
         [
@@ -642,8 +639,7 @@ def test_missing_root_and_malformed_trace_are_incomplete(tmp_path: Path) -> None
 
 @pytest.mark.parametrize("dir_name", [".", ".."])
 def test_summary_rejects_dot_session_directories(tmp_path: Path, dir_name: str) -> None:
-    log_root, trace, _ = _base_sessions(tmp_path)
-    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    log_root, trace, _, root_transcript = _base_sessions(tmp_path)
     entry = _entry(ROOT_ID, root_transcript)
     entry["dir_name"] = dir_name
     _index(log_root, [entry])
@@ -658,8 +654,7 @@ def test_summary_rejects_dot_session_directories(tmp_path: Path, dir_name: str) 
 def test_summary_rejects_malformed_owned_index_summary_and_transcript(
     tmp_path: Path,
 ) -> None:
-    log_root, trace, _child = _base_sessions(tmp_path)
-    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    log_root, trace, _child, root_transcript = _base_sessions(tmp_path)
     index_path = log_root / "sessions.jsonl"
     index_path.write_text(
         index_path.read_text(encoding="utf-8") + "{malformed\n", encoding="utf-8"
@@ -706,13 +701,12 @@ def test_ownership_pairs_root_branch_with_managed_claim_and_keeps_compact_proof(
             },
         ),
     ]
-    log_root, trace, child_transcript = _base_sessions(
+    log_root, trace, child_transcript, root_transcript = _base_sessions(
         tmp_path,
         child_id="session-child",
         child_records=claim_records,
     )
     assert child_transcript is not None
-    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
     _jsonl(
         root_transcript,
         [
@@ -751,8 +745,7 @@ def test_ownership_pairs_root_branch_with_managed_claim_and_keeps_compact_proof(
 
 
 def test_ownership_ignores_unhashable_tool_names(tmp_path: Path) -> None:
-    log_root, trace, _ = _base_sessions(tmp_path)
-    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    log_root, trace, _, root_transcript = _base_sessions(tmp_path)
     record = _tool_use("unrelated", "ignored", {})
     record["message"]["content"][0]["name"] = []
     _jsonl(root_transcript, [record])
@@ -778,12 +771,11 @@ def test_ownership_isolates_branch_and_claim_scenarios(
         ),
         _tool_result("child-branch", {"merge_target": "wrong-owner/branch"}),
     ]
-    log_root, trace, child_transcript = _base_sessions(
+    log_root, trace, child_transcript, root_transcript = _base_sessions(
         tmp_path,
         child_id="session-child" if scenario == "child_branch" else None,
         child_records=child_records if scenario == "child_branch" else None,
     )
-    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
     if scenario == "claim_reentry":
         root_records = [
             _tool_use(
@@ -1033,10 +1025,9 @@ def test_launch_receipt_adopts_a_worker_with_empty_parent_fields(
     tool: str,
     success: bool,
 ) -> None:
-    log_root, trace, _ = _base_sessions(tmp_path)
+    log_root, trace, _, root_transcript = _base_sessions(tmp_path)
     worker_id = "session-worker"
     worker_transcript = _worker(log_root, worker_id)
-    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
     _jsonl(
         root_transcript,
         _launch(
@@ -1054,10 +1045,9 @@ def test_launch_receipt_adopts_a_worker_with_empty_parent_fields(
 
 
 def test_acknowledgement_alone_adopts_a_worker(tmp_path: Path) -> None:
-    log_root, trace, _ = _base_sessions(tmp_path)
+    log_root, trace, _, root_transcript = _base_sessions(tmp_path)
     worker_id = "session-worker"
     worker_transcript = _worker(log_root, worker_id)
-    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
     _jsonl(
         root_transcript,
         [
@@ -1085,11 +1075,10 @@ def test_overlapping_session_without_receipt_or_parent_is_reported_not_adopted(
     tmp_path: Path,
     worker_dispatch: str,
 ) -> None:
-    log_root, trace, _ = _base_sessions(tmp_path)
+    log_root, trace, _, _ = _base_sessions(tmp_path)
     worker_id = "session-worker"
     worker_transcript = _worker(log_root, worker_id)
-    index_path = log_root / "sessions.jsonl"
-    entries = [json.loads(line) for line in index_path.read_text(encoding="utf-8").splitlines()]
+    entries = _index_rows(log_root)
     next(row for row in entries if row["session_id"] == worker_id)["dispatch_id"] = worker_dispatch
     _index(log_root, entries)
     _trace_root_and_worker(trace, log_root, worker_id, worker_transcript)
@@ -1105,7 +1094,7 @@ def test_overlapping_session_without_receipt_or_parent_is_reported_not_adopted(
 
 
 def test_receipt_in_an_unowned_transcript_does_not_adopt(tmp_path: Path) -> None:
-    log_root, trace, _ = _base_sessions(tmp_path)
+    log_root, trace, _, _ = _base_sessions(tmp_path)
     worker_id = "session-worker"
     worker_transcript = _worker(log_root, worker_id)
     foreign_id = "session-foreign"
@@ -1118,8 +1107,7 @@ def test_receipt_in_an_unowned_transcript_does_not_adopt(tmp_path: Path) -> None
             {"success": True, "receipt_id": "r1", "session_id": worker_id},
         ),
     )
-    index_path = log_root / "sessions.jsonl"
-    entries = [json.loads(line) for line in index_path.read_text(encoding="utf-8").splitlines()]
+    entries = _index_rows(log_root)
     entries.append(
         _entry(
             foreign_id,
@@ -1155,8 +1143,7 @@ def test_reply_without_receipt_id_proves_no_launch(
     tmp_path: Path,
     reply: dict[str, Any],
 ) -> None:
-    log_root, trace, _ = _base_sessions(tmp_path)
-    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    log_root, trace, _, root_transcript = _base_sessions(tmp_path)
     _jsonl(root_transcript, _launch("launch", reply))
     _trace(
         trace,
@@ -1173,10 +1160,9 @@ def test_reply_without_receipt_id_proves_no_launch(
 
 
 def test_launch_reply_marked_is_error_is_not_evidence(tmp_path: Path) -> None:
-    log_root, trace, _ = _base_sessions(tmp_path)
+    log_root, trace, _, root_transcript = _base_sessions(tmp_path)
     worker_id = "session-worker"
     worker_transcript = _worker(log_root, worker_id)
-    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
     _jsonl(
         root_transcript,
         _launch(
@@ -1194,8 +1180,7 @@ def test_launch_reply_marked_is_error_is_not_evidence(tmp_path: Path) -> None:
 
 
 def test_launched_session_absent_from_trace_and_index_is_reported(tmp_path: Path) -> None:
-    log_root, trace, _ = _base_sessions(tmp_path)
-    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
+    log_root, trace, _, root_transcript = _base_sessions(tmp_path)
     _jsonl(
         root_transcript,
         _launch(
@@ -1225,17 +1210,15 @@ def test_candidate_without_exactly_one_index_row_is_reported(
     index_count: int,
     receipt_names_worker: bool,
 ) -> None:
-    log_root, trace, _ = _base_sessions(tmp_path)
+    log_root, trace, _, root_transcript = _base_sessions(tmp_path)
     worker_id = "session-worker"
     worker_transcript = _worker(log_root, worker_id)
-    index_path = log_root / "sessions.jsonl"
-    entries = [json.loads(line) for line in index_path.read_text(encoding="utf-8").splitlines()]
+    entries = _index_rows(log_root)
     worker_entry = next(row for row in entries if row["session_id"] == worker_id)
     entries = [row for row in entries if row["session_id"] != worker_id]
     if index_count == 2:
         entries.extend([worker_entry, dict(worker_entry)])
     _index(log_root, entries)
-    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
     _jsonl(
         root_transcript,
         _launch(
@@ -1254,16 +1237,14 @@ def test_candidate_without_exactly_one_index_row_is_reported(
 
 
 def test_receipt_named_worker_from_another_dispatch_is_not_adopted(tmp_path: Path) -> None:
-    log_root, trace, _ = _base_sessions(tmp_path)
+    log_root, trace, _, root_transcript = _base_sessions(tmp_path)
     worker_id = "session-worker"
     worker_transcript = _worker(log_root, worker_id)
-    index_path = log_root / "sessions.jsonl"
-    entries = [json.loads(line) for line in index_path.read_text(encoding="utf-8").splitlines()]
+    entries = _index_rows(log_root)
     next(row for row in entries if row["session_id"] == worker_id)["dispatch_id"] = (
         "another-dispatch"
     )
     _index(log_root, entries)
-    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
     _jsonl(
         root_transcript,
         _launch(
@@ -1282,14 +1263,13 @@ def test_receipt_named_worker_from_another_dispatch_is_not_adopted(tmp_path: Pat
 def test_receipt_adopted_worker_with_a_contradicting_declared_parent_is_reported(
     tmp_path: Path,
 ) -> None:
-    log_root, trace, _ = _base_sessions(tmp_path)
+    log_root, trace, _, root_transcript = _base_sessions(tmp_path)
     worker_id = "session-worker"
     worker_transcript = _worker(log_root, worker_id)
     summary_path = log_root / "sessions" / worker_id / "summary.json"
     worker_summary = json.loads(summary_path.read_text(encoding="utf-8"))
     worker_summary["execution_identity"]["parent_session_id"] = "other-parent"
     summary_path.write_text(json.dumps(worker_summary), encoding="utf-8")
-    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
     _jsonl(
         root_transcript,
         _launch(
@@ -1306,10 +1286,9 @@ def test_receipt_adopted_worker_with_a_contradicting_declared_parent_is_reported
 
 
 def test_receipt_adopted_worker_without_lifecycle_endpoints_is_incomplete(tmp_path: Path) -> None:
-    log_root, trace, _ = _base_sessions(tmp_path)
+    log_root, trace, _, root_transcript = _base_sessions(tmp_path)
     worker_id = "session-worker"
     _worker(log_root, worker_id)
-    root_transcript = log_root / "transcripts" / f"{ROOT_ID}.jsonl"
     _jsonl(
         root_transcript,
         _launch(

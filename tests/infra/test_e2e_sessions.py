@@ -278,6 +278,59 @@ def test_hook_capture_uses_event_alias_when_hook_event_name_is_null(
     assert record["event"] == "SessionStart"
 
 
+def test_hook_capture_retries_short_appends(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    trace = tmp_path / "events.jsonl"
+    original_write = sessions.os.write
+    calls = 0
+
+    def short_once(fd: int, data: bytes | memoryview) -> int:
+        nonlocal calls
+        if calls == 0:
+            calls += 1
+            return original_write(fd, data[:4])
+        return original_write(fd, data)
+
+    monkeypatch.setattr(sessions.os, "write", short_once)
+
+    assert sessions.capture_hook_event(
+        trace, {"hook_event_name": "SessionStart", "session_id": ROOT_ID}
+    )
+    [record] = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+    assert record["event"] == "SessionStart"
+    assert record["session_id"] == ROOT_ID
+
+
+def test_hook_capture_rolls_back_zero_write_before_next_event(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    trace = tmp_path / "events.jsonl"
+    original_write = sessions.os.write
+    calls = 0
+
+    def partial_then_zero(fd: int, data: bytes | memoryview) -> int:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return original_write(fd, data[:4])
+        return 0
+
+    monkeypatch.setattr(sessions.os, "write", partial_then_zero)
+    with pytest.raises(OSError, match="short lifecycle trace append"):
+        sessions.capture_hook_event(
+            trace, {"hook_event_name": "SessionStart", "session_id": "failed-session"}
+        )
+
+    assert trace.read_bytes() == b""
+    monkeypatch.setattr(sessions.os, "write", original_write)
+    assert sessions.capture_hook_event(
+        trace, {"hook_event_name": "SessionStart", "session_id": ROOT_ID}
+    )
+    [record] = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+    assert record["session_id"] == ROOT_ID
+
+
 def test_hook_capture_appends_concurrent_allow_listed_records(tmp_path: Path) -> None:
     trace = tmp_path / "events.jsonl"
     with ThreadPoolExecutor(max_workers=8) as pool:

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
 import math
 import os
@@ -51,6 +52,8 @@ _LAUNCH_TOOLS = frozenset({"run_skill", "complete_run_skill_result", "recover_ru
 _TRACKED_TOOLS = _RESOURCE_TOOLS | _LAUNCH_TOOLS
 _MAX_HOOK_INPUT_BYTES = 65_536
 _MAX_TRACE_RECORD_BYTES = 8_192
+_TRACE_LOCK_TIMEOUT_SEC = 5.0
+_TRACE_LOCK_POLL_SEC = 0.01
 
 
 def capture_hook_event(trace_path: Path, payload: Mapping[str, Any]) -> bool:
@@ -61,15 +64,46 @@ def capture_hook_event(trace_path: Path, payload: Mapping[str, Any]) -> bool:
     encoded = (json.dumps(record, separators=(",", ":")) + "\n").encode("utf-8")
     if len(encoded) > _MAX_TRACE_RECORD_BYTES:
         raise ValueError("lifecycle hook record exceeds the size limit")
+    _append_trace_record(trace_path, encoded)
+    return True
+
+
+def _append_trace_record(trace_path: Path, encoded: bytes) -> None:
+    """Serialize a complete append and roll back an incomplete record under lock."""
     trace_path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(trace_path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
+    lock_acquired = False
     try:
-        written = os.write(fd, encoded)
-        if written != len(encoded):
-            raise OSError("short lifecycle trace append")
+        deadline = time.monotonic() + _TRACE_LOCK_TIMEOUT_SEC
+        while not lock_acquired:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("timed out acquiring lifecycle trace lock") from exc
+                time.sleep(min(_TRACE_LOCK_POLL_SEC, remaining))
+            else:
+                lock_acquired = True
+
+        start_offset = os.fstat(fd).st_size
+        remaining_bytes = memoryview(encoded)
+        written_total = 0
+        try:
+            while remaining_bytes:
+                written = os.write(fd, remaining_bytes)
+                if written <= 0:
+                    raise OSError("short lifecycle trace append")
+                written_total += written
+                remaining_bytes = remaining_bytes[written:]
+        except OSError:
+            if written_total:
+                os.ftruncate(fd, start_offset)
+            raise
     finally:
+        if lock_acquired:
+            fcntl.flock(fd, fcntl.LOCK_UN)
         os.close(fd)
-    return True
 
 
 def _hook_record(payload: Mapping[str, Any]) -> dict[str, Any] | None:

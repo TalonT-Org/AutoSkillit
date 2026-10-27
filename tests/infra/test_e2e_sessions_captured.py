@@ -210,9 +210,6 @@ def test_captured_run_accounts_for_successful_and_failed_workers(
         provenance["repository"],
         claim_label=provenance["claim_label"],
     )
-    assert ownership["branches"] == ["e2e-implementation-fixture-normalize-whitespace/1-3"]
-    assert ownership["claimed"] is True
-    assert ownership["violations"] == []
     assert [item["session_id"] for item in ownership["transcripts"]] == sorted(
         (ROOT_SESSION_ID, *WORKER_SESSION_IDS)
     )

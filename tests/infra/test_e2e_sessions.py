@@ -37,7 +37,6 @@ def _session(
     session_id: str,
     *,
     parent_session_id: str = "",
-    caller_session_id: str = "",
     records: list[dict[str, Any]] | None = None,
 ) -> Path:
     transcript = log_root / "transcripts" / f"{session_id}.jsonl"

@@ -143,16 +143,13 @@ def select_for_pull_request(
             f"below thresholds ({pr.changed_files} files, {lines} lines) and no {E2E_LABEL} label",
         )
     seed = f"{pr.number}:{pr.head_sha}"
-    if E2E_LABEL in pr.labels:
-        return Selection(
-            pick_tests(catalog, changed_paths, seed, large_change=_is_large_change(pr)),
-            f"{E2E_LABEL} label",
-        )
-    if not is_sampled(pr, SAMPLE_PROBABILITY):
+    labeled = E2E_LABEL in pr.labels
+    if not labeled and not is_sampled(pr, SAMPLE_PROBABILITY):
         return Selection((), "eligible but not sampled for this head commit")
+    reason = f"{E2E_LABEL} label" if labeled else "eligible and sampled"
     return Selection(
         pick_tests(catalog, changed_paths, seed, large_change=_is_large_change(pr)),
-        "eligible and sampled",
+        reason,
     )
 
 

@@ -166,7 +166,8 @@ def test_capture_payload_files_have_no_raw_home_paths_and_keep_wire_shape() -> N
     bootstrap_reply, _ = _tool_reply(rows, "bootstrap_clone")
     bootstrap_result = json.loads(bootstrap_reply["mcpMeta"]["structuredContent"]["result"])
     assert bootstrap_result["merge_target"] == "main"
-    _assert_truncated_prose(rows)
+    for transcript_path in sorted((FIXTURE_DIR / "projects").rglob("*.jsonl")):
+        _assert_truncated_prose(_rows(transcript_path))
 
 
 def test_captured_run_proves_claim_and_published_branch(

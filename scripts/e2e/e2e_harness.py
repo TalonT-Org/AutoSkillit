@@ -1555,7 +1555,7 @@ def run_recipe(
     env: Mapping[str, str],
     runner: Runner,
     *,
-    home: Path | None = None,
+    home: Path,
 ) -> tuple[list[str], list[dict[str, str]]]:
     failure = (
         configure_git(env, runner)
@@ -1570,7 +1570,6 @@ def run_recipe(
     head_refs: frozenset[str] = frozenset()
     ingredients = dict(test.ingredients)
     label = ""
-    home = home or Path.home()
     trace = out / _SESSION_TRACE_FILENAME
     if test.pipeline or test.issue_url_env:
         try:

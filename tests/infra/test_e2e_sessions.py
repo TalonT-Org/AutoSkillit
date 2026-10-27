@@ -333,13 +333,10 @@ def test_summary_collapses_repeated_events_excludes_unrelated_and_sweeps_half_op
     log_root, trace, child_transcript = _base_sessions(tmp_path, child_id="session-child")
     assert child_transcript is not None
     unrelated = _session(log_root, "session-unrelated", parent_session_id="other-parent")
-    rows = json.loads((log_root / "sessions.jsonl").read_text(encoding="utf-8").splitlines()[0])
-    entries = [
-        rows,
-        _entry(
-            "session-child", child_transcript, parent_session_id=ROOT_ID, caller_session_id=ROOT_ID
-        ),
-    ]
+    index_path = log_root / "sessions.jsonl"
+    rows = [json.loads(line) for line in index_path.read_text(encoding="utf-8").splitlines()]
+    by_session_id = {row["session_id"]: row for row in rows}
+    entries = [by_session_id[ROOT_ID], by_session_id["session-child"]]
     entries.append(
         _entry(
             "session-unrelated",

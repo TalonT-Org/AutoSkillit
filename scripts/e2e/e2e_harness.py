@@ -1114,6 +1114,23 @@ def list_head_refs(
     return frozenset(refs)
 
 
+def _seed_config_fields(config: object) -> tuple[str, str]:
+    if not isinstance(config, Mapping):
+        raise ValueError("seed: effective config must be an object")
+    values: list[str] = []
+    for section, field in (("github", "in_progress_label"), ("branching", "default_base_branch")):
+        settings = config.get(section)
+        if not isinstance(settings, Mapping):
+            raise ValueError(f"seed: effective config {section} section must be an object")
+        value = settings.get(field)
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(
+                f"seed: effective config {section}.{field} must be a non-empty string"
+            )
+        values.append(value)
+    return values[0], values[1]
+
+
 def prepare_seed(
     test: e2e_catalog.CatalogTest,
     repository: str,
@@ -1134,7 +1151,7 @@ def prepare_seed(
         evidence=out / "effective-config",
         cwd=SANDBOX_CLONE,
     )
-    label = config["github"]["in_progress_label"]
+    label, configured_base_branch = _seed_config_fields(config)
     seed = _json_call(
         ["gh", "issue", "view", url, "--json", "number,url,state,title,body,labels"],
         env,
@@ -1166,7 +1183,7 @@ def prepare_seed(
     if (
         not isinstance(default_branch, dict)
         or default_branch.get("name") != "main"
-        or config["branching"]["default_base_branch"] != "main"
+        or configured_base_branch != "main"
     ):
         raise ValueError("seed: sandbox and effective configured base branch must both be main")
     ingredients = dict(test.ingredients)
@@ -1463,8 +1480,15 @@ def release_owned_claim(
         runner,
         evidence=out / "seed-final",
     )
+    if not isinstance(current, Mapping):
+        raise ValueError("cleanup: final seed issue must be an object")
+    labels = current.get("labels")
+    if not isinstance(labels, list) or any(
+        not isinstance(row, Mapping) or not isinstance(row.get("name"), str) for row in labels
+    ):
+        raise ValueError("cleanup: final seed issue labels must be an array of named objects")
     failures = [] if current.get("state") == "OPEN" else ["cleanup: seed issue is no longer OPEN"]
-    if label not in {row["name"] for row in current["labels"]}:
+    if label not in {row["name"] for row in labels}:
         return failures
     if not proof["claimed"]:
         return [*failures, "cleanup: claim label is present without this run's claim proof"]

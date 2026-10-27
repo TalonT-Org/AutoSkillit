@@ -4071,3 +4071,34 @@ def test_sandbox_ci_deadline_distinguishes_pending_and_missing_runs(
 
     assert str(error.value) == expected
     assert len(_recorded_calls(runner.calls, contains="/actions/workflows/1/runs?")) == 1
+
+
+def test_malformed_effective_config_reports_the_section(tmp_path: Path, monkeypatch) -> None:
+    runner, state = _pipeline_runner()
+    state["config"] = {"github": [], "branching": {"default_base_branch": "main"}}
+
+    failures, result, _out, _home, _catalog, _observed = _run_pipeline(
+        tmp_path, runner, state, monkeypatch
+    )
+
+    assert failures == ["preflight: seed: effective config github section must be an object"]
+    assert result["outcome"] == "failed"
+    assert not any(call.argv[:3] == ["gh", "issue", "view"] for call in runner.calls)
+    assert not any(call.argv[:3] == ["autoskillit", "fleet", "run"] for call in runner.calls)
+
+
+def test_malformed_final_issue_labels_report_cleanup_shape(tmp_path: Path, monkeypatch) -> None:
+    runner, state = _pipeline_runner()
+    state["final_issue"] = {"state": "OPEN", "labels": None}
+
+    failures, result, _out, _home, _catalog, _observed = _run_pipeline(
+        tmp_path, runner, state, monkeypatch
+    )
+
+    assert result["outcome"] == "failed"
+    assert any(
+        "cleanup claim: cleanup: final seed issue labels must be an array of named objects"
+        in failure
+        for failure in failures
+    )
+    assert not any(call.argv[:3] == ["gh", "issue", "edit"] for call in runner.calls)

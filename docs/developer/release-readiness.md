@@ -21,7 +21,7 @@ This is an experimental evidence branch. Keep its PR in draft and do not merge o
 | Real package upgrade | `5c4924749` to `f84bae324` | Install passed; CLI exit status failed | Real packages in scratch Docker; candidate version/doctor passed and old worker survived, but update re-exec returned status 20 |
 | Configured local gate | Product baseline plus report fix `f12e4872` | Passed | 13,123 passed, 187 skipped, 12 xfailed; conservative filter selected 13,321 and deselected 40,860; lint and both platform type checks passed |
 | PR test shards | `f12e4872` | Passed | [Tests run 41094167109](https://github.com/TalonT-Org/AutoSkillit/actions/runs/41094167109); Channel B is unfiltered, other shards retain configured path filtering |
-| Unfiltered local test task | Same product baseline | Pending | Existing `AUTOSKILLIT_TEST_FILTER=none task test-check` route; smoke/canary markers and feature gates still apply |
+| Unfiltered local test task | Evidence commit `4fb145b2`, product baseline `f84bae324` | Passed | 56,876 passed, 809 skipped, 26 xfailed in 25m 54s; exit 0, with path filtering disabled; smoke/canary markers and feature gates still apply |
 
 ## Reproduction
 
@@ -36,6 +36,14 @@ gh workflow run e2e.yml --repo TalonT-Org/AutoSkillit --ref develop -f tests=imp
 Wait for each scenario's actual execution and preserve first-attempt failures. The existing repository-wide E2E queue and session limits remain in effect. The implementation scenario needs the configured canonical sandbox seed issue, OPEN and unclaimed, and a passing sandbox baseline.
 
 Run the repository's local checks with `task test-local-gate`. Use `task install-worktree` for linked-worktree setup; do not run `autoskillit init` inside a linked worktree.
+
+The additional path-unfiltered run used the existing task, explicitly selecting the entire test tree and clearing inherited path ignores:
+
+```bash
+AUTOSKILLIT_TEST_FILTER=none PYTEST_TEST_PATHS=tests/ PYTEST_IGNORE_PATHS= task test-check
+```
+
+It ran on Python 3.11.14. Reported feature scope had Codex backend disabled and exploration, fleet, headless fleet execution, planner, and providers enabled. The active host entrypoint hash and installed source commit matched the pre-test snapshot after this full run.
 
 ## Evidence required before marking a row passed
 
@@ -69,6 +77,6 @@ Host executable path, hash, version, direct-URL provenance and uv tool inventory
 
 The current catalog has no seeded remediation scenario; #5234 tracks that gap. The fixed seed is an implementation fixture, so it was preserved rather than rewritten into a bug fixture. The upgrade rehearsal used pristine old source; installed local hot fixes were outside this experiment.
 
-An earlier main-checkout local gate timed out after 1,200 seconds around 80% completion without a final failure summary. The isolated worktree's configured gate later completed after correcting the experiment report's filename/index mistakes. Its conservative filter is explicitly recorded above; an unfiltered run is tracked separately. The current Tests workflow exposes no manual dispatch or PR-label override for full path-unfiltered CI.
+An earlier main-checkout local gate timed out after 1,200 seconds around 80% completion without a final failure summary. The isolated worktree's configured gate later passed after correcting the experiment report's filename/index mistakes; the separate unfiltered task also passed. The current Tests workflow exposes no manual dispatch or PR-label override for full path-unfiltered CI, so the broader run was performed locally.
 
 Current live E2E uses Claude Code through MiniMax. Its success does not establish every native-provider or Codex workflow. Fixed-join Codex skill admission remains a separate adoption requirement under #4711. Release acceptance must be repeated against the final candidate after the separate fixes land.

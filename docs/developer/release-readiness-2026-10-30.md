@@ -15,9 +15,9 @@ This is an experimental evidence branch. Keep its PR in draft and do not merge o
 | Check | Candidate | Result | Evidence |
 |---|---|---|---|
 | Canary | `f84bae324` | Passed | [E2E run 41088605318](https://github.com/TalonT-Org/AutoSkillit/actions/runs/41088605318) — actual canary job completed successfully |
-| Clean installation | `f84bae324` | Passed | Same explicitly selected workflow run; clean-install execution and aggregate gate both completed successfully |
-| Headless sandbox smoke | `f84bae324` | Running | [E2E run 41089434602](https://github.com/TalonT-Org/AutoSkillit/actions/runs/41089434602); execution and exact teardown still to be checked |
-| Seeded implementation | `f84bae324` | Queued | [E2E run 41089453034](https://github.com/TalonT-Org/AutoSkillit/actions/runs/41089453034); same candidate, fixed seed, PR/CI evidence and teardown still to be checked |
+| Clean installation | `f84bae324` | Expected warnings accepted | Workflow/gate succeeded, while the downloaded harness result is `passed: false`, `outcome: expected_failure`, with no unexpected failures; allowlisted doctor findings are #5242/#5243 |
+| Headless sandbox smoke | `f84bae324` | Passed, cleanup independently verified | [E2E run 41089434602](https://github.com/TalonT-Org/AutoSkillit/actions/runs/41089434602); downloaded harness result has `passed: true`, no failures; scenario ran 16:23:38–16:27:17 UTC |
+| Seeded implementation | `f84bae324` | Running | [E2E run 41089453034](https://github.com/TalonT-Org/AutoSkillit/actions/runs/41089453034); same candidate, fixed seed, PR/CI evidence and teardown still to be checked |
 | Real package upgrade | Old source to candidate | Running independently | Scratch home and uv tool/bin directories; actual resulting source and install invariance still to be checked |
 | Configured local gate | `f84bae324` | Incomplete | Lint and Linux/macOS type checks passed; test process timed out after 1,200 seconds around 80%, with failure markers and no final failure summary |
 
@@ -43,6 +43,8 @@ Run the repository's local checks with `task test-local-gate`. Use `task install
 - Implementation's PR is OPEN and unmerged when validated. After teardown, owned PRs are CLOSED, owned remote branches are gone, the claim is released, and the seed remains OPEN.
 - Failure, cancellation and cleanup results remain recorded even if a subsequent retry succeeds.
 - Known clean-install doctor warnings #5242/#5243 are distinguished from unexpected warnings and from actual plugin/MCP failures.
+
+The smoke artifacts identify [sandbox PR #59](https://github.com/TalonT-Org/autoskillit-e2e-sandbox/pull/59), head `b83fc3ae4ceb05cb5eb8d69e3a1323c3bc1ff497`, and branch `e2e-smoke-071e3714980e4da1b92be7f495614abf`. A separate GitHub query verified the PR is CLOSED and unmerged and the branch is absent. Unrelated fixture PR #50 remains OPEN and the two pre-existing fixture branches still point at `d6c143d2494488deeb6680d7d5cf2e55e3e01732`. The seed was OPEN and claimed by the subsequently running implementation test at that observation; claim release must be checked after implementation ends.
 
 ## Additional probes and limits
 

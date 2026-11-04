@@ -1,6 +1,6 @@
 """Reusable canary state machine and GitHub issue updater for live probes and E2E runs.
 
-IL-1 module: imports only stdlib and `autoskillit.core`. Provides the persistence +
+IL-1 module: imports only stdlib, `regex` and `autoskillit.core`. Provides the persistence +
 flake-guard primitives live probes build on and the E2E workflow's failure issue.
 """
 
@@ -13,6 +13,8 @@ import tempfile
 from dataclasses import asdict, dataclass
 from enum import StrEnum, unique
 from pathlib import Path
+
+import regex as re
 
 from autoskillit.core import atomic_write, get_logger, run_gh
 
@@ -148,19 +150,19 @@ class IssueUpdater:
                 f"{self._owner}/{self._repo}",
                 "--title",
                 title,
-                "--json",
-                "number",
             ],
             body,
         )
         if result.returncode != 0:
             msg = f"gh issue create failed: {result.stderr}"
             raise RuntimeError(msg)
-        try:
-            issue_number = json.loads(result.stdout)["number"]
-        except (json.JSONDecodeError, KeyError) as exc:
+        match = re.fullmatch(
+            r"https?://[^/\s]+/[^/\s]+/[^/\s]+/issues/([0-9]+)", result.stdout.strip()
+        )
+        issue_number = int(match.group(1)) if match else 0
+        if issue_number < 1:
             msg = f"gh issue create returned unexpected output: {result.stdout!r}"
-            raise RuntimeError(msg) from exc
+            raise RuntimeError(msg)
         return issue_number
 
     def _current_body(self, number: int) -> str:

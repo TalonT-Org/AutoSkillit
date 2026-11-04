@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 from pathlib import Path
 from subprocess import CompletedProcess
 
@@ -17,7 +19,7 @@ from autoskillit._probe_canary import (
     _cli_main,
 )
 
-pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
 class TestCanaryStateLoad:
@@ -127,26 +129,97 @@ class TestErrorKind:
 
 
 class TestIssueUpdater:
-    def test_ensure_issue_creates_new(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    @pytest.mark.parametrize(
+        "stdout",
+        [
+            "https://github.com/test-org/test-repo/issues/123\n",
+            "\n  http://ghe.example.com:8080/test-org/test-repo/issues/123  \n",
+        ],
+        ids=["https", "http-enterprise-host"],
+    )
+    def test_ensure_issue_creates_new(self, monkeypatch: pytest.MonkeyPatch, stdout: str) -> None:
         def mock_run_gh(args, **kwargs):
             if args[0:2] == ["issue", "list"]:
                 return CompletedProcess(args=args, returncode=0, stdout="[]", stderr="")
             if args[0:2] == ["issue", "create"]:
                 assert "--body-file" in args
-                return CompletedProcess(
-                    args=args,
-                    returncode=0,
-                    stdout=json.dumps({"number": 123}),
-                    stderr="",
-                )
+                return CompletedProcess(args=args, returncode=0, stdout=stdout, stderr="")
             return CompletedProcess(args=args, returncode=1, stdout="", stderr="")
 
         monkeypatch.setattr(_patch_autoskillit__probe_canary, "run_gh", mock_run_gh)
         updater = IssueUpdater(owner="test-org", repo="test-repo")
         state = CanaryState()
         num = updater.ensure_issue(state, "Probe failure", "Details here")
+        assert type(num) is int
         assert num == 123
+        assert type(state.last_issue_number) is int
         assert state.last_issue_number == 123
+
+    @pytest.mark.parametrize(
+        "stdout",
+        [
+            json.dumps({"number": 123}),
+            "https://github.com/test-org/test-repo/issues/abc\n",
+            "https://github.com/test-org/test-repo/issues/0\n",
+        ],
+        ids=["legacy-json", "nonnumeric-issue", "zero-issue"],
+    )
+    def test_ensure_issue_rejects_unexpected_create_output(
+        self, monkeypatch: pytest.MonkeyPatch, stdout: str
+    ) -> None:
+        body_files: list[Path] = []
+
+        def mock_run_gh(args, **kwargs):
+            if args[0:2] == ["issue", "list"]:
+                return CompletedProcess(args=args, returncode=0, stdout="[]", stderr="")
+            if args[0:2] == ["issue", "create"]:
+                body_files.append(Path(args[args.index("--body-file") + 1]))
+                return CompletedProcess(args=args, returncode=0, stdout=stdout, stderr="")
+            raise AssertionError(f"Unexpected gh call: {args}")
+
+        monkeypatch.setattr(_patch_autoskillit__probe_canary, "run_gh", mock_run_gh)
+        updater = IssueUpdater(owner="test-org", repo="test-repo")
+        state = CanaryState(last_issue_number=5)
+        with pytest.raises(RuntimeError, match="gh issue create returned unexpected output"):
+            updater.ensure_issue(state, "Probe failure", "Details")
+        assert state.last_issue_number == 5
+        assert len(body_files) == 1
+        assert not body_files[0].exists()
+
+    def test_issue_create_arguments_are_supported_by_installed_gh(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        gh_executable = shutil.which("gh")
+        assert gh_executable is not None, "the gh CLI must be installed for this contract test"
+        body = "Contract body"
+        body_files: list[Path] = []
+
+        def run_help_instead_of_create(args, **kwargs):
+            body_file = Path(args[args.index("--body-file") + 1])
+            body_files.append(body_file)
+            assert body_file.read_text() == body
+            help_result = subprocess.run(
+                [gh_executable, *args, "--help"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            assert help_result.returncode == 0, help_result.stderr
+            assert "--json" not in args
+            return CompletedProcess(
+                args=args,
+                returncode=0,
+                stdout="https://github.com/test-org/test-repo/issues/123\n",
+                stderr="",
+            )
+
+        monkeypatch.setattr(_patch_autoskillit__probe_canary, "run_gh", run_help_instead_of_create)
+        updater = IssueUpdater(owner="test-org", repo="test-repo")
+        number = updater._create("Contract title", body)
+        assert number == 123
+        assert len(body_files) == 1
+        assert not body_files[0].exists()
 
     def test_ensure_issue_updates_existing(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def mock_run_gh(args, **kwargs):
@@ -174,7 +247,12 @@ class TestIssueUpdater:
             if args[0:2] == ["issue", "list"]:
                 return CompletedProcess(args=args, returncode=0, stdout="[]", stderr="")
             if args[0:2] == ["issue", "create"]:
-                return CompletedProcess(args=args, returncode=1, stdout="", stderr="auth error")
+                return CompletedProcess(
+                    args=args,
+                    returncode=1,
+                    stdout="https://github.com/test-org/test-repo/issues/5\n",
+                    stderr="auth error",
+                )
             raise AssertionError(f"Unexpected gh call: {args}")
 
         monkeypatch.setattr(_patch_autoskillit__probe_canary, "run_gh", mock_run_gh)
@@ -182,6 +260,7 @@ class TestIssueUpdater:
         state = CanaryState()
         with pytest.raises(RuntimeError, match="gh issue create failed"):
             updater.ensure_issue(state, "Probe failure", "Details")
+        assert state.last_issue_number is None
 
     def test_ensure_issue_logs_on_edit_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def mock_run_gh(args, **kwargs):
@@ -243,7 +322,7 @@ class _FakeGh:
             stdout = json.dumps({"body": self.body})
             return CompletedProcess(args=args, returncode=0, stdout=stdout, stderr="")
         if command == "create":
-            stdout = json.dumps({"number": 99})
+            stdout = "https://github.com/test-org/test-repo/issues/99\n"
             return CompletedProcess(args=args, returncode=0, stdout=stdout, stderr="")
         return CompletedProcess(args=args, returncode=0, stdout="", stderr="")
 
@@ -441,7 +520,7 @@ class TestCliMain:
                 return CompletedProcess(
                     args=args,
                     returncode=0,
-                    stdout=json.dumps({"number": 7}),
+                    stdout="https://github.com/test-org/test-repo/issues/7\n",
                     stderr="",
                 )
             return CompletedProcess(args=args, returncode=1, stdout="", stderr="")

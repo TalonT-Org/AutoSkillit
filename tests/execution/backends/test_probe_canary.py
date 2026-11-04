@@ -186,9 +186,14 @@ class TestIssueUpdater:
         assert len(body_files) == 1
         assert not body_files[0].exists()
 
-    def test_issue_create_arguments_are_supported_by_installed_gh(
+    def test_issue_create_flags_are_accepted_by_installed_gh(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """Run the production create argv with `--help` appended so nothing is created.
+
+        Only flag validity is checked: `gh issue create` has no dry-run, so its stdout shape
+        is covered by the URL fixtures above, not by the real binary.
+        """
         gh_executable = shutil.which("gh")
         assert gh_executable is not None, "the gh CLI must be installed for this contract test"
         body = "Contract body"

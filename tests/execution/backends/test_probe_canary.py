@@ -200,6 +200,7 @@ class TestIssueUpdater:
         body_files: list[Path] = []
 
         def run_help_instead_of_create(args, **kwargs):
+            assert "--body-file" in args
             body_file = Path(args[args.index("--body-file") + 1])
             body_files.append(body_file)
             assert body_file.read_text() == body

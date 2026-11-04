@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
 from pathlib import Path
-from subprocess import CompletedProcess
+from subprocess import CompletedProcess, run
 
 import pytest
 import structlog.testing
@@ -205,7 +204,7 @@ class TestIssueUpdater:
             body_file = Path(args[args.index("--body-file") + 1])
             body_files.append(body_file)
             assert body_file.read_text() == body
-            help_result = subprocess.run(
+            help_result = run(
                 [gh_executable, *args, "--help"],
                 capture_output=True,
                 text=True,

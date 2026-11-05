@@ -1,10 +1,10 @@
 """Classification primitives for git operations used by git_ops_guard.
 
 The orchestrator (`git_ops_guard.py`) imports a controlled subset of the public
-surface (`_classify_git_invocation`,
-`_contains_blocked_git_op`, `_git_result`, `_git_text`, `_parse_worktree_owners`,
-`_resolve_attempted_sha`, `_resolve_git_common_dir`) and dispatches into the inner
-classifiers transitively through `_classify_git_invocation`.
+surface (`_classify_git_invocation`, `_git_result`, `_git_text`,
+`_parse_worktree_owners`, `_resolve_attempted_sha`, `_resolve_git_common_dir`) and
+dispatches into the inner classifiers transitively through `_classify_git_invocation`.
+`_git_target.py` also builds on `_git_result`.
 
 Ref-rewriting subcommands are classified by outcome: branch, checkout, switch,
 symbolic-ref, update-ref, reset, push and fetch read their argv through the
@@ -19,16 +19,10 @@ flat-mode siblings resolved via `git_ops_guard.py`'s `sys.path` bootstrap (or
 the test-side bootstrap centralized in `tests/conftest.py`). It does NOT
 re-export any `_command_classification` symbol.
 
-`_contains_blocked_git_op` reads the command exclusively through
-`all_evaluated_segments`/`live_command_text` (rectify #4941 Part A) rather than
-a raw `shlex.split`/text-bag scan, so a `git` invocation delivered via
-`bash -c`, a heredoc, a herestring, or a pipe is seen the same way a direct
-invocation is.
-
 Public API surface:
     Classifiers: _classify_git_invocation,
         _classify_fetch, _classify_push, _classify_update_ref, _classify_reset,
-        _classify_outcome, _contains_blocked_git_op
+        _classify_outcome
     Helpers (consumed transitively by the classifiers above):
         _git_result, _git_text, _parse_worktree_owners,
         _resolve_git_common_dir, _normal_branch_ref, _symbolic_head,
@@ -39,18 +33,11 @@ Public API surface:
 from __future__ import annotations
 
 import os
-import re
 import subprocess
 from pathlib import Path
 
 from _command_classification import (
     GitInvocation,
-    _command_position_candidate_spans,
-    all_evaluated_segments,
-    command_verb_and_args,
-    extract_git_subcommand_and_flags,
-    extract_interpreter_command_payloads,
-    live_command_text,
 )
 from _git_outcome import (
     git_ref_outcome,
@@ -62,78 +49,6 @@ from _git_outcome import (
 from _github_mutation_analysis import (
     _DYNAMIC_SHELL_TOKEN_RE,
 )
-
-_DELIMITERS_RE = re.compile(r"[\s,\[\]'\"()]+")
-
-
-def _tokenize_text(text: str) -> frozenset[str]:
-    """Split text on common delimiters for set-membership matching.
-
-    Prevents '.' from matching periods inside filenames like 'foo.py'.
-    """
-    return frozenset(t for t in _DELIMITERS_RE.split(text) if t)
-
-
-def _blocked_op_in_evaluated_segment(
-    segment: list[str], blocked_ops: frozenset[tuple[str, ...]]
-) -> tuple[str, ...] | None:
-    """Return the first blocked git operation in an evaluated segment."""
-    for start, end in _command_position_candidate_spans(segment):
-        verb, args = command_verb_and_args(segment[start:end])
-        if verb != "git" and not verb.endswith("/git"):
-            continue
-        result = extract_git_subcommand_and_flags([verb, *args])
-        if result is None:
-            continue
-        subcommand = result.subcommand
-        remaining = result.flags
-        if subcommand == "<unresolved>":
-            return (subcommand,)
-        for op_tuple in blocked_ops:
-            if subcommand == op_tuple[0] and all(flag in remaining for flag in op_tuple[1:]):
-                return op_tuple
-    return None
-
-
-def _contains_blocked_git_op(
-    cmd: str, blocked_ops: frozenset[tuple[str, ...]]
-) -> tuple[str, ...] | None:
-    """Return the matching blocked git op tuple, or None if no match.
-
-    Reads *cmd* exclusively through `all_evaluated_segments`, the single
-    authority for "what will actually execute, and as what argv" (rectify
-    #4941 Part A): a direct invocation, one delivered via `bash -c`/`eval`,
-    one fed through a heredoc/herestring/pipe to a shell, and a literal-argv
-    `subprocess.run(["git", ...])` are all seen the same way, at every
-    command-position candidate span (top level, and inside an inline
-    function/group body). A 'git' token (or /path/to/git, or a wrapper- or
-    env-assignment-prefixed invocation) is a command start via
-    `command_verb_and_args`. Returns `None` when `all_evaluated_segments`
-    cannot tokenize *cmd* (fail-open).
-
-    `blocked_ops` is passed by the caller (the orchestrator's `main()`
-    passes `_BLOCKED_GIT_OPS` to keep the constant co-located with itself
-    per the sync-invariant test in `test_risky_git_ops_coverage.py`).
-    """
-    segments = all_evaluated_segments(cmd)
-    if segments is None:
-        return None
-
-    for segment in segments:
-        blocked_op = _blocked_op_in_evaluated_segment(segment, blocked_ops)
-        if blocked_op is not None:
-            return blocked_op
-
-    # A Python payload whose subprocess/os call could not be resolved to a
-    # literal argv or string (dynamic argument, unrecognized call shape)
-    # means a "git" mention anywhere in what will actually run cannot be
-    # ruled out -- deny unconditionally rather than silently falling
-    # through to "not blocked".
-    _payloads, has_unresolved = extract_interpreter_command_payloads(cmd)
-    if has_unresolved and "git" in _tokenize_text(live_command_text(cmd)):
-        return ("<unresolved>",)
-
-    return None
 
 
 def _git_result(cwd: str, *args: str) -> subprocess.CompletedProcess[bytes]:

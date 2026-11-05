@@ -6,8 +6,9 @@ effect on every worktree is compared with what the classifier predicted.
 
 Members: ``_build_base`` and ``_sandbox`` (fixture repositories),
 ``_run_differential`` (the shared driver returning a ``_Run``), ``_git_cases``
-(argv strategy), the Property A section (shared refs) and the Property C
-section (HEAD of the primary checkout).
+(argv strategy), the Property A section (shared refs), the Property C section
+(HEAD of the primary checkout) and the Property D section (destructive effects
+on a dirty repository, with its own fixture, strategy and driver).
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ import shutil
 import subprocess
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, NamedTuple
 
 import pytest
@@ -43,6 +44,7 @@ from _git_outcome import (  # type: ignore[import-not-found]
     GitHeadEffect,
     GitRefOutcome,
     git_ref_outcome,
+    risky_git_operation,
 )
 from _git_target import (  # type: ignore[import-not-found]
     GitTargetKind,
@@ -50,6 +52,7 @@ from _git_target import (  # type: ignore[import-not-found]
     command_channel_flags,
     resolve_git_target_for_path,
 )
+from _hook_constants import RISKY_GIT_OPERATIONS  # type: ignore[import-not-found]
 from _shell_segment_walk import walk_evaluated_segments  # type: ignore[import-not-found]
 from hypothesis import HealthCheck, event, example, given, settings
 from hypothesis import strategies as st
@@ -545,6 +548,19 @@ _OPTION_VALUES: Mapping[str, tuple[str, ...]] = {
     "refmap": ("refs/heads/*:refs/heads/*", "refs/heads/feat:refs/heads/feat"),
     "negotiation-tip": ("HEAD",),
     "filter": ("blob:none",),
+    "message": ("x", "amended"),
+    "file": ("d/x",),
+    "template": ("d/x",),
+    "author": ("Other <other@example.invalid>",),
+    "date": ("2000-01-01T00:00:00+0000",),
+    "fixup": ("HEAD", "amend:HEAD", "reword:HEAD"),
+    "squash": ("HEAD",),
+    "reuse-message": ("HEAD",),
+    "reedit-message": ("HEAD",),
+    "cleanup": ("strip", "verbatim"),
+    "trailer": ("Acked-by: x",),
+    "untracked-files": ("no", "all"),
+    "exclude": ("*.tmp", "untracked_dir"),
 }
 
 
@@ -629,27 +645,35 @@ def _spelled_row(draw: st.DrawFn, subcommand: str, name: str) -> list[str]:
 
 
 @st.composite
-def _git_cases(draw: st.DrawFn) -> _Case:
+def _argv_cases(
+    draw: st.DrawFn,
+    subcommands: tuple[str, ...],
+    slots: Mapping[str, tuple[tuple[str, ...], ...]],
+    skeletons: Mapping[str, tuple[_Skeleton, ...]],
+    strays: Mapping[str, tuple[str, ...]] | None = None,
+) -> _Case:
     """A subcommand with options and operands in any order and an optional ``--``.
 
     Three in four draws start from a well-formed skeleton and add at most one
     stray option; the rest are free-form combinations of table rows and operands.
+    Stray options come from the whole option table unless *strays* narrows them.
     """
-    subcommand = draw(st.sampled_from(_SUBCOMMANDS))
+    subcommand = draw(st.sampled_from(subcommands))
     table = _GIT_SUBCOMMAND_TABLES[subcommand]
     structured = draw(st.sampled_from((True, True, True, False)))
     if structured:
-        rows, minimum, pools = draw(st.sampled_from(_SKELETONS[subcommand]))
+        rows, minimum, pools = draw(st.sampled_from(skeletons[subcommand]))
         stray = 1
     else:
-        rows, minimum, pools, stray = (), 0, _OPERAND_SLOTS[subcommand], 3
+        rows, minimum, pools, stray = (), 0, slots[subcommand], 3
     operands = pools[: draw(st.integers(minimum, len(pools)))]
     items = [(False, [draw(st.sampled_from(pool))]) for pool in operands]
     groups = [
         draw(_spelled_row(subcommand, draw(st.sampled_from(alternatives.split("|")))))
         for alternatives in rows
     ]
-    stray_option = st.sampled_from(sorted(table)).flatmap(
+    stray_names = sorted(table) if strays is None else strays[subcommand]
+    stray_option = st.sampled_from(stray_names).flatmap(
         lambda name: _spelled_row(subcommand, name)
     )
     groups += draw(st.lists(stray_option, max_size=stray))
@@ -660,6 +684,10 @@ def _git_cases(draw: st.DrawFn) -> _Case:
         floor = 1 + max((i for i, (is_option, _) in enumerate(items) if is_option), default=-1)
         items.insert(draw(st.integers(floor if structured else 0, len(items))), (False, ["--"]))
     return subcommand, tuple(token for _, group in items for token in group)
+
+
+def _git_cases() -> st.SearchStrategy[_Case]:
+    return _argv_cases(_SUBCOMMANDS, _OPERAND_SLOTS, _SKELETONS)
 
 
 # ---------------------------------------------------------------------------
@@ -984,3 +1012,509 @@ def test_primary_head_rule_denies_every_checkout_and_switch_that_moves_the_prima
     )
     problems = _primary_head_problems(run, verdict)
     assert not problems, _primary_head_failure_message(run, verdict, problems)
+
+
+# ---------------------------------------------------------------------------
+# Property D: destructive effects
+# ---------------------------------------------------------------------------
+
+_EDITED_PATHS = ("file.txt", "d/x", "local.txt", "hidden/h.txt")
+_EARLIER_COMMITTER_DATE = "2025-06-01T00:00:00+0000"
+
+
+def _write(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def _build_destructive_base(base: _Base, root: Path) -> _Base:
+    """A copy of *base* holding the state a destructive command can destroy.
+
+    ``develop`` gains a local commit written with an earlier committer date than
+    any later command uses, so it diverges from ``origin/develop`` and an amend
+    always writes a different commit. Four tracked files carry unstaged edits;
+    ``hidden/h.txt`` is named by no argv pool, so only a whole-tree operand can
+    revert every edit. The untracked entries are a file, a directory holding a
+    file, an empty directory, a nested repository and an ignored file.
+    """
+    tree = root / "tree"
+    shutil.copytree(base.tree, tree, symlinks=True)
+    primary = tree / "primary"
+    with _pinned_git_environment(base.home):
+        _git(primary, "remote", "set-url", "origin", str(tree / "origin.git"))
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setenv("GIT_COMMITTER_DATE", _EARLIER_COMMITTER_DATE)
+            _write(primary / "local.txt", "local\n")
+            _write(primary / "hidden" / "h.txt", "hidden\n")
+            _git(primary, "add", "local.txt", "hidden/h.txt")
+            _git(primary, "commit", "-q", "-m", "local")
+        _git(primary, "fetch", "-q", "origin")
+        for relpath in _EDITED_PATHS:
+            path = primary / relpath
+            _write(path, path.read_text(encoding="utf-8") + "edited\n")
+        _write(primary / "scratch.tmp", "scratch\n")
+        _write(primary / "untracked_dir" / "inner.txt", "inner\n")
+        (primary / "empty_dir").mkdir()
+        _write(primary / "ignored.log", "ignored\n")
+        with (primary / ".git" / "info" / "exclude").open("a", encoding="utf-8") as exclude:
+            exclude.write("*.log\n")
+        _git(primary, "init", "-q", "--template=", "nested")
+        _write(primary / "nested" / "n.txt", "nested\n")
+    return _Base(tree, base.home, base.sha_a, base.sha_b, base.git_version)
+
+
+class _Snapshot(NamedTuple):
+    head_ref: str
+    head: str
+    parent: str
+    edits: Mapping[str, bytes | None]
+    untracked: frozenset[str]
+    disk: frozenset[str]
+    remote: Mapping[str, str]
+
+
+def _disk_entries(worktree: Path) -> frozenset[str]:
+    entries: set[str] = set()
+    for directory, names, files in os.walk(worktree):
+        here = Path(directory)
+        if here == worktree and ".git" in names:
+            names.remove(".git")
+        entries.update((here / name).relative_to(worktree).as_posix() for name in (*names, *files))
+    return frozenset(entries)
+
+
+def _tracked_entries(worktree: Path) -> frozenset[str]:
+    """Every tracked path and each directory that contains one."""
+    listing = _git(worktree, "ls-files", "-z", check=False).stdout
+    tracked: set[str] = set()
+    for relpath in filter(None, listing.split("\0")):
+        tracked.add(relpath)
+        tracked.update(
+            parent.as_posix() for parent in PurePosixPath(relpath).parents if parent.name
+        )
+    return frozenset(tracked)
+
+
+def _read_bytes(path: Path) -> bytes | None:
+    try:
+        return path.read_bytes()
+    except OSError:
+        return None
+
+
+def _remote_heads(origin: Path) -> dict[str, str]:
+    listing = _git(origin, "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads")
+    return dict(line.split(" ", 1) for line in listing.stdout.splitlines())
+
+
+def _snapshot(sandbox: _Sandbox) -> _Snapshot:
+    primary = sandbox.primary
+    disk = _disk_entries(primary)
+    return _Snapshot(
+        head_ref=_git(primary, "symbolic-ref", "-q", "HEAD", check=False).stdout.strip(),
+        head=_git(primary, "rev-parse", "--verify", "-q", "HEAD", check=False).stdout.strip(),
+        parent=_git(primary, "rev-parse", "--verify", "-q", "HEAD^", check=False).stdout.strip(),
+        edits={relpath: _read_bytes(primary / relpath) for relpath in _EDITED_PATHS},
+        untracked=disk - _tracked_entries(primary),
+        disk=disk,
+        remote=_remote_heads(primary.parent / "origin.git"),
+    )
+
+
+def _rewritten_non_fast_forward(
+    origin: Path, before: Mapping[str, str], after: Mapping[str, str]
+) -> bool:
+    """Whether a branch now points at a commit that does not contain its old tip."""
+    for ref, old in before.items():
+        new = after.get(ref)
+        if new is None or new == old:
+            continue
+        if _git(origin, "merge-base", "--is-ancestor", old, new, check=False).returncode:
+            return True
+    return False
+
+
+def _observed_effect(
+    origin: Path, subcommand: str, before: _Snapshot, after: _Snapshot
+) -> str | None:
+    """The destructive effect named after *subcommand*, when Git had it between the snapshots.
+
+    An amend replaces the commit the current branch ends in. A hard reset reverts
+    some edit; a whole-tree restore reverts every edit. A clean removes some
+    untracked entry. A force push moves a remote branch to a commit that does not
+    contain its old tip.
+    """
+    reverted = sum(after.edits[relpath] != before.edits[relpath] for relpath in _EDITED_PATHS)
+    if subcommand == "commit":
+        replaced = (
+            after.head_ref == before.head_ref
+            and after.head != before.head
+            and after.parent == before.parent
+        )
+        return "amend" if replaced else None
+    if subcommand == "reset":
+        return "hard-reset" if reverted else None
+    if subcommand == "checkout":
+        return "whole-tree-restore" if reverted == len(_EDITED_PATHS) else None
+    if subcommand == "clean":
+        return "clean" if before.untracked - after.disk else None
+    if subcommand == "push":
+        rewritten = _rewritten_non_fast_forward(origin, before.remote, after.remote)
+        return "force-push" if rewritten else None
+    return None
+
+
+@dataclass(frozen=True, slots=True)
+class _DestructiveRun:
+    subcommand: str
+    argv: tuple[str, ...]
+    returncode: int
+    stderr: str
+    effect: str | None
+    git_version: str
+
+    @property
+    def command(self) -> str:
+        return shlex.join(["git", self.subcommand, *self.argv])
+
+
+def _run_destructive(
+    sandbox: _Sandbox, subcommand: str, argv: tuple[str, ...], *, require_force: bool
+) -> _DestructiveRun:
+    """Run ``git <subcommand> <argv>`` in the dirty primary and name its destructive effect."""
+    if not require_force:
+        _git(sandbox.primary, "config", "clean.requireForce", "false")
+    before = _snapshot(sandbox)
+    completed = _git(sandbox.primary, subcommand, *argv, check=False)
+    after = _snapshot(sandbox)
+    effect = _observed_effect(sandbox.primary.parent / "origin.git", subcommand, before, after)
+    return _DestructiveRun(
+        subcommand, argv, completed.returncode, completed.stderr, effect, sandbox.git_version
+    )
+
+
+_DIRTY_SUBCOMMANDS = ("commit", "reset", "clean", "checkout", "push")
+
+_DIRTY_REVISIONS = (
+    "HEAD",
+    "HEAD~",
+    "HEAD~1",
+    "HEAD~2",
+    "develop",
+    "feat",
+    "other",
+    "origin/develop",
+)
+_DIRTY_TRACKED = ("file.txt", "d/x", "d", "local.txt")
+_WHOLE_TREE_SPELLINGS = (".", "./", ":/", ":(top)", ":(top).")
+_DIRTY_RESTORE = (*_DIRTY_TRACKED, *_WHOLE_TREE_SPELLINGS)
+_DIRTY_UNTRACKED = (
+    "scratch.tmp",
+    "untracked_dir",
+    "empty_dir",
+    "nested",
+    "ignored.log",
+    ".",
+    "file.txt",
+)
+_ORIGIN = ("origin",)
+_DIRTY_REFSPECS = (
+    "develop",
+    "feat",
+    "other",
+    "HEAD",
+    "develop:develop",
+    "HEAD:develop",
+    "feat:develop",
+    "other:develop",
+    "develop:other",
+    "feat:other",
+    "develop:feat",
+    "other:feat",
+    "feat:review",
+    "develop:y",
+    "+develop",
+    "+feat",
+    "+develop:develop",
+    "+feat:develop",
+    "+HEAD:develop",
+    "+develop:other",
+    "+feat:other",
+    "+develop:feat",
+    "+other:feat",
+    "+other:review",
+    "+feat:y",
+)
+
+# A revision operand of checkout always has a path after it, so no generated
+# checkout switches branches: a forced switch discards edits as well, but it is
+# not a whole-tree restore.
+_DIRTY_SLOTS: Mapping[str, tuple[tuple[str, ...], ...]] = {
+    "commit": (_DIRTY_TRACKED,) * 2,
+    "reset": (_DIRTY_REVISIONS, _DIRTY_TRACKED, _DIRTY_TRACKED),
+    "clean": (_DIRTY_UNTRACKED,) * 2,
+    "checkout": (_DIRTY_RESTORE,) * 3,
+    "push": (_ORIGIN, _DIRTY_REFSPECS, _DIRTY_REFSPECS),
+}
+
+_DIRTY_SKELETONS: Mapping[str, tuple[_Skeleton, ...]] = {
+    "commit": (
+        _sk("amend", 0, _DIRTY_TRACKED),
+        _sk("amend message", 0, _DIRTY_TRACKED),
+        _sk("amend all", 0),
+        _sk("amend edit|reset-author|signoff|allow-empty|quiet|date|author|dry-run", 0),
+        _sk("all message", 0),
+        _sk("allow-empty message", 0),
+        _sk("message", 1, _DIRTY_TRACKED, _DIRTY_TRACKED),
+        _sk("fixup|squash|reuse-message|reedit-message|template|cleanup all", 0),
+    ),
+    "reset": (
+        _sk("hard", 0, _DIRTY_REVISIONS),
+        _sk("hard soft|mixed|merge|keep", 0, _DIRTY_REVISIONS),
+        _sk("soft|mixed|merge|keep", 0, _DIRTY_REVISIONS),
+        _sk("", 0, _DIRTY_REVISIONS),
+        _sk("", 2, _DIRTY_REVISIONS, _DIRTY_TRACKED, _DIRTY_TRACKED),
+        _sk("patch|quiet|refresh|intent-to-add", 0, _DIRTY_REVISIONS),
+    ),
+    "clean": (
+        _sk("", 0, _DIRTY_UNTRACKED, _DIRTY_UNTRACKED),
+        _sk("force", 0, _DIRTY_UNTRACKED, _DIRTY_UNTRACKED),
+        _sk("force d", 0, _DIRTY_UNTRACKED, _DIRTY_UNTRACKED),
+        _sk("force x|X", 0, _DIRTY_UNTRACKED, _DIRTY_UNTRACKED),
+        _sk("force d x|X", 0, _DIRTY_UNTRACKED, _DIRTY_UNTRACKED),
+        _sk("d|x|X", 0, _DIRTY_UNTRACKED, _DIRTY_UNTRACKED),
+        _sk("force force d", 0, _DIRTY_UNTRACKED, _DIRTY_UNTRACKED),
+        _sk("force dry-run|interactive|quiet", 0, _DIRTY_UNTRACKED, _DIRTY_UNTRACKED),
+        _sk("force exclude", 0, _DIRTY_UNTRACKED, _DIRTY_UNTRACKED),
+        _sk("dry-run d|x", 0, _DIRTY_UNTRACKED, _DIRTY_UNTRACKED),
+    ),
+    "checkout": (
+        _sk("force", 0, _DIRTY_RESTORE, _DIRTY_RESTORE),
+        _sk("force|quiet|merge|overlay|ours|theirs|patch", 0, _DIRTY_RESTORE, _DIRTY_RESTORE),
+        _sk("", 1, _DIRTY_RESTORE, _DIRTY_RESTORE, _DIRTY_RESTORE),
+        _sk("", 2, _DIRTY_REVISIONS, _DIRTY_RESTORE, _DIRTY_RESTORE),
+        _sk("force", 2, _DIRTY_REVISIONS, _DIRTY_RESTORE),
+    ),
+    "push": (
+        _sk("", 1, _ORIGIN, _DIRTY_REFSPECS, _DIRTY_REFSPECS),
+        _sk("force", 0, _ORIGIN, _DIRTY_REFSPECS, _DIRTY_REFSPECS),
+        _sk("force set-upstream", 1, _ORIGIN, _DIRTY_REFSPECS),
+        _sk("force-with-lease", 0, _ORIGIN, _DIRTY_REFSPECS, _DIRTY_REFSPECS),
+        _sk("force-with-lease force-if-includes", 1, _ORIGIN, _DIRTY_REFSPECS),
+        _sk(
+            "force dry-run|atomic|porcelain|quiet|verbose|follow-tags|push-option",
+            1,
+            _ORIGIN,
+            _DIRTY_REFSPECS,
+        ),
+        _sk(
+            "set-upstream|atomic|quiet|follow-tags|verify|force-if-includes",
+            1,
+            _ORIGIN,
+            _DIRTY_REFSPECS,
+        ),
+        _sk("all|tags|mirror|prune|branches", 1, _ORIGIN),
+        _sk("all|mirror force|force-with-lease", 1, _ORIGIN),
+    ),
+}
+
+# Commit, reset, clean and push may take any option of their table except those
+# that wait for a terminal, sign, read a pathspec file or redirect the push away
+# from origin. Checkout takes only the options that restore paths or force a
+# restore: those that create, detach or switch branches stay out.
+_DIRTY_STRAYS: Mapping[str, tuple[str, ...]] = {
+    "commit": tuple(
+        name
+        for name in sorted(_GIT_SUBCOMMAND_TABLES["commit"])
+        if name
+        not in ("interactive", "patch", "gpg-sign", "pathspec-from-file", "pathspec-file-nul")
+    ),
+    "reset": tuple(
+        name
+        for name in sorted(_GIT_SUBCOMMAND_TABLES["reset"])
+        if name not in ("pathspec-from-file", "pathspec-file-nul")
+    ),
+    "clean": tuple(sorted(_GIT_SUBCOMMAND_TABLES["clean"])),
+    "checkout": (
+        "force",
+        "quiet",
+        "merge",
+        "overlay",
+        "ours",
+        "theirs",
+        "patch",
+        "guess",
+        "progress",
+        "ignore-other-worktrees",
+        "recurse-submodules",
+    ),
+    "push": tuple(
+        name
+        for name in sorted(_GIT_SUBCOMMAND_TABLES["push"])
+        if name not in ("repo", "receive-pack", "exec", "signed")
+    ),
+}
+
+
+def _dirty_cases() -> st.SearchStrategy[_Case]:
+    return _argv_cases(_DIRTY_SUBCOMMANDS, _DIRTY_SLOTS, _DIRTY_SKELETONS, _DIRTY_STRAYS)
+
+
+# Spellings of a destructive command, each with a state in which Git acts on it
+# or refuses; the classifier must flag every one that acted.
+_DESTRUCTIVE_CASES: tuple[_Case, ...] = (
+    ("commit", ("--amend",)),
+    ("commit", ("--amen",)),
+    ("commit", ("--am", "--no-edit")),
+    ("commit", ("--amend", "-m", "amended")),
+    ("commit", ("-a", "--amend")),
+    ("commit", ("--amend", "d/x")),
+    ("commit", ("--amend", "--no-amend", "-a", "-m", "x")),
+    ("commit", ("-a", "-m", "--amend")),
+    ("commit", ("-a", "-m", "x", "--no-amend")),
+    ("commit", ("-a", "-m", "x")),
+    ("commit", ("--allow-empty", "-m", "x")),
+    ("commit", ("-m", "x")),
+    ("push", ("-fu", "origin", "develop")),
+    ("push", ("-qf", "origin", "develop")),
+    ("push", ("-f", "origin", "develop")),
+    ("push", ("origin", "develop", "-f")),
+    ("push", ("--force-w", "origin", "develop")),
+    ("push", ("--force-with-lease", "origin", "develop")),
+    ("push", ("--force-with-lease=develop", "origin", "develop")),
+    ("push", ("origin", "+develop")),
+    ("push", ("origin", "+HEAD:develop")),
+    ("push", ("origin", "+feat:develop")),
+    ("push", ("-f",)),
+    ("push", ("--forc", "origin", "develop")),
+    ("push", ("origin", "develop")),
+    ("push", ("-u", "origin", "develop")),
+    ("push", ("--force-if-includes", "origin", "develop")),
+    ("push", ("--recurse-submodules=check", "origin", "develop")),
+    ("push", ("origin", "+other:review")),
+    ("push", ("-n", "-f", "origin", "develop")),
+    ("push", ("origin", "feat:review")),
+    ("push", ("--mirror", "origin")),
+    ("push", ("origin", "--mirror")),
+    ("push", ("--all", "origin")),
+    ("push", ("--all", "-f", "origin")),
+    ("reset", ("--hard", "HEAD~")),
+    ("reset", ("--hard",)),
+    ("reset", ("--har", "HEAD~")),
+    ("reset", ("--h", "HEAD~")),
+    ("reset", ("--hard", "HEAD~2")),
+    ("reset", ("--hard", "other")),
+    ("reset", ("--soft", "--hard", "HEAD~")),
+    ("reset", ("--hard", "--soft", "HEAD~")),
+    ("reset", ("--hard-foo",)),
+    ("reset", ("--soft", "HEAD~")),
+    ("reset", ("--mixed", "HEAD~")),
+    ("reset", ("--merge", "HEAD~")),
+    ("reset", ("--keep", "HEAD~")),
+    ("reset", ("--", "file.txt")),
+    ("clean", ("--forc",)),
+    ("clean", ("-f",)),
+    ("clean", ("-df",)),
+    ("clean", ("-fd",)),
+    ("clean", ("-xdf",)),
+    ("clean", ("-fx",)),
+    ("clean", ("-fX",)),
+    ("clean", ("-ff",)),
+    ("clean", ("-ffd",)),
+    ("clean", ("-dff",)),
+    ("clean", ("-f", "-e", "*.tmp")),
+    ("clean", ("-f", "scratch.tmp")),
+    ("clean", ("-f", "file.txt")),
+    ("clean", ("-d",)),
+    ("clean", ("-n",)),
+    ("clean", ("-nd",)),
+    ("clean", ("--dry-run", "-d")),
+    ("clean", ("-nf",)),
+    ("clean", ("-i",)),
+    ("clean", ("-fi",)),
+    ("clean", ("-f", "-n", "--no-dry-run")),
+    ("checkout", ("-f",)),
+    ("checkout", ("--force",)),
+    ("checkout", ("--forc",)),
+    ("checkout", ("-f", "--")),
+    ("checkout", ("--",)),
+    ("checkout", (".",)),
+    ("checkout", ("./",)),
+    ("checkout", (":/",)),
+    ("checkout", (":(top)",)),
+    ("checkout", (":(top).",)),
+    ("checkout", ("--", ".")),
+    ("checkout", ("--", "./")),
+    ("checkout", ("--", ":/")),
+    ("checkout", (".", "--")),
+    ("checkout", (".", "origin", "main")),
+    ("checkout", ("HEAD", ".")),
+    ("checkout", ("feat", ".")),
+    ("checkout", ("HEAD", "--", ".")),
+    ("checkout", ("-f", ".")),
+    ("checkout", ("-q", "--", ".")),
+    ("checkout", ("--", "file.txt")),
+    ("checkout", ("--", "d")),
+    ("checkout", ("file.txt",)),
+    ("checkout", ("HEAD", "file.txt")),
+    ("checkout", ("-q",)),
+    ("checkout", ("feat",)),
+)
+
+# Cleans that act without `-f` because the repository's configuration waives the
+# force requirement.
+_UNFORCED_CLEAN_CASES: tuple[_Case, ...] = (
+    ("clean", ("-d",)),
+    ("clean", ("-x",)),
+    ("clean", ("-X",)),
+    ("clean", ()),
+    ("clean", ("-dx",)),
+    ("clean", ("-n",)),
+    ("clean", ("-i",)),
+)
+
+
+def _with_destructive_examples(test: Callable[..., None]) -> Callable[..., None]:
+    for case in reversed(_UNFORCED_CLEAN_CASES):
+        test = example(case=case, require_force=False)(test)
+    for case in reversed(_DESTRUCTIVE_CASES):
+        test = example(case=case, require_force=True)(test)
+    return test
+
+
+def _destructive_failure_message(run: _DestructiveRun, risky: tuple[str, ...] | None) -> str:
+    return (
+        f"Property D violated by `{run.command}` (exit {run.returncode})\n"
+        "  expected: a destructive effect Git produced is named by "
+        "risky_git_operation as a blocked operation\n"
+        f"  actual: effect {run.effect!r} observed but risky_git_operation returned {risky!r}\n"
+        f"  git stderr: {run.stderr.strip()!r}\n"
+        f"  {run.git_version}"
+    )
+
+
+@pytest.fixture(scope="module")
+def destructive_base(git_base: _Base, tmp_path_factory: pytest.TempPathFactory) -> _Base:
+    return _build_destructive_base(git_base, tmp_path_factory.mktemp("destructive-base"))
+
+
+@pytest.mark.timeout(300)
+@settings(max_examples=200, deadline=None)
+@_with_destructive_examples
+@given(case=_dirty_cases(), require_force=st.booleans())
+def test_risky_operation_is_detected_for_every_destructive_effect(
+    destructive_base: _Base,
+    tmp_path_factory: pytest.TempPathFactory,
+    case: _Case,
+    require_force: bool,
+) -> None:
+    subcommand, argv = case
+    with _sandbox(destructive_base, tmp_path_factory.mktemp) as sandbox:
+        run = _run_destructive(sandbox, subcommand, argv, require_force=require_force)
+    risky = risky_git_operation(subcommand, argv, RISKY_GIT_OPERATIONS)
+    event(f"git:{subcommand}:{'ok' if run.returncode == 0 else 'rejected'}")
+    event(f"effect:{subcommand}:{run.effect or 'none'}")
+    if run.effect is not None:
+        assert risky is not None, _destructive_failure_message(run, risky)
+    elif risky is not None:
+        event(f"over-block-d:{subcommand}")

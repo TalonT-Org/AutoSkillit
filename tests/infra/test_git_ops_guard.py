@@ -8,9 +8,11 @@ Pattern mirrors test_pr_create_guard.py.
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 from collections.abc import Mapping
@@ -26,6 +28,7 @@ from autoskillit.hooks._classification._option_grammar import OptionArity, Optio
 from autoskillit.hooks._runtime._git_command_classification import _classify_fetch
 from autoskillit.hooks._runtime._git_option_tables import _GIT_FETCH_FLAG_SPEC
 from autoskillit.hooks.guards import git_ops_guard
+from tests._git_topology import commit_file, init_checkout
 from tests.infra._git_ops_guard_harness import (
     _TOOL_NAME,
     _checked_out_ref_result,
@@ -323,10 +326,9 @@ class TestInterpreterAndNestedShell:
         assert _is_denied(out)
 
     def test_denies_env_prefix_git_amend(self, tmp_path):
-        # rectify #4941 Part A: _contains_blocked_git_op now resolves the verb
-        # through command_verb_and_args, which skips POSIX assignments the
-        # same way the checked-out-ref preflight always has -- an env-prefixed
-        # invocation (VAR=1 git ...) is no longer a raw-shlex-split blind spot.
+        # contains_blocked_git_op resolves the verb through the evaluated-segment
+        # walk, which skips POSIX assignments the same way the checked-out-ref
+        # preflight does, so an env-prefixed invocation (VAR=1 git ...) is seen.
         out = _run_guard("VAR=1 git commit --amend", kitchen_open=True, tmpdir=tmp_path)
         assert _is_denied(out)
 
@@ -1578,6 +1580,252 @@ class TestCheckedOutRefOutcomeImmunity:
         assert verdicts == dict.fromkeys(_SESSION_SHAPES, verdict)
 
 
+@functools.cache
+def _git_version() -> str:
+    return subprocess.run(
+        ["git", "--version"], capture_output=True, text=True, check=False
+    ).stdout.strip()
+
+
+def _context(command: str, observed: object = "") -> str:
+    return f"{command!r} {observed!r} ({_git_version()})"
+
+
+def _deny_reason(output: str) -> str:
+    return json.loads(output)["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def _destructive_reason(op: tuple[str, ...]) -> str:
+    return git_ops_guard._DENY_REASON_TEMPLATE.format(op=" ".join(("git", *op)))
+
+
+_AMEND = ("commit", "--amend")
+_FORCE_PUSH = ("push", "--force")
+_LEASE_PUSH = ("push", "--force-with-lease")
+_HARD_RESET = ("reset", "--hard")
+_FORCE_CLEAN = ("clean", "-f")
+_CHECKOUT_TREE = ("checkout", ".")
+_CHECKOUT_DASHDASH_TREE = ("checkout", "--", ".")
+_UNRESOLVED_OP = ("<unresolved>",)
+
+
+def _git_rows(op: tuple[str, ...], *tails: str) -> list[tuple[str, tuple[str, ...]]]:
+    return [(f"git {tail}", op) for tail in tails]
+
+
+_DESTRUCTIVE_ROWS = [
+    *_git_rows(
+        _FORCE_PUSH,
+        "push -fu origin main",
+        "push -qf origin main",
+        "push origin +main",
+        "push origin +HEAD:main",
+    ),
+    *_git_rows(
+        _LEASE_PUSH, "push --force-w origin main", "push --force-with-lease=main origin main"
+    ),
+    *_git_rows(_HARD_RESET, "reset --har HEAD~", "reset --h HEAD~"),
+    *_git_rows(
+        _FORCE_CLEAN,
+        "clean --forc",
+        "clean -df",
+        "clean -xdf",
+        "clean -fx",
+        "clean -ff",
+        "clean -d",
+        "-c clean.requireForce=0 clean -d",
+    ),
+    *_git_rows(_AMEND, "commit --amen", "commit --am --no-edit"),
+    ("git-commit --amend", _AMEND),
+    *_git_rows(
+        _CHECKOUT_TREE, "checkout -f", "checkout ./", "checkout :/", "checkout . origin main"
+    ),
+    *_git_rows(_CHECKOUT_DASHDASH_TREE, "checkout -- ./"),
+    *_git_rows(_UNRESOLVED_OP, "push --forc origin main", "reset --hard-foo"),
+]
+
+_DESTRUCTIVE_ALLOWED = [
+    "git commit -m '--amend'",
+    "git commit -m x --no-amend",
+    "git push origin main",
+    "git push -u origin main",
+    "git push --force-if-includes origin main",
+    "git push --recurse-submodules=check origin main",
+    "git reset --soft HEAD~",
+    "git clean -n",
+    "git clean -nd",
+    "git clean --dry-run -d",
+    "git clean -i",
+    "git checkout -- a.txt",
+    "git checkout feature",
+    "git -c user.name=x commit -m x",
+]
+
+_DENIED_SHAPE = (True, "skill")
+_EXEMPT_SHAPES = tuple(shape for shape in _SESSION_SHAPES if shape != _DENIED_SHAPE)
+_SHAPE_PARITY_COMMANDS = (
+    "git push origin +main",
+    "git reset --har HEAD~",
+    "git clean -d",
+    "git commit --am --no-edit",
+    "git checkout ./",
+    "git push --forc origin main",
+)
+
+_REPOSITORY_ALIAS_ROWS = [
+    ("git ci --amend", _AMEND),
+    ("git pf origin main", _FORCE_PUSH),
+]
+_UNKNOWN_IDENTITY_COMMANDS = [
+    "git sh",
+    "P=commit; git $P --amend",
+    "git -c alias.x='commit --amend' x",
+]
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git binary required")
+class TestDestructiveOutcomeImmunity:
+    """The headless destructive-operation phase matches the operations
+    RISKY_GIT_OPERATIONS names by what they do, not by how their options are
+    spelled. A plain directory is no repository, so the checked-out-ref preflight
+    has nothing to decide and the phase alone does.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _isolated_git_environment(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        home = tmp_path / "home"
+        home.mkdir()
+        for name in (
+            "GIT_DIR",
+            "GIT_WORK_TREE",
+            "GIT_COMMON_DIR",
+            "GIT_TEST_DISALLOW_ABBREVIATED_OPTIONS",
+        ):
+            monkeypatch.delenv(name, raising=False)
+        monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+        monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+        monkeypatch.setenv("HOME", str(home))
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(home / ".config"))
+
+    @pytest.fixture
+    def aliased_repo(self, tmp_path: Path) -> Path:
+        """A checkout on ``main`` with a separate bare ``origin`` that is fetched,
+        and repository aliases for commit, a forced push and a shell command."""
+        repo = init_checkout(tmp_path / "repo")
+        _git(repo, "branch", "-m", "main")
+        commit_file(repo, "tracked.txt", "initial\n", "initial")
+        origin = tmp_path / "origin.git"
+        _git(tmp_path, "init", "--bare", str(origin))
+        _git(repo, "remote", "add", "origin", str(origin))
+        _git(repo, "push", "-q", "origin", "main")
+        _git(repo, "fetch", "-q", "origin")
+        for alias, expansion in (
+            ("ci", "commit"),
+            ("pf", "push --force"),
+            ("sh", "!git commit --amend"),
+        ):
+            _git(repo, "config", f"alias.{alias}", expansion)
+        return repo
+
+    def test_the_plain_directory_is_not_inside_a_repository(self, tmp_path: Path) -> None:
+        result = subprocess.run(
+            ["git", "-C", str(tmp_path), "rev-parse", "--git-dir"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode != 0, _context("rev-parse in the plain directory", result.stdout)
+
+    @pytest.mark.parametrize(("command", "op"), _DESTRUCTIVE_ROWS)
+    def test_denies_each_spelling_with_the_destructive_reason(
+        self, tmp_path: Path, command: str, op: tuple[str, ...]
+    ) -> None:
+        out = _run_guard(command, kitchen_open=True, tmpdir=tmp_path)
+
+        assert _guard_verdict(out) == "other-deny", _context(command, out)
+        assert _deny_reason(out) == _destructive_reason(op), _context(command, out)
+
+    @pytest.mark.parametrize("command", _DESTRUCTIVE_ALLOWED)
+    def test_allows_each_spelling_that_destroys_nothing(
+        self, tmp_path: Path, command: str
+    ) -> None:
+        out = _run_guard(command, kitchen_open=True, tmpdir=tmp_path)
+
+        assert _guard_verdict(out) == "allow", _context(command, out)
+
+    @pytest.mark.parametrize(
+        "command", [command for command, _ in _DESTRUCTIVE_ROWS] + _DESTRUCTIVE_ALLOWED
+    )
+    def test_allows_every_row_in_the_orchestrator_tier(self, tmp_path: Path, command: str) -> None:
+        out = _run_guard(command, kitchen_open=True, tmpdir=tmp_path, session_type="orchestrator")
+
+        assert _guard_verdict(out) == "allow", _context(command, out)
+
+    @pytest.mark.parametrize(("headless", "session_type"), _EXEMPT_SHAPES)
+    @pytest.mark.parametrize("command", _SHAPE_PARITY_COMMANDS)
+    def test_allows_the_destructive_rows_outside_a_headless_skill_session(
+        self, tmp_path: Path, command: str, headless: bool, session_type: str
+    ) -> None:
+        out = _run_guard(
+            command,
+            kitchen_open=True,
+            tmpdir=tmp_path,
+            headless=headless,
+            session_type=session_type,
+        )
+
+        assert _guard_verdict(out) == "allow", _context(command, (headless, session_type, out))
+
+    @pytest.mark.parametrize(("command", "op"), _REPOSITORY_ALIAS_ROWS)
+    def test_denies_a_repository_alias_for_a_destructive_operation(
+        self, aliased_repo: Path, command: str, op: tuple[str, ...]
+    ) -> None:
+        out = _run_guard(command, kitchen_open=True, tmpdir=aliased_repo)
+
+        assert _guard_verdict(out) == "other-deny", _context(command, out)
+        assert _deny_reason(out) == _destructive_reason(op), _context(command, out)
+
+    @pytest.mark.parametrize(("headless", "session_type"), _EXEMPT_SHAPES)
+    @pytest.mark.parametrize("command", [command for command, _ in _REPOSITORY_ALIAS_ROWS])
+    def test_allows_a_repository_alias_outside_a_headless_skill_session(
+        self, aliased_repo: Path, command: str, headless: bool, session_type: str
+    ) -> None:
+        out = _run_guard(
+            command,
+            kitchen_open=True,
+            tmpdir=aliased_repo,
+            headless=headless,
+            session_type=session_type,
+        )
+
+        assert _guard_verdict(out) == "allow", _context(command, (headless, session_type, out))
+
+    @pytest.mark.parametrize(("headless", "session_type"), _SESSION_SHAPES)
+    @pytest.mark.parametrize("command", _UNKNOWN_IDENTITY_COMMANDS)
+    def test_denies_a_command_of_unknown_identity_in_every_session_shape(
+        self, aliased_repo: Path, command: str, headless: bool, session_type: str
+    ) -> None:
+        out = _run_guard(
+            command,
+            kitchen_open=True,
+            tmpdir=aliased_repo,
+            headless=headless,
+            session_type=session_type,
+        )
+
+        assert _guard_verdict(out) == "checked-out-ref", _context(
+            command, (headless, session_type, out)
+        )
+        assert _checked_out_ref_result(out)["attempted_value"] == "<unresolved>"
+
+    @pytest.mark.parametrize("command", ["git lfs version", "cd $X && git lfs pull"])
+    def test_allows_an_external_subcommand(self, aliased_repo: Path, command: str) -> None:
+        out = _run_guard(command, kitchen_open=True, tmpdir=aliased_repo)
+
+        assert _guard_verdict(out) == "allow", _context(command, out)
+
+
 class TestGuardFailsClosed:
     """An unexpected classification error blocks (exit 2, reason on stderr)."""
 
@@ -1611,7 +1859,7 @@ class TestGuardFailsClosed:
         def _raise(*_args: object, **_kwargs: object) -> None:
             raise KeyError("injected matcher failure")
 
-        monkeypatch.setattr(git_ops_guard, "_contains_blocked_git_op", _raise)
+        monkeypatch.setattr(git_ops_guard, "contains_blocked_git_op", _raise)
 
         code = _guard_exit_code("git status", tmp_path)
 
@@ -1676,25 +1924,26 @@ def test_every_git_fetch_spec_flag_is_recognized(name: str) -> None:
 
 def test_git_ops_guard_classify_imports_from_new_sibling() -> None:
     """Every classification primitive the orchestrator consumes from
-    autoskillit.hooks._runtime._git_command_classification must remain
-    reachable from the package import surface, as must the remote-identity
-    helper `_same_repository` resolves through. Mirrors the orchestrator's
-    import block in git_ops_guard.py. The fetch option table the classifier
-    reads lives in _git_option_tables as OptionDef rows.
+    autoskillit.hooks._runtime._git_command_classification, and the blocked
+    operation matcher it consumes from autoskillit.hooks._runtime._git_target,
+    must remain reachable from the package import surface, as must the
+    remote-identity helper `_same_repository` resolves through. Mirrors the
+    orchestrator's import block in git_ops_guard.py. The fetch option table the
+    classifier reads lives in _git_option_tables as OptionDef rows.
     """
     from autoskillit.hooks._runtime._git_command_classification import (
         _classify_git_invocation,
-        _contains_blocked_git_op,
         _git_result,
         _git_text,
         _parse_worktree_owners,
         _resolve_attempted_sha,
         _resolve_git_common_dir,
     )
+    from autoskillit.hooks._runtime._git_target import contains_blocked_git_op
 
     expected_callables = (
         _classify_git_invocation,
-        _contains_blocked_git_op,
+        contains_blocked_git_op,
         _git_result,
         _git_text,
         _parse_worktree_owners,
@@ -1702,7 +1951,7 @@ def test_git_ops_guard_classify_imports_from_new_sibling() -> None:
         _resolve_git_common_dir,
     )
     for symbol in expected_callables:
-        assert callable(symbol), f"_git_command_classification.{symbol.__name__} must be callable"
+        assert callable(symbol), f"{symbol.__name__} must be callable"
 
     assert isinstance(_GIT_FETCH_FLAG_SPEC, Mapping)
     assert all(isinstance(row, OptionDef) for row in _GIT_FETCH_FLAG_SPEC.values())

@@ -53,7 +53,8 @@ logic, with zero consumers outside this one file.
   there (`analyze_git_segment`): RESOLVED, NOT_A_REPOSITORY or UNRESOLVED, never a
   guessed repository. It imports `_shell_segment_walk`, `_git_command_classification`,
   `_git_outcome`, `_command_classification`, `_github_mutation_analysis` and
-  `_path_identity`; `guards/git_ops_guard.py` imports it.
+  `_path_identity`; `guards/git_ops_guard.py` imports it, including the headless blocklist
+  matcher `contains_blocked_git_op`.
 
 - `_git_command_classification.py` — Git operation classification used by
   `guards/git_ops_guard.py`; it shares the runtime command and mutation primitives.

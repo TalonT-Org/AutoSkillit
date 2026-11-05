@@ -41,7 +41,6 @@ from _command_classification import (  # noqa: E402
 )
 from _git_command_classification import (  # noqa: E402
     _classify_git_invocation,
-    _contains_blocked_git_op,
     _git_result,
     _git_text,
     _parse_worktree_owners,
@@ -56,8 +55,11 @@ from _git_target import (  # noqa: E402
     GitSegmentFacts,
     GitTarget,
     GitTargetKind,
+    _mentions_git_mutation,
+    _mutation_names,
     analyze_git_segment,
     command_channel_flags,
+    contains_blocked_git_op,
     resolve_git_target_for_path,
 )
 from _github_mutation_analysis import (  # noqa: E402
@@ -117,24 +119,6 @@ _INTERPRETER_WRITE_RE = re.compile(
     r"|\bshutil\.(?:copy\w*|move)\s*\("
 )
 _PYTHON_VERB_RE = re.compile(r"python(?:3(?:\.\d+)?)?")
-
-
-def _mutation_names(subcommands: frozenset[str]) -> str:
-    return "|".join(sorted(re.escape(name) for name in subcommands))
-
-
-def _mentions_git_mutation(
-    text: str, subcommands: frozenset[str] = _GIT_MUTATION_SUBCOMMANDS
-) -> bool:
-    """Whether *text* names a Git command word followed by one of *subcommands*.
-
-    Deliberately matches inside arguments too: an opaque launcher's payload
-    (``xargs sh -c '...git push...'``) cannot be told apart from quoted data
-    without per-launcher grammar.
-    """
-    names = _mutation_names(subcommands)
-    pattern = rf"(?<![\w.-])git(?:-[a-z-]+)?(?![\w.])[^\n;&|]*?\b(?:{names})\b"
-    return re.search(pattern, text) is not None
 
 
 def _context_for(target: GitTarget, cache: dict[Any, Any]) -> dict[str, object]:
@@ -647,7 +631,7 @@ def main() -> None:
         ):
             sys.exit(0)
 
-        blocked = _contains_blocked_git_op(cmd, _BLOCKED_GIT_OPS)
+        blocked = contains_blocked_git_op(cmd, _BLOCKED_GIT_OPS, parsed.execution_cwd, cache)
         if blocked is None or _git_op_policy_allows(project_root, blocked):
             sys.exit(0)
 

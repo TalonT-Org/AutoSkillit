@@ -2,8 +2,9 @@
 
 Members: checkout, switch, branch and symbolic-ref outcome matrices
 (``git_ref_outcome``), dynamic-token ambiguity rows, the ``parse_update_ref``,
-``parse_reset``, ``parse_push`` and ``parse_fetch`` parser rows, and the
-``is_ref_mutation`` rows.
+``parse_reset``, ``parse_push`` and ``parse_fetch`` parser rows, the
+``is_ref_mutation`` rows, and the ``risky_git_operation`` predicate registry and
+outcome rows.
 
 Rows follow Git 2.43's case partitions. Argv is space-separated shorthand split
 on whitespace; ``5f3c9e1`` stands for a commit and ``feat`` for a branch name.
@@ -11,9 +12,12 @@ on whitespace; ``5f3c9e1`` stands for a commit and ``feat`` for a branch name.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import pytest
 
 from autoskillit.hooks._runtime._git_outcome import (
+    _RISKY_PREDICATES,
     GitHeadEffect,
     git_ref_outcome,
     is_ref_mutation,
@@ -21,7 +25,9 @@ from autoskillit.hooks._runtime._git_outcome import (
     parse_push,
     parse_reset,
     parse_update_ref,
+    risky_git_operation,
 )
+from autoskillit.hooks._runtime._hook_constants import RISKY_GIT_OPERATIONS
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 
@@ -347,3 +353,222 @@ _REF_MUTATION_ROWS = [
 @pytest.mark.parametrize(("subcommand", "argv", "expected"), _REF_MUTATION_ROWS)
 def test_is_ref_mutation(subcommand: str, argv: str, expected: bool) -> None:
     assert is_ref_mutation(subcommand, _argv(argv)) is expected
+
+
+def missing_predicates(
+    predicates: Mapping[tuple[str, ...], object], ops: frozenset[tuple[str, ...]]
+) -> set[tuple[str, ...]]:
+    """The operations in *ops* that *predicates* has no entry for."""
+    return set(ops) - set(predicates)
+
+
+def test_risky_predicates_are_keyed_exactly_by_the_risky_operations() -> None:
+    assert set(_RISKY_PREDICATES) == RISKY_GIT_OPERATIONS
+    assert not missing_predicates(_RISKY_PREDICATES, RISKY_GIT_OPERATIONS)
+
+
+@pytest.mark.parametrize("op", sorted(RISKY_GIT_OPERATIONS), ids=lambda op: " ".join(op))
+def test_a_predicate_map_missing_one_operation_is_reported(op: tuple[str, ...]) -> None:
+    canary = {key: predicate for key, predicate in _RISKY_PREDICATES.items() if key != op}
+
+    assert set(canary) != RISKY_GIT_OPERATIONS
+    assert missing_predicates(canary, RISKY_GIT_OPERATIONS) == {op}
+
+
+_UNRESOLVED = ("<unresolved>",)
+_AMEND = ("commit", "--amend")
+_FORCE = ("push", "--force")
+_FORCE_SHORT = ("push", "-f")
+_LEASE = ("push", "--force-with-lease")
+_HARD = ("reset", "--hard")
+_CLEAN = ("clean", "-f")
+_CLEAN_DIRECTORIES = ("clean", "-fd")
+_CHECKOUT_TREE = ("checkout", ".")
+_CHECKOUT_DASHDASH_TREE = ("checkout", "--", ".")
+
+
+def _risky_cases(expected: tuple[str, ...] | None, commands: tuple[str, ...]) -> list[object]:
+    """Rows from ``"<subcommand> <argv>"`` shorthand that all expect *expected*."""
+    cases = []
+    for command in commands:
+        subcommand, _, argv = command.partition(" ")
+        cases.append(pytest.param(subcommand, argv, expected, id=command))
+    return cases
+
+
+_RISKY_ROWS = [
+    *_risky_cases(
+        _FORCE,
+        (
+            "push --force origin main",
+            "push -f origin main",
+            "push -fu origin main",
+            "push -qf origin main",
+            "push --no-force --force origin main",
+            "push origin +main",
+            "push origin +HEAD:main",
+            "push -u origin main +feat",
+        ),
+    ),
+    *_risky_cases(
+        _LEASE,
+        (
+            "push --force-with-lease origin main",
+            "push --force-w origin main",
+            "push --force-with-lease=main origin main",
+        ),
+    ),
+    *_risky_cases(_HARD, ("reset --hard HEAD~", "reset --har HEAD~", "reset --h HEAD~")),
+    *_risky_cases(_HARD, ("reset --soft --hard HEAD~", "reset --mixed --hard")),
+    *_risky_cases(
+        _CLEAN,
+        (
+            "clean -f",
+            "clean --forc",
+            "clean -df",
+            "clean -xdf",
+            "clean -fx",
+            "clean -ff",
+            "clean -d",
+            "clean -x",
+            "clean -n --no-dry-run",
+            "clean -e pattern -f",
+        ),
+    ),
+    *_risky_cases(_AMEND, ("commit --amend", "commit --amen", "commit --am --no-edit")),
+    *_risky_cases(_AMEND, ("commit -m x --no-amend --amend",)),
+    *_risky_cases(
+        _CHECKOUT_TREE,
+        (
+            "checkout .",
+            "checkout -f",
+            "checkout --force",
+            "checkout ./",
+            "checkout :/",
+            "checkout :(top)",
+            "checkout :(top).",
+            "checkout . origin main",
+            "checkout feat .",
+        ),
+    ),
+    *_risky_cases(_CHECKOUT_DASHDASH_TREE, ("checkout -- .", "checkout -- ./", "checkout -- a .")),
+]
+
+_ALLOWED_ROWS = [
+    *_risky_cases(
+        None,
+        (
+            "commit -m --amend",
+            "commit -m x --no-amend",
+            "commit --amend --no-amend",
+            "commit -m x",
+            "commit -F --amend",
+        ),
+    ),
+    *_risky_cases(
+        None,
+        (
+            "push origin main",
+            "push -u origin main",
+            "push --force-if-includes origin main",
+            "push --recurse-submodules=check origin main",
+            "push --force --no-force origin main",
+            "push --repo=+r origin main",
+            "push origin main:+refs",
+        ),
+    ),
+    *_risky_cases(None, ("reset --soft HEAD~", "reset --hard --soft HEAD~", "reset HEAD~")),
+    *_risky_cases(
+        None,
+        (
+            "clean -n",
+            "clean -nd",
+            "clean --dry-run -d",
+            "clean -i",
+            "clean --interactive -d",
+            "clean -fni",
+            "clean -f -n",
+        ),
+    ),
+    *_risky_cases(
+        None,
+        (
+            "checkout -- a.txt",
+            "checkout feature",
+            "checkout -b x",
+            "checkout -f feature",
+            "checkout :/.",
+            "checkout -p",
+            "checkout feat -- a.txt",
+        ),
+    ),
+]
+
+_UNRESOLVED_ROWS = [
+    *_risky_cases(_UNRESOLVED, ("push --forc origin main", "push --bogus", "reset --hard-foo")),
+    *_risky_cases(_UNRESOLVED, ("commit --bogus", "clean --bogus", "checkout --bogus x")),
+]
+
+
+@pytest.mark.parametrize(
+    ("subcommand", "argv", "expected"), [*_RISKY_ROWS, *_ALLOWED_ROWS, *_UNRESOLVED_ROWS]
+)
+def test_risky_git_operation_judges_the_outcome_not_the_spelling(
+    subcommand: str, argv: str, expected: tuple[str, ...] | None
+) -> None:
+    assert risky_git_operation(subcommand, _argv(argv), RISKY_GIT_OPERATIONS) == expected
+
+
+@pytest.mark.parametrize("op", sorted(RISKY_GIT_OPERATIONS), ids=lambda op: " ".join(op))
+def test_each_operation_is_detected_in_its_own_spelling_when_it_is_the_only_one_blocked(
+    op: tuple[str, ...],
+) -> None:
+    assert risky_git_operation(op[0], list(op[1:]), frozenset({op})) == op
+
+
+@pytest.mark.parametrize(
+    ("subcommand", "argv", "blocked", "expected"),
+    [
+        pytest.param("push", "-f origin main", RISKY_GIT_OPERATIONS, _FORCE, id="push-f-all"),
+        pytest.param(
+            "push", "-f origin main", frozenset({_FORCE_SHORT}), _FORCE_SHORT, id="push-f-short"
+        ),
+        pytest.param("push", "-f origin main", frozenset({_FORCE}), _FORCE, id="push-f-long-only"),
+        pytest.param("clean", "-fd", RISKY_GIT_OPERATIONS, _CLEAN, id="clean-fd-all"),
+        pytest.param(
+            "clean", "-fd", frozenset({_CLEAN_DIRECTORIES}), _CLEAN_DIRECTORIES, id="clean-fd-only"
+        ),
+        pytest.param("clean", "-f", frozenset({_CLEAN_DIRECTORIES}), None, id="clean-f-not-fd"),
+        pytest.param("push", "--force origin main", frozenset({_HARD}), None, id="other-op"),
+        pytest.param("push", "--forc origin main", frozenset({_HARD}), None, id="other-unparsed"),
+        pytest.param(
+            "checkout", "-- .", frozenset({_CHECKOUT_TREE}), None, id="dashdash-not-tree"
+        ),
+        pytest.param(
+            "checkout",
+            "-- .",
+            frozenset({_CHECKOUT_DASHDASH_TREE}),
+            _CHECKOUT_DASHDASH_TREE,
+            id="dashdash-tree",
+        ),
+        pytest.param(
+            "checkout",
+            ". origin main",
+            frozenset({_CHECKOUT_DASHDASH_TREE}),
+            None,
+            id="tree-not-dashdash",
+        ),
+    ],
+)
+def test_risky_git_operation_reports_only_blocked_operations_deterministically(
+    subcommand: str,
+    argv: str,
+    blocked: frozenset[tuple[str, ...]],
+    expected: tuple[str, ...] | None,
+) -> None:
+    assert risky_git_operation(subcommand, _argv(argv), blocked) == expected
+
+
+def test_an_unresolved_subcommand_is_reported_unresolved_for_any_blocked_set() -> None:
+    assert risky_git_operation("<unresolved>", [], RISKY_GIT_OPERATIONS) == _UNRESOLVED
+    assert risky_git_operation("<unresolved>", [], frozenset({_HARD})) == _UNRESOLVED

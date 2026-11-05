@@ -17,7 +17,9 @@ bounded classification; a dynamic deciding operand is reported ambiguous.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import os
+import re
+from collections.abc import Callable, Mapping, Sequence
 from enum import StrEnum
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -27,6 +29,7 @@ from _git_option_tables import (
     _GIT_FETCH_FLAG_SPEC,
     _GIT_PUSH_FLAG_SPEC,
     _GIT_RESET_FLAG_SPEC,
+    _GIT_SUBCOMMAND_TABLES,
     _GIT_SWITCH_FLAG_SPEC,
     _GIT_SYMBOLIC_REF_FLAG_SPEC,
     _GIT_UPDATE_REF_FLAG_SPEC,
@@ -271,6 +274,11 @@ class ResetArgs(NamedTuple):
     unresolved: str | None
 
 
+def _last_reset_mode(parsed: ParsedArgv) -> str | None:
+    modes = ("soft", "mixed", "hard", "merge", "keep")
+    return next((o.name for o in reversed(parsed.options) if o.name in modes), None)
+
+
 def parse_reset(args: Sequence[str]) -> ResetArgs:
     parsed = parse_options(args, _GIT_RESET_FLAG_SPEC)
     unresolved = parsed.unresolved
@@ -278,8 +286,7 @@ def parse_reset(args: Sequence[str]) -> ResetArgs:
         unresolved = "pathspec_from_file"
     operands = parsed.operands
     before = parsed.operands_before_dashdash
-    modes = ("soft", "mixed", "hard", "merge", "keep")
-    mode = next((o.name for o in reversed(parsed.options) if o.name in modes), None)
+    mode = _last_reset_mode(parsed)
     path_mode = (
         _active(parsed, "patch") is not None
         or (before is not None and len(operands) > before)
@@ -365,3 +372,95 @@ def is_ref_mutation(subcommand: str, args: Sequence[str]) -> bool:
             or any(":" in refspec for refspec in fetch.refspecs)
         )
     return False
+
+
+_PATHSPEC_MAGIC_RE = re.compile(r"^:(?:/|\([a-z,]*\))?")
+
+
+def _is_whole_tree_pathspec(token: str) -> bool:
+    """Whether a pathspec selects the whole tree: ``.``, ``./``, ``d/..``, ``:/``, ``:(top)``,
+    ``*`` and their equivalents once pathspec magic and redundant segments are removed."""
+    normalized = os.path.normpath(_PATHSPEC_MAGIC_RE.sub("", token, count=1))
+    return normalized == "." or set(normalized) == {"*"}
+
+
+def _risky_amend(parsed: ParsedArgv) -> bool:
+    return _active(parsed, "amend") is not None
+
+
+def _risky_force_push(parsed: ParsedArgv) -> bool:
+    forced_refspec = any(refspec.startswith("+") for refspec in parsed.operands[1:])
+    overwrites_remote = _active(parsed, "force") or _active(parsed, "mirror")
+    return overwrites_remote is not None or forced_refspec
+
+
+def _risky_force_with_lease(parsed: ParsedArgv) -> bool:
+    return _active(parsed, "force-with-lease") is not None
+
+
+def _risky_hard_reset(parsed: ParsedArgv) -> bool:
+    return _last_reset_mode(parsed) == "hard"
+
+
+def _risky_clean(parsed: ParsedArgv) -> bool:
+    """Any clean that is not a dry run: Git refuses an unforced clean unless config
+    says otherwise, so this covers every config channel without querying config."""
+    return not any(_active(parsed, name) for name in ("dry-run", "interactive"))
+
+
+def _risky_clean_directories(parsed: ParsedArgv) -> bool:
+    return _risky_clean(parsed) and _active(parsed, "d") is not None
+
+
+def _risky_checkout_whole_tree(parsed: ParsedArgv) -> bool:
+    operands = parsed.operands
+    if not operands:
+        return _active(parsed, "force") is not None
+    if parsed.operands_before_dashdash is not None:
+        return False
+    return any(_is_whole_tree_pathspec(operand) for operand in operands)
+
+
+def _risky_checkout_dashdash_whole_tree(parsed: ParsedArgv) -> bool:
+    before = parsed.operands_before_dashdash
+    return before is not None and any(
+        _is_whole_tree_pathspec(operand) for operand in parsed.operands[before:]
+    )
+
+
+# Keyed exactly by RISKY_GIT_OPERATIONS (tests/hooks/test_git_outcome.py pins this).
+_RISKY_PREDICATES: Mapping[tuple[str, ...], Callable[[ParsedArgv], bool]] = {
+    ("commit", "--amend"): _risky_amend,
+    ("push", "--force"): _risky_force_push,
+    ("push", "-f"): _risky_force_push,
+    ("push", "--force-with-lease"): _risky_force_with_lease,
+    ("reset", "--hard"): _risky_hard_reset,
+    ("clean", "-f"): _risky_clean,
+    ("clean", "-fd"): _risky_clean_directories,
+    ("checkout", "."): _risky_checkout_whole_tree,
+    ("checkout", "--", "."): _risky_checkout_dashdash_whole_tree,
+}
+
+
+def risky_git_operation(
+    subcommand: str, args: Sequence[str], blocked_ops: frozenset[tuple[str, ...]]
+) -> tuple[str, ...] | None:
+    """The blocked operation an invocation performs, by outcome rather than by spelling.
+
+    An unresolved subcommand or option parse is returned as ``("<unresolved>",)``.
+    Among several matching operations the longest wins, then sorted order, so the
+    choice is deterministic. Option values are never read as flags, so
+    ``commit -m '--amend'`` is not an amend.
+    """
+    if subcommand == "<unresolved>":
+        return ("<unresolved>",)
+    candidates = [op for op in blocked_ops if op[0] == subcommand]
+    if not candidates:
+        return None
+    parsed = parse_options(args, _GIT_SUBCOMMAND_TABLES[subcommand])
+    if parsed.unresolved:
+        return ("<unresolved>",)
+    matching = sorted(
+        (op for op in candidates if _RISKY_PREDICATES[op](parsed)), key=lambda op: (-len(op), op)
+    )
+    return matching[0] if matching else None

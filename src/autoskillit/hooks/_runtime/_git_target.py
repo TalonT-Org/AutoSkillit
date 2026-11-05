@@ -20,21 +20,21 @@ from __future__ import annotations
 import os
 import re
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple
+from typing import Any, Literal, NamedTuple
 
 from _command_classification import (
     GitInvocation,
     _git_subcommand_index,
     extract_git_subcommand_and_flags,
+    extract_interpreter_command_payloads,
+    live_command_text,
     tokenize_command_segments,
 )
 from _git_command_classification import _git_result
-from _git_outcome import GitHeadEffect, GitRefOutcome, git_ref_outcome
+from _git_outcome import GitHeadEffect, GitRefOutcome, git_ref_outcome, risky_git_operation
 from _github_mutation_analysis import _DYNAMIC_SHELL_TOKEN_RE
 from _path_identity import PathIdentityError, canonical_existing_path
-
-if TYPE_CHECKING:
-    from autoskillit.hooks._runtime._shell_segment_walk import WalkedSegment
+from _shell_segment_walk import WalkedSegment, walk_evaluated_segments
 
 # Git subcommands that can mutate checked-out refs. Read-only commands (log,
 # status, diff, show, ...) must not be denied just because a preceding cd failed.
@@ -73,6 +73,7 @@ _LAYOUT_CHANNEL_RE = re.compile(
 )
 _ALIAS_CHANNEL_RE = re.compile(r"alias\.|GIT_CONFIG|\bHOME=|XDG_CONFIG_HOME=")
 _ALIAS_KEY_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*")
+_DELIMITERS_RE = re.compile(r"[\s,\[\]'\"()]+")
 
 
 class GitTargetKind(StrEnum):
@@ -280,3 +281,87 @@ def analyze_git_segment(
         else git_ref_outcome(invocation.subcommand, invocation.flags)
     )
     return GitSegmentFacts(invocation, target, outcome, identity_unknown)
+
+
+def _mutation_names(subcommands: frozenset[str]) -> str:
+    return "|".join(sorted(re.escape(name) for name in subcommands))
+
+
+def _mentions_git_mutation(
+    text: str, subcommands: frozenset[str] = _GIT_MUTATION_SUBCOMMANDS
+) -> bool:
+    """Whether *text* names a Git command word followed by one of *subcommands*.
+
+    Deliberately matches inside arguments too: an opaque launcher's payload
+    (``xargs sh -c '...git push...'``) cannot be told apart from quoted data
+    without per-launcher grammar.
+    """
+    names = _mutation_names(subcommands)
+    pattern = rf"(?<![\w.-])git(?:-[a-z-]+)?(?![\w.])[^\n;&|]*?\b(?:{names})\b"
+    return re.search(pattern, text) is not None
+
+
+def _tokenize_text(text: str) -> frozenset[str]:
+    """Split text on common delimiters for set-membership matching.
+
+    Prevents '.' from matching periods inside filenames like 'foo.py'.
+    """
+    return frozenset(token for token in _DELIMITERS_RE.split(text) if token)
+
+
+def _blocked_in_segment(
+    seg: WalkedSegment,
+    flags: ChannelFlags,
+    cache: dict[Any, Any],
+    blocked_ops: frozenset[tuple[str, ...]],
+) -> tuple[str, ...] | None:
+    names = frozenset(op[0] for op in blocked_ops)
+    if seg.position_unresolved and _mentions_git_mutation(" ".join(seg.executable), names):
+        return ("<unresolved>",)
+    facts = analyze_git_segment(seg, flags, cache)
+    if facts is None:
+        return None
+    if facts.identity_unknown:
+        return ("<unresolved>",)
+    return risky_git_operation(facts.invocation.subcommand, facts.invocation.flags, blocked_ops)
+
+
+def contains_blocked_git_op(
+    cmd: str,
+    blocked_ops: frozenset[tuple[str, ...]],
+    cwd: str = "",
+    cache: dict[Any, Any] | None = None,
+) -> tuple[str, ...] | None:
+    """Return the blocked Git operation *cmd* performs, or None.
+
+    Reads *cmd* exclusively through the evaluated-segment walk, the single
+    authority for what will actually execute and as what argv (rectify #4941
+    Part A): a direct invocation, one delivered via ``bash -c``/``eval``, a
+    heredoc/herestring/pipe-fed shell, and a literal-argv
+    ``subprocess.run(["git", ...])`` are all seen the same way. Operations are
+    matched by outcome (``risky_git_operation``), not by option spelling.
+    Returns None when *cmd* cannot be tokenized (fail-open).
+
+    ``blocked_ops`` is passed by the caller (the orchestrator's ``main()`` passes
+    ``_BLOCKED_GIT_OPS`` to keep the constant co-located with itself per the
+    sync-invariant test in ``test_risky_git_ops_coverage.py``).
+    """
+    walk = walk_evaluated_segments(cmd, cwd)
+    if walk is None:
+        return None
+    live_text = live_command_text(cmd)
+    flags = command_channel_flags(live_text)
+    shared_cache: dict[Any, Any] = {} if cache is None else cache
+    for seg in walk:
+        blocked = _blocked_in_segment(seg, flags, shared_cache, blocked_ops)
+        if blocked is not None:
+            return blocked
+
+    # A Python payload whose subprocess/os call could not be resolved to a
+    # literal argv or string means a "git" mention anywhere in what will
+    # actually run cannot be ruled out -- deny rather than silently falling
+    # through to "not blocked".
+    _payloads, has_unresolved = extract_interpreter_command_payloads(cmd)
+    if has_unresolved and "git" in _tokenize_text(live_text):
+        return ("<unresolved>",)
+    return None

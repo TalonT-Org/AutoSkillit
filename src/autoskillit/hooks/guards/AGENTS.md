@@ -58,6 +58,11 @@ The package initializer remains import-free.
   by its ancestor, so clone in a separate command first. Worked example: a recipe step
   that runs `git checkout <branch>` in the cook session's own checkout (the `checkout`
   step of `full-audit`) is denied by design; point `workspace` at a linked worktree.
+  Opaque launchers (`xargs`, `find -exec`, `uv run`, `setsid`, `node -e`, ...) and wrapper
+  options the tables do not model fail closed only when the command also mentions a Git
+  mutation; Git-mutation text quoted inside such a launcher's arguments (for example
+  `find . -exec grep -l "git push" {} \;`) is therefore denied too, and the remedy is
+  to run the inner command directly (`grep -rl "git push" .`).
   In headless skill sessions, the later legacy Git phase blocks
   `commit --amend`, `push --force`, `reset --hard`, `clean -f`, and `checkout .`. It
   matches those operations by outcome rather than by spelling (abbreviated, bundled and

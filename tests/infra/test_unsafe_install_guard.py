@@ -297,6 +297,8 @@ _DIRECT_DENIED: list[tuple[str, str]] = [
     ("sudo -u root pip install -e .", "sudo-pip-install-e"),
     ("nice -n 5 pip install -e .", "nice-pip-install-e"),
     ("timeout 30 pip install -e .", "timeout-pip-install-e"),
+    ("timeout 60 uv pip install -e .", "timeout-uv-pip-install-e"),
+    ("timeout -k 5 60 uv pip install -e .", "timeout-kill-after-uv-pip-install-e"),
     ("stdbuf -o0 pip install -e .", "stdbuf-pip-install-e"),
     # Attached --python=<path> form: must remain unsafe when path is not .venv.
     ("pip install -e . --python=/usr/bin/python3", "attached-system-python"),

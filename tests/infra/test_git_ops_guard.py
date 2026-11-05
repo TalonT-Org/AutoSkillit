@@ -1996,3 +1996,181 @@ def test_git_ops_guard_imports_with_hooks_directory_alone() -> None:
     )
     assert "ModuleNotFoundError" not in result.stderr
     assert "ImportError" not in result.stderr
+
+
+_INVOCATION_GRAMMAR_DENIED = [
+    ("bash -lc 'git push --force origin main'", _FORCE_PUSH),
+    ("sh -ec 'git commit --amend'", _AMEND),
+    ("timeout -k 5 10 git push -f origin main", _FORCE_PUSH),
+    ("sudo -n git commit --amend", _AMEND),
+    ("env --ignore-signal git push -f origin main", _FORCE_PUSH),
+    ("python3 -Bc \"import subprocess; subprocess.run(['git','reset','--hard'])\"", _HARD_RESET),
+    ("echo x | xargs git push -f origin main", _FORCE_PUSH),
+    ("xargs sh -c 'true&&git push -f origin main'", _FORCE_PUSH),
+    ("env -S 'true;git commit --amend'", _AMEND),
+    ("setsid git commit --amend", _AMEND),
+    ("node -e \"require('child_process').execSync('git push -f origin main')\"", _FORCE_PUSH),
+]
+
+_INVOCATION_GRAMMAR_REF_REWRITES = [
+    "bash -lc 'git update-ref refs/heads/develop {sha}'",
+    "timeout -k 5 10 git checkout -Bdevelop {sha}",
+    "sudo -D {primary} git update-ref refs/heads/develop {sha}",
+]
+
+_INVOCATION_GRAMMAR_HEAD_MOVES = [
+    "bash -lc 'git checkout -b x {sha}'",
+    "sudo -n git checkout other",
+]
+
+_INVOCATION_GRAMMAR_ALLOWED = [
+    "bash -lc 'git status'",
+    "timeout 600 uv run pytest -q",
+    "uv run pytest -k git",
+    "uv run pytest -q && git push origin main",
+    "echo x | xargs grep git",
+    "find . -exec git log {} \\;",
+    "nice -n 5 make build",
+    "command -v git",
+    "bash script.sh",
+]
+
+_QUOTED_PUSH_TEXT_IN_LAUNCHER = 'find . -exec grep -l "git push" {} \\;'
+
+
+def _denies_by_ref_or_destructive_phase(output: str, op: tuple[str, ...]) -> bool:
+    """Whether *output* denies with the checked-out-ref reason or with the
+    destructive-phase reason for *op* or for an unresolved operation."""
+    if not _is_denied(output):
+        return False
+    reason = _deny_reason(output)
+    return reason.startswith(git_ops_guard.CHECKED_OUT_REF_DENY_PREFIX) or reason in {
+        _destructive_reason(op),
+        _destructive_reason(_UNRESOLVED_OP),
+    }
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git binary required")
+@pytest.mark.usefixtures("isolated_git_config")
+class TestInvocationGrammarImmunity:
+    """A command is judged as the Git invocation it carries, however a wrapper's
+    options, a shell or interpreter command string, or an opaque launcher
+    deliver it. A launcher whose payload cannot be located denies only when its
+    text mentions a Git mutation; every other form keeps the verdict of the
+    command it runs in all four session shapes.
+    """
+
+    @pytest.fixture
+    def cook_repo(self, tmp_path: Path) -> dict[str, Path | str]:
+        built = build_linked_repo(tmp_path, tracked_state_dir=True)
+        _git(Path(str(built["primary"])), "branch", "other")
+        return built
+
+    @pytest.fixture
+    def pushable_repo(self, linked_repo: dict[str, Path | str]) -> Path:
+        """The unrelated repository, with the bare repository as ``origin``."""
+        unrelated = Path(str(linked_repo["unrelated"]))
+        _git(unrelated, "remote", "add", "origin", str(linked_repo["bare"]))
+        return unrelated
+
+    @pytest.mark.parametrize(("command", "op"), _INVOCATION_GRAMMAR_DENIED)
+    def test_denies_a_git_mutation_behind_an_invocation_grammar(
+        self, tmp_path: Path, command: str, op: tuple[str, ...]
+    ) -> None:
+        """A plain directory is no repository, so the preflight denies only a
+        segment whose position is unresolved and that mentions a Git mutation;
+        otherwise the destructive phase denies, naming the row's operation or an
+        unresolved one. Either denial is a pass.
+        """
+        out = _run_guard(command, kitchen_open=True, tmpdir=tmp_path)
+
+        assert _denies_by_ref_or_destructive_phase(out, op), _context(command, out)
+
+    def test_denies_git_mutation_text_quoted_in_an_opaque_launcher_argument(
+        self, tmp_path: Path
+    ) -> None:
+        """Text naming a Git mutation inside ``find -exec`` arguments cannot be told
+        apart from a payload such as ``xargs sh -c '...git push...'``, so quoted
+        data denies too.
+        """
+        out = _run_guard(_QUOTED_PUSH_TEXT_IN_LAUNCHER, kitchen_open=True, tmpdir=tmp_path)
+
+        assert _denies_by_ref_or_destructive_phase(out, _UNRESOLVED_OP), _context(
+            _QUOTED_PUSH_TEXT_IN_LAUNCHER, out
+        )
+
+    def test_allows_the_inner_command_the_launcher_wraps(self, tmp_path: Path) -> None:
+        command = 'grep -rl "git push" .'
+
+        out = _run_guard(command, kitchen_open=True, tmpdir=tmp_path)
+
+        assert _guard_verdict(out) == "allow", _context(command, out)
+
+    @pytest.mark.parametrize("command_template", _INVOCATION_GRAMMAR_REF_REWRITES)
+    def test_denies_a_checked_out_ref_rewrite_behind_an_invocation_grammar(
+        self, linked_repo: dict[str, Path | str], command_template: str
+    ) -> None:
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        command = command_template.format(
+            sha=linked_repo["new_sha"], primary=shlex.quote(str(linked_repo["primary"]))
+        )
+
+        out = _run_guard(command, kitchen_open=True, tmpdir=linked)
+
+        assert _guard_verdict(out) == "checked-out-ref", _context(command, out)
+        threatened = _checked_out_ref_result(out)["threatened_refs"]
+        assert isinstance(threatened, list)
+        assert [row["target_ref"] for row in threatened] == ["refs/heads/develop"], _context(
+            command, out
+        )
+
+    @pytest.mark.parametrize("command_template", _INVOCATION_GRAMMAR_HEAD_MOVES)
+    def test_denies_a_cook_head_move_behind_an_invocation_grammar(
+        self, cook_repo: dict[str, Path | str], tmp_path: Path, command_template: str
+    ) -> None:
+        primary = Path(str(cook_repo["primary"]))
+        command = command_template.format(sha=cook_repo["new_sha"])
+
+        out = _run_guard(
+            command,
+            kitchen_open=True,
+            tmpdir=tmp_path,
+            marker_root=primary,
+            headless=False,
+            extra_env={
+                "AUTOSKILLIT_SESSION_TYPE": "skill",
+                "AUTOSKILLIT_LAUNCH_ID": "0123456789abcdef",
+                "AUTOSKILLIT_STATE_ROOT": str(primary),
+            },
+            use_bash_key=True,
+            payload_cwd=primary,
+        )
+
+        assert _is_denied(out), _context(command, out)
+        reason = _deny_reason(out)
+        prefix = git_ops_guard.PRIMARY_HEAD_DENY_PREFIX
+        assert reason.startswith(prefix), _context(command, out)
+        details = json.loads(reason.removeprefix(prefix))
+        assert details["subcommand"] == "checkout", _context(command, details)
+        assert details["protected_primary"] == str(primary), _context(command, details)
+
+    @pytest.mark.parametrize("command", _INVOCATION_GRAMMAR_ALLOWED)
+    @pytest.mark.parametrize("directory", ["plain", "repository"])
+    def test_allows_each_form_in_every_session_shape(
+        self, tmp_path: Path, pushable_repo: Path, directory: str, command: str
+    ) -> None:
+        verdicts = {
+            shape: _guard_verdict(
+                _run_guard(
+                    command,
+                    kitchen_open=True,
+                    tmpdir=tmp_path if directory == "plain" else pushable_repo,
+                    headless=shape[0],
+                    session_type=shape[1],
+                )
+            )
+            for shape in _SESSION_SHAPES
+        }
+
+        assert verdicts == dict.fromkeys(_SESSION_SHAPES, "allow"), _context(command, verdicts)

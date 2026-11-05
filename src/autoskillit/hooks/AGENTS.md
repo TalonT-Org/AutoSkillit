@@ -61,6 +61,12 @@ That inventory test makes any new raw scan under `hooks/` a conscious, reviewed 
 `StdinLiteral` is the second instance of the `ArgvToken` "tag once at tokenization, consume
 tagged provenance downstream" pattern (`_tokenizer.py`, commit `6624dda71`, issue #4680):
 future token-level provenance should extend this path rather than add a parallel parser.
+Invocation `-c` extraction (`bash -lc`, `python3 -Bc`) and wrapper command-position arity
+(`_WRAPPER_SPECS`) live in `_classification/_invocation_flags.py`. Where the command a
+wrapper, interpreter or launcher runs cannot be located, the position is *unresolved*; that
+signal travels out of band (`WalkedSegment.position_unresolved`) so every shared consumer
+keeps its verb. Git option semantics are decided through `_option_grammar` tables;
+`tests/arch/test_git_option_literal_scope.py` enforces this.
 
 ## Multi-concern files
 

@@ -14,6 +14,7 @@ import logging
 import os
 import re
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -47,7 +48,7 @@ from _git_command_classification import (  # noqa: E402
     _resolve_attempted_sha,
 )
 from _git_option_tables import _SED_FLAG_SPEC  # noqa: E402
-from _git_outcome import is_ref_mutation  # noqa: E402
+from _git_outcome import GitHeadEffect, is_ref_mutation  # noqa: E402
 from _git_target import (  # noqa: E402
     _GIT_BUILTIN_SUBCOMMANDS,
     _GIT_MUTATION_SUBCOMMANDS,
@@ -76,6 +77,8 @@ from _hook_payload import (  # noqa: E402
     resolve_state_root,
 )
 from _hook_settings import (  # noqa: E402
+    hook_is_interactive_cook,
+    hook_is_launched_interactive,
     hook_session_shape,
     read_merged_hook_config,
 )
@@ -84,6 +87,7 @@ from _shell_segment_walk import WalkedSegment, walk_evaluated_segments  # noqa: 
 
 GIT_OPS_DENY_TRIGGER: str = DENY_TRIGGER_BY_GUARD["git_ops_guard"]
 CHECKED_OUT_REF_DENY_PREFIX: str = "Checked-out ref mutation blocked: "
+PRIMARY_HEAD_DENY_PREFIX: str = "Primary checkout HEAD move blocked: "
 _LOGGER = logging.getLogger(__name__)  # noqa: TID251 - standalone stdlib guard
 
 _DENY_REASON_TEMPLATE = DENY_REASON_BY_GUARD["git_ops_guard"]
@@ -380,6 +384,117 @@ def _preflight_raw_writes(
             _deny_for_mutations(data, _context_for(target, cache), [mutation])
 
 
+def _lazy_anchor(project_root: Path, cache: dict[Any, Any]) -> Callable[[], str | None]:
+    """The common Git directory of the session's project repository, resolved on first use.
+
+    A repository the anchor cannot resolve raises, which blocks only the command
+    that needed it. Drift is harmless: a linked worktree's state root shares the
+    primary's common directory.
+    """
+
+    def anchor() -> str | None:
+        target = resolve_git_target_for_path(str(project_root), cache)
+        if target.kind == GitTargetKind.UNRESOLVED:
+            raise RuntimeError(f"cook anchor repository unresolved: {target.reason}")
+        return target.common_git_dir if target.kind == GitTargetKind.RESOLVED else None
+
+    return anchor
+
+
+def _effective_head_effect(facts: GitSegmentFacts) -> GitHeadEffect:
+    if facts.identity_unknown:
+        return GitHeadEffect.AMBIGUOUS
+    if facts.outcome is None:
+        return GitHeadEffect.NONE
+    if facts.outcome.rewrites_current_branch:
+        return GitHeadEffect.MOVES
+    return facts.outcome.head_effect
+
+
+def _primary_head_violation(
+    facts: GitSegmentFacts, anchor: Callable[[], str | None]
+) -> str | None:
+    """Why *facts* would move HEAD of the anchor repository's primary checkout, if it would."""
+    effect = _effective_head_effect(facts)
+    if effect in (GitHeadEffect.NONE, GitHeadEffect.PATH_RESTORE):
+        return None
+    target = facts.target
+    if target.kind == GitTargetKind.UNRESOLVED:
+        return "unresolved_target"
+    if target.kind != GitTargetKind.RESOLVED or not target.is_main_worktree:
+        return None
+    protected = anchor()
+    if protected is None or protected != target.common_git_dir:
+        return None
+    return "moves_primary_head" if effect == GitHeadEffect.MOVES else "ambiguous_head_effect"
+
+
+_PRIMARY_HEAD_CLONE_NOTE = (
+    "A worktree or clone created by the same command is judged by its nearest existing "
+    "ancestor, so create it in a separate command first."
+)
+_PRIMARY_HEAD_REMEDY = {
+    "moves_primary_head": (
+        "A cook session must leave HEAD of its primary checkout alone. Run this in a linked "
+        "worktree: `cd <worktree> && <command>` or `git -C <worktree> <command>`. "
+        + _PRIMARY_HEAD_CLONE_NOTE
+    ),
+    "ambiguous_head_effect": (
+        "This could switch the primary checkout's branch, so it is denied. To restore paths use "
+        "`git checkout -- <path>` or `git restore <path>`; to switch branches or check out a "
+        "commit use a linked worktree: `git -C <worktree> switch <branch>` or "
+        "`git -C <worktree> switch --detach <commit>`. " + _PRIMARY_HEAD_CLONE_NOTE
+    ),
+    "unresolved_target": (
+        "The repository this command acts on could not be proven. Name it with a literal "
+        "`git -C <worktree> ...` or `cd <worktree> && ...`. " + _PRIMARY_HEAD_CLONE_NOTE
+    ),
+}
+
+
+def _deny_primary_head(
+    *,
+    data: dict[str, object],
+    cwd: str,
+    subcommand: str,
+    head_effect: str,
+    reason: str,
+    protected_primary: str,
+) -> None:
+    details = {
+        "execution_cwd": cwd,
+        "head_effect": head_effect,
+        "protected_primary": protected_primary,
+        "reason": reason,
+        "remedy": _PRIMARY_HEAD_REMEDY[reason],
+        "session_id": str(data.get("session_id", "")),
+        "subcommand": subcommand,
+    }
+    deny_tool_use(
+        PRIMARY_HEAD_DENY_PREFIX + json.dumps(details, sort_keys=True, separators=(",", ":"))
+    )
+
+
+def _enforce_primary_head(
+    data: dict[str, object],
+    seg: WalkedSegment,
+    facts: GitSegmentFacts,
+    anchor: Callable[[], str | None],
+) -> None:
+    reason = _primary_head_violation(facts, anchor)
+    if reason is None:
+        return
+    target = facts.target
+    _deny_primary_head(
+        data=data,
+        cwd=target.cwd or seg.verb_cwd,
+        subcommand=facts.invocation.subcommand,
+        head_effect=str(_effective_head_effect(facts)),
+        reason=reason,
+        protected_primary=(target.toplevel or target.cwd) if reason != "unresolved_target" else "",
+    )
+
+
 def _decide_shared_ref(
     data: dict[str, object], facts: GitSegmentFacts, cache: dict[Any, Any], cwd: str
 ) -> None:
@@ -404,7 +519,11 @@ def _decide_shared_ref(
 
 
 def _preflight_segment(
-    data: dict[str, object], seg: WalkedSegment, flags: ChannelFlags, cache: dict[Any, Any]
+    data: dict[str, object],
+    seg: WalkedSegment,
+    flags: ChannelFlags,
+    cache: dict[Any, Any],
+    anchor: Callable[[], str | None] | None,
 ) -> None:
     if seg.position_unresolved and _mentions_git_mutation(" ".join(seg.executable)):
         _deny_unresolved(data)
@@ -416,13 +535,19 @@ def _preflight_segment(
     facts = analyze_git_segment(seg, flags, cache)
     if facts is None:
         return
+    if anchor is not None:
+        _enforce_primary_head(data, seg, facts, anchor)
     if facts.invocation.subcommand in _READ_ONLY_SUBCOMMANDS and not facts.identity_unknown:
         return
     _decide_shared_ref(data, facts, cache, seg.verb_cwd if seg.cwd_certain else "")
 
 
 def _preflight_checked_out_ref_mutation(
-    data: dict[str, object], command: str, execution_cwd: str, cache: dict[Any, Any]
+    data: dict[str, object],
+    command: str,
+    execution_cwd: str,
+    cache: dict[Any, Any],
+    anchor: Callable[[], str | None] | None,
 ) -> None:
     # The live-text projection (rectify #4941 Part A): heredoc and herestring
     # bodies are blanked at their source spans and appended once when their
@@ -437,7 +562,7 @@ def _preflight_checked_out_ref_mutation(
         return
     flags = command_channel_flags(live_text)
     for seg in walk:
-        _preflight_segment(data, seg, flags, cache)
+        _preflight_segment(data, seg, flags, cache, anchor)
     scan = scan_write_targets(live_text, execution_cwd)
     _preflight_raw_writes(data, live_text, walk, scan, execution_cwd, cache)
     if extract_interpreter_command_payloads(command)[1] and _mentions_git_mutation(live_text):
@@ -501,35 +626,29 @@ def main() -> None:
     # handler and serves as the explicit verdict signal.
     try:
         project_root = resolve_state_root(parsed.payload_cwd)
+        # The marker is written by open_kitchen and removed by close_kitchen, but it
+        # is project-wide: a launched interactive session is checked without it.
         kitchen_open = _kitchen_marker_exists(project_root)
+        cache: dict[Any, Any] = {}
 
-        if kitchen_open:
-            _preflight_checked_out_ref_mutation(data, cmd, parsed.execution_cwd, {})
+        if kitchen_open or hook_is_launched_interactive():
+            anchor = _lazy_anchor(project_root, cache) if hook_is_interactive_cook() else None
+            _preflight_checked_out_ref_mutation(data, cmd, parsed.execution_cwd, cache, anchor)
 
         headless, tier = hook_session_shape()
-        if not headless:
+        # Orchestrator-typed headless sessions bypass the destructive-op deny but
+        # remain subject to the all-session ref preflight above.
+        skill_name = os.environ.get("AUTOSKILLIT_SKILL_NAME", "")
+        if (
+            not headless
+            or not kitchen_open
+            or skill_name in _EXEMPT_SKILLS
+            or tier in _DESTRUCTIVE_OP_EXEMPT_TIERS
+        ):
             sys.exit(0)
 
         blocked = _contains_blocked_git_op(cmd, _BLOCKED_GIT_OPS)
-        if blocked is None:
-            sys.exit(0)
-
-        skill_name = os.environ.get("AUTOSKILLIT_SKILL_NAME", "")
-        if skill_name in _EXEMPT_SKILLS:
-            sys.exit(0)
-
-        # Orchestrator-typed headless sessions bypass the destructive-op deny
-        # but remain subject to the all-session ref preflight above (which runs
-        # unconditionally before this branch).
-        if tier in _DESTRUCTIVE_OP_EXEMPT_TIERS:
-            sys.exit(0)
-
-        # Hook config file is written by open_kitchen and removed by close_kitchen.
-        # Its presence reliably signals an open kitchen without needing session ID.
-        if not kitchen_open:
-            sys.exit(0)
-
-        if _git_op_policy_allows(project_root, blocked):
+        if blocked is None or _git_op_policy_allows(project_root, blocked):
             sys.exit(0)
 
         op_str = " ".join(("git",) + blocked)

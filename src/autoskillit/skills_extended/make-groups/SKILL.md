@@ -299,7 +299,7 @@ should not land on the base branch until the full set is audited.
 After `make-groups` completes, create a feature branch before starting the pipeline:
 
 ```bash
-git switch -c feature/{topic}
+git branch feature/{topic}
 ```
 
 Then run each group through the pipeline using the feature branch as `base_branch` for all

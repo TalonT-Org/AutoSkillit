@@ -142,6 +142,13 @@ class PreparedInteractiveLaunch:
     pre_spawn_check: Callable[[], None] | None = None
 
 
+def _interactive_anchor_env(
+    extra_env: Mapping[str, str] | None, project_dir: Path
+) -> dict[str, str]:
+    """Bind hook state to the orchestrating project root for every interactive launch."""
+    return {**(extra_env or {}), AUTOSKILLIT_STATE_ROOT_ENV_VAR: str(project_dir.resolve())}
+
+
 def prepare_interactive_launch(
     backend: CodingAgentBackend,
     *,
@@ -157,6 +164,7 @@ def prepare_interactive_launch(
     mcp_tool_timeout_sec: float | None = None,
 ) -> PreparedInteractiveLaunch:
     """Probe an exact executable before sealing the capability-complete session env."""
+    extra_env = _interactive_anchor_env(extra_env, project_dir)
 
     probe_env = dict(os.environ)
     if extra_env is not None and "PATH" in extra_env:
@@ -238,6 +246,7 @@ def _finalize_interactive_launch(
     mcp_tool_timeout_sec: float | None = None,
 ) -> PreparedInteractiveLaunch:
     """Build and validate the finalized invocation with its exact executable binding."""
+    extra_env = _interactive_anchor_env(extra_env, project_dir)
     from autoskillit.execution import assert_interactive_ordering, assert_resume_purity
 
     if exact_binding_probe_required:
@@ -396,11 +405,6 @@ def _run_interactive_session(
         raise ValueError("managed launch inputs are invalid for a raw session")
 
     _project_dir = (project_dir if project_dir is not None else Path.cwd()).resolve()
-    # Injected so PreToolUse guards can locate `.autoskillit/` state from the
-    # orchestrating project root even when a command's own cwd points into a
-    # sibling worktree with its own checked-in `.autoskillit/` — the production
-    # signal resolve_state_root() (hooks/_hook_payload.py) checks first.
-    extra_env = {**(extra_env or {}), AUTOSKILLIT_STATE_ROOT_ENV_VAR: str(_project_dir)}
     tools_arg: tuple[str, ...] = (
         ("AskUserQuestion",) if backend.capabilities.skill_injection_capable else ()
     )

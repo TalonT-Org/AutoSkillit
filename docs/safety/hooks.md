@@ -117,14 +117,20 @@ caller to use the `prepare_pr → compose_pr` pipeline instead.
 
 ### `git_ops_guard.py`
 **Guarded tool:** `Bash`, `run_cmd`
-Blocks destructive raw git CLI operations in headless skill sessions:
+Protects checked-out refs in every session and blocks destructive raw git CLI operations
+in headless skill sessions. While the kitchen is open, and in every
+autoskillit-launched interactive session (cook, order, managed fleet) whether or not it
+is, a preflight denies commands that rewrite a branch ref checked out in any worktree of
+the repository. In an interactive cook session it also denies moving `HEAD` of the
+anchor repository's primary checkout. Destructive operations blocked in headless skill
+sessions:
 `commit --amend`, `push --force` / `-f` / `--force-with-lease`, `reset --hard`,
 `clean -f` / `-fd`, and `checkout .` / `checkout -- .`. Uses `shlex.split`
 tokenisation with global-flag skipping so `git -C /path commit --amend` and
 full-path invocations like `/usr/bin/git push --force` are correctly detected.
 Also catches interpreter-wrapped (`python3 -c "subprocess.run(['git', 'commit', '--amend'])"`)
-and nested-shell forms. Session scope: headless only. Orchestrator sessions
-are exempt. Per-subcommand allow-overrides are available via `git_ops_policy`
+and nested-shell forms. Session scope of the destructive-operation phase: headless
+skill sessions; orchestrator sessions are exempt. Per-subcommand allow-overrides are available via `git_ops_policy`
 in `.hook_config.json` for future recipes that legitimately need these operations.
 
 ### `resource_exhaustion_guard.py`

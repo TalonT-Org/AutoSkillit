@@ -9,7 +9,7 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -21,6 +21,7 @@ import autoskillit.cli.session._session_process as _patch_session__session_proce
 import autoskillit.cli.session._session_reload as _patch_session__session_reload
 import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
 from autoskillit import cli
+from autoskillit.cli.session._session_launch import _order_launch_env
 from autoskillit.core import (
     CODEX_MODEL_ALIASES,
     CODEX_RESERVED_HOME_ENV_VARS,
@@ -43,6 +44,10 @@ from autoskillit.core import (
     SkillSemanticPlan,
     ValidatedAddDir,
     atomic_write,
+)
+from autoskillit.hooks._runtime._hook_settings import (
+    hook_is_interactive_cook,
+    hook_is_launched_interactive,
 )
 from tests._realistic_project import PINNED_CLAUDE_SHIM_VERSION_OUTPUT
 from tests.cli._cook_launch_helpers import cook_attempt_result
@@ -622,6 +627,26 @@ def test_cook_uses_managed_home_for_final_child_context(
     assert len(spec.env[LAUNCH_ID_ENV_VAR]) == 16
     assert captured["run_kwargs"]["pass_fds"] == (17, 13, 7, 9)  # type: ignore[index]
     assert binding.closed
+
+
+def test_cook_launch_env_is_a_launched_interactive_cook_to_hooks(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured = _install_harness(monkeypatch, tmp_path)
+
+    cli.cook(backend=_Backend())
+
+    spec = captured["spec"]
+    assert isinstance(spec, CmdSpec)
+    with patch.dict("os.environ", spec.env, clear=True):
+        assert hook_is_interactive_cook() is True
+        assert hook_is_launched_interactive() is True
+
+
+def test_order_launch_env_is_launched_interactive_but_not_cook_to_hooks() -> None:
+    with patch.dict("os.environ", _order_launch_env("0123456789abcdef"), clear=True):
+        assert hook_is_interactive_cook() is False
+        assert hook_is_launched_interactive() is True
 
 
 def test_cook_retains_projection_binding_when_launch_consumes_no_artifact(

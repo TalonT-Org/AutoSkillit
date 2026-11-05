@@ -40,6 +40,24 @@ The package initializer remains import-free.
   what a command does without changing its text. The guard raises the cost of mistakes
   and bypasses for Git ref and `HEAD` mutations; it is not a security boundary against a
   hostile shell.
+  A cook session may not move HEAD of its anchor repository's primary checkout: in an
+  interactive cook session (`AUTOSKILLIT_SESSION_TYPE=skill` with a launch id and no
+  `AUTOSKILLIT_HEADLESS`), a Git segment whose outcome moves `HEAD`, or whose effect is
+  ambiguous, is denied (`Primary checkout HEAD move blocked: ...`) when its target is the
+  main worktree of the anchor repository, or is unresolved. The rule is
+  outcome-based and marker-independent: every autoskillit-launched interactive session
+  (cook, order, managed fleet) runs the shared-ref preflight without the kitchen marker,
+  and `AUTOSKILLIT_STATE_ROOT` is set for every interactive launch. Linked worktrees and
+  other repositories are unaffected. Limits: a linked or bare layout protects its main
+  worktree; `gh pr checkout`, `rebase`, `bisect` and `pull` are outside the rule;
+  `merge`, `cherry-pick`, `revert`, `am`, `commit` and `reset` advance the current branch
+  without switching branches and are outside it too; `git worktree add` leaves the
+  primary's HEAD alone (Git refuses `worktree add -B <branch>` for a branch checked out
+  elsewhere); a bare `checkout X` is denied as ambiguous, while `git checkout -- <path>`
+  and `git restore <path>` always pass; a same-command clone inside the primary is judged
+  by its ancestor, so clone in a separate command first. Worked example: a recipe step
+  that runs `git checkout <branch>` in the cook session's own checkout (the `checkout`
+  step of `full-audit`) is denied by design; point `workspace` at a linked worktree.
   In headless skill sessions, the later legacy Git phase blocks
   `commit --amend`, `push --force`, `reset --hard`, `clean -f`, and `checkout .`.
   Raw GitHub review publication is fail-closed across Bash and `run_cmd`: the guard denies
@@ -105,6 +123,7 @@ defense-in-depth measure against privilege escalation:
 | `exploration_request_identity_guard.py` | A supported exploration event lacks bounded native identity or its one-shot record cannot be written | A Claude exploration call must not execute without request-correlated authority |
 | `join_stop_guard.py` | Malformed/non-object payload or missing `session_id` | Stop must not release when the guard cannot identify the binding whose wave completion authorizes release |
 | `git_ops_guard.py` | Any unexpected runtime error (any `Exception`) while classifying a Git command, in the checked-out-ref preflight or the headless destructive-op phase; or an unresolved target (unknown cwd, layout override or unparseable global option) for a ref mutation; or, in the separate headless destructive-op-blocking preflight, an unrecognized global git flag that leaves the real subcommand unresolved, or a Python subprocess/os call whose argument could not be resolved to a literal argv or string while `live_command_text` still mentions "git" | An unhandled exception must not silently allow a checked-out ref mutation — use exit 2 + stderr to hard-block. `_git_command_classification._contains_blocked_git_op` reads the command exclusively through `all_evaluated_segments`, the evaluated-segment blocklist authority (rectify #4941 Part A): it cannot match `_BLOCKED_GIT_OPS`'s literal subcommand tuples against an unresolved subcommand, so it denies unconditionally the moment `extract_git_subcommand_and_flags` reports `"<unresolved>"`, and separately denies when an unresolved interpreter payload cannot rule out a hidden `git` invocation, rather than silently falling through to "not blocked" |
+| `git_ops_guard.py` | In an interactive cook session, the anchor repository cannot be resolved, or a Git command that could move HEAD has an unresolved target | A command that might move the primary checkout's HEAD must not pass on a target the guard cannot prove; the deny names a literal `git -C <worktree>` or `cd <worktree> &&` remedy |
 | `pr_create_guard.py` | Hook config unreadable or malformed while the kitchen is open (OSError, JSONDecodeError, AttributeError, TypeError) | An unresolvable `recipe_allows_pr_create` authorization must not be read as permission to bypass the prepare_pr → compose_pr pipeline |
 | `unsafe_install_guard.py` | An unrecognized global pip flag leaves `pip`'s `install` token position unresolved | `_find_pip_install` cannot tell whether the command is a pip install at all; treating that the same as "definitely not an install" would silently skip the editable/system-install checks entirely, so it is threaded through as a distinct `"unresolved-pip-flags"` kind and denied unconditionally, matching the pre-existing `"unresolved-subprocess"` kind's treatment |
 | `write_guard.py` | A write-verb operand or redirect target cannot be resolved, or a Bash command cannot be parsed, while a write-prefix policy applies | An unresolved target could escape the allowed prefix; the denial explains how to substitute a literal path. |

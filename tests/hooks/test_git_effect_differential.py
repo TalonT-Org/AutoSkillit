@@ -6,7 +6,8 @@ effect on every worktree is compared with what the classifier predicted.
 
 Members: ``_build_base`` and ``_sandbox`` (fixture repositories),
 ``_run_differential`` (the shared driver returning a ``_Run``), ``_git_cases``
-(argv strategy), and the Property A section (shared refs).
+(argv strategy), the Property A section (shared refs) and the Property C
+section (HEAD of the primary checkout).
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ from _classification._option_grammar import (  # type: ignore[import-not-found]
 )
 from _command_classification import (  # type: ignore[import-not-found]
     extract_git_subcommand_and_flags,
+    live_command_text,
 )
 from _git_command_classification import (  # type: ignore[import-not-found]
     _classify_git_invocation,
@@ -44,9 +46,12 @@ from _git_outcome import (  # type: ignore[import-not-found]
 )
 from _git_target import (  # type: ignore[import-not-found]
     GitTargetKind,
+    analyze_git_segment,
+    command_channel_flags,
     resolve_git_target_for_path,
 )
-from hypothesis import event, example, given, settings
+from _shell_segment_walk import walk_evaluated_segments  # type: ignore[import-not-found]
+from hypothesis import HealthCheck, event, example, given, settings
 from hypothesis import strategies as st
 
 from autoskillit.hooks.guards import git_ops_guard
@@ -870,3 +875,112 @@ def test_classifier_accounts_for_shared_ref_effects(
     with _sandbox(git_base, tmp_path_factory.mktemp) as sandbox:
         run = _run_differential(sandbox, subcommand, argv)
     _assert_shared_refs_sound(run)
+
+
+# ---------------------------------------------------------------------------
+# Property C: HEAD of the primary checkout
+# ---------------------------------------------------------------------------
+
+_HEAD_MOVING_SUBCOMMANDS = ("checkout", "switch")
+
+# Spellings that only restore paths, so the primary keeps what it has checked out.
+_PATH_ONLY_CASES: tuple[_Case, ...] = (
+    ("checkout", ("--", "file.txt")),
+    ("checkout", ("other", "--", "file.txt")),
+    ("checkout", ("other", "file.txt")),
+    ("checkout", (".",)),
+    ("checkout", ("--ours", "file.txt")),
+    ("checkout", ("-p",)),
+    ("checkout", ("-f",)),
+)
+
+# Spellings that change the primary's HEAD name, attachment or identity.
+_HEAD_MOVING_CASES: tuple[_Case, ...] = (
+    ("checkout", ("-b", "new-1", _SHA_A)),
+    ("checkout", ("-Bdevelop", _SHA_A)),
+    ("checkout", ("--detach",)),
+    ("checkout", ("--orphan", "new-1")),
+    ("checkout", ("-",)),
+    ("checkout", ("@{-1}",)),
+    ("checkout", ("other",)),
+    ("checkout", (_SHA_A,)),
+    ("checkout", ("-t", "origin/y")),
+    ("switch", ("other",)),
+    ("switch", ("-c", "new-1")),
+    ("switch", ("-Cdevelop", "feat")),
+    ("switch", ("--detach", _SHA_A)),
+    ("switch", ("-",)),
+    ("switch", ("y",)),
+)
+
+
+def _with_primary_head_examples(test: Callable[..., None]) -> Callable[..., None]:
+    for case in reversed(_PATH_ONLY_CASES + _HEAD_MOVING_CASES):
+        test = example(case=case)(test)
+    return test
+
+
+def _primary_head_verdict(run: _Run, primary: Path) -> str | None:
+    """The primary-head rule's verdict on the command *run* executed, issued from *primary*."""
+    walked = walk_evaluated_segments(run.command, str(primary))
+    assert walked is not None, f"`{run.command}` could not be tokenized ({run.git_version})"
+    flags = command_channel_flags(live_command_text(run.command))
+    cache: dict[Any, Any] = {}
+    analysed = [analyze_git_segment(segment, flags, cache) for segment in walked]
+    facts = [segment_facts for segment_facts in analysed if segment_facts is not None]
+    assert len(facts) == 1, f"`{run.command}` classified {len(facts)} Git segments"
+    anchor = git_ops_guard._lazy_anchor(primary, cache)
+    verdict: str | None = git_ops_guard._primary_head_violation(facts[0], anchor)
+    return verdict
+
+
+def _primary_head_change(run: _Run) -> tuple[_View, _View] | None:
+    for label, before, after in run.head_changes:
+        if label == "primary":
+            return before, after
+    return None
+
+
+def _primary_head_problems(run: _Run, verdict: str | None) -> list[str]:
+    problems: list[str] = []
+    change = _primary_head_change(run)
+    if change is not None and verdict is None:
+        problems.append(
+            f"primary HEAD changed {_describe_head(change[0])} -> {_describe_head(change[1])} "
+            "but the rule allows it"
+        )
+    if (run.subcommand, run.argv) in _PATH_ONLY_CASES and verdict is not None:
+        problems.append(f"a path-only spelling is denied as {verdict!r}")
+    return problems
+
+
+def _primary_head_failure_message(run: _Run, verdict: str | None, problems: list[str]) -> str:
+    return (
+        f"Property C violated by `{run.command}` (exit {run.returncode})\n"
+        "  expected: a checkout or switch that changed the primary's HEAD is denied, and "
+        "a path-only spelling is allowed\n"
+        f"  actual: {'; '.join(problems)}\n"
+        f"  rule verdict: {verdict!r}\n"
+        f"  outcome: {run.outcome}\n"
+        f"  git stderr: {run.stderr.strip()!r}\n"
+        f"  {run.git_version}"
+    )
+
+
+@pytest.mark.timeout(300)
+@settings(max_examples=200, deadline=None, suppress_health_check=[HealthCheck.filter_too_much])
+@_with_primary_head_examples
+@given(case=_git_cases().filter(lambda case: case[0] in _HEAD_MOVING_SUBCOMMANDS))
+def test_primary_head_rule_denies_every_checkout_and_switch_that_moves_the_primary_head(
+    git_base: _Base, tmp_path_factory: pytest.TempPathFactory, case: _Case
+) -> None:
+    subcommand, argv = case
+    with _sandbox(git_base, tmp_path_factory.mktemp) as sandbox:
+        run = _run_differential(sandbox, subcommand, argv)
+        verdict = _primary_head_verdict(run, sandbox.primary)
+    event(
+        f"git:{run.subcommand}:{'moved' if _primary_head_change(run) else 'kept'}:"
+        f"{'denied' if verdict else 'allowed'}"
+    )
+    problems = _primary_head_problems(run, verdict)
+    assert not problems, _primary_head_failure_message(run, verdict, problems)

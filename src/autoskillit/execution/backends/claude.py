@@ -415,9 +415,9 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
         An interactive session operates at L1 (cook, ``autoskillit cook``) by default.
         It becomes an L2 orchestrator (order, ``autoskillit order``) when the user
         calls ``open_kitchen``, granting full kitchen access and the ability to dispatch
-        L1 ``run_skill`` workers. Unlike headless sessions, the orchestration level of
-        an interactive session is determined at runtime by kitchen state, not by a
-        ``SESSION_TYPE`` env variable.
+        L1 ``run_skill`` workers. The launcher sets ``SESSION_TYPE`` for cook
+        (``skill``) and order (``orchestrator``), together with a launch id; the
+        kitchen state, not that variable, decides which tools are visible.
         """
         del generated_home
         builder = CmdBuilder(str(executable.path) if executable is not None else "claude")

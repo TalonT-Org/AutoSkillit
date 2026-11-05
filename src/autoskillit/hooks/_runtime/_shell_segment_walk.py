@@ -376,7 +376,13 @@ def _walk_executable(
 ) -> tuple[WalkedSegment, ShellDirectoryState | None]:
     _classification = _classification_module()
 
-    def walked(start: int | None, verb_cwd: str, certain: bool, handled: bool) -> WalkedSegment:
+    def walked(
+        start: int | None,
+        verb_cwd: str,
+        certain: bool,
+        handled: bool,
+        position_unresolved: bool = False,
+    ) -> WalkedSegment:
         return WalkedSegment(
             record,
             partition,
@@ -386,16 +392,16 @@ def _walk_executable(
             verb_cwd,
             certain and bool(verb_cwd),
             handled,
-            False,
+            position_unresolved,
         )
 
-    start = _classification._verb_start_index(executable)
+    start, unresolved = _classification._command_position(executable)
     setting = _cdpath_setting(executable, start) if executable_tokens is not None else None
     previous_cdpath = state.cdpath_unknown
     if setting is not None:
         state.cdpath_unknown = setting[0]
     if start is None:
-        return walked(None, state.cwd, state.cwd_certain, False), None
+        return walked(None, state.cwd, state.cwd_certain, False, unresolved), None
     parent_certain = state.cwd_certain
     handled = _apply_shell_builtin(executable, start, executable_tokens, state)
     if setting is not None and setting[1]:
@@ -406,14 +412,14 @@ def _walk_executable(
         state.cwd_certain = False
         state.chain_pending = False
     if handled or _classification.is_gh_command(executable):
-        return walked(start, state.cwd, state.cwd_certain, handled), None
+        return walked(start, state.cwd, state.cwd_certain, handled, unresolved), None
     verb_cwd = _classification._wrapped_verb_cwd(executable, start, state.cwd, executable_tokens)
     absolute_override = _classification._wrapped_verb_cwd(executable, start, "", executable_tokens)
     verb_certain = bool(verb_cwd) and (bool(absolute_override) or state.cwd_certain)
     invoked = _invoked_child_state(
         executable[start], verb_cwd, verb_certain, state, record.subshell_path
     )
-    return walked(start, verb_cwd, verb_certain, False), invoked
+    return walked(start, verb_cwd, verb_certain, False, unresolved), invoked
 
 
 def walk_evaluated_segments(command: str, cwd: str) -> list[WalkedSegment] | None:

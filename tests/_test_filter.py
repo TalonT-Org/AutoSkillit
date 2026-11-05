@@ -1537,6 +1537,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "cli/test_capture_store.py",
             # file-level: open-kitchen bridge drives the real registry path (no in-memory stub)
             "cli/test_resume_registry_identity.py",
+            # file-level: asserts the launched cook env against the hook identity predicates
+            "cli/test_cook_interactive.py",
             "recipe",
             "server/test_kitchen_lifecycle.py",
             "server/test_tools_kitchen_gate.py",

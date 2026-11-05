@@ -94,18 +94,6 @@ _WRITE_CALL_SITE_RE = re.compile(
 )
 
 
-# Command wrappers whose only effect is to invoke the next command with
-# adjusted environment/priority. The verb is the token after the wrapper.
-# 'xargs' is intentionally excluded: it dispatches a downstream reader and
-# adding it would let `xargs cat src/.../foo.yaml` reach the reader check,
-# weakening xargs-chain bypass detection (see D1 design decision).
-_COMMAND_WRAPPERS: frozenset[str] = frozenset({"command", "nice", "time", "sudo", "nohup"})
-# Wrappers that consume a mandatory DURATION as their first non-wrapper token.
-_WRAPPERS_WITH_DURATION: frozenset[str] = frozenset({"timeout"})
-# Wrappers that take a single short flag as their first non-wrapper token
-# (e.g. 'stdbuf -o0', 'stdbuf -i0', 'stdbuf -e0').
-_WRAPPERS_WITH_SHORT_FLAG: frozenset[str] = frozenset({"stdbuf"})
-
 # env option arity tables.
 _ENV_NO_VALUE_FLAGS: frozenset[str] = frozenset(
     {
@@ -128,9 +116,6 @@ _ENV_VALUE_FLAGS: frozenset[str] = frozenset(
         "--chdir",
         "-S",
         "--split-string",
-        "--default-signal",
-        "--ignore-signal",
-        "--block-signal",
         "--argv0",
     }
 )
@@ -145,35 +130,6 @@ _ENV_VALUE_FLAGS_ATTACHED: frozenset[str] = frozenset(
         "--default-signal",
         "--ignore-signal",
         "--block-signal",
-    }
-)
-# Wrappers taking a value optionally attached ('-u=root', '--user=root').
-_WRAPPER_VALUE_FLAGS_ATTACHED: frozenset[str] = frozenset(
-    {
-        "-u",
-        "--user",
-        "-n",
-        "--adjustment",
-        "-k",
-        "--kill-after",
-        "-s",
-        "--signal",
-    }
-)
-_WRAPPER_VALUE_FLAGS_DETACHED: frozenset[str] = frozenset(
-    {
-        "-u",
-        "--user",
-        "-n",
-        "--adjustment",
-        "-k",
-        "--kill-after",
-        "-s",
-        "--signal",
-        "-g",
-        "--group",
-        "-p",
-        "--priority",
     }
 )
 
@@ -358,31 +314,6 @@ def _env_chdir_value(start: int, segment: list[str]) -> tuple[str, int, int] | N
     return chdir
 
 
-def _consume_wrapper_options(start: int, segment: list[str]) -> int:
-    """Skip past a wrapper's attached/detached value options.
-
-    Wrappers (sudo, nice, nohup, time, command) accept option flags before
-    the inner command. Many take values either attached (--user=root) or as
-    the next detached token (-u root). Returns the index of the first
-    non-option token.
-    """
-    i = start
-    while i < len(segment):
-        token = segment[i]
-        if token == "--":
-            return i + 1
-        if not token.startswith("-"):
-            return i
-        if "=" in token:
-            i += 1
-            continue
-        if token in _WRAPPER_VALUE_FLAGS_DETACHED and i + 1 < len(segment):
-            i += 2
-            continue
-        i += 1
-    return i
-
-
 def _command_start_index(segment: list[str]) -> int | None:
     if not segment:
         return None
@@ -395,67 +326,60 @@ def _command_start_index(segment: list[str]) -> int | None:
         if token == "env":
             start = _consume_env(start + 1, segment)
             continue
-        if token in _COMMAND_WRAPPERS:
-            start += 1
-            continue
-        if token in _WRAPPERS_WITH_DURATION and start + 1 < len(segment):
-            start += 2
-            continue
-        if (
-            token in _WRAPPERS_WITH_SHORT_FLAG
-            and start + 1 < len(segment)
-            and segment[start + 1].startswith("-")
-        ):
-            start += 2
+        if token in _WRAPPER_SPECS:
+            start, unresolved = _wrapper_command_start(segment, start)
+            if unresolved:
+                break
             continue
         break
     return start if start < len(segment) else None
 
 
-def _verb_start_index(segment: list[str]) -> int | None:
-    """Return the index of the command verb in *segment*, skipping shell
+def _command_position(segment: list[str]) -> tuple[int | None, bool]:
+    """Return the index of the command verb in *segment* and whether that is unresolved.
 
-    keywords (while/until/if/do/then/elif/else), POSIX assignments, `env`,
-    and wrapper prefixes (sudo/nice/timeout/...). Returns None when the segment is
-    empty or ends inside a wrapper (missing a required value) -- the same
-    cases command_verb_and_args reports as ("", []). Exposed separately so
-    a caller threading a second, index-aligned parallel array (e.g.
-    ArgvToken quote provenance) can slice it at the same start point
-    command_verb_and_args computes for *segment* itself, rather than
-    re-deriving that decision independently.
+    Skips shell keywords (while/until/if/do/then/elif/else), POSIX assignments, `env`
+    and wrapper prefixes through each wrapper's own option table. The index is None
+    when the segment is empty or ends inside a wrapper. The second value is True when
+    the verb cannot be proven: a wrapper option the table does not model (the walk
+    stops at the wrapper word), `env -S`, an opaque launcher (`xargs`, `find -exec`,
+    `uv run`, ...) or a shell/Python `-c` program that cannot be located. It travels
+    out of band so shared consumers keep their verb.
     """
     if not segment:
-        return None
+        return None, False
     start = 0
+    unresolved = False
     while start < len(segment):
         token = segment[start]
         if token in {"while", "until", "if", "do", "then", "elif", "else", "!"}:
             start += 1
-            continue
-        if _is_posix_assignment(token):
+        elif _is_posix_assignment(token):
             start += 1
-            continue
-        if token == "env":
-            start = _consume_env(start + 1, segment)
-            continue
-        if token in _COMMAND_WRAPPERS:
-            # Wrappers (sudo, nice, etc.) may consume attached/detached value options.
-            start = _consume_wrapper_options(start + 1, segment)
-            continue
-        if token in _WRAPPERS_WITH_DURATION:
-            if start + 1 >= len(segment):
-                return None
-            start += 2
-            continue
-        if token in _WRAPPERS_WITH_SHORT_FLAG:
-            if start + 1 >= len(segment):
-                return None
-            if not segment[start + 1].startswith("-"):
-                return None
-            start += 2
-            continue
-        break
-    return start if start < len(segment) else None
+        elif token == "env":
+            end = _consume_env(start + 1, segment)
+            unresolved = unresolved or _env_splits_string(segment[start + 1 : end])
+            start = end
+        elif token in _WRAPPER_SPECS:
+            start, wrapper_unresolved = _wrapper_command_start(segment, start)
+            if wrapper_unresolved:
+                return start, True
+        else:
+            break
+    if start >= len(segment):
+        return None, unresolved
+    return start, unresolved or _launcher_position_unresolved(segment[start:])
+
+
+def _verb_start_index(segment: list[str]) -> int | None:
+    """Return the index of the command verb in *segment*, or None when there is none.
+
+    Exposed separately so a caller threading a second, index-aligned parallel array
+    (e.g. ArgvToken quote provenance) can slice it at the same start point
+    command_verb_and_args computes for *segment* itself, rather than re-deriving
+    that decision independently. See `_command_position` for the skipped prefixes.
+    """
+    return _command_position(segment)[0]
 
 
 def _command_position_candidate_spans(segment: Sequence[str]) -> tuple[tuple[int, int], ...]:
@@ -592,8 +516,6 @@ if TYPE_CHECKING:
         is_allowed_protected_path_metadata_command,
     )
     from autoskillit.hooks._classification._interpreters import (
-        _PYTHON_INVOCATION_FLAG_SPEC,
-        _SHELL_INVOCATION_FLAG_SPEC,
         EvaluatedPayload,
         StdinConsumer,
         _extract_interpreter_segment_specs,
@@ -620,6 +542,15 @@ if TYPE_CHECKING:
     from autoskillit.hooks._classification._interpreters import (
         live_command_text as _live_command_text_impl,
     )
+    from autoskillit.hooks._classification._invocation_flags import (
+        _PYTHON_INVOCATION_FLAG_SPEC,
+        _SHELL_INVOCATION_FLAG_SPEC,
+        _WRAPPER_SPECS,
+        _env_splits_string,
+        _launcher_position_unresolved,
+        _wrapper_chdir_value,
+        _wrapper_command_start,
+    )
     from autoskillit.hooks._classification._output_redirect import (
         _FD_DUPLICATION_RE,
         _REDIRECT_OP_ONLY_RE,
@@ -633,9 +564,9 @@ if TYPE_CHECKING:
     )
 else:
     if __package__:
-        from .._classification import _flags, _interpreters, _output_redirect
+        from .._classification import _flags, _interpreters, _invocation_flags, _output_redirect
     else:
-        from _classification import _flags, _interpreters, _output_redirect
+        from _classification import _flags, _interpreters, _invocation_flags, _output_redirect
 
     _GIT_ADD_CONTENT_FLAGS = _flags._GIT_ADD_CONTENT_FLAGS
     _GIT_DIFF_CONTENT_FLAGS = _flags._GIT_DIFF_CONTENT_FLAGS
@@ -678,8 +609,13 @@ else:
     )
     _interpreter_invokes_impl = _interpreters.interpreter_invokes
     _live_command_text_impl = _interpreters.live_command_text
-    _SHELL_INVOCATION_FLAG_SPEC = _interpreters._SHELL_INVOCATION_FLAG_SPEC
-    _PYTHON_INVOCATION_FLAG_SPEC = _interpreters._PYTHON_INVOCATION_FLAG_SPEC
+    _SHELL_INVOCATION_FLAG_SPEC = _invocation_flags._SHELL_INVOCATION_FLAG_SPEC
+    _PYTHON_INVOCATION_FLAG_SPEC = _invocation_flags._PYTHON_INVOCATION_FLAG_SPEC
+    _WRAPPER_SPECS = _invocation_flags._WRAPPER_SPECS
+    _env_splits_string = _invocation_flags._env_splits_string
+    _launcher_position_unresolved = _invocation_flags._launcher_position_unresolved
+    _wrapper_chdir_value = _invocation_flags._wrapper_chdir_value
+    _wrapper_command_start = _invocation_flags._wrapper_command_start
     OutputRedirectPartition = _output_redirect.OutputRedirectPartition
     _FD_DUPLICATION_RE = _output_redirect._FD_DUPLICATION_RE
     _REDIRECT_OP_ONLY_RE = _output_redirect._REDIRECT_OP_ONLY_RE
@@ -759,16 +695,20 @@ def _wrapped_verb_cwd(
     cwd: str,
     argv_tokens: Sequence[ArgvToken] | None = None,
 ) -> str:
-    """Resolve env chdir options for the executable without moving shell redirects."""
+    """Resolve env/sudo chdir options for the executable without moving shell redirects."""
     for index, token in enumerate(segment[:start]):
         if token == "env":
             chdir = _env_chdir_value(index + 1, segment)
-            if chdir is not None:
-                value, value_index, prefix_length = chdir
-                source = _shell_source(argv_tokens, value_index)
-                if source is not None:
-                    source = source[prefix_length:]
-                cwd = resolve_write_target(value, cwd, shell_source=source) or ""
+        elif token in _WRAPPER_SPECS:
+            chdir = _wrapper_chdir_value(segment, index)
+        else:
+            continue
+        if chdir is not None:
+            value, value_index, prefix_length = chdir
+            source = _shell_source(argv_tokens, value_index)
+            if source is not None:
+                source = source[prefix_length:]
+            cwd = resolve_write_target(value, cwd, shell_source=source) or ""
     return cwd
 
 

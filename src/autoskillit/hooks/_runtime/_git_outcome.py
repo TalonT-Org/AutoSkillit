@@ -374,7 +374,9 @@ def is_ref_mutation(subcommand: str, args: Sequence[str]) -> bool:
     return False
 
 
-_PATHSPEC_MAGIC_RE = re.compile(r"^:(?:/|\([a-z,]*\))?")
+# ``:/`` is top-of-tree magic only before nothing or a wildcard: ``:/.`` and other
+# ``:/<text>`` name a commit by message, a revision rather than a pathspec.
+_PATHSPEC_MAGIC_RE = re.compile(r"^:(?:/(?=\*|$)|\([a-z,]*\))?")
 
 
 def _is_whole_tree_pathspec(token: str) -> bool:

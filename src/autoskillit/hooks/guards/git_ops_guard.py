@@ -510,6 +510,15 @@ def _preflight_segment(
     anchor: Callable[[], str | None] | None,
 ) -> None:
     if seg.position_unresolved and _mentions_git_mutation(" ".join(seg.executable)):
+        if anchor is not None:
+            _deny_primary_head(
+                data=data,
+                cwd=seg.verb_cwd,
+                subcommand="<unresolved>",
+                head_effect=str(GitHeadEffect.AMBIGUOUS),
+                reason="unresolved_target",
+                protected_primary="",
+            )
         _deny_unresolved(data)
     verb = os.path.basename(seg.executable[seg.start]) if seg.start is not None else ""
     if verb in _PACK_VERBS:

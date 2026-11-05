@@ -11,6 +11,12 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from autoskillit.hooks._classification._flag_arity_classification import _FlagArity
+    from autoskillit.hooks._classification._invocation_flags import (
+        _PYTHON_INVOCATION_FLAG_SPEC,
+        _SHELL_INVOCATION_FLAG_SPEC,
+        python_c_program,
+        shell_c_payload,
+    )
     from autoskillit.hooks._classification._python_program_analysis import (
         _InterpreterCommandSpec,
         _python_c_program,
@@ -40,8 +46,6 @@ if TYPE_CHECKING:
         tokenize_command_segments,
     )
 
-    _SHELL_INVOCATION_FLAG_SPEC: dict[str, _FlagArity]
-    _PYTHON_INVOCATION_FLAG_SPEC: dict[str, _FlagArity]
 else:
     # _flag_arity_classification, _python_program_analysis, and
     # _substitution_scanning are leaf siblings (no back-reference into the
@@ -56,12 +60,14 @@ else:
     if __package__:
         from . import (
             _flag_arity_classification,
+            _invocation_flags,
             _python_program_analysis,
             _substitution_scanning,
             _tokenizer,
         )
     else:
         import _flag_arity_classification
+        import _invocation_flags
         import _python_program_analysis
         import _substitution_scanning
         import _tokenizer
@@ -77,34 +83,10 @@ else:
     )
     _scan_shell_payload_segment_groups = _substitution_scanning._iter_shell_payload_segment_groups
     _iter_substitution_occurrences = _substitution_scanning._iter_substitution_occurrences
-
-    # Flags that consume a following value when the shell/Python interpreter
-    # itself (not a heredoc/herestring body) reads a script from a
-    # positional operand. Only VALUE-arity flags are listed: any other
-    # `-`/`+`-prefixed token is skipped as boolean by the default bucket in
-    # `_walk_invocation_flags`. Defined here (rather than at the bottom of
-    # the file) now that _FlagArity no longer forces a deferred, re-entrant
-    # import -- see the comment above.
-    _SHELL_INVOCATION_FLAG_SPEC: dict[str, _FlagArity] = {
-        "-o": _FlagArity.VALUE,
-        "+o": _FlagArity.VALUE,
-        "-O": _FlagArity.VALUE,
-        "+O": _FlagArity.VALUE,
-        "--rcfile": _FlagArity.VALUE,
-        "--init-file": _FlagArity.VALUE,
-        # Bash 5.2 help does not print --rcfile/--init-file's operand arity;
-        # covered by the generative flag-spec test instead of the
-        # live-`--help` contract test (see
-        # tests/hooks/test_gh_api_flag_spec_contract.py).
-        "-c": _FlagArity.VALUE,
-    }
-    _PYTHON_INVOCATION_FLAG_SPEC: dict[str, _FlagArity] = {
-        "-c": _FlagArity.VALUE,
-        "-m": _FlagArity.VALUE,
-        "-W": _FlagArity.VALUE,
-        "-X": _FlagArity.VALUE,
-        "--check-hash-based-pycs": _FlagArity.VALUE,
-    }
+    _SHELL_INVOCATION_FLAG_SPEC = _invocation_flags._SHELL_INVOCATION_FLAG_SPEC
+    _PYTHON_INVOCATION_FLAG_SPEC = _invocation_flags._PYTHON_INVOCATION_FLAG_SPEC
+    shell_c_payload = _invocation_flags.shell_c_payload
+    python_c_program = _invocation_flags.python_c_program
 
 
 def has_interpreter_write(command: str) -> bool:
@@ -481,8 +463,11 @@ def evaluated_payloads(command: str) -> list[EvaluatedPayload]:
 
     for index, segment in enumerate(segments):
         verb, args = command_verb_and_args(list(segment.tokens))
-        if _is_shell_interpreter(verb) and args and args[0] == "-c" and len(args) >= 2:
-            payloads.append(EvaluatedPayload(args[1], StdinConsumer.SHELL, index, "-c", None))
+        shell_program = shell_c_payload(args)[0] if _is_shell_interpreter(verb) else None
+        if shell_program is not None:
+            payloads.append(
+                EvaluatedPayload(shell_program, StdinConsumer.SHELL, index, "-c", None)
+            )
         elif verb == "eval" and args:
             payloads.append(
                 EvaluatedPayload(" ".join(args), StdinConsumer.SHELL, index, "eval", None)
@@ -698,17 +683,12 @@ def _extract_interpreter_segment_specs(
 
     specs: list[_InterpreterCommandSpec] = []
     has_unresolved = False
-    try:
-        command_index = args.index("-c")
-    except ValueError:
-        command_index = None
-    if command_index is not None:
-        if command_index + 1 >= len(args):
-            has_unresolved = True
-        else:
-            found, unresolved = _python_program_command_specs(args[command_index + 1])
-            specs.extend(found)
-            has_unresolved = has_unresolved or unresolved
+    program, program_unresolved = python_c_program(args)
+    has_unresolved = program_unresolved
+    if program is not None:
+        found, unresolved = _python_program_command_specs(program)
+        specs.extend(found)
+        has_unresolved = has_unresolved or unresolved
 
     if stdin_literals and stdin_consumer(list(segment)) == StdinConsumer.PYTHON:
         for literal in stdin_literals:

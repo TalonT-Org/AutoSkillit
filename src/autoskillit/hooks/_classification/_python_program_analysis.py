@@ -2,10 +2,10 @@
 
 Split out of `_interpreters.py` (rectify #4941 Part A) to keep that module's
 stdin-consumer/evaluated-payload machinery under the REQ-CNST-010 line cap.
-Self-contained: parses a Python -c program (or a heredoc/herestring-fed
-`python3`/`python3 -` body) via the stdlib `ast` module and returns any
-literal-argv or literal-string `subprocess.*`/`os.*` call it finds, with no
-dependency on the rest of `_classification/`.
+Parses a Python -c program (or a heredoc/herestring-fed `python3`/`python3 -`
+body) via the stdlib `ast` module and returns any literal-argv or literal-string
+`subprocess.*`/`os.*` call it finds. Locating the `-c` program in an argv is the
+`_invocation_flags` leaf's job; nothing else of `_classification/` is imported.
 """
 
 from __future__ import annotations
@@ -14,6 +14,15 @@ import ast
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from autoskillit.hooks._classification._invocation_flags import python_c_program
+else:
+    if __package__:
+        from ._invocation_flags import python_c_program
+    else:
+        from _invocation_flags import python_c_program
 
 _PYTHON_SUBPROCESS_FUNCS: frozenset[str] = frozenset(
     {
@@ -101,11 +110,7 @@ def _python_c_program(executable: str, args: Sequence[str]) -> str | None:
     """Return the literal program passed to a normalized Python executable's -c."""
     if re.fullmatch(r"python(?:3(?:\.\d+)?)?", executable) is None:
         return None
-    try:
-        index = args.index("-c")
-    except ValueError:
-        return None
-    return args[index + 1] if index + 1 < len(args) else None
+    return python_c_program(args)[0]
 
 
 def _python_program_command_specs(

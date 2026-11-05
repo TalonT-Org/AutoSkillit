@@ -16,6 +16,7 @@ import shlex
 import subprocess
 import sys
 import unittest.mock
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -24,11 +25,10 @@ import pytest
 # internal bare-name sibling imports (_github_mutation_analysis,
 # _command_classification) is centralized in tests/conftest.py -- it must
 # run before this module's own top-level imports, which a fixture cannot do.
-from autoskillit.hooks._runtime._command_classification import _FlagArity
-from autoskillit.hooks._runtime._git_command_classification import (
-    _GIT_FETCH_FLAG_SPEC,
-    _classify_fetch,
-)
+from autoskillit.hooks._classification._option_grammar import OptionArity, OptionDef
+from autoskillit.hooks._runtime._git_command_classification import _classify_fetch
+from autoskillit.hooks._runtime._git_option_tables import _GIT_FETCH_FLAG_SPEC
+from autoskillit.hooks.guards import git_ops_guard
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
@@ -162,6 +162,42 @@ def _checked_out_ref_result(output: str) -> dict[str, object]:
 
 def _assert_ref_unchanged(repo: Path, ref: str, old_sha: str) -> None:
     assert _git(repo, "rev-parse", ref) == old_sha
+
+
+def _guard_verdict(output: str) -> str:
+    """Classify captured guard stdout as allow, checked-out-ref or other-deny."""
+    if not output.strip():
+        return "allow"
+    assert _is_denied(output), output
+    reason = json.loads(output)["hookSpecificOutput"]["permissionDecisionReason"]
+    if reason.startswith(git_ops_guard.CHECKED_OUT_REF_DENY_PREFIX):
+        return "checked-out-ref"
+    return "other-deny"
+
+
+def _guard_exit_code(cmd: str, tmpdir: Path) -> int | str | None:
+    """Run git_ops_guard.main() in a headless skill session with the kitchen open
+    and return the code it exits with.
+
+    _run_guard requires a clean exit; this expects main() to terminate through
+    SystemExit and leaves stdout and stderr to the caller's capsys.
+    """
+    hook_cfg = tmpdir / _HOOK_CONFIG_RELPATH
+    hook_cfg.parent.mkdir(parents=True, exist_ok=True)
+    hook_cfg.write_text(json.dumps({"kitchen": "open"}))
+    payload = {
+        "session_id": "guard-test-session",
+        "tool_name": _TOOL_NAME,
+        "tool_input": {"cmd": cmd, "cwd": str(tmpdir)},
+    }
+    with (
+        unittest.mock.patch.dict(os.environ, _make_clean_env(None), clear=True),
+        unittest.mock.patch("sys.stdin", io.StringIO(json.dumps(payload))),
+        unittest.mock.patch("pathlib.Path.cwd", return_value=tmpdir),
+        pytest.raises(SystemExit) as exit_info,
+    ):
+        git_ops_guard.main()
+    return exit_info.value.code
 
 
 # ---------------------------------------------------------------------------
@@ -901,11 +937,10 @@ class TestCheckedOutRefMutations:
         self, linked_repo: dict[str, Path | str]
     ) -> None:
         """--negotiation-tip <rev> in space-separated form (NOT --flag=value,
-        which is a single self-contained shlex token) previously fell through
-        _classify_fetch's flag parsing as unrecognized, so its value was
-        appended to `positional` and misread as the remote name. The wrong
-        remote.<name>.fetch lookup returned nothing, mappings stayed empty,
-        and the fetch passed through unclassified. See _GIT_FETCH_FLAG_SPEC.
+        which is a single self-contained shlex token) must consume its value.
+        A value misread as the remote name sends the remote.<name>.fetch lookup
+        to the wrong remote, leaves the mappings empty, and lets the fetch pass
+        through unclassified. See _GIT_FETCH_FLAG_SPEC in _git_option_tables.
         """
         linked = linked_repo["linked"]
         assert isinstance(linked, Path)
@@ -1517,60 +1552,210 @@ class TestCheckedOutRefPreflightOrdering:
         _checked_out_ref_result(out)
 
 
+_SESSION_SHAPES = (
+    (True, "skill"),
+    (True, "orchestrator"),
+    (False, "orchestrator"),
+    (False, "skill"),
+)
+
+
+class TestCheckedOutRefOutcomeImmunity:
+    """A ref rewrite is judged by the checked-out ref it rewrites, not by how its
+    options are spelled; HEAD effects with no ref rewrite and list forms stay allowed.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _unowned_branch(self, linked_repo: dict[str, Path | str]) -> None:
+        _git(Path(str(linked_repo["primary"])), "branch", "spare", str(linked_repo["old_sha"]))
+
+    @pytest.mark.parametrize(
+        "command_template",
+        [
+            "git checkout -Bdevelop {sha}",
+            "git checkout -fB develop {sha}",
+            "git checkout --ignore-other-worktrees -Bdevelop",
+            "git checkout feat -B develop",
+            "git switch -Cdevelop",
+            "git switch --force-create=develop",
+            "git switch --force-c develop",
+            "git branch -m develop renamed",
+            "git branch -M develop renamed",
+            "git update-ref -dm why refs/heads/develop",
+            "git push -o x {primary} HEAD:develop",
+        ],
+    )
+    def test_denies_rewrite_of_ref_owned_by_primary(
+        self, linked_repo: dict[str, Path | str], command_template: str
+    ) -> None:
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        command = command_template.format(
+            sha=linked_repo["new_sha"], primary=shlex.quote(str(linked_repo["primary"]))
+        )
+        out = _run_guard(command, kitchen_open=True, tmpdir=linked)
+        assert _guard_verdict(out) == "checked-out-ref", command
+        threatened = _checked_out_ref_result(out)["threatened_refs"]
+        assert isinstance(threatened, list)
+        assert [row["target_ref"] for row in threatened] == ["refs/heads/develop"], command
+
+    @pytest.mark.parametrize(
+        "command_template",
+        [
+            "git branch -m spare spare2",
+            "git checkout -b fresh {sha}",
+            "git checkout spare",
+            "git switch spare",
+            "git checkout --detach",
+            "git branch -a",
+            "git branch --merged",
+            "git symbolic-ref HEAD",
+        ],
+    )
+    def test_allows_unowned_rewrites_head_effects_and_list_forms(
+        self, linked_repo: dict[str, Path | str], command_template: str
+    ) -> None:
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        command = command_template.format(sha=linked_repo["new_sha"])
+        out = _run_guard(command, kitchen_open=True, tmpdir=linked)
+        assert _guard_verdict(out) == "allow", command
+
+    @pytest.mark.parametrize(
+        ("command", "verdict"),
+        [
+            ("git checkout -Bdevelop", "checked-out-ref"),
+            ("git branch -m develop renamed", "checked-out-ref"),
+            ("git update-ref -dm why refs/heads/develop", "checked-out-ref"),
+            ("git branch -a", "allow"),
+            ("git checkout -b fresh", "allow"),
+            ("git checkout spare", "allow"),
+        ],
+    )
+    def test_verdict_is_the_same_in_every_session_shape(
+        self, linked_repo: dict[str, Path | str], command: str, verdict: str
+    ) -> None:
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        verdicts = {
+            shape: _guard_verdict(
+                _run_guard(
+                    command,
+                    kitchen_open=True,
+                    tmpdir=linked,
+                    headless=shape[0],
+                    session_type=shape[1],
+                )
+            )
+            for shape in _SESSION_SHAPES
+        }
+        assert verdicts == dict.fromkeys(_SESSION_SHAPES, verdict)
+
+
+class TestGuardFailsClosed:
+    """An unexpected classification error blocks (exit 2, reason on stderr)."""
+
+    def test_error_in_ref_classification_blocks(
+        self,
+        linked_repo: dict[str, Path | str],
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+
+        def _raise(*_args: object, **_kwargs: object) -> None:
+            raise IndexError("injected classification failure")
+
+        monkeypatch.setattr(git_ops_guard, "_classify_git_segment", _raise)
+
+        code = _guard_exit_code(f"git update-ref refs/heads/x {linked_repo['new_sha']}", linked)
+
+        captured = capsys.readouterr()
+        assert code == 2
+        assert captured.out == ""
+        assert "git_ops_guard: IndexError: injected classification failure" in captured.err
+
+    def test_error_in_blocked_operation_match_blocks(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        def _raise(*_args: object, **_kwargs: object) -> None:
+            raise KeyError("injected matcher failure")
+
+        monkeypatch.setattr(git_ops_guard, "_contains_blocked_git_op", _raise)
+
+        code = _guard_exit_code("git status", tmp_path)
+
+        captured = capsys.readouterr()
+        assert code == 2
+        assert captured.out == ""
+        assert "git_ops_guard: KeyError: 'injected matcher failure'" in captured.err
+
+
 # ---------------------------------------------------------------------------
-# Spec table coverage: every entry in _GIT_FETCH_FLAG_SPEC must be recognized
-# by _classify_fetch's spec-driven consume loop. Parametrized directly from
-# the table's own keys so a future flag added to the spec extends coverage
+# Spec table coverage: every row of _GIT_FETCH_FLAG_SPEC must be recognized by
+# _classify_fetch in each spelling it admits. Parametrized directly from the
+# table's own keys so a row added to the table extends coverage
 # automatically. Registered with test_guard_flag_spec_coverage.py via
 # _SPEC_TABLE_TEST_FILES so the standing-invariant AST scanner confirms the
 # parametrize genuinely iterates the table rather than a hand-copied list.
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("flag", sorted(_GIT_FETCH_FLAG_SPEC))
-def test_every_git_fetch_spec_flag_is_recognized(flag: str) -> None:
-    """Generative coverage (Part D): every flag in _GIT_FETCH_FLAG_SPEC must be
+def _fetch_flag_spellings(row: OptionDef) -> list[list[str]]:
+    """Return the argv fragments that spell *row*: long, short and negated.
 
-    recognized by _classify_fetch rather than misread as the remote/refspec
-    positional. An unrecognized flag's value would have been misclassified as
-    the fetch's remote URL and silently passed the destructive-op preflight;
-    that must not happen for any spec member.
-
-    --stdin is intentionally short-circuited by _classify_fetch's first
-    special case (it makes destinations ambiguous by design, independent of
-    spec-table recognition), so we assert the SPECIFIC ambiguous result shape
-    for it rather than the generic non-unresolved invariant.
+    A REQUIRED value is stuck to the long spelling (``--name=VALUE``) and
+    follows the short one as a separate token.
     """
-    args = [flag]
-    if _GIT_FETCH_FLAG_SPEC[flag] == _FlagArity.VALUE:
-        args.append("someval")
-    args.append("origin")
+    value = ["someval"] if row.arity == OptionArity.REQUIRED else []
+    spellings: list[list[str]] = []
+    if row.has_long:
+        spellings.append([f"--{row.name}=someval"] if value else [f"--{row.name}"])
+    if row.short:
+        spellings.append([f"-{row.short}", *value])
+    if row.has_long and row.negatable:
+        spellings.append([f"--no-{row.name}"])
+    return spellings
 
-    result = _classify_fetch(args, cwd="/tmp", owned_refs=[])
 
-    if flag == "--stdin":
-        # --stdin is special-cased at the top of _classify_fetch to return the
-        # ambiguous-deny idiom; the spec table entry exists so the generic
-        # consume loop doesn't misread it as a positional remote, not because
-        # the function's downstream logic actually consumes it.
-        assert result == [("", "<unresolved>", True)]
-    else:
-        # Any presence of an `<unresolved>` entry from the consume loop
-        # means the flag was NOT recognized -- the precise failure mode the
-        # spec table is supposed to prevent.
-        assert not any(entry[1] == "<unresolved>" for entry in result)
+@pytest.mark.parametrize("name", sorted(_GIT_FETCH_FLAG_SPEC))
+def test_every_git_fetch_spec_flag_is_recognized(name: str) -> None:
+    """Generative coverage: every row of _GIT_FETCH_FLAG_SPEC, in each spelling
+    it admits, must be recognized by _classify_fetch rather than misread as the
+    remote/refspec operand. An unrecognized flag's value would have been
+    misclassified as the fetch's remote URL and silently passed the
+    destructive-op preflight; that must not happen for any table row.
+
+    ``--stdin`` makes the destinations ambiguous by design (the refspecs arrive
+    on stdin), so we assert that specific result shape for it rather than the
+    generic non-unresolved invariant; its negation is an ordinary flag.
+    """
+    spellings = _fetch_flag_spellings(_GIT_FETCH_FLAG_SPEC[name])
+    assert spellings, f"{name} has no spelling"
+
+    for spelling in spellings:
+        result = _classify_fetch([*spelling, "origin"], cwd="/tmp", owned_refs=[])
+
+        if spelling == ["--stdin"]:
+            assert result == [("", "<unresolved>", True)]
+        else:
+            # An `<unresolved>` entry means the flag was NOT recognized -- the
+            # precise failure mode the option table is supposed to prevent.
+            assert not any(entry[1] == "<unresolved>" for entry in result), spelling
 
 
 def test_git_ops_guard_classify_imports_from_new_sibling() -> None:
     """Step 9 (#4733) regression: every classification primitive the orchestrator
     consumes from autoskillit.hooks._runtime._git_command_classification must remain
     reachable from the package import surface. Mirrors the orchestrator's import
-    block at src/autoskillit/hooks/guards/git_ops_guard.py:37.
+    block at src/autoskillit/hooks/guards/git_ops_guard.py:37. The fetch option
+    table the classifier reads lives in _git_option_tables as OptionDef rows.
     """
     from autoskillit.hooks._runtime._git_command_classification import (
-        _GIT_FETCH_BOOLEAN_FLAGS,
-        _GIT_FETCH_FLAG_SPEC,
-        _GIT_FETCH_VALUE_FLAGS,
         _classify_git_segment,
         _contains_blocked_git_op,
         _git_result,
@@ -1592,13 +1777,9 @@ def test_git_ops_guard_classify_imports_from_new_sibling() -> None:
     for symbol in expected_callables:
         assert callable(symbol), f"_git_command_classification.{symbol.__name__} must be callable"
 
-    assert isinstance(_GIT_FETCH_FLAG_SPEC, dict)
-    assert all(isinstance(k, str) for k in _GIT_FETCH_FLAG_SPEC)
-    assert all(
-        v == _FlagArity.BOOLEAN or v == _FlagArity.VALUE for v in _GIT_FETCH_FLAG_SPEC.values()
-    )
-    assert isinstance(_GIT_FETCH_BOOLEAN_FLAGS, frozenset)
-    assert isinstance(_GIT_FETCH_VALUE_FLAGS, frozenset)
+    assert isinstance(_GIT_FETCH_FLAG_SPEC, Mapping)
+    assert all(isinstance(row, OptionDef) for row in _GIT_FETCH_FLAG_SPEC.values())
+    assert all(name == row.name for name, row in _GIT_FETCH_FLAG_SPEC.items())
 
 
 def test_git_ops_guard_imports_with_hooks_directory_alone() -> None:

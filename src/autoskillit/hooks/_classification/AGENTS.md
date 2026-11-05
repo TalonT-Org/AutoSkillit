@@ -21,6 +21,9 @@ block B bootstrap so hook scripts can keep importing via
   `EvaluatedSegment`, `StdinLiteral`, `strip_heredoc_bodies`).
 - `_flags.py` — flag-parsing tables, shell-substitution regexes, and
   protected-read classification.
+- `_option_grammar.py` — Git parse-options engine (`parse_options`, `last_option`,
+  `OptionArity`, `OptionDef`, `ParsedArgv`): bundled, stuck, `=`-joined,
+  abbreviated and negated options over per-subcommand tables; leaf module.
 - `_flag_arity_classification.py` — leaf sibling holding the `_FlagArity` enum
   referenced by `_flags.py` and `_interpreters.py`. Lifted out so neither
   classification module owns the cross-import that would otherwise create a
@@ -52,7 +55,7 @@ the facade's relative imports and any bare-name bootstrap (hook scripts that
 push `hooks/_classification/` onto `sys.path`) resolve the same symbols.
 
 Within-folder imports of leaf siblings (`_tokenizer.py`, `_flag_arity_classification.py`,
-`_source_map.py`)
+`_source_map.py`, `_option_grammar.py`)
 stay at module top-level — they have no back-references into the facade or
 into other `_classification/` modules, so the relative-import dance isn't
 required.

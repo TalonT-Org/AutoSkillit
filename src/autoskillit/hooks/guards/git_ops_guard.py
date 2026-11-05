@@ -10,9 +10,9 @@ stdlib-only; no autoskillit imports.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
-import subprocess
 import sys
 from collections import deque
 from pathlib import Path
@@ -77,6 +77,7 @@ from _path_identity import destination_location  # noqa: E402
 
 GIT_OPS_DENY_TRIGGER: str = DENY_TRIGGER_BY_GUARD["git_ops_guard"]
 CHECKED_OUT_REF_DENY_PREFIX: str = "Checked-out ref mutation blocked: "
+_LOGGER = logging.getLogger(__name__)  # noqa: TID251 - standalone stdlib guard
 
 _DENY_REASON_TEMPLATE = DENY_REASON_BY_GUARD["git_ops_guard"]
 
@@ -584,57 +585,51 @@ def main() -> None:
     if not cmd:
         sys.exit(0)
 
-    project_root = resolve_state_root(parsed.payload_cwd)
+    # Any unexpected classification error denies. SystemExit raised by the
+    # deny helpers is BaseException, not Exception, so it bypasses this
+    # handler and serves as the explicit verdict signal.
     try:
-        cfg_path = project_root / ".autoskillit" / "temp" / ".hook_config.json"
-        kitchen_open = cfg_path.exists()
-    except OSError:
-        sys.exit(0)
-
-    if kitchen_open:
+        project_root = resolve_state_root(parsed.payload_cwd)
         try:
+            cfg_path = project_root / ".autoskillit" / "temp" / ".hook_config.json"
+            kitchen_open = cfg_path.exists()
+        except OSError:
+            sys.exit(0)
+
+        if kitchen_open:
             _preflight_checked_out_ref_mutation(data, cmd, parsed.execution_cwd)
-        except (
-            OSError,
-            subprocess.SubprocessError,
-            TypeError,
-            UnicodeDecodeError,
-            ValueError,
-        ) as exc:
-            # Fail-closed on preflight exception. SystemExit raised by
-            # _deny_checked_out_ref is BaseException, not Exception, so it
-            # bypasses this handler and serves as the explicit deny signal.
-            block(f"git_ops_guard: preflight failed: {exc}")
 
-    headless, tier = hook_session_shape()
-    if not headless:
-        sys.exit(0)
+        headless, tier = hook_session_shape()
+        if not headless:
+            sys.exit(0)
 
-    blocked = _contains_blocked_git_op(cmd, _BLOCKED_GIT_OPS)
-    if blocked is None:
-        sys.exit(0)
+        blocked = _contains_blocked_git_op(cmd, _BLOCKED_GIT_OPS)
+        if blocked is None:
+            sys.exit(0)
 
-    skill_name = os.environ.get("AUTOSKILLIT_SKILL_NAME", "")
-    if skill_name in _EXEMPT_SKILLS:
-        sys.exit(0)
+        skill_name = os.environ.get("AUTOSKILLIT_SKILL_NAME", "")
+        if skill_name in _EXEMPT_SKILLS:
+            sys.exit(0)
 
-    # Orchestrator-typed headless sessions bypass the destructive-op deny
-    # but remain subject to the all-session ref preflight above (which runs
-    # unconditionally before this branch).
-    if tier in _DESTRUCTIVE_OP_EXEMPT_TIERS:
-        sys.exit(0)
+        # Orchestrator-typed headless sessions bypass the destructive-op deny
+        # but remain subject to the all-session ref preflight above (which runs
+        # unconditionally before this branch).
+        if tier in _DESTRUCTIVE_OP_EXEMPT_TIERS:
+            sys.exit(0)
 
-    # Hook config file is written by open_kitchen and removed by close_kitchen.
-    # Its presence reliably signals an open kitchen without needing session ID.
-    if not kitchen_open:
-        sys.exit(0)
+        # Hook config file is written by open_kitchen and removed by close_kitchen.
+        # Its presence reliably signals an open kitchen without needing session ID.
+        if not kitchen_open:
+            sys.exit(0)
 
-    if _git_op_policy_allows(project_root, blocked):
-        sys.exit(0)
+        if _git_op_policy_allows(project_root, blocked):
+            sys.exit(0)
 
-    op_str = " ".join(("git",) + blocked)
-    deny_reason = _DENY_REASON_TEMPLATE.format(op=op_str)
-    deny_tool_use(deny_reason)
+        op_str = " ".join(("git",) + blocked)
+        deny_tool_use(_DENY_REASON_TEMPLATE.format(op=op_str))
+    except Exception as exc:
+        _LOGGER.error("git_ops_guard classification failed", exc_info=True)
+        block(f"git_ops_guard: {type(exc).__name__}: {exc}")
 
 
 if __name__ == "__main__":

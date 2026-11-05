@@ -48,6 +48,10 @@ logic, with zero consumers outside this one file.
 
 - `_git_command_classification.py` — Git operation classification used by
   `guards/git_ops_guard.py`; it shares the runtime command and mutation primitives.
+  It reads option semantics through `_git_outcome.py` (what an argv does:
+  rewritten ref and HEAD effect), which reads `_git_option_tables.py` (data-only
+  per-subcommand option tables) through the `_classification/_option_grammar.py`
+  parse-options engine.
 
 - `_github_mutation_analysis.py`, `_command_classification.py` → `hooks/_classification/`
   (a sibling subpackage outside the move set, not itself moved)

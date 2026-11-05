@@ -22,6 +22,7 @@ class PayloadAnomaly(StrEnum):
     NON_STRING_COMMAND = "non_string_command"
     NON_STRING_CWD = "non_string_cwd"
     RELATIVE_CWD = "relative_cwd"
+    RELATIVE_WORKDIR = "relative_workdir"
 
 
 class ParsedHookCommand(NamedTuple):
@@ -56,6 +57,22 @@ def _absolute_string_or_blank(value: Any) -> tuple[str, PayloadAnomaly | None]:
     if os.path.isabs(value):
         return (value, None)
     return ("", PayloadAnomaly.RELATIVE_CWD)
+
+
+def _execution_cwd(
+    tool_kind: str, raw_cwd: Any, tool_input: dict[str, Any]
+) -> tuple[str, PayloadAnomaly | None]:
+    """The directory the command runs in.
+
+    A Bash-shaped payload may carry a per-call ``workdir`` (Codex); when it
+    does, that, not the session cwd, is where the command runs.
+    """
+    workdir = tool_input.get("workdir")
+    if tool_kind == "bash" and isinstance(workdir, str):
+        if os.path.isabs(workdir):
+            return (workdir, None)
+        return ("", PayloadAnomaly.RELATIVE_WORKDIR)
+    return _absolute_string_or_blank(raw_cwd)
 
 
 def normalize_payload_cwd(value: Any) -> str:
@@ -116,7 +133,7 @@ def parse_hook_command(data: dict[str, Any]) -> ParsedHookCommand:
         command = None
         anomalies.append(PayloadAnomaly.NON_STRING_COMMAND)
 
-    execution_cwd, cwd_anomaly = _absolute_string_or_blank(raw_execution_cwd)
+    execution_cwd, cwd_anomaly = _execution_cwd(tool_kind, raw_execution_cwd, tool_input)
     if cwd_anomaly is not None:
         anomalies.append(cwd_anomaly)
 

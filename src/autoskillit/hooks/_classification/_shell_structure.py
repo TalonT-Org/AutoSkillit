@@ -110,7 +110,7 @@ def _normalize_newlines_for_tokenize(source: SourceMappedText) -> SourceMappedTe
         elif c == '"' and not in_single:
             in_double = not in_double
         elif c == "\n" and not in_single and not in_double:
-            builder.emit(" ; \n", i, i + 1)
+            builder.emit("\n ; ", i, i + 1)
             i += 1
             continue
         builder.copy(i, i + 1)

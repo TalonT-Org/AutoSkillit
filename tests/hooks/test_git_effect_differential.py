@@ -19,7 +19,7 @@ import subprocess
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import pytest
 
@@ -30,11 +30,21 @@ from _classification._option_grammar import (  # type: ignore[import-not-found]
     OptionArity,
     OptionDef,
 )
+from _command_classification import (  # type: ignore[import-not-found]
+    extract_git_subcommand_and_flags,
+)
+from _git_command_classification import (  # type: ignore[import-not-found]
+    _classify_git_invocation,
+)
 from _git_option_tables import _GIT_SUBCOMMAND_TABLES  # type: ignore[import-not-found]
 from _git_outcome import (  # type: ignore[import-not-found]
     GitHeadEffect,
     GitRefOutcome,
     git_ref_outcome,
+)
+from _git_target import (  # type: ignore[import-not-found]
+    GitTargetKind,
+    resolve_git_target_for_path,
 )
 from hypothesis import event, example, given, settings
 from hypothesis import strategies as st
@@ -299,11 +309,15 @@ def _run_differential(sandbox: _Sandbox, subcommand: str, case_argv: tuple[str, 
     argv = tuple(
         token.replace(_SHA_A, sandbox.sha_a).replace(_SHA_B, sandbox.sha_b) for token in case_argv
     )
-    context = git_ops_guard._repository_context(str(sandbox.primary))
-    assert context is not None, f"no repository context for {sandbox.primary}"
+    cache: dict[Any, Any] = {}
+    target = resolve_git_target_for_path(str(sandbox.primary), cache)
+    assert target.kind == GitTargetKind.RESOLVED, f"no repository for {sandbox.primary}"
+    context = git_ops_guard._context_for(target, cache)
     owners = context["owners"]
     assert isinstance(owners, dict)
-    tuples = tuple(git_ops_guard._classify_git_segment(["git", subcommand, *argv], context))
+    invocation = extract_git_subcommand_and_flags(["git", subcommand, *argv])
+    assert invocation is not None, f"no git subcommand in {(subcommand, *argv)}"
+    tuples = tuple(_classify_git_invocation(invocation, context))
     before = _observe(sandbox)
     completed = _git(sandbox.primary, subcommand, *argv, check=False)
     after = _observe(sandbox)

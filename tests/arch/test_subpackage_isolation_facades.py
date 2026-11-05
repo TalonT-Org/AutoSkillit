@@ -276,8 +276,10 @@ def test_hooks_runtime_decomposition_has_expected_siblings() -> None:
         "_git_command_classification",
         "_git_option_tables",
         "_git_outcome",
+        "_git_target",
         "_path_identity",
         "_session_registry_bridge",
+        "_shell_segment_walk",
         "_write_target_scan",
     }
 

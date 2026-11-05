@@ -43,8 +43,17 @@ block B bootstrap so hook scripts can keep importing via
   Sole producer of these symbols; the facade re-exports them.
 `scan_write_targets` and `WriteTargetScan` are defined in
 `_runtime/_write_target_scan.py` and re-exported by
-`_runtime/_command_classification.py`. The scanner tracks mutable cwd and scope
-state across evaluated commands.
+`_runtime/_command_classification.py`. The scanner consumes
+`_runtime/_shell_segment_walk.py`, the single authority for the cwd in effect for
+each evaluated segment: it tracks mutable cwd and scope state and, beyond the
+shell's logical directory, whether a `cd` certainly ran (`cwd_certain`).
+
+`_CommandSegment` carries the logical operator that joined it to the previous
+segment (`connector`: `&&`, `||`, `|`, `&`, `;` or empty) and whether it is the first
+statement after a dropped bare keyword line (`after_keyword`). The first operator
+after a command wins, so a newline after `&&`, `||`, `|` or `&` keeps that operator.
+`_shell_structure` emits the newline boundary before its `;`, so a trailing `#`
+comment cannot swallow the boundary.
 
 ## Bootstrap Conventions
 

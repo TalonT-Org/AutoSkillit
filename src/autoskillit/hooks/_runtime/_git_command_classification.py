@@ -1,7 +1,7 @@
 """Classification primitives for git operations used by git_ops_guard.
 
 The orchestrator (`git_ops_guard.py`) imports a controlled subset of the public
-surface (`_classify_git_segment`, `_classify_git_invocation`,
+surface (`_classify_git_invocation`,
 `_contains_blocked_git_op`, `_git_result`, `_git_text`, `_parse_worktree_owners`,
 `_resolve_attempted_sha`, `_resolve_git_common_dir`) and dispatches into the inner
 classifiers transitively through `_classify_git_invocation`.
@@ -26,7 +26,7 @@ a raw `shlex.split`/text-bag scan, so a `git` invocation delivered via
 invocation is.
 
 Public API surface:
-    Classifiers: _classify_git_segment, _classify_git_invocation,
+    Classifiers: _classify_git_invocation,
         _classify_fetch, _classify_push, _classify_update_ref, _classify_reset,
         _classify_outcome, _contains_blocked_git_op
     Helpers (consumed transitively by the classifiers above):
@@ -143,6 +143,7 @@ def _git_result(cwd: str, *args: str) -> subprocess.CompletedProcess[bytes]:
         check=False,
         text=False,
         timeout=10,
+        env={**os.environ, "LC_ALL": "C", "LANGUAGE": ""},
     )
 
 
@@ -449,17 +450,3 @@ def _classify_git_invocation(
     elif subcommand == "push":
         return _classify_push(args, context, owned_refs)
     return [one] if one is not None else []
-
-
-def _classify_git_segment(
-    segment: list[str], context: dict[str, object]
-) -> list[tuple[str, str, bool]]:
-    parsed = extract_git_subcommand_and_flags(segment)
-    if parsed is None:
-        return []
-    if parsed.subcommand == "<unresolved>":
-        # An unrecognized global git flag means the real subcommand could
-        # not be found -- ambiguous-deny (route through _all_threatened
-        # against every owned ref), not "nothing to check here".
-        return [("", "<unresolved>", True)]
-    return _classify_git_invocation(parsed, context)

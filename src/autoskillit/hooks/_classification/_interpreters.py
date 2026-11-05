@@ -630,6 +630,7 @@ def all_evaluated_segments_with_provenance(
                     item.argv_tokens,
                     scope,
                     cwd_override=cwd_override,
+                    syntax=item,
                 )
             )
         else:

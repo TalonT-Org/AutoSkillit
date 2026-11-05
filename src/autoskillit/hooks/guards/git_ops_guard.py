@@ -14,7 +14,6 @@ import logging
 import os
 import re
 import sys
-from collections import deque
 from pathlib import Path
 from typing import Any
 
@@ -30,28 +29,35 @@ _GUARDS_DIR = str(Path(__file__).resolve().parent)  # hooks/guards/
 if _GUARDS_DIR not in sys.path:
     sys.path.insert(0, _GUARDS_DIR)
 
+from _classification import _option_grammar  # noqa: E402
 from _command_classification import (  # noqa: E402
-    _GIT_GLOBAL_FLAG_SPEC,
-    StdinConsumer,
     WriteTargetScan,
-    _consume_str_flag,
-    _extract_interpreter_segment_specs,
     command_verb_and_args,
-    evaluated_payloads,
+    extract_interpreter_command_payloads,
     extract_interpreter_write_paths,
     live_command_text,
     scan_write_targets,
-    tokenize_command_segments,
 )
 from _git_command_classification import (  # noqa: E402
-    _classify_git_segment,
+    _classify_git_invocation,
     _contains_blocked_git_op,
     _git_result,
     _git_text,
     _parse_worktree_owners,
     _resolve_attempted_sha,
-    _resolve_git_common_dir,
-    extract_git_subcommand_and_flags,
+)
+from _git_option_tables import _SED_FLAG_SPEC  # noqa: E402
+from _git_outcome import is_ref_mutation  # noqa: E402
+from _git_target import (  # noqa: E402
+    _GIT_BUILTIN_SUBCOMMANDS,
+    _GIT_MUTATION_SUBCOMMANDS,
+    ChannelFlags,
+    GitSegmentFacts,
+    GitTarget,
+    GitTargetKind,
+    analyze_git_segment,
+    command_channel_flags,
+    resolve_git_target_for_path,
 )
 from _github_mutation_analysis import (  # noqa: E402
     _DYNAMIC_SHELL_TOKEN_RE,
@@ -74,6 +80,7 @@ from _hook_settings import (  # noqa: E402
     read_merged_hook_config,
 )
 from _path_identity import destination_location  # noqa: E402
+from _shell_segment_walk import WalkedSegment, walk_evaluated_segments  # noqa: E402
 
 GIT_OPS_DENY_TRIGGER: str = DENY_TRIGGER_BY_GUARD["git_ops_guard"]
 CHECKED_OUT_REF_DENY_PREFIX: str = "Checked-out ref mutation blocked: "
@@ -87,37 +94,58 @@ _EXEMPT_SKILLS: frozenset[str] = EXEMPT_SKILLS_BY_GUARD["git_ops_guard"]
 _DESTRUCTIVE_OP_EXEMPT_TIERS: frozenset[str] = frozenset({"orchestrator"})
 
 _RAW_WRITE_VERBS = frozenset({"cp", "mv", "tee", "truncate", "rm", "unlink", "sed", "dd"})
+_PACK_VERBS = frozenset({"git-receive-pack", "git-upload-pack"})
+_READ_ONLY_SUBCOMMANDS = _GIT_BUILTIN_SUBCOMMANDS - _GIT_MUTATION_SUBCOMMANDS
 
-# Git subcommands that can mutate checked-out refs (the same set
-# _classify_git_segment recognises). Used by _deny_outer_git_mutations
-# to escalate only when the unresolved-cwd segment is actually a
-# mutation — read-only commands (log, status, diff, show, ...) must
-# not be denied just because a preceding cd failed.
-_GIT_MUTATION_SUBCOMMANDS: frozenset[str] = frozenset(
-    {"update-ref", "branch", "checkout", "switch", "reset", "fetch", "push", "symbolic-ref"}
+# Commands that mention none of these cannot reach a Git ref or repository
+# classification, so they skip the preflight entirely. This bounds the blast
+# radius of the classifier; it is not a security boundary.
+_GIT_RELEVANT_RE = re.compile(
+    r"(?<![A-Za-z0-9])git(?![A-Za-z0-9])|refs/|packed-refs|worktrees/|\bHEAD\b"
+    r"|\bGIT_(?:DIR|COMMON_DIR|WORK_TREE)\b"
 )
+_REF_STORAGE_RE = re.compile(
+    r"(?<![\w.])\.git(?![\w-])|refs/|packed-refs|logs/HEAD|worktrees/|\bHEAD\b"
+    r"|\bGIT_(?:DIR|COMMON_DIR|WORK_TREE)\b"
+)
+_INTERPRETER_WRITE_RE = re.compile(
+    r"\bopen\s*\(|\.write_text\s*\(|\.write_bytes\s*\(|\bos\.(?:rename|replace|link|symlink)\s*\("
+    r"|\bshutil\.(?:copy\w*|move)\s*\("
+)
+_PYTHON_VERB_RE = re.compile(r"python(?:3(?:\.\d+)?)?")
 
 
-def _repository_context(execution_cwd: str) -> dict[str, object] | None:
-    git_dir = _git_text(execution_cwd, "rev-parse", "--absolute-git-dir")
-    common_path = _resolve_git_common_dir(execution_cwd)
-    requesting = _git_text(execution_cwd, "rev-parse", "--show-toplevel")
-    if not git_dir or common_path is None or not requesting:
-        return None
-    common_git_dir = str(common_path)
-    worktrees = _git_result(execution_cwd, "worktree", "list", "--porcelain", "-z")
-    if worktrees.returncode != 0:
-        return None
-    try:
-        owners = _parse_worktree_owners(worktrees.stdout)
-    except UnicodeDecodeError:
-        return None
+def _mutation_names(subcommands: frozenset[str]) -> str:
+    return "|".join(sorted(re.escape(name) for name in subcommands))
+
+
+def _mentions_git_mutation(
+    text: str, subcommands: frozenset[str] = _GIT_MUTATION_SUBCOMMANDS
+) -> bool:
+    """Whether *text* names a Git command word followed by one of *subcommands*.
+
+    Deliberately matches inside arguments too: an opaque launcher's payload
+    (``xargs sh -c '...git push...'``) cannot be told apart from quoted data
+    without per-launcher grammar.
+    """
+    names = _mutation_names(subcommands)
+    pattern = rf"(?<![\w.-])git(?:-[a-z-]+)?(?![\w.])[^\n;&|]*?\b(?:{names})\b"
+    return re.search(pattern, text) is not None
+
+
+def _context_for(target: GitTarget, cache: dict[Any, Any]) -> dict[str, object]:
+    key = ("owners", target.cwd)
+    if key not in cache:
+        worktrees = _git_result(target.cwd, "worktree", "list", "--porcelain", "-z")
+        if worktrees.returncode != 0:
+            raise RuntimeError(f"git worktree list failed in {target.cwd}")
+        cache[key] = _parse_worktree_owners(worktrees.stdout)
     return {
-        "common_git_dir": common_git_dir,
-        "execution_cwd": execution_cwd,
-        "owners": owners,
-        "requesting_worktree_path": requesting,
-        "worktree_git_dir": git_dir,
+        "common_git_dir": target.common_git_dir,
+        "execution_cwd": target.cwd,
+        "owners": cache[key],
+        "requesting_worktree_path": target.toplevel or target.cwd,
+        "worktree_git_dir": target.worktree_git_dir,
     }
 
 
@@ -198,97 +226,35 @@ def _deny_checked_out_ref(
     deny_tool_use(reason)
 
 
-def _raw_write_targets(
-    text: str,
-    initial_cwd: str,
-    outer_segments: list[list[str]],
-    additional_segments: list[list[str]],
-    additional_owners: list[int | None],
-    interpreter_cwd: str,
-    scan: WriteTargetScan,
-) -> tuple[list[tuple[str, str]], list[tuple[str, str]], bool]:
-    targets = [(target, initial_cwd) for target in scan.targets]
-    entry_targets = [(target, initial_cwd) for target in scan.entry_targets]
-    ambiguous = scan.unresolved
-    outer_cwds = _compute_outer_cwds(outer_segments, initial_cwd)
-    segments_with_cwds = list(zip(outer_segments, outer_cwds))
-    segments_with_cwds.extend(
-        (
-            segment,
-            outer_cwds[owner] if owner is not None and 0 <= owner < len(outer_cwds) else "",
+def _deny_unresolved(data: dict[str, object]) -> None:
+    _deny_checked_out_ref(
+        data=data, context=None, attempted_value="<unresolved>", threatened_refs=[]
+    )
+
+
+def _deny_for_mutations(
+    data: dict[str, object], context: dict[str, object], mutations: list[tuple[str, str, bool]]
+) -> None:
+    for target_ref, attempted_value, ambiguous in mutations:
+        threatened = (
+            _all_threatened(context) if ambiguous else _threatened_for_target(context, target_ref)
         )
-        for segment, owner in zip(additional_segments, additional_owners)
-    )
-    for segment, segment_cwd in segments_with_cwds:
-        verb, args = command_verb_and_args(segment)
-        verb = os.path.basename(verb)
-        if verb not in _RAW_WRITE_VERBS:
-            continue
-        if verb == "dd":
-            candidates = [token.split("=", 1)[1] for token in args if token.startswith("of=")]
-        elif verb == "sed":
-            candidates = args[-1:] if any(token.startswith("-i") for token in args) else []
-        else:
-            candidates = args[-1:]
-        for candidate in candidates:
-            if _DYNAMIC_SHELL_TOKEN_RE.search(candidate):
-                ambiguous = True
-            elif candidate:
-                targets.append((candidate, segment_cwd))
-    interpreter_paths = extract_interpreter_write_paths(text)
-    if interpreter_paths == [] and "open(" in text:
-        ambiguous = True
-    elif interpreter_paths:
-        targets.extend((path, interpreter_cwd) for path in interpreter_paths)
-    return (targets, entry_targets, ambiguous)
+        if threatened:
+            _deny_checked_out_ref(
+                data=data,
+                context=context,
+                attempted_value=attempted_value,
+                threatened_refs=threatened,
+            )
 
 
-def _raw_target_mutations(
-    text: str,
-    *,
-    initial_cwd: str,
-    outer_segments: list[list[str]],
-    additional_segments: list[list[str]],
-    additional_owners: list[int | None],
-    interpreter_cwd: str,
-    context: dict[str, object] | None,
-    scan: WriteTargetScan,
-) -> list[tuple[str, str, bool]]:
-    targets, entry_targets, ambiguous = _raw_write_targets(
-        text,
-        initial_cwd,
-        outer_segments,
-        additional_segments,
-        additional_owners,
-        interpreter_cwd,
-        scan,
-    )
-    if ambiguous:
-        return [("", "<unresolved>", True)]
-    resolved_targets: list[Path] = []
-    for raw_targets, is_entry in ((targets, False), (entry_targets, True)):
-        for raw_target, target_cwd in raw_targets:
-            target = Path(raw_target)
-            if not target.is_absolute():
-                if not target_cwd:
-                    return [("", "<unresolved>", True)]
-                target = Path(target_cwd) / target
-            try:
-                resolved_targets.append(
-                    destination_location(target) if is_entry else target.resolve()
-                )
-            except (OSError, RuntimeError, ValueError):
-                return [("", "<unresolved>", True)]
-    if context is None:
-        return []
-    common = Path(str(context["common_git_dir"])).resolve()
-    worktree_git = Path(str(context["worktree_git_dir"])).resolve()
-    result: list[tuple[str, str, bool]] = []
-    for target in resolved_targets:
-        mutation = _classify_raw_write_target(target, common, worktree_git)
-        if mutation is not None:
-            result.append(mutation)
-    return result
+def _deny_ambiguous(data: dict[str, object], execution_cwd: str, cache: dict[Any, Any]) -> None:
+    """Deny an unattributable mutation against every owned ref of the cwd's repository."""
+    target = resolve_git_target_for_path(execution_cwd, cache) if execution_cwd else None
+    if target is not None and target.kind == GitTargetKind.RESOLVED:
+        _deny_for_mutations(data, _context_for(target, cache), [("", "<unresolved>", True)])
+        return
+    _deny_unresolved(data)
 
 
 def _classify_raw_write_target(
@@ -316,242 +282,184 @@ def _classify_raw_write_target(
     return (f"refs/heads/{relative.as_posix()}", "<unresolved>", False)
 
 
-def _git_segment_cwd(segment: list[str], cwd: str) -> str:
-    verb, args = command_verb_and_args(segment)
-    if verb != "git" and not verb.endswith("/git"):
-        return cwd
-    current = Path(cwd)
-    index = 0
-    while index < len(args):
-        token = args[index]
-        if token == "-C" and index + 1 < len(args):
-            candidate = Path(args[index + 1])
-            current = candidate if candidate.is_absolute() else current / candidate
-            index += 2
+def _verb_write_candidates(verb: str, args: list[str]) -> list[str]:
+    if verb == "dd":
+        return [token.split("=", 1)[1] for token in args if token.startswith("of=")]
+    if verb == "sed":
+        parsed = _option_grammar.parse_options(args, _SED_FLAG_SPEC)
+        in_place = _option_grammar.last_option(parsed, "in-place") is not None
+        return args[-1:] if parsed.unresolved or in_place else []
+    return args[-1:]
+
+
+def _single_python_cwd(walk: list[WalkedSegment]) -> str:
+    cwds = [
+        seg.verb_cwd if seg.cwd_certain else ""
+        for seg in walk
+        if seg.start is not None
+        and _PYTHON_VERB_RE.fullmatch(os.path.basename(seg.executable[seg.start]))
+    ]
+    return cwds[0] if len(cwds) == 1 else ""
+
+
+def _raw_write_candidates(
+    text: str, walk: list[WalkedSegment], scan: WriteTargetScan, execution_cwd: str
+) -> tuple[list[tuple[str, str, bool]], bool]:
+    """Raw write targets as ``(path, cwd, is_entry)``, and whether any is unresolvable."""
+    targets = [(target, execution_cwd, False) for target in scan.targets]
+    targets.extend((target, execution_cwd, True) for target in scan.entry_targets)
+    ambiguous = scan.unresolved
+    for seg in walk:
+        if seg.start is None or seg.handled_builtin:
             continue
-        if not token.startswith("-"):
-            break
-        # -C's own value is captured above (needed to build `current`); every
-        # other global flag is just skipped past, same as before -- an
-        # unrecognized flag advances by one token rather than stopping, this
-        # is cwd-tracking, not the security-critical subcommand parse.
-        _, next_index, recognized = _consume_str_flag(args, index, _GIT_GLOBAL_FLAG_SPEC)
-        index = next_index if recognized else index + 1
-    return str(current.resolve())
-
-
-def _preflight_segments(
-    command: str,
-) -> tuple[list[list[str]], list[list[str]], list[int | None], bool]:
-    outer_segments = tokenize_command_segments(command)
-    additional_segments: list[list[str]] = []
-    additional_owners: list[int | None] = []
-    interpreter_unresolved = False
-    payloads = evaluated_payloads(command)
-    shell_queue = deque(
-        (payload.text, payload.consumer_index)
-        for payload in payloads
-        if payload.kind == StdinConsumer.SHELL
-    )
-    seen_shell: set[tuple[str, int | None]] = set()
-    while shell_queue:
-        text, owner = shell_queue.popleft()
-        if (text, owner) in seen_shell:
+        verb, args = command_verb_and_args(seg.executable)
+        verb = os.path.basename(verb)
+        if verb not in _RAW_WRITE_VERBS:
             continue
-        seen_shell.add((text, owner))
-        segments = tokenize_command_segments(text)
-        additional_segments.extend(segments)
-        additional_owners.extend([owner] * len(segments))
-        shell_queue.extend(
-            (nested.text, owner)
-            for nested in evaluated_payloads(text)
-            if nested.kind == StdinConsumer.SHELL
-        )
-    for payload in payloads:
-        if payload.kind == StdinConsumer.PYTHON:
-            specs, unresolved = _extract_interpreter_segment_specs(["python3", "-c", payload.text])
-            interpreter_unresolved = interpreter_unresolved or unresolved
-            segments = []
-            for spec in specs:
-                if isinstance(spec.payload, list):
-                    segments.append(spec.payload)
-                else:
-                    segments.extend(tokenize_command_segments(spec.payload))
-            additional_segments.extend(segments)
-            additional_owners.extend([payload.consumer_index] * len(segments))
-    return outer_segments, additional_segments, additional_owners, interpreter_unresolved
+        for candidate in _verb_write_candidates(verb, args):
+            if _DYNAMIC_SHELL_TOKEN_RE.search(candidate):
+                ambiguous = True
+            elif candidate:
+                targets.append((candidate, seg.verb_cwd if seg.cwd_certain else "", False))
+    # None: not an interpreter write; []: a write whose path is not a literal.
+    interpreter_paths = extract_interpreter_write_paths(text) or []
+    if not interpreter_paths and _INTERPRETER_WRITE_RE.search(text):
+        ambiguous = True
+    interpreter_cwd = _single_python_cwd(walk)
+    targets.extend((path, interpreter_cwd, False) for path in interpreter_paths)
+    return targets, ambiguous
 
 
-def _is_structural_mutation(
-    live_text: str, outer: list[list[str]], additional: list[list[str]], *, has_write: bool
-) -> bool:
-    return bool(
-        re.search(
-            r"\bgit\b[^\n;&|]*(?:update-ref|branch\s+(?:-f|--force)|checkout\s+-B|switch\s+-C|"
-            r"reset\b|fetch\b|push\b|symbolic-ref\s+HEAD)\b",
-            live_text,
-        )
-        or has_write
-        or any(
-            os.path.basename(command_verb_and_args(segment)[0]) in _RAW_WRITE_VERBS | {"install"}
-            for segment in [*outer, *additional]
-        )
-    )
+def _resolve_raw_targets(
+    targets: list[tuple[str, str, bool]],
+) -> tuple[list[Path], bool]:
+    resolved: list[Path] = []
+    ambiguous = False
+    for raw_target, cwd, is_entry in targets:
+        path = Path(raw_target)
+        if not path.is_absolute():
+            if not cwd:
+                ambiguous = True
+                continue
+            path = Path(cwd) / path
+        try:
+            resolved.append(destination_location(path) if is_entry else path.resolve())
+        except (OSError, RuntimeError, ValueError):
+            ambiguous = True
+    return resolved, ambiguous
 
 
-def _advance_shell_cwd(current_cwd: str, verb: str, args: list[str]) -> tuple[str, bool]:
-    if verb == "cd":
-        if any(arg == "-" for arg in args):
-            return "", True
-        target_args = [arg for arg in args if arg not in ("-P", "--")]
-        if len(target_args) == 1 and not _DYNAMIC_SHELL_TOKEN_RE.search(target_args[0]):
-            candidate = Path(target_args[0])
-            if not current_cwd and not candidate.is_absolute():
-                return "", True
-            return (
-                str(
-                    (
-                        candidate if candidate.is_absolute() else Path(current_cwd) / candidate
-                    ).resolve()
-                ),
-                True,
-            )
-        if len(args) != 1:
-            return "", True
-    elif verb == "pushd" and len(args) == 1 and not _DYNAMIC_SHELL_TOKEN_RE.search(args[0]):
-        candidate = Path(args[0])
-        if not current_cwd and not candidate.is_absolute():
-            return "", True
-        return (
-            str(
-                (candidate if candidate.is_absolute() else Path(current_cwd) / candidate).resolve()
-            ),
-            True,
-        )
-    return current_cwd, False
-
-
-def _compute_outer_cwds(outer_segments: list[list[str]], initial_cwd: str) -> list[str]:
-    """Return the cwd in effect during each outer segment, walking cd/pushd."""
-    cwds: list[str] = []
-    current_cwd = initial_cwd
-    for segment in outer_segments:
-        verb, args = command_verb_and_args(segment)
-        current_cwd, _ = _advance_shell_cwd(current_cwd, verb, args)
-        cwds.append(current_cwd)
-    return cwds
-
-
-def _deny_for_mutations(
-    data: dict[str, object], context: dict[str, object], mutations: list[tuple[str, str, bool]]
+def _preflight_raw_writes(
+    data: dict[str, object],
+    text: str,
+    walk: list[WalkedSegment],
+    scan: WriteTargetScan,
+    execution_cwd: str,
+    cache: dict[Any, Any],
 ) -> None:
-    for target_ref, attempted_value, ambiguous in mutations:
-        threatened = (
-            _all_threatened(context) if ambiguous else _threatened_for_target(context, target_ref)
+    """Judge every raw write target against its own repository.
+
+    An unresolvable target is ambiguous only when the command names ref
+    storage, so ordinary writes through a variable are not denied.
+    """
+    candidates, ambiguous = _raw_write_candidates(text, walk, scan, execution_cwd)
+    resolved, unresolvable = _resolve_raw_targets(candidates)
+    names_ref_storage = _REF_STORAGE_RE.search(text) is not None
+    if (ambiguous or unresolvable) and names_ref_storage:
+        _deny_ambiguous(data, execution_cwd, cache)
+    for path in resolved:
+        target = resolve_git_target_for_path(str(path), cache)
+        if target.kind == GitTargetKind.UNRESOLVED and names_ref_storage:
+            _deny_unresolved(data)
+        if target.kind != GitTargetKind.RESOLVED:
+            continue
+        mutation = _classify_raw_write_target(
+            path, Path(target.common_git_dir), Path(target.worktree_git_dir)
         )
-        if threatened:
-            _deny_checked_out_ref(
-                data=data,
-                context=context,
-                attempted_value=attempted_value,
-                threatened_refs=threatened,
-            )
+        if mutation is not None:
+            _deny_for_mutations(data, _context_for(target, cache), [mutation])
 
 
-def _deny_outer_git_mutations(data: dict[str, object], segment: list[str], cwd: str) -> None:
-    verb = os.path.basename(command_verb_and_args(segment)[0])
-    if verb not in {"git", "git-receive-pack", "git-upload-pack"}:
+def _decide_shared_ref(
+    data: dict[str, object], facts: GitSegmentFacts, cache: dict[Any, Any], cwd: str
+) -> None:
+    """Deny what *facts* would do to a checked-out ref; *cwd* is the proven cwd or empty."""
+    target = facts.target
+    invocation = facts.invocation
+    if facts.identity_unknown:
+        if target.kind == GitTargetKind.UNRESOLVED:
+            _deny_unresolved(data)
+        elif target.kind == GitTargetKind.RESOLVED:
+            _deny_for_mutations(data, _context_for(target, cache), [("", "<unresolved>", True)])
         return
-    if not cwd:
-        # A preceding cwd change could not be resolved; this segment cannot
-        # be routed to a repository with confidence. Escalate to deny only
-        # when the subcommand is a known ref-mutating one — read-only
-        # commands (log, status, diff, show, ...) must not be denied just
-        # because a preceding cd failed. An unparseable subcommand
-        # (parsed is None or "<unresolved>") also escalates, matching the
-        # `_classify_git_segment` fail-closed posture.
-        parsed = extract_git_subcommand_and_flags(segment)
-        subcommand = parsed.subcommand if parsed is not None else None
-        if subcommand is None or subcommand == "<unresolved>":
-            subcommand = None  # ambiguous — escalate below
-        if subcommand is None or subcommand in _GIT_MUTATION_SUBCOMMANDS:
-            _deny_checked_out_ref(
-                data=data,
-                context=None,
-                attempted_value="<unresolved>",
-                threatened_refs=[],
-            )
+    if target.kind == GitTargetKind.UNRESOLVED:
+        if target.reason == "unparsed_global_options":
+            _deny_ambiguous(data, cwd, cache)
+        elif is_ref_mutation(invocation.subcommand, invocation.flags):
+            _deny_unresolved(data)
         return
-    context = _repository_context(_git_segment_cwd(segment, cwd))
-    if context is not None:
-        _deny_for_mutations(data, context, _classify_git_segment(segment, context))
+    if target.kind == GitTargetKind.RESOLVED:
+        context = _context_for(target, cache)
+        _deny_for_mutations(data, context, _classify_git_invocation(invocation, context))
+
+
+def _preflight_segment(
+    data: dict[str, object], seg: WalkedSegment, flags: ChannelFlags, cache: dict[Any, Any]
+) -> None:
+    if seg.position_unresolved and _mentions_git_mutation(" ".join(seg.executable)):
+        _deny_unresolved(data)
+    verb = os.path.basename(seg.executable[seg.start]) if seg.start is not None else ""
+    if verb in _PACK_VERBS:
+        if not seg.cwd_certain or not seg.verb_cwd:
+            _deny_unresolved(data)
+        return
+    facts = analyze_git_segment(seg, flags, cache)
+    if facts is None:
+        return
+    if facts.invocation.subcommand in _READ_ONLY_SUBCOMMANDS and not facts.identity_unknown:
+        return
+    _decide_shared_ref(data, facts, cache, seg.verb_cwd if seg.cwd_certain else "")
 
 
 def _preflight_checked_out_ref_mutation(
-    data: dict[str, object], command: str, execution_cwd: str
+    data: dict[str, object], command: str, execution_cwd: str, cache: dict[Any, Any]
 ) -> None:
-    outer_segments, additional_segments, additional_owners, interpreter_unresolved = (
-        _preflight_segments(command)
-    )
     # The live-text projection (rectify #4941 Part A): heredoc and herestring
     # bodies are blanked at their source spans and appended once when their
-    # consumer executes them. Inert bodies are never appended.
-    # Both the structural-mutation regex and
-    # _raw_target_mutations' write-path scan read this projection instead of
-    # the raw command, so an inert `cat <<'EOF'` body mentioning
-    # "git push --force" as prose no longer matches, while a heredoc/pipe-fed
-    # shell that actually runs it still does.
+    # consumer executes them, so an inert `cat <<'EOF'` body mentioning
+    # "git push --force" as prose does not match, while a heredoc/pipe-fed
+    # shell that actually runs it does.
     live_text = live_command_text(command)
-    scan = scan_write_targets(live_text, execution_cwd)
-    structural_mutation = _is_structural_mutation(
-        live_text, outer_segments, additional_segments, has_write=scan.has_write
-    )
-    if not execution_cwd:
-        if structural_mutation:
-            _deny_checked_out_ref(
-                data=data,
-                context=None,
-                attempted_value="<unresolved>",
-                threatened_refs=[],
-            )
+    walk = walk_evaluated_segments(command, execution_cwd)
+    if walk is None:
+        if _mentions_git_mutation(live_text):
+            _deny_unresolved(data)
         return
-    initial_context = _repository_context(execution_cwd)
-    current_cwd = execution_cwd
-    outer_cwds = _compute_outer_cwds(outer_segments, current_cwd)
-    for segment, segment_cwd in zip(outer_segments, outer_cwds):
-        _deny_outer_git_mutations(data, segment, segment_cwd)
-    current_cwd = outer_cwds[-1] if outer_cwds else execution_cwd
+    flags = command_channel_flags(live_text)
+    for seg in walk:
+        _preflight_segment(data, seg, flags, cache)
+    scan = scan_write_targets(live_text, execution_cwd)
+    _preflight_raw_writes(data, live_text, walk, scan, execution_cwd, cache)
+    if extract_interpreter_command_payloads(command)[1] and _mentions_git_mutation(live_text):
+        _deny_unresolved(data)
 
-    context = _repository_context(current_cwd) if current_cwd else None
-    mutations: list[tuple[str, str, bool]] = []
-    if context is not None:
-        for segment in additional_segments:
-            mutations.extend(_classify_git_segment(segment, context))
-    raw_context = context or initial_context
-    mutations.extend(
-        _raw_target_mutations(
-            live_text,
-            initial_cwd=execution_cwd,
-            outer_segments=outer_segments,
-            additional_segments=additional_segments,
-            additional_owners=additional_owners,
-            interpreter_cwd=current_cwd,
-            context=raw_context,
-            scan=scan,
+
+def _git_relevant(probe: str) -> bool:
+    """Whether *probe* (quotes and backslashes removed) can reach a Git classification."""
+    return bool(
+        _GIT_RELEVANT_RE.search(probe)
+        or (
+            ("$" in probe or "`" in probe)
+            and re.search(rf"\b(?:{_mutation_names(_GIT_MUTATION_SUBCOMMANDS)})\b", probe)
         )
     )
-    if interpreter_unresolved and structural_mutation:
-        mutations.append(("", "<unresolved>", True))
-    if raw_context is None:
-        if any(ambiguous for _, _, ambiguous in mutations):
-            _deny_checked_out_ref(
-                data=data,
-                context=None,
-                attempted_value="<unresolved>",
-                threatened_refs=[],
-            )
-        return
-    _deny_for_mutations(data, raw_context, mutations)
+
+
+def _kitchen_marker_exists(project_root: Path) -> bool:
+    try:
+        return (project_root / ".autoskillit" / "temp" / ".hook_config.json").exists()
+    except OSError:
+        return False
 
 
 def _parse_hook_event() -> tuple[dict[str, object], Any] | None:
@@ -585,19 +493,18 @@ def main() -> None:
     if not cmd:
         sys.exit(0)
 
+    if not _git_relevant(re.sub(r"['\"\\]", "", cmd)):
+        sys.exit(0)
+
     # Any unexpected classification error denies. SystemExit raised by the
     # deny helpers is BaseException, not Exception, so it bypasses this
     # handler and serves as the explicit verdict signal.
     try:
         project_root = resolve_state_root(parsed.payload_cwd)
-        try:
-            cfg_path = project_root / ".autoskillit" / "temp" / ".hook_config.json"
-            kitchen_open = cfg_path.exists()
-        except OSError:
-            sys.exit(0)
+        kitchen_open = _kitchen_marker_exists(project_root)
 
         if kitchen_open:
-            _preflight_checked_out_ref_mutation(data, cmd, parsed.execution_cwd)
+            _preflight_checked_out_ref_mutation(data, cmd, parsed.execution_cwd, {})
 
         headless, tier = hook_session_shape()
         if not headless:

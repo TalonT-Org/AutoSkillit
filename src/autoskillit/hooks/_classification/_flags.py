@@ -259,6 +259,16 @@ _GIT_GLOBAL_FLAG_SPEC: Mapping[str, _FlagArity] = {
     "--namespace": _FlagArity.VALUE,
     "--config-env": _FlagArity.VALUE,
     "--super-prefix": _FlagArity.VALUE,
+    "--attr-source": _FlagArity.VALUE,
+    "--list-cmds": _FlagArity.VALUE,
+    "--no-optional-locks": _FlagArity.BOOLEAN,
+    "--literal-pathspecs": _FlagArity.BOOLEAN,
+    "--no-literal-pathspecs": _FlagArity.BOOLEAN,
+    "--glob-pathspecs": _FlagArity.BOOLEAN,
+    "--noglob-pathspecs": _FlagArity.BOOLEAN,
+    "--icase-pathspecs": _FlagArity.BOOLEAN,
+    "--no-lazy-fetch": _FlagArity.BOOLEAN,
+    "--no-advice": _FlagArity.BOOLEAN,
     # --exec-path[=<path>] is optional-value (usable bare, or with `=`); this
     # module's binary arity model can't express "optional". BOOLEAN is the
     # correct default for its common bare usage; the rare `=`-form

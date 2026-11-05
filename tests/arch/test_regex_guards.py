@@ -232,18 +232,17 @@ def test_command_classifying_guards_use_shared_primitive():
 
 
 def test_git_ops_guard_orchestrator_keeps_command_classification_import() -> None:
-    """Step 9 (#4733) regression: after decomposing the git-command
-    classification primitives into _git_command_classification, the
-    orchestrator (git_ops_guard.py) MUST continue to use the flag-spec
-    engine (_consume_str_flag, _GIT_GLOBAL_FLAG_SPEC), command tokenizer,
-    evaluated payloads with consumer provenance, and write-target scan
-    (tokenize_command_segments, command_verb_and_args, evaluated_payloads,
-    StdinConsumer, extract_interpreter_write_paths, scan_write_targets) from
-    _command_classification - the same shared primitives that
+    """git_ops_guard.py consumes the shared command-classification primitives directly.
+
+    The orchestrator reads commands through the evaluated-segment authority
+    (live_command_text, extract_interpreter_command_payloads), the verb parser
+    (command_verb_and_args) and the write-target scan
+    (extract_interpreter_write_paths, scan_write_targets) from
+    _command_classification -- the same shared primitives that
     test_command_classifying_guards_use_shared_primitive enforces for
-    write_guard.py, pr_create_guard.py, etc. The new sibling must NOT
-    re-export these symbols to consumers; it receives them as bare-name
-    imports internally and the orchestrator consumes them directly.
+    write_guard.py, pr_create_guard.py, etc. _git_command_classification must
+    not re-export them: it receives them as bare-name imports internally and
+    the orchestrator consumes them directly.
     """
     src = (SRC_ROOT / "hooks" / "guards" / "git_ops_guard.py").read_text()
     tree = ast.parse(src)
@@ -257,18 +256,11 @@ def test_git_ops_guard_orchestrator_keeps_command_classification_import() -> Non
             elif node.module == "_git_command_classification":
                 imports_from_git_command_classification.extend(a.name for a in node.names)
 
-    # The orchestrator must keep using the flag-spec engine and shared parsing
-    # from _command_classification. The minimal set is the engine pair
-    # (_consume_str_flag, _GIT_GLOBAL_FLAG_SPEC) plus the primitives
-    # actually consumed by the orchestrator's handlers.
     required_command_classification = {
-        "_consume_str_flag",
-        "_GIT_GLOBAL_FLAG_SPEC",
-        "tokenize_command_segments",
         "command_verb_and_args",
-        "evaluated_payloads",
-        "StdinConsumer",
+        "extract_interpreter_command_payloads",
         "extract_interpreter_write_paths",
+        "live_command_text",
         "scan_write_targets",
     }
     missing = required_command_classification - set(imports_from_command_classification)
@@ -285,14 +277,11 @@ def test_git_ops_guard_orchestrator_keeps_command_classification_import() -> Non
     # the orchestrator itself still consumes directly (orchestrator's import
     # would be shadowed by the sibling's re-export).
     forbidden = {
-        "_GIT_GLOBAL_FLAG_SPEC",
-        "_consume_str_flag",
         "command_verb_and_args",
-        "evaluated_payloads",
-        "StdinConsumer",
+        "extract_interpreter_command_payloads",
         "extract_interpreter_write_paths",
+        "live_command_text",
         "scan_write_targets",
-        "tokenize_command_segments",
     }
     leaked = forbidden & set(imports_from_git_command_classification)
     assert not leaked, (

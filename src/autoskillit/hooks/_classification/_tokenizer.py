@@ -45,6 +45,8 @@ else:
 
 # Operators that terminate a shlex token and split command segments.
 _SHELL_OPERATORS: frozenset[str] = frozenset({"&&", "||", ";", "|", "&"})
+_LOGICAL_CONNECTORS: frozenset[str] = frozenset({"&&", "||", "|", "&"})
+_BARE_KEYWORDS: frozenset[str] = frozenset({"if", "while", "until", "then", "else", "elif", "do"})
 _HEREDOC_PLACEHOLDER_RE = re.compile(r"__AUTOSKILLIT_HEREDOC_(\d+)__")
 
 
@@ -372,6 +374,8 @@ class _CommandSegment:
     piped_from_previous: bool = False
     function_body: bool = False
     subshell_path: tuple[int, ...] = ()
+    connector: str = ""
+    after_keyword: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -383,6 +387,8 @@ class EvaluatedSegment:
     is absent only for literal Python subprocess argv, which was not shell-lexed.
     ``subshell_path`` is None when the payload's owning segment is unknown.
     ``cwd_override`` is a Python subprocess's explicitly configured initial cwd.
+    ``syntax`` is the tokenized segment this record came from, including segments
+    of evaluated payloads; it is None for literal Python subprocess argv.
     """
 
     tokens: list[str]
@@ -391,6 +397,7 @@ class EvaluatedSegment:
     argv_tokens: list[ArgvToken] | None
     subshell_path: tuple[int, ...] | None
     cwd_override: str | None = None
+    syntax: _CommandSegment | None = None
 
     def __post_init__(self) -> None:
         if not self.tokens:
@@ -621,6 +628,22 @@ def _restore_substitutions(
     return token, raw_span, quoted
 
 
+def _connector_after_operator(pending: str, token: str) -> str:
+    """The operator joining the next segment, given the one already pending.
+
+    The first operator after a command wins: a newline (rewritten to ``;``)
+    after ``&&``/``||``/``|``/``&`` must not erase it.
+    """
+    if pending in _LOGICAL_CONNECTORS and token == ";":
+        return pending
+    return token if token in _SHELL_OPERATORS else ";"
+
+
+def _connector_after_group(kind: str, pending: str) -> str:
+    """A closing brace or subshell ends the operator context it was opened in."""
+    return "" if kind in {"close_brace", "close_subshell"} else pending
+
+
 def _advance_group_context(
     kind: str,
     group_id: int,
@@ -664,16 +687,16 @@ def _tokenize_command_segments_with_redirects(command: str) -> list[_CommandSegm
     subshell_path: tuple[int, ...] = ()
     function_depth = 0
     brace_functions: list[bool] = []
+    connector = ""
+    after_keyword = False
 
     def flush() -> None:
         nonlocal current_tokens, current_redirect_syntax, current_argv_tokens
-        nonlocal current_stdin_literals
+        nonlocal current_stdin_literals, connector, after_keyword
+        bare_keyword = len(current_tokens) == 1 and current_tokens[0] in _BARE_KEYWORDS
         if (
             current_tokens
-            and not (
-                len(current_tokens) == 1
-                and current_tokens[0] in {"if", "while", "until", "then", "else", "elif", "do"}
-            )
+            and not bare_keyword
             and not (
                 len(current_tokens) == 1
                 and re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*\(\)", current_tokens[0])
@@ -689,8 +712,14 @@ def _tokenize_command_segments_with_redirects(command: str) -> list[_CommandSegm
                     piped_from_previous,
                     function_body=function_depth > 0,
                     subshell_path=subshell_path,
+                    connector=connector,
+                    after_keyword=after_keyword,
                 )
             )
+            connector = ""
+            after_keyword = False
+        else:
+            after_keyword = after_keyword or bare_keyword
         current_tokens = []
         current_redirect_syntax = []
         current_argv_tokens = []
@@ -711,6 +740,7 @@ def _tokenize_command_segments_with_redirects(command: str) -> list[_CommandSegm
                 kind, group_id, subshell_path, function_depth, brace_functions
             )
             piped_from_previous = False
+            connector = _connector_after_group(kind, connector)
             index += 1
             continue
 
@@ -729,7 +759,8 @@ def _tokenize_command_segments_with_redirects(command: str) -> list[_CommandSegm
 
         if token in _SHELL_OPERATORS or _is_case_terminator(token):
             flush()
-            piped_from_previous = token == "|"
+            connector = _connector_after_operator(connector, token)
+            piped_from_previous = connector == "|"
             index += 1
             continue
 

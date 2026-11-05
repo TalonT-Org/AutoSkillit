@@ -45,6 +45,15 @@ logic, with zero consumers outside this one file.
 - `_write_target_scan.py` — scope-aware write-target scanning across evaluated
   commands. It imports `_command_classification` inside scan operations, after the
   facade has loaded, so the facade can re-export its result type without an import cycle.
+  It consumes `_shell_segment_walk.py`, which owns the cwd walk (`walk_evaluated_segments`,
+  `WalkedSegment`, `cwd_certain`) and reaches the facade only through its lazy
+  `_classification_module()` accessor.
+
+- `_git_target.py` — which repository a walked Git segment acts on and what it does
+  there (`analyze_git_segment`): RESOLVED, NOT_A_REPOSITORY or UNRESOLVED, never a
+  guessed repository. It imports `_shell_segment_walk`, `_git_command_classification`,
+  `_git_outcome`, `_command_classification`, `_github_mutation_analysis` and
+  `_path_identity`; `guards/git_ops_guard.py` imports it.
 
 - `_git_command_classification.py` — Git operation classification used by
   `guards/git_ops_guard.py`; it shares the runtime command and mutation primitives.

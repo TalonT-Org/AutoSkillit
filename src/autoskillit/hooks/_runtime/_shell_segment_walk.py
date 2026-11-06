@@ -26,16 +26,28 @@ from types import ModuleType
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from autoskillit.hooks._classification._invocation_flags import _WRAPPER_SPECS
     from autoskillit.hooks._classification._output_redirect import OutputRedirectPartition
     from autoskillit.hooks._classification._tokenizer import ArgvToken, EvaluatedSegment
+else:
+    if __package__:
+        from .._classification import _invocation_flags
+    else:
+        from _classification import _invocation_flags
+
+    _WRAPPER_SPECS = _invocation_flags._WRAPPER_SPECS
 
 _DIRECTORY_COMMANDS: frozenset[str] = frozenset({"cd", "pushd", "popd"})
 _LOGICAL_CONNECTORS: frozenset[str] = frozenset({"&&", "||", "|", "&"})
 _TAINTING_FIRST_TOKENS: frozenset[str] = frozenset(
     {"if", "while", "until", "for", "select", "case", "then", "do", "else", "elif", "{"}
 )
-_UNWRAPPED_BLOCKERS: frozenset[str] = frozenset(
-    {"env", "sudo", "nice", "nohup", "timeout", "stdbuf"}
+# ``time`` and ``command`` run a shell builtin in the current shell, so ``time cd d``
+# still changes the directory; every other wrapper starts a process, where ``cd`` is
+# not a command.
+_BUILTIN_TRANSPARENT_WRAPPERS: frozenset[str] = frozenset({"time", "command"})
+_UNWRAPPED_BLOCKERS: frozenset[str] = (
+    frozenset({"env", *_WRAPPER_SPECS}) - _BUILTIN_TRANSPARENT_WRAPPERS
 )
 
 
@@ -92,9 +104,9 @@ def _ensure_scope_state(
 def _unwrapped_prefix(prefix: list[str]) -> bool:
     """True when *prefix* contains no wrapper command — i.e. is the unwrapped shell-builtin form.
 
-    The polarity is ``unwrapped``: returns True only when none of the wrapper
-    tokens (``env``, ``sudo``, ``nice``, ``nohup``, ``timeout``, ``stdbuf``)
-    appears in the prefix.
+    The polarity is ``unwrapped``: returns True only when no process-starting
+    wrapper (``env`` and the ``_WRAPPER_SPECS`` commands, bar the builtin-transparent
+    ``time`` and ``command``) appears in the prefix.
     """
     return not any(token in _UNWRAPPED_BLOCKERS for token in prefix)
 

@@ -1,8 +1,9 @@
 """Payload facts extracted by ``parse_hook_command`` in hooks/_runtime/_hook_payload.py.
 
 Members: the Bash per-call ``workdir`` rows (absolute, relative and blank), the
-payload-cwd rows that carry no ``workdir``, the run_cmd rows that ignore it, and
-the github_mutation_guard decisions that separate ``RELATIVE_WORKDIR`` from the
+payload-cwd rows that carry no ``workdir``, the session-cwd anomalies that
+survive a ``workdir``, the run_cmd rows that ignore it, and the
+github_mutation_guard decisions that separate ``RELATIVE_WORKDIR`` from the
 session-cwd anomalies.
 """
 
@@ -133,6 +134,45 @@ def test_relative_workdir_does_not_trigger_the_github_guard_malformed_cwd_denial
     assert parsed.anomalies == (PayloadAnomaly.RELATIVE_WORKDIR,)
     assert decision.allow is True
     assert decision.trigger is None
+
+
+@pytest.mark.parametrize(
+    ("payload_cwd", "workdir", "execution_cwd", "anomalies"),
+    [
+        ("relative", "/work", "/work", (PayloadAnomaly.RELATIVE_CWD,)),
+        (7, "/work", "/work", (PayloadAnomaly.NON_STRING_CWD,)),
+        (
+            "relative",
+            "work",
+            "",
+            (PayloadAnomaly.RELATIVE_CWD, PayloadAnomaly.RELATIVE_WORKDIR),
+        ),
+    ],
+    ids=[
+        "relative-session-cwd-absolute-workdir",
+        "non-string-session-cwd-absolute-workdir",
+        "relative-session-cwd-relative-workdir",
+    ],
+)
+def test_session_cwd_anomalies_survive_a_workdir_and_keep_the_github_guard_denial(
+    payload_cwd: object,
+    workdir: str,
+    execution_cwd: str,
+    anomalies: tuple[PayloadAnomaly, ...],
+) -> None:
+    event = {
+        "tool_name": "Bash",
+        "tool_input": {"command": _COMMAND, "workdir": workdir},
+        "cwd": payload_cwd,
+    }
+
+    parsed = parse_hook_command(event)
+    decision = decide(parsed)
+
+    assert parsed.execution_cwd == execution_cwd
+    assert parsed.anomalies == anomalies
+    assert decision.allow is False
+    assert decision.trigger is DenyTrigger.MALFORMED_CWD
 
 
 @pytest.mark.parametrize(

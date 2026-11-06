@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.hooks._classification._invocation_flags import _WRAPPER_SPECS
 from autoskillit.hooks._classification._tokenizer import (
     _CommandSegment,
     _tokenize_command_segments_with_redirects,
@@ -171,6 +172,11 @@ def test_git_segment_cwd_certainty(
         pytest.param("cd $X && git x", False, "", id="dynamic-target"),
         pytest.param("cd - && git x", False, "", id="previous-directory"),
         pytest.param("builtin cd @a && git x", False, "@w", id="builtin-cd-is-unmodelled"),
+        pytest.param("time cd @a; git x", True, "@a", id="time-runs-the-builtin-in-place"),
+        pytest.param("time -p cd @a; git x", True, "@a", id="time-option-runs-the-builtin"),
+        pytest.param("command cd @a; git x", False, "@a", id="command-runs-an-unmodelled-builtin"),
+        pytest.param("exec cd @a; git x", True, "@w", id="exec-starts-a-process"),
+        pytest.param("env cd @a; git x", True, "@w", id="env-starts-a-process"),
     ],
 )
 def test_git_segment_cwd_and_certainty_together(
@@ -179,6 +185,15 @@ def test_git_segment_cwd_and_certainty_together(
     segment = _git_segment(_walk(command, dirs, dirs["w"]), "x")
     assert segment.cwd_certain is certain
     assert segment.verb_cwd == _bind(verb_cwd, dirs)
+
+
+@pytest.mark.parametrize("wrapper", sorted(_WRAPPER_SPECS))
+def test_only_builtin_transparent_wrappers_let_a_cd_change_the_walk_directory(
+    dirs: dict[str, str], wrapper: str
+) -> None:
+    segment = _git_segment(_walk(f"{wrapper} cd @a; git x", dirs, dirs["w"]), "x")
+    expected = "@a" if wrapper in {"time", "command"} else "@w"
+    assert segment.verb_cwd == _bind(expected, dirs)
 
 
 def test_unknown_initial_cwd_is_never_certain(dirs: dict[str, str]) -> None:

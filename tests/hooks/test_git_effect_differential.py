@@ -838,7 +838,8 @@ def _shared_ref_violations(run: _Run) -> list[str]:
     be ambiguous. When the HEAD effect is NONE or PATH_RESTORE, no HEAD may
     change except that of a worktree sitting on a branch the command rewrites
     by name: renaming a checked-out branch rewrites that worktree's HEAD symref
-    as part of the rewrite, which the named tuple already accounts for.
+    as part of the rewrite, which the named tuple already accounts for. A subcommand
+    with no outcome concept that detaches or re-attaches a worktree HEAD must name HEAD.
     """
     problems: list[str] = []
     if not run.ambiguous:
@@ -855,6 +856,13 @@ def _shared_ref_violations(run: _Run) -> list[str]:
                     f"HEAD effect {_head_effect(run)} but {label} HEAD changed "
                     f"{_describe_head(before_view)} -> {_describe_head(after_view)}"
                 )
+    if _head_effect(run) is None and not run.ambiguous and "HEAD" not in run.named_refs:
+        for label, before_view, after_view in run.head_changes:
+            if before_view.head_ref is None or after_view.head_ref != before_view.head_ref:
+                problems.append(
+                    f"{label} HEAD changed {_describe_head(before_view)} -> "
+                    f"{_describe_head(after_view)} but no tuple names HEAD"
+                )
     return problems
 
 
@@ -862,7 +870,8 @@ def _failure_message(run: _Run, problems: list[str]) -> str:
     return (
         f"Property A violated by `{run.command}` (exit {run.returncode})\n"
         "  expected: every checked-out branch that changed is named by a classifier tuple "
-        "or a tuple is ambiguous; a NONE/PATH_RESTORE HEAD effect changes no HEAD\n"
+        "or a tuple is ambiguous; a NONE/PATH_RESTORE HEAD effect changes no HEAD; "
+        "a command with no HEAD effect concept that detaches or re-attaches a HEAD names HEAD\n"
         f"  actual: {'; '.join(problems)}\n"
         f"  classifier tuples: {list(run.tuples)}\n"
         f"  outcome: {run.outcome}\n"

@@ -26,6 +26,7 @@ import pytest
 from autoskillit.hooks._classification._option_grammar import OptionArity, OptionDef
 from autoskillit.hooks._runtime._git_command_classification import _classify_fetch
 from autoskillit.hooks._runtime._git_option_tables import _GIT_FETCH_FLAG_SPEC
+from autoskillit.hooks._runtime._hook_constants import DENY_REASON_BY_GUARD
 from autoskillit.hooks.guards import git_ops_guard
 from tests._git_topology import AMBIENT_GIT_VARIABLES, commit_file, init_checkout
 from tests.infra._git_ops_guard_harness import (
@@ -1285,8 +1286,7 @@ class TestCheckedOutRefWriteTargets:
         if verdict == "checked-out-ref":
             assert _checked_out_ref_result(out)["attempted_value"] == "<unresolved>"
         elif verdict == "other-deny":
-            reason = json.loads(out)["hookSpecificOutput"]["permissionDecisionReason"]
-            assert reason == git_ops_guard._DENY_REASON_TEMPLATE.format(op="git checkout .")
+            assert _deny_reason(out) == _destructive_reason(_CHECKOUT_TREE)
 
 
 class TestCheckedOutRefAllows:
@@ -1602,7 +1602,7 @@ def _deny_reason(output: str) -> str:
 
 
 def _destructive_reason(op: tuple[str, ...]) -> str:
-    return git_ops_guard._DENY_REASON_TEMPLATE.format(op=" ".join(("git", *op)))
+    return DENY_REASON_BY_GUARD["git_ops_guard"].format(op=" ".join(("git", *op)))
 
 
 _AMEND = ("commit", "--amend")

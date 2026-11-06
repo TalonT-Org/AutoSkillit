@@ -12,18 +12,25 @@ expand to the fixture repositories and a dangling commit.
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 
 import pytest
 
 from tests.infra._git_ops_guard_harness import (
+    _context,
     _git,
     _guard_verdict,
     _run_guard,
     build_linked_repo,
 )
 
-pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
+pytestmark = [
+    pytest.mark.layer("infra"),
+    pytest.mark.medium,
+    pytest.mark.skipif(shutil.which("git") is None, reason="git binary required"),
+    pytest.mark.usefixtures("isolated_git_config"),
+]
 
 _M1 = "git update-ref refs/heads/develop <sha>"
 _M2 = "git checkout -Bdevelop <sha>"
@@ -226,22 +233,23 @@ class TestEffectiveTargetAttribution:
     def test_denies_command_reaching_a_checked_out_ref(
         self, linked_repo: dict[str, Path | str], tmp_path: Path, cwd: str, command: str
     ) -> None:
-        assert _bash_verdict(linked_repo, tmp_path, cwd, command) == "checked-out-ref"
+        verdict = _bash_verdict(linked_repo, tmp_path, cwd, command)
+        assert verdict == "checked-out-ref", _context(command, (cwd, verdict))
 
     def test_denies_dynamic_command_word_resolved_by_hook_env(
         self, linked_repo: dict[str, Path | str], tmp_path: Path
     ) -> None:
-        verdict = _bash_verdict(
-            linked_repo, tmp_path, "linked", "$G checkout -Bdevelop <sha>", extra_env={"G": "git"}
-        )
-        assert verdict == "checked-out-ref"
+        command = "$G checkout -Bdevelop <sha>"
+        verdict = _bash_verdict(linked_repo, tmp_path, "linked", command, extra_env={"G": "git"})
+        assert verdict == "checked-out-ref", _context(command, verdict)
 
     def test_denies_alias_configured_in_the_repository(
         self, linked_repo: dict[str, Path | str], tmp_path: Path
     ) -> None:
         _git(Path(str(linked_repo["primary"])), "config", "alias.ur", "update-ref")
-        verdict = _bash_verdict(linked_repo, tmp_path, "linked", "git ur refs/heads/develop <sha>")
-        assert verdict == "checked-out-ref"
+        command = "git ur refs/heads/develop <sha>"
+        verdict = _bash_verdict(linked_repo, tmp_path, "linked", command)
+        assert verdict == "checked-out-ref", _context(command, verdict)
 
     @pytest.mark.parametrize("tool_cwd", [".", ""])
     @pytest.mark.parametrize("command", _RUN_CMD_UNKNOWN_CWD_DENIED)
@@ -251,7 +259,7 @@ class TestEffectiveTargetAttribution:
         output = _run_guard(
             _expand(command, linked_repo), kitchen_open=True, tmpdir=tmp_path, tool_cwd=tool_cwd
         )
-        assert _guard_verdict(output) == "checked-out-ref"
+        assert _guard_verdict(output) == "checked-out-ref", _context(command, (tool_cwd, output))
 
     def test_denies_bash_whose_workdir_names_the_linked_worktree(
         self, linked_repo: dict[str, Path | str], tmp_path: Path
@@ -263,13 +271,14 @@ class TestEffectiveTargetAttribution:
             _M1,
             tool_input_extra={"workdir": str(linked_repo["linked"])},
         )
-        assert verdict == "checked-out-ref"
+        assert verdict == "checked-out-ref", _context(_M1, verdict)
 
     @pytest.mark.parametrize(("cwd", "command"), _ALLOWED_FROM_CWD)
     def test_allows_command_that_cannot_reach_a_checked_out_ref(
         self, linked_repo: dict[str, Path | str], tmp_path: Path, cwd: str, command: str
     ) -> None:
-        assert _bash_verdict(linked_repo, tmp_path, cwd, command) == "allow"
+        verdict = _bash_verdict(linked_repo, tmp_path, cwd, command)
+        assert verdict == "allow", _context(command, (cwd, verdict))
 
     @pytest.mark.parametrize("command", _RUN_CMD_UNKNOWN_CWD_ALLOWED)
     def test_allows_run_cmd_with_empty_tool_cwd_when_no_ref_is_threatened(
@@ -278,7 +287,7 @@ class TestEffectiveTargetAttribution:
         output = _run_guard(
             _expand(command, linked_repo), kitchen_open=True, tmpdir=tmp_path, tool_cwd=""
         )
-        assert _guard_verdict(output) == "allow"
+        assert _guard_verdict(output) == "allow", _context(command, output)
 
     @pytest.mark.parametrize(("headless", "session_type"), _SESSION_SHAPES)
     @pytest.mark.parametrize("command", _BENIGN_COMMANDS)
@@ -293,7 +302,7 @@ class TestEffectiveTargetAttribution:
         verdict = _bash_verdict(
             linked_repo, tmp_path, "primary", command, headless=headless, session_type=session_type
         )
-        assert verdict == "allow"
+        assert verdict == "allow", _context(command, (headless, session_type, verdict))
 
     @pytest.mark.parametrize(
         ("cwd", "command", "verdict"),
@@ -317,4 +326,4 @@ class TestEffectiveTargetAttribution:
             )
             for shape in _SESSION_SHAPES
         }
-        assert verdicts == dict.fromkeys(_SESSION_SHAPES, verdict)
+        assert verdicts == dict.fromkeys(_SESSION_SHAPES, verdict), _context(command, verdicts)

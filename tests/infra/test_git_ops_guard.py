@@ -8,7 +8,6 @@ Pattern mirrors test_pr_create_guard.py.
 
 from __future__ import annotations
 
-import functools
 import json
 import os
 import shlex
@@ -32,6 +31,7 @@ from tests._git_topology import commit_file, init_checkout
 from tests.infra._git_ops_guard_harness import (
     _TOOL_NAME,
     _checked_out_ref_result,
+    _context,
     _git,
     _guard_exit_code,
     _guard_verdict,
@@ -40,7 +40,12 @@ from tests.infra._git_ops_guard_harness import (
     build_linked_repo,
 )
 
-pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
+pytestmark = [
+    pytest.mark.layer("infra"),
+    pytest.mark.medium,
+    pytest.mark.skipif(shutil.which("git") is None, reason="git binary required"),
+    pytest.mark.usefixtures("isolated_git_config"),
+]
 
 
 @pytest.fixture
@@ -955,6 +960,16 @@ class TestCheckedOutRefAmbiguity:
         }
         assert all(row["old_sha"] == linked_repo["old_sha"] for row in refs)
 
+    def test_dynamic_tee_target_naming_neither_git_nor_ref_storage_is_allowed(
+        self, linked_repo: dict[str, Path | str]
+    ) -> None:
+        # The same dynamic target as the ref-storage row above, with no ref-storage
+        # text: the command is not about Git state, so the prefilter lets it through.
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        out = _run_guard('printf x | tee "$TARGET"', kitchen_open=True, tmpdir=linked)
+        assert out.strip() == ""
+
     def test_literal_asterisk_in_value_is_recognized_as_dynamic(
         self, linked_repo: dict[str, Path | str]
     ) -> None:
@@ -1522,10 +1537,12 @@ class TestCheckedOutRefOutcomeImmunity:
             sha=linked_repo["new_sha"], primary=shlex.quote(str(linked_repo["primary"]))
         )
         out = _run_guard(command, kitchen_open=True, tmpdir=linked)
-        assert _guard_verdict(out) == "checked-out-ref", command
+        assert _guard_verdict(out) == "checked-out-ref", _context(command, out)
         threatened = _checked_out_ref_result(out)["threatened_refs"]
         assert isinstance(threatened, list)
-        assert [row["target_ref"] for row in threatened] == ["refs/heads/develop"], command
+        assert [row["target_ref"] for row in threatened] == ["refs/heads/develop"], _context(
+            command, threatened
+        )
 
     @pytest.mark.parametrize(
         "command_template",
@@ -1547,7 +1564,7 @@ class TestCheckedOutRefOutcomeImmunity:
         assert isinstance(linked, Path)
         command = command_template.format(sha=linked_repo["new_sha"])
         out = _run_guard(command, kitchen_open=True, tmpdir=linked)
-        assert _guard_verdict(out) == "allow", command
+        assert _guard_verdict(out) == "allow", _context(command, out)
 
     @pytest.mark.parametrize(
         ("command", "verdict"),
@@ -1577,18 +1594,7 @@ class TestCheckedOutRefOutcomeImmunity:
             )
             for shape in _SESSION_SHAPES
         }
-        assert verdicts == dict.fromkeys(_SESSION_SHAPES, verdict)
-
-
-@functools.cache
-def _git_version() -> str:
-    return subprocess.run(
-        ["git", "--version"], capture_output=True, text=True, check=False
-    ).stdout.strip()
-
-
-def _context(command: str, observed: object = "") -> str:
-    return f"{command!r} {observed!r} ({_git_version()})"
+        assert verdicts == dict.fromkeys(_SESSION_SHAPES, verdict), _context(command, verdicts)
 
 
 def _deny_reason(output: str) -> str:
@@ -1683,7 +1689,6 @@ _UNKNOWN_IDENTITY_COMMANDS = [
 ]
 
 
-@pytest.mark.skipif(shutil.which("git") is None, reason="git binary required")
 class TestDestructiveOutcomeImmunity:
     """The headless destructive-operation phase matches the operations
     RISKY_GIT_OPERATIONS names by what they do, not by how their options are
@@ -2050,8 +2055,6 @@ def _denies_by_ref_or_destructive_phase(output: str, op: tuple[str, ...]) -> boo
     }
 
 
-@pytest.mark.skipif(shutil.which("git") is None, reason="git binary required")
-@pytest.mark.usefixtures("isolated_git_config")
 class TestInvocationGrammarImmunity:
     """A command is judged as the Git invocation it carries, however a wrapper's
     options, a shell or interpreter command string, or an opaque launcher

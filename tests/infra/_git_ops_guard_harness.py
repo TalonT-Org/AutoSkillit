@@ -1,15 +1,21 @@
 """Shared harness for git_ops_guard tests: payloads, a guard runner and repositories.
 
 Members: _make_clean_env, _build_payload, _run_guard, _guard_exit_code,
-_is_denied, _checked_out_ref_result, _guard_verdict, _git, build_linked_repo.
+_is_denied, _checked_out_ref_result, _guard_verdict, _git, _git_version, _context,
+build_linked_repo.
 
 ``UNSET`` distinguishes "use the default" from an explicit ``""`` or ``None`` for
-the payload's cwd fields, so a test can send a relative or empty cwd.
+the payload's cwd fields, so a test can send a relative or empty cwd. A verdict
+rests on what the installed Git does, so assertion messages carry ``_context``.
+The modules that use this harness ``skipif`` without a ``git`` binary and isolate
+Git config: ``GIT_CONFIG_GLOBAL`` replaces both ``~/.gitconfig`` and
+``$XDG_CONFIG_HOME/git/config``, so ``isolated_git_config`` needs no HOME redirect.
 """
 
 from __future__ import annotations
 
 import contextlib
+import functools
 import io
 import json
 import os
@@ -27,6 +33,17 @@ UNSET: object = object()
 _TOOL_NAME = "mcp__autoskillit__local__autoskillit__run_cmd"
 _BASH_TOOL_NAME = "Bash"
 _HOOK_CONFIG_RELPATH = ".autoskillit/temp/.hook_config.json"
+
+
+@functools.cache
+def _git_version() -> str:
+    return subprocess.run(
+        ["git", "--version"], capture_output=True, text=True, check=False
+    ).stdout.strip()
+
+
+def _context(command: str, observed: object = "") -> str:
+    return f"{command!r} {observed!r} ({_git_version()})"
 
 
 def _make_clean_env(
@@ -141,7 +158,7 @@ def _run_guard(
                     try:
                         git_ops_guard.main()
                     except SystemExit as exc:
-                        assert exc.code == 0, f"Guard exited non-zero: {exc.code!r}"
+                        assert exc.code == 0, _context(cmd, f"guard exited {exc.code!r}")
 
     return buf.getvalue()
 
@@ -178,7 +195,7 @@ def _checked_out_ref_result(output: str) -> dict[str, object]:
     data = json.loads(output)
     reason = data["hookSpecificOutput"]["permissionDecisionReason"]
     prefix = git_ops_guard.CHECKED_OUT_REF_DENY_PREFIX
-    assert reason.startswith(prefix)
+    assert reason.startswith(prefix), _context("checked-out-ref deny reason", reason)
     return json.loads(reason.removeprefix(prefix))
 
 
@@ -186,7 +203,7 @@ def _guard_verdict(output: str) -> str:
     """Classify captured guard stdout as allow, checked-out-ref or other-deny."""
     if not output.strip():
         return "allow"
-    assert _is_denied(output), output
+    assert _is_denied(output), _context("guard output", output)
     reason = json.loads(output)["hookSpecificOutput"]["permissionDecisionReason"]
     if reason.startswith(git_ops_guard.CHECKED_OUT_REF_DENY_PREFIX):
         return "checked-out-ref"

@@ -449,9 +449,22 @@ _RISKY_ROWS = [
             "checkout :(top).",
             "checkout . origin main",
             "checkout feat .",
+            "checkout *",
+            "checkout d/..",
+            "checkout :(top)*",
         ),
     ),
-    *_risky_cases(_CHECKOUT_DASHDASH_TREE, ("checkout -- .", "checkout -- ./", "checkout -- a .")),
+    *_risky_cases(
+        _CHECKOUT_DASHDASH_TREE,
+        (
+            "checkout -- .",
+            "checkout -- ./",
+            "checkout -- a .",
+            "checkout -- *",
+            "checkout -- d/..",
+            "checkout -- :(top)*",
+        ),
+    ),
 ]
 
 _ALLOWED_ROWS = [
@@ -500,6 +513,9 @@ _ALLOWED_ROWS = [
             "checkout :/.",
             "checkout -p",
             "checkout feat -- a.txt",
+            "checkout -- d/*",
+            "checkout -- *.txt",
+            "checkout -- ./d",
         ),
     ),
 ]

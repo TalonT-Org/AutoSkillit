@@ -335,9 +335,9 @@ def contains_blocked_git_op(
     """Return the blocked Git operation *cmd* performs, or None.
 
     Reads *cmd* exclusively through the evaluated-segment walk, the single
-    authority for what will actually execute and as what argv (rectify #4941
-    Part A): a direct invocation, one delivered via ``bash -c``/``eval``, a
-    heredoc/herestring/pipe-fed shell, and a literal-argv
+    authority for what will actually execute and as what argv: a direct
+    invocation, one delivered via ``bash -c``/``eval``, a heredoc/herestring/
+    pipe-fed shell, and a literal-argv
     ``subprocess.run(["git", ...])`` are all seen the same way. Operations are
     matched by outcome (``risky_git_operation``), not by option spelling.
     Returns None when *cmd* cannot be tokenized (fail-open).

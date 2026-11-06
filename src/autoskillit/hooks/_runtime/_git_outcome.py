@@ -2,14 +2,16 @@
 
 Members: GitHeadEffect, GitRefOutcome, git_ref_outcome, UpdateRefArgs,
 parse_update_ref, ResetArgs, parse_reset, PushArgs, parse_push, FetchArgs,
-parse_fetch, is_ref_mutation.
+parse_fetch, is_ref_mutation, risky_git_operation, _RISKY_PREDICATES.
 
 Every classification reads options through the ``_option_grammar`` engine over
 the tables in ``_git_option_tables``, so a stuck, bundled, abbreviated or
 reordered spelling means what it means to Git. ``git_ref_outcome`` maps
 branch, checkout, switch and symbolic-ref argv to the branch ref a command
 rewrites and the effect on ``HEAD``; the other parsers expose the operands the
-classifiers in ``_git_command_classification`` need.
+classifiers in ``_git_command_classification`` need. ``risky_git_operation``
+names which of the operations in ``RISKY_GIT_OPERATIONS`` an argv performs, through
+one predicate per operation in ``_RISKY_PREDICATES``.
 
 Expansion word-splitting into options (``git checkout $FLAGS``) is outside this
 bounded classification; a dynamic deciding operand is reported ambiguous.

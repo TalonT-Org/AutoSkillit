@@ -4,7 +4,7 @@ Each of this rectify's CLI flag-arity spec tables (_GH_API_FLAG_SPEC and
 _CURL_FLAG_SPEC in hooks/_github_mutation_analysis.py; _GIT_GLOBAL_FLAG_SPEC
 and _PIP_GLOBAL_FLAG_SPEC in hooks/_command_classification.py;
 _SHELL_INVOCATION_FLAG_SPEC and _PYTHON_INVOCATION_FLAG_SPEC in
-hooks/_classification/_interpreters.py, rectify #4941 Part A; and the Git and
+hooks/_classification/_invocation_flags.py, rectify #4941 Part A; and the Git and
 sed option tables in hooks/_runtime/_git_option_tables.py: _GIT_CHECKOUT_FLAG_SPEC,
 _GIT_SWITCH_FLAG_SPEC, _GIT_BRANCH_FLAG_SPEC, _GIT_SYMBOLIC_REF_FLAG_SPEC,
 _GIT_UPDATE_REF_FLAG_SPEC, _GIT_RESET_FLAG_SPEC, _GIT_PUSH_FLAG_SPEC,

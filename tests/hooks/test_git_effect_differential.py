@@ -1206,7 +1206,7 @@ _DIRTY_REVISIONS = (
     "origin/develop",
 )
 _DIRTY_TRACKED = ("file.txt", "d/x", "d", "local.txt")
-_WHOLE_TREE_SPELLINGS = (".", "./", ":/", ":(top)", ":(top).")
+_WHOLE_TREE_SPELLINGS = (".", "./", ":/", ":(top)", ":(top).", "*", "d/..", ":(top)*")
 _DIRTY_RESTORE = (*_DIRTY_TRACKED, *_WHOLE_TREE_SPELLINGS)
 _DIRTY_UNTRACKED = (
     "scratch.tmp",
@@ -1446,6 +1446,10 @@ _DESTRUCTIVE_CASES: tuple[_Case, ...] = (
     ("checkout", ("--", ".")),
     ("checkout", ("--", "./")),
     ("checkout", ("--", ":/")),
+    ("checkout", ("--", "*")),
+    ("checkout", ("--", "d/..")),
+    ("checkout", ("--", ":(top)*")),
+    ("checkout", ("*",)),
     ("checkout", (".", "--")),
     ("checkout", (".", "origin", "main")),
     ("checkout", ("HEAD", ".")),

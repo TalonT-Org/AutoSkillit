@@ -15,7 +15,6 @@ and a dangling commit.
 
 from __future__ import annotations
 
-import functools
 import io
 import json
 import os
@@ -35,6 +34,7 @@ from tests.infra._git_ops_guard_harness import (
     _HOOK_CONFIG_RELPATH,
     UNSET,
     _build_payload,
+    _context,
     _git,
     _guard_verdict,
     _make_clean_env,
@@ -166,17 +166,6 @@ def repo(tmp_path: Path) -> dict[str, Path | str]:
     _git(primary, "push", "-q", "origin", "develop:refs/heads/y")
     _git(primary, "fetch", "-q", "origin")
     return built
-
-
-@functools.cache
-def _git_version() -> str:
-    return subprocess.run(
-        ["git", "--version"], capture_output=True, text=True, check=False
-    ).stdout.strip()
-
-
-def _context(command: str, observed: object = "") -> str:
-    return f"{command!r} {observed!r} ({_git_version()})"
 
 
 def _expand(command: str, repo: dict[str, Path | str], tmp_path: Path) -> str:

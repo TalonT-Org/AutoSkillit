@@ -35,9 +35,10 @@ The package initializer remains import-free.
   rule over-denies (taint lasts for the scope); a raw write through a pre-existing
   symlink alias into ref storage, from a command that names neither Git nor ref storage,
   passes the prefilter; a recursive delete of a dynamic directory that contains ref
-  storage (`rm -rf "$REPO"`) is allowed; Git's executable repository state (hooks,
-  `core.hooksPath`, filter and diff drivers, `credential.helper`, merge drivers) changes
-  what a command does without changing its text. The guard raises the cost of mistakes
+  storage (`rm -rf "$REPO"`) is allowed; Git's executable repository state
+  (`.git/hooks/*`, `core.hooksPath`, `core.fsmonitor`, `core.sshCommand`, filter and diff
+  drivers, `credential.helper`, merge drivers) changes what a command does without
+  changing its text. The guard raises the cost of mistakes
   and bypasses for Git ref and `HEAD` mutations; it is not a security boundary against a
   hostile shell.
   A cook session may not move HEAD of its anchor repository's primary checkout: in an

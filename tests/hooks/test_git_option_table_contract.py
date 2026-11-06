@@ -29,6 +29,7 @@ from autoskillit.hooks._runtime._git_option_tables import (
     _GIT_SUBCOMMAND_TABLES,
     _GIT_TABLES_REFERENCE_VERSION,
 )
+from tests._git_topology import init_empty_checkout
 
 pytestmark = [
     pytest.mark.layer("hooks"),
@@ -118,11 +119,15 @@ def git_env(tmp_path_factory: pytest.TempPathFactory) -> dict[str, str]:
 
 @pytest.fixture(scope="module")
 def git_repo(tmp_path_factory: pytest.TempPathFactory, git_env: dict[str, str]) -> Path:
-    # The helper only needs a repository to run in, not one with history.
-    repo = tmp_path_factory.mktemp("git-option-contract-repo")
-    init = _run_git(git_env, repo, "init", "-q")
-    assert init.returncode == 0, f"git init failed: {init.stderr!r}"
-    return repo
+    # The helper only needs a repository to run in, not one with history. The
+    # topology builder reads the process environment, so it runs under the same
+    # isolation as every other Git call in this module.
+    with pytest.MonkeyPatch.context() as patch:
+        for name in _AMBIENT_GIT_VARIABLES:
+            patch.delenv(name, raising=False)
+        for name in ("HOME", "XDG_CONFIG_HOME", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM"):
+            patch.setenv(name, git_env[name])
+        return init_empty_checkout(tmp_path_factory.mktemp("git-option-contract-repo"))
 
 
 @pytest.fixture(scope="module")

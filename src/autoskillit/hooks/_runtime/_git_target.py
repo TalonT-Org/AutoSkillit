@@ -38,7 +38,7 @@ from _command_classification import (
     tokenize_command_segments,
 )
 from _git_command_classification import _git_result
-from _git_outcome import GitHeadEffect, GitRefOutcome, git_ref_outcome, risky_git_operation
+from _git_outcome import GitRefOutcome, _ambiguous_outcome, git_ref_outcome, risky_git_operation
 from _github_mutation_analysis import _DYNAMIC_SHELL_TOKEN_RE
 from _path_identity import PathIdentityError, canonical_existing_path
 from _shell_segment_walk import WalkedSegment, walk_evaluated_segments
@@ -286,7 +286,7 @@ def analyze_git_segment(
         else:
             invocation = expanded
     outcome = (
-        GitRefOutcome(None, False, "HEAD", True, GitHeadEffect.AMBIGUOUS)
+        _ambiguous_outcome()
         if identity_unknown
         else git_ref_outcome(invocation.subcommand, invocation.flags)
     )

@@ -20,7 +20,8 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, NamedTuple
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from autoskillit.hooks._classification._flag_arity_classification import _FlagArity
@@ -161,7 +162,8 @@ def python_c_program(args: Sequence[str]) -> tuple[str | None, bool]:
     return None, False
 
 
-class _WrapperSpec(NamedTuple):
+@dataclass(frozen=True, slots=True)
+class _WrapperSpec:
     booleans: frozenset[str]
     values: frozenset[str]
     leading_operands: int

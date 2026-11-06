@@ -68,37 +68,39 @@ def _walk(command: str, dirs: dict[str, str], cwd: str) -> list[WalkedSegment]:
     return walk
 
 
-def _certainty_rows(certain: bool, *commands: str, subcommand: str = "x") -> list[object]:
+def _proven_rows(verb_cwd: str, *commands: str, subcommand: str = "x") -> list[object]:
     return [
-        pytest.param(command, certain, subcommand, id=_row_id(command, certain))
+        pytest.param(command, verb_cwd, subcommand, id=_row_id(command, verb_cwd))
         for command in commands
     ]
+
+
+def _uncertain_rows(*commands: str, subcommand: str = "x") -> list[object]:
+    return [pytest.param(command, subcommand, id=_row_id(command, False)) for command in commands]
 
 
 _SPAWN_PROGRAM = 'import subprocess; subprocess.run(["git", "x"], cwd="@a")'
 
 _CERTAIN_CASES = [
-    # The Git segment runs only after a cd that certainly ran. A missing target
-    # still counts inside an unbroken && chain, which skips Git when the cd fails.
-    *_certainty_rows(
-        True,
+    # The Git segment runs only after a cd that certainly ran.
+    *_proven_rows(
+        "@a",
         "cd @a && git x",
         "cd @a; git x",
         "cd @a || exit 1; git x",
         "pushd @a >/dev/null && git x",
         "make && cd @a && git x",
-        "cd @missing && git x",
         "cd @a &&\ngit x",
         "cd @a # go\ngit x",
     ),
-    *_certainty_rows(
-        True, "git status || true; cd @a && git checkout -b x", subcommand="checkout"
-    ),
+    # A missing target still counts inside an unbroken && chain, which skips Git when the cd fails.
+    *_proven_rows("@missing", "cd @missing && git x"),
+    *_proven_rows("@a", "git status || true; cd @a && git checkout -b x", subcommand="checkout"),
     # A child shell started after a certain cd inherits it.
-    *_certainty_rows(True, "cd @a && bash -c 'git x'; cd @b"),
+    *_proven_rows("@a", "cd @a && bash -c 'git x'; cd @b"),
     # A per-invocation override seeds its own certain cwd.
-    *_certainty_rows(
-        True,
+    *_proven_rows(
+        "@a",
         "env -C @a git x",
         f"python3 -c '{_SPAWN_PROGRAM}'",
         "cd $X && env -C @a git x",
@@ -107,8 +109,7 @@ _CERTAIN_CASES = [
 
 _UNCERTAIN_CASES = [
     # The cd may not have run, may have failed, or ran in another process.
-    *_certainty_rows(
-        False,
+    *_uncertain_rows(
         "cd @missing; git x",
         "true || cd @a; git x",
         "false && cd @a; git x",
@@ -119,8 +120,7 @@ _UNCERTAIN_CASES = [
         "true ||\ncd @a\ngit x",
     ),
     # A cd inside a compound body or function body never certainly ran.
-    *_certainty_rows(
-        False,
+    *_uncertain_rows(
         "if false; then cd @a; fi; git x",
         "if false; then true; cd @a; fi; git x",
         "for d in a; do cd @a; done; git x",
@@ -130,31 +130,38 @@ _UNCERTAIN_CASES = [
         "bash -c 'f() { cd @a; }; git x'",
     ),
     # Bare keyword lines leave no trace of the condition in the command text.
-    *_certainty_rows(
-        False,
+    *_uncertain_rows(
         "if\nfalse\nthen\ncd @a\nfi\ngit x",
         "while\ntrue\ndo\ncd @a\ndone\ngit x",
     ),
     # The connector resets at a group close.
-    *_certainty_rows(False, "{ true; } || cd @a; git x"),
+    *_uncertain_rows("{ true; } || cd @a; git x"),
     # A redirect's child-scope records do not hide the pipe that follows.
-    *_certainty_rows(False, 'cd @a >"$(echo f)" | git x'),
+    *_uncertain_rows('cd @a >"$(echo f)" | git x'),
     # Taint lasts for the scope, so an earlier pipeline over-denies.
-    *_certainty_rows(False, "ls | head; cd @a; git x"),
-    *_certainty_rows(False, "cd @a && bash -c 'false && cd @b; git x'"),
+    *_uncertain_rows("ls | head; cd @a; git x"),
+    *_uncertain_rows("cd @a && bash -c 'false && cd @b; git x'"),
     # A dynamic or relative override does not stand alone.
-    *_certainty_rows(False, "cd $X && env -C sub git x", 'env -C "$D" git x'),
+    *_uncertain_rows("cd $X && env -C sub git x", 'env -C "$D" git x'),
 ]
 
 
-@pytest.mark.parametrize(
-    ("command", "certain", "subcommand"), [*_CERTAIN_CASES, *_UNCERTAIN_CASES]
-)
-def test_git_segment_cwd_certainty(
-    dirs: dict[str, str], command: str, certain: bool, subcommand: str
+@pytest.mark.parametrize(("command", "verb_cwd", "subcommand"), _CERTAIN_CASES)
+def test_proven_git_segment_cwd_is_the_directory_the_command_names(
+    dirs: dict[str, str], command: str, verb_cwd: str, subcommand: str
 ) -> None:
     segment = _git_segment(_walk(command, dirs, dirs["w"]), subcommand)
-    assert segment.cwd_certain is certain
+    assert segment.cwd_certain is True
+    assert segment.verb_cwd == _bind(verb_cwd, dirs)
+
+
+# verb_cwd is the shell's logical directory, so it is deliberately not asserted here.
+@pytest.mark.parametrize(("command", "subcommand"), _UNCERTAIN_CASES)
+def test_unproven_git_segment_cwd_is_uncertain(
+    dirs: dict[str, str], command: str, subcommand: str
+) -> None:
+    segment = _git_segment(_walk(command, dirs, dirs["w"]), subcommand)
+    assert segment.cwd_certain is False
 
 
 @pytest.mark.parametrize(

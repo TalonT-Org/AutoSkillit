@@ -77,7 +77,6 @@ class ShellDirectoryState:
 
 @dataclass(frozen=True, slots=True)
 class WalkedSegment:
-    record: EvaluatedSegment
     partition: OutputRedirectPartition
     executable: list[str]
     executable_tokens: list[ArgvToken] | None
@@ -399,7 +398,6 @@ def _walk_executable(
         position_unresolved: bool = False,
     ) -> WalkedSegment:
         return WalkedSegment(
-            record,
             partition,
             executable,
             executable_tokens,

@@ -2,7 +2,8 @@
 
 Members: GitTargetKind, GitTarget, ChannelFlags, GitSegmentFacts,
 command_channel_flags, analyze_git_segment, resolve_git_target_for_path,
-expand_git_alias, _GIT_BUILTIN_SUBCOMMANDS, _GIT_MUTATION_SUBCOMMANDS.
+expand_git_alias, contains_blocked_git_op, _mentions_git_mutation,
+_mutation_names, _GIT_BUILTIN_SUBCOMMANDS, _GIT_MUTATION_SUBCOMMANDS.
 
 ``analyze_git_segment`` is the single analysis entry for a walked shell
 segment. The target is RESOLVED only from a proven working directory; an
@@ -10,6 +11,12 @@ unknown cwd, a dynamic ``-C``, a repository-layout override or an unparseable
 global option is UNRESOLVED, never a guessed repository. A path that is not
 inside any repository is NOT_A_REPOSITORY. Callers decide what each kind
 means for the command at hand.
+
+``contains_blocked_git_op`` is the headless destructive-operation matcher. It
+lives here because it reads every command through ``analyze_git_segment`` and
+shares its cache, and this module already imports ``_git_command_classification``,
+which therefore cannot import it back. It asks ``_git_outcome.risky_git_operation``
+which of the caller's blocked operations each segment performs.
 
 Every Git query goes through ``_git_result`` (locale-stable), once per
 canonical path per ``cache``.

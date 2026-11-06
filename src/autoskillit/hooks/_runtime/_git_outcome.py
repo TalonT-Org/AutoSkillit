@@ -401,8 +401,10 @@ def _risky_hard_reset(parsed: ParsedArgv) -> bool:
 
 def _risky_clean(parsed: ParsedArgv) -> bool:
     """Any clean that is not a dry run: Git refuses an unforced clean unless config
-    says otherwise, so this covers every config channel without querying config."""
-    return not any(_active(parsed, name) for name in ("dry-run", "interactive"))
+    says otherwise, so this covers every config channel without querying config.
+    ``-i`` is no exemption: Git reads its menu from stdin, so a piped answer cleans
+    with no human."""
+    return _active(parsed, "dry-run") is None
 
 
 def _risky_clean_directories(parsed: ParsedArgv) -> bool:

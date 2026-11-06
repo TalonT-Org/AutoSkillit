@@ -117,8 +117,13 @@ def _pinned_git_environment(home: Path) -> Iterator[None]:
         yield
 
 
-def _git(cwd: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    """Run Git under the environment pinned by ``_pinned_git_environment``."""
+def _git(
+    cwd: Path, *args: str, check: bool = True, stdin_text: str = ""
+) -> subprocess.CompletedProcess[str]:
+    """Run Git under the environment pinned by ``_pinned_git_environment``.
+
+    Git reads ``stdin_text`` on stdin; the default is an immediate end of input.
+    """
     return subprocess.run(
         ["git", *args],
         cwd=cwd,
@@ -126,7 +131,7 @@ def _git(cwd: Path, *args: str, check: bool = True) -> subprocess.CompletedProce
         capture_output=True,
         text=True,
         errors="replace",
-        stdin=subprocess.DEVNULL,
+        input=stdin_text,
         timeout=_GIT_TIMEOUT_SECONDS,
     )
 
@@ -1185,7 +1190,9 @@ def _run_destructive(
     if not require_force:
         _git(sandbox.primary, "config", "clean.requireForce", "false")
     before = _snapshot(sandbox)
-    completed = _git(sandbox.primary, subcommand, *argv, check=False)
+    # An interactive clean takes its menu answer from stdin, and ``c`` cleans.
+    stdin_text = "c\n" if subcommand == "clean" else ""
+    completed = _git(sandbox.primary, subcommand, *argv, check=False, stdin_text=stdin_text)
     after = _snapshot(sandbox)
     effect = _observed_effect(sandbox.primary.parent / "origin.git", subcommand, before, after)
     return _DestructiveRun(

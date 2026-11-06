@@ -142,14 +142,17 @@ def _probe_repository(path: str) -> GitTarget:
         if b"not a git repository" in probe.stderr:
             return GitTarget(GitTargetKind.NOT_A_REPOSITORY, "", path, "", "", False, None)
         return _unresolved("git_query_failed", path)
-    git_dir_raw, common_raw = probe.stdout.decode("utf-8", errors="strict").splitlines()[:2]
-    worktree_git_dir = canonical_existing_path(git_dir_raw)
-    # ``--git-common-dir`` is relative to the queried path (``.`` inside ``.git``).
-    common_git_dir = canonical_existing_path(os.path.join(path, common_raw))
     # ``--show-toplevel`` fails inside ``.git`` and in a bare repository, so it
     # is a separate query.
     top = _git_result(path, "rev-parse", "--show-toplevel")
-    toplevel = top.stdout.decode("utf-8", errors="strict").strip() if top.returncode == 0 else None
+    try:
+        git_dir_raw, common_raw = probe.stdout.decode("utf-8").splitlines()[:2]
+        toplevel = top.stdout.decode("utf-8").strip() if top.returncode == 0 else None
+    except ValueError:
+        return _unresolved("git_query_failed", path)
+    worktree_git_dir = canonical_existing_path(git_dir_raw)
+    # ``--git-common-dir`` is relative to the queried path (``.`` inside ``.git``).
+    common_git_dir = canonical_existing_path(os.path.join(path, common_raw))
     return GitTarget(
         GitTargetKind.RESOLVED,
         "",

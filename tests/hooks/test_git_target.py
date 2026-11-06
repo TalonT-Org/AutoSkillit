@@ -2,9 +2,10 @@
 
 Members: checkout, linked-worktree, ``.git`` and bare-repository targets, the
 non-repository target, unproven-cwd and ``-C`` rows, layout-override and
-unparsed-global-option rows, dynamic command and subcommand identity, the alias
-channel, alias expansion, ``git-<builtin>`` and external commands,
-``resolve_git_target_for_path`` and the builtin/mutation subcommand sets.
+unparsed-global-option rows, unreadable Git output, dynamic command and
+subcommand identity, the alias channel, alias expansion, ``git-<builtin>`` and
+external commands, ``resolve_git_target_for_path`` and the builtin/mutation
+subcommand sets.
 
 Every row analyses a whole segment produced by ``walk_evaluated_segments``, in
 real repositories under ``tmp_path_factory`` with Git configuration isolated
@@ -575,6 +576,22 @@ def test_repository_is_queried_once_per_canonical_path_per_cache(
     assert first == second, _git_version()
     assert queries_after_first > 0, _git_version()
     assert len(queries) == queries_after_first, f"{queries} ({_git_version()})"
+
+
+@pytest.mark.parametrize(
+    "stdout", [b"/r/\xff\n/r/\xff\n", b"/only/one\n"], ids=["not_utf8", "one_line"]
+)
+def test_unreadable_rev_parse_output_is_an_unresolved_git_query(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stdout: bytes
+) -> None:
+    def fake_git_result(cwd: str, *args: str) -> subprocess.CompletedProcess[bytes]:
+        return subprocess.CompletedProcess(args=[], returncode=0, stdout=stdout, stderr=b"")
+
+    monkeypatch.setattr(_git_target, "_git_result", fake_git_result)
+
+    target = resolve_git_target_for_path(str(tmp_path), {})
+
+    _assert_unresolved(str(tmp_path), target, "git_query_failed")
 
 
 def test_mutation_subcommands_are_builtin_subcommands() -> None:

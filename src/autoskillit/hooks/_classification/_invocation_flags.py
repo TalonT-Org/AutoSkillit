@@ -176,7 +176,8 @@ _NO_OPTIONS: frozenset[str] = frozenset()
 # 1.9). An option whose short form carries two meanings (`sudo -h` is `--help`
 # and `--host`) stays out of the table so it falls to the unmodelled rule: a
 # modelled-but-wrong arity silently mislocates the command word, while an
-# unmodelled option fails closed.
+# unmodelled option fails closed. The one exception is an `=`-joined token
+# (`--host=h`): it is a single token whatever the option's arity.
 _WRAPPER_SPECS: Mapping[str, _WrapperSpec] = {
     "timeout": _WrapperSpec(
         frozenset({"--foreground", "--preserve-status", "-v", "--verbose"}),
@@ -246,7 +247,10 @@ _WRAPPER_SPECS: Mapping[str, _WrapperSpec] = {
 
 
 def _wrapper_option_width(spec: _WrapperSpec, token: str) -> int | None:
-    """Tokens a wrapper option occupies (1 or 2), or None when the table does not model it."""
+    """Tokens a wrapper option occupies (1 or 2), or None when its width is unknown.
+
+    An ``=``-joined token is one token whether or not the table models its option.
+    """
     values = spec.values | spec.chdir
     if "=" in token:
         return 1

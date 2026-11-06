@@ -1,8 +1,8 @@
 """Git command outcomes: what an argv does, not which tokens it contains.
 
 Members: GitHeadEffect, GitRefOutcome, git_ref_outcome, UpdateRefArgs,
-parse_update_ref, ResetArgs, parse_reset, PushArgs, parse_push, FetchArgs,
-parse_fetch, is_ref_mutation, risky_git_operation, _RISKY_PREDICATES.
+parse_update_ref, ResetArgs, parse_reset, RemoteArgs, parse_push, parse_fetch,
+is_ref_mutation, risky_git_operation, _RISKY_PREDICATES.
 
 Every classification reads options through the ``_option_grammar`` engine over
 the tables in ``_git_option_tables``, so a stuck, bundled, abbreviated or
@@ -308,33 +308,26 @@ def _remote_and_refspecs(
     return (repo.value, ()) if repo is not None else (None, ())
 
 
-class PushArgs(NamedTuple):
+class RemoteArgs(NamedTuple):
     parsed: ParsedArgv
     remote: str | None
     refspecs: tuple[str, ...]
     unresolved: str | None
 
 
-def parse_push(args: Sequence[str]) -> PushArgs:
+def parse_push(args: Sequence[str]) -> RemoteArgs:
     parsed = parse_options(args, _GIT_PUSH_FLAG_SPEC)
     remote, refspecs = _remote_and_refspecs(parsed, _active(parsed, "repo"))
-    return PushArgs(parsed, remote, refspecs, parsed.unresolved)
+    return RemoteArgs(parsed, remote, refspecs, parsed.unresolved)
 
 
-class FetchArgs(NamedTuple):
-    parsed: ParsedArgv
-    remote: str | None
-    refspecs: tuple[str, ...]
-    unresolved: str | None
-
-
-def parse_fetch(args: Sequence[str]) -> FetchArgs:
+def parse_fetch(args: Sequence[str]) -> RemoteArgs:
     parsed = parse_options(args, _GIT_FETCH_FLAG_SPEC)
     unresolved = parsed.unresolved
     if unresolved is None and _active(parsed, "stdin"):
         unresolved = "stdin"
     remote, refspecs = _remote_and_refspecs(parsed, None)
-    return FetchArgs(parsed, remote, refspecs, unresolved)
+    return RemoteArgs(parsed, remote, refspecs, unresolved)
 
 
 def _path_like_remote(remote: str) -> bool:

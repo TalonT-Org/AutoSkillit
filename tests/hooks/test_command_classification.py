@@ -4793,11 +4793,14 @@ def test_every_git_global_spec_flag_is_recognized(flag: str) -> None:
 @pytest.mark.parametrize(
     ("argv", "subcommand"),
     [
-        (["git", "--no-optional-locks", "status"], "status"),
-        (["git", "--literal-pathspecs", "log"], "log"),
-        (["git", "--no-literal-pathspecs", "log"], "log"),
-        (["git", "--attr-source=HEAD", "log"], "log"),
-        (["git", "--attr-source", "HEAD", "log"], "log"),
+        pytest.param(argv, subcommand, id=" ".join(argv))
+        for argv, subcommand in [
+            (["git", "--no-optional-locks", "status"], "status"),
+            (["git", "--literal-pathspecs", "log"], "log"),
+            (["git", "--no-literal-pathspecs", "log"], "log"),
+            (["git", "--attr-source=HEAD", "log"], "log"),
+            (["git", "--attr-source", "HEAD", "log"], "log"),
+        ]
     ],
 )
 def test_git_pathspec_lock_and_attribute_globals_leave_the_real_subcommand(
@@ -4810,7 +4813,9 @@ def test_git_pathspec_lock_and_attribute_globals_leave_the_real_subcommand(
     assert result.flags == []
 
 
-@pytest.mark.parametrize("argv", [["git", "--list-cmds=main"], ["git", "--exec-path"]])
+@pytest.mark.parametrize(
+    "argv", [["git", "--list-cmds=main"], ["git", "--exec-path"]], ids=" ".join
+)
 def test_git_query_only_invocation_has_no_subcommand(argv: list[str]) -> None:
     assert extract_git_subcommand_and_flags(argv) is None
 

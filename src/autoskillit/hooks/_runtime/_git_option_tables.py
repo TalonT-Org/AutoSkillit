@@ -1,4 +1,8 @@
-"""Option tables for the Git subcommands whose argv the guard classifies.
+"""Option tables for the commands whose argv ``git_ops_guard`` classifies.
+
+Covers the Git subcommands in ``_GIT_SUBCOMMAND_TABLES`` and ``sed`` (``_SED_FLAG_SPEC``),
+whose in-place edit makes its last operand a raw write target in the guard's raw-write scan.
+Both are read by the ``_option_grammar`` engine.
 
 Members: _GIT_CHECKOUT_FLAG_SPEC, _GIT_SWITCH_FLAG_SPEC, _GIT_BRANCH_FLAG_SPEC,
 _GIT_SYMBOLIC_REF_FLAG_SPEC, _GIT_UPDATE_REF_FLAG_SPEC, _GIT_RESET_FLAG_SPEC,

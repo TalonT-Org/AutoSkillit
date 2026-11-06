@@ -35,13 +35,6 @@ from autoskillit.hooks._runtime._shell_segment_walk import (
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 
 _PLACEHOLDER_RE = re.compile(r"@(w|a|b|missing)\b")
-_AMBIENT_ENV_NAMES = ("CDPATH", "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR")
-
-
-@pytest.fixture(autouse=True)
-def _hermetic_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in _AMBIENT_ENV_NAMES:
-        monkeypatch.delenv(name, raising=False)
 
 
 @pytest.fixture

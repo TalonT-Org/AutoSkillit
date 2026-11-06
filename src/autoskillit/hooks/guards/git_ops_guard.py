@@ -105,17 +105,15 @@ _PACK_VERBS = frozenset({"git-receive-pack", "git-upload-pack"})
 # and am write refs of the requesting worktree); they only skip the shared-ref decision.
 _NON_MUTATION_SUBCOMMANDS = _GIT_BUILTIN_SUBCOMMANDS - _GIT_MUTATION_SUBCOMMANDS
 
-# Commands that mention none of these cannot reach a Git ref or repository
-# classification, so they skip the preflight entirely. This bounds the blast
-# radius of the classifier; it is not a security boundary.
-_GIT_RELEVANT_RE = re.compile(
-    r"(?<![A-Za-z0-9])git(?![A-Za-z0-9])|refs/|packed-refs|worktrees/|\bHEAD\b"
-    r"|\bGIT_(?:DIR|COMMON_DIR|WORK_TREE)\b"
-)
 _REF_STORAGE_RE = re.compile(
     r"(?<![\w.])\.git(?![\w-])|refs/|packed-refs|logs/HEAD|worktrees/|\bHEAD\b"
     r"|\bGIT_(?:DIR|COMMON_DIR|WORK_TREE)\b"
 )
+# Commands that mention none of these cannot reach a Git ref or repository
+# classification, so they skip the preflight entirely. Built from _REF_STORAGE_RE so the
+# prefilter can never be narrower than the ref-storage spellings it must let through. This
+# bounds the blast radius of the classifier; it is not a security boundary.
+_GIT_RELEVANT_RE = re.compile(rf"(?<![A-Za-z0-9])git(?![A-Za-z0-9])|{_REF_STORAGE_RE.pattern}")
 _INTERPRETER_WRITE_RE = re.compile(
     r"\bopen\s*\(|\.write_text\s*\(|\.write_bytes\s*\(|\bos\.(?:rename|replace|link|symlink)\s*\("
     r"|\bshutil\.(?:copy\w*|move)\s*\("

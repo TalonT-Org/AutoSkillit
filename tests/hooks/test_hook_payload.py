@@ -1,10 +1,10 @@
 """Payload facts extracted by ``parse_hook_command`` in hooks/_runtime/_hook_payload.py.
 
-Members: the Bash per-call ``workdir`` rows (absolute, relative and blank), the
-payload-cwd rows that carry no ``workdir``, the session-cwd anomalies that
+Members: the Bash per-call ``workdir`` rows (absolute, relative, blank, non-string
+and null), the payload-cwd rows that carry no ``workdir``, the session-cwd anomalies that
 survive a ``workdir``, the run_cmd rows that ignore it, and the
-github_mutation_guard decisions that separate ``RELATIVE_WORKDIR`` from the
-session-cwd anomalies.
+github_mutation_guard decisions that separate ``RELATIVE_WORKDIR`` and
+``NON_STRING_WORKDIR`` from the session-cwd anomalies.
 """
 
 from __future__ import annotations
@@ -64,6 +64,38 @@ def test_relative_or_blank_workdir_is_a_relative_workdir_anomaly(
     assert parsed.execution_cwd == ""
     assert parsed.payload_cwd == str(tmp_path)
     assert parsed.anomalies == (PayloadAnomaly.RELATIVE_WORKDIR,)
+
+
+@pytest.mark.parametrize("workdir", [7, [], {}, True], ids=repr)
+def test_non_string_workdir_is_a_non_string_workdir_anomaly(
+    tmp_path: Path, workdir: object
+) -> None:
+    event = make_hook_event(
+        tool="Bash",
+        command=_COMMAND,
+        payload_cwd=str(tmp_path),
+        extra_tool_input={"workdir": workdir},
+    )
+
+    parsed = parse_hook_command(event)
+
+    assert parsed.execution_cwd == ""
+    assert parsed.payload_cwd == str(tmp_path)
+    assert parsed.anomalies == (PayloadAnomaly.NON_STRING_WORKDIR,)
+
+
+def test_null_workdir_is_absent_and_uses_the_session_cwd(tmp_path: Path) -> None:
+    event = make_hook_event(
+        tool="Bash",
+        command=_COMMAND,
+        payload_cwd=str(tmp_path),
+        extra_tool_input={"workdir": None},
+    )
+
+    parsed = parse_hook_command(event)
+
+    assert parsed.execution_cwd == str(tmp_path)
+    assert parsed.anomalies == ()
 
 
 @pytest.mark.parametrize(
@@ -136,6 +168,24 @@ def test_relative_workdir_does_not_trigger_the_github_guard_malformed_cwd_denial
     assert decision.trigger is None
 
 
+def test_non_string_workdir_does_not_trigger_the_github_guard_malformed_cwd_denial(
+    tmp_path: Path,
+) -> None:
+    event = make_hook_event(
+        tool="Bash",
+        command=_COMMAND,
+        payload_cwd=str(tmp_path),
+        extra_tool_input={"workdir": 7},
+    )
+    parsed = parse_hook_command(event)
+
+    decision = decide(parsed)
+
+    assert parsed.anomalies == (PayloadAnomaly.NON_STRING_WORKDIR,)
+    assert decision.allow is True
+    assert decision.trigger is None
+
+
 @pytest.mark.parametrize(
     ("payload_cwd", "workdir", "execution_cwd", "anomalies"),
     [
@@ -147,16 +197,18 @@ def test_relative_workdir_does_not_trigger_the_github_guard_malformed_cwd_denial
             "",
             (PayloadAnomaly.RELATIVE_CWD, PayloadAnomaly.RELATIVE_WORKDIR),
         ),
+        (7, 7, "", (PayloadAnomaly.NON_STRING_CWD, PayloadAnomaly.NON_STRING_WORKDIR)),
     ],
     ids=[
         "relative-session-cwd-absolute-workdir",
         "non-string-session-cwd-absolute-workdir",
         "relative-session-cwd-relative-workdir",
+        "non-string-session-cwd-non-string-workdir",
     ],
 )
 def test_session_cwd_anomalies_survive_a_workdir_and_keep_the_github_guard_denial(
     payload_cwd: object,
-    workdir: str,
+    workdir: object,
     execution_cwd: str,
     anomalies: tuple[PayloadAnomaly, ...],
 ) -> None:

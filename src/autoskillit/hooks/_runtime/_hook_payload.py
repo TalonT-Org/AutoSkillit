@@ -21,6 +21,7 @@ class PayloadAnomaly(StrEnum):
     FIELD_CONFUSION = "field_confusion"
     NON_STRING_COMMAND = "non_string_command"
     NON_STRING_CWD = "non_string_cwd"
+    NON_STRING_WORKDIR = "non_string_workdir"
     RELATIVE_CWD = "relative_cwd"
     RELATIVE_WORKDIR = "relative_workdir"
 
@@ -65,14 +66,17 @@ def _execution_cwd(
     """The directory the command runs in, and every anomaly in the cwd-shaped fields.
 
     A Bash-shaped payload may carry a per-call ``workdir`` (Codex); when it
-    does, that, not the session cwd, is where the command runs. A malformed
-    session cwd is still reported: it is a defect of the payload whether or not
-    a workdir overrides it.
+    does, that, not the session cwd, is where the command runs. A present
+    non-string or relative workdir is NON_STRING_WORKDIR or RELATIVE_WORKDIR
+    with the execution cwd unknown. A malformed session cwd is still reported:
+    it is a defect of the payload whether or not a workdir overrides it.
     """
     session_cwd, session_anomaly = _absolute_string_or_blank(raw_cwd)
     anomalies = () if session_anomaly is None else (session_anomaly,)
     workdir = tool_input.get("workdir")
-    if tool_kind == "bash" and isinstance(workdir, str):
+    if tool_kind == "bash" and workdir is not None:
+        if not isinstance(workdir, str):
+            return ("", (*anomalies, PayloadAnomaly.NON_STRING_WORKDIR))
         if os.path.isabs(workdir):
             return (workdir, anomalies)
         return ("", (*anomalies, PayloadAnomaly.RELATIVE_WORKDIR))

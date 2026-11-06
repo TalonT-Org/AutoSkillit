@@ -685,9 +685,7 @@ def _extract_interpreter_segment_specs(
         return ([], False)
 
     specs: list[_InterpreterCommandSpec] = []
-    has_unresolved = False
-    program, program_unresolved = python_c_program(args)
-    has_unresolved = program_unresolved
+    program, has_unresolved = python_c_program(args)
     if program is not None:
         found, unresolved = _python_program_command_specs(program)
         specs.extend(found)

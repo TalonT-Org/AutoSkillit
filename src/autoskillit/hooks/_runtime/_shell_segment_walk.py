@@ -285,10 +285,6 @@ def _apply_shell_builtin(
 ) -> bool:
     if argv_tokens is None or not _unwrapped_prefix(executable[:start]):
         return False
-    if start >= len(executable):
-        state.cwd = ""
-        state.cdpath_unknown = True
-        return True
     argv = executable[start:]
     verb = argv[0]
     if verb in _DIRECTORY_COMMANDS:

@@ -41,7 +41,12 @@ from _git_target import (  # type: ignore[import-not-found]
 )
 from _shell_segment_walk import walk_evaluated_segments  # type: ignore[import-not-found]
 
-from tests._git_topology import add_linked_worktree, commit_file, init_checkout
+from tests._git_topology import (
+    AMBIENT_GIT_VARIABLES,
+    add_linked_worktree,
+    commit_file,
+    init_checkout,
+)
 
 pytestmark = [
     pytest.mark.layer("hooks"),
@@ -50,12 +55,6 @@ pytestmark = [
 ]
 
 _GIT_TIMEOUT_SECONDS = 10
-_INHERITED_REPOSITORY_ENV = (
-    "GIT_DIR",
-    "GIT_WORK_TREE",
-    "GIT_COMMON_DIR",
-    "GIT_TEST_DISALLOW_ABBREVIATED_OPTIONS",
-)
 _REPOSITORY_ALIASES = {
     "co": "checkout",
     "nb": "checkout -b",
@@ -95,7 +94,7 @@ def _isolate_git_environment(mp: pytest.MonkeyPatch, home: Path, ceiling: Path) 
     mp.setenv("GIT_CONFIG_GLOBAL", os.devnull)
     mp.setenv("GIT_CONFIG_NOSYSTEM", "1")
     mp.setenv("GIT_CEILING_DIRECTORIES", str(ceiling))
-    for name in _INHERITED_REPOSITORY_ENV:
+    for name in AMBIENT_GIT_VARIABLES:
         mp.delenv(name, raising=False)
 
 

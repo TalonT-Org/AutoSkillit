@@ -34,7 +34,7 @@ from autoskillit.hooks._runtime._git_option_tables import (
     _GIT_TABLES_REFERENCE_VERSION,
 )
 from autoskillit.hooks._runtime._git_target import _GIT_BUILTIN_SUBCOMMANDS
-from tests._git_topology import init_empty_checkout
+from tests._git_topology import AMBIENT_GIT_VARIABLES, init_empty_checkout
 
 pytestmark = [
     pytest.mark.layer("hooks"),
@@ -42,12 +42,6 @@ pytestmark = [
     pytest.mark.skipif(shutil.which("git") is None, reason="git binary required"),
 ]
 
-_AMBIENT_GIT_VARIABLES = (
-    "GIT_DIR",
-    "GIT_WORK_TREE",
-    "GIT_COMMON_DIR",
-    "GIT_TEST_DISALLOW_ABBREVIATED_OPTIONS",
-)
 _MIN_LIVE_NAMES = 3
 
 
@@ -112,7 +106,7 @@ def git_env(tmp_path_factory: pytest.TempPathFactory) -> dict[str, str]:
     xdg_config_home = root / "xdg-config"
     home.mkdir()
     xdg_config_home.mkdir()
-    env = {k: v for k, v in os.environ.items() if k not in _AMBIENT_GIT_VARIABLES}
+    env = {k: v for k, v in os.environ.items() if k not in AMBIENT_GIT_VARIABLES}
     env.update(
         HOME=str(home),
         XDG_CONFIG_HOME=str(xdg_config_home),
@@ -128,7 +122,7 @@ def git_repo(tmp_path_factory: pytest.TempPathFactory, git_env: dict[str, str]) 
     # topology builder reads the process environment, so it runs under the same
     # isolation as every other Git call in this module.
     with pytest.MonkeyPatch.context() as patch:
-        for name in _AMBIENT_GIT_VARIABLES:
+        for name in AMBIENT_GIT_VARIABLES:
             patch.delenv(name, raising=False)
         for name in ("HOME", "XDG_CONFIG_HOME", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM"):
             patch.setenv(name, git_env[name])

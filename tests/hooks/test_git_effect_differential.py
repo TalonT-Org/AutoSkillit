@@ -58,7 +58,7 @@ from hypothesis import HealthCheck, event, example, given, settings
 from hypothesis import strategies as st
 
 from autoskillit.hooks.guards import git_ops_guard
-from tests._git_topology import commit_file, init_empty_checkout
+from tests._git_topology import AMBIENT_GIT_VARIABLES, commit_file, init_empty_checkout
 
 pytestmark = [
     pytest.mark.layer("hooks"),
@@ -72,12 +72,6 @@ _GIT_TIMEOUT_SECONDS = 30
 # Repository fixtures
 # ---------------------------------------------------------------------------
 
-_STRIPPED_VARIABLES = (
-    "GIT_DIR",
-    "GIT_WORK_TREE",
-    "GIT_COMMON_DIR",
-    "GIT_TEST_DISALLOW_ABBREVIATED_OPTIONS",
-)
 _COMMIT_DATE = "2026-01-01T00:00:00+0000"
 
 
@@ -110,7 +104,7 @@ def _pinned_git_environment(home: Path) -> Iterator[None]:
     not a per-call dict.
     """
     with pytest.MonkeyPatch.context() as patch:
-        for name in _STRIPPED_VARIABLES:
+        for name in AMBIENT_GIT_VARIABLES:
             patch.delenv(name, raising=False)
         for name, value in _pinned_variables(home).items():
             patch.setenv(name, value)

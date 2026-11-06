@@ -7,6 +7,14 @@ from pathlib import Path
 
 _GIT_TIMEOUT_SECONDS = 10
 
+# Ambient variables that redirect Git or change its option parsing; Git-spawning tests clear them.
+AMBIENT_GIT_VARIABLES = (
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_COMMON_DIR",
+    "GIT_TEST_DISALLOW_ABBREVIATED_OPTIONS",
+)
+
 
 def _run_git(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(

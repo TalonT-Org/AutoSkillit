@@ -27,7 +27,7 @@ from autoskillit.hooks._classification._option_grammar import OptionArity, Optio
 from autoskillit.hooks._runtime._git_command_classification import _classify_fetch
 from autoskillit.hooks._runtime._git_option_tables import _GIT_FETCH_FLAG_SPEC
 from autoskillit.hooks.guards import git_ops_guard
-from tests._git_topology import commit_file, init_checkout
+from tests._git_topology import AMBIENT_GIT_VARIABLES, commit_file, init_checkout
 from tests.infra._git_ops_guard_harness import (
     _TOOL_NAME,
     _checked_out_ref_result,
@@ -1704,12 +1704,7 @@ class TestDestructiveOutcomeImmunity:
     def _isolated_git_environment(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         home = tmp_path / "home"
         home.mkdir()
-        for name in (
-            "GIT_DIR",
-            "GIT_WORK_TREE",
-            "GIT_COMMON_DIR",
-            "GIT_TEST_DISALLOW_ABBREVIATED_OPTIONS",
-        ):
+        for name in AMBIENT_GIT_VARIABLES:
             monkeypatch.delenv(name, raising=False)
         monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
         monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")

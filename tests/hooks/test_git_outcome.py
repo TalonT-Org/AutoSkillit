@@ -12,8 +12,6 @@ on whitespace; ``5f3c9e1`` stands for a commit and ``feat`` for a branch name.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-
 import pytest
 
 from autoskillit.hooks._runtime._git_outcome import (
@@ -355,24 +353,8 @@ def test_is_ref_mutation(subcommand: str, argv: str, expected: bool) -> None:
     assert is_ref_mutation(subcommand, _argv(argv)) is expected
 
 
-def missing_predicates(
-    predicates: Mapping[tuple[str, ...], object], ops: frozenset[tuple[str, ...]]
-) -> set[tuple[str, ...]]:
-    """The operations in *ops* that *predicates* has no entry for."""
-    return set(ops) - set(predicates)
-
-
 def test_risky_predicates_are_keyed_exactly_by_the_risky_operations() -> None:
     assert set(_RISKY_PREDICATES) == RISKY_GIT_OPERATIONS
-    assert not missing_predicates(_RISKY_PREDICATES, RISKY_GIT_OPERATIONS)
-
-
-@pytest.mark.parametrize("op", sorted(RISKY_GIT_OPERATIONS), ids=lambda op: " ".join(op))
-def test_a_predicate_map_missing_one_operation_is_reported(op: tuple[str, ...]) -> None:
-    canary = {key: predicate for key, predicate in _RISKY_PREDICATES.items() if key != op}
-
-    assert set(canary) != RISKY_GIT_OPERATIONS
-    assert missing_predicates(canary, RISKY_GIT_OPERATIONS) == {op}
 
 
 _UNRESOLVED = ("<unresolved>",)

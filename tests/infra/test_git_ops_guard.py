@@ -1646,6 +1646,7 @@ _DESTRUCTIVE_ROWS = [
     ("printf 'c\\n' | git clean -fdi", _FORCE_CLEAN),
     ("echo 1 | git clean -id", _FORCE_CLEAN),
     *_git_rows(_AMEND, "commit --amen", "commit --am --no-edit"),
+    # Git's dashed spelling of the same builtin; the reason names the normalized operation.
     ("git-commit --amend", _AMEND),
     *_git_rows(
         _CHECKOUT_TREE, "checkout -f", "checkout ./", "checkout :/", "checkout . origin main"

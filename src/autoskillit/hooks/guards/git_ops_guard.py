@@ -101,7 +101,9 @@ _DESTRUCTIVE_OP_EXEMPT_TIERS: frozenset[str] = frozenset({"orchestrator"})
 
 _RAW_WRITE_VERBS = frozenset({"cp", "mv", "tee", "truncate", "rm", "unlink", "sed", "dd"})
 _PACK_VERBS = frozenset({"git-receive-pack", "git-upload-pack"})
-_READ_ONLY_SUBCOMMANDS = _GIT_BUILTIN_SUBCOMMANDS - _GIT_MUTATION_SUBCOMMANDS
+# Builtins outside _GIT_MUTATION_SUBCOMMANDS. Not read-only (commit, merge, rebase, stash, tag
+# and am write refs of the requesting worktree); they only skip the shared-ref decision.
+_NON_MUTATION_SUBCOMMANDS = _GIT_BUILTIN_SUBCOMMANDS - _GIT_MUTATION_SUBCOMMANDS
 
 # Commands that mention none of these cannot reach a Git ref or repository
 # classification, so they skip the preflight entirely. This bounds the blast
@@ -530,7 +532,7 @@ def _preflight_segment(
         return
     if anchor is not None:
         _enforce_primary_head(data, seg, facts, anchor)
-    if facts.invocation.subcommand in _READ_ONLY_SUBCOMMANDS and not facts.identity_unknown:
+    if facts.invocation.subcommand in _NON_MUTATION_SUBCOMMANDS and not facts.identity_unknown:
         return
     _decide_shared_ref(data, facts, cache, seg.verb_cwd if seg.cwd_certain else "")
 

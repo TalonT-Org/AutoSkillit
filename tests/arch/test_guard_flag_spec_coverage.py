@@ -4,8 +4,13 @@ Each of this rectify's CLI flag-arity spec tables (_GH_API_FLAG_SPEC and
 _CURL_FLAG_SPEC in hooks/_github_mutation_analysis.py; _GIT_GLOBAL_FLAG_SPEC
 and _PIP_GLOBAL_FLAG_SPEC in hooks/_command_classification.py;
 _SHELL_INVOCATION_FLAG_SPEC and _PYTHON_INVOCATION_FLAG_SPEC in
-hooks/_classification/_interpreters.py, rectify #4941 Part A) must have a
-corresponding test parametrized directly from the table's own keys (e.g.
+hooks/_classification/_invocation_flags.py, rectify #4941 Part A; and the Git and
+sed option tables in hooks/_runtime/_git_option_tables.py: _GIT_CHECKOUT_FLAG_SPEC,
+_GIT_SWITCH_FLAG_SPEC, _GIT_BRANCH_FLAG_SPEC, _GIT_SYMBOLIC_REF_FLAG_SPEC,
+_GIT_UPDATE_REF_FLAG_SPEC, _GIT_RESET_FLAG_SPEC, _GIT_PUSH_FLAG_SPEC,
+_GIT_FETCH_FLAG_SPEC, _GIT_COMMIT_FLAG_SPEC, _GIT_CLEAN_FLAG_SPEC and
+_SED_FLAG_SPEC) must have a corresponding test parametrized directly from
+the table's own keys (e.g.
 `@pytest.mark.parametrize("flag", sorted(_GH_API_FLAG_SPEC))`), not a
 hand-maintained flag list a future table update could silently drift out of
 sync with -- adding a flag to the table then automatically extends the
@@ -14,7 +19,8 @@ parametrize's coverage with no separate test-list edit required.
 This mirrors tests/arch/test_fail_closed_guard_contract.py's AST-scan and
 batch-report shape: a structural test about the test suite's own
 completeness, not about runtime behavior (the generative tests themselves,
-in tests/hooks/test_command_classification.py and
+in tests/hooks/test_command_classification.py,
+tests/hooks/test_git_option_tables.py and
 tests/infra/test_unsafe_install_guard.py, exercise runtime behavior).
 """
 
@@ -37,10 +43,20 @@ _SPEC_TABLE_TEST_FILES: dict[str, tuple[str, ...]] = {
     "_GH_ISSUE_EDIT_FLAG_SPEC": ("hooks/test_command_classification.py",),
     "_CURL_FLAG_SPEC": ("hooks/test_command_classification.py",),
     "_GIT_GLOBAL_FLAG_SPEC": ("hooks/test_command_classification.py",),
-    "_GIT_FETCH_FLAG_SPEC": ("infra/test_git_ops_guard.py",),
     "_PIP_GLOBAL_FLAG_SPEC": ("infra/test_unsafe_install_guard.py",),
     "_SHELL_INVOCATION_FLAG_SPEC": ("hooks/test_command_classification.py",),
     "_PYTHON_INVOCATION_FLAG_SPEC": ("hooks/test_command_classification.py",),
+    "_GIT_CHECKOUT_FLAG_SPEC": ("hooks/test_git_option_tables.py",),
+    "_GIT_SWITCH_FLAG_SPEC": ("hooks/test_git_option_tables.py",),
+    "_GIT_BRANCH_FLAG_SPEC": ("hooks/test_git_option_tables.py",),
+    "_GIT_SYMBOLIC_REF_FLAG_SPEC": ("hooks/test_git_option_tables.py",),
+    "_GIT_UPDATE_REF_FLAG_SPEC": ("hooks/test_git_option_tables.py",),
+    "_GIT_RESET_FLAG_SPEC": ("hooks/test_git_option_tables.py",),
+    "_GIT_PUSH_FLAG_SPEC": ("hooks/test_git_option_tables.py",),
+    "_GIT_FETCH_FLAG_SPEC": ("hooks/test_git_option_tables.py",),
+    "_GIT_COMMIT_FLAG_SPEC": ("hooks/test_git_option_tables.py",),
+    "_GIT_CLEAN_FLAG_SPEC": ("hooks/test_git_option_tables.py",),
+    "_SED_FLAG_SPEC": ("hooks/test_git_option_tables.py",),
 }
 
 

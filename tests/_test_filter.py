@@ -157,7 +157,7 @@ TEST_HELPER_CASCADE: dict[str, frozenset[str]] = {
     "tests/fleet/_reaper_test_support.py": frozenset({"fleet"}),
     "tests/hooks/_interactive_guard_harness.py": frozenset({"hooks", "skills"}),
     "tests/_git_topology.py": frozenset(
-        {"core", "execution", "server", "integration", "workspace", "fleet"}
+        {"core", "execution", "server", "integration", "workspace", "fleet", "hooks", "infra"}
     ),
     "tests/fleet/_codex_mcp_env.py": frozenset({"fleet", "integration"}),
     "tests/fleet/_descendant_worker.py": frozenset({"fleet"}),
@@ -1537,6 +1537,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "cli/test_capture_store.py",
             # file-level: open-kitchen bridge drives the real registry path (no in-memory stub)
             "cli/test_resume_registry_identity.py",
+            # file-level: asserts the launched cook env against the hook identity predicates
+            "cli/test_cook_interactive.py",
             "recipe",
             "server/test_kitchen_lifecycle.py",
             "server/test_tools_kitchen_gate.py",

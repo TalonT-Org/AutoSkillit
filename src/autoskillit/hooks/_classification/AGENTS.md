@@ -21,13 +21,21 @@ block B bootstrap so hook scripts can keep importing via
   `EvaluatedSegment`, `StdinLiteral`, `strip_heredoc_bodies`).
 - `_flags.py` — flag-parsing tables, shell-substitution regexes, and
   protected-read classification.
+- `_option_grammar.py` — Git parse-options engine (`parse_options`, `last_option`,
+  `OptionArity`, `OptionDef`, `ParsedArgv`): bundled, stuck, `=`-joined,
+  abbreviated and negated options over per-subcommand tables; leaf module.
 - `_flag_arity_classification.py` — leaf sibling holding the `_FlagArity` enum
   referenced by `_flags.py` and `_interpreters.py`. Lifted out so neither
   classification module owns the cross-import that would otherwise create a
   bidirectional `_flags` ↔ `_interpreters` coupling.
+- `_invocation_flags.py` — leaf holding the shell and Python invocation specs, the
+  bundle-aware `-c` extractors (`shell_c_payload`, `python_c_program`) and the
+  per-wrapper command-position tables (`_WRAPPER_SPECS`, `_wrapper_command_start`).
+  A wrapper option or launcher it does not model is reported *unresolved* out of
+  band, so shared consumers keep their verb.
 - `_python_program_analysis.py` — Python interpreter and subprocess invocation
-  analysis (`_InterpreterCommandSpec`, `_python_c_program`,
-  `_python_program_command_specs`, `_python_program_evaluated_specs`).
+  analysis (`_InterpreterCommandSpec`, `_python_program_command_specs`,
+  `_python_program_evaluated_specs`).
 - `_substitution_scanning.py` — shell-substitution / process-substitution
   scanning and the legacy shell-payload segment traversal.
 - `_github_mutation_cli_analysis.py` — `gh` / `curl` mutation grammar.
@@ -40,8 +48,17 @@ block B bootstrap so hook scripts can keep importing via
   Sole producer of these symbols; the facade re-exports them.
 `scan_write_targets` and `WriteTargetScan` are defined in
 `_runtime/_write_target_scan.py` and re-exported by
-`_runtime/_command_classification.py`. The scanner tracks mutable cwd and scope
-state across evaluated commands.
+`_runtime/_command_classification.py`. The scanner consumes
+`_runtime/_shell_segment_walk.py`, the single authority for the cwd in effect for
+each evaluated segment: it tracks mutable cwd and scope state and, beyond the
+shell's logical directory, whether a `cd` certainly ran (`cwd_certain`).
+
+`_CommandSegment` carries the logical operator that joined it to the previous
+segment (`connector`: `&&`, `||`, `|`, `&`, `;` or empty) and whether it is the first
+statement after a dropped bare keyword line (`after_keyword`). The first operator
+after a command wins, so a newline after `&&`, `||`, `|` or `&` keeps that operator.
+`_shell_structure` emits the newline boundary before its `;`, so a trailing `#`
+comment cannot swallow the boundary.
 
 ## Bootstrap Conventions
 
@@ -52,7 +69,7 @@ the facade's relative imports and any bare-name bootstrap (hook scripts that
 push `hooks/_classification/` onto `sys.path`) resolve the same symbols.
 
 Within-folder imports of leaf siblings (`_tokenizer.py`, `_flag_arity_classification.py`,
-`_source_map.py`)
+`_source_map.py`, `_option_grammar.py`, `_invocation_flags.py`)
 stay at module top-level — they have no back-references into the facade or
 into other `_classification/` modules, so the relative-import dance isn't
 required.

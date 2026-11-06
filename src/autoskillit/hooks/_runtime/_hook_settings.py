@@ -453,6 +453,27 @@ def hook_session_shape() -> tuple[bool, str]:
     return headless, tier
 
 
+def hook_is_launched_interactive() -> bool:
+    """True for an autoskillit-launched interactive session (cook, order, managed fleet)
+    and its subagents."""
+    headless, _tier = hook_session_shape()
+    return not headless and bool(os.environ.get(_AUTOSKILLIT_LAUNCH_ID_ENV))
+
+
+def hook_is_interactive_cook() -> bool:
+    """True for an autoskillit-launched interactive cook session and its subagents.
+
+    ``hook_session_shape`` maps an empty ``SESSION_TYPE`` to the skill tier, so the
+    explicit read is what separates cook from a launch that set no session type.
+    """
+    _headless, tier = hook_session_shape()
+    return (
+        hook_is_launched_interactive()
+        and tier == "skill"
+        and bool(os.environ.get("AUTOSKILLIT_SESSION_TYPE"))
+    )
+
+
 def admit_hook_session_scope(
     session_scope: str,
     exempt_tiers: frozenset[str],

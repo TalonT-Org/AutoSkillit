@@ -24,7 +24,10 @@ from autoskillit.hooks._runtime._command_classification import (
     PROTECTED_SOURCE_PATH_PATTERNS,
     OutputRedirectPartition,
     StdinConsumer,
+    _command_position,
     _FlagArity,
+    _verb_start_index,
+    _wrapped_verb_cwd,
     all_evaluated_segments,
     command_has_blocked_protected_path_read,
     command_verb,
@@ -53,6 +56,7 @@ from autoskillit.hooks._runtime._github_mutation_analysis import (
     GitHubMutationStatus,
     analyze_github_mutations,
 )
+from autoskillit.hooks._runtime._shell_segment_walk import walk_evaluated_segments
 from tests._evaluation_shape_matrix import (
     EVALUATION_SHAPE_MATRIX,
     wrap_git_op,
@@ -894,6 +898,247 @@ class TestCommandVerbAndArgs:
         verb_from_helper, _ = command_verb_and_args(seg)
         assert verb_from_helper == command_verb(seg)
 
+    @pytest.mark.parametrize(
+        ("command", "index"),
+        [
+            pytest.param(command, index, id=command)
+            for command, index in [
+                ("timeout -k 5 10 git s", 4),
+                ("timeout --kill-after=5 10 git s", 3),
+                ("timeout -s KILL 10 git s", 4),
+                ("sudo -n git s", 2),
+                ("sudo -u root git s", 3),
+                ("sudo -E -- git s", 3),
+                ("nice -n 5 git s", 3),
+                ("time -p git s", 2),
+                ("stdbuf -o L git s", 3),
+                ("stdbuf -oL git s", 2),
+                ("nohup git s", 1),
+                ("command git s", 1),
+                ("exec -a n git s", 3),
+                ("env --ignore-signal git s", 2),
+                ("env --ignore-signal=INT git s", 2),
+                ("env -i A=1 git s", 3),
+                ("sudo -- git s", 2),
+                ("env -- git s", 2),
+                ("nice -- git s", 2),
+                ("then git push", 1),
+            ]
+        ],
+    )
+    def test_wrapper_options_are_skipped_to_the_command_word(self, command, index):
+        segment = command.split()
+        assert _command_position(segment) == (index, False)
+        assert _verb_start_index(segment) == index
+        assert segment[index] == "git"
+
+    @pytest.mark.parametrize(
+        ("command", "index"),
+        [
+            pytest.param(command, index, id=command)
+            for command, index in [
+                ("git status", 0),
+                ("then git status", 1),
+                ("then sudo git status", 2),
+                ("! git status", 1),
+                ("FOO=1 git status", 1),
+                ("env X=1 git status", 2),
+                ("env -S x git status", 3),
+                ("timeout 5 git status", 2),
+                ("sudo -n git status", 2),
+                ("if env X=1 sudo -u root git status", 6),
+            ]
+        ],
+    )
+    def test_git_invocation_prefix_is_the_skipped_verb_prefix(self, command, index):
+        segment = command.split()
+        assert _verb_start_index(segment) == index
+        invocation = extract_git_subcommand_and_flags(segment)
+        assert invocation is not None
+        assert invocation.subcommand == "status"
+        assert invocation.prefix_tokens == segment[:index]
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "sudo -h git status",
+            "timeout --bogus 5 git status",
+            "xargs git status",
+            "uv run git status",
+            "command -v git",
+            "wc -l f",
+            "then",
+        ],
+    )
+    def test_git_invocation_is_absent_when_the_verb_start_is_not_git(self, command):
+        assert extract_git_subcommand_and_flags(command.split()) is None
+
+    def test_command_v_describes_a_command_rather_than_running_one(self):
+        segment = ["command", "-v", "git"]
+        assert _command_position(segment) == (None, False)
+        assert _verb_start_index(segment) is None
+        assert command_verb_and_args(segment) == ("", [])
+
+    @pytest.mark.parametrize(
+        ("command", "index"),
+        [
+            pytest.param(command, index, id=command)
+            for command, index in [
+                ("sudo -nu root git s", 0),
+                ("timeout --bogus 10 git s", 0),
+                ("sudo -h git s", 0),
+                ("FOO=1 sudo -h git s", 1),
+                ("env A=1 timeout --bogus 10 git s", 2),
+                ("timeout 10 sudo -nu root git s", 2),
+            ]
+        ],
+    )
+    def test_unmodelled_wrapper_option_stops_at_the_wrapper_word(self, command, index):
+        segment = command.split()
+        assert _command_position(segment) == (index, True)
+        assert _verb_start_index(segment) == index
+        assert command_verb_and_args(segment)[0] == segment[index]
+
+    @pytest.mark.parametrize(
+        ("command", "index"),
+        [
+            pytest.param(command, index, id=command)
+            for command, index in [
+                ("xargs git push", 0),
+                ("xargs -n1 gh pr view", 0),
+                ("find . -exec git s {} ;", 0),
+                ("find . -execdir git s {} ;", 0),
+                ("find . -ok git s {} ;", 0),
+                ("find . -okdir git s {} ;", 0),
+                ("watch git s", 0),
+                ("parallel git ::: s", 0),
+                ("uv run git s", 0),
+                ("uv run pytest -k git", 0),
+                ("uvx t", 0),
+                ("pipx run t", 0),
+                ("setsid git s", 0),
+                ("ionice -c3 git s", 0),
+                ("taskset 1 git s", 0),
+                ("chrt -o 0 git s", 0),
+                ("flock /tmp/l git s", 0),
+                ("node -e P", 0),
+                ("perl -e P", 0),
+                ("ruby -e P", 0),
+                ("bash --bogus -c P", 0),
+                ("bash -c", 0),
+                ("python3 --bogus -c P", 0),
+                ("python3 -c", 0),
+                ("timeout 10 xargs git push", 2),
+                ("sudo -n uv run pytest", 2),
+            ]
+        ],
+    )
+    def test_opaque_launcher_is_unresolved_and_keeps_its_own_word_as_the_verb(
+        self, command, index
+    ):
+        segment = command.split()
+        assert _command_position(segment) == (index, True)
+        assert _verb_start_index(segment) == index
+        assert command_verb_and_args(segment) == (segment[index], segment[index + 1 :])
+
+    @pytest.mark.parametrize(
+        ("segment", "index", "verb"),
+        [
+            pytest.param(["env", "-S", "git s"], None, "", id="split-string-is-the-whole-command"),
+            pytest.param(
+                ["env", "-u", "FOO", "--chdir", "/tmp", "-S", "x", "pip", "install"],
+                7,
+                "pip",
+                id="split-string-short",
+            ),
+            pytest.param(
+                ["env", "--split-string", "FOOBAR", "pip", "install"],
+                3,
+                "pip",
+                id="split-string-long",
+            ),
+            pytest.param(["env", "-S", "x", "git", "s"], 3, "git", id="split-string-then-git"),
+        ],
+    )
+    def test_env_split_string_keeps_its_verb_and_is_unresolved(self, segment, index, verb):
+        assert _command_position(segment) == (index, True)
+        assert command_verb_and_args(segment)[0] == verb
+
+    @pytest.mark.parametrize(
+        ("command", "index"),
+        [
+            pytest.param(command, index, id=command)
+            for command, index in [
+                ("sudo --user=root rm /tmp/f", 2),
+                ("find . -name x", 0),
+                ("find . -type f -print", 0),
+                ("uv pip install x", 0),
+                ("bash -lc P", 0),
+                ("sh -ec P", 0),
+                ("python3 -Bc P", 0),
+                ("python3 -m pip install x", 0),
+            ]
+        ],
+    )
+    def test_position_is_resolved(self, command, index):
+        assert _command_position(command.split()) == (index, False)
+
+    @pytest.mark.parametrize(
+        ("command", "expected"),
+        [
+            pytest.param(command, expected, id=command)
+            for command, expected in [
+                ("env -C /x git s", "/x"),
+                ("sudo -D /x git s", "/x"),
+                ("sudo --chdir=/x git s", "/x"),
+                ("sudo -D/x git s", "/x"),
+                ("sudo -D sub git s", "/base/sub"),
+                ("sudo -D /a -D /b git s", "/b"),
+                ("env -C /a sudo -D /b git s", "/b"),
+                ("sudo -D /b env -C /a git s", "/a"),
+                ("sudo -n git s", "/base"),
+                ("timeout 10 git s", "/base"),
+            ]
+        ],
+    )
+    def test_wrapped_verb_cwd_applies_the_wrappers_chdir_options(self, command, expected):
+        segment = command.split()
+        start = _verb_start_index(segment)
+        assert start is not None
+        assert _wrapped_verb_cwd(segment, start, "/base") == expected
+
+    @pytest.mark.parametrize(
+        ("command", "unresolved"),
+        [
+            pytest.param(command, unresolved, id=command)
+            for command, unresolved in [
+                ("xargs git push", True),
+                ("sudo -nu root git s", True),
+                ("sudo -h git s", True),
+                ("timeout --bogus 10 git s", True),
+                ("bash --bogus -c 'git s'", True),
+                ("python3 --bogus -c 'x = 1'", True),
+                ("env -S 'git s'", True),
+                ("find . -exec git s {} \\;", True),
+                ("uv run git s", True),
+                ("setsid git s", True),
+                ("node -e 'x'", True),
+                ("bash -lc 'git s'", False),
+                ("python3 -Bc 'x = 1'", False),
+                ("timeout -k 5 10 git s", False),
+                ("sudo -n git s", False),
+                ("sudo --user=root rm /tmp/f", False),
+                ("env -i A=1 git s", False),
+                ("find . -name x", False),
+                ("bash script.sh", False),
+            ]
+        ],
+    )
+    def test_walk_reports_an_unresolved_command_position(self, tmp_path, command, unresolved):
+        walked = walk_evaluated_segments(command, str(tmp_path))
+        assert walked is not None
+        assert any(segment.position_unresolved for segment in walked) is unresolved
+
 
 class TestCommandPositionCandidateSpans:
     @pytest.mark.parametrize(
@@ -1067,6 +1312,76 @@ class TestEvaluatedPayloads:
         assert segments is not None
         found = [command_verb_and_args(segment) for segment in segments]
         assert _GIT_PUSH_FORCE_ARGV in found
+
+    _UPDATE_REF_PROGRAM = "git update-ref refs/heads/x y"
+    _UPDATE_REF_ARGV = ["git", "update-ref", "refs/heads/x", "y"]
+    _PYTHON_UPDATE_REF_PROGRAM = (
+        'import subprocess; subprocess.run(["git", "update-ref", "refs/heads/x", "y"])'
+    )
+
+    @pytest.mark.parametrize(
+        "invocation",
+        [
+            "bash -lc",
+            "bash -xc",
+            "bash -ec",
+            "bash -e -c",
+            "bash --norc -c",
+            "bash --noprofile -c",
+            "bash --login -c",
+            "bash -O extglob -c",
+            "bash +O extglob -c",
+            "bash -c --",
+            "bash -D -c",
+            "sh -ec",
+        ],
+    )
+    def test_shell_c_invocation_forms_expose_the_program_segment(self, invocation):
+        segments = all_evaluated_segments(f"{invocation} {shlex.quote(self._UPDATE_REF_PROGRAM)}")
+        assert segments is not None
+        assert self._UPDATE_REF_ARGV in segments
+
+    @pytest.mark.parametrize(
+        "invocation",
+        [
+            "python3 -c",
+            "python3 -Bc",
+            "python3 -Ic",
+            "python3 -I -c",
+            "python3 -R -c",
+            "python3 -t -c",
+            "python3 -W error -c",
+            "python3 -Werror -c",
+            "python3 -X dev -c",
+        ],
+    )
+    def test_python_c_invocation_forms_expose_the_program_segment(self, invocation):
+        segments = all_evaluated_segments(
+            f"{invocation} {shlex.quote(self._PYTHON_UPDATE_REF_PROGRAM)}"
+        )
+        assert segments is not None
+        assert self._UPDATE_REF_ARGV in segments
+
+    def test_python_c_program_stuck_to_the_flag_exposes_the_program_segment(self):
+        segments = all_evaluated_segments(
+            f"python3 -c{shlex.quote(self._PYTHON_UPDATE_REF_PROGRAM)}"
+        )
+        assert segments is not None
+        assert self._UPDATE_REF_ARGV in segments
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            f"bash script.sh {shlex.quote(_UPDATE_REF_PROGRAM)}",
+            f"bash -s {shlex.quote(_UPDATE_REF_PROGRAM)}",
+            f"python3 script.py {shlex.quote(_PYTHON_UPDATE_REF_PROGRAM)}",
+            f"python3 -m pip {shlex.quote(_UPDATE_REF_PROGRAM)}",
+        ],
+    )
+    def test_interpreter_operands_are_not_programs(self, command):
+        segments = all_evaluated_segments(command)
+        assert segments is not None
+        assert self._UPDATE_REF_ARGV not in segments
 
     @pytest.mark.parametrize(
         ("tokens", "expected"),
@@ -2586,6 +2901,53 @@ def test_git_metadata_arms_reject_command_prefixes(arm: str, prefix: str) -> Non
 @pytest.mark.parametrize("prefix", ["X=1", "env X=1", "sudo", "timeout 5"])
 def test_wc_metadata_arm_rejects_command_prefixes(prefix: str) -> None:
     command = f"{prefix} wc -l {_PROTECTED_RECIPE}"
+    assert command_has_blocked_protected_path_read(command, PROTECTED_SOURCE_PATH_PATTERNS)
+
+
+# The tokenizer emits the segment a shell keyword introduces with the keyword as its
+# first token, so each shape puts the command under test behind exactly one keyword.
+_KEYWORD_LED_SHAPES = {
+    "if": "if {command}; then true; fi",
+    "then": "if true; then {command}; fi",
+    "elif": "if false; then true; elif {command}; then true; fi",
+    "else": "if false; then true; else {command}; fi",
+    "while": "while {command}; do break; done",
+    "until": "until {command}; do break; done",
+    "do": "for i in 1; do {command}; done",
+    "!": "! {command}",
+}
+_KEYWORD_LED_PREFIXES = ("", "X=1", "env X=1", "sudo", "timeout 5")
+
+
+def _keyword_led_command(keyword: str, prefix: str, invocation: str) -> str:
+    command = _KEYWORD_LED_SHAPES[keyword].format(command=f"{prefix} {invocation}".strip())
+    segments = all_evaluated_segments_with_provenance(command)
+    assert segments is not None
+    assert any(segment.tokens[0] == keyword for segment in segments)
+    return command
+
+
+@pytest.mark.parametrize("prefix", _KEYWORD_LED_PREFIXES)
+@pytest.mark.parametrize("keyword", _KEYWORD_LED_SHAPES)
+def test_wc_metadata_arm_rejects_keyword_led_segments(keyword: str, prefix: str) -> None:
+    """A leading shell keyword is a skipped prefix like any wrapper, so the wc arm denies it.
+
+    Before the verb start was unified, a keyword stopped the prefix walk at index 0 and
+    admitted `if true; then sudo wc -l <protected>; fi` even though `sudo wc -l
+    <protected>` is denied. Denying the benign bare keyword-led `wc -l <protected>` is the
+    accepted cost of closing that bypass.
+    """
+    command = _keyword_led_command(keyword, prefix, f"wc -l {_PROTECTED_RECIPE}")
+    assert command_has_blocked_protected_path_read(command, PROTECTED_SOURCE_PATH_PATTERNS)
+
+
+@pytest.mark.parametrize("arm", _GIT_METADATA_ARMS)
+@pytest.mark.parametrize("prefix", _KEYWORD_LED_PREFIXES)
+@pytest.mark.parametrize("keyword", _KEYWORD_LED_SHAPES)
+def test_git_metadata_arms_reject_keyword_led_segments(
+    keyword: str, prefix: str, arm: str
+) -> None:
+    command = _keyword_led_command(keyword, prefix, f"git {arm}")
     assert command_has_blocked_protected_path_read(command, PROTECTED_SOURCE_PATH_PATTERNS)
 
 
@@ -4426,6 +4788,36 @@ def test_every_git_global_spec_flag_is_recognized(flag: str) -> None:
 
     assert result is not None
     assert result.subcommand != "<unresolved>"
+
+
+@pytest.mark.parametrize(
+    ("argv", "subcommand"),
+    [
+        pytest.param(argv, subcommand, id=" ".join(argv))
+        for argv, subcommand in [
+            (["git", "--no-optional-locks", "status"], "status"),
+            (["git", "--literal-pathspecs", "log"], "log"),
+            (["git", "--no-literal-pathspecs", "log"], "log"),
+            (["git", "--attr-source=HEAD", "log"], "log"),
+            (["git", "--attr-source", "HEAD", "log"], "log"),
+        ]
+    ],
+)
+def test_git_pathspec_lock_and_attribute_globals_leave_the_real_subcommand(
+    argv: list[str], subcommand: str
+) -> None:
+    result = extract_git_subcommand_and_flags(argv)
+
+    assert result is not None
+    assert result.subcommand == subcommand
+    assert result.flags == []
+
+
+@pytest.mark.parametrize(
+    "argv", [["git", "--list-cmds=main"], ["git", "--exec-path"]], ids=" ".join
+)
+def test_git_query_only_invocation_has_no_subcommand(argv: list[str]) -> None:
+    assert extract_git_subcommand_and_flags(argv) is None
 
 
 class TestStructuralHeredocShapes:

@@ -21,7 +21,9 @@ class PayloadAnomaly(StrEnum):
     FIELD_CONFUSION = "field_confusion"
     NON_STRING_COMMAND = "non_string_command"
     NON_STRING_CWD = "non_string_cwd"
+    NON_STRING_WORKDIR = "non_string_workdir"
     RELATIVE_CWD = "relative_cwd"
+    RELATIVE_WORKDIR = "relative_workdir"
 
 
 class ParsedHookCommand(NamedTuple):
@@ -56,6 +58,29 @@ def _absolute_string_or_blank(value: Any) -> tuple[str, PayloadAnomaly | None]:
     if os.path.isabs(value):
         return (value, None)
     return ("", PayloadAnomaly.RELATIVE_CWD)
+
+
+def _execution_cwd(
+    tool_kind: str, raw_cwd: Any, tool_input: dict[str, Any]
+) -> tuple[str, tuple[PayloadAnomaly, ...]]:
+    """The directory the command runs in, and every anomaly in the cwd-shaped fields.
+
+    A Bash-shaped payload may carry a per-call ``workdir`` (Codex); when it
+    does, that, not the session cwd, is where the command runs. A present
+    non-string or relative workdir is NON_STRING_WORKDIR or RELATIVE_WORKDIR
+    with the execution cwd unknown. A malformed session cwd is still reported:
+    it is a defect of the payload whether or not a workdir overrides it.
+    """
+    session_cwd, session_anomaly = _absolute_string_or_blank(raw_cwd)
+    anomalies = () if session_anomaly is None else (session_anomaly,)
+    workdir = tool_input.get("workdir")
+    if tool_kind == "bash" and workdir is not None:
+        if not isinstance(workdir, str):
+            return ("", (*anomalies, PayloadAnomaly.NON_STRING_WORKDIR))
+        if os.path.isabs(workdir):
+            return (workdir, anomalies)
+        return ("", (*anomalies, PayloadAnomaly.RELATIVE_WORKDIR))
+    return (session_cwd, anomalies)
 
 
 def normalize_payload_cwd(value: Any) -> str:
@@ -116,9 +141,8 @@ def parse_hook_command(data: dict[str, Any]) -> ParsedHookCommand:
         command = None
         anomalies.append(PayloadAnomaly.NON_STRING_COMMAND)
 
-    execution_cwd, cwd_anomaly = _absolute_string_or_blank(raw_execution_cwd)
-    if cwd_anomaly is not None:
-        anomalies.append(cwd_anomaly)
+    execution_cwd, cwd_anomalies = _execution_cwd(tool_kind, raw_execution_cwd, tool_input)
+    anomalies.extend(cwd_anomalies)
 
     return ParsedHookCommand(
         tool_kind=tool_kind,

@@ -123,9 +123,10 @@ CODEX_RESERVED_HOME_ENV_VARS: frozenset[str] = frozenset({CODEX_HOME_ENV_VAR, "C
 AUTOSKILLIT_APPLICABLE_GUARDS: str = "AUTOSKILLIT_APPLICABLE_GUARDS"
 AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES: str = "AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES"
 AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR: str = "AUTOSKILLIT_AUDIT_ADMISSION_AUTHORITY_PATH"
-# The orchestrating project root, injected by launch preparation so guards can
-# locate `.autoskillit/` state in worktree topologies where the hook payload's
-# own cwd points into a sibling worktree with its own checked-in `.autoskillit/`.
+# The project root for interactive launches and the session cwd for headless ones,
+# injected by launch preparation so guards can locate `.autoskillit/` state in
+# worktree topologies where the hook payload's own cwd points into a sibling
+# worktree with its own checked-in `.autoskillit/`.
 # Read as a bare string literal by hooks/_hook_payload.py's resolve_state_root
 # (stdlib-only boundary prevents importing this constant there) — keep the two
 # string values byte-identical.

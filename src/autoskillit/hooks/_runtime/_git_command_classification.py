@@ -1,223 +1,54 @@
 """Classification primitives for git operations used by git_ops_guard.
 
-Step 9 (#4733) of the decompose-hooks-files plan (#4665). All `_classify_*`
-primitives and the helpers used exclusively by them moved from
-`git_ops_guard.py` (1,002 lines) into this sibling module. The orchestrator
-(`git_ops_guard.py`) imports a controlled subset of the public surface
-(`_classify_git_segment`, `_contains_blocked_git_op`, `_git_result`,
-`_git_text`, `_parse_worktree_owners`, `_resolve_attempted_sha`,
-`_resolve_git_common_dir`) and dispatches into the inner classifiers
-transitively through `_classify_git_segment`.
+The orchestrator (`git_ops_guard.py`) imports a controlled subset of the public
+surface (`_classify_git_invocation`, `_git_result`, `_git_text`,
+`_parse_worktree_owners`, `_resolve_attempted_sha`, `_resolve_git_common_dir`) and
+dispatches into the inner classifiers transitively through `_classify_git_invocation`.
+`_git_target.py` also builds on `_git_result`.
 
-This module is stdlib-only at the package level: it imports seven symbols
-from `_command_classification` (the tokenization/classification primitives
-`_command_position_candidate_spans`, `_consume_str_flag`,
-`all_evaluated_segments`, `command_verb_and_args`,
-`extract_git_subcommand_and_flags`, `extract_interpreter_command_payloads`,
-`live_command_text`, and the structural type `_FlagArity`) and one symbol
-from `_github_mutation_analysis` (`_DYNAMIC_SHELL_TOKEN_RE`). Both are
-bare-name flat-mode siblings resolved via `git_ops_guard.py`'s `sys.path`
-bootstrap (or the test-side bootstrap centralized in `tests/conftest.py`).
-It does NOT re-export any `_command_classification` symbol.
+Ref-rewriting subcommands are classified by outcome: branch, checkout, switch,
+symbolic-ref, update-ref, reset, push and fetch read their argv through the
+option tables in `_git_option_tables` and the parsers in `_git_outcome`, never by
+matching option tokens.
 
-`_contains_blocked_git_op` reads the command exclusively through
-`all_evaluated_segments`/`live_command_text` (rectify #4941 Part A) rather
-than a raw `shlex.split`/text-bag scan, so a `git` invocation delivered via
-`bash -c`, a heredoc, a herestring, or a pipe is seen the same way a direct
-invocation is.
+This module is stdlib-only at the package level: it imports the
+tokenization/classification primitives from `_command_classification`, the
+outcome parsers from `_git_outcome` and one symbol from
+`_github_mutation_analysis` (`_DYNAMIC_SHELL_TOKEN_RE`). All are bare-name
+flat-mode siblings resolved via `git_ops_guard.py`'s `sys.path` bootstrap (or
+the test-side bootstrap centralized in `tests/conftest.py`). It does NOT
+re-export any `_command_classification` symbol.
 
 Public API surface:
-    Classifiers (7):
-        _classify_git_segment, _classify_fetch, _classify_push,
-        _classify_update_ref, _classify_branch_position, _classify_reset,
-        _contains_blocked_git_op
+    Classifiers: _classify_git_invocation,
+        _classify_fetch, _classify_push, _classify_update_ref, _classify_reset,
+        _classify_outcome
     Helpers (consumed transitively by the classifiers above):
         _git_result, _git_text, _parse_worktree_owners,
         _resolve_git_common_dir, _normal_branch_ref, _symbolic_head,
-        _resolve_attempted_sha, _consume_option_value, _refspec_targets,
-        _same_repository, _resolve_remote_url, _local_path_from_remote_url
+        _resolve_attempted_sha, _refspec_targets, _same_repository,
+        _resolve_remote_url, _local_path_from_remote_url
 """
 
 from __future__ import annotations
 
 import os
-import re
 import subprocess
 from pathlib import Path
 
 from _command_classification import (
-    _command_position_candidate_spans,
-    _consume_str_flag,
-    _FlagArity,
-    all_evaluated_segments,
-    command_verb_and_args,
-    extract_git_subcommand_and_flags,
-    extract_interpreter_command_payloads,
-    live_command_text,
+    GitInvocation,
+)
+from _git_outcome import (
+    git_ref_outcome,
+    parse_fetch,
+    parse_push,
+    parse_reset,
+    parse_update_ref,
 )
 from _github_mutation_analysis import (
     _DYNAMIC_SHELL_TOKEN_RE,
 )
-
-# git fetch's own flag spec (distinct from _GIT_GLOBAL_FLAG_SPEC, git's
-# top-level global flags), verified against a live `git fetch -h` read.
-# Covers every fetch flag, including its `--no-X` negation form for each
-# boolean flag git itself documents as `--[no-]X`. Used by _classify_fetch
-# to correctly skip past an unrecognized fetch flag's value instead of
-# misreading it as the remote/refspec positional.
-_GIT_FETCH_BOOLEAN_FLAGS: frozenset[str] = frozenset(
-    {
-        "-v",
-        "--verbose",
-        "-q",
-        "--quiet",
-        "--all",
-        "--set-upstream",
-        "-a",
-        "--append",
-        "--atomic",
-        "-f",
-        "--force",
-        "-m",
-        "--multiple",
-        "-t",
-        "--tags",
-        "-n",
-        "--prefetch",
-        "-p",
-        "--prune",
-        "-P",
-        "--prune-tags",
-        "--dry-run",
-        "--porcelain",
-        "--write-fetch-head",
-        "-k",
-        "--keep",
-        "-u",
-        "--update-head-ok",
-        "--progress",
-        "--unshallow",
-        "--refetch",
-        "--update-shallow",
-        "-4",
-        "--ipv4",
-        "-6",
-        "--ipv6",
-        # --recurse-submodules[=<on-demand>] is optional-value; see
-        # _GIT_GLOBAL_FLAG_SPEC's --exec-path precedent for why BOOLEAN is
-        # the correct default (its `=`-form safely fails closed instead).
-        "--recurse-submodules",
-        "--negotiate-only",
-        "--auto-maintenance",
-        "--auto-gc",
-        "--show-forced-updates",
-        "--write-commit-graph",
-        "--stdin",
-    }
-)
-_GIT_FETCH_VALUE_FLAGS: frozenset[str] = frozenset(
-    {
-        "-j",
-        "--jobs",
-        "--depth",
-        "--shallow-since",
-        "--shallow-exclude",
-        "--deepen",
-        "--refmap",
-        "-o",
-        "--server-option",
-        "--negotiation-tip",
-        "--filter",
-        "--upload-pack",
-    }
-)
-_GIT_FETCH_FLAG_SPEC: dict[str, _FlagArity] = {
-    **{flag: _FlagArity.BOOLEAN for flag in _GIT_FETCH_BOOLEAN_FLAGS},
-    **{
-        f"--no-{flag.removeprefix('--')}": _FlagArity.BOOLEAN
-        for flag in _GIT_FETCH_BOOLEAN_FLAGS
-        if flag.startswith("--")
-    },
-    **{flag: _FlagArity.VALUE for flag in _GIT_FETCH_VALUE_FLAGS},
-    **{
-        f"--no-{flag.removeprefix('--')}": _FlagArity.BOOLEAN
-        for flag in _GIT_FETCH_VALUE_FLAGS
-        if flag.startswith("--")
-    },
-}
-
-
-_DELIMITERS_RE = re.compile(r"[\s,\[\]'\"()]+")
-
-
-def _tokenize_text(text: str) -> frozenset[str]:
-    """Split text on common delimiters for set-membership matching.
-
-    Prevents '.' from matching periods inside filenames like 'foo.py'.
-    """
-    return frozenset(t for t in _DELIMITERS_RE.split(text) if t)
-
-
-def _blocked_op_in_evaluated_segment(
-    segment: list[str], blocked_ops: frozenset[tuple[str, ...]]
-) -> tuple[str, ...] | None:
-    """Return the first blocked git operation in an evaluated segment."""
-    for start, end in _command_position_candidate_spans(segment):
-        verb, args = command_verb_and_args(segment[start:end])
-        if verb != "git" and not verb.endswith("/git"):
-            continue
-        result = extract_git_subcommand_and_flags([verb, *args])
-        if result is None:
-            continue
-        subcommand = result.subcommand
-        remaining = result.flags
-        if subcommand == "<unresolved>":
-            return (subcommand,)
-        for op_tuple in blocked_ops:
-            if subcommand == op_tuple[0] and all(flag in remaining for flag in op_tuple[1:]):
-                return op_tuple
-    return None
-
-
-def _contains_blocked_git_op(
-    cmd: str, blocked_ops: frozenset[tuple[str, ...]]
-) -> tuple[str, ...] | None:
-    """Return the matching blocked git op tuple, or None if no match.
-
-    Reads *cmd* exclusively through `all_evaluated_segments`, the single
-    authority for "what will actually execute, and as what argv" (rectify
-    #4941 Part A): a direct invocation, one delivered via `bash -c`/`eval`,
-    one fed through a heredoc/herestring/pipe to a shell, and a literal-argv
-    `subprocess.run(["git", ...])` are all seen the same way, at every
-    command-position candidate span (top level, and inside an inline
-    function/group body). A 'git' token (or /path/to/git, or a wrapper- or
-    env-assignment-prefixed invocation) is a command start via
-    `command_verb_and_args`. Returns `None` when `all_evaluated_segments`
-    cannot tokenize *cmd* (fail-open).
-
-    `blocked_ops` is passed by the caller (the orchestrator's `main()`
-    passes `_BLOCKED_GIT_OPS` to keep the constant co-located with itself
-    per the sync-invariant test in `test_risky_git_ops_coverage.py`).
-    """
-    segments = all_evaluated_segments(cmd)
-    if segments is None:
-        return None
-
-    for segment in segments:
-        blocked_op = _blocked_op_in_evaluated_segment(segment, blocked_ops)
-        if blocked_op is not None:
-            return blocked_op
-
-    # A Python payload whose subprocess/os call could not be resolved to a
-    # literal argv or string (dynamic argument, unrecognized call shape)
-    # means a "git" mention anywhere in what will actually run cannot be
-    # ruled out -- deny unconditionally rather than silently falling
-    # through to "not blocked".
-    _payloads, has_unresolved = extract_interpreter_command_payloads(cmd)
-    if has_unresolved and "git" in _tokenize_text(live_command_text(cmd)):
-        return ("<unresolved>",)
-
-    return None
 
 
 def _git_result(cwd: str, *args: str) -> subprocess.CompletedProcess[bytes]:
@@ -227,6 +58,7 @@ def _git_result(cwd: str, *args: str) -> subprocess.CompletedProcess[bytes]:
         check=False,
         text=False,
         timeout=10,
+        env={**os.environ, "LC_ALL": "C", "LANGUAGE": ""},
     )
 
 
@@ -285,61 +117,27 @@ def _symbolic_head(cwd: str) -> str:
 
 
 def _resolve_attempted_sha(cwd: str, value: str) -> str:
-    if value in ("", "<delete>", "<unresolved>"):
+    if value in ("", "<delete>", "<rename>", "<unresolved>"):
         return ""
     return _git_text(cwd, "rev-parse", "--verify", f"{value}^{{commit}}")
 
 
-def _consume_option_value(args: list[str], index: int, option: str) -> int:
-    return index + 2 if args[index] == option and index + 1 < len(args) else index + 1
-
-
-def _parse_update_ref_args(
-    args: list[str],
-) -> tuple[bool, bool, str, str] | None:
-    no_deref = False
-    delete = False
-    positional: list[str] = []
-    index = 0
-    while index < len(args):
-        token = args[index]
-        if token == "--stdin":
-            return (True, False, "", "")
-        if token == "--no-deref":
-            no_deref = True
-        elif token in ("-d", "--delete"):
-            delete = True
-        elif token == "-m":
-            index = _consume_option_value(args, index, token)
-            continue
-        elif token == "--create-reflog":
-            # Boolean flag — do NOT consume the next token as its value.
-            index += 1
-            continue
-        elif token.startswith("-"):
-            pass
-        else:
-            positional.append(token)
-        index += 1
-    if not positional:
-        return None
-    target = positional[0]
-    attempted = "<delete>" if delete else (positional[1] if len(positional) > 1 else "")
-    if not attempted:
-        return None
-    return (False, no_deref, target, attempted)
-
-
 def _classify_update_ref(args: list[str], cwd: str) -> tuple[str, str, bool] | None:
-    parsed = _parse_update_ref_args(args)
-    if parsed is None:
-        return None
-    unresolved, no_deref, target, attempted = parsed
-    if unresolved:
+    parsed = parse_update_ref(args)
+    if parsed.unresolved is not None or parsed.stdin:
         return ("", "<unresolved>", True)
+    if not parsed.operands:
+        return None
+    target = parsed.operands[0]
+    if parsed.delete:
+        attempted = "<delete>"
+    elif len(parsed.operands) > 1:
+        attempted = parsed.operands[1]
+    else:
+        return None
     if _DYNAMIC_SHELL_TOKEN_RE.search(target) or _DYNAMIC_SHELL_TOKEN_RE.search(attempted):
         return ("", "<unresolved>", True)
-    if target == "HEAD" and no_deref:
+    if target == "HEAD" and parsed.no_deref:
         return ("HEAD", attempted, False)
     if target == "HEAD":
         target = _symbolic_head(cwd)
@@ -348,53 +146,33 @@ def _classify_update_ref(args: list[str], cwd: str) -> tuple[str, str, bool] | N
     return (_normal_branch_ref(target), attempted, False)
 
 
-def _classify_branch_position(subcommand: str, args: list[str]) -> tuple[str, str, bool] | None:
-    if subcommand == "branch":
-        if not any(token in ("-f", "--force") for token in args):
-            return None
-        # `git branch -f <name> [<start-point>]` — `-f` is a flag that
-        # may appear anywhere in the arg list, so gather positionals
-        # across the whole list. Target is the first positional, start
-        # point (if any) is the second.
-        positional = [token for token in args if not token.startswith("-")]
-        if not positional:
-            return None
-        target = positional[0]
-        attempted = positional[1] if len(positional) > 1 else "HEAD"
-    else:
-        marker = "-B" if subcommand == "checkout" else "-C"
-        try:
-            marker_index = args.index(marker)
-        except ValueError:
-            return None
-        # `git checkout -B <branch> [<start-point>]` and `git switch -C
-        # <branch> [<start-point>]` — the marker MUST be followed by the
-        # new branch name (next positional token), but the start-point
-        # may appear anywhere else (before or after the marker). Do NOT
-        # conflate "any positional after marker" with "target", since
-        # start-points placed before the marker would silently bypass
-        # detection (`git checkout <sha> -B main` must still deny against
-        # `refs/heads/main`).
-        if marker_index + 1 >= len(args):
-            return None
-        target = args[marker_index + 1]
-        if target.startswith("-"):
-            return None
-        other_positionals = [
-            token
-            for index, token in enumerate(args)
-            if index != marker_index + 1 and not token.startswith("-")
-        ]
-        attempted = other_positionals[0] if other_positionals else "HEAD"
-    if _DYNAMIC_SHELL_TOKEN_RE.search(target) or _DYNAMIC_SHELL_TOKEN_RE.search(attempted):
-        return ("", "<unresolved>", True)
-    return (_normal_branch_ref(target), attempted, False)
+def _classify_outcome(subcommand: str, args: list[str], cwd: str) -> list[tuple[str, str, bool]]:
+    """Ref rewrites of a branch/checkout/switch/symbolic-ref argv.
+
+    A HEAD effect with no ref rewrite (``checkout other``, ``checkout -b x``,
+    ``switch --detach``) yields nothing: Git itself refuses to check out a
+    branch another worktree has checked out, and a primary-HEAD move is the
+    cook rule's concern, not the shared-ref preflight's.
+    """
+    outcome = git_ref_outcome(subcommand, args)
+    if outcome is None:
+        return []
+    if outcome.ref_ambiguous:
+        return [("", "<unresolved>", True)]
+    if outcome.rewrites_current_branch:
+        return [(_symbolic_head(cwd) or "HEAD", "<rename>", False)]
+    if outcome.rewritten_ref is not None:
+        return [(_normal_branch_ref(outcome.rewritten_ref), outcome.start_point, False)]
+    return []
 
 
 def _classify_reset(args: list[str], cwd: str) -> tuple[str, str, bool] | None:
-    if "--" in args or any(token.startswith("--pathspec-from-file") for token in args):
+    parsed = parse_reset(args)
+    if parsed.unresolved is not None:
+        return ("", "<unresolved>", True)
+    if parsed.path_mode:
         return None
-    attempted = next((token for token in args if not token.startswith("-")), "HEAD")
+    attempted = parsed.commit
     target = _symbolic_head(cwd)
     if not target:
         # Fail-closed: ambiguous on rev-parse failure — route to _all_threatened.
@@ -427,33 +205,6 @@ def _refspec_targets(refspec: str, owned_refs: list[str]) -> list[str]:
     return [ref for ref in owned_refs if ref.startswith(prefix) and ref.endswith(suffix)]
 
 
-def _parse_fetch_args(args: list[str]) -> tuple[list[str], list[str]] | None:
-    refmaps: list[str] = []
-    positional: list[str] = []
-    index = 0
-    while index < len(args):
-        token = args[index]
-        if token == "--stdin":
-            return None
-        if token == "--refmap" and index + 1 < len(args):
-            refmaps.append(args[index + 1])
-            index += 2
-            continue
-        if token.startswith("--refmap="):
-            refmaps.append(token.split("=", 1)[1])
-            index += 1
-            continue
-        if token.startswith("-"):
-            _, next_index, recognized = _consume_str_flag(args, index, _GIT_FETCH_FLAG_SPEC)
-            if not recognized:
-                return None
-            index = next_index
-            continue
-        positional.append(token)
-        index += 1
-    return refmaps, positional
-
-
 def _fetch_mappings(
     refmaps: list[str], command_refspecs: list[str], cwd: str, remote: str
 ) -> list[str] | None:
@@ -476,15 +227,13 @@ def _fetch_mappings(
 def _classify_fetch(
     args: list[str], cwd: str, owned_refs: list[str]
 ) -> list[tuple[str, str, bool]]:
-    parsed = _parse_fetch_args(args)
-    if parsed is None:
+    fetch = parse_fetch(args)
+    if fetch.unresolved is not None:
         return [("", "<unresolved>", True)]
-    refmaps, positional = parsed
-    if not positional:
+    if fetch.remote is None:
         return []
-    remote = positional[0]
-    command_refspecs = positional[1:]
-    mappings = _fetch_mappings(refmaps, command_refspecs, cwd, remote)
+    refmaps = [option.value or "" for option in fetch.parsed.options if option.name == "refmap"]
+    mappings = _fetch_mappings(refmaps, list(fetch.refspecs), cwd, fetch.remote)
     if mappings is None:
         return [("", "<unresolved>", True)]
     result: list[tuple[str, str, bool]] = []
@@ -563,10 +312,12 @@ def _same_repository(candidate: str, context: dict[str, object]) -> bool | None:
 def _classify_push(
     args: list[str], context: dict[str, object], owned_refs: list[str]
 ) -> list[tuple[str, str, bool]]:
-    positional = [token for token in args if not token.startswith("-")]
-    if not positional:
+    push = parse_push(args)
+    if push.unresolved is not None:
+        return [("", "<unresolved>", True)]
+    if push.remote is None:
         return []
-    same_repo = _same_repository(positional[0], context)
+    same_repo = _same_repository(push.remote, context)
     if same_repo is False:
         return []
     if same_repo is None:
@@ -575,10 +326,10 @@ def _classify_push(
     # `git push origin`) uses remote.pushDefault / branch.<name>.merge to
     # resolve the target — we cannot enumerate without reading config, so
     # treat as ambiguous: route through _all_threatened rather than fail-open.
-    if len(positional) < 2:
+    if not push.refspecs:
         return [("", "<unresolved>", True)]
     result: list[tuple[str, str, bool]] = []
-    for refspec in positional[1:]:
+    for refspec in push.refspecs:
         # Colonless refspec (e.g. `git push . feature-branch`) defaults to
         # `feature-branch:feature-branch` and still updates a checked-out
         # ref if it lands in owned_refs — normalize before classifying.
@@ -592,37 +343,11 @@ def _classify_push(
     return result
 
 
-def _classify_symbolic_ref(args: list[str]) -> tuple[str, str, bool] | None:
-    positional: list[str] = []
-    index = 0
-    while index < len(args):
-        token = args[index]
-        if token == "-m":
-            index += 2
-            continue
-        if token.startswith("-"):
-            index += 1
-            continue
-        positional.append(token)
-        index += 1
-    if len(positional) >= 2 and positional[0] == "HEAD":
-        return (_normal_branch_ref(positional[1]), positional[1], False)
-    return None
-
-
-def _classify_git_segment(
-    segment: list[str], context: dict[str, object]
+def _classify_git_invocation(
+    invocation: GitInvocation, context: dict[str, object]
 ) -> list[tuple[str, str, bool]]:
-    parsed = extract_git_subcommand_and_flags(segment)
-    if parsed is None:
-        return []
-    subcommand = parsed.subcommand
-    args = parsed.flags
-    if subcommand == "<unresolved>":
-        # An unrecognized global git flag means the real subcommand could
-        # not be found -- ambiguous-deny (route through _all_threatened
-        # against every owned ref), not "nothing to check here".
-        return [("", "<unresolved>", True)]
+    subcommand = invocation.subcommand
+    args = invocation.flags
     cwd = str(context["execution_cwd"])
     owners = context["owners"]
     if not isinstance(owners, dict):
@@ -631,14 +356,12 @@ def _classify_git_segment(
     one: tuple[str, str, bool] | None = None
     if subcommand == "update-ref":
         one = _classify_update_ref(args, cwd)
-    elif subcommand in ("branch", "checkout", "switch"):
-        one = _classify_branch_position(subcommand, args)
+    elif subcommand in ("branch", "checkout", "switch", "symbolic-ref"):
+        return _classify_outcome(subcommand, args, cwd)
     elif subcommand == "reset":
         one = _classify_reset(args, cwd)
     elif subcommand == "fetch":
         return _classify_fetch(args, cwd, owned_refs)
     elif subcommand == "push":
         return _classify_push(args, context, owned_refs)
-    elif subcommand == "symbolic-ref":
-        one = _classify_symbolic_ref(args)
     return [one] if one is not None else []

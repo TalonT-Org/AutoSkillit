@@ -16,7 +16,7 @@ if TYPE_CHECKING:
         ArgvToken,
         EvaluatedSegment,
         SearchPattern,
-        _command_start_index,
+        _verb_start_index,
         command_verb,
         extract_git_subcommand_and_flags,
     )
@@ -259,6 +259,16 @@ _GIT_GLOBAL_FLAG_SPEC: Mapping[str, _FlagArity] = {
     "--namespace": _FlagArity.VALUE,
     "--config-env": _FlagArity.VALUE,
     "--super-prefix": _FlagArity.VALUE,
+    "--attr-source": _FlagArity.VALUE,
+    "--list-cmds": _FlagArity.VALUE,
+    "--no-optional-locks": _FlagArity.BOOLEAN,
+    "--literal-pathspecs": _FlagArity.BOOLEAN,
+    "--no-literal-pathspecs": _FlagArity.BOOLEAN,
+    "--glob-pathspecs": _FlagArity.BOOLEAN,
+    "--noglob-pathspecs": _FlagArity.BOOLEAN,
+    "--icase-pathspecs": _FlagArity.BOOLEAN,
+    "--no-lazy-fetch": _FlagArity.BOOLEAN,
+    "--no-advice": _FlagArity.BOOLEAN,
     # --exec-path[=<path>] is optional-value (usable bare, or with `=`); this
     # module's binary arity model can't express "optional". BOOLEAN is the
     # correct default for its common bare usage; the rare `=`-form
@@ -446,7 +456,8 @@ def is_allowed_protected_path_metadata_command(segment: EvaluatedSegment) -> boo
             return False
         return _is_allowed_git_metadata_invocation(git_parts.subcommand, git_parts.flags)
     if verb == "wc" or verb.endswith("/wc"):
-        start = _command_start_index(tokens)
+        # Any skipped prefix (keyword, assignment, `env`, wrapper) disqualifies the arm.
+        start = _verb_start_index(tokens)
         if start != 0:
             return False
         flags = [token for token in tokens[start + 1 :] if token.startswith("-")]
@@ -504,7 +515,7 @@ if not TYPE_CHECKING:
     ArgvToken = _classification.ArgvToken
     EvaluatedSegment = _classification.EvaluatedSegment
     SearchPattern = _classification.SearchPattern
-    _command_start_index = _classification._command_start_index
+    _verb_start_index = _classification._verb_start_index
     command_verb = _classification.command_verb
     extract_git_subcommand_and_flags = _classification.extract_git_subcommand_and_flags
 

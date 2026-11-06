@@ -517,8 +517,10 @@ class SessionType(StrEnum):
                     run_skill). L0 subagents are the actual leaf nodes — they never
                     set AUTOSKILLIT_SESSION_TYPE and cannot call run_skill.
 
-    Note: interactive L1 sessions (autoskillit cook, bare Claude Code) have no
-    SessionType value -- they bypass tier checks because AUTOSKILLIT_HEADLESS is unset.
+    Note: an interactive cook session (autoskillit cook) carries SKILL together with a
+    launch id and no AUTOSKILLIT_HEADLESS, which is how hooks tell it from a headless
+    worker. A bare Claude Code session has no SessionType value and bypasses tier
+    checks because AUTOSKILLIT_HEADLESS is unset.
     """
 
     FLEET = "fleet"

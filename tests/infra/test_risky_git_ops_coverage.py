@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.hook_registry import HOOK_REGISTRY, RISKY_GIT_OPERATIONS
+from autoskillit.hooks._runtime._git_target import contains_blocked_git_op
 from tests._evaluation_shape_matrix import EVALUATION_SHAPE_MATRIX, wrap_git_op
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
@@ -131,22 +132,17 @@ _INERT_SHAPES = [shape for shape in EVALUATION_SHAPE_MATRIX if not shape.execute
 @pytest.mark.parametrize("op", sorted(RISKY_GIT_OPERATIONS), ids=lambda op: "-".join(op))
 @pytest.mark.parametrize("shape", _EXECUTING_SHAPES, ids=lambda s: s.id)
 def test_every_risky_git_op_is_detected_through_every_evaluation_shape(shape, op) -> None:
-    """rectify #4941 Part A: every RISKY_GIT_OPERATIONS tuple, delivered through
-    every executing evaluation shape (direct, -c, eval, heredoc, herestring,
-    pipe, substitution, Python subprocess), must still be denied.
+    """Every RISKY_GIT_OPERATIONS tuple, delivered through every executing
+    evaluation shape (direct, -c, eval, heredoc, herestring, pipe, substitution,
+    Python subprocess), is detected as itself when it is the only blocked
+    operation, and is detected when all of them are blocked.
     """
-    from autoskillit.hooks._runtime._git_command_classification import (
-        _contains_blocked_git_op,
-    )
-
     cmd = wrap_git_op(shape, op)
-    result = _contains_blocked_git_op(cmd, RISKY_GIT_OPERATIONS)
-    # Some RISKY_GIT_OPERATIONS tuples structurally overlap once rendered
-    # with a trailing "origin main" (e.g. ("checkout", ".") also matches
-    # wherever ("checkout", "--", ".") does), so any detected tuple --
-    # not necessarily the exact one parametrized -- proves this shape was
-    # correctly denied.
-    assert result is not None, f"{shape.id}: {op} not detected through {cmd!r}"
+    alone = contains_blocked_git_op(cmd, frozenset({op}))
+    assert alone == op, f"{shape.id}: {op} not detected through {cmd!r} (got {alone!r})"
+    assert contains_blocked_git_op(cmd, RISKY_GIT_OPERATIONS) is not None, (
+        f"{shape.id}: {op} not detected through {cmd!r} with every operation blocked"
+    )
 
 
 @pytest.mark.parametrize("op", sorted(RISKY_GIT_OPERATIONS), ids=lambda op: "-".join(op))
@@ -156,10 +152,6 @@ def test_inert_shapes_never_flag_a_risky_git_op(shape, op) -> None:
     never executes it must never trip the blocklist, however the delivery
     shape happens to render the operation's text.
     """
-    from autoskillit.hooks._runtime._git_command_classification import (
-        _contains_blocked_git_op,
-    )
-
     cmd = wrap_git_op(shape, op)
-    result = _contains_blocked_git_op(cmd, RISKY_GIT_OPERATIONS)
+    result = contains_blocked_git_op(cmd, RISKY_GIT_OPERATIONS)
     assert result is None, f"{shape.id}: {op} incorrectly denied through {cmd!r} (got {result!r})"

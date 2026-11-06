@@ -49,7 +49,8 @@ _GIT_MUTATION_SUBCOMMANDS: frozenset[str] = frozenset(
     {"update-ref", "branch", "checkout", "switch", "reset", "fetch", "push", "symbolic-ref"}
 )
 
-# ``git --list-cmds=builtins`` on the reference Git. Aliases cannot shadow these.
+# ``git --list-cmds=builtins`` on ``_GIT_TABLES_REFERENCE_VERSION``, pinned by
+# tests/hooks/test_git_option_table_contract.py. Aliases cannot shadow these.
 _GIT_BUILTIN_SUBCOMMANDS: frozenset[str] = frozenset(
     (
         "add am annotate apply archive bisect blame branch bugreport bundle cat-file "

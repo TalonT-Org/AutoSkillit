@@ -1,7 +1,8 @@
 """Live completeness of the Git option tables against ``--git-completion-helper-all``.
 
 Members: _parse_completion_helper, _audit_table, git_env, git_repo, git_version,
-test_table_agrees_with_live_completion_helper.
+test_table_agrees_with_live_completion_helper,
+test_builtin_inventory_agrees_with_live_list_cmds.
 
 ``git <sub> --git-completion-helper-all`` prints one line of whitespace-separated
 tokens. Before the first bare ``--`` come the long options, where a trailing
@@ -10,6 +11,9 @@ tokens. Before the first bare ``--`` come the long options, where a trailing
 the check covers long rows only. The comparison runs only on the Git the tables
 were derived from: at runtime an unknown option already fails closed, so a newer
 Git produces denies, not bypasses.
+
+The builtin subcommand inventory ``_GIT_BUILTIN_SUBCOMMANDS`` is held to the same
+reference Git: it must equal ``git --list-cmds=builtins`` exactly.
 """
 
 from __future__ import annotations
@@ -29,6 +33,7 @@ from autoskillit.hooks._runtime._git_option_tables import (
     _GIT_SUBCOMMAND_TABLES,
     _GIT_TABLES_REFERENCE_VERSION,
 )
+from autoskillit.hooks._runtime._git_target import _GIT_BUILTIN_SUBCOMMANDS
 from tests._git_topology import init_empty_checkout
 
 pytestmark = [
@@ -177,4 +182,35 @@ def test_table_agrees_with_live_completion_helper(
     assert not audit.negations, (
         f"{version_text}: git {subcommand} lists negations whose table row is "
         f"missing or not negatable: {audit.negations}"
+    )
+
+
+def test_builtin_inventory_agrees_with_live_list_cmds(
+    git_env: dict[str, str],
+    git_repo: Path,
+    git_version: tuple[str, tuple[int, int]],
+) -> None:
+    version_text, version = git_version
+    result = _run_git(git_env, git_repo, "--list-cmds=builtins")
+    assert result.returncode == 0, (
+        f"{version_text}: git --list-cmds=builtins failed: "
+        f"rc={result.returncode}, stderr={result.stderr!r}"
+    )
+    live = frozenset(result.stdout.split())
+    assert len(live) >= _MIN_LIVE_NAMES, (
+        f"{version_text}: git --list-cmds=builtins listed too few names: {result.stdout!r}"
+    )
+    missing = sorted(live - _GIT_BUILTIN_SUBCOMMANDS)
+    stale = sorted(_GIT_BUILTIN_SUBCOMMANDS - live)
+
+    if version != _GIT_TABLES_REFERENCE_VERSION:
+        pytest.skip(
+            f"{version_text} differs from the tables' reference Git "
+            f"{_GIT_TABLES_REFERENCE_VERSION}; builtins missing from the inventory: "
+            f"{missing}; stale inventory names: {stale}"
+        )
+
+    assert not missing and not stale, (
+        f"{version_text}: _GIT_BUILTIN_SUBCOMMANDS disagrees with git --list-cmds=builtins: "
+        f"missing={missing} stale={stale}"
     )

@@ -42,10 +42,11 @@ from _git_target import (  # type: ignore[import-not-found]
 from _shell_segment_walk import walk_evaluated_segments  # type: ignore[import-not-found]
 
 from tests._git_topology import (
-    AMBIENT_GIT_VARIABLES,
+    _run_git,
     add_linked_worktree,
     commit_file,
     init_checkout,
+    isolate_git_environment,
 )
 
 pytestmark = [
@@ -75,29 +76,6 @@ def _git_version() -> str:
     return result.stdout.strip() or "<git version unavailable>"
 
 
-def _git(cwd: Path, *args: str) -> None:
-    subprocess.run(
-        ["git", *args],
-        cwd=cwd,
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=_GIT_TIMEOUT_SECONDS,
-    )
-
-
-def _isolate_git_environment(mp: pytest.MonkeyPatch, home: Path, ceiling: Path) -> None:
-    """Point Git's user, system and discovery state into the test tree."""
-    home.mkdir(parents=True, exist_ok=True)
-    mp.setenv("HOME", str(home))
-    mp.setenv("XDG_CONFIG_HOME", str(home / ".config"))
-    mp.setenv("GIT_CONFIG_GLOBAL", os.devnull)
-    mp.setenv("GIT_CONFIG_NOSYSTEM", "1")
-    mp.setenv("GIT_CEILING_DIRECTORIES", str(ceiling))
-    for name in AMBIENT_GIT_VARIABLES:
-        mp.delenv(name, raising=False)
-
-
 @dataclass(frozen=True)
 class Topology:
     """Canonical paths of the repositories and directories the rows analyse."""
@@ -116,22 +94,22 @@ class Topology:
 def _isolated_git_environment(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, tmp_path_factory: pytest.TempPathFactory
 ) -> None:
-    _isolate_git_environment(monkeypatch, tmp_path / "home", tmp_path_factory.getbasetemp())
+    isolate_git_environment(monkeypatch, tmp_path / "home", ceiling=tmp_path_factory.getbasetemp())
 
 
 @pytest.fixture(scope="module")
 def topology(tmp_path_factory: pytest.TempPathFactory) -> Topology:
     root = tmp_path_factory.mktemp("git-target").resolve()
     with pytest.MonkeyPatch.context() as mp:
-        _isolate_git_environment(mp, root / "build-home", tmp_path_factory.getbasetemp())
+        isolate_git_environment(mp, root / "build-home", ceiling=tmp_path_factory.getbasetemp())
         primary = init_checkout(root / "primary")
         commit_file(primary, "sub/tracked.txt", "tracked\n", "add tracked file")
-        _git(primary, "branch", "develop")
+        _run_git("branch", "develop", cwd=primary)
         for name, value in _REPOSITORY_ALIASES.items():
-            _git(primary, "config", f"alias.{name}", value)
+            _run_git("config", f"alias.{name}", value, cwd=primary)
         linked = add_linked_worktree(primary, "review")
         bare = root / "bare.git"
-        _git(root, "init", "--bare", "-q", str(bare))
+        _run_git("init", "--bare", "-q", str(bare), cwd=root)
         plain = root / "plain"
         plain.mkdir()
         primary_link = root / "primary-link"

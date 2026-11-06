@@ -1,9 +1,14 @@
-"""Small real-Git fixtures for checkout and linked-worktree tests."""
+"""Small real-Git fixtures and environment isolation for checkout and linked-worktree tests."""
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import pytest
 
 _GIT_TIMEOUT_SECONDS = 10
 
@@ -25,6 +30,23 @@ def _run_git(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess
         text=True,
         timeout=_GIT_TIMEOUT_SECONDS,
     )
+
+
+def isolate_git_environment(
+    mp: pytest.MonkeyPatch, home: Path, *, ceiling: Path | None = None
+) -> None:
+    """Point Git's user, system and discovery state into the test tree; drop ambient overrides."""
+    home.mkdir(parents=True, exist_ok=True)
+    mp.setenv("HOME", str(home))
+    mp.setenv("XDG_CONFIG_HOME", str(home / ".config"))
+    mp.setenv("XDG_DATA_HOME", str(home / ".local" / "share"))
+    mp.setenv("XDG_CACHE_HOME", str(home / ".cache"))
+    mp.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    mp.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    if ceiling is not None:
+        mp.setenv("GIT_CEILING_DIRECTORIES", str(ceiling))
+    for name in AMBIENT_GIT_VARIABLES:
+        mp.delenv(name, raising=False)
 
 
 def init_empty_checkout(path: Path) -> Path:

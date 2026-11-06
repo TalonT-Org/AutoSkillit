@@ -29,7 +29,7 @@ import _git_target  # type: ignore[import-not-found]
 import pytest
 
 from autoskillit.hooks.guards import git_ops_guard
-from tests._git_topology import AMBIENT_GIT_VARIABLES, commit_file
+from tests._git_topology import commit_file, isolate_git_environment
 from tests.infra._git_ops_guard_harness import (
     _HOOK_CONFIG_RELPATH,
     UNSET,
@@ -137,16 +137,7 @@ _ALLOWED_OUTSIDE_THE_PRIMARY = [
 
 @pytest.fixture(autouse=True)
 def _isolated_git_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    home = tmp_path / "home"
-    home.mkdir()
-    for name in AMBIENT_GIT_VARIABLES:
-        monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
-    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
-    monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(home / ".config"))
-    monkeypatch.setenv("XDG_DATA_HOME", str(home / ".local" / "share"))
-    monkeypatch.setenv("XDG_CACHE_HOME", str(home / ".cache"))
+    isolate_git_environment(monkeypatch, tmp_path / "home")
 
 
 @pytest.fixture

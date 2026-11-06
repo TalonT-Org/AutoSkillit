@@ -263,21 +263,25 @@ def _observe(sandbox: _Sandbox) -> dict[str, _View]:
 
 
 @dataclass(frozen=True, slots=True)
-class _Run:
+class _GitRun:
     subcommand: str
     argv: tuple[str, ...]
     returncode: int
     stderr: str
-    owners: tuple[str, ...]
-    tuples: _Tuples
-    outcome: GitRefOutcome | None
-    before: Mapping[str, _View]
-    after: Mapping[str, _View]
     git_version: str
 
     @property
     def command(self) -> str:
         return shlex.join(["git", self.subcommand, *self.argv])
+
+
+@dataclass(frozen=True, slots=True)
+class _Run(_GitRun):
+    owners: tuple[str, ...]
+    tuples: _Tuples
+    outcome: GitRefOutcome | None
+    before: Mapping[str, _View]
+    after: Mapping[str, _View]
 
     @property
     def named_refs(self) -> set[str]:
@@ -1164,17 +1168,8 @@ def _observed_effect(
 
 
 @dataclass(frozen=True, slots=True)
-class _DestructiveRun:
-    subcommand: str
-    argv: tuple[str, ...]
-    returncode: int
-    stderr: str
+class _DestructiveRun(_GitRun):
     effect: str | None
-    git_version: str
-
-    @property
-    def command(self) -> str:
-        return shlex.join(["git", self.subcommand, *self.argv])
 
 
 def _run_destructive(
@@ -1190,7 +1185,12 @@ def _run_destructive(
     after = _snapshot(sandbox)
     effect = _observed_effect(sandbox.primary.parent / "origin.git", subcommand, before, after)
     return _DestructiveRun(
-        subcommand, argv, completed.returncode, completed.stderr, effect, sandbox.git_version
+        subcommand=subcommand,
+        argv=argv,
+        returncode=completed.returncode,
+        stderr=completed.stderr,
+        git_version=sandbox.git_version,
+        effect=effect,
     )
 
 

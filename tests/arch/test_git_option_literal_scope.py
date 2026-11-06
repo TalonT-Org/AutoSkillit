@@ -9,7 +9,9 @@ one literal spelling (``"-B" in args``, ``args.index("--force")``,
 ``token.startswith("--force")``) silently allows every other spelling. Option
 semantics are decided through ``_option_grammar`` tables instead.
 
-Detectors, over the Git-classification modules only:
+Detectors, over ``guards/git_ops_guard.py`` plus every ``hooks/_runtime/_git_*.py``
+sibling, so a new Git-classification module is covered by naming it ``_git_*.py``
+(the shell walk and the generic command classifier are out of scope by design):
 
 (a) a ``Compare`` using ``in``/``not in``/``==``/``!=`` against a string literal that
     looks like an option (or a tuple/set/list literal containing one);
@@ -32,9 +34,7 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 _HOOKS_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "hooks"
 _SCOPED_FILES = (
     _HOOKS_ROOT / "guards" / "git_ops_guard.py",
-    _HOOKS_ROOT / "_runtime" / "_git_command_classification.py",
-    _HOOKS_ROOT / "_runtime" / "_git_outcome.py",
-    _HOOKS_ROOT / "_runtime" / "_git_target.py",
+    *sorted((_HOOKS_ROOT / "_runtime").glob("_git_*.py")),
 )
 _OPTION_TOKEN_RE = re.compile(r"^[-+]{1,2}[A-Za-z0-9?]")
 _TOKEN_METHODS = frozenset(

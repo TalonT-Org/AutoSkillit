@@ -28,17 +28,21 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from autoskillit.hooks._classification._invocation_flags import _WRAPPER_SPECS
     from autoskillit.hooks._classification._output_redirect import OutputRedirectPartition
-    from autoskillit.hooks._classification._tokenizer import ArgvToken, EvaluatedSegment
+    from autoskillit.hooks._classification._tokenizer import (
+        _LOGICAL_CONNECTORS,
+        ArgvToken,
+        EvaluatedSegment,
+    )
 else:
     if __package__:
-        from .._classification import _invocation_flags
+        from .._classification import _invocation_flags, _tokenizer
     else:
-        from _classification import _invocation_flags
+        from _classification import _invocation_flags, _tokenizer
 
     _WRAPPER_SPECS = _invocation_flags._WRAPPER_SPECS
+    _LOGICAL_CONNECTORS = _tokenizer._LOGICAL_CONNECTORS
 
 _DIRECTORY_COMMANDS: frozenset[str] = frozenset({"cd", "pushd", "popd"})
-_LOGICAL_CONNECTORS: frozenset[str] = frozenset({"&&", "||", "|", "&"})
 _TAINTING_FIRST_TOKENS: frozenset[str] = frozenset(
     {"if", "while", "until", "for", "select", "case", "then", "do", "else", "elif", "{"}
 )

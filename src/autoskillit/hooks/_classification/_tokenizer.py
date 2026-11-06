@@ -45,7 +45,7 @@ else:
 
 # Operators that terminate a shlex token and split command segments.
 _SHELL_OPERATORS: frozenset[str] = frozenset({"&&", "||", ";", "|", "&"})
-_LOGICAL_CONNECTORS: frozenset[str] = frozenset({"&&", "||", "|", "&"})
+_LOGICAL_CONNECTORS: frozenset[str] = _SHELL_OPERATORS - {";"}
 _BARE_KEYWORDS: frozenset[str] = frozenset({"if", "while", "until", "then", "else", "elif", "do"})
 _HEREDOC_PLACEHOLDER_RE = re.compile(r"__AUTOSKILLIT_HEREDOC_(\d+)__")
 

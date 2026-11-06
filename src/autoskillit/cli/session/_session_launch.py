@@ -167,10 +167,10 @@ def prepare_interactive_launch(
     extra_env = _interactive_anchor_env(extra_env, project_dir)
 
     probe_env = dict(os.environ)
-    if extra_env is not None and "PATH" in extra_env:
+    if "PATH" in extra_env:
         probe_env["PATH"] = extra_env["PATH"]
     selector = backend.capabilities.explicit_path_env_var
-    if selector and extra_env is not None and selector in extra_env:
+    if selector and selector in extra_env:
         probe_env[selector] = extra_env[selector]
     explicit_path_env = selector if selector and selector in probe_env else None
 
@@ -180,7 +180,7 @@ def prepare_interactive_launch(
         cwd=project_dir,
         explicit_path_env=explicit_path_env,
     )
-    merged_extras = dict(extra_env or {})
+    merged_extras = dict(extra_env)
     if managed_home is not None:
         readiness = backend.probe_launch_readiness(
             session_dir=managed_home.generated_home, executable=provisional

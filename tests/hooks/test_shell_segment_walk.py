@@ -310,6 +310,7 @@ _LAYOUT_COMMANDS = (
     "git --bare x",
     "git -c core.worktree=/r x",
     "git -c include.path=/x y",
+    "git -c includeIf.gitdir:/a/.path=/x y",
 )
 _ALIAS_COMMANDS = (
     "git -c alias.x=y x",
@@ -327,6 +328,17 @@ def _flags(command: str) -> ChannelFlags:
 @pytest.mark.parametrize("command", _LAYOUT_COMMANDS)
 def test_layout_channels_in_command_text(command: str) -> None:
     assert _flags(command) == ChannelFlags(layout_override=True, alias_channel=False)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        'git commit -m "add include.txt" && git checkout feature',
+        "cat include.h && git checkout x",
+    ],
+)
+def test_include_in_a_filename_is_not_a_layout_channel(command: str) -> None:
+    assert _flags(command) == ChannelFlags(layout_override=False, alias_channel=False)
 
 
 @pytest.mark.parametrize("command", _ALIAS_COMMANDS)

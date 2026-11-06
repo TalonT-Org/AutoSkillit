@@ -69,7 +69,7 @@ _GIT_BUILTIN_SUBCOMMANDS: frozenset[str] = frozenset(
 _LAYOUT_ENV_NAMES: tuple[str, ...] = ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR")
 _LAYOUT_CHANNEL_RE = re.compile(
     r"\b(?:GIT_DIR|GIT_WORK_TREE|GIT_COMMON_DIR)=|--git-dir\b|--work-tree\b|--bare\b"
-    r"|core\.(?:worktree|bare)|include(?:If)?\."
+    r"|core\.(?:worktree|bare)|include\.path|includeIf\."
 )
 _ALIAS_CHANNEL_RE = re.compile(r"alias\.|GIT_CONFIG|\bHOME=|XDG_CONFIG_HOME=")
 _ALIAS_KEY_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*")

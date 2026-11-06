@@ -19,14 +19,16 @@ facade imports ``_write_target_scan`` (which imports this module) at its bottom.
 from __future__ import annotations
 
 import os
-import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from types import ModuleType
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from autoskillit.hooks._classification._invocation_flags import _WRAPPER_SPECS
+    from autoskillit.hooks._classification._invocation_flags import (
+        _PYTHON_NAME_RE,
+        _WRAPPER_SPECS,
+    )
     from autoskillit.hooks._classification._output_redirect import OutputRedirectPartition
     from autoskillit.hooks._classification._tokenizer import (
         _LOGICAL_CONNECTORS,
@@ -39,6 +41,7 @@ else:
     else:
         from _classification import _invocation_flags, _tokenizer
 
+    _PYTHON_NAME_RE = _invocation_flags._PYTHON_NAME_RE
     _WRAPPER_SPECS = _invocation_flags._WRAPPER_SPECS
     _LOGICAL_CONNECTORS = _tokenizer._LOGICAL_CONNECTORS
 
@@ -316,8 +319,8 @@ def _invoked_child_state(
 
     if path is None or verb_cwd == state.cwd:
         return None
-    if _classification._is_shell_interpreter(verb) or re.fullmatch(
-        r"python(?:3(?:\.\d+)?)?", _classification._normalize_executable(verb)
+    if _classification._is_shell_interpreter(verb) or _PYTHON_NAME_RE.fullmatch(
+        _classification._normalize_executable(verb)
     ):
         return ShellDirectoryState(verb_cwd, state.cdpath_unknown, verb_certain)
     return None

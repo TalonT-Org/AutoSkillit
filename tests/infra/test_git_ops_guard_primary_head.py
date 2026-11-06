@@ -15,12 +15,10 @@ and a dangling commit.
 
 from __future__ import annotations
 
-import io
 import json
 import os
 import shutil
 import subprocess
-import unittest.mock
 from pathlib import Path
 
 # The sys.path bootstrap for bare-name hook-sibling imports is centralized in
@@ -31,13 +29,15 @@ import pytest
 from autoskillit.hooks.guards import git_ops_guard
 from tests._git_topology import commit_file, isolate_git_environment
 from tests.infra._git_ops_guard_harness import (
-    _HOOK_CONFIG_RELPATH,
     UNSET,
     _build_payload,
     _context,
+    _expand,
     _git,
     _guard_verdict,
+    _invoke_guard,
     _make_clean_env,
+    _open_kitchen,
     _run_guard,
     build_linked_repo,
 )
@@ -152,12 +152,6 @@ def repo(tmp_path: Path) -> dict[str, Path | str]:
     _git(primary, "push", "-q", "origin", "develop:refs/heads/y")
     _git(primary, "fetch", "-q", "origin")
     return built
-
-
-def _expand(command: str, repo: dict[str, Path | str], tmp_path: Path) -> str:
-    for name in ("primary", "linked", "unrelated"):
-        command = command.replace(f"<{name}>", str(repo[name]))
-    return command.replace("<tmp>", str(tmp_path)).replace("<sha>", str(repo["new_sha"]))
 
 
 def _session_env(session: str, repo: dict[str, Path | str], *, state_root: bool) -> dict[str, str]:
@@ -401,21 +395,13 @@ def _cook_exit_code(
 
     ``_run_guard`` requires a clean exit, which a blocked classification is not.
     """
-    primary = Path(str(repo["primary"]))
-    marker = primary / _HOOK_CONFIG_RELPATH
-    marker.parent.mkdir(parents=True, exist_ok=True)
-    marker.write_text(json.dumps({"kitchen": "open"}))
+    _open_kitchen(Path(str(repo["primary"])))
     payload = _build_payload(
         _expand(command, repo, tmp_path), tmp_path, use_bash_key=True, payload_cwd=payload_cwd
     )
     env = {**_make_clean_env(None, headless=False), **_session_env("cook", repo, state_root=True)}
-    with (
-        unittest.mock.patch.dict(os.environ, env, clear=True),
-        unittest.mock.patch("sys.stdin", io.StringIO(json.dumps(payload))),
-        unittest.mock.patch("pathlib.Path.cwd", return_value=tmp_path),
-        pytest.raises(SystemExit) as exit_info,
-    ):
-        git_ops_guard.main()
+    with pytest.raises(SystemExit) as exit_info:
+        _invoke_guard(json.dumps(payload), env, tmp_path)
     return exit_info.value.code
 
 

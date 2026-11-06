@@ -1,8 +1,8 @@
 """Shared harness for git_ops_guard tests: payloads, a guard runner and repositories.
 
-Members: _make_clean_env, _build_payload, _run_guard, _guard_exit_code,
-_is_denied, _checked_out_ref_result, _guard_verdict, _git, _git_version, _context,
-build_linked_repo.
+Members: _make_clean_env, _build_payload, _open_kitchen, _invoke_guard, _run_guard,
+_guard_exit_code, _is_denied, _checked_out_ref_result, _guard_verdict, _git,
+_git_version, _context, build_linked_repo, _expand.
 
 ``UNSET`` distinguishes "use the default" from an explicit ``""`` or ``None`` for
 the payload's cwd fields, so a test can send a relative or empty cwd. A verdict
@@ -102,10 +102,29 @@ def _build_payload(
     return payload
 
 
+def _open_kitchen(root: Path, hook_config: dict[str, object] | None = None) -> None:
+    marker = root / _HOOK_CONFIG_RELPATH
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(json.dumps(hook_config or {"kitchen": "open"}))
+
+
+def _invoke_guard(stdin_content: str, env: dict[str, str], process_cwd: Path) -> None:
+    """Run git_ops_guard.main() under *env*, *stdin_content* and a patched Path.cwd().
+
+    SystemExit propagates to the caller.
+    """
+    with (
+        unittest.mock.patch.dict(os.environ, env, clear=True),
+        unittest.mock.patch("sys.stdin", io.StringIO(stdin_content)),
+        unittest.mock.patch("pathlib.Path.cwd", return_value=process_cwd),
+    ):
+        git_ops_guard.main()
+
+
 def _run_guard(
     cmd: str,
     kitchen_open: bool,
-    tmpdir,
+    tmpdir: Path,
     raw_stdin: str | None = None,
     skill_name: str | None = None,
     session_type: str | None = None,
@@ -143,44 +162,32 @@ def _run_guard(
         )
 
     if kitchen_open:
-        hook_cfg = (marker_root or tmpdir) / _HOOK_CONFIG_RELPATH
-        hook_cfg.parent.mkdir(parents=True, exist_ok=True)
-        hook_cfg.write_text(json.dumps(hook_config or {"kitchen": "open"}))
+        _open_kitchen(marker_root or tmpdir, hook_config)
 
     clean_env = _make_clean_env(skill_name, session_type, headless=headless)
     clean_env.update(extra_env or {})
 
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
-        with unittest.mock.patch.dict(os.environ, clean_env, clear=True):
-            with unittest.mock.patch("sys.stdin", io.StringIO(stdin_content)):
-                with unittest.mock.patch("pathlib.Path.cwd", return_value=process_cwd or tmpdir):
-                    try:
-                        git_ops_guard.main()
-                    except SystemExit as exc:
-                        assert exc.code == 0, _context(cmd, f"guard exited {exc.code!r}")
+        try:
+            _invoke_guard(stdin_content, clean_env, process_cwd or tmpdir)
+        except SystemExit as exc:
+            assert exc.code == 0, _context(cmd, f"guard exited {exc.code!r}")
 
     return buf.getvalue()
 
 
-def _guard_exit_code(cmd: str, tmpdir: Path, **payload_kwargs: object) -> int | str | None:
+def _guard_exit_code(cmd: str, tmpdir: Path) -> int | str | None:
     """Run git_ops_guard.main() in a headless skill session with the kitchen open
     and return the code it exits with.
 
     _run_guard requires a clean exit; this expects main() to terminate through
     SystemExit and leaves stdout and stderr to the caller's capsys.
     """
-    hook_cfg = tmpdir / _HOOK_CONFIG_RELPATH
-    hook_cfg.parent.mkdir(parents=True, exist_ok=True)
-    hook_cfg.write_text(json.dumps({"kitchen": "open"}))
-    payload = _build_payload(cmd, tmpdir, **payload_kwargs)  # type: ignore[arg-type]
-    with (
-        unittest.mock.patch.dict(os.environ, _make_clean_env(None), clear=True),
-        unittest.mock.patch("sys.stdin", io.StringIO(json.dumps(payload))),
-        unittest.mock.patch("pathlib.Path.cwd", return_value=tmpdir),
-        pytest.raises(SystemExit) as exit_info,
-    ):
-        git_ops_guard.main()
+    _open_kitchen(tmpdir)
+    payload = _build_payload(cmd, tmpdir)
+    with pytest.raises(SystemExit) as exit_info:
+        _invoke_guard(json.dumps(payload), _make_clean_env(None), tmpdir)
     return exit_info.value.code
 
 
@@ -251,3 +258,10 @@ def build_linked_repo(tmp_path: Path, *, tracked_state_dir: bool = False) -> dic
         "worktree_git_dir": _git(linked, "rev-parse", "--absolute-git-dir"),
         "common_git_dir": str((linked / _git(linked, "rev-parse", "--git-common-dir")).resolve()),
     }
+
+
+def _expand(command: str, repo: dict[str, Path | str], tmp_path: Path) -> str:
+    """Expand <primary>, <linked>, <unrelated>, <tmp> and <sha> in *command*."""
+    for name in ("primary", "linked", "unrelated"):
+        command = command.replace(f"<{name}>", str(repo[name]))
+    return command.replace("<tmp>", str(tmp_path)).replace("<sha>", str(repo["new_sha"]))

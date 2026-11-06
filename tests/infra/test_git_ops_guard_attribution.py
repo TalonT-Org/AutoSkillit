@@ -19,6 +19,7 @@ import pytest
 
 from tests.infra._git_ops_guard_harness import (
     _context,
+    _expand,
     _git,
     _guard_verdict,
     _run_guard,
@@ -172,12 +173,6 @@ _RUN_CMD_UNKNOWN_CWD_ALLOWED = [
 ]
 
 
-def _expand(command: str, repo: dict[str, Path | str]) -> str:
-    for name in ("primary", "linked", "unrelated"):
-        command = command.replace(f"<{name}>", str(repo[name]))
-    return command.replace("<sha>", str(repo["new_sha"]))
-
-
 def _payload_dir(repo: dict[str, Path | str], name: str) -> Path:
     if name == "primary-git":
         return Path(str(repo["primary"])) / ".git"
@@ -201,7 +196,7 @@ def _bash_verdict(
     directory resolves its state root to.
     """
     output = _run_guard(
-        _expand(command, repo),
+        _expand(command, repo, tmp_path),
         kitchen_open=True,
         tmpdir=tmp_path,
         use_bash_key=True,
@@ -257,7 +252,10 @@ class TestEffectiveTargetAttribution:
         self, linked_repo: dict[str, Path | str], tmp_path: Path, command: str, tool_cwd: str
     ) -> None:
         output = _run_guard(
-            _expand(command, linked_repo), kitchen_open=True, tmpdir=tmp_path, tool_cwd=tool_cwd
+            _expand(command, linked_repo, tmp_path),
+            kitchen_open=True,
+            tmpdir=tmp_path,
+            tool_cwd=tool_cwd,
         )
         assert _guard_verdict(output) == "checked-out-ref", _context(command, (tool_cwd, output))
 
@@ -285,7 +283,10 @@ class TestEffectiveTargetAttribution:
         self, linked_repo: dict[str, Path | str], tmp_path: Path, command: str
     ) -> None:
         output = _run_guard(
-            _expand(command, linked_repo), kitchen_open=True, tmpdir=tmp_path, tool_cwd=""
+            _expand(command, linked_repo, tmp_path),
+            kitchen_open=True,
+            tmpdir=tmp_path,
+            tool_cwd="",
         )
         assert _guard_verdict(output) == "allow", _context(command, output)
 

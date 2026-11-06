@@ -153,7 +153,7 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("collapse-issues", "combined_url"),
         ("issue-splitter", "parent_url"),  # source issue URL, obtained in prior step
         ("issue-splitter", "route"),  # routing label value, from manifest
-        ("make-groups", "topic"),  # prose: "git branch feature/{topic}"
+        ("make-groups", "topic"),  # prose: "git -C <clone> switch -c feature/{topic}"
         ("merge-pr", "pr_branch"),  # per-PR head branch from gh pr list
         ("merge-pr", "file_path"),  # per-file iteration in deletion check
         ("merge-pr", "symbol_name"),  # per-symbol grep pattern

@@ -296,18 +296,27 @@ When implementing multiple groups from this skill's output, **always work on a f
 not directly on `main`. Group implementations take multiple plan-implement-merge cycles and
 should not land on the base branch until the full set is audited.
 
-After `make-groups` completes, create a feature branch before starting the pipeline:
+After `make-groups` completes, create and publish a feature branch in the checkout that
+`merge_worktree` merges into. `merge_worktree` requires that checkout's main worktree to have
+the base branch checked out and `origin/<base_branch>` to exist, so `git branch` alone is not
+enough:
 
 ```bash
-git branch feature/{topic}
+git -C <clone> switch -c feature/{topic}
+git -C <clone> push -u origin feature/{topic}
 ```
+
+Run these against the pipeline's clone, not the checkout your own cook session is anchored in:
+the cook-session guard denies moving `HEAD` of that primary checkout. Alternatively, create and
+check out the branch yourself before launching the session.
 
 Then run each group through the pipeline using the feature branch as `base_branch` for all
 `merge_worktree` calls. The `/autoskillit:audit-impl` skill accepts the manifest as input
 and audits all groups at once as the final gate before merging the feature branch to `develop`.
 
-Use the `group-implementation` bundled workflow to automate this — it creates the feature
-branch, runs the group loop, and gates on audit before signalling merge-ready.
+The `implementation-groups` bundled recipe automates this — it bootstraps the clone, creates
+and publishes the feature branch (`create_and_publish_branch`), runs the group loop, and gates
+on audit before signalling merge-ready.
 
 ## Related Skills
 

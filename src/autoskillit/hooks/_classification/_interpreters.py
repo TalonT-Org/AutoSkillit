@@ -19,7 +19,6 @@ if TYPE_CHECKING:
     )
     from autoskillit.hooks._classification._python_program_analysis import (
         _InterpreterCommandSpec,
-        _python_c_program,
         _python_program_command_specs,
         _python_program_evaluated_specs,
     )
@@ -75,7 +74,6 @@ else:
     _strip_heredoc_bodies_mapped = _tokenizer._strip_heredoc_bodies_mapped
     _FlagArity = _flag_arity_classification._FlagArity
     _InterpreterCommandSpec = _python_program_analysis._InterpreterCommandSpec
-    _python_c_program = _python_program_analysis._python_c_program
     _python_program_command_specs = _python_program_analysis._python_program_command_specs
     _python_program_evaluated_specs = _python_program_analysis._python_program_evaluated_specs
     _extract_process_substitution_occurrences = (
@@ -473,7 +471,12 @@ def evaluated_payloads(command: str) -> list[EvaluatedPayload]:
                 EvaluatedPayload(" ".join(args), StdinConsumer.SHELL, index, "eval", None)
             )
         else:
-            program = _python_c_program(_normalize_executable(verb), args)
+            executable = _normalize_executable(verb)
+            program = (
+                python_c_program(args)[0]
+                if re.fullmatch(r"python(?:3(?:\.\d+)?)?", executable)
+                else None
+            )
             if program is not None:
                 payloads.append(
                     EvaluatedPayload(program, StdinConsumer.PYTHON, index, "python-c", None)

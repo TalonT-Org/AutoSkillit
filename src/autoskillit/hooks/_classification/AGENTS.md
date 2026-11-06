@@ -34,8 +34,8 @@ block B bootstrap so hook scripts can keep importing via
   A wrapper option or launcher it does not model is reported *unresolved* out of
   band, so shared consumers keep their verb.
 - `_python_program_analysis.py` — Python interpreter and subprocess invocation
-  analysis (`_InterpreterCommandSpec`, `_python_c_program`,
-  `_python_program_command_specs`, `_python_program_evaluated_specs`).
+  analysis (`_InterpreterCommandSpec`, `_python_program_command_specs`,
+  `_python_program_evaluated_specs`).
 - `_substitution_scanning.py` — shell-substitution / process-substitution
   scanning and the legacy shell-payload segment traversal.
 - `_github_mutation_cli_analysis.py` — `gh` / `curl` mutation grammar.

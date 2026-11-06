@@ -28,7 +28,7 @@ from autoskillit.hooks._runtime._git_command_classification import _classify_fet
 from autoskillit.hooks._runtime._git_option_tables import _GIT_FETCH_FLAG_SPEC
 from autoskillit.hooks._runtime._hook_constants import DENY_REASON_BY_GUARD
 from autoskillit.hooks.guards import git_ops_guard
-from tests._git_topology import AMBIENT_GIT_VARIABLES, commit_file, init_checkout
+from tests._git_topology import commit_file, init_checkout
 from tests.infra._git_ops_guard_harness import (
     _TOOL_NAME,
     _checked_out_ref_result,
@@ -1701,15 +1701,9 @@ class TestDestructiveOutcomeImmunity:
     """
 
     @pytest.fixture(autouse=True)
-    def _isolated_git_environment(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-        home = tmp_path / "home"
-        home.mkdir()
-        for name in AMBIENT_GIT_VARIABLES:
-            monkeypatch.delenv(name, raising=False)
-        monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
-        monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
-        monkeypatch.setenv("HOME", str(home))
-        monkeypatch.setenv("XDG_CONFIG_HOME", str(home / ".config"))
+    def _allow_abbreviated_options(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Git's own test-suite switch rejects the abbreviated options this class pins.
+        monkeypatch.delenv("GIT_TEST_DISALLOW_ABBREVIATED_OPTIONS", raising=False)
 
     @pytest.fixture
     def aliased_repo(self, tmp_path: Path) -> Path:

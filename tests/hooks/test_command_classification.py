@@ -932,6 +932,47 @@ class TestCommandVerbAndArgs:
         assert _verb_start_index(segment) == index
         assert segment[index] == "git"
 
+    @pytest.mark.parametrize(
+        ("command", "index"),
+        [
+            pytest.param(command, index, id=command)
+            for command, index in [
+                ("git status", 0),
+                ("then git status", 1),
+                ("then sudo git status", 2),
+                ("! git status", 1),
+                ("FOO=1 git status", 1),
+                ("env X=1 git status", 2),
+                ("env -S x git status", 3),
+                ("timeout 5 git status", 2),
+                ("sudo -n git status", 2),
+                ("if env X=1 sudo -u root git status", 6),
+            ]
+        ],
+    )
+    def test_git_invocation_prefix_is_the_skipped_verb_prefix(self, command, index):
+        segment = command.split()
+        assert _verb_start_index(segment) == index
+        invocation = extract_git_subcommand_and_flags(segment)
+        assert invocation is not None
+        assert invocation.subcommand == "status"
+        assert invocation.prefix_tokens == segment[:index]
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "sudo -h git status",
+            "timeout --bogus 5 git status",
+            "xargs git status",
+            "uv run git status",
+            "command -v git",
+            "wc -l f",
+            "then",
+        ],
+    )
+    def test_git_invocation_is_absent_when_the_verb_start_is_not_git(self, command):
+        assert extract_git_subcommand_and_flags(command.split()) is None
+
     def test_command_v_describes_a_command_rather_than_running_one(self):
         segment = ["command", "-v", "git"]
         assert _command_position(segment) == (None, False)
@@ -2860,6 +2901,53 @@ def test_git_metadata_arms_reject_command_prefixes(arm: str, prefix: str) -> Non
 @pytest.mark.parametrize("prefix", ["X=1", "env X=1", "sudo", "timeout 5"])
 def test_wc_metadata_arm_rejects_command_prefixes(prefix: str) -> None:
     command = f"{prefix} wc -l {_PROTECTED_RECIPE}"
+    assert command_has_blocked_protected_path_read(command, PROTECTED_SOURCE_PATH_PATTERNS)
+
+
+# The tokenizer emits the segment a shell keyword introduces with the keyword as its
+# first token, so each shape puts the command under test behind exactly one keyword.
+_KEYWORD_LED_SHAPES = {
+    "if": "if {command}; then true; fi",
+    "then": "if true; then {command}; fi",
+    "elif": "if false; then true; elif {command}; then true; fi",
+    "else": "if false; then true; else {command}; fi",
+    "while": "while {command}; do break; done",
+    "until": "until {command}; do break; done",
+    "do": "for i in 1; do {command}; done",
+    "!": "! {command}",
+}
+_KEYWORD_LED_PREFIXES = ("", "X=1", "env X=1", "sudo", "timeout 5")
+
+
+def _keyword_led_command(keyword: str, prefix: str, invocation: str) -> str:
+    command = _KEYWORD_LED_SHAPES[keyword].format(command=f"{prefix} {invocation}".strip())
+    segments = all_evaluated_segments_with_provenance(command)
+    assert segments is not None
+    assert any(segment.tokens[0] == keyword for segment in segments)
+    return command
+
+
+@pytest.mark.parametrize("prefix", _KEYWORD_LED_PREFIXES)
+@pytest.mark.parametrize("keyword", _KEYWORD_LED_SHAPES)
+def test_wc_metadata_arm_rejects_keyword_led_segments(keyword: str, prefix: str) -> None:
+    """A leading shell keyword is a skipped prefix like any wrapper, so the wc arm denies it.
+
+    Before the verb start was unified, a keyword stopped the prefix walk at index 0 and
+    admitted `if true; then sudo wc -l <protected>; fi` even though `sudo wc -l
+    <protected>` is denied. Denying the benign bare keyword-led `wc -l <protected>` is the
+    accepted cost of closing that bypass.
+    """
+    command = _keyword_led_command(keyword, prefix, f"wc -l {_PROTECTED_RECIPE}")
+    assert command_has_blocked_protected_path_read(command, PROTECTED_SOURCE_PATH_PATTERNS)
+
+
+@pytest.mark.parametrize("arm", _GIT_METADATA_ARMS)
+@pytest.mark.parametrize("prefix", _KEYWORD_LED_PREFIXES)
+@pytest.mark.parametrize("keyword", _KEYWORD_LED_SHAPES)
+def test_git_metadata_arms_reject_keyword_led_segments(
+    keyword: str, prefix: str, arm: str
+) -> None:
+    command = _keyword_led_command(keyword, prefix, f"git {arm}")
     assert command_has_blocked_protected_path_read(command, PROTECTED_SOURCE_PATH_PATTERNS)
 
 

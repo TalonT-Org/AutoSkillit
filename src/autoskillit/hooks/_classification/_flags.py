@@ -16,7 +16,7 @@ if TYPE_CHECKING:
         ArgvToken,
         EvaluatedSegment,
         SearchPattern,
-        _command_start_index,
+        _verb_start_index,
         command_verb,
         extract_git_subcommand_and_flags,
     )
@@ -456,7 +456,8 @@ def is_allowed_protected_path_metadata_command(segment: EvaluatedSegment) -> boo
             return False
         return _is_allowed_git_metadata_invocation(git_parts.subcommand, git_parts.flags)
     if verb == "wc" or verb.endswith("/wc"):
-        start = _command_start_index(tokens)
+        # Any skipped prefix (keyword, assignment, `env`, wrapper) disqualifies the arm.
+        start = _verb_start_index(tokens)
         if start != 0:
             return False
         flags = [token for token in tokens[start + 1 :] if token.startswith("-")]
@@ -514,7 +515,7 @@ if not TYPE_CHECKING:
     ArgvToken = _classification.ArgvToken
     EvaluatedSegment = _classification.EvaluatedSegment
     SearchPattern = _classification.SearchPattern
-    _command_start_index = _classification._command_start_index
+    _verb_start_index = _classification._verb_start_index
     command_verb = _classification.command_verb
     extract_git_subcommand_and_flags = _classification.extract_git_subcommand_and_flags
 

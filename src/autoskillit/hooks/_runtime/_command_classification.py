@@ -314,27 +314,6 @@ def _env_chdir_value(start: int, segment: list[str]) -> tuple[str, int, int] | N
     return chdir
 
 
-def _command_start_index(segment: list[str]) -> int | None:
-    if not segment:
-        return None
-    start = 0
-    while start < len(segment):
-        token = segment[start]
-        if _is_posix_assignment(token):
-            start += 1
-            continue
-        if token == "env":
-            start = _consume_env(start + 1, segment)
-            continue
-        if token in _WRAPPER_SPECS:
-            start, unresolved = _wrapper_command_start(segment, start)
-            if unresolved:
-                break
-            continue
-        break
-    return start if start < len(segment) else None
-
-
 def _command_position(segment: list[str]) -> tuple[int | None, bool]:
     """Return the index of the command verb in *segment* and whether that is unresolved.
 
@@ -454,8 +433,8 @@ def extract_git_subcommand_and_flags(segment: list[str]) -> GitInvocation | None
 
     Skips global git flags (and their value tokens) to find the subcommand,
     then returns its subcommand, remaining tokens, global flags, and skipped
-    command prefix. Returns None if the segment
-    is not a git command or has no subcommand.
+    command prefix (leading shell keywords, assignments, `env` and wrappers).
+    Returns None if the segment is not a git command or has no subcommand.
 
     Returns a `"<unresolved>"` invocation when an unrecognized `-`-prefixed global
     flag is encountered before the subcommand -- distinguishable from None
@@ -466,7 +445,7 @@ def extract_git_subcommand_and_flags(segment: list[str]) -> GitInvocation | None
     safe). See is_allowed_protected_path_metadata_command and
     `_git_target.analyze_git_segment` / `_git_target.contains_blocked_git_op`.
     """
-    start = _command_start_index(segment)
+    start = _verb_start_index(segment)
     if start is None:
         return None
     verb = segment[start]

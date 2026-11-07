@@ -93,6 +93,29 @@
         "tests/"
       ],
       "test_command": ["task", "test-check"]
+    },
+    {
+      "name": "remediation",
+      "kind": "recipe",
+      "pipeline": true,
+      "peak_sessions": 8,
+      "timeout_sec": 7200,
+      "trigger_paths": ["src/autoskillit/recipes/remediation.yaml"],
+      "recipe": "remediation",
+      "ingredients": {
+        "source_dir": "/workspace/sandbox",
+        "open_pr": "true",
+        "auto_merge": "false",
+        "arch_lenses": "false",
+        "audit_impl": "true"
+      },
+      "expected_pull_request_state": "open",
+      "issue_url_env": "E2E_REMEDIATION_ISSUE_URL",
+      "required_changed_paths": [
+        "sandbox/",
+        "tests/"
+      ],
+      "test_command": ["task", "test-check"]
     }
   ]
 }

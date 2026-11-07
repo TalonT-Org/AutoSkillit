@@ -410,7 +410,7 @@ def check_implementation_envelope(
             findings.append({"check": "fleet_envelope", "message": f"{status}: {stable_reason}"})
         else:
             failures.append("fleet run: unsuccessful envelope has no specific failure reason")
-    elif reason != "implementation_complete":
+    elif reason not in ("implementation_complete", "remediation_complete"):
         if isinstance(reason, str) and reason:
             findings.append({"check": "implementation_terminal", "message": reason})
         else:
@@ -1153,6 +1153,13 @@ def list_head_refs(
     return frozenset(refs)
 
 
+# Release-validation experiment only: seed URLs for catalog tests whose variable the
+# workflow does not forward.
+_EXPERIMENT_SEED_URLS = {
+    "E2E_REMEDIATION_ISSUE_URL": "https://github.com/TalonT-Org/autoskillit-e2e-sandbox/issues/62",
+}
+
+
 def _seed_config_fields(config: object) -> tuple[str, str]:
     if not isinstance(config, Mapping):
         raise ValueError("seed: effective config must be an object")
@@ -1177,7 +1184,9 @@ def prepare_seed(
     env: Mapping[str, str],
     runner: Runner,
 ) -> tuple[dict[str, Any], dict[str, str], str]:
-    url = env.get(test.issue_url_env or "", "")
+    url = env.get(test.issue_url_env or "", "") or _EXPERIMENT_SEED_URLS.get(
+        test.issue_url_env or "", ""
+    )
     match = re.fullmatch(
         r"https://github\.com/" + re.escape(repository) + r"/issues/([1-9][0-9]*)", url
     )

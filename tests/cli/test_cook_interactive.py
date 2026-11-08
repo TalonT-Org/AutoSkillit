@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import tomllib
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
@@ -15,6 +15,7 @@ import pytest
 
 import autoskillit.cli.install._plugin_artifact as _patch_install__plugin_artifact
 import autoskillit.cli.session._session_backend as _patch_session__session_backend
+import autoskillit.cli.session._session_cook as _patch_session__session_cook
 import autoskillit.cli.session._session_launch_intent as _patch_session__session_picker
 import autoskillit.cli.session._session_onboarding as _patch_session__session_onboarding
 import autoskillit.cli.session._session_process as _patch_session__session_process
@@ -29,6 +30,7 @@ from autoskillit.core import (
     SESSION_TYPE_ENV_VAR,
     BackendConventions,
     CmdSpec,
+    CodingAgentBackend,
     CompiledSessionSkillCatalogAuthority,
     FreshLaunch,
     HookTrustPolicy,
@@ -397,6 +399,7 @@ def test_codex_cook_adds_pre_reveal_developer_guidance(
 def test_cook_aborts_before_spawn_when_skill_discovery_fails(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Discovery diagnostics must reject the managed launch before the child starts."""
     diagnostic = "Codex skill discovery is missing managed names ['expected-skill']"
@@ -412,14 +415,255 @@ def test_cook_aborts_before_spawn_when_skill_discovery_fails(
     backend = _DiscoveryFailureBackend()
     captured = _install_harness(monkeypatch, tmp_path)
 
-    with pytest.raises(RuntimeError, match="Codex skill discovery is missing managed names"):
+    with pytest.raises(SystemExit) as caught:
         cli.cook(backend=backend)
 
+    assert caught.value.code == 1
+    assert capsys.readouterr().err == f"ERROR: {diagnostic}\n"
     events = captured["events"]
     assert isinstance(events, list)
     event_names = [event[0] for event in events]
     assert "run" not in event_names
     assert event_names[-1] == "managed-exit"
+
+
+class _ManagedCleanupFailure(Exception):
+    pass
+
+
+def _install_real_codex_rejection_harness(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> tuple[CodingAgentBackend, list[_CookBinding], list[str], list[str], list[tuple[str, ...]]]:
+    from autoskillit.cli.install._installed_plugins import InstalledPluginsFile
+    from autoskillit.cli.session._session_startup_trace import StartupTrace
+    from autoskillit.core import PluginLoadMode
+    from autoskillit.execution.backends.codex import CodexBackend
+
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    source_home = tmp_path / "home" / ".codex"
+    source_home.mkdir(parents=True)
+    (source_home / "config.toml").write_text(
+        'cli_auth_credentials_store = "keyring"\n', encoding="utf-8"
+    )
+    backend = CodexBackend(source_codex_home=source_home)
+
+    bundled_catalog = tmp_path / "bundled-models.json"
+    atomic_write(bundled_catalog, json.dumps(installed_catalog()))
+    codex_shim = tmp_path / "codex"
+    atomic_write(
+        codex_shim,
+        "#!/usr/bin/env python3\n"
+        "import pathlib\n"
+        "import sys\n"
+        "if sys.argv[1:] != ['debug', 'models', '--bundled']:\n"
+        "    raise SystemExit(64)\n"
+        f"sys.stdout.buffer.write(pathlib.Path({str(bundled_catalog)!r}).read_bytes())\n",
+    )
+    codex_shim.chmod(0o755)
+
+    plugin_dir = fake_projected_plugin_root(tmp_path, "rejection-artifact")
+    plugin_metadata = plugin_dir / ".claude-plugin" / "plugin.json"
+    plugin_metadata.parent.mkdir()
+    plugin_metadata.write_text("{}\n", encoding="utf-8")
+    bindings: list[_CookBinding] = []
+
+    class _TrackingAuthority(_CookAuthority):
+        def acquire_launch_binding(self, **_kwargs: object) -> _CookBinding:
+            binding = _CookBinding(self.plugin_dir)
+            bindings.append(binding)
+            return binding
+
+    close_statuses: list[str] = []
+    released_claims: list[str] = []
+    rendered_errors: list[tuple[str, ...]] = []
+    real_close = StartupTrace.close
+    real_renderer = _patch_session__session_cook.render_launch_validation_errors
+
+    def record_close(
+        trace: StartupTrace,
+        *,
+        status: str,
+        diagnostics: Mapping[str, object] | None = None,
+    ) -> None:
+        close_statuses.append(status)
+        real_close(trace, status=status, diagnostics=diagnostics)
+
+    def record_renderer(errors: tuple[str, ...]) -> None:
+        rendered_errors.append(errors)
+        real_renderer(errors)
+
+    monkeypatch.chdir(project_root)
+    monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: str(codex_shim))
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr(InstalledPluginsFile, "contains", lambda self, key: False)
+    monkeypatch.setattr(_patch_session__session_onboarding, "is_first_run", lambda _project: False)
+    monkeypatch.setattr(_patch_ui__timed_input, "timed_prompt", lambda *args, **kwargs: "")
+    monkeypatch.setattr("autoskillit.core.write_registry_entry", lambda *args: None)
+    monkeypatch.setattr(
+        "autoskillit.core.claim_launch_for_session",
+        lambda *_args, **_kwargs: "0123456789abcdef",
+    )
+    monkeypatch.setattr(
+        "autoskillit.core.release_session_claim",
+        lambda _project, launch_id: released_claims.append(launch_id),
+    )
+    monkeypatch.setattr(
+        _patch_install__plugin_artifact,
+        "interactive_plugin_authority",
+        lambda **_kwargs: (_TrackingAuthority(plugin_dir), PluginLoadMode.GENERATED_HOME),
+    )
+    monkeypatch.setattr(
+        _patch_session__session_process,
+        "run_cook_attempt",
+        lambda *args, **kwargs: pytest.fail("rejected launch must not spawn"),
+    )
+    monkeypatch.setattr(
+        _patch_session__session_reload,
+        "consume_reload_sentinel",
+        lambda _project: pytest.fail("rejected launch must not inspect reload state"),
+    )
+    monkeypatch.setattr(
+        _patch_session__session_onboarding,
+        "mark_onboarded",
+        lambda _project: pytest.fail("rejected launch must not complete onboarding"),
+    )
+    monkeypatch.setattr(StartupTrace, "close", record_close)
+    monkeypatch.setattr(
+        _patch_session__session_cook, "render_launch_validation_errors", record_renderer
+    )
+
+    return backend, bindings, close_statuses, released_claims, rendered_errors
+
+
+@pytest.mark.parametrize("cleanup_fails", [False, True], ids=["cleanup-succeeds", "cleanup-fails"])
+def test_real_managed_codex_validation_rejection_renders_before_cleanup(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
+    cleanup_fails: bool,
+) -> None:
+    import autoskillit.workspace.session_skills._manager as session_skill_manager
+    from autoskillit.execution.backends.codex import CodexBackend
+
+    diagnostic = "Codex skill discovery is missing managed names ['expected-skill']"
+    backend, bindings, close_statuses, released_claims, rendered_errors = (
+        _install_real_codex_rejection_harness(monkeypatch, tmp_path)
+    )
+    generated_home: Path | None = None
+    validation_count = 0
+
+    def reject(_self: CodexBackend, spec: CmdSpec) -> InteractiveInvocationValidation:
+        nonlocal generated_home, validation_count
+        validation_count += 1
+        generated_home = Path(spec.env["CODEX_HOME"])
+        assert generated_home.is_dir()
+        return InteractiveInvocationValidation(errors=(diagnostic,))
+
+    monkeypatch.setattr(CodexBackend, "validate_interactive_invocation", reject)
+    if cleanup_fails:
+        real_remove = session_skill_manager._remove_and_verify
+
+        def fail_cleanup(path: Path) -> bool:
+            if generated_home is not None and path == generated_home:
+                raise _ManagedCleanupFailure("controlled cleanup failure")
+            return real_remove(path)
+
+        monkeypatch.setattr(session_skill_manager, "_remove_and_verify", fail_cleanup)
+
+    expected_exception = _ManagedCleanupFailure if cleanup_fails else SystemExit
+    with pytest.raises(expected_exception) as caught:
+        cli.cook(backend=backend)
+
+    if not cleanup_fails:
+        assert isinstance(caught.value, SystemExit)
+        assert caught.value.code == 1
+        assert generated_home is not None and not generated_home.exists()
+    else:
+        assert generated_home is not None and generated_home.exists()
+    assert capsys.readouterr().err == f"ERROR: {diagnostic}\n"
+    assert validation_count == 1
+    assert rendered_errors == [(diagnostic,)]
+    assert close_statuses == ["failed"]
+    assert all(binding.closed for binding in bindings)
+    assert released_claims == ["0123456789abcdef"]
+    assert not any(
+        "managed_session_body_failed" in record.getMessage() for record in caplog.records
+    )
+
+
+def test_reload_validation_rejection_does_not_start_a_second_attempt(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from autoskillit.cli.session._session_startup_trace import StartupTrace
+
+    diagnostic = "reloaded launch catalog changed"
+
+    class _ReloadThenRejectBackend(_Backend):
+        def __init__(self) -> None:
+            super().__init__()
+            self.validation_count = 0
+
+        def validate_interactive_invocation(
+            self, spec: CmdSpec
+        ) -> InteractiveInvocationValidation:
+            self.validated.append(spec)
+            self.validation_count += 1
+            errors = () if self.validation_count == 1 else (diagnostic,)
+            return InteractiveInvocationValidation(errors=errors)
+
+    backend = _ReloadThenRejectBackend()
+    captured = _install_harness(monkeypatch, tmp_path)
+    close_statuses: list[str] = []
+    rendered_errors: list[tuple[str, ...]] = []
+    reload_calls = 0
+    real_close = StartupTrace.close
+    real_renderer = _patch_session__session_cook.render_launch_validation_errors
+
+    def record_close(
+        trace: StartupTrace,
+        *,
+        status: str,
+        diagnostics: Mapping[str, object] | None = None,
+    ) -> None:
+        close_statuses.append(status)
+        real_close(trace, status=status, diagnostics=diagnostics)
+
+    def record_renderer(errors: tuple[str, ...]) -> None:
+        rendered_errors.append(errors)
+        real_renderer(errors)
+
+    def consume_reload(_project: Path) -> str:
+        nonlocal reload_calls
+        reload_calls += 1
+        assert reload_calls == 1
+        return "fedcba9876543210"
+
+    monkeypatch.setattr(_patch_session__session_reload, "consume_reload_sentinel", consume_reload)
+    monkeypatch.setattr(StartupTrace, "close", record_close)
+    monkeypatch.setattr(
+        _patch_session__session_cook, "render_launch_validation_errors", record_renderer
+    )
+
+    with pytest.raises(SystemExit) as caught:
+        cli.cook(backend=backend)
+
+    assert caught.value.code == 1
+    assert capsys.readouterr().err == f"ERROR: {diagnostic}\n"
+    events = captured["events"]
+    assert isinstance(events, list)
+    assert [event[0] for event in events].count("run") == 1
+    assert "onboarded" not in [event[0] for event in events]
+    assert [event[0] for event in events][-1] == "managed-exit"
+    assert backend.validation_count == 2
+    assert reload_calls == 1
+    assert rendered_errors == [(diagnostic,)]
+    assert close_statuses == ["failed"]
+    assert captured["releases"] == ["0123456789abcdef"]
 
 
 def test_codex_cook_admits_compose_pr_roles_from_exact_bundled_catalog_probe(

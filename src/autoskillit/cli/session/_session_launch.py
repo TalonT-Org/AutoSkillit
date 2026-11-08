@@ -71,6 +71,14 @@ class PreparedInteractiveLaunch:
     pre_spawn_check: Callable[[], None] | None = None
 
 
+class InteractiveLaunchValidationError(Exception):
+    """Carry expected validation diagnostics to the managed resource owner."""
+
+    def __init__(self, errors: Sequence[str]) -> None:
+        self.errors = tuple(errors)
+        super().__init__("; ".join(self.errors))
+
+
 def prepare_interactive_launch(
     backend: CodingAgentBackend,
     *,
@@ -238,6 +246,8 @@ def _finalize_interactive_launch(
     assert_resume_purity(spec=spec, launch=launch)
     validation = backend.validate_interactive_invocation(spec)
     if validation.errors:
+        if managed_home is not None:
+            raise InteractiveLaunchValidationError(validation.errors)
         _exit_launch_validation_errors(validation.errors)
 
     return PreparedInteractiveLaunch(
@@ -253,9 +263,15 @@ def _exit_launch_preparation_error(exc: ValueError) -> NoReturn:
     raise SystemExit(1)
 
 
-def _exit_launch_validation_errors(errors: Sequence[str]) -> NoReturn:
+def render_launch_validation_errors(errors: Sequence[str]) -> None:
+    """Render one ERROR line per diagnostic, joining embedded line breaks with '; '."""
     for error in errors:
-        sys.stderr.write(f"ERROR: {error}\n")
+        normalized = "; ".join(error.splitlines())
+        sys.stderr.write(f"ERROR: {normalized}\n")
+
+
+def _exit_launch_validation_errors(errors: Sequence[str]) -> NoReturn:
+    render_launch_validation_errors(errors)
     raise SystemExit(1)
 
 
@@ -689,6 +705,7 @@ def _launch_cook_session(
     projection_load_mode = (
         launch_load_mode if launch_load_mode.consumes_artifact else PluginLoadMode.PROJECTED_HOME
     )
+    launch_rejected = False
     with plugin_launch_binding_scope(
         authority=artifact_authority,
         backend=backend,
@@ -746,7 +763,14 @@ def _launch_cook_session(
                     mcp_tool_timeout_sec=mcp_tool_timeout_sec,
                     process_tether=process_tether,
                 )
+            except InteractiveLaunchValidationError as exc:
+                render_launch_validation_errors(exc.errors)
+                trace.close(status="failed")
+                launch_rejected = True
             except BaseException:
                 trace.close(status="failed")
                 raise
-            trace.close(status="success")
+            else:
+                trace.close(status="success")
+    if launch_rejected:
+        raise SystemExit(1)

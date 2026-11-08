@@ -114,6 +114,8 @@ def _skills_instruction_text(document: Any) -> str:
     for item in document:
         if not isinstance(item, dict):
             raise ValueError("Codex prompt-input JSON contains a malformed response item")
+        if item.get("type") != "message" or item.get("role") != "developer":
+            continue
         content = item.get("content")
         if not isinstance(content, list):
             raise ValueError("Codex prompt-input response item has malformed content")
@@ -124,7 +126,6 @@ def _skills_instruction_text(document: Any) -> str:
             if (
                 part.get("type") == "input_text"
                 and isinstance(text, str)
-                and item.get("role") == "developer"
                 and text.startswith("<skills_instructions>")
             ):
                 candidates.append(text)

@@ -66,7 +66,11 @@ def _fleet_session_launcher(
     managed_join_parent_id: str | None = None,
 ) -> Iterator[Callable[[InteractiveLaunch, dict[str, str]], Any]]:
     """Keep one leased wrapper home through a fleet session's retry loop."""
-    from autoskillit.cli.session._session_launch import _run_interactive_session
+    from autoskillit.cli.session._session_launch import (
+        InteractiveLaunchValidationError,
+        _run_interactive_session,
+        render_launch_validation_errors,
+    )
 
     parent_env = (
         {MANAGED_JOIN_PARENT_ID_ENV_VAR: managed_join_parent_id}
@@ -138,6 +142,7 @@ def _fleet_session_launcher(
         launch_load_mode if launch_load_mode.consumes_artifact else PluginLoadMode.PROJECTED_HOME
     )
     launch_id = uuid.uuid4().hex[:16]
+    launch_rejected = False
     with plugin_launch_binding_scope(
         authority=authority,
         backend=backend,
@@ -194,10 +199,17 @@ def _fleet_session_launcher(
 
             try:
                 yield managed_launch
+            except InteractiveLaunchValidationError as exc:
+                render_launch_validation_errors(exc.errors)
+                trace.close(status="failed")
+                launch_rejected = True
             except BaseException:
                 trace.close(status="failed")
                 raise
-            trace.close(status="success")
+            else:
+                trace.close(status="success")
+    if launch_rejected:
+        raise SystemExit(1)
 
 
 def _refresh_campaign_after_resume(

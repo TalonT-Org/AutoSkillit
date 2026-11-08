@@ -11,8 +11,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, assert_never
 
 from autoskillit.cli.session._session_launch import (
+    InteractiveLaunchValidationError,
     _exit_launch_preparation_error,
     prepare_interactive_launch,
+    render_launch_validation_errors,
 )
 from autoskillit.cli.session._session_skills import (
     append_skill_unavailability,
@@ -469,9 +471,7 @@ def _execute_cook_attempt(
     assert_resume_purity(spec=spec, launch=launch)
     validation = backend.validate_interactive_invocation(spec)
     if validation.errors:
-        raise RuntimeError(
-            "Interactive invocation validation failed: " + "; ".join(validation.errors)
-        )
+        raise InteractiveLaunchValidationError(validation.errors)
     with backend.session_attempt_context(
         session_home=managed_home.generated_home,
         project_dir=project_dir,
@@ -713,6 +713,7 @@ def cook(
         projection_load_mode = (
             load_mode if load_mode.consumes_artifact else PluginLoadMode.PROJECTED_HOME
         )
+        launch_rejected = False
         with (
             plugin_launch_binding_scope(
                 authority=artifact_authority,
@@ -758,21 +759,27 @@ def cook(
             cook_env_extras = _build_cook_attempt_env(
                 launch_id, profile, config, managed_join_context
             )
-            _run_managed_cook(
-                backend=backend,
-                project_dir=project_dir,
-                launch=launch,
-                launch_id=launch_id,
-                config=config,
-                cook_env_extras=cook_env_extras,
-                managed_home=managed_home,
-                projection_binding=projection_binding,
-                load_mode=load_mode,
-                trace=trace,
-                trace_enabled=trace_enabled,
-                force_inactive_agent_teams=force_inactive_agent_teams,
-                showed_onboarding=showed_onboarding,
-            )
+            try:
+                _run_managed_cook(
+                    backend=backend,
+                    project_dir=project_dir,
+                    launch=launch,
+                    launch_id=launch_id,
+                    config=config,
+                    cook_env_extras=cook_env_extras,
+                    managed_home=managed_home,
+                    projection_binding=projection_binding,
+                    load_mode=load_mode,
+                    trace=trace,
+                    trace_enabled=trace_enabled,
+                    force_inactive_agent_teams=force_inactive_agent_teams,
+                    showed_onboarding=showed_onboarding,
+                )
+            except InteractiveLaunchValidationError as exc:
+                render_launch_validation_errors(exc.errors)
+                launch_rejected = True
+        if launch_rejected:
+            raise SystemExit(1)
     finally:
         if claimed_launch_id is not None:
             core.release_session_claim(project_dir, claimed_launch_id)

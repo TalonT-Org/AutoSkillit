@@ -71,7 +71,10 @@ def _prompt_input_errors(
     try:
         discovered = discovery.parse_skills_instructions(result.stdout.decode("utf-8"))
     except (UnicodeDecodeError, ValueError) as exc:
-        return [f"Codex skill discovery parse failed: {exc}; {context}"]
+        return [
+            f"Codex skill discovery parse failed: {exc}; {context}; "
+            "Update AutoSkillit to a build supporting this discovery output and retry."
+        ]
     return discovery._catalog_discovery_errors(
         discovered,
         expected_paths,

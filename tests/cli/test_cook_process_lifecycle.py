@@ -18,7 +18,7 @@ from autoskillit.cli.session._session_process import run_cook_attempt
 from autoskillit.cli.session.pty._observer import PtyObserver
 from autoskillit.config import ProcessTetherConfig
 from autoskillit.core import CmdSpec, TerminationReason, ValidatedAddDir
-from tests.cli._cook_launch_helpers import lifetime_policy
+from tests.cli._managed_launch_helpers import lifetime_policy
 from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]

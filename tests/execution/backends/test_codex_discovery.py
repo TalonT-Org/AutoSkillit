@@ -17,28 +17,98 @@ from tests.fixtures.codex import fixture_path
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 _FIXTURE_ROOT = Path("/opt/autoskillit-fixtures/codex/discovery")
-_FIXTURES = ("discovery_prompt_input_v0130.json", "discovery_prompt_input_v0153.json")
+_FIXTURE_EXPECTATIONS = [
+    (
+        "discovery_prompt_input_v0130.json",
+        (
+            Path("/opt/autoskillit-fixtures/codex/discovery/v0130/home/skills"),
+            Path("/opt/autoskillit-fixtures/codex/discovery/v0130/home/skills/.system"),
+        ),
+        {
+            "alpha": Path(
+                "/opt/autoskillit-fixtures/codex/discovery/v0130/home/skills/alpha/SKILL.md"
+            ),
+            "beta": Path(
+                "/opt/autoskillit-fixtures/codex/discovery/v0130/home/skills/beta/SKILL.md"
+            ),
+            "system-native": Path(
+                "/opt/autoskillit-fixtures/codex/discovery/v0130/home/skills/.system/system-native/SKILL.md"
+            ),
+        },
+    ),
+    (
+        "discovery_prompt_input_v0153.json",
+        (
+            Path("/opt/autoskillit-fixtures/codex/discovery/v0153/home/skills"),
+            Path("/opt/autoskillit-fixtures/codex/discovery/v0153/home/skills/.system"),
+        ),
+        {
+            "alpha": Path(
+                "/opt/autoskillit-fixtures/codex/discovery/v0153/home/skills/alpha/SKILL.md"
+            ),
+            "beta": Path(
+                "/opt/autoskillit-fixtures/codex/discovery/v0153/home/skills/beta/SKILL.md"
+            ),
+            "system-native": Path(
+                "/opt/autoskillit-fixtures/codex/discovery/v0153/home/skills/.system/system-native/SKILL.md"
+            ),
+        },
+    ),
+    (
+        "discovery_prompt_input_v0164.json",
+        (
+            Path("/opt/autoskillit-fixtures/codex/discovery/v0164/home/add-dir/skills"),
+            Path("/opt/autoskillit-fixtures/codex/discovery/v0164/home/add-dir/skills/.system"),
+        ),
+        {
+            "make-arch-diag": Path(
+                "/opt/autoskillit-fixtures/codex/discovery/v0164/home/add-dir/skills/make-arch-diag/SKILL.md"
+            ),
+            "imagegen": Path(
+                "/opt/autoskillit-fixtures/codex/discovery/v0164/home/add-dir/skills/.system/imagegen/SKILL.md"
+            ),
+            "openai-docs": Path(
+                "/opt/autoskillit-fixtures/codex/discovery/v0164/home/add-dir/skills/.system/openai-docs/SKILL.md"
+            ),
+            "skill-creator": Path(
+                "/opt/autoskillit-fixtures/codex/discovery/v0164/home/add-dir/skills/.system/skill-creator/SKILL.md"
+            ),
+            "skill-installer": Path(
+                "/opt/autoskillit-fixtures/codex/discovery/v0164/home/add-dir/skills/.system/skill-installer/SKILL.md"
+            ),
+        },
+    ),
+]
+_FIXTURE_SOURCE_ROOTS = {name: roots[0] for name, roots, _paths in _FIXTURE_EXPECTATIONS}
+_FIXTURES = tuple(_FIXTURE_SOURCE_ROOTS)
 
 
 def _skills_text(document: list[object]) -> str:
-    item = document[0]
-    assert isinstance(item, dict)
-    content = item["content"]
-    assert isinstance(content, list)
-    part = content[0]
-    assert isinstance(part, dict)
-    text = part["text"]
-    assert isinstance(text, str)
-    return text
+    return _skills_text_part(document)["text"]
+
+
+def _skills_text_part(document: list[object]) -> dict[str, str]:
+    candidates: list[dict[str, str]] = []
+    for item in document:
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") != "message" or item.get("role") != "developer":
+            continue
+        content = item.get("content")
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            text = part.get("text")
+            if isinstance(text, str) and text.startswith("<skills_instructions>"):
+                candidates.append(part)
+    assert len(candidates) == 1
+    return candidates[0]
 
 
 def _with_skills_text(document: list[object], text: str) -> str:
-    item = document[0]
-    assert isinstance(item, dict)
-    content = item["content"]
-    assert isinstance(content, list)
-    part = content[0]
-    assert isinstance(part, dict)
+    part = _skills_text_part(document)
     part["text"] = text
     return json.dumps(document)
 
@@ -88,8 +158,7 @@ def _discovery_root(catalog_dir: Path) -> Path:
 
 def _loader_output_at_root(name: str, catalog_dir: Path, discovery_root: Path) -> str:
     document = _fixture_document(name)
-    fixture_version = "v0130" if "v0130" in name else "v0153"
-    source_root = _FIXTURE_ROOT / fixture_version / "home" / "skills"
+    source_root = _FIXTURE_SOURCE_ROOTS[name]
     return _with_skills_text(
         document,
         _skills_text(document).replace(str(source_root), str(discovery_root)),
@@ -132,33 +201,30 @@ def _install_prompt_stub(
 
 
 @pytest.mark.parametrize(
-    ("fixture_name", "expected_version"),
-    [
-        ("discovery_prompt_input_v0130.json", "v0130"),
-        ("discovery_prompt_input_v0153.json", "v0153"),
-    ],
+    ("fixture_name", "expected_roots", "expected_paths"),
+    _FIXTURE_EXPECTATIONS,
 )
 def test_parse_skills_instructions_reads_pinned_real_loader_shapes(
     fixture_name: str,
-    expected_version: str,
+    expected_roots: tuple[Path, ...],
+    expected_paths: dict[str, Path],
 ) -> None:
     parsed = discovery.parse_skills_instructions(
         fixture_path(fixture_name).read_text(encoding="utf-8")
     )
-    root = _FIXTURE_ROOT / expected_version / "home" / "skills"
-
-    assert parsed.names == {"alpha", "beta", "system-native"}
-    assert parsed.roots == (root, root / ".system")
-    assert parsed.paths == {
-        "alpha": root / "alpha" / "SKILL.md",
-        "beta": root / "beta" / "SKILL.md",
-        "system-native": root / ".system" / "system-native" / "SKILL.md",
-    }
+    assert parsed.names == set(expected_paths)
+    assert parsed.roots == expected_roots
+    assert parsed.paths == expected_paths
 
 
-@pytest.mark.parametrize("fixture_name", _FIXTURES)
+@pytest.mark.parametrize(
+    ("fixture_name", "expected_roots", "expected_paths"),
+    _FIXTURE_EXPECTATIONS,
+)
 def test_parse_skills_instructions_tolerates_json_and_rendering_whitespace(
     fixture_name: str,
+    expected_roots: tuple[Path, ...],
+    expected_paths: dict[str, Path],
 ) -> None:
     document = _fixture_document(fixture_name)
     text = _skills_text(document).replace("\n", "\r\n")
@@ -173,6 +239,31 @@ def test_parse_skills_instructions_tolerates_json_and_rendering_whitespace(
 
     parsed = discovery.parse_skills_instructions(json.dumps(reordered, indent=2))
 
+    assert parsed.names == set(expected_paths)
+    assert parsed.roots == expected_roots
+    assert parsed.paths == expected_paths
+
+
+@pytest.mark.parametrize(
+    ("extra_item", "position"),
+    [
+        ({"type": "additional_tools", "role": "developer", "tools": []}, "leading"),
+        ({"type": "future_item", "role": "developer", "payload": {}}, "trailing"),
+        ({"type": "message", "role": "user"}, "trailing"),
+    ],
+)
+def test_parse_skills_instructions_ignores_unconsumed_response_items(
+    extra_item: dict[str, object],
+    position: str,
+) -> None:
+    document = _fixture_document("discovery_prompt_input_v0153.json")
+    if position == "leading":
+        document.insert(0, extra_item)
+    else:
+        document.append(extra_item)
+
+    parsed = discovery.parse_skills_instructions(json.dumps(document))
+
     assert parsed.names == {"alpha", "beta", "system-native"}
 
 
@@ -181,7 +272,10 @@ def test_parse_skills_instructions_tolerates_json_and_rendering_whitespace(
     [
         ("{not json", "malformed JSON"),
         (json.dumps({"content": []}), "response-item list"),
-        (json.dumps([{"role": "developer", "content": "wrong"}]), "malformed content"),
+        (
+            json.dumps([{"type": "message", "role": "developer", "content": "wrong"}]),
+            "malformed content",
+        ),
         (json.dumps([]), "<skills_instructions> block"),
     ],
 )
@@ -191,6 +285,15 @@ def test_parse_skills_instructions_rejects_malformed_json_and_envelope(
 ) -> None:
     with pytest.raises(ValueError, match=message):
         discovery.parse_skills_instructions(prompt_input)
+
+
+def test_parse_skills_instructions_rejects_ambiguous_developer_blocks() -> None:
+    document = _fixture_document("discovery_prompt_input_v0153.json")
+    duplicate = json.loads(json.dumps(document[0]))
+    document.append(duplicate)
+
+    with pytest.raises(ValueError, match="exactly one <skills_instructions> block"):
+        discovery.parse_skills_instructions(json.dumps(document))
 
 
 @pytest.mark.parametrize(
@@ -320,6 +423,61 @@ def test_attest_catalog_discovery_accepts_real_loader_fixture_at_expected_root(
 
     assert errors == ()
     assert (catalog_dir / ".system" / "native" / "SKILL.md").is_file()
+
+
+def test_attest_catalog_discovery_accepts_captured_v0164_response(tmp_path: Path) -> None:
+    catalog_dir, expected_entries = _catalog(tmp_path, entries=("make-arch-diag",))
+    for name in ("imagegen", "openai-docs", "skill-creator", "skill-installer"):
+        native_skill = catalog_dir / ".system" / name / "SKILL.md"
+        native_skill.parent.mkdir()
+        native_skill.write_text("native", encoding="utf-8")
+    command, env = _install_prompt_stub(
+        tmp_path,
+        _loader_output("discovery_prompt_input_v0164.json", catalog_dir),
+    )
+
+    validation = attestation.attest(
+        probe_command=command,
+        env=env,
+        cwd=str(tmp_path),
+        catalog_dir=catalog_dir,
+        expected_discovery_root=_discovery_root(catalog_dir),
+        route=discovery.CODEX_MANAGED_HOME_ROUTE,
+        expected_entries=expected_entries,
+        version="0.164.0",
+    )
+
+    assert validation.errors == ()
+    assert validation.pre_spawn_check is not None
+    validation.pre_spawn_check()
+
+
+def test_attest_catalog_discovery_reports_actionable_v0164_consumed_item_diagnostic(
+    tmp_path: Path,
+) -> None:
+    catalog_dir, expected_entries = _catalog(tmp_path, entries=("make-arch-diag",))
+    document = _fixture_document("discovery_prompt_input_v0164.json")
+    skills_message = document[2]
+    assert isinstance(skills_message, dict)
+    skills_message["content"] = "malformed"
+    command, env = _install_prompt_stub(tmp_path, json.dumps(document))
+
+    errors = attestation.attest(
+        probe_command=command,
+        env=env,
+        cwd=str(tmp_path),
+        catalog_dir=catalog_dir,
+        expected_discovery_root=_discovery_root(catalog_dir),
+        route=discovery.CODEX_MANAGED_HOME_ROUTE,
+        expected_entries=expected_entries,
+        version="0.164.0",
+    ).errors
+
+    diagnostic = "\n".join(errors)
+    assert "response item has malformed content" in diagnostic
+    assert "version=0.164.0" in diagnostic
+    assert "Update AutoSkillit" in diagnostic
+    assert "retry" in diagnostic
 
 
 def test_attest_catalog_discovery_rejects_foreign_managed_root(tmp_path: Path) -> None:

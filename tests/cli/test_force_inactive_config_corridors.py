@@ -32,8 +32,8 @@ from autoskillit.core import (
     SessionAttemptHandle,
     ValidatedAddDir,
 )
-from tests.cli._cook_launch_helpers import cook_attempt_result
 from tests.cli._interactive_process import interactive_launch_metadata
+from tests.cli._managed_launch_helpers import cook_attempt_result
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 

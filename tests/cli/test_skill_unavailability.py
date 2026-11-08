@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.cli.session._session_cook import _prepare_cook_managed_launch
-from autoskillit.cli.session._session_launch import (
+from autoskillit.cli.session._session_onboarding import (
     append_skill_unavailability,
     render_skill_unavailability,
 )

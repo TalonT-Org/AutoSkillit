@@ -25,8 +25,8 @@ import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
 from autoskillit import cli
 from autoskillit.config import AutomationConfig, LoggingConfig
 from autoskillit.core import atomic_write
-from tests.cli._cook_launch_helpers import arrange_cook
 from tests.cli._fleet_helpers import _stub_campaign_resolution, _stub_guards
+from tests.cli._managed_launch_helpers import arrange_cook
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 

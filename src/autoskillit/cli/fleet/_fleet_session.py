@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from autoskillit.core import (
     CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE,
     FLEET_SESSION_REQUIRED_ENV,
+    MANAGED_JOIN_PARENT_ID_ENV_VAR,
     CodingAgentBackend,
     FleetSessionEnv,
     FreshLaunch,
@@ -65,20 +66,25 @@ def _fleet_session_launcher(
     managed_join_parent_id: str | None = None,
 ) -> Iterator[Callable[[InteractiveLaunch, dict[str, str]], Any]]:
     """Keep one leased wrapper home through a fleet session's retry loop."""
-    from autoskillit.cli.session._session_launch import _run_interactive_session
+    from autoskillit.cli.session._session_launch import (
+        InteractiveLaunchValidationError,
+        _run_interactive_session,
+        render_launch_validation_errors,
+    )
+
+    parent_env = (
+        {MANAGED_JOIN_PARENT_ID_ENV_VAR: managed_join_parent_id}
+        if managed_join_parent_id is not None
+        else {}
+    )
 
     def raw_launch(
         launch: InteractiveLaunch,
         extra_env: dict[str, str],
     ) -> Any:
-        launch_env = dict(extra_env)
-        if managed_join_parent_id is not None:
-            from autoskillit.core import MANAGED_JOIN_PARENT_ID_ENV_VAR
-
-            launch_env[MANAGED_JOIN_PARENT_ID_ENV_VAR] = managed_join_parent_id
         return _run_interactive_session(
             launch=launch,
-            extra_env=launch_env,
+            extra_env={**extra_env, **parent_env},
             project_dir=project_dir,
             required_env=FLEET_SESSION_REQUIRED_ENV,
             backend=backend,
@@ -96,7 +102,6 @@ def _fleet_session_launcher(
     from autoskillit.cli.session._session_startup_trace import StartupTrace
     from autoskillit.core import (
         LAUNCH_ID_ENV_VAR,
-        MANAGED_JOIN_PARENT_ID_ENV_VAR,
         PluginLoadMode,
         plugin_launch_binding_scope,
         resolve_temp_dir,
@@ -137,6 +142,7 @@ def _fleet_session_launcher(
         launch_load_mode if launch_load_mode.consumes_artifact else PluginLoadMode.PROJECTED_HOME
     )
     launch_id = uuid.uuid4().hex[:16]
+    launch_rejected = False
     with plugin_launch_binding_scope(
         authority=authority,
         backend=backend,
@@ -172,9 +178,7 @@ def _fleet_session_launcher(
             ) -> Any:
                 nonlocal attempt
                 attempt += 1
-                launch_env = {**extra_env, LAUNCH_ID_ENV_VAR: launch_id}
-                if managed_join_parent_id is not None:
-                    launch_env[MANAGED_JOIN_PARENT_ID_ENV_VAR] = managed_join_parent_id
+                launch_env = {**extra_env, LAUNCH_ID_ENV_VAR: launch_id, **parent_env}
                 return _run_interactive_session(
                     launch=launch,
                     extra_env=launch_env,
@@ -195,10 +199,17 @@ def _fleet_session_launcher(
 
             try:
                 yield managed_launch
+            except InteractiveLaunchValidationError as exc:
+                render_launch_validation_errors(exc.errors)
+                trace.close(status="failed")
+                launch_rejected = True
             except BaseException:
                 trace.close(status="failed")
                 raise
-            trace.close(status="success")
+            else:
+                trace.close(status="success")
+    if launch_rejected:
+        raise SystemExit(1)
 
 
 def _refresh_campaign_after_resume(
@@ -329,7 +340,7 @@ def _launch_fleet_session(
     from autoskillit.cli.session._session_backend import (
         resolve_global_backend,
     )
-    from autoskillit.cli.session._session_launch import render_skill_unavailability
+    from autoskillit.cli.session._session_onboarding import render_skill_unavailability
     from autoskillit.config import load_config
     from autoskillit.workspace import (
         compile_session_skill_catalog,

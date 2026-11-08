@@ -34,7 +34,8 @@ def test_stdio_eof_exits_and_cleans_lifespan_state(tmp_path: Path) -> None:
     )
     sentinel = state_dir / "kitchen_state" / f"server_ready_{process.pid}.sentinel"
     try:
-        wait_for_subprocess_ready(process, sentinel, deadline_s=10.0)
+        # Allow cold imports under xdist contention before timing EOF shutdown.
+        wait_for_subprocess_ready(process, sentinel, deadline_s=30.0)
         assert process.stdin is not None
         process.stdin.close()
         process.stdin = None

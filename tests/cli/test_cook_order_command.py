@@ -21,8 +21,8 @@ import autoskillit.cli.session._session_process as _patch_session__session_proce
 from autoskillit import cli
 from autoskillit.config import LoggingConfig, ProcessTetherConfig
 from autoskillit.core import ClaudeFlags, InteractiveInvocationValidation, PreLaunchReadiness
-from tests.cli._cook_launch_helpers import cook_attempt_result
 from tests.cli._interactive_process import InteractiveProcessStub, configure_popen
+from tests.cli._managed_launch_helpers import cook_attempt_result
 from tests.cli.conftest import _SCRIPT_YAML
 
 pytestmark = [

@@ -19,6 +19,7 @@ from autoskillit.core import InteractiveInvocationValidation
 from autoskillit.execution.backends import _codex_probes as probes
 from autoskillit.execution.backends._codex import interactive_validation
 from autoskillit.execution.process._lifecycle import owned_group
+from tests.fixtures.codex import fixture_path
 from tests.fixtures.hook_topology import projection_shaped_hook_root
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -488,6 +489,7 @@ def _prompt_input_for_catalog(catalog_dir: Path) -> bytes:
     return json.dumps(
         [
             {
+                "type": "message",
                 "role": "developer",
                 "content": [{"type": "input_text", "text": skills_block}],
             }
@@ -495,7 +497,19 @@ def _prompt_input_for_catalog(catalog_dir: Path) -> bytes:
     ).encode()
 
 
-@pytest.mark.parametrize("version", ("0.156.0", "0.156.1"))
+def _captured_v0164_prompt_input_for_catalog(catalog_dir: Path) -> bytes:
+    document = json.loads(
+        fixture_path("discovery_prompt_input_v0164.json").read_text(encoding="utf-8")
+    )
+    skills_message = document[2]
+    skills_text = skills_message["content"][1]["text"]
+    source_root = "/opt/autoskillit-fixtures/codex/discovery/v0164/home/add-dir/skills"
+    skills_text = skills_text.replace(source_root, str(catalog_dir.resolve()))
+    skills_message["content"][1]["text"] = skills_text.replace("make-arch-diag", "managed-skill")
+    return json.dumps(document).encode()
+
+
+@pytest.mark.parametrize("version", ("0.156.0", "0.156.1", "0.164.0"))
 def test_real_interactive_validator_checks_bound_version_before_native_discovery(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -530,9 +544,14 @@ def test_real_interactive_validator_checks_bound_version_before_native_discovery
         if command == (str(executable), "--version"):
             return probes._BoundedProbeResult(0, f"codex-cli {version}\n".encode(), b"")
         if command[-2:] == discovery.CODEX_SKILL_DISCOVERY_CONTRACT.prompt_probe:
+            prompt_input = (
+                _captured_v0164_prompt_input_for_catalog(generated_home / "skills")
+                if version == "0.164.0"
+                else _prompt_input_for_catalog(generated_home / "skills")
+            )
             return probes._BoundedProbeResult(
                 0,
-                _prompt_input_for_catalog(generated_home / "skills"),
+                prompt_input,
                 b"",
             )
         pytest.fail(f"unexpected Codex probe command: {command}")

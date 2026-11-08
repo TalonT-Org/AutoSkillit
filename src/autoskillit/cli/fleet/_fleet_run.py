@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Annotated, NoReturn
 
 from cyclopts import Parameter
 
-from autoskillit.cli.session._session_launch import render_skill_unavailability
+from autoskillit.cli.session._session_onboarding import render_skill_unavailability
 from autoskillit.core import get_logger, is_feature_enabled
 
 if TYPE_CHECKING:

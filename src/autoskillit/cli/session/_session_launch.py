@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, NoReturn, assert_never, overload
+from typing import TYPE_CHECKING, NoReturn, assert_never
 
 from autoskillit.cli.session._session_backend import verify_launch_home
+from autoskillit.cli.session._session_onboarding import (
+    append_skill_unavailability,
+    render_skill_unavailability,
+)
 from autoskillit.core import (
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
     CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE,
@@ -24,7 +27,6 @@ from autoskillit.core import (
     RestoreSession,
     ResumeWithBriefing,
     SessionHookRoot,
-    SkillContractError,
     TerminationReason,
     executable_binding_matches_current_file,
     get_logger,
@@ -45,86 +47,13 @@ if TYPE_CHECKING:
         PluginLaunchBinding,
         ResumeSpec,
         SemanticAdaptationContext,
-        SkillUnavailabilityPayload,
         ValidatedAddDir,
     )
     from autoskillit.workspace import (
         CompiledSessionSkillCatalog,
-        SkillExclusion,
     )
 
 logger = get_logger(__name__)
-
-
-def render_skill_contract_composition_failure(exc: SkillContractError) -> None:
-    """Print a clean, actionable message for a composition-root contract failure.
-
-    No traceback. The underlying message is already actionable (file path,
-    invalidity kind's hint, and — for the tier-role gate — an embedded
-    doctor pointer) after resolution-boundary containment; this guarantees
-    the doctor pointer is present for every SkillContractError shape, not
-    only the ones that already embed it.
-    """
-    print(f"ERROR: {exc}")
-    print("Run: autoskillit doctor")
-
-
-def render_skill_catalog_exclusions(exclusions: tuple[SkillExclusion, ...]) -> None:
-    """Print one operator-visible warning line per excluded skill candidate."""
-    for exclusion in exclusions:
-        hint = "; ".join(exclusion.hints)
-        print(f"WARNING: excluded project-local skill {exclusion.name!r} at {exclusion.path}")
-        if hint:
-            print(f"  hint: {hint}")
-
-
-def render_skill_unavailability(
-    unavailability_payload: SkillUnavailabilityPayload,
-) -> None:
-    """Print backend exclusions grouped by operation and diagnostic."""
-    grouped: dict[tuple[str, str], list[str]] = {}
-    for item in unavailability_payload["unavailable"]:
-        grouped.setdefault((item["operation"], item["diagnostic"]), []).append(item["skill"])
-    for (operation, diagnostic), skill_names in sorted(grouped.items()):
-        names = ", ".join(sorted(skill_names))
-        print(
-            f"{len(skill_names)} skills unavailable on this backend "
-            f"({operation}: {diagnostic}): {names}"
-        )
-
-
-@overload
-def append_skill_unavailability(
-    system_prompt: None,
-    unavailability_payload: SkillUnavailabilityPayload,
-) -> None: ...
-
-
-@overload
-def append_skill_unavailability(
-    system_prompt: str,
-    unavailability_payload: SkillUnavailabilityPayload,
-) -> str: ...
-
-
-def append_skill_unavailability(
-    system_prompt: str | None,
-    unavailability_payload: SkillUnavailabilityPayload,
-) -> str | None:
-    """Append the canonical machine-readable refusal payload to a prompt."""
-    if system_prompt is None or not unavailability_payload["unavailable"]:
-        return system_prompt
-    unavailable_json = json.dumps(
-        unavailability_payload,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    block = (
-        f"<autoskillit_skill_unavailability>{unavailable_json}</autoskillit_skill_unavailability>"
-    )
-    if block in system_prompt:
-        return system_prompt
-    return f"{system_prompt.rstrip()}\n\n{block}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,6 +69,14 @@ class PreparedInteractiveLaunch:
     spec: CmdSpec
     executable: ExecutableLaunchBinding
     pre_spawn_check: Callable[[], None] | None = None
+
+
+class InteractiveLaunchValidationError(Exception):
+    """Carry expected validation diagnostics to the managed resource owner."""
+
+    def __init__(self, errors: Sequence[str]) -> None:
+        self.errors = tuple(errors)
+        super().__init__("; ".join(self.errors))
 
 
 def _interactive_anchor_env(
@@ -318,6 +255,8 @@ def _finalize_interactive_launch(
     assert_resume_purity(spec=spec, launch=launch)
     validation = backend.validate_interactive_invocation(spec)
     if validation.errors:
+        if managed_home is not None:
+            raise InteractiveLaunchValidationError(validation.errors)
         _exit_launch_validation_errors(validation.errors)
 
     return PreparedInteractiveLaunch(
@@ -333,9 +272,15 @@ def _exit_launch_preparation_error(exc: ValueError) -> NoReturn:
     raise SystemExit(1)
 
 
-def _exit_launch_validation_errors(errors: Sequence[str]) -> NoReturn:
+def render_launch_validation_errors(errors: Sequence[str]) -> None:
+    """Render one ERROR line per diagnostic, joining embedded line breaks with '; '."""
     for error in errors:
-        sys.stderr.write(f"ERROR: {error}\n")
+        normalized = "; ".join(error.splitlines())
+        sys.stderr.write(f"ERROR: {normalized}\n")
+
+
+def _exit_launch_validation_errors(errors: Sequence[str]) -> NoReturn:
+    render_launch_validation_errors(errors)
     raise SystemExit(1)
 
 
@@ -764,6 +709,7 @@ def _launch_cook_session(
     projection_load_mode = (
         launch_load_mode if launch_load_mode.consumes_artifact else PluginLoadMode.PROJECTED_HOME
     )
+    launch_rejected = False
     with plugin_launch_binding_scope(
         authority=artifact_authority,
         backend=backend,
@@ -821,7 +767,14 @@ def _launch_cook_session(
                     mcp_tool_timeout_sec=mcp_tool_timeout_sec,
                     process_tether=process_tether,
                 )
+            except InteractiveLaunchValidationError as exc:
+                render_launch_validation_errors(exc.errors)
+                trace.close(status="failed")
+                launch_rejected = True
             except BaseException:
                 trace.close(status="failed")
                 raise
-            trace.close(status="success")
+            else:
+                trace.close(status="success")
+    if launch_rejected:
+        raise SystemExit(1)

@@ -9,10 +9,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import autoskillit.cli.install._plugin_artifact as _patch_install__plugin_artifact
 import autoskillit.cli.prompts as _patch_cli_prompts
 import autoskillit.cli.session._session_launch as _patch_session__session_launch
+import autoskillit.cli.session._session_startup_trace as _patch_session__startup_trace
 from autoskillit.config import ProcessTetherConfig
 from autoskillit.fleet.campaign_state.state_records import ResumeDecision
+from tests.cli._managed_launch_helpers import RecordingLifecycle
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -145,6 +148,129 @@ def test_fleet_session_launcher_forwards_managed_join_parent_identity(
     extra_env = captured["extra_env"]
     assert isinstance(extra_env, dict)
     assert extra_env[MANAGED_JOIN_PARENT_ID_ENV_VAR] == "managed-join-id"
+
+
+def test_managed_fleet_validation_rejection_cleans_up_before_exit(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from autoskillit.cli.fleet._fleet_session import _fleet_session_launcher
+    from autoskillit.cli.session._session_launch import InteractiveLaunchValidationError
+    from autoskillit.core import FreshLaunch, PluginLoadMode
+
+    launch_id_events: list[str] = []
+    generated_home = tmp_path / "managed-home"
+    skills_dir = generated_home / "autoskillit-add-dir"
+    skills_dir.mkdir(parents=True)
+    projection_root = tmp_path / "projection"
+    projection_root.mkdir()
+    lifecycle = RecordingLifecycle(
+        generated_home=generated_home,
+        skills_dir=skills_dir,
+        projection_root=projection_root,
+        unavailability_payload={"backend": "codex", "unavailable": ()},
+        returncodes=(),
+    )
+    rejection = "cause: fleet catalog rejected\nremedy: refresh the installed generation"
+    backend = MagicMock()
+    backend.name = "codex"
+    backend.capabilities.session_dir_persistent = True
+    backend.conventions = MagicMock()
+    compilation = MagicMock()
+    compilation.catalog = MagicMock()
+    calls: list[object] = []
+
+    class _Trace:
+        def __init__(self, _project_dir: Path, launch_id: str, *, enabled: bool) -> None:
+            assert enabled is False
+            launch_id_events.append(launch_id)
+            lifecycle.events.append(("trace-created",))
+
+        def record_launch_anchor(self) -> None:
+            lifecycle.events.append(("trace-anchor",))
+
+        def close(self, *, status: str) -> None:
+            lifecycle.events.append(("trace-close", status))
+
+    def reject_launch(*_args: object, **_kwargs: object) -> None:
+        calls.append(object())
+        raise InteractiveLaunchValidationError(errors=(rejection,))
+
+    original_render = _patch_session__session_launch.render_launch_validation_errors
+
+    def record_render(errors: tuple[str, ...]) -> None:
+        lifecycle.events.append(("validation-render", errors))
+        original_render(errors)
+
+    monkeypatch.setattr(
+        _patch_session__session_launch,
+        "_run_interactive_session",
+        reject_launch,
+    )
+    monkeypatch.setattr(
+        _patch_session__session_launch,
+        "render_launch_validation_errors",
+        record_render,
+    )
+    monkeypatch.setattr(_patch_session__startup_trace, "StartupTrace", _Trace)
+    monkeypatch.setattr(
+        "autoskillit.workspace.DefaultSessionSkillManager",
+        lambda *args, **kwargs: lifecycle,
+    )
+    monkeypatch.setattr(
+        _patch_install__plugin_artifact,
+        "interactive_plugin_authority",
+        lambda **_kwargs: (lifecycle, PluginLoadMode.GENERATED_HOME),
+    )
+    monkeypatch.setattr(
+        "autoskillit.workspace.resolve_persistent_session_roots",
+        lambda *_args, **_kwargs: MagicMock(),
+    )
+    monkeypatch.setattr(
+        "autoskillit.workspace.resolve_ephemeral_root",
+        lambda: tmp_path / "ephemeral",
+    )
+
+    caller_resumed = False
+    with pytest.raises(SystemExit) as exc_info:
+        with _fleet_session_launcher(
+            backend=backend,
+            project_dir=tmp_path,
+            skill_compilation=compilation,
+            default_base_branch="main",
+            workspace_temp_dir=None,
+            force_inactive_agent_teams=False,
+            mcp_tool_timeout_sec=1.0,
+            process_tether=ProcessTetherConfig(),
+        ) as launch_session:
+            launch_session(FreshLaunch(system_prompt="validation contract"), {})
+            caller_resumed = True
+
+    assert exc_info.value.code == 1
+    assert caller_resumed is False
+    assert len(calls) == 1
+    assert len(launch_id_events) == 1
+    assert capsys.readouterr().err == (
+        "ERROR: cause: fleet catalog rejected; remedy: refresh the installed generation\n"
+    )
+    assert lifecycle.events.count(("trace-close", "failed")) == 1
+    assert ("trace-close", "success") not in lifecycle.events
+    managed_exit = lifecycle.event_for("managed-exit", launch_id_events[0])
+    assert lifecycle.events.index(("validation-render", (rejection,))) < lifecycle.events.index(
+        managed_exit
+    )
+    assert lifecycle.events.index(managed_exit) < lifecycle.events.index(("projection-exit",))
+    assert lifecycle.projection_bindings[0].closed
+    assert not [
+        record for record in caplog.records if "fleet catalog rejected" in record.getMessage()
+    ]
+    assert all(
+        record.exc_info is None
+        for record in caplog.records
+        if record.name.startswith("autoskillit.")
+    )
 
 
 class TestLaunchFleetSessionIngredientsTable:

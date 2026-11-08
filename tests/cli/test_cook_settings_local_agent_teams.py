@@ -33,7 +33,7 @@ from autoskillit.config import AutomationConfig
 from autoskillit.core import atomic_write
 from autoskillit.execution.backends import ClaudeCodeBackend
 from tests._realistic_project import PINNED_CLAUDE_SHIM_VERSION_OUTPUT
-from tests.cli._cook_launch_helpers import arrange_cook
+from tests.cli._managed_launch_helpers import arrange_cook
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 

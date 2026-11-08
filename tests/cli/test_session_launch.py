@@ -47,8 +47,8 @@ from tests._realistic_project import (
     PINNED_CLAUDE_SHIM_VERSION,
     PINNED_CLAUDE_SHIM_VERSION_OUTPUT,
 )
-from tests.cli._cook_launch_helpers import RecordingLifecycle, cook_attempt_result
 from tests.cli._interactive_process import InteractiveProcessStub, interactive_launch_metadata
+from tests.cli._managed_launch_helpers import RecordingLifecycle, cook_attempt_result
 from tests.fixtures.plugin_artifact_state import (
     PluginArtifactStateKind,
     build_plugin_artifact_state,
@@ -1931,6 +1931,7 @@ if sys.argv[-2:] == ["debug", "prompt-input"]:
         json.dumps(
             [
                 {
+                    "type": "message",
                     "role": "developer",
                     "content": [{"type": "input_text", "text": skills_instructions}],
                 }
@@ -2385,6 +2386,160 @@ def test_raw_codex_launch_renders_validation_errors_without_spawning(
     assert "ERROR: projected catalog discovery rejected" in capsys.readouterr().err
     binding = cast(list[PluginLaunchBinding], captured["bindings"])[0]
     assert binding.closed
+
+
+def test_render_launch_validation_errors_emits_one_ordered_line_per_error(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from autoskillit.cli.session._session_launch import render_launch_validation_errors
+
+    errors = (
+        "cause: projected catalog discovery failed\nversion: codex-cli 0.164.0",
+        "remedy: run autoskillit install",
+    )
+
+    render_launch_validation_errors(errors)
+
+    assert capsys.readouterr().err.splitlines() == [
+        "ERROR: cause: projected catalog discovery failed; version: codex-cli 0.164.0",
+        "ERROR: remedy: run autoskillit install",
+    ]
+
+
+def test_managed_cook_validation_rejection_cleans_up_before_exit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from autoskillit.core import CmdSpec, SkillExecutionRole, ValidatedAddDir
+    from autoskillit.execution.backends.codex import CodexBackend
+    from autoskillit.workspace import DefaultSkillResolver, compile_session_skill_catalog
+
+    launch_id = "validationfailure"
+    generated_home = tmp_path / "managed-home"
+    skills_dir = generated_home / "autoskillit-add-dir"
+    skills_dir.mkdir(parents=True)
+    projection_root = tmp_path / "projection"
+    projection_root.mkdir()
+    lifecycle = RecordingLifecycle(
+        generated_home=generated_home,
+        skills_dir=skills_dir,
+        projection_root=projection_root,
+        unavailability_payload={"backend": "codex", "unavailable": ()},
+        returncodes=(),
+    )
+    rejection = "cause: managed catalog rejected\nremedy: refresh the installed generation"
+
+    class _RejectingCodexBackend(CodexBackend):
+        def binary_name(self) -> str:
+            return "true"
+
+        def ensure_pre_launch(self, **_kwargs: object) -> PreLaunchReadiness:
+            return PreLaunchReadiness((), {})
+
+        def probe_launch_readiness(self, **_kwargs: object) -> PreLaunchReadiness:
+            return PreLaunchReadiness((), {})
+
+        def build_interactive_cmd(self, **kwargs):  # type: ignore[no-untyped-def]
+            managed_skill_catalog = next(
+                (entry for entry in kwargs["add_dirs"] if isinstance(entry, ValidatedAddDir)),
+                None,
+            )
+            return CmdSpec(
+                cmd=("true",),
+                env={},
+                **interactive_launch_metadata(binary="true", launch=kwargs["launch"]),
+                managed_skill_catalog=managed_skill_catalog,
+            )
+
+        def validate_interactive_invocation(
+            self, spec: CmdSpec
+        ) -> InteractiveInvocationValidation:
+            del spec
+            lifecycle.events.append(("validated",))
+            return InteractiveInvocationValidation(errors=(rejection,))
+
+    class _Trace:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            lifecycle.events.append(("trace-created",))
+
+        def record_launch_anchor(self) -> None:
+            lifecycle.events.append(("trace-anchor",))
+
+        def close(self, *, status: str) -> None:
+            lifecycle.events.append(("trace-close", status))
+
+    source_home = tmp_path / "source-codex"
+    source_home.mkdir()
+    backend = _RejectingCodexBackend(source_codex_home=source_home)
+    compilation = compile_session_skill_catalog(
+        DefaultSkillResolver().list_effective(tmp_path, SkillExecutionRole.ORCHESTRATOR),
+        backend,
+    )
+    original_render = _patch_session__session_launch.render_launch_validation_errors
+
+    def record_render(errors: tuple[str, ...]) -> None:
+        lifecycle.events.append(("validation-render", errors))
+        original_render(errors)
+
+    monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: "/usr/bin/true")
+    monkeypatch.setattr(
+        "autoskillit.workspace.DefaultSessionSkillManager",
+        lambda *args, **kwargs: lifecycle,
+    )
+    monkeypatch.setattr(
+        _patch_install__plugin_artifact,
+        "interactive_plugin_authority",
+        lambda **_kwargs: (lifecycle, PluginLoadMode.GENERATED_HOME),
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_startup_trace.StartupTrace",
+        _Trace,
+    )
+    monkeypatch.setattr(
+        _patch_session__session_launch,
+        "render_launch_validation_errors",
+        record_render,
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        _launch_cook_session(
+            launch=FreshLaunch(system_prompt="validation contract"),
+            project_dir=tmp_path,
+            required_env=frozenset(),
+            process_tether=ProcessTetherConfig(),
+            backend=backend,
+            skill_compilation=compilation,
+            launch_id=launch_id,
+            default_base_branch="main",
+            workspace_temp_dir=None,
+        )
+
+    assert exc_info.value.code == 1
+    assert capsys.readouterr().err == (
+        "ERROR: cause: managed catalog rejected; remedy: refresh the installed generation\n"
+    )
+    assert lifecycle.events.count(("validated",)) == 1
+    assert lifecycle.events.count(("trace-close", "failed")) == 1
+    assert ("trace-close", "success") not in lifecycle.events
+    assert lifecycle.events_of_type("run") == []
+    assert lifecycle.events_of_type("attempt-enter") == []
+    assert lifecycle.events.index(("validation-render", (rejection,))) < lifecycle.events.index(
+        lifecycle.event_for("managed-exit", launch_id)
+    )
+    assert lifecycle.events.index(
+        lifecycle.event_for("managed-exit", launch_id)
+    ) < lifecycle.events.index(("projection-exit",))
+    assert lifecycle.projection_bindings[0].closed
+    assert not [
+        record for record in caplog.records if "managed catalog rejected" in record.getMessage()
+    ]
+    assert all(
+        record.exc_info is None
+        for record in caplog.records
+        if record.name.startswith("autoskillit.")
+    )
 
 
 def test_order_managed_session_keeps_home_across_reload_and_infra_resume(

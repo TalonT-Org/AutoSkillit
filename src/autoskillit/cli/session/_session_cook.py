@@ -12,8 +12,11 @@ from typing import TYPE_CHECKING, assert_never
 
 from autoskillit.cli.session._session_launch import (
     _exit_launch_preparation_error,
-    append_skill_unavailability,
     prepare_interactive_launch,
+)
+from autoskillit.cli.session._session_skills import (
+    append_skill_unavailability,
+    prepare_cook_skill_visibility,
     render_skill_catalog_exclusions,
     render_skill_contract_composition_failure,
     render_skill_unavailability,
@@ -600,25 +603,17 @@ def cook(
     from autoskillit.exploration import resolve_repository_profile
     from autoskillit.workspace import (
         DefaultSessionSkillManager,
-        DefaultSkillResolver,
         SkillsDirectoryProvider,
         compile_session_skill_catalog,
         resolve_ephemeral_root,
         resolve_persistent_session_roots,
-        validate_skill_tier_roles,
     )
 
     config = load_config()
     apply_terminal_logging(config.logging, TerminalLogPolicy.INTERACTIVE)
     force_inactive_agent_teams = config.agent_backend.force_inactive_agent_teams
     project_dir = resolve_project_dir()
-    skill_resolver = DefaultSkillResolver()
-    skill_visibility = config.skill_visibility_spec()
-    try:
-        validate_skill_tier_roles(skill_visibility, skill_resolver, project_dir)
-    except SkillContractError as exc:
-        render_skill_contract_composition_failure(exc)
-        raise SystemExit(1) from exc
+    skill_resolver, skill_visibility = prepare_cook_skill_visibility(config, project_dir)
     backend = _resolve_cook_backend(config, backend)
     cook_system_prompt = (
         _COOK_PRE_REVEALED_KITCHEN_PROMPT

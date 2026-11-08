@@ -121,9 +121,13 @@ def _skills_instruction_text(document: Any) -> str:
             if not isinstance(part, dict):
                 raise ValueError("Codex prompt-input content contains a malformed item")
             text = part.get("text")
-            if part.get("type") == "input_text" and isinstance(text, str):
-                if item.get("role") == "developer" and text.startswith("<skills_instructions>"):
-                    candidates.append(text)
+            if (
+                part.get("type") == "input_text"
+                and isinstance(text, str)
+                and item.get("role") == "developer"
+                and text.startswith("<skills_instructions>")
+            ):
+                candidates.append(text)
     if len(candidates) != 1:
         raise ValueError("Codex prompt-input must contain exactly one <skills_instructions> block")
     return candidates[0]

@@ -85,6 +85,17 @@ INVARIANT_REGISTRY: Final[dict[str, InvariantDef]] = {
         enforcement_layer="hook-deny",
         backends=_BOTH,
     ),
+    "git-primary-checkout-head": InvariantDef(
+        id="git-primary-checkout-head",
+        prohibition=(
+            "Using checkout, switch, branch or symbolic-ref to move HEAD of the cook anchor "
+            "repository's primary checkout is prohibited"
+        ),
+        source_doc="AGENTS.md",
+        gate_target="guards/git_ops_guard.py",
+        enforcement_layer="hook-deny",
+        backends=_BOTH,
+    ),
     "recipe-read-headless": InvariantDef(
         id="recipe-read-headless",
         prohibition="Must not read recipe/skill/agent files directly in headless sessions",

@@ -17,8 +17,59 @@ The package initializer remains import-free.
   worktree in the same Git common directory. It derives repository identity and command
   cwd from the parsed tool payload plus read-only Git resolution; vendor `session_id` and
   `transcript_path` values are diagnostic only. Detached worktrees own no branch ref.
+  Branch, checkout, switch, symbolic-ref, update-ref, reset, push and fetch are
+  classified by outcome (which branch ref a command rewrites and whether `HEAD`
+  moves), read through Git's own option semantics (bundled, stuck, abbreviated and
+  negated spellings), never by matching option tokens. Attribution counts only a
+  certain cwd: a failed, dynamic, conditional, piped, backgrounded, function-body or
+  compound-body `cd`, a repository-layout override (`GIT_DIR`, `--git-dir`, `--bare`,
+  `core.worktree`), or an unparseable global option leaves the target unresolved, and an
+  unresolved target denies a command that can rewrite a branch ref. Aliases are
+  expanded; `git-core` executables are covered; each raw write target is judged against
+  its own repository. A Git-relevance prefilter keeps commands that mention neither Git
+  nor ref storage out of the classifier. Codex per-call `workdir` is honoured whenever
+  the hook payload provides it.
+  Known residuals, not pending decisions: a worktree created by the same command is
+  judged by its nearest existing ancestor; Python `os.chdir` is not modelled, nor is a
+  `cd` shadowed by a shell function defined in the same command; the conservative `cd`
+  rule over-denies (taint lasts for the scope); a raw write through a pre-existing
+  symlink alias into ref storage, from a command that names neither Git nor ref storage,
+  passes the prefilter; a recursive delete of a dynamic directory that contains ref
+  storage (`rm -rf "$REPO"`) is allowed; Git's executable repository state
+  (`.git/hooks/*`, `core.hooksPath`, `core.fsmonitor`, `core.sshCommand`, filter and diff
+  drivers, `credential.helper`, merge drivers) changes what a command does without
+  changing its text. The guard raises the cost of mistakes
+  and bypasses for Git ref and `HEAD` mutations; it is not a security boundary against a
+  hostile shell.
+  A cook session may not move HEAD of its anchor repository's primary checkout: in an
+  interactive cook session (`AUTOSKILLIT_SESSION_TYPE=skill` with a launch id and no
+  `AUTOSKILLIT_HEADLESS`), a Git segment whose outcome moves `HEAD`, or whose effect is
+  ambiguous, is denied (`Primary checkout HEAD move blocked: ...`) when its target is the
+  main worktree of the anchor repository, or is unresolved. The rule is
+  outcome-based and marker-independent: every autoskillit-launched interactive session
+  (cook, order, managed fleet) runs the shared-ref preflight without the kitchen marker,
+  and `AUTOSKILLIT_STATE_ROOT` is set for every interactive launch. Linked worktrees and
+  other repositories are unaffected. Limits: a linked or bare layout protects its main
+  worktree; `gh pr checkout`, `rebase`, `bisect` and `pull` are outside the rule;
+  `merge`, `cherry-pick`, `revert`, `am`, `commit` and `reset` advance the current branch
+  without switching branches and are outside it too; `git worktree add` leaves the
+  primary's HEAD alone (Git refuses `worktree add -B <branch>` for a branch checked out
+  elsewhere); a bare `checkout X` is denied as ambiguous, while `git checkout -- <path>`
+  and `git restore <path>` always pass; a same-command clone inside the primary is judged
+  by its ancestor, so clone in a separate command first. Worked example: a recipe step
+  that runs `git checkout <branch>` in the cook session's own checkout (the `checkout`
+  step of `full-audit`) is denied by design; point `workspace` at a linked worktree.
+  Opaque launchers (`xargs`, `find -exec`, `uv run`, `setsid`, `node -e`, ...) and wrapper
+  options the tables do not model fail closed only when the command also mentions a Git
+  mutation; Git-mutation text quoted inside such a launcher's arguments (for example
+  `find . -exec grep -l "git push" {} \;`) is therefore denied too, and the remedy is
+  to run the inner command directly (`grep -rl "git push" .`).
   In headless skill sessions, the later legacy Git phase blocks
-  `commit --amend`, `push --force`, `reset --hard`, `clean -f`, and `checkout .`.
+  `commit --amend`, `push --force`, `reset --hard`, `clean -f`, and `checkout .`. It
+  matches those operations by outcome rather than by spelling (abbreviated, bundled and
+  `+refspec` forms, aliases, and any non-dry-run `clean`), and never reads an option
+  value as a flag. Other working-tree discards such as `git stash`, `git restore .` and
+  `git checkout -f <branch>` stay outside this phase.
   Raw GitHub review publication is fail-closed across Bash and `run_cmd`: the guard denies
   review/comment writes, multiple or dynamically unresolved mutations, and relative
   `--input` files that cannot be resolved against the command's own execution cwd (a
@@ -81,7 +132,8 @@ defense-in-depth measure against privilege escalation:
 | `github_mutation_guard.py` | Ambiguous or unresolved GitHub mutation command | Unknown mutation scope must not bypass the structured review publisher |
 | `exploration_request_identity_guard.py` | A supported exploration event lacks bounded native identity or its one-shot record cannot be written | A Claude exploration call must not execute without request-correlated authority |
 | `join_stop_guard.py` | Malformed/non-object payload or missing `session_id` | Stop must not release when the guard cannot identify the binding whose wave completion authorizes release |
-| `git_ops_guard.py` | Unexpected runtime error during the checked-out-ref preflight (OSError, subprocess.SubprocessError, TypeError, UnicodeDecodeError, ValueError); or, in the separate headless destructive-op-blocking preflight, an unrecognized global git flag that leaves the real subcommand unresolved, or a Python subprocess/os call whose argument could not be resolved to a literal argv or string while `live_command_text` still mentions "git" | An unhandled exception must not silently allow a checked-out ref mutation — use exit 2 + stderr to hard-block. `_git_command_classification._contains_blocked_git_op` reads the command exclusively through `all_evaluated_segments`, the evaluated-segment blocklist authority (rectify #4941 Part A): it cannot match `_BLOCKED_GIT_OPS`'s literal subcommand tuples against an unresolved subcommand, so it denies unconditionally the moment `extract_git_subcommand_and_flags` reports `"<unresolved>"`, and separately denies when an unresolved interpreter payload cannot rule out a hidden `git` invocation, rather than silently falling through to "not blocked" |
+| `git_ops_guard.py` | Any unexpected runtime error (any `Exception`) while classifying a Git command, in the checked-out-ref preflight or the headless destructive-op phase; or an unresolved target (unknown cwd, layout override or unparseable global option) for a ref mutation; or, in the separate headless destructive-op-blocking preflight, an unrecognized global git flag that leaves the real subcommand unresolved, or a Python subprocess/os call whose argument could not be resolved to a literal argv or string while `live_command_text` still mentions "git" | An unhandled exception must not silently allow a checked-out ref mutation — use exit 2 + stderr to hard-block. `_git_target.contains_blocked_git_op` reads the command exclusively through the evaluated-segment walk, the blocklist authority (rectify #4941 Part A): it cannot match `_BLOCKED_GIT_OPS`'s literal subcommand tuples against an unresolved subcommand, so it denies unconditionally the moment `extract_git_subcommand_and_flags` reports `"<unresolved>"`, and separately denies when an unresolved interpreter payload cannot rule out a hidden `git` invocation, rather than silently falling through to "not blocked" |
+| `git_ops_guard.py` | In an interactive cook session, the anchor repository cannot be resolved, or a Git command that could move HEAD has an unresolved target | A command that might move the primary checkout's HEAD must not pass on a target the guard cannot prove; the deny names a literal `git -C <worktree>` or `cd <worktree> &&` remedy |
 | `pr_create_guard.py` | Hook config unreadable or malformed while the kitchen is open (OSError, JSONDecodeError, AttributeError, TypeError) | An unresolvable `recipe_allows_pr_create` authorization must not be read as permission to bypass the prepare_pr → compose_pr pipeline |
 | `unsafe_install_guard.py` | An unrecognized global pip flag leaves `pip`'s `install` token position unresolved | `_find_pip_install` cannot tell whether the command is a pip install at all; treating that the same as "definitely not an install" would silently skip the editable/system-install checks entirely, so it is threaded through as a distinct `"unresolved-pip-flags"` kind and denied unconditionally, matching the pre-existing `"unresolved-subprocess"` kind's treatment |
 | `write_guard.py` | A write-verb operand or redirect target cannot be resolved, or a Bash command cannot be parsed, while a write-prefix policy applies | An unresolved target could escape the allowed prefix; the denial explains how to substitute a literal path. |

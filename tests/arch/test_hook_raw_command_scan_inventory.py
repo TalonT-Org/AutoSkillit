@@ -190,7 +190,9 @@ def _scoped_source_files() -> list[Path]:
     files += [
         HOOKS_ROOT / "_runtime" / "_command_classification.py",
         HOOKS_ROOT / "_runtime" / "_git_command_classification.py",
+        HOOKS_ROOT / "_runtime" / "_git_target.py",
         HOOKS_ROOT / "_runtime" / "_github_mutation_analysis.py",
+        HOOKS_ROOT / "_runtime" / "_shell_segment_walk.py",
     ]
     return sorted(set(files))
 
@@ -248,14 +250,6 @@ _EXPECTED_RAW_COMMAND_SCANS: frozenset[tuple[str, str, str]] = frozenset(
         (
             "hooks/_classification/_interpreters.py",
             "interpreter_invokes",
-            "tokenize_command_segments",
-        ),
-        # git_ops_guard.py tokenizes outer and nested payload segments for its
-        # per-segment cd/git classification. evaluated_payloads supplies each
-        # nested payload's consumer index so its owner is preserved.
-        (
-            "hooks/guards/git_ops_guard.py",
-            "_preflight_segments",
             "tokenize_command_segments",
         ),
         # compose_pr_body_guard.py -- per-evaluated-payload segmentation

@@ -2545,6 +2545,33 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "harness itself and scrubbed to avoid inadvertent live API behavior in tests."
         ),
     ),
+    "GIT_COMMON_DIR": AmbientEnvDisposition(
+        var="GIT_COMMON_DIR",
+        disposition="scrub",
+        owner="harness",
+        justification=(
+            "Git repository-layout override read by git_ops_guard from the hook's own environment;"
+            "scrubbed so an ambient value cannot redirect a test's Git queries."
+        ),
+    ),
+    "GIT_DIR": AmbientEnvDisposition(
+        var="GIT_DIR",
+        disposition="scrub",
+        owner="harness",
+        justification=(
+            "Git repository-layout override read by git_ops_guard from the hook's own environment;"
+            "scrubbed so an ambient value cannot redirect a test's Git queries."
+        ),
+    ),
+    "GIT_WORK_TREE": AmbientEnvDisposition(
+        var="GIT_WORK_TREE",
+        disposition="scrub",
+        owner="harness",
+        justification=(
+            "Git repository-layout override read by git_ops_guard from the hook's own environment;"
+            "scrubbed so an ambient value cannot redirect a test's Git queries."
+        ),
+    ),
     "H": AmbientEnvDisposition(
         var="H",
         disposition="scrub",

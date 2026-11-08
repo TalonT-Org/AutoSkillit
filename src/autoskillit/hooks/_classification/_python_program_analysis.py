@@ -2,17 +2,15 @@
 
 Split out of `_interpreters.py` (rectify #4941 Part A) to keep that module's
 stdin-consumer/evaluated-payload machinery under the REQ-CNST-010 line cap.
-Self-contained: parses a Python -c program (or a heredoc/herestring-fed
-`python3`/`python3 -` body) via the stdlib `ast` module and returns any
-literal-argv or literal-string `subprocess.*`/`os.*` call it finds, with no
-dependency on the rest of `_classification/`.
+Parses a Python -c program (or a heredoc/herestring-fed `python3`/`python3 -`
+body) via the stdlib `ast` module and returns any literal-argv or literal-string
+`subprocess.*`/`os.*` call it finds. Self-contained: no dependency on the rest of
+`_classification/`.
 """
 
 from __future__ import annotations
 
 import ast
-import re
-from collections.abc import Sequence
 from dataclasses import dataclass
 
 _PYTHON_SUBPROCESS_FUNCS: frozenset[str] = frozenset(
@@ -95,17 +93,6 @@ class _InterpreterCommandSpec:
     payload: str | list[str]
     cwd: str | None
     invokes_shell: bool = False
-
-
-def _python_c_program(executable: str, args: Sequence[str]) -> str | None:
-    """Return the literal program passed to a normalized Python executable's -c."""
-    if re.fullmatch(r"python(?:3(?:\.\d+)?)?", executable) is None:
-        return None
-    try:
-        index = args.index("-c")
-    except ValueError:
-        return None
-    return args[index + 1] if index + 1 < len(args) else None
 
 
 def _python_program_command_specs(

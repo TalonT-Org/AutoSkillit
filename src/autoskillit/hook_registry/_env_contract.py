@@ -220,9 +220,10 @@ HOOK_ENV_CONTRACT: tuple[HookEnvVarDef, ...] = (
     HookEnvVarDef(
         "AUTOSKILLIT_STATE_ROOT",
         "autoskillit",
-        "autoskillit.cli.session._session_launch:_run_interactive_session",
-        "autoskillit.cli.session._session_launch:_run_interactive_session",
-        "Interactive launch binds all hook state to the orchestrating project root.",
+        "autoskillit.cli.session._session_launch:_interactive_anchor_env",
+        "autoskillit.cli.session._session_launch:prepare_interactive_launch",
+        "Every interactive launch (cook, order, fleet) binds hook state to the "
+        "orchestrating project root.",
     ),
     HookEnvVarDef(
         "AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES",

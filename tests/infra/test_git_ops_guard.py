@@ -8,14 +8,13 @@ Pattern mirrors test_pr_create_guard.py.
 
 from __future__ import annotations
 
-import contextlib
-import io
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
-import unittest.mock
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -24,140 +23,35 @@ import pytest
 # internal bare-name sibling imports (_github_mutation_analysis,
 # _command_classification) is centralized in tests/conftest.py -- it must
 # run before this module's own top-level imports, which a fixture cannot do.
-from autoskillit.hooks._runtime._command_classification import _FlagArity
-from autoskillit.hooks._runtime._git_command_classification import (
-    _GIT_FETCH_FLAG_SPEC,
-    _classify_fetch,
+from autoskillit.hooks._classification._option_grammar import OptionArity, OptionDef
+from autoskillit.hooks._runtime._git_command_classification import _classify_fetch
+from autoskillit.hooks._runtime._git_option_tables import _GIT_FETCH_FLAG_SPEC
+from autoskillit.hooks._runtime._hook_constants import DENY_REASON_BY_GUARD
+from autoskillit.hooks.guards import git_ops_guard
+from tests._git_topology import commit_file, init_checkout
+from tests.infra._git_ops_guard_harness import (
+    _TOOL_NAME,
+    _checked_out_ref_result,
+    _context,
+    _git,
+    _guard_exit_code,
+    _guard_verdict,
+    _is_denied,
+    _run_guard,
+    build_linked_repo,
 )
 
-pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
-
-_TOOL_NAME = "mcp__autoskillit__local__autoskillit__run_cmd"
-_BASH_TOOL_NAME = "Bash"
-_HOOK_CONFIG_RELPATH = ".autoskillit/temp/.hook_config.json"
-
-
-def _make_clean_env(
-    skill_name: str | None,
-    session_type: str | None = None,
-    headless: bool = True,
-) -> dict[str, str]:
-    env = {k: v for k, v in os.environ.items()}
-    if headless:
-        env["AUTOSKILLIT_HEADLESS"] = "1"
-    else:
-        env.pop("AUTOSKILLIT_HEADLESS", None)
-    if skill_name is not None:
-        env["AUTOSKILLIT_SKILL_NAME"] = skill_name
-    else:
-        env.pop("AUTOSKILLIT_SKILL_NAME", None)
-    if session_type is not None:
-        env["AUTOSKILLIT_SESSION_TYPE"] = session_type
-    else:
-        env.pop("AUTOSKILLIT_SESSION_TYPE", None)
-    return env
-
-
-def _run_guard(
-    cmd: str,
-    kitchen_open: bool,
-    tmpdir,
-    raw_stdin: str | None = None,
-    skill_name: str | None = None,
-    session_type: str | None = None,
-    use_bash_key: bool = False,
-    headless: bool = True,
-    include_execution_cwd: bool = True,
-    hook_config: dict[str, object] | None = None,
-) -> str:
-    """Invoke git_ops_guard.main() and return captured stdout."""
-    from autoskillit.hooks.guards.git_ops_guard import main
-
-    if raw_stdin is not None:
-        stdin_content = raw_stdin
-    else:
-        cmd_key = "command" if use_bash_key else "cmd"
-        tool_input = {cmd_key: cmd}
-        if include_execution_cwd and not use_bash_key:
-            tool_input["cwd"] = str(tmpdir)
-        tool_name = _BASH_TOOL_NAME if use_bash_key else _TOOL_NAME
-        stdin_payload = {
-            "session_id": "guard-test-session",
-            "tool_name": tool_name,
-            "tool_input": tool_input,
-        }
-        if include_execution_cwd and use_bash_key:
-            stdin_payload["cwd"] = str(tmpdir)
-        stdin_content = json.dumps(stdin_payload)
-
-    if kitchen_open:
-        hook_cfg = tmpdir / _HOOK_CONFIG_RELPATH
-        hook_cfg.parent.mkdir(parents=True, exist_ok=True)
-        hook_cfg.write_text(json.dumps(hook_config or {"kitchen": "open"}))
-
-    clean_env = _make_clean_env(skill_name, session_type, headless=headless)
-
-    buf = io.StringIO()
-    with contextlib.redirect_stdout(buf):
-        with unittest.mock.patch.dict(os.environ, clean_env, clear=True):
-            with unittest.mock.patch("sys.stdin", io.StringIO(stdin_content)):
-                with unittest.mock.patch("pathlib.Path.cwd", return_value=tmpdir):
-                    try:
-                        main()
-                    except SystemExit as exc:
-                        assert exc.code == 0, f"Guard exited non-zero: {exc.code!r}"
-
-    return buf.getvalue()
-
-
-def _is_denied(output: str) -> bool:
-    if not output:
-        return False
-    data = json.loads(output)
-    return data.get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
-
-
-def _git(cwd: Path, *args: str, input_text: str | None = None) -> str:
-    return subprocess.run(
-        ["git", "-C", str(cwd), *args],
-        check=True,
-        capture_output=True,
-        text=True,
-        input=input_text,
-    ).stdout.strip()
+pytestmark = [
+    pytest.mark.layer("infra"),
+    pytest.mark.medium,
+    pytest.mark.skipif(shutil.which("git") is None, reason="git binary required"),
+    pytest.mark.usefixtures("isolated_git_config"),
+]
 
 
 @pytest.fixture
 def linked_repo(tmp_path: Path) -> dict[str, Path | str]:
-    primary = tmp_path / "repo"
-    linked = tmp_path / "review"
-    primary.mkdir()
-    _git(primary, "init", "-b", "develop")
-    _git(primary, "config", "user.name", "Guard Test")
-    _git(primary, "config", "user.email", "guard@example.invalid")
-    (primary / "tracked.txt").write_text("initial\n", encoding="utf-8")
-    _git(primary, "add", "tracked.txt")
-    _git(primary, "commit", "-m", "initial")
-    old_sha = _git(primary, "rev-parse", "HEAD")
-    tree = _git(primary, "rev-parse", "HEAD^{tree}")
-    new_sha = _git(primary, "commit-tree", tree, "-p", old_sha, input_text="next\n")
-    _git(primary, "worktree", "add", "-b", "review", str(linked), old_sha)
-    return {
-        "primary": primary,
-        "linked": linked,
-        "old_sha": old_sha,
-        "new_sha": new_sha,
-        "worktree_git_dir": _git(linked, "rev-parse", "--absolute-git-dir"),
-        "common_git_dir": str((linked / _git(linked, "rev-parse", "--git-common-dir")).resolve()),
-    }
-
-
-def _checked_out_ref_result(output: str) -> dict[str, object]:
-    data = json.loads(output)
-    reason = data["hookSpecificOutput"]["permissionDecisionReason"]
-    prefix = "Checked-out ref mutation blocked: "
-    assert reason.startswith(prefix)
-    return json.loads(reason.removeprefix(prefix))
+    return build_linked_repo(tmp_path)
 
 
 def _assert_ref_unchanged(repo: Path, ref: str, old_sha: str) -> None:
@@ -216,28 +110,20 @@ class TestGitPushForceDenied:
         assert _is_denied(out)
 
     def test_denies_push_force_with_unresolved_global_flag(self, tmp_path: Path) -> None:
-        """Defense regression for _contains_blocked_git_op's <unresolved>
-
-        short-circuit (git_ops_guard.py:206). An unrecognized git global
-        flag (`--attr-source` -- a genuine git option not yet enumerated in
-        _GIT_GLOBAL_FLAG_SPEC) before `push --force` makes
-        extract_git_subcommand_and_flags return ("<unresolved>", ...). The
-        short-circuit at git_ops_guard.py:206 then must deny unconditionally
-        via the fail-closed sentinel; without it, the sentinel would not
-        match any literal entry in _BLOCKED_GIT_OPS and the destructive
-        `push --force` would slip through undetected.
+        """An unrecognized git global flag (`--frobnicate`) before `push --force`
+        makes extract_git_subcommand_and_flags return ("<unresolved>", ...):
+        the flag's value cannot be told from the subcommand, so the invocation
+        is denied fail-closed rather than read as a no-op that matches nothing
+        in _BLOCKED_GIT_OPS. The checked-out-ref preflight, which runs first
+        in a kitchen-open session, issues the deny with an unresolved value.
         """
         out = _run_guard(
-            "git --attr-source foo push --force",
+            "git --frobnicate push --force",
             kitchen_open=True,
             tmpdir=tmp_path,
         )
-        assert _is_denied(out)
-        data = json.loads(out)
-        reason = data["hookSpecificOutput"]["permissionDecisionReason"]
-        # Distinguish from the checked-out-ref denial (TestCheckedOutRef*)
-        # and from a no-op exit: this path uses GIT_OPS_DENY_TRIGGER.
-        assert "destructive" in reason.lower() or "blocked" in reason.lower()
+        assert _guard_verdict(out) == "checked-out-ref"
+        assert _checked_out_ref_result(out)["attempted_value"] == "<unresolved>"
 
 
 # ---------------------------------------------------------------------------
@@ -317,15 +203,12 @@ class TestGitOpsGuardAllowed:
         assert out.strip() == ""
 
     def test_allows_git_push_to_remote(self, tmp_path):
-        """Regression for #4937: `_same_repository` previously treated a
-        configured remote name as a filesystem path, so any push to a named
-        remote -- even a genuine network remote -- resolved to `None`
-        ("uncertain") and was denied via `_all_threatened`. Requires a real
-        repository topology: the original version of this test passed a
-        bare, non-git-inited tmp_path, which made `_repository_context`
-        return None and short-circuit the preflight before it ever reached
-        `_classify_git_segment`/`_classify_push`, so it never actually
-        exercised push classification.
+        """A push to a configured remote name is judged by the remote's URL, not
+        by treating the name as a filesystem path: a genuine network remote is a
+        different repository, so the push is allowed rather than denied as an
+        uncertain destination. Requires a real repository topology so that the
+        push reaches `_classify_push`; outside any repository the preflight has
+        nothing to classify.
         """
         repo = tmp_path / "repo"
         repo.mkdir()
@@ -351,12 +234,14 @@ class TestGitOpsGuardAllowed:
         out = _run_guard("git commit --amend", kitchen_open=False, tmpdir=tmp_path)
         assert out.strip() == ""
 
-    def test_npm_read_only_and_script_policy(self, tmp_path):
+    def test_npm_commands_naming_neither_git_nor_ref_storage_are_allowed(self, tmp_path):
+        """A command that names neither Git nor ref storage cannot reach a ref,
+        so npm version queries and script runs are allowed."""
         out = _run_guard("npm --version", kitchen_open=True, tmpdir=tmp_path)
         assert out.strip() == ""
 
         out = _run_guard("npm run build", kitchen_open=True, tmpdir=tmp_path)
-        assert _checked_out_ref_result(out)["attempted_value"] == "<unresolved>"
+        assert out.strip() == ""
 
 
 # ---------------------------------------------------------------------------
@@ -447,10 +332,9 @@ class TestInterpreterAndNestedShell:
         assert _is_denied(out)
 
     def test_denies_env_prefix_git_amend(self, tmp_path):
-        # rectify #4941 Part A: _contains_blocked_git_op now resolves the verb
-        # through command_verb_and_args, which skips POSIX assignments the
-        # same way the checked-out-ref preflight always has -- an env-prefixed
-        # invocation (VAR=1 git ...) is no longer a raw-shlex-split blind spot.
+        # contains_blocked_git_op resolves the verb through the evaluated-segment
+        # walk, which skips POSIX assignments the same way the checked-out-ref
+        # preflight does, so an env-prefixed invocation (VAR=1 git ...) is seen.
         out = _run_guard("VAR=1 git commit --amend", kitchen_open=True, tmpdir=tmp_path)
         assert _is_denied(out)
 
@@ -521,10 +405,8 @@ class TestStdinLiteralConsumers:
     def test_denies_raw_write_verb_via_heredoc_preflight(
         self, tmp_path, include_execution_cwd: bool
     ) -> None:
-        """Pins the _raw_target_mutations segment-source change and the
-        no-execution_cwd early-return path (2.3): a raw-write verb (`rm`)
-        delivered through a heredoc must deny with or without a resolvable
-        execution_cwd."""
+        """A raw-write verb (`rm`) delivered through a heredoc against a ref
+        file must deny with or without a resolvable execution_cwd."""
         _git(tmp_path, "init", "-b", "develop")
         _git(tmp_path, "config", "user.name", "Guard Test")
         _git(tmp_path, "config", "user.email", "guard@example.invalid")
@@ -539,14 +421,18 @@ class TestStdinLiteralConsumers:
         )
         assert _is_denied(out)
 
-    def test_denies_piped_install_heredoc_without_execution_cwd(self, tmp_path) -> None:
+    def test_allows_piped_install_heredoc_naming_neither_git_nor_ref_storage(
+        self, tmp_path
+    ) -> None:
+        """A piped `install` with relative operands and no execution cwd names no
+        ref storage, so it cannot reach a ref and is allowed."""
         out = _run_guard(
             "cat <<'EOF' | bash\ninstall source destination\nEOF",
             kitchen_open=True,
             tmpdir=tmp_path,
             include_execution_cwd=False,
         )
-        assert _checked_out_ref_result(out)["execution_cwd"] == ""
+        assert out.strip() == ""
 
     def test_allows_inert_backtick_heredoc_git_push(self, tmp_path) -> None:
         """cat-redirect-heredoc-inline-backtick: an inert `cat` body mentioning
@@ -901,11 +787,10 @@ class TestCheckedOutRefMutations:
         self, linked_repo: dict[str, Path | str]
     ) -> None:
         """--negotiation-tip <rev> in space-separated form (NOT --flag=value,
-        which is a single self-contained shlex token) previously fell through
-        _classify_fetch's flag parsing as unrecognized, so its value was
-        appended to `positional` and misread as the remote name. The wrong
-        remote.<name>.fetch lookup returned nothing, mappings stayed empty,
-        and the fetch passed through unclassified. See _GIT_FETCH_FLAG_SPEC.
+        which is a single self-contained shlex token) must consume its value.
+        A value misread as the remote name sends the remote.<name>.fetch lookup
+        to the wrong remote, leaves the mappings empty, and lets the fetch pass
+        through unclassified. See _GIT_FETCH_FLAG_SPEC in _git_option_tables.
         """
         linked = linked_repo["linked"]
         assert isinstance(linked, Path)
@@ -1057,7 +942,7 @@ class TestCheckedOutRefAmbiguity:
             "git fetch --stdin origin",
             "git push . HEAD:$TARGET",
             "git push nonexistent-remote-name HEAD:develop",
-            'printf x | tee "$TARGET"',
+            'printf x | tee "$TARGET/refs/heads/x"',
         ],
     )
     def test_recognized_ambiguous_mutations_fail_closed_for_all_owners(
@@ -1075,6 +960,16 @@ class TestCheckedOutRefAmbiguity:
             "refs/heads/review",
         }
         assert all(row["old_sha"] == linked_repo["old_sha"] for row in refs)
+
+    def test_dynamic_tee_target_naming_neither_git_nor_ref_storage_is_allowed(
+        self, linked_repo: dict[str, Path | str]
+    ) -> None:
+        # The same dynamic target as the ref-storage row above, with no ref-storage
+        # text: the command is not about Git state, so the prefilter lets it through.
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        out = _run_guard('printf x | tee "$TARGET"', kitchen_open=True, tmpdir=linked)
+        assert out.strip() == ""
 
     def test_literal_asterisk_in_value_is_recognized_as_dynamic(
         self, linked_repo: dict[str, Path | str]
@@ -1103,27 +998,22 @@ class TestCheckedOutRefAmbiguity:
     def test_unresolved_global_flag_before_subcommand_fails_closed_for_all_owners(
         self, linked_repo: dict[str, Path | str]
     ) -> None:
-        # Regression test: extract_git_subcommand_and_flags() must return
-        # ("<unresolved>", []) -- not silently misparse -- when a real git
-        # global flag outside the guard's recognized _GIT_GLOBAL_FLAG_SPEC
-        # appears in space-separated form before the subcommand.
-        # --attr-source=<tree-ish> is a genuine git global option (see
-        # `git help git`'s OPTIONS section; `git --attr-source foo status`
-        # runs status normally, proving git itself consumes "foo" as the
-        # flag's value, not a subcommand) that the guard's flag spec does
-        # not recognize. The prior parser advanced its cursor by exactly
-        # one token for any unrecognized `-`-prefixed token, so the flag's
-        # *value* token ("foo") was misread as the subcommand itself: `git
-        # --attr-source foo branch -f develop start` classified
-        # subcommand="foo", which matched none of _classify_git_segment's
-        # dispatch branches, so the real `branch -f` mutation was never
-        # classified at all and slipped through undetected. It must
-        # instead be treated as unresolved/ambiguous, matching the
-        # $TARGET and asterisk cases above.
+        # extract_git_subcommand_and_flags() must return ("<unresolved>", [])
+        # -- not silently misparse -- when a global flag outside the guard's
+        # recognized _GIT_GLOBAL_FLAG_SPEC appears in space-separated form
+        # before the subcommand. `--frobnicate` is no Git option, so the guard
+        # cannot know whether it takes a value. Skipping an unrecognized
+        # `-`-prefixed token by exactly one would misread the flag's *value*
+        # token ("foo") as the subcommand itself: `git --frobnicate foo branch
+        # -f develop start` would classify subcommand="foo", which matches none
+        # of _classify_git_invocation's dispatch branches, so the real
+        # `branch -f` mutation would never be classified and would slip
+        # through undetected. It must instead be treated as unresolved/ambiguous,
+        # matching the $TARGET and asterisk cases above.
         linked = linked_repo["linked"]
         assert isinstance(linked, Path)
         out = _run_guard(
-            "git --attr-source foo branch -f develop start",
+            "git --frobnicate foo branch -f develop start",
             kitchen_open=True,
             tmpdir=linked,
         )
@@ -1158,7 +1048,29 @@ class TestCheckedOutRefAmbiguity:
         ],
         ids=["npm-prefix", "ln-entry"],
     )
-    def test_unresolved_explicit_write_destination_fails_closed(
+    def test_unresolved_explicit_write_destination_naming_no_ref_storage_is_allowed(
+        self,
+        linked_repo: dict[str, Path | str],
+        monkeypatch: pytest.MonkeyPatch,
+        command: str,
+    ) -> None:
+        monkeypatch.delenv("DESTINATION", raising=False)
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+
+        out = _run_guard(command, kitchen_open=True, tmpdir=linked)
+
+        assert out.strip() == ""
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            'npm install --prefix "$DESTINATION/refs/heads" package',
+            'ln -sf /tmp/source "$DESTINATION/.git/HEAD"',
+        ],
+        ids=["npm-prefix", "ln-entry"],
+    )
+    def test_unresolved_explicit_write_destination_naming_ref_storage_fails_closed(
         self,
         linked_repo: dict[str, Path | str],
         monkeypatch: pytest.MonkeyPatch,
@@ -1174,20 +1086,37 @@ class TestCheckedOutRefAmbiguity:
         assert _checked_out_ref_result(out)["attempted_value"] == "<unresolved>"
 
     @pytest.mark.parametrize(
-        "command_builder",
+        ("command_builder", "denied"),
         [
-            lambda root: f"npm install --prefix {shlex.quote(str(root / 'npm-root'))} package",
-            lambda root: f"ln -sf /tmp/source {shlex.quote(str(root / 'link'))}",
-            lambda root: f"install -t {shlex.quote(str(root / 'install-root'))} /tmp/source",
-            lambda _root: "cat > f.md <<< 'git push --force origin main'",
+            (
+                lambda root: f"npm install --prefix {shlex.quote(str(root / 'npm-root'))} package",
+                False,
+            ),
+            (lambda root: f"ln -sf /tmp/source {shlex.quote(str(root / 'link'))}", False),
+            (
+                lambda root: f"install -t {shlex.quote(str(root / 'install-root'))} /tmp/source",
+                False,
+            ),
+            (lambda _root: "cat > f.md <<< 'git push --force origin main'", False),
+            (lambda _root: "cat > refs/heads/x <<< y", True),
         ],
-        ids=["npm-prefix", "ln-entry", "install-target-directory", "relative-redirect"],
+        ids=[
+            "npm-prefix",
+            "ln-entry",
+            "install-target-directory",
+            "relative-redirect",
+            "relative-redirect-naming-ref-storage",
+        ],
     )
-    def test_structural_write_without_execution_cwd_fails_closed(
+    def test_structural_write_without_execution_cwd_is_classified(
         self,
         linked_repo: dict[str, Path | str],
         command_builder,
+        denied: bool,
     ) -> None:
+        """Writes to absolute non-ref paths are classified and allowed without an
+        execution cwd. A relative write has no cwd to resolve against, so it is
+        ambiguous, and denied, only when the command names ref storage."""
         linked = linked_repo["linked"]
         assert isinstance(linked, Path)
 
@@ -1198,18 +1127,40 @@ class TestCheckedOutRefAmbiguity:
             include_execution_cwd=False,
         )
 
-        assert _is_denied(out)
-        assert _checked_out_ref_result(out)["attempted_value"] == "<unresolved>"
+        if denied:
+            assert _is_denied(out)
+            assert _checked_out_ref_result(out)["attempted_value"] == "<unresolved>"
+        else:
+            assert out.strip() == ""
 
 
-def test_link_entry_parent_loop_fails_closed(linked_repo: dict[str, Path | str]) -> None:
+def test_link_entry_parent_loop_naming_neither_git_nor_ref_storage_is_allowed(
+    linked_repo: dict[str, Path | str], tmp_path: Path
+) -> None:
     linked = linked_repo["linked"]
     assert isinstance(linked, Path)
-    loop = linked / "loop"
+    loop = tmp_path / "loop"
     loop.symlink_to(loop)
 
     out = _run_guard(
         f"ln -s source {shlex.quote(str(loop / 'entry'))}", kitchen_open=True, tmpdir=linked
+    )
+
+    assert out.strip() == ""
+
+
+def test_link_entry_parent_loop_naming_ref_storage_fails_closed(
+    linked_repo: dict[str, Path | str], tmp_path: Path
+) -> None:
+    linked = linked_repo["linked"]
+    assert isinstance(linked, Path)
+    loop = tmp_path / "loop"
+    loop.symlink_to(loop)
+
+    out = _run_guard(
+        f"ln -s source {shlex.quote(str(loop / 'refs/heads/entry'))}",
+        kitchen_open=True,
+        tmpdir=linked,
     )
 
     assert _is_denied(out)
@@ -1228,13 +1179,34 @@ class TestCheckedOutRefWriteTargets:
             "cd - && dd if=/dev/zero of=rel.bin",
         ],
     )
-    def test_unresolved_write_targets_fail_closed(
+    def test_unresolved_write_targets_naming_no_ref_storage_are_allowed(
         self,
         linked_repo: dict[str, Path | str],
         monkeypatch: pytest.MonkeyPatch,
         command: str,
     ) -> None:
         monkeypatch.delenv("GIT_TARGET", raising=False)
+        monkeypatch.delenv("UNSET_DIR", raising=False)
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        out = _run_guard(command, kitchen_open=True, tmpdir=linked)
+        assert out.strip() == ""
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            'echo x > "$G/refs/heads/develop"',
+            'cd "$UNSET_DIR" && echo y > refs/heads/x',
+            "cd - && dd if=/dev/zero of=.git/HEAD",
+        ],
+    )
+    def test_unresolved_write_targets_naming_ref_storage_fail_closed(
+        self,
+        linked_repo: dict[str, Path | str],
+        monkeypatch: pytest.MonkeyPatch,
+        command: str,
+    ) -> None:
+        monkeypatch.delenv("G", raising=False)
         monkeypatch.delenv("UNSET_DIR", raising=False)
         linked = linked_repo["linked"]
         assert isinstance(linked, Path)
@@ -1280,8 +1252,8 @@ class TestCheckedOutRefWriteTargets:
         self, linked_repo: dict[str, Path | str], command: str
     ) -> None:
         """Read-only git verbs must not be denied just because a preceding
-        cd failed (cwd resolves to empty). _deny_outer_git_mutations only
-        escalates when the subcommand is a known ref-mutating one.
+        cd failed (cwd resolves to empty). The preflight only escalates an
+        unknown repository when the subcommand is a known ref-mutating one.
         """
         linked = linked_repo["linked"]
         assert isinstance(linked, Path)
@@ -1289,26 +1261,32 @@ class TestCheckedOutRefWriteTargets:
         assert out.strip() == ""
 
     @pytest.mark.parametrize(
-        "command",
+        ("command", "verdict"),
         [
-            "cd - && git push origin develop",
-            "cd - && git reset --hard",
-            "cd - && git checkout .",
+            ("cd - && git push origin develop", "allow"),
+            ("cd - && git reset --hard", "checked-out-ref"),
+            ("cd - && git checkout .", "other-deny"),
         ],
     )
-    def test_mutation_git_after_failed_cd_is_denied(
-        self, linked_repo: dict[str, Path | str], command: str
+    def test_git_after_failed_cd_is_denied_only_when_it_rewrites_a_ref_or_is_destructive(
+        self, linked_repo: dict[str, Path | str], command: str, verdict: str
     ) -> None:
-        """Mutation git verbs after a failed cd must escalate to deny —
-        the segment cannot be routed to a repository with confidence, and
-        a bare git mutation has no shell-write surface for
-        scan_write_targets to catch.
+        """After a failed cd the segment cannot be routed to a repository.
+        `reset --hard` outside path mode is a ref mutation, so the preflight
+        denies it fail-closed with an unresolved value. `checkout .` restores
+        paths and rewrites no ref; the headless destructive-operation phase
+        denies it. `push origin develop` names a remote, which is not a ref
+        mutation of this repository, and a push without force is not risky,
+        so it is allowed.
         """
         linked = linked_repo["linked"]
         assert isinstance(linked, Path)
         out = _run_guard(command, kitchen_open=True, tmpdir=linked)
-        assert _is_denied(out)
-        assert _checked_out_ref_result(out)["attempted_value"] == "<unresolved>"
+        assert _guard_verdict(out) == verdict, command
+        if verdict == "checked-out-ref":
+            assert _checked_out_ref_result(out)["attempted_value"] == "<unresolved>"
+        elif verdict == "other-deny":
+            assert _deny_reason(out) == _destructive_reason(_CHECKOUT_TREE)
 
 
 class TestCheckedOutRefAllows:
@@ -1517,72 +1495,454 @@ class TestCheckedOutRefPreflightOrdering:
         _checked_out_ref_result(out)
 
 
+_SESSION_SHAPES = (
+    (True, "skill"),
+    (True, "orchestrator"),
+    (False, "orchestrator"),
+    (False, "skill"),
+)
+
+
+class TestCheckedOutRefOutcomeImmunity:
+    """A ref rewrite is judged by the checked-out ref it rewrites, not by how its
+    options are spelled; HEAD effects with no ref rewrite and list forms stay allowed.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _unowned_branch(self, linked_repo: dict[str, Path | str]) -> None:
+        _git(Path(str(linked_repo["primary"])), "branch", "spare", str(linked_repo["old_sha"]))
+
+    @pytest.mark.parametrize(
+        "command_template",
+        [
+            "git checkout -Bdevelop {sha}",
+            "git checkout -fB develop {sha}",
+            "git checkout --ignore-other-worktrees -Bdevelop",
+            "git checkout feat -B develop",
+            "git switch -Cdevelop",
+            "git switch --force-create=develop",
+            "git switch --force-c develop",
+            "git branch -m develop renamed",
+            "git branch -M develop renamed",
+            "git update-ref -dm why refs/heads/develop",
+            "git push -o x {primary} HEAD:develop",
+        ],
+    )
+    def test_denies_rewrite_of_ref_owned_by_primary(
+        self, linked_repo: dict[str, Path | str], command_template: str
+    ) -> None:
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        command = command_template.format(
+            sha=linked_repo["new_sha"], primary=shlex.quote(str(linked_repo["primary"]))
+        )
+        out = _run_guard(command, kitchen_open=True, tmpdir=linked)
+        assert _guard_verdict(out) == "checked-out-ref", _context(command, out)
+        threatened = _checked_out_ref_result(out)["threatened_refs"]
+        assert isinstance(threatened, list)
+        assert [row["target_ref"] for row in threatened] == ["refs/heads/develop"], _context(
+            command, threatened
+        )
+
+    @pytest.mark.parametrize(
+        "command_template",
+        [
+            "git branch -m spare spare2",
+            "git checkout -b fresh {sha}",
+            "git checkout spare",
+            "git switch spare",
+            "git checkout --detach",
+            "git branch -a",
+            "git branch --merged",
+            "git symbolic-ref HEAD",
+        ],
+    )
+    def test_allows_unowned_rewrites_head_effects_and_list_forms(
+        self, linked_repo: dict[str, Path | str], command_template: str
+    ) -> None:
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        command = command_template.format(sha=linked_repo["new_sha"])
+        out = _run_guard(command, kitchen_open=True, tmpdir=linked)
+        assert _guard_verdict(out) == "allow", _context(command, out)
+
+    @pytest.mark.parametrize(
+        ("command", "verdict"),
+        [
+            ("git checkout -Bdevelop", "checked-out-ref"),
+            ("git branch -m develop renamed", "checked-out-ref"),
+            ("git update-ref -dm why refs/heads/develop", "checked-out-ref"),
+            ("git branch -a", "allow"),
+            ("git checkout -b fresh", "allow"),
+            ("git checkout spare", "allow"),
+        ],
+    )
+    def test_verdict_is_the_same_in_every_session_shape(
+        self, linked_repo: dict[str, Path | str], command: str, verdict: str
+    ) -> None:
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        verdicts = {
+            shape: _guard_verdict(
+                _run_guard(
+                    command,
+                    kitchen_open=True,
+                    tmpdir=linked,
+                    headless=shape[0],
+                    session_type=shape[1],
+                )
+            )
+            for shape in _SESSION_SHAPES
+        }
+        assert verdicts == dict.fromkeys(_SESSION_SHAPES, verdict), _context(command, verdicts)
+
+
+def _deny_reason(output: str) -> str:
+    return json.loads(output)["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def _destructive_reason(op: tuple[str, ...]) -> str:
+    return DENY_REASON_BY_GUARD["git_ops_guard"].format(op=" ".join(("git", *op)))
+
+
+_AMEND = ("commit", "--amend")
+_FORCE_PUSH = ("push", "--force")
+_LEASE_PUSH = ("push", "--force-with-lease")
+_HARD_RESET = ("reset", "--hard")
+_FORCE_CLEAN = ("clean", "-f")
+_CHECKOUT_TREE = ("checkout", ".")
+_CHECKOUT_DASHDASH_TREE = ("checkout", "--", ".")
+_UNRESOLVED_OP = ("<unresolved>",)
+
+
+def _git_rows(op: tuple[str, ...], *tails: str) -> list[tuple[str, tuple[str, ...]]]:
+    return [(f"git {tail}", op) for tail in tails]
+
+
+_DESTRUCTIVE_ROWS = [
+    *_git_rows(
+        _FORCE_PUSH,
+        "push -fu origin main",
+        "push -qf origin main",
+        "push origin +main",
+        "push origin +HEAD:main",
+    ),
+    *_git_rows(
+        _LEASE_PUSH, "push --force-w origin main", "push --force-with-lease=main origin main"
+    ),
+    *_git_rows(_HARD_RESET, "reset --har HEAD~", "reset --h HEAD~"),
+    *_git_rows(
+        _FORCE_CLEAN,
+        "clean --forc",
+        "clean -df",
+        "clean -xdf",
+        "clean -fx",
+        "clean -ff",
+        "clean -d",
+        "-c clean.requireForce=0 clean -d",
+        "clean -i",
+        "clean --interactive -d",
+    ),
+    ("printf 'c\\n' | git clean -fdi", _FORCE_CLEAN),
+    ("echo 1 | git clean -id", _FORCE_CLEAN),
+    *_git_rows(_AMEND, "commit --amen", "commit --am --no-edit"),
+    # Git's dashed spelling of the same builtin; the reason names the normalized operation.
+    ("git-commit --amend", _AMEND),
+    *_git_rows(
+        _CHECKOUT_TREE, "checkout -f", "checkout ./", "checkout :/", "checkout . origin main"
+    ),
+    *_git_rows(_CHECKOUT_DASHDASH_TREE, "checkout -- ./"),
+    *_git_rows(_UNRESOLVED_OP, "push --forc origin main", "reset --hard-foo"),
+]
+
+_DESTRUCTIVE_ALLOWED = [
+    "git commit -m '--amend'",
+    "git commit -m x --no-amend",
+    "git push origin main",
+    "git push -u origin main",
+    "git push --force-if-includes origin main",
+    "git push --recurse-submodules=check origin main",
+    "git reset --soft HEAD~",
+    "git clean -n",
+    "git clean -nd",
+    "git clean --dry-run -d",
+    "git clean -fni",
+    "git checkout -- a.txt",
+    "git checkout feature",
+    "git -c user.name=x commit -m x",
+]
+
+_DENIED_SHAPE = (True, "skill")
+_EXEMPT_SHAPES = tuple(shape for shape in _SESSION_SHAPES if shape != _DENIED_SHAPE)
+_SHAPE_PARITY_COMMANDS = (
+    "git push origin +main",
+    "git reset --har HEAD~",
+    "git clean -d",
+    "git commit --am --no-edit",
+    "git checkout ./",
+    "git push --forc origin main",
+)
+
+_REPOSITORY_ALIAS_ROWS = [
+    ("git ci --amend", _AMEND),
+    ("git pf origin main", _FORCE_PUSH),
+]
+_UNKNOWN_IDENTITY_COMMANDS = [
+    "git sh",
+    "P=commit; git $P --amend",
+    "git -c alias.x='commit --amend' x",
+]
+
+
+class TestDestructiveOutcomeImmunity:
+    """The headless destructive-operation phase matches the operations
+    RISKY_GIT_OPERATIONS names by what they do, not by how their options are
+    spelled. A plain directory is no repository, so the checked-out-ref preflight
+    has nothing to decide and the phase alone does.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _allow_abbreviated_options(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Git's own test-suite switch rejects the abbreviated options this class pins.
+        monkeypatch.delenv("GIT_TEST_DISALLOW_ABBREVIATED_OPTIONS", raising=False)
+
+    @pytest.fixture
+    def aliased_repo(self, tmp_path: Path) -> Path:
+        """A checkout on ``main`` with a separate bare ``origin`` that is fetched,
+        and repository aliases for commit, a forced push and a shell command."""
+        repo = init_checkout(tmp_path / "repo")
+        _git(repo, "branch", "-m", "main")
+        commit_file(repo, "tracked.txt", "initial\n", "initial")
+        origin = tmp_path / "origin.git"
+        _git(tmp_path, "init", "--bare", str(origin))
+        _git(repo, "remote", "add", "origin", str(origin))
+        _git(repo, "push", "-q", "origin", "main")
+        _git(repo, "fetch", "-q", "origin")
+        for alias, expansion in (
+            ("ci", "commit"),
+            ("pf", "push --force"),
+            ("sh", "!git commit --amend"),
+        ):
+            _git(repo, "config", f"alias.{alias}", expansion)
+        return repo
+
+    def test_the_plain_directory_is_not_inside_a_repository(self, tmp_path: Path) -> None:
+        result = subprocess.run(
+            ["git", "-C", str(tmp_path), "rev-parse", "--git-dir"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode != 0, _context("rev-parse in the plain directory", result.stdout)
+
+    @pytest.mark.parametrize(("command", "op"), _DESTRUCTIVE_ROWS)
+    def test_denies_each_spelling_with_the_destructive_reason(
+        self, tmp_path: Path, command: str, op: tuple[str, ...]
+    ) -> None:
+        out = _run_guard(command, kitchen_open=True, tmpdir=tmp_path)
+
+        assert _guard_verdict(out) == "other-deny", _context(command, out)
+        assert _deny_reason(out) == _destructive_reason(op), _context(command, out)
+
+    @pytest.mark.parametrize("command", _DESTRUCTIVE_ALLOWED)
+    def test_allows_each_spelling_that_destroys_nothing(
+        self, tmp_path: Path, command: str
+    ) -> None:
+        out = _run_guard(command, kitchen_open=True, tmpdir=tmp_path)
+
+        assert _guard_verdict(out) == "allow", _context(command, out)
+
+    @pytest.mark.parametrize(
+        "command", [command for command, _ in _DESTRUCTIVE_ROWS] + _DESTRUCTIVE_ALLOWED
+    )
+    def test_allows_every_row_in_the_orchestrator_tier(self, tmp_path: Path, command: str) -> None:
+        out = _run_guard(command, kitchen_open=True, tmpdir=tmp_path, session_type="orchestrator")
+
+        assert _guard_verdict(out) == "allow", _context(command, out)
+
+    @pytest.mark.parametrize(("headless", "session_type"), _EXEMPT_SHAPES)
+    @pytest.mark.parametrize("command", _SHAPE_PARITY_COMMANDS)
+    def test_allows_the_destructive_rows_outside_a_headless_skill_session(
+        self, tmp_path: Path, command: str, headless: bool, session_type: str
+    ) -> None:
+        out = _run_guard(
+            command,
+            kitchen_open=True,
+            tmpdir=tmp_path,
+            headless=headless,
+            session_type=session_type,
+        )
+
+        assert _guard_verdict(out) == "allow", _context(command, (headless, session_type, out))
+
+    @pytest.mark.parametrize(("command", "op"), _REPOSITORY_ALIAS_ROWS)
+    def test_denies_a_repository_alias_for_a_destructive_operation(
+        self, aliased_repo: Path, command: str, op: tuple[str, ...]
+    ) -> None:
+        out = _run_guard(command, kitchen_open=True, tmpdir=aliased_repo)
+
+        assert _guard_verdict(out) == "other-deny", _context(command, out)
+        assert _deny_reason(out) == _destructive_reason(op), _context(command, out)
+
+    @pytest.mark.parametrize(("headless", "session_type"), _EXEMPT_SHAPES)
+    @pytest.mark.parametrize("command", [command for command, _ in _REPOSITORY_ALIAS_ROWS])
+    def test_allows_a_repository_alias_outside_a_headless_skill_session(
+        self, aliased_repo: Path, command: str, headless: bool, session_type: str
+    ) -> None:
+        out = _run_guard(
+            command,
+            kitchen_open=True,
+            tmpdir=aliased_repo,
+            headless=headless,
+            session_type=session_type,
+        )
+
+        assert _guard_verdict(out) == "allow", _context(command, (headless, session_type, out))
+
+    @pytest.mark.parametrize(("headless", "session_type"), _SESSION_SHAPES)
+    @pytest.mark.parametrize("command", _UNKNOWN_IDENTITY_COMMANDS)
+    def test_denies_a_command_of_unknown_identity_in_every_session_shape(
+        self, aliased_repo: Path, command: str, headless: bool, session_type: str
+    ) -> None:
+        out = _run_guard(
+            command,
+            kitchen_open=True,
+            tmpdir=aliased_repo,
+            headless=headless,
+            session_type=session_type,
+        )
+
+        assert _guard_verdict(out) == "checked-out-ref", _context(
+            command, (headless, session_type, out)
+        )
+        assert _checked_out_ref_result(out)["attempted_value"] == "<unresolved>"
+
+    @pytest.mark.parametrize("command", ["git lfs version", "cd $X && git lfs pull"])
+    def test_allows_an_external_subcommand(self, aliased_repo: Path, command: str) -> None:
+        out = _run_guard(command, kitchen_open=True, tmpdir=aliased_repo)
+
+        assert _guard_verdict(out) == "allow", _context(command, out)
+
+
+class TestGuardFailsClosed:
+    """An unexpected classification error blocks (exit 2, reason on stderr)."""
+
+    def test_error_in_ref_classification_blocks(
+        self,
+        linked_repo: dict[str, Path | str],
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+
+        def _raise(*_args: object, **_kwargs: object) -> None:
+            raise IndexError("injected classification failure")
+
+        monkeypatch.setattr(git_ops_guard, "_classify_git_invocation", _raise)
+
+        code = _guard_exit_code(f"git update-ref refs/heads/x {linked_repo['new_sha']}", linked)
+
+        captured = capsys.readouterr()
+        assert code == 2
+        assert captured.out == ""
+        assert "git_ops_guard: IndexError: injected classification failure" in captured.err
+
+    def test_error_in_blocked_operation_match_blocks(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        def _raise(*_args: object, **_kwargs: object) -> None:
+            raise KeyError("injected matcher failure")
+
+        monkeypatch.setattr(git_ops_guard, "contains_blocked_git_op", _raise)
+
+        code = _guard_exit_code("git status", tmp_path)
+
+        captured = capsys.readouterr()
+        assert code == 2
+        assert captured.out == ""
+        assert "git_ops_guard: KeyError: 'injected matcher failure'" in captured.err
+
+
 # ---------------------------------------------------------------------------
-# Spec table coverage: every entry in _GIT_FETCH_FLAG_SPEC must be recognized
-# by _classify_fetch's spec-driven consume loop. Parametrized directly from
-# the table's own keys so a future flag added to the spec extends coverage
+# Spec table coverage: every row of _GIT_FETCH_FLAG_SPEC must be recognized by
+# _classify_fetch in each spelling it admits. Parametrized directly from the
+# table's own keys so a row added to the table extends coverage
 # automatically. Registered with test_guard_flag_spec_coverage.py via
 # _SPEC_TABLE_TEST_FILES so the standing-invariant AST scanner confirms the
 # parametrize genuinely iterates the table rather than a hand-copied list.
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("flag", sorted(_GIT_FETCH_FLAG_SPEC))
-def test_every_git_fetch_spec_flag_is_recognized(flag: str) -> None:
-    """Generative coverage (Part D): every flag in _GIT_FETCH_FLAG_SPEC must be
+def _fetch_flag_spellings(row: OptionDef) -> list[list[str]]:
+    """Return the argv fragments that spell *row*: long, short and negated.
 
-    recognized by _classify_fetch rather than misread as the remote/refspec
-    positional. An unrecognized flag's value would have been misclassified as
-    the fetch's remote URL and silently passed the destructive-op preflight;
-    that must not happen for any spec member.
-
-    --stdin is intentionally short-circuited by _classify_fetch's first
-    special case (it makes destinations ambiguous by design, independent of
-    spec-table recognition), so we assert the SPECIFIC ambiguous result shape
-    for it rather than the generic non-unresolved invariant.
+    A REQUIRED value is stuck to the long spelling (``--name=VALUE``) and
+    follows the short one as a separate token.
     """
-    args = [flag]
-    if _GIT_FETCH_FLAG_SPEC[flag] == _FlagArity.VALUE:
-        args.append("someval")
-    args.append("origin")
+    value = ["someval"] if row.arity == OptionArity.REQUIRED else []
+    spellings: list[list[str]] = []
+    if row.has_long:
+        spellings.append([f"--{row.name}=someval"] if value else [f"--{row.name}"])
+    if row.short:
+        spellings.append([f"-{row.short}", *value])
+    if row.has_long and row.negatable:
+        spellings.append([f"--no-{row.name}"])
+    return spellings
 
-    result = _classify_fetch(args, cwd="/tmp", owned_refs=[])
 
-    if flag == "--stdin":
-        # --stdin is special-cased at the top of _classify_fetch to return the
-        # ambiguous-deny idiom; the spec table entry exists so the generic
-        # consume loop doesn't misread it as a positional remote, not because
-        # the function's downstream logic actually consumes it.
-        assert result == [("", "<unresolved>", True)]
-    else:
-        # Any presence of an `<unresolved>` entry from the consume loop
-        # means the flag was NOT recognized -- the precise failure mode the
-        # spec table is supposed to prevent.
-        assert not any(entry[1] == "<unresolved>" for entry in result)
+@pytest.mark.parametrize("name", sorted(_GIT_FETCH_FLAG_SPEC))
+def test_every_git_fetch_spec_flag_is_recognized(name: str) -> None:
+    """Generative coverage: every row of _GIT_FETCH_FLAG_SPEC, in each spelling
+    it admits, must be recognized by _classify_fetch rather than misread as the
+    remote/refspec operand. An unrecognized flag's value would have been
+    misclassified as the fetch's remote URL and silently passed the
+    destructive-op preflight; that must not happen for any table row.
+
+    ``--stdin`` makes the destinations ambiguous by design (the refspecs arrive
+    on stdin), so we assert that specific result shape for it rather than the
+    generic non-unresolved invariant; its negation is an ordinary flag.
+    """
+    spellings = _fetch_flag_spellings(_GIT_FETCH_FLAG_SPEC[name])
+    assert spellings, f"{name} has no spelling"
+
+    for spelling in spellings:
+        result = _classify_fetch([*spelling, "origin"], cwd="/tmp", owned_refs=[])
+
+        if spelling == ["--stdin"]:
+            assert result == [("", "<unresolved>", True)]
+        else:
+            # An `<unresolved>` entry means the flag was NOT recognized -- the
+            # precise failure mode the option table is supposed to prevent.
+            assert not any(entry[1] == "<unresolved>" for entry in result), spelling
 
 
 def test_git_ops_guard_classify_imports_from_new_sibling() -> None:
-    """Step 9 (#4733) regression: every classification primitive the orchestrator
-    consumes from autoskillit.hooks._runtime._git_command_classification must remain
-    reachable from the package import surface. Mirrors the orchestrator's import
-    block at src/autoskillit/hooks/guards/git_ops_guard.py:37.
+    """Every classification primitive the orchestrator consumes from
+    autoskillit.hooks._runtime._git_command_classification, and the blocked
+    operation matcher it consumes from autoskillit.hooks._runtime._git_target,
+    must remain reachable from the package import surface, as must the
+    remote-identity helper `_same_repository` resolves through. Mirrors the
+    orchestrator's import block in git_ops_guard.py. The fetch option table the
+    classifier reads lives in _git_option_tables as OptionDef rows.
     """
     from autoskillit.hooks._runtime._git_command_classification import (
-        _GIT_FETCH_BOOLEAN_FLAGS,
-        _GIT_FETCH_FLAG_SPEC,
-        _GIT_FETCH_VALUE_FLAGS,
-        _classify_git_segment,
-        _contains_blocked_git_op,
+        _classify_git_invocation,
         _git_result,
         _git_text,
         _parse_worktree_owners,
         _resolve_attempted_sha,
         _resolve_git_common_dir,
     )
+    from autoskillit.hooks._runtime._git_target import contains_blocked_git_op
 
     expected_callables = (
-        _classify_git_segment,
-        _contains_blocked_git_op,
+        _classify_git_invocation,
+        contains_blocked_git_op,
         _git_result,
         _git_text,
         _parse_worktree_owners,
@@ -1590,15 +1950,11 @@ def test_git_ops_guard_classify_imports_from_new_sibling() -> None:
         _resolve_git_common_dir,
     )
     for symbol in expected_callables:
-        assert callable(symbol), f"_git_command_classification.{symbol.__name__} must be callable"
+        assert callable(symbol), f"{symbol.__name__} must be callable"
 
-    assert isinstance(_GIT_FETCH_FLAG_SPEC, dict)
-    assert all(isinstance(k, str) for k in _GIT_FETCH_FLAG_SPEC)
-    assert all(
-        v == _FlagArity.BOOLEAN or v == _FlagArity.VALUE for v in _GIT_FETCH_FLAG_SPEC.values()
-    )
-    assert isinstance(_GIT_FETCH_BOOLEAN_FLAGS, frozenset)
-    assert isinstance(_GIT_FETCH_VALUE_FLAGS, frozenset)
+    assert isinstance(_GIT_FETCH_FLAG_SPEC, Mapping)
+    assert all(isinstance(row, OptionDef) for row in _GIT_FETCH_FLAG_SPEC.values())
+    assert all(name == row.name for name, row in _GIT_FETCH_FLAG_SPEC.items())
 
 
 def test_git_ops_guard_imports_with_hooks_directory_alone() -> None:
@@ -1639,3 +1995,179 @@ def test_git_ops_guard_imports_with_hooks_directory_alone() -> None:
     )
     assert "ModuleNotFoundError" not in result.stderr
     assert "ImportError" not in result.stderr
+
+
+_INVOCATION_GRAMMAR_DENIED = [
+    ("bash -lc 'git push --force origin main'", _FORCE_PUSH),
+    ("sh -ec 'git commit --amend'", _AMEND),
+    ("timeout -k 5 10 git push -f origin main", _FORCE_PUSH),
+    ("sudo -n git commit --amend", _AMEND),
+    ("env --ignore-signal git push -f origin main", _FORCE_PUSH),
+    ("python3 -Bc \"import subprocess; subprocess.run(['git','reset','--hard'])\"", _HARD_RESET),
+    ("echo x | xargs git push -f origin main", _FORCE_PUSH),
+    ("xargs sh -c 'true&&git push -f origin main'", _FORCE_PUSH),
+    ("env -S 'true;git commit --amend'", _AMEND),
+    ("setsid git commit --amend", _AMEND),
+    ("node -e \"require('child_process').execSync('git push -f origin main')\"", _FORCE_PUSH),
+]
+
+_INVOCATION_GRAMMAR_REF_REWRITES = [
+    "bash -lc 'git update-ref refs/heads/develop {sha}'",
+    "timeout -k 5 10 git checkout -Bdevelop {sha}",
+    "sudo -D {primary} git update-ref refs/heads/develop {sha}",
+]
+
+_INVOCATION_GRAMMAR_HEAD_MOVES = [
+    "bash -lc 'git checkout -b x {sha}'",
+    "sudo -n git checkout other",
+]
+
+_INVOCATION_GRAMMAR_ALLOWED = [
+    "bash -lc 'git status'",
+    "timeout 600 uv run pytest -q",
+    "uv run pytest -k git",
+    "uv run pytest -q && git push origin main",
+    "echo x | xargs grep git",
+    "find . -exec git log {} \\;",
+    "nice -n 5 make build",
+    "command -v git",
+    "bash script.sh",
+]
+
+_QUOTED_PUSH_TEXT_IN_LAUNCHER = 'find . -exec grep -l "git push" {} \\;'
+
+
+def _denies_by_ref_or_destructive_phase(output: str, op: tuple[str, ...]) -> bool:
+    """Whether *output* denies with the checked-out-ref reason or with the
+    destructive-phase reason for *op* or for an unresolved operation."""
+    if not _is_denied(output):
+        return False
+    reason = _deny_reason(output)
+    return reason.startswith(git_ops_guard.CHECKED_OUT_REF_DENY_PREFIX) or reason in {
+        _destructive_reason(op),
+        _destructive_reason(_UNRESOLVED_OP),
+    }
+
+
+class TestInvocationGrammarImmunity:
+    """A command is judged as the Git invocation it carries, however a wrapper's
+    options, a shell or interpreter command string, or an opaque launcher
+    deliver it. A launcher whose payload cannot be located denies only when its
+    text mentions a Git mutation; every other form keeps the verdict of the
+    command it runs in all four session shapes.
+    """
+
+    @pytest.fixture
+    def cook_repo(self, tmp_path: Path) -> dict[str, Path | str]:
+        built = build_linked_repo(tmp_path, tracked_state_dir=True)
+        _git(Path(str(built["primary"])), "branch", "other")
+        return built
+
+    @pytest.fixture
+    def pushable_repo(self, linked_repo: dict[str, Path | str]) -> Path:
+        """The unrelated repository, with the bare repository as ``origin``."""
+        unrelated = Path(str(linked_repo["unrelated"]))
+        _git(unrelated, "remote", "add", "origin", str(linked_repo["bare"]))
+        return unrelated
+
+    @pytest.mark.parametrize(("command", "op"), _INVOCATION_GRAMMAR_DENIED)
+    def test_denies_a_git_mutation_behind_an_invocation_grammar(
+        self, tmp_path: Path, command: str, op: tuple[str, ...]
+    ) -> None:
+        """A plain directory is no repository, so the preflight denies only a
+        segment whose position is unresolved and that mentions a Git mutation;
+        otherwise the destructive phase denies, naming the row's operation or an
+        unresolved one. Either denial is a pass.
+        """
+        out = _run_guard(command, kitchen_open=True, tmpdir=tmp_path)
+
+        assert _denies_by_ref_or_destructive_phase(out, op), _context(command, out)
+
+    def test_denies_git_mutation_text_quoted_in_an_opaque_launcher_argument(
+        self, tmp_path: Path
+    ) -> None:
+        """Text naming a Git mutation inside ``find -exec`` arguments cannot be told
+        apart from a payload such as ``xargs sh -c '...git push...'``, so quoted
+        data denies too.
+        """
+        out = _run_guard(_QUOTED_PUSH_TEXT_IN_LAUNCHER, kitchen_open=True, tmpdir=tmp_path)
+
+        assert _denies_by_ref_or_destructive_phase(out, _UNRESOLVED_OP), _context(
+            _QUOTED_PUSH_TEXT_IN_LAUNCHER, out
+        )
+
+    def test_allows_the_inner_command_the_launcher_wraps(self, tmp_path: Path) -> None:
+        command = 'grep -rl "git push" .'
+
+        out = _run_guard(command, kitchen_open=True, tmpdir=tmp_path)
+
+        assert _guard_verdict(out) == "allow", _context(command, out)
+
+    @pytest.mark.parametrize("command_template", _INVOCATION_GRAMMAR_REF_REWRITES)
+    def test_denies_a_checked_out_ref_rewrite_behind_an_invocation_grammar(
+        self, linked_repo: dict[str, Path | str], command_template: str
+    ) -> None:
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        command = command_template.format(
+            sha=linked_repo["new_sha"], primary=shlex.quote(str(linked_repo["primary"]))
+        )
+
+        out = _run_guard(command, kitchen_open=True, tmpdir=linked)
+
+        assert _guard_verdict(out) == "checked-out-ref", _context(command, out)
+        threatened = _checked_out_ref_result(out)["threatened_refs"]
+        assert isinstance(threatened, list)
+        assert [row["target_ref"] for row in threatened] == ["refs/heads/develop"], _context(
+            command, out
+        )
+
+    @pytest.mark.parametrize("command_template", _INVOCATION_GRAMMAR_HEAD_MOVES)
+    def test_denies_a_cook_head_move_behind_an_invocation_grammar(
+        self, cook_repo: dict[str, Path | str], tmp_path: Path, command_template: str
+    ) -> None:
+        primary = Path(str(cook_repo["primary"]))
+        command = command_template.format(sha=cook_repo["new_sha"])
+
+        out = _run_guard(
+            command,
+            kitchen_open=True,
+            tmpdir=tmp_path,
+            marker_root=primary,
+            headless=False,
+            extra_env={
+                "AUTOSKILLIT_SESSION_TYPE": "skill",
+                "AUTOSKILLIT_LAUNCH_ID": "0123456789abcdef",
+                "AUTOSKILLIT_STATE_ROOT": str(primary),
+            },
+            use_bash_key=True,
+            payload_cwd=primary,
+        )
+
+        assert _is_denied(out), _context(command, out)
+        reason = _deny_reason(out)
+        prefix = git_ops_guard.PRIMARY_HEAD_DENY_PREFIX
+        assert reason.startswith(prefix), _context(command, out)
+        details = json.loads(reason.removeprefix(prefix))
+        assert details["subcommand"] == "checkout", _context(command, details)
+        assert details["protected_primary"] == str(primary), _context(command, details)
+
+    @pytest.mark.parametrize("command", _INVOCATION_GRAMMAR_ALLOWED)
+    @pytest.mark.parametrize("directory", ["plain", "repository"])
+    def test_allows_each_form_in_every_session_shape(
+        self, tmp_path: Path, pushable_repo: Path, directory: str, command: str
+    ) -> None:
+        verdicts = {
+            shape: _guard_verdict(
+                _run_guard(
+                    command,
+                    kitchen_open=True,
+                    tmpdir=tmp_path if directory == "plain" else pushable_repo,
+                    headless=shape[0],
+                    session_type=shape[1],
+                )
+            )
+            for shape in _SESSION_SHAPES
+        }
+
+        assert verdicts == dict.fromkeys(_SESSION_SHAPES, "allow"), _context(command, verdicts)

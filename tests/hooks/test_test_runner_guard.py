@@ -171,6 +171,17 @@ class TestDenyPatterns:
         output = _run_hook(event, monkeypatch, headless=True)
         assert output == ""
 
+    @pytest.mark.parametrize(
+        "command",
+        ["timeout 600 uv run pytest -q", "uv run pytest -k git"],
+    )
+    def test_blocks_uv_run_pytest_launcher_forms(self, command, monkeypatch):
+        # `uv run` is an opaque launcher: its position is unresolved, but `uv`
+        # stays the verb so the pytest operand is still matched.
+        event = _build_event(command)
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert _is_denied(output)
+
     def test_blocks_pytest_after_cd(self, monkeypatch):
         event = _build_event("cd /some/path && pytest")
         output = _run_hook(event, monkeypatch, headless=True)

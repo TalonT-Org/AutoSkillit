@@ -162,6 +162,7 @@ def test_expected_entry_ids() -> None:
         "git-reset-hard",
         "git-clean-f",
         "git-checked-out-ref-mutation",
+        "git-primary-checkout-head",
         "recipe-read-headless",
         "write-path-prefix",
         "skill-orchestration-from-L1",

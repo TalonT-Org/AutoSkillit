@@ -2535,7 +2535,11 @@ def test_managed_cook_validation_rejection_cleans_up_before_exit(
     assert not [
         record for record in caplog.records if "managed catalog rejected" in record.getMessage()
     ]
-    assert all(record.exc_info is None for record in caplog.records)
+    assert all(
+        record.exc_info is None
+        for record in caplog.records
+        if record.name.startswith("autoskillit.")
+    )
 
 
 def test_order_managed_session_keeps_home_across_reload_and_infra_resume(

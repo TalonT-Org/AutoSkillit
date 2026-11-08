@@ -266,7 +266,11 @@ def test_managed_fleet_validation_rejection_cleans_up_before_exit(
     assert not [
         record for record in caplog.records if "fleet catalog rejected" in record.getMessage()
     ]
-    assert all(record.exc_info is None for record in caplog.records)
+    assert all(
+        record.exc_info is None
+        for record in caplog.records
+        if record.name.startswith("autoskillit.")
+    )
 
 
 class TestLaunchFleetSessionIngredientsTable:

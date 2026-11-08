@@ -38,7 +38,7 @@ from autoskillit import cli
 from autoskillit.config import AutomationConfig
 from autoskillit.core import CmdSpec
 from autoskillit.execution.backends import ClaudeCodeBackend
-from tests.cli._cook_launch_helpers import arrange_cook
+from tests.cli._managed_launch_helpers import arrange_cook
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.large, pytest.mark.smoke]
 

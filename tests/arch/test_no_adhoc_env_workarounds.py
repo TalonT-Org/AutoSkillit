@@ -72,7 +72,7 @@ _INTENTIONAL_ENV_INPUT_SITES: dict[str, str] = {
         "tests/arch/test_mcp_env_forward_coverage.py::AUTOSKILLIT_MCP_CLIENT_BACKEND",
         "tests/arch/test_skill_capability_registry.py::AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS",
         "tests/arch/test_skill_capability_registry.py::AUTOSKILLIT_HEADLESS_AUTO_GATE",
-        "tests/cli/_cook_launch_helpers.py::AUTOSKILLIT_CODEX_STARTUP_TRACE",
+        "tests/cli/_managed_launch_helpers.py::AUTOSKILLIT_CODEX_STARTUP_TRACE",
         "tests/cli/test_doctor.py::AUTOSKILLIT_CAMPAIGN_ID",
         "tests/cli/test_doctor_backend_guards.py::AUTOSKILLIT_AGENT_BACKEND",
         "tests/cli/test_doctor_backend_guards.py::AUTOSKILLIT_AGENT_BACKEND__BACKEND",

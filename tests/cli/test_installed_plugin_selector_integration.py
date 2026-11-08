@@ -46,8 +46,8 @@ from autoskillit.core import (
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 from autoskillit.workspace import DefaultSkillResolver, compile_session_skill_catalog
 from autoskillit.workspace._installed._projection_cache import projected_plugin_artifact_digest
-from tests.cli._cook_launch_helpers import cook_attempt_result
 from tests.cli._interactive_process import InteractiveProcessStub, interactive_launch_metadata
+from tests.cli._managed_launch_helpers import cook_attempt_result
 from tests.fakes import adapt_test_skill_semantics
 from tests.fixtures.plugin_artifact_state import (
     INVALID_PLUGIN_ARTIFACT_STATE_KINDS,

@@ -242,7 +242,7 @@ class TestCookAddDirStructure:
         import shutil
 
         from autoskillit.core import CmdSpec
-        from tests.cli._cook_launch_helpers import cook_attempt_result
+        from tests.cli._managed_launch_helpers import cook_attempt_result
 
         monkeypatch.setattr("autoskillit.core.bind_session_owner", lambda *_args: True)
         structure_errors: list[str] = []

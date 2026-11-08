@@ -19,7 +19,7 @@ from autoskillit.cli.session._session_process import (
 from autoskillit.config import AutomationConfig, ProcessTetherConfig
 from autoskillit.core import FreshLaunch, PluginLoadMode
 from autoskillit.core.types import TerminationReason
-from tests.cli._cook_launch_helpers import cook_attempt_result
+from tests.cli._managed_launch_helpers import cook_attempt_result
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 

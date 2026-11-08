@@ -16,7 +16,7 @@ import structlog
 from autoskillit.config import ProcessTetherConfig
 from autoskillit.core import InFlightOperations, TerminationReason, operation_lease
 from autoskillit.execution.process._process_tether import TetherRecord, write_tether
-from tests.cli._cook_launch_helpers import lifetime_policy
+from tests.cli._managed_launch_helpers import lifetime_policy
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 

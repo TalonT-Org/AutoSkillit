@@ -23,8 +23,8 @@ import autoskillit.cli.session._session_reload as _patch_session__session_reload
 import autoskillit.cli.ui._terminal as _patch_ui__terminal
 import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
 from autoskillit.core import InteractiveInvocationValidation, PreLaunchReadiness
-from tests.cli._cook_launch_helpers import RecordingLifecycle, cook_attempt_result
 from tests.cli._interactive_process import InteractiveProcessStub, interactive_launch_metadata
+from tests.cli._managed_launch_helpers import RecordingLifecycle, cook_attempt_result
 from tests.fakes import adapt_test_skill_semantics
 
 pytestmark = [

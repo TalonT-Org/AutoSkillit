@@ -47,8 +47,8 @@ from tests._realistic_project import (
     PINNED_CLAUDE_SHIM_VERSION,
     PINNED_CLAUDE_SHIM_VERSION_OUTPUT,
 )
-from tests.cli._cook_launch_helpers import RecordingLifecycle, cook_attempt_result
 from tests.cli._interactive_process import InteractiveProcessStub, interactive_launch_metadata
+from tests.cli._managed_launch_helpers import RecordingLifecycle, cook_attempt_result
 from tests.fixtures.plugin_artifact_state import (
     PluginArtifactStateKind,
     build_plugin_artifact_state,

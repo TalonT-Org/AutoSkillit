@@ -1,4 +1,4 @@
-"""Hermetic harness for real-backend cook launch tests."""
+"""Hermetic managed-launch helpers for cook, order, and fleet tests."""
 
 from __future__ import annotations
 

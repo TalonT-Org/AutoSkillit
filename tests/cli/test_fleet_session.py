@@ -15,7 +15,7 @@ import autoskillit.cli.session._session_launch as _patch_session__session_launch
 import autoskillit.cli.session._session_startup_trace as _patch_session__startup_trace
 from autoskillit.config import ProcessTetherConfig
 from autoskillit.fleet.campaign_state.state_records import ResumeDecision
-from tests.cli._cook_launch_helpers import RecordingLifecycle
+from tests.cli._managed_launch_helpers import RecordingLifecycle
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small, pytest.mark.feature("fleet")]
 

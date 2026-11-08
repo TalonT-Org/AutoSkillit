@@ -25,7 +25,7 @@ import autoskillit.execution.process._process_tether as process_tether
 import autoskillit.workspace as _patch_workspace
 from autoskillit.config import AutomationConfig, ProcessTetherConfig
 from autoskillit.core import FreshLaunch, PluginLoadMode
-from tests.cli._cook_launch_helpers import arrange_cook, cook_attempt_result
+from tests.cli._managed_launch_helpers import arrange_cook, cook_attempt_result
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 

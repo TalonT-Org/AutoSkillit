@@ -46,8 +46,8 @@ from autoskillit.workspace import (
     SkillUnavailableMetadata,
 )
 from autoskillit.workspace.skills import _skill_info_from_frontmatter
-from tests.cli._cook_launch_helpers import cook_attempt_result
 from tests.cli._interactive_process import interactive_launch_metadata
+from tests.cli._managed_launch_helpers import cook_attempt_result
 from tests.fakes import adapt_test_skill_semantics
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]

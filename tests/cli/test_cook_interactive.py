@@ -46,8 +46,8 @@ from autoskillit.core import (
     atomic_write,
 )
 from tests._realistic_project import PINNED_CLAUDE_SHIM_VERSION_OUTPUT
-from tests.cli._cook_launch_helpers import cook_attempt_result, record_cook_rejection
 from tests.cli._interactive_process import interactive_launch_metadata
+from tests.cli._managed_launch_helpers import cook_attempt_result, record_cook_rejection
 from tests.execution.backends._codex_fixtures import installed_catalog
 from tests.fakes import adapt_test_skill_semantics
 from tests.fixtures.hook_topology import fake_projected_plugin_root

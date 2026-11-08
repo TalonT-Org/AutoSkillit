@@ -22,8 +22,8 @@ import autoskillit.cli.session._session_reload as _patch_session__session_reload
 import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
 from autoskillit.core import CmdSpec, FreshLaunch, ManagedSessionHome, ValidatedAddDir
 from autoskillit.execution.backends._backend_cmd_builder_base import SHARED_BASELINE_ENV
-from tests.cli._cook_launch_helpers import cook_attempt_result
 from tests.cli._interactive_process import InteractiveProcessStub
+from tests.cli._managed_launch_helpers import cook_attempt_result
 
 pytestmark = [
     pytest.mark.layer("cli"),

@@ -504,11 +504,7 @@ def _captured_v0164_prompt_input_for_catalog(catalog_dir: Path) -> bytes:
     skills_message = document[2]
     skills_text = skills_message["content"][1]["text"]
     source_root = "/opt/autoskillit-fixtures/codex/discovery/v0164/home/add-dir/skills"
-    skills_text = skills_text.replace(source_root, str(catalog_dir))
-    skills_text = skills_text.replace(
-        str(catalog_dir / ".system"),
-        str(catalog_dir.resolve() / ".system"),
-    )
+    skills_text = skills_text.replace(source_root, str(catalog_dir.resolve()))
     skills_message["content"][1]["text"] = skills_text.replace("make-arch-diag", "managed-skill")
     return json.dumps(document).encode()
 

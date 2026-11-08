@@ -494,8 +494,15 @@ def _install_real_codex_rejection_harness(
         rendered_errors.append(errors)
         real_renderer(errors)
 
+    real_which = shutil.which
+
+    def which(executable: str, **kwargs: object) -> str | None:
+        if executable == backend.binary_name():
+            return str(codex_shim)
+        return real_which(executable, **kwargs)
+
     monkeypatch.chdir(project_root)
-    monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: str(codex_shim))
+    monkeypatch.setattr(shutil, "which", which)
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr(InstalledPluginsFile, "contains", lambda self, key: False)
     monkeypatch.setattr(_patch_session__session_onboarding, "is_first_run", lambda _project: False)

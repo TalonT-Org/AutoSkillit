@@ -597,7 +597,7 @@ def test_real_managed_codex_validation_rejection_renders_before_cleanup(
     assert rendered_errors == [(diagnostic,)]
     assert close_statuses == ["failed"]
     assert all(binding.closed for binding in bindings)
-    assert released_claims == [generated_home.name]
+    assert released_claims == ["0123456789abcdef"]
     assert not any(
         "managed_session_body_failed" in record.getMessage() for record in caplog.records
     )

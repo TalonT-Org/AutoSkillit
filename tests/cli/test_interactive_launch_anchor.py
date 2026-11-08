@@ -36,9 +36,9 @@ from autoskillit.core import (
 )
 from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.execution.process import _daemon_orphans
-from tests.cli._cook_launch_helpers import cook_attempt_result
 from tests.cli._fleet_helpers import _capture_subprocess, _stub_campaign_resolution, _stub_guards
 from tests.cli._logging_helpers import stub_configure_logging
+from tests.cli._managed_launch_helpers import cook_attempt_result
 from tests.cli.conftest import _SCRIPT_YAML
 from tests.cli.test_cook_env_scrub import _capture_cook_spec
 from tests.execution.backends._codex_fixtures import installed_catalog

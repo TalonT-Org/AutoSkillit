@@ -17,23 +17,70 @@ from tests.fixtures.codex import fixture_path
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 _FIXTURE_ROOT = Path("/opt/autoskillit-fixtures/codex/discovery")
-_FIXTURE_SOURCE_ROOTS = {
-    "discovery_prompt_input_v0130.json": _FIXTURE_ROOT / "v0130" / "home" / "skills",
-    "discovery_prompt_input_v0153.json": _FIXTURE_ROOT / "v0153" / "home" / "skills",
-    "discovery_prompt_input_v0164.json": _FIXTURE_ROOT / "v0164" / "home" / "add-dir" / "skills",
-}
+_FIXTURE_EXPECTATIONS = [
+    (
+        "discovery_prompt_input_v0130.json",
+        (
+            Path("/opt/autoskillit-fixtures/codex/discovery/v0130/home/skills"),
+            Path("/opt/autoskillit-fixtures/codex/discovery/v0130/home/skills/.system"),
+        ),
+        {
+            "alpha": Path(
+                "/opt/autoskillit-fixtures/codex/discovery/v0130/home/skills/alpha/SKILL.md"
+            ),
+            "beta": Path(
+                "/opt/autoskillit-fixtures/codex/discovery/v0130/home/skills/beta/SKILL.md"
+            ),
+            "system-native": Path(
+                "/opt/autoskillit-fixtures/codex/discovery/v0130/home/skills/.system/system-native/SKILL.md"
+            ),
+        },
+    ),
+    (
+        "discovery_prompt_input_v0153.json",
+        (
+            Path("/opt/autoskillit-fixtures/codex/discovery/v0153/home/skills"),
+            Path("/opt/autoskillit-fixtures/codex/discovery/v0153/home/skills/.system"),
+        ),
+        {
+            "alpha": Path(
+                "/opt/autoskillit-fixtures/codex/discovery/v0153/home/skills/alpha/SKILL.md"
+            ),
+            "beta": Path(
+                "/opt/autoskillit-fixtures/codex/discovery/v0153/home/skills/beta/SKILL.md"
+            ),
+            "system-native": Path(
+                "/opt/autoskillit-fixtures/codex/discovery/v0153/home/skills/.system/system-native/SKILL.md"
+            ),
+        },
+    ),
+    (
+        "discovery_prompt_input_v0164.json",
+        (
+            Path("/opt/autoskillit-fixtures/codex/discovery/v0164/home/add-dir/skills"),
+            Path("/opt/autoskillit-fixtures/codex/discovery/v0164/home/add-dir/skills/.system"),
+        ),
+        {
+            "make-arch-diag": Path(
+                "/opt/autoskillit-fixtures/codex/discovery/v0164/home/add-dir/skills/make-arch-diag/SKILL.md"
+            ),
+            "imagegen": Path(
+                "/opt/autoskillit-fixtures/codex/discovery/v0164/home/add-dir/skills/.system/imagegen/SKILL.md"
+            ),
+            "openai-docs": Path(
+                "/opt/autoskillit-fixtures/codex/discovery/v0164/home/add-dir/skills/.system/openai-docs/SKILL.md"
+            ),
+            "skill-creator": Path(
+                "/opt/autoskillit-fixtures/codex/discovery/v0164/home/add-dir/skills/.system/skill-creator/SKILL.md"
+            ),
+            "skill-installer": Path(
+                "/opt/autoskillit-fixtures/codex/discovery/v0164/home/add-dir/skills/.system/skill-installer/SKILL.md"
+            ),
+        },
+    ),
+]
+_FIXTURE_SOURCE_ROOTS = {name: roots[0] for name, roots, _paths in _FIXTURE_EXPECTATIONS}
 _FIXTURES = tuple(_FIXTURE_SOURCE_ROOTS)
-_FIXTURE_EXPECTED_NAMES = {
-    "discovery_prompt_input_v0130.json": {"alpha", "beta", "system-native"},
-    "discovery_prompt_input_v0153.json": {"alpha", "beta", "system-native"},
-    "discovery_prompt_input_v0164.json": {
-        "imagegen",
-        "openai-docs",
-        "skill-creator",
-        "skill-installer",
-        "make-arch-diag",
-    },
-}
 
 
 def _skills_text(document: list[object]) -> str:
@@ -155,70 +202,7 @@ def _install_prompt_stub(
 
 @pytest.mark.parametrize(
     ("fixture_name", "expected_roots", "expected_paths"),
-    [
-        (
-            "discovery_prompt_input_v0130.json",
-            (
-                Path("/opt/autoskillit-fixtures/codex/discovery/v0130/home/skills"),
-                Path("/opt/autoskillit-fixtures/codex/discovery/v0130/home/skills/.system"),
-            ),
-            {
-                "alpha": Path(
-                    "/opt/autoskillit-fixtures/codex/discovery/v0130/home/skills/alpha/SKILL.md"
-                ),
-                "beta": Path(
-                    "/opt/autoskillit-fixtures/codex/discovery/v0130/home/skills/beta/SKILL.md"
-                ),
-                "system-native": Path(
-                    "/opt/autoskillit-fixtures/codex/discovery/v0130/home/skills/.system/system-native/SKILL.md"
-                ),
-            },
-        ),
-        (
-            "discovery_prompt_input_v0153.json",
-            (
-                Path("/opt/autoskillit-fixtures/codex/discovery/v0153/home/skills"),
-                Path("/opt/autoskillit-fixtures/codex/discovery/v0153/home/skills/.system"),
-            ),
-            {
-                "alpha": Path(
-                    "/opt/autoskillit-fixtures/codex/discovery/v0153/home/skills/alpha/SKILL.md"
-                ),
-                "beta": Path(
-                    "/opt/autoskillit-fixtures/codex/discovery/v0153/home/skills/beta/SKILL.md"
-                ),
-                "system-native": Path(
-                    "/opt/autoskillit-fixtures/codex/discovery/v0153/home/skills/.system/system-native/SKILL.md"
-                ),
-            },
-        ),
-        (
-            "discovery_prompt_input_v0164.json",
-            (
-                Path("/opt/autoskillit-fixtures/codex/discovery/v0164/home/add-dir/skills"),
-                Path(
-                    "/opt/autoskillit-fixtures/codex/discovery/v0164/home/add-dir/skills/.system"
-                ),
-            ),
-            {
-                "make-arch-diag": Path(
-                    "/opt/autoskillit-fixtures/codex/discovery/v0164/home/add-dir/skills/make-arch-diag/SKILL.md"
-                ),
-                "imagegen": Path(
-                    "/opt/autoskillit-fixtures/codex/discovery/v0164/home/add-dir/skills/.system/imagegen/SKILL.md"
-                ),
-                "openai-docs": Path(
-                    "/opt/autoskillit-fixtures/codex/discovery/v0164/home/add-dir/skills/.system/openai-docs/SKILL.md"
-                ),
-                "skill-creator": Path(
-                    "/opt/autoskillit-fixtures/codex/discovery/v0164/home/add-dir/skills/.system/skill-creator/SKILL.md"
-                ),
-                "skill-installer": Path(
-                    "/opt/autoskillit-fixtures/codex/discovery/v0164/home/add-dir/skills/.system/skill-installer/SKILL.md"
-                ),
-            },
-        ),
-    ],
+    _FIXTURE_EXPECTATIONS,
 )
 def test_parse_skills_instructions_reads_pinned_real_loader_shapes(
     fixture_name: str,
@@ -233,9 +217,14 @@ def test_parse_skills_instructions_reads_pinned_real_loader_shapes(
     assert parsed.paths == expected_paths
 
 
-@pytest.mark.parametrize("fixture_name", _FIXTURES)
+@pytest.mark.parametrize(
+    ("fixture_name", "expected_roots", "expected_paths"),
+    _FIXTURE_EXPECTATIONS,
+)
 def test_parse_skills_instructions_tolerates_json_and_rendering_whitespace(
     fixture_name: str,
+    expected_roots: tuple[Path, ...],
+    expected_paths: dict[str, Path],
 ) -> None:
     document = _fixture_document(fixture_name)
     text = _skills_text(document).replace("\n", "\r\n")
@@ -250,7 +239,9 @@ def test_parse_skills_instructions_tolerates_json_and_rendering_whitespace(
 
     parsed = discovery.parse_skills_instructions(json.dumps(reordered, indent=2))
 
-    assert parsed.names == _FIXTURE_EXPECTED_NAMES[fixture_name]
+    assert parsed.names == set(expected_paths)
+    assert parsed.roots == expected_roots
+    assert parsed.paths == expected_paths
 
 
 @pytest.mark.parametrize(

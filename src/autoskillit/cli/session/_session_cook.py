@@ -16,12 +16,12 @@ from autoskillit.cli.session._session_launch import (
     prepare_interactive_launch,
     render_launch_validation_errors,
 )
-from autoskillit.cli.session._session_skills import (
+from autoskillit.cli.session._session_onboarding import (
     append_skill_unavailability,
-    prepare_cook_skill_visibility,
     render_skill_catalog_exclusions,
     render_skill_contract_composition_failure,
     render_skill_unavailability,
+    validate_cook_skill_visibility,
 )
 from autoskillit.core import (
     PluginLaunchBinding,
@@ -603,6 +603,7 @@ def cook(
     from autoskillit.exploration import resolve_repository_profile
     from autoskillit.workspace import (
         DefaultSessionSkillManager,
+        DefaultSkillResolver,
         SkillsDirectoryProvider,
         compile_session_skill_catalog,
         resolve_ephemeral_root,
@@ -613,7 +614,9 @@ def cook(
     apply_terminal_logging(config.logging, TerminalLogPolicy.INTERACTIVE)
     force_inactive_agent_teams = config.agent_backend.force_inactive_agent_teams
     project_dir = resolve_project_dir()
-    skill_resolver, skill_visibility = prepare_cook_skill_visibility(config, project_dir)
+    skill_resolver = DefaultSkillResolver()
+    skill_visibility = config.skill_visibility_spec()
+    validate_cook_skill_visibility(skill_visibility, skill_resolver, project_dir)
     backend = _resolve_cook_backend(config, backend)
     cook_system_prompt = (
         _COOK_PRE_REVEALED_KITCHEN_PROMPT

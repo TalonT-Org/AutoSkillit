@@ -531,6 +531,10 @@ def _install_real_codex_rejection_harness(
     )
     monkeypatch.setattr(StartupTrace, "close", record_close)
     monkeypatch.setattr(
+        "autoskillit.execution.backends._codex_probes._validate_mcp_probe",
+        lambda *_args, **_kwargs: [],
+    )
+    monkeypatch.setattr(
         _patch_session__session_cook, "render_launch_validation_errors", record_renderer
     )
 
@@ -583,12 +587,17 @@ def test_real_managed_codex_validation_rejection_renders_before_cleanup(
         assert generated_home is not None and not generated_home.exists()
     else:
         assert generated_home is not None and generated_home.exists()
-    assert capsys.readouterr().err == f"ERROR: {diagnostic}\n"
+        assert str(caught.value) == "controlled cleanup failure"
+    stderr = capsys.readouterr().err
+    assert stderr.startswith(f"ERROR: {diagnostic}\n")
+    assert stderr.count(f"ERROR: {diagnostic}\n") == 1
+    if not cleanup_fails:
+        assert stderr == f"ERROR: {diagnostic}\n"
     assert validation_count == 1
     assert rendered_errors == [(diagnostic,)]
     assert close_statuses == ["failed"]
     assert all(binding.closed for binding in bindings)
-    assert released_claims == ["0123456789abcdef"]
+    assert released_claims == [generated_home.name]
     assert not any(
         "managed_session_body_failed" in record.getMessage() for record in caplog.records
     )
@@ -663,7 +672,8 @@ def test_reload_validation_rejection_does_not_start_a_second_attempt(
     assert reload_calls == 1
     assert rendered_errors == [(diagnostic,)]
     assert close_statuses == ["failed"]
-    assert captured["releases"] == ["0123456789abcdef"]
+    launch_id = next(event[1] for event in events if event[0] == "managed-enter")
+    assert captured["releases"] == [launch_id]
 
 
 def test_codex_cook_admits_compose_pr_roles_from_exact_bundled_catalog_probe(

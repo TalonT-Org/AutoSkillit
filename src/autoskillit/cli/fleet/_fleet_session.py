@@ -340,7 +340,7 @@ def _launch_fleet_session(
     from autoskillit.cli.session._session_backend import (
         resolve_global_backend,
     )
-    from autoskillit.cli.session._session_skills import render_skill_unavailability
+    from autoskillit.cli.session._session_onboarding import render_skill_unavailability
     from autoskillit.config import load_config
     from autoskillit.workspace import (
         compile_session_skill_catalog,

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn, assert_never
 
 from autoskillit.cli.session._session_backend import verify_launch_home
-from autoskillit.cli.session._session_skills import (
+from autoskillit.cli.session._session_onboarding import (
     append_skill_unavailability,
     render_skill_unavailability,
 )

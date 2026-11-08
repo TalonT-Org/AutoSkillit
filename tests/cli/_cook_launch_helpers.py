@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+
+import pytest
 
 import autoskillit.cli.install._plugin_artifact as _patch_install__plugin_artifact
 import autoskillit.cli.session._session_cook as _patch_session__session_cook
@@ -227,6 +229,37 @@ class _Authority:
 
     def acquire_launch_binding(self, **_kwargs: object) -> _Binding:
         return _Binding(self.plugin_dir)
+
+
+def record_cook_rejection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[list[str], list[tuple[str, ...]]]:
+    """Record cook rejection diagnostics and trace status while retaining real effects."""
+    from autoskillit.cli.session._session_startup_trace import StartupTrace
+
+    close_statuses: list[str] = []
+    rendered_errors: list[tuple[str, ...]] = []
+    real_close = StartupTrace.close
+    real_renderer = _patch_session__session_cook.render_launch_validation_errors
+
+    def record_close(
+        trace: StartupTrace,
+        *,
+        status: str,
+        diagnostics: Mapping[str, object] | None = None,
+    ) -> None:
+        close_statuses.append(status)
+        real_close(trace, status=status, diagnostics=diagnostics)
+
+    def record_renderer(errors: tuple[str, ...]) -> None:
+        rendered_errors.append(errors)
+        real_renderer(errors)
+
+    monkeypatch.setattr(StartupTrace, "close", record_close)
+    monkeypatch.setattr(
+        _patch_session__session_cook, "render_launch_validation_errors", record_renderer
+    )
+    return close_statuses, rendered_errors
 
 
 def arrange_cook(

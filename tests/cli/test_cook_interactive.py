@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import tomllib
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
@@ -15,7 +15,6 @@ import pytest
 
 import autoskillit.cli.install._plugin_artifact as _patch_install__plugin_artifact
 import autoskillit.cli.session._session_backend as _patch_session__session_backend
-import autoskillit.cli.session._session_cook as _patch_session__session_cook
 import autoskillit.cli.session._session_launch_intent as _patch_session__session_picker
 import autoskillit.cli.session._session_onboarding as _patch_session__session_onboarding
 import autoskillit.cli.session._session_process as _patch_session__session_process
@@ -47,7 +46,7 @@ from autoskillit.core import (
     atomic_write,
 )
 from tests._realistic_project import PINNED_CLAUDE_SHIM_VERSION_OUTPUT
-from tests.cli._cook_launch_helpers import cook_attempt_result
+from tests.cli._cook_launch_helpers import cook_attempt_result, record_cook_rejection
 from tests.cli._interactive_process import interactive_launch_metadata
 from tests.execution.backends._codex_fixtures import installed_catalog
 from tests.fakes import adapt_test_skill_semantics
@@ -436,7 +435,6 @@ def _install_real_codex_rejection_harness(
     tmp_path: Path,
 ) -> tuple[CodingAgentBackend, list[_CookBinding], list[str], list[str], list[tuple[str, ...]]]:
     from autoskillit.cli.install._installed_plugins import InstalledPluginsFile
-    from autoskillit.cli.session._session_startup_trace import StartupTrace
     from autoskillit.core import PluginLoadMode
     from autoskillit.execution.backends.codex import CodexBackend
 
@@ -475,24 +473,8 @@ def _install_real_codex_rejection_harness(
             bindings.append(binding)
             return binding
 
-    close_statuses: list[str] = []
+    close_statuses, rendered_errors = record_cook_rejection(monkeypatch)
     released_claims: list[str] = []
-    rendered_errors: list[tuple[str, ...]] = []
-    real_close = StartupTrace.close
-    real_renderer = _patch_session__session_cook.render_launch_validation_errors
-
-    def record_close(
-        trace: StartupTrace,
-        *,
-        status: str,
-        diagnostics: Mapping[str, object] | None = None,
-    ) -> None:
-        close_statuses.append(status)
-        real_close(trace, status=status, diagnostics=diagnostics)
-
-    def record_renderer(errors: tuple[str, ...]) -> None:
-        rendered_errors.append(errors)
-        real_renderer(errors)
 
     real_which = shutil.which
 
@@ -536,13 +518,9 @@ def _install_real_codex_rejection_harness(
         "mark_onboarded",
         lambda _project: pytest.fail("rejected launch must not complete onboarding"),
     )
-    monkeypatch.setattr(StartupTrace, "close", record_close)
     monkeypatch.setattr(
         "autoskillit.execution.backends._codex_probes._validate_mcp_probe",
         lambda *_args, **_kwargs: [],
-    )
-    monkeypatch.setattr(
-        _patch_session__session_cook, "render_launch_validation_errors", record_renderer
     )
 
     return backend, bindings, close_statuses, released_claims, rendered_errors
@@ -615,7 +593,6 @@ def test_reload_validation_rejection_does_not_start_a_second_attempt(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    from autoskillit.cli.session._session_startup_trace import StartupTrace
 
     diagnostic = "reloaded launch catalog changed"
 
@@ -634,24 +611,8 @@ def test_reload_validation_rejection_does_not_start_a_second_attempt(
 
     backend = _ReloadThenRejectBackend()
     captured = _install_harness(monkeypatch, tmp_path)
-    close_statuses: list[str] = []
-    rendered_errors: list[tuple[str, ...]] = []
+    close_statuses, rendered_errors = record_cook_rejection(monkeypatch)
     reload_calls = 0
-    real_close = StartupTrace.close
-    real_renderer = _patch_session__session_cook.render_launch_validation_errors
-
-    def record_close(
-        trace: StartupTrace,
-        *,
-        status: str,
-        diagnostics: Mapping[str, object] | None = None,
-    ) -> None:
-        close_statuses.append(status)
-        real_close(trace, status=status, diagnostics=diagnostics)
-
-    def record_renderer(errors: tuple[str, ...]) -> None:
-        rendered_errors.append(errors)
-        real_renderer(errors)
 
     def consume_reload(_project: Path) -> str:
         nonlocal reload_calls
@@ -660,10 +621,6 @@ def test_reload_validation_rejection_does_not_start_a_second_attempt(
         return "fedcba9876543210"
 
     monkeypatch.setattr(_patch_session__session_reload, "consume_reload_sentinel", consume_reload)
-    monkeypatch.setattr(StartupTrace, "close", record_close)
-    monkeypatch.setattr(
-        _patch_session__session_cook, "render_launch_validation_errors", record_renderer
-    )
 
     with pytest.raises(SystemExit) as caught:
         cli.cook(backend=backend)

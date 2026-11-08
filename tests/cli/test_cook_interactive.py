@@ -489,11 +489,6 @@ def _install_real_codex_rejection_harness(
     monkeypatch.setattr(InstalledPluginsFile, "contains", lambda self, key: False)
     monkeypatch.setattr(_patch_session__session_onboarding, "is_first_run", lambda _project: False)
     monkeypatch.setattr(_patch_ui__timed_input, "timed_prompt", lambda *args, **kwargs: "")
-    monkeypatch.setattr("autoskillit.core.write_registry_entry", lambda *args: None)
-    monkeypatch.setattr(
-        "autoskillit.core.claim_launch_for_session",
-        lambda *_args, **_kwargs: "0123456789abcdef",
-    )
     monkeypatch.setattr(
         "autoskillit.core.release_session_claim",
         lambda _project, launch_id: released_claims.append(launch_id),
@@ -541,6 +536,11 @@ def test_real_managed_codex_validation_rejection_renders_before_cleanup(
     backend, bindings, close_statuses, released_claims, rendered_errors = (
         _install_real_codex_rejection_harness(monkeypatch, tmp_path)
     )
+    registered_claims: list[str] = []
+    monkeypatch.setattr(
+        "autoskillit.core.write_registry_entry",
+        lambda _project, launch_id, *_args: registered_claims.append(launch_id),
+    )
     generated_home: Path | None = None
     validation_count = 0
 
@@ -582,7 +582,8 @@ def test_real_managed_codex_validation_rejection_renders_before_cleanup(
     assert rendered_errors == [(diagnostic,)]
     assert close_statuses == ["failed"]
     assert all(binding.closed for binding in bindings)
-    assert released_claims == ["0123456789abcdef"]
+    assert len(registered_claims) == 1
+    assert released_claims == registered_claims
     assert not any(
         "managed_session_body_failed" in record.getMessage() for record in caplog.records
     )
